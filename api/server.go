@@ -76,6 +76,7 @@ import (
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/playground"
+	"github.com/pblumer/atlas/promquery"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/tracing"
 
@@ -394,6 +395,9 @@ type Server struct {
 	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
 	inboundSubs *inboundSubStore
 	inboundPoll time.Duration
+	// inboundClock is the clock the bridge paces per-watch cadences by, injectable so a
+	// test does not have to wait one out. nil means time.Now.
+	inboundClock func() time.Time
 	// inboundBatch caps how many clio events one poll of a subscription reads and
 	// republishes (the ReadEvents Limit). It bounds the burst a single poll can hand
 	// the run loop so a large backlog drains as bounded catch-up across ticks rather
@@ -406,9 +410,21 @@ type Server struct {
 	// exporter runs on its own goroutine off the run loop — it only reads the durable
 	// WAL files and the state store's applied-position watermark, never the processor
 	// — so it never touches the single-writer invariant (I3).
-	osExportCfg  opensearch.Config
-	exporter     *opensearch.Exporter
-	exporterPoll time.Duration
+	osExportCfg opensearch.Config
+	exporter    *opensearch.Exporter
+	// eventSearch, when non-nil, replaces the client Panorama's historical context
+	// reads the exported event log through (ADR-0189 P5b), so a test drives the
+	// adapter without a live cluster. Nil in production, where a client is built
+	// from osExportCfg per call.
+	eventSearch opensearch.Searcher
+	// metricsQueryCfg is the Prometheus-compatible store Panorama's historical
+	// context reads node metrics from (ADR-0189 P5b-ii). It is read-only and
+	// separate from the exposition Atlas serves at /metrics: this is somebody
+	// else's server, holding what they scraped. Enabled only when a URL is set.
+	// metricsQuery, when non-nil, replaces the client for a test.
+	metricsQueryCfg promquery.Config
+	metricsQuery    promquery.Querier
+	exporterPoll    time.Duration
 	// exporterTicks, when non-nil, replaces the exporter loop's real ticker so a test
 	// drives each export pass explicitly rather than racing a wall-clock cadence.
 	// exporterTicked, when non-nil, receives once after each triggered pass completes,
@@ -738,6 +754,15 @@ func WithScriptWorker(jobType int32, exec script.Exec) Option {
 // and index live in server config, never in a model.
 func WithOpenSearchExporter(cfg opensearch.Config) Option {
 	return func(s *Server) { s.osExportCfg = cfg }
+}
+
+// WithMetricsQuery points Panorama's historical context at a Prometheus-compatible
+// store (ADR-0189 P5b-ii). It is read-only and unrelated to the /metrics endpoint
+// Atlas serves: this is where somebody else keeps what they scraped. An empty URL
+// leaves the metrics half of every context answer reported as not-configured,
+// which is then true of the server rather than a guess about the store.
+func WithMetricsQuery(cfg promquery.Config) Option {
+	return func(s *Server) { s.metricsQueryCfg = cfg }
 }
 
 // WithOpenSearchExportInterval sets how often the exporter polls the log for newly
@@ -1138,7 +1163,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		settings:          settings,
 		playgroundTTL:     playgroundSessionTTL, // WithPlaygroundSessions overrides both of these
 		playgroundSweep:   playgroundReapInterval,
-		inboundPoll:       2 * time.Second,          // default cadence; WithInboundPollInterval overrides, 0 disables
+		inboundPoll:       2 * time.Second,          // default tick; WithInboundPollInterval overrides, 0 disables
 		inboundBatch:      defaultInboundBatch,      // per-poll ReadEvents cap; WithInboundBatchLimit overrides
 		exporterPoll:      5 * time.Second,          // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
 		retentionInterval: DefaultRetentionInterval, // history-retention sweep cadence; WithRetentionInterval overrides (ADR-0115)
@@ -1207,7 +1232,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		time.Now,
 		s.collectBindingCatalog,
 		s.collectFacts,
-	)
+	).WithContextResolver(s.collectContext)
 	s.panoramaMesh = panorama.NewMesh(s.runLoop, s.collectLandscape, s.panorama.OverlaysOnLoop, meshMaxNodes)
 	for _, opt := range opts {
 		opt(s)

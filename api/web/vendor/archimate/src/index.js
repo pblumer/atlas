@@ -3,8 +3,18 @@ import BaseRenderer from "diagram-js/lib/draw/BaseRenderer";
 import SelectionModule from "diagram-js/lib/features/selection";
 import MoveCanvasModule from "diagram-js/lib/navigation/movecanvas";
 import ZoomScrollModule from "diagram-js/lib/navigation/zoomscroll";
+// The authoring half (ADR-0189 §2, P2a). Moving and resizing shapes, and the
+// command stack that makes both undoable. They are loaded only when the caller may
+// edit — see Viewer's `editable` option — so a reader's canvas carries no modeling
+// behaviour at all rather than carrying it disabled.
+import ModelingModule from "diagram-js/lib/features/modeling";
+import MoveModule from "diagram-js/lib/features/move";
+import ResizeModule from "diagram-js/lib/features/resize";
+import OutlineModule from "diagram-js/lib/features/outline";
+import RulesModule from "diagram-js/lib/features/rules";
 import { append, attr, create } from "tiny-svg";
 import inherits from "inherits-browser";
+import RuleProvider from "diagram-js/lib/features/rules/RuleProvider";
 
 const XSI = "http://www.w3.org/2001/XMLSchema-instance";
 
@@ -208,19 +218,91 @@ const dock = (shape, other) => {
   return { x: here.x + dx * scale, y: here.y + dy * scale };
 };
 
+// ArchiMateRules says what may be edited. diagram-js asks before every move,
+// resize and connect, and with no rules provider it asks nobody and allows
+// everything — including the operations this slice does not implement, which would
+// then change the canvas and never reach the document.
+//
+// So the answer is explicit: shapes move and resize, and nothing else is permitted
+// yet. Creating elements and drawing relationships arrive with their own slices and
+// their own semantic rules; until then the canvas must not offer them, because an
+// edit that cannot be saved is worse than one that cannot be made.
+function ArchiMateRules(eventBus) {
+  RuleProvider.call(this, eventBus);
+}
+inherits(ArchiMateRules, RuleProvider);
+ArchiMateRules.$inject = [ "eventBus" ];
+ArchiMateRules.prototype.init = function() {
+  this.addRule("elements.move", ({ shapes, target }) => {
+    // Only shapes, and only within the view they are already on: re-parenting a
+    // shape into another shape is containment, which is a semantic change to the
+    // model rather than an arrangement.
+    if (!shapes || !shapes.length) return false;
+    if (target && target.parent) return false;
+    return shapes.every((shape) => shape.type === "archimate:shape");
+  });
+  this.addRule("shape.resize", ({ shape }) => shape.type === "archimate:shape");
+  for (const forbidden of [ "shape.create", "connection.create", "elements.delete", "connection.reconnect" ]) {
+    this.addRule(forbidden, () => false);
+  }
+};
+
+const RulesProviderModule = {
+  __depends__: [ RulesModule ],
+  __init__: [ "archimateRules" ],
+  archimateRules: [ "type", ArchiMateRules ],
+};
+
+// The modules a read-only canvas loads, and the ones authoring adds on top.
+const VIEW_MODULES = [ RendererModule, SelectionModule, MoveCanvasModule, ZoomScrollModule ];
+const EDIT_MODULES = [ ModelingModule, MoveModule, ResizeModule, OutlineModule, RulesProviderModule ];
+
 export class Viewer {
-  constructor(container, onSelection) {
+  constructor(container, onSelection, options = {}) {
+    this.editable = Boolean(options.editable);
     this.diagram = new Diagram({
       canvas: { container },
-      modules: [ RendererModule, SelectionModule, MoveCanvasModule, ZoomScrollModule ],
+      modules: this.editable ? [ ...VIEW_MODULES, ...EDIT_MODULES ] : VIEW_MODULES,
     });
     this.canvas = this.diagram.get("canvas");
     this.factory = this.diagram.get("elementFactory");
     this.selection = this.diagram.get("selection");
-    this.diagram.get("eventBus").on("selection.changed", (event) => {
+    const eventBus = this.diagram.get("eventBus");
+    eventBus.on("selection.changed", (event) => {
       onSelection?.((event.newSelection && event.newSelection[0])?.businessObject || null);
     });
+    if (this.editable) {
+      this.commandStack = this.diagram.get("commandStack");
+      // One event for "the picture changed", whatever changed it. The host does not
+      // need to know whether a shape was dragged, resized, undone or redone — only
+      // that what is on screen no longer matches what was loaded.
+      eventBus.on([ "commandStack.changed" ], () => options.onChange?.());
+    }
   }
+
+  // moved reports every shape whose geometry differs from the document it was drawn
+  // from, as the server's layout writer wants it.
+  //
+  // It is computed by comparing against what was loaded rather than by accumulating
+  // the drags as they happen. Dragging a box away and back is not a change, and an
+  // accumulating list would report it as one — which would save a revision that
+  // moved nothing and make everybody else's open editor conflict for it.
+  moved() {
+    const changes = [];
+    for (const [ id, origin ] of this.origin || []) {
+      const shape = this.shapes.get(id);
+      if (!shape) continue;
+      const now = { x: Math.round(shape.x), y: Math.round(shape.y), w: Math.round(shape.width), h: Math.round(shape.height) };
+      if (now.x === origin.x && now.y === origin.y && now.w === origin.w && now.h === origin.h) continue;
+      changes.push({ nodeId: id, ...now });
+    }
+    return changes;
+  }
+
+  undo() { this.commandStack?.canUndo() && this.commandStack.undo(); }
+  redo() { this.commandStack?.canRedo() && this.commandStack.redo(); }
+  canUndo() { return Boolean(this.commandStack?.canUndo()); }
+  canRedo() { return Boolean(this.commandStack?.canRedo()); }
 
   render(view) {
     if (this.root) this.canvas.removeRootElement(this.root);
@@ -228,6 +310,10 @@ export class Viewer {
     this.canvas.setRootElement(root);
     this.root = root;
     const shapes = new Map();
+    // origin is the geometry the document declared, kept so `moved` can compare
+    // against it rather than against the last drag.
+    this.origin = new Map();
+    this.shapes = shapes;
     for (const item of view.shapes) {
       const shape = this.factory.createShape({
         id: item.id, type: "archimate:shape", x: item.x, y: item.y, width: item.width, height: item.height,
@@ -235,6 +321,7 @@ export class Viewer {
       });
       this.canvas.addShape(shape, root);
       shapes.set(item.id, shape);
+      this.origin.set(item.id, { x: item.x, y: item.y, w: item.width, h: item.height });
     }
     for (const item of view.connections) {
       const source = shapes.get(item.source);
@@ -248,6 +335,9 @@ export class Viewer {
       this.canvas.addConnection(connection, root);
     }
     this.selection.select(null);
+    // A view switch is a new baseline. Leaving the stack would let undo reach back
+    // into a view that is no longer on screen and move shapes nobody can see.
+    this.commandStack?.clear();
     requestAnimationFrame(() => this.fit());
   }
 

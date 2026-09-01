@@ -474,53 +474,79 @@ function meshOf(processes) {
   return graph;
 }
 
-// A few hundred names on one canvas is not a landscape, it is a wall of text with
-// circles behind it. Above the clutter threshold only the anchors keep a name —
-// applications, which are what somebody navigates by — and the rest are revealed.
-test("a crowded landscape names its applications and reveals the rest", async ({ page }) => {
-  installMock(page, meshOf(40));
+// Zoomed out over a crowded landscape a name would be a smear sitting on top of
+// the structure the picture is carrying, so it is not painted. That is a statement
+// about the magnification, not about the node: the name is in the DOM, it is the
+// node's accessible label, and hovering or zooming brings it back.
+test("a crowded landscape holds its names until they can be read", async ({ page }) => {
+  installMock(page, meshOf(100));
   await page.goto("/index.html#/panorama/landscape");
 
-  await expect(page.locator('[data-node-id="application:a1"]')).toHaveClass(/mesh-named/);
-  await expect(page.locator('[data-node-id="process:0"]')).not.toHaveClass(/mesh-named/);
+  // Every node wants its name; the canvas decides which are legible right now.
+  await expect(page.locator('[data-node-id="process:0"]')).toHaveClass(/mesh-named/);
+  await expect(page.locator(".mesh-canvas")).not.toHaveClass(/mesh-names-all/);
+  const ink = page.locator('[data-node-id="process:0"] .mesh-label-ink');
+  await expect(ink).toHaveCSS("opacity", "0");
 
-  // The name is in the DOM either way: it is the node's accessible label and a
-  // screen reader must not depend on a pointer to reach it.
+  // The name is in the DOM either way: a screen reader must not depend on a
+  // pointer, or on a zoom level, to reach it.
   await expect(page.locator('[data-node-id="process:0"] .mesh-label')).toHaveText("Process 0");
   await expect(page.locator('[data-node-id="process:0"]'))
     .toHaveAttribute("aria-label", /Process 0/);
 
   // Hovering reveals it, without re-rendering the graph.
-  const ink = page.locator('[data-node-id="process:0"] .mesh-label-ink');
-  await expect(ink).toHaveCSS("opacity", "0");
   await page.locator('[data-node-id="process:0"]').hover();
   await expect(ink).toHaveCSS("opacity", "1");
 });
 
-// Below the threshold there is room, and hiding names would be pure loss with
-// nothing bought.
+// And zooming in reveals them all — which is the whole bargain of laying the graph
+// out in a world larger than the window. Nothing is re-rendered to do it: the
+// canvas is told what magnification it is at and the stylesheet does the rest.
+test("zooming in brings the names out", async ({ page }) => {
+  installMock(page, meshOf(100));
+  await page.goto("/index.html#/panorama/landscape");
+
+  const canvas = page.locator(".mesh-canvas");
+  await expect(canvas).not.toHaveClass(/mesh-names-all/);
+  const before = await canvas.getAttribute("viewBox");
+
+  for (let i = 0; i < 6; i++) await page.locator("#mesh-zoom-in").click();
+
+  await expect(canvas).toHaveClass(/mesh-names-all/);
+  await expect(page.locator('[data-node-id="process:0"] .mesh-label-ink')).toHaveCSS("opacity", "1");
+  // The graph did not move under the zoom: same nodes, same layout, new window.
+  expect(await canvas.getAttribute("viewBox")).not.toBe(before);
+  await expect(page.locator(".mesh-node")).toHaveCount(101);
+});
+
+// A small landscape needs no zoom: its world is the window, so every name is
+// already large enough to read and hiding any would be pure loss.
 test("a small landscape keeps every name on screen", async ({ page }) => {
   installMock(page, meshOf(4));
   await page.goto("/index.html#/panorama/landscape");
 
   await expect(page.locator(".mesh-node")).toHaveCount(5);
+  await expect(page.locator(".mesh-canvas")).toHaveClass(/mesh-names-all/);
   for (const id of ["application:a1", "process:0", "process:3"]) {
-    await expect(page.locator(`[data-node-id="${id}"]`)).toHaveClass(/mesh-named/);
+    await expect(page.locator(`[data-node-id="${id}"] .mesh-label-ink`)).toHaveCSS("opacity", "1");
   }
 });
 
-// Two things bring a name back in a crowded graph without hovering: selecting the
-// node, and filtering down to it. Both are how somebody actually looks for one.
+// Two things bring a name back in a crowded graph without hovering and without
+// zooming: selecting the node, and filtering down to it. Both are how somebody
+// actually looks for one. The graph has to be large enough that its names are
+// genuinely held back, or this asserts nothing.
 test("selecting or filtering brings a name back", async ({ page }) => {
-  installMock(page, meshOf(40));
+  installMock(page, meshOf(100));
   await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).not.toHaveClass(/mesh-names-all/);
 
   await page.locator('[data-node-id="process:7"]').click();
-  await expect(page.locator('[data-node-id="process:7"]')).toHaveClass(/mesh-named/);
+  await expect(page.locator('[data-node-id="process:7"] .mesh-label-ink')).toHaveCSS("opacity", "1");
 
   await page.locator("#mesh-search").fill("Process 12");
   await expect(page.locator(".mesh-node")).toHaveCount(1);
-  await expect(page.locator('[data-node-id="process:12"]')).toHaveClass(/mesh-named/);
+  await expect(page.locator('[data-node-id="process:12"] .mesh-label-ink')).toHaveCSS("opacity", "1");
 });
 
 // Size carries rank as well as kind: at a few hundred nodes the eye sorts by size
@@ -564,4 +590,70 @@ test("nodes do not overlap each other", async ({ page }) => {
   });
   // Negative means two circles intersect. A little slack for the fit's rescaling.
   expect(overlaps).toBeGreaterThan(-2);
+});
+
+// Which bubble is connected to which, answered by pointing at one. Impact analysis
+// already answers the bigger question — what breaks if this goes down — but it
+// needs a click and walks the whole chain. This is the question asked dozens of
+// times while reading a landscape: what does *this* touch?
+test("pointing at a node shows what it is connected to", async ({ page }) => {
+  installMock(page, graph);
+  await page.goto("/index.html#/panorama/landscape");
+  const canvas = page.locator(".mesh-canvas");
+  await expect(canvas).not.toHaveClass(/mesh-relating/);
+
+  await page.locator('[data-node-id="process:1"]').hover();
+  await expect(canvas).toHaveClass(/mesh-relating/);
+
+  // The node itself, its neighbours, and the edges between them are lifted.
+  await expect(page.locator('[data-node-id="process:1"]')).toHaveClass(/mesh-relating-self/);
+  const related = page.locator(".mesh-node.mesh-related");
+  expect(await related.count()).toBeGreaterThan(0);
+  await expect(page.locator(".mesh-edge.mesh-related-edge").first()).toBeVisible();
+
+  // Every edge lifted actually touches the node — the highlight is the graph's own
+  // adjacency, not a guess from where things happen to sit on screen.
+  const honest = await page.evaluate(() => [...document.querySelectorAll(".mesh-related-edge")]
+    .every((e) => e.dataset.from === "process:1" || e.dataset.to === "process:1"));
+  expect(honest).toBe(true);
+
+  // A related node's name comes out with it: knowing something is connected is not
+  // much use without knowing what it is.
+  await expect(related.first().locator(".mesh-label-ink")).toHaveCSS("opacity", "1");
+
+  // Unrelated ones fall back rather than disappearing: the question is "what does
+  // this touch", not "what if the rest were gone".
+  const dimmed = await page.evaluate(() => {
+    const el = [...document.querySelectorAll(".mesh-node")]
+      .find((n) => !n.classList.contains("mesh-related") && !n.classList.contains("mesh-relating-self"));
+    return el ? getComputedStyle(el).opacity : null;
+  });
+  expect(Number(dimmed)).toBeGreaterThan(0);
+  expect(Number(dimmed)).toBeLessThan(1);
+});
+
+// The layout is what the whole picture rests on: a graph compressed into the
+// viewport puts its circles through each other, and no amount of colour or labelling
+// recovers from that. The world grows with the content instead, so the guarantee
+// holds at every size rather than only at the small ones.
+test("no two nodes overlap, however many there are", async ({ page }) => {
+  for (const size of [12, 60]) {
+    installMock(page, meshOf(size));
+    await page.goto("/index.html#/panorama/landscape");
+    await page.locator(".mesh-node").first().waitFor();
+
+    const worst = await page.evaluate(() => {
+      const at = [...document.querySelectorAll(".mesh-node")].map((g) => {
+        const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform"));
+        return { x: +m[1], y: +m[2], r: +g.querySelector(".mesh-body").getAttribute("r") };
+      });
+      let gap = Infinity;
+      for (let i = 0; i < at.length; i++) for (let j = i + 1; j < at.length; j++) {
+        gap = Math.min(gap, Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y) - at[i].r - at[j].r);
+      }
+      return gap;
+    });
+    // Not merely non-negative: there is room for a name between any two of them.
+    expect(worst).toBeGreaterThan(30);
+  }
 });

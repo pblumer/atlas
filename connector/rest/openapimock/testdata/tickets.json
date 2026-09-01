@@ -1,0 +1,28 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "Tickets", "version": "2.0.0"},
+  "paths": {
+    "/tickets": {
+      "post": {
+        "operationId": "createTicket",
+        "responses": {
+          "default": {
+            "description": "the created ticket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {"type": "string", "format": "uuid"},
+                    "opened": {"type": "string", "format": "date-time"},
+                    "priority": {"type": ["string", "null"], "default": "low"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

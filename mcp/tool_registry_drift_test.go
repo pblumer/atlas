@@ -120,7 +120,20 @@ var mcpOmittedRoutes = map[string]string{
 	// Its shape is also at contract version 1 and still settling, and an MCP tool is
 	// a public contract.
 	"GET /api/v1/panorama/models/{id}/observations": "an architecture reading surface over facts an agent already reaches directly; contract still settling",
-	"PUT /api/v1/node": "an operator naming this instance, not an agent action",
+	// Historical context (ADR-0189 P5b) reads stores outside Atlas on the caller's
+	// behalf. An agent that wants a metric or a log line asks the store that owns it,
+	// with the whole query language available, rather than through a keyhole that
+	// answers three fixed measures; and a tool here would let one agent fan queries
+	// across somebody else's cluster from a loop. Its contract is also at version 1
+	// and still settling, like the observations above.
+	"GET /api/v1/panorama/models/{id}/context": "a keyhole onto stores an agent should query directly; contract still settling",
+	// The drift journal (ADR-0189 P5) is the same reading surface over time, and it
+	// is explicitly not durable: an agent handed it as a tool would read a
+	// restart-emptied journal as an absence of change, which is the one reading it
+	// must not produce. What an agent needs is the current answer, which the routes
+	// it already has give it.
+	"GET /api/v1/panorama/models/{id}/drift": "a non-durable reading surface; an agent must not read an emptied journal as an absence of change",
+	"PUT /api/v1/node":                       "an operator naming this instance, not an agent action",
 	// One worker's recent jobs (ADR-0157): operator diagnostics about a *process*, and
 	// a memory tail rather than a record. An agent debugging a run asks from the
 	// instance side, where atlas_instance_jobs and the timeline answer the same
@@ -231,6 +244,12 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/panorama/models/{id}":     "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
 	"DELETE /api/v1/panorama/models/{id}":  "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
 	"GET /api/v1/panorama/models/{id}/xml": "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	// Where the boxes sit on a view is a person's spatial judgement about what is
+	// legible, not a fact an agent can improve. A tool for it would let one rearrange
+	// somebody's diagram with no way to see whether the result reads better — and
+	// the arrangement is the one part of the document that carries no semantics for
+	// an agent to reason about in the first place.
+	"PUT /api/v1/panorama/models/{id}/layout": "how a diagram is arranged is a human judgement about legibility, with no semantics for an agent to act on",
 	// The derived landscape mesh (ADR-0211) is read-only and would make an obvious
 	// agent tool — "what depends on this connector" is exactly the question. It is
 	// omitted for now because its payload shape is still moving: P2.5 adds node and

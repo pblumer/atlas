@@ -69,6 +69,13 @@ type adMockReporter struct {
 	dir    *ad.MockDirectory
 	client *http.Client
 
+	// backoff is this reporter's copy of adMockStartupBackoff, taken when it is
+	// constructed. The startup report runs on a detached goroutine that outlives
+	// whatever created it, so reading the package variable from inside that loop
+	// races with anything that replaces it — which a test legitimately does. Copying
+	// it here confines that read to the constructing goroutine.
+	backoff []time.Duration
+
 	mu   sync.Mutex
 	sent uint64
 	ever bool
@@ -83,11 +90,12 @@ func newADMockReporter(env func(string) string, dir *ad.MockDirectory) *adMockRe
 		return nil
 	}
 	return &adMockReporter{
-		url:    url,
-		token:  strings.TrimSpace(env("ATLAS_TOKEN")),
-		worker: strings.TrimSpace(env(WorkerIDEnv)),
-		dir:    dir,
-		client: nettimeout.HTTPClient(),
+		url:     url,
+		token:   strings.TrimSpace(env("ATLAS_TOKEN")),
+		worker:  strings.TrimSpace(env(WorkerIDEnv)),
+		dir:     dir,
+		client:  nettimeout.HTTPClient(),
+		backoff: adMockStartupBackoff,
 	}
 }
 
@@ -141,11 +149,11 @@ func (r *adMockReporter) reportAtStartup(ctx context.Context) {
 		if err = r.send(ctx); err == nil {
 			return
 		}
-		if attempt >= len(adMockStartupBackoff) {
+		if attempt >= len(r.backoff) {
 			r.warn(err)
 			return
 		}
-		timer := time.NewTimer(adMockStartupBackoff[attempt])
+		timer := time.NewTimer(r.backoff[attempt])
 		select {
 		case <-timer.C:
 		case <-ctx.Done():

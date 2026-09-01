@@ -35,6 +35,7 @@ import (
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/checkpoint"
 	remedymock "github.com/pblumer/atlas/connector/remedy/mock"
+	"github.com/pblumer/atlas/connector/rest/openapimock"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/jobtype"
@@ -42,6 +43,7 @@ import (
 	"github.com/pblumer/atlas/mcp"
 	"github.com/pblumer/atlas/mimimport"
 	"github.com/pblumer/atlas/opensearch"
+	"github.com/pblumer/atlas/promquery"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/tracing"
 	"github.com/pblumer/atlas/wal"
@@ -96,6 +98,10 @@ func main() {
 		if err := runMockRemedy(args); err != nil {
 			fatal("atlas mock-remedy", err)
 		}
+	case "mock-openapi":
+		if err := runMockOpenAPI(args); err != nil {
+			fatal("atlas mock-openapi", err)
+		}
 	case "playground":
 		if err := runPlaygroundScenario(args, os.Stdout); err != nil {
 			// A run that happened and did not meet its expectations leaves its own
@@ -149,6 +155,7 @@ Usage:
   atlas import-mim     [flags] FILE Convert a MIM/FIM XOML workflow to BPMN 2.0
   atlas check-job-types [flags]     Check a data directory's job-type table for index collisions
   atlas mock-remedy    [flags]      Run a mock BMC Remedy AR System for the Remedy connector
+  atlas mock-openapi   [flags]      Serve a mock REST API from an OpenAPI document
   atlas playground     [flags]      Run a saved Playground scenario and exit on its verdict
   atlas version                     Print the version and build metadata
 
@@ -264,6 +271,11 @@ func runServe(args []string) error {
 	supervise := superviseFlag{}
 	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
 	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. It is unauthenticated like /healthz — put a reverse proxy in front of anything exposed beyond the host")
+	// The read side of the exposition above, and a different server: this is where
+	// somebody else keeps what they scraped. Panorama queries it for a node's recent
+	// history (ADR-0189 P5b-ii) and stores none of the answer.
+	metricsURL := fs.String("metrics-url", os.Getenv("ATLAS_METRICS_URL"), "base URL of a Prometheus-compatible store to read node history from for Panorama's architecture views (ADR-0189); empty disables it, and the metrics half of every answer then reports itself not-configured. Read-only and unrelated to --metrics, which is what this server exposes. Credentials come from ATLAS_METRICS_USERNAME/ATLAS_METRICS_PASSWORD")
+	metricsInstance := fs.String("metrics-instance", os.Getenv("ATLAS_METRICS_INSTANCE"), "how this node appears in --metrics-url's `instance` label, e.g. atlas-01.internal. Atlas cannot derive it: a scrape target is your configuration, and guessing would answer about a different process while looking exactly like an answer about this one. Left empty, a Panorama element bound to this server's own runtime reports itself unidentifiable and says why")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -273,6 +285,12 @@ func runServe(args []string) error {
 		Username: os.Getenv("ATLAS_OPENSEARCH_USERNAME"),
 		Password: os.Getenv("ATLAS_OPENSEARCH_PASSWORD"),
 		Index:    strings.TrimSpace(*osIndex),
+	}
+	metricsCfg := promquery.Config{
+		URL:      strings.TrimSpace(*metricsURL),
+		Username: os.Getenv("ATLAS_METRICS_USERNAME"),
+		Password: os.Getenv("ATLAS_METRICS_PASSWORD"),
+		Instance: strings.TrimSpace(*metricsInstance),
 	}
 	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch}
 	trace := tracing.Config{
@@ -292,7 +310,7 @@ func runServe(args []string) error {
 		ClientSecret: *oidcClientSecret,
 		Scopes:       *oidcScopes,
 		Name:         *oidcName,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, metricsCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -369,7 +387,7 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -490,6 +508,13 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		apiOpts = append(apiOpts, api.WithOpenSearchExporter(osExport))
 		logging.Info(logging.ExporterEnabled, "opensearch exporter enabled",
 			slog.String("index", osExport.Index), slog.String("url", osExport.URL))
+	}
+	// Read a node's recent history back from a metrics store for Panorama's
+	// architecture views (ADR-0189 P5b-ii). Read-only, and a different server from
+	// the exposition above: nothing is copied here, each answer is queried when
+	// somebody asks for it.
+	if metricsQuery.Enabled() {
+		apiOpts = append(apiOpts, api.WithMetricsQuery(metricsQuery))
 	}
 	// Hard-delete finished-instance history past the max age, gated on export (ADR-0115).
 	// The cadence and batch apply either way: retention also runs for a process that
@@ -959,7 +984,7 @@ func runWorker(args []string) error {
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
-	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: ad, csv, entra, jira, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, webscrape). The server must be offloading them (it offloads ad, csv, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN, entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET, remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD, and jira takes ATLAS_JIRA_CONNECTORS plus ATLAS_JIRA_<NAME>_URL and exactly one credential shape — _EMAIL with _API_TOKEN for Jira Cloud, or _TOKEN alone for a Data Center personal access token, because that shape also decides how an assignee is addressed and which search endpoint is used; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an Atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Connectors instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker Atlas supervises is handed all of that at spawn from the connector store, so it needs none of it set by hand")
+	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: ad, csv, entra, jira, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, webscrape). The server must be offloading them (it offloads ad, csv, jira, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN, entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET, remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD, and jira takes ATLAS_JIRA_CONNECTORS plus ATLAS_JIRA_<NAME>_URL and exactly one credential shape — _EMAIL with _API_TOKEN for Jira Cloud, or _TOKEN alone for a Data Center personal access token, because that shape also decides how an assignee is addressed and which search endpoint is used; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an Atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Connectors instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker Atlas supervises is handed all of that at spawn from the connector store, so it needs none of it set by hand")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1105,7 +1130,14 @@ func runMockRemedy(args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "wire it up: set a Remedy connector's endpoint to %s and store its {\"username\":…,\"password\":…} bundle in the vault\n", base)
 
-	httpSrv := &http.Server{Addr: *addr, Handler: mock.Handler()}
+	return runMockServer(*addr, mock.Handler())
+}
+
+// runMockServer serves a mock until the process is interrupted. Both mock
+// subcommands land here: a mock is a foreground dev aid, so it stays out of the
+// server's structured logging and shuts down on the signal a terminal sends.
+func runMockServer(addr string, handler http.Handler) error {
+	httpSrv := &http.Server{Addr: addr, Handler: handler}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errCh := make(chan error, 1)
@@ -1125,6 +1157,80 @@ func runMockRemedy(args []string) error {
 		defer cancel()
 		return httpSrv.Shutdown(shutCtx)
 	}
+}
+
+// runMockOpenAPI serves a mock REST API from an OpenAPI 3 document, so a process with
+// a REST connector task can be run before the API it calls exists — or without
+// pointing a draft at the real one. Where `atlas mock-remedy` hand-implements the
+// endpoints of one Worker Type, this serves whatever a document describes: point a
+// REST task's url at the address it prints and nothing else about the model changes.
+//
+// What it answers is the document's own examples where it states them and values
+// generated from its schemas where it does not, always the same way for the same
+// document. GET /__mock/calls is the journal of what a run actually did, and
+// GET /__mock/report is that journal in the envelope the Console's Mockups view takes
+// (ADR-0216).
+func runMockOpenAPI(args []string) error {
+	fs := flag.NewFlagSet("mock-openapi", flag.ExitOnError)
+	specPath := fs.String("spec", "", "path to the OpenAPI 3 document (JSON or YAML) to mock — required")
+	addr := fs.String("addr", ":8009", "HTTP listen address for the mock API")
+	basePath := fs.String("base-path", "", `serve the document's paths under this prefix instead of the path in its first server URL ("/" serves them at the root)`)
+	id := fs.String("id", defaultWorkerID(), "name this mock reports itself under")
+	quiet := fs.Bool("quiet", false, "do not print one line per served call")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*specPath) == "" {
+		return errors.New("--spec is required: the OpenAPI document to mock")
+	}
+	spec, err := openapimock.LoadFile(*specPath)
+	if err != nil {
+		return err
+	}
+	opts := []openapimock.Option{openapimock.WithID(*id)}
+	if !*quiet {
+		opts = append(opts, openapimock.WithLog(os.Stderr))
+	}
+	if *basePath != "" {
+		opts = append(opts, openapimock.WithBasePath(*basePath))
+	}
+	mock := openapimock.New(spec, opts...)
+
+	printMockOpenAPIBanner(os.Stderr, spec, mock, *specPath, *addr, loopbackURL(*addr))
+	return runMockServer(*addr, mock.Handler())
+}
+
+// printMockOpenAPIBanner tells the operator what was loaded and what to do with it.
+// Like the Remedy mock's, it is a human-facing hint written straight to stderr: a mock
+// is a dev aid, and stays out of the structured logging pipeline the server uses.
+func printMockOpenAPIBanner(w io.Writer, spec *openapimock.Spec, mock *openapimock.Server, specPath, addr, base string) {
+	fmt.Fprintf(w, "atlas mock-openapi: %s — %d operations from %s, listening on %s\n",
+		spec.Name(), len(spec.Operations), specPath, addr)
+	// The routes are the thing an operator needs in front of them, but a large
+	// document would bury the rest of the banner, so a long list is cut short and the
+	// journal below answers what was actually called.
+	const shown = 10
+	// The compiled order is the matcher's — most specific first — which reads as
+	// shuffled to a person. A banner is for reading, so it goes back to path order.
+	routes := make([]openapimock.Operation, len(spec.Operations))
+	copy(routes, spec.Operations)
+	sort.Slice(routes, func(i, j int) bool {
+		if routes[i].Path != routes[j].Path {
+			return routes[i].Path < routes[j].Path
+		}
+		return routes[i].Method < routes[j].Method
+	})
+	for i, op := range routes {
+		if i == shown {
+			fmt.Fprintf(w, "  … and %d more\n", len(routes)-shown)
+			break
+		}
+		fmt.Fprintf(w, "  %-6s %s%s%s\n", op.Method, base, mock.BasePath(), op.Path)
+	}
+	fmt.Fprintf(w, "  journal: GET %s/__mock/calls\n", base)
+	fmt.Fprintf(w, "  report:  GET %s/__mock/report\n", base)
+	fmt.Fprintf(w, "wire it up: point a REST connector task's url at %s%s/… — the model needs no other change\n", base, mock.BasePath())
+	fmt.Fprintln(w, "  a caller asks for a stated error path with the header `Prefer: code=404`")
 }
 
 // runResetPassword sets a local user's password directly against the on-disk user

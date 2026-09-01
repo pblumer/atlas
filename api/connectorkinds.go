@@ -429,10 +429,19 @@ var offloadableKinds = map[string][]int32{
 // worker and the handover (remedyWorkerEnv), which leaves no reason for a ticket create,
 // three round trips to somebody else's ITSM host, to keep happening on the loop.
 //
+// Jira is the fifth, and it is Remedy's way exactly (ADR-0218).
+// A managed kind whose site address and Atlassian credential live in the connector store
+// and the vault, excluded only for as long as there was nothing to hand them to;
+// ADR-0201's follow-ups built the worker and jiraWorkerEnv built the handover. What
+// decided it was not the argument but watching an operator look for the worker: a kind
+// the engine serves itself appears in the Workers view only when something is wrong with
+// it, so a working Jira connector is a row that is folded away as quiet, in a table whose
+// whole subject is who is doing the work.
+//
 // The credential-bearing kinds the engine cannot yet hand over stay in the engine
 // until an operator moves their secrets themselves, with --offload-connectors.
 func DefaultOffloadedKinds() []string {
-	return []string{"ad", "csv", connectorKindMail, connectorKindRemedy, "script", "webscrape"}
+	return []string{"ad", "csv", connectorKindJira, connectorKindMail, connectorKindRemedy, "script", "webscrape"}
 }
 
 // DefaultSupervisedWorkerOnlyKinds are the worker-only connector kinds Atlas supervises

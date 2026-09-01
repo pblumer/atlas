@@ -491,6 +491,28 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Observe what a Panorama model's bound Atlas resources are currently doing (ADR-0189)",
 			tag:     "Panorama", role: RoleModeler,
 			resp: jsonBody("Observation document", tObject())}},
+		// What has been seen to change (ADR-0189 P5). A separate route from the
+		// observations because the two cost different things: "what is happening"
+		// reads the engine, "what changed" reads what previous answers established.
+		{"GET", "/api/v1/panorama/models/{id}/drift", s.panorama.HandleDrift, apiOp{
+			summary: "What has been seen to change about a Panorama model's bound resources, newest first (ADR-0189)",
+			tag:     "Panorama", role: RoleModeler,
+			resp: jsonBody("Drift journal", tObject())}},
+		// Historical context from stores outside Atlas (ADR-0189 P5b). Element-scoped
+		// because every bound value costs a query against somebody else's cluster,
+		// and a model-wide answer would multiply that by the whole landscape.
+		{"GET", "/api/v1/panorama/models/{id}/context", s.panorama.HandleContext, apiOp{
+			summary: "Read historical context for one element from the stores outside Atlas (ADR-0189)",
+			tag:     "Panorama", role: RoleModeler,
+			resp: jsonBody("Historical context document", tObject())}},
+		// Moving shapes on a view (ADR-0189 §2). Separate from the model update
+		// because it can do exactly one thing: the canvas sends what moved, never a
+		// document, so a browser's serialiser can never rewrite somebody's model.
+		{"PUT", "/api/v1/panorama/models/{id}/layout", s.panorama.HandleSetLayout, apiOp{
+			summary: "Write new positions for shapes on a Panorama view (ADR-0189)",
+			tag:     "Panorama", role: RoleModeler,
+			req:  jsonBody("Moved shapes and the revision they were read at", tObject()),
+			resp: jsonBody("The updated model summary", tObject())}},
 		{"GET", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleBindings, apiOp{
 			summary: "Resolve a Panorama model's Atlas bindings for the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Resolved Atlas bindings", tObject())}},

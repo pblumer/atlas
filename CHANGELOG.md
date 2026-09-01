@@ -14,6 +14,55 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A Jira issue can start a process.** A Jira connector now carries inbound event
+  watches beside its outbound operations
+  ([ADR-0214](docs/adr/0214-jira-inbound-issue-watch.md)): Console → Connectors →
+  Events takes a JQL and a message name, and every issue the query matches is
+  published as an Atlas message, so a message-start process runs per new ticket and a
+  waiting instance is woken. Atlas polls, so nothing has to reach the server from the
+  internet. A new watch is forward-only — pointing one at a project with a long
+  history does not start a process per old ticket — and the correlation key and the
+  started instance see `issueKey`, `projectKey`, `issueType`, `summary`, `status`,
+  `reporter` and the whole issue. A watch on changed rather than new issues is the
+  same watch with its cursor field moved to `updated`. The bridge that carries this
+  is no longer clio's alone: what a source *is* moved behind an interface, and an
+  existing clio subscription keeps its resume position and its idempotency mark
+  byte-for-byte.
+
+- **The jira kind can be supervised.** `atlas --supervise-connector jira` refused to
+  start the *server* — `KnownConnectorKinds` is a hand-written list beside the switch
+  that is the real implementation, and the jira case was added without it, so the kind
+  could be served by a worker started by hand and never by one Atlas supervises. Which
+  is the path the Workers view shows, so it looked like a worker that does not exist.
+  A test now holds the list to the switch in both directions.
+
+- **Mock any REST API from its OpenAPI document.** `atlas mock-openapi --spec
+  petstore.yaml` serves the paths a document describes, so a process with a REST
+  connector task can be run end to end before the API it calls exists — or without
+  pointing a draft at the real one
+  ([ADR-0217](docs/adr/0217-openapi-mock-server.md)).
+
+  Where `atlas mock-remedy` hand-implements the endpoints of one Worker Type, this
+  serves whatever a document describes, and only the URL's host changes in the model.
+  A response is the document's own `example` where it states one, the first of its
+  named `examples` where it states those, and otherwise a value generated from the
+  schema — the same bytes on every run, so a demo is reproducible and a test can assert
+  on a body. A caller asks for a stated error path with `Prefer: code=404` or picks a
+  named example with `Prefer: example=rex`.
+
+  It refuses rather than improvises: a `$ref` it cannot resolve fails at startup in the
+  terminal that launched it, and a status the document does not describe is a 400 that
+  names what is on offer — a test written against the 404 path must not quietly pass on
+  a 200. What it does *not* do is validate: a request body is recorded, never checked,
+  and nothing is stateful.
+
+  `GET /__mock/calls` is the journal of what a run actually did — method, path,
+  operation, status, the `X-Request-ID` a job carries, and the body it sent — and
+  `GET /__mock/report` is that journal in the envelope the Console's Mockups view takes
+  ([ADR-0216](docs/adr/0216-mockups-are-one-view.md)), so this
+  mockup reports where the others are moving rather than becoming a fourth place to
+  look.
+
 - **See the mock Active Directory.** An AD worker running in mockup mode now reports
   the forests it holds, and Operations › **Mock directory** shows them: one card
   per worker, one tree per LDAP URL, every entry with its attributes, and the operation
@@ -148,6 +197,18 @@ _Changed_ / _Removed_ for each version.
 
 
 ### Changed
+
+- **Jira runs on a worker by default.** `DefaultOffloadedKinds` now includes `jira`, so a
+  Jira task is leased by a supervised worker instead of served inside the engine
+  ([ADR-0218](docs/adr/0218-jira-default-offload.md)). The engine
+  hands that worker the site URL and the vault credential at spawn, so nothing needs
+  configuring — the same handover mail and Remedy get. It appears in Operations → Workers
+  as a process with a pid, a log and a restart button, which is where an operator looks
+  for it; served in-process it was a folded-away row in Job types, visible only when
+  something was wrong with it. **This changes behaviour on upgrade**: the work moves out
+  of the engine on the next start, and a Jira site reachable from the engine must be
+  reachable from the worker. `--in-process-connectors jira` is the way back, and the
+  in-process handler stays for it.
 
 - **New Atlas mark.** The logo and the favicon are now a white peak carrying a
   cross on a black tile, replacing the blue hexagon-and-flow mark and the `A`

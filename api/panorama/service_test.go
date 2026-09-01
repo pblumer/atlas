@@ -28,6 +28,12 @@ type serviceFixture struct {
 	// facts is what the observation projection reads; factsErr makes it fail.
 	facts    Facts
 	factsErr error
+	// contextResults is what the historical-context adapters return, and
+	// contextErr makes them fail. contextQueries records what they were asked, so a
+	// test can assert that a binding no store can identify was still asked about.
+	contextResults []ContextResult
+	contextErr     error
+	contextQueries []ContextQuery
 }
 
 // errStub is the failure a test injects when it needs the catalog to fail.
@@ -60,6 +66,11 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 		func() time.Time { return time.Unix(1_700_000_000, 0) },
 		func(*http.Request) (Catalog, error) { return fx.catalog, fx.catalogErr },
 		func(*http.Request) (Facts, error) { return fx.facts, fx.factsErr },
+	).WithContextResolver(
+		func(_ *http.Request, queries []ContextQuery) ([]ContextResult, error) {
+			fx.contextQueries = queries
+			return fx.contextResults, fx.contextErr
+		},
 	)
 	return fx
 }

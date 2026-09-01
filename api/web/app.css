@@ -675,6 +675,56 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .panorama-sev-attention { border-left-color: var(--warn); }
 .panorama-sev-ok { border-left-color: var(--ok); }
 .panorama-unwatched { font-style: italic; }
+/* The drift journal in the properties panel (ADR-0189 P5). A list of transitions,
+   deliberately not a chart: this is a correlation surface, and a sparkline would
+   promise a continuity the journal does not have. Its limits sit with it, closed
+   but never hidden, because "nothing changed" and "nobody looked" read the same
+   without them. */
+.panorama-drift { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+.panorama-drift-entry {
+  border-left: 3px solid var(--border-strong); padding: 6px 0 6px 9px;
+  margin: 0 0 8px; display: flex; flex-direction: column; gap: 3px;
+}
+.panorama-drift-entry:last-child { margin-bottom: 0; }
+.panorama-drift-entry code { font-size: 11px; overflow-wrap: anywhere; }
+.panorama-drift-entry p { margin: 0; }
+.panorama-drift-limits { margin-top: 10px; font-size: 11px; color: var(--muted); }
+.panorama-drift-limits summary { cursor: pointer; }
+.panorama-drift-limits ul { margin: 6px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 5px; }
+.panorama-drift-limits b { color: var(--text); }
+.panorama-obs-since { font-size: 11px; }
+/* The authoring toolbar (ADR-0189 §2). The status is the one place that says
+   whether there is unsaved work, so it changes colour rather than only wording:
+   "no unsaved changes" and "three shapes moved" must not read alike at a glance. */
+.panorama-tool-sep {
+  width: 1px; align-self: stretch; margin: 2px 4px; background: var(--border-strong);
+}
+.panorama-status.panorama-dirty { color: var(--warn); font-weight: 600; }
+/* Historical context from stores outside Atlas (ADR-0189 P5b). A bar strip, not a
+   chart: a smooth line with axes would promise a continuity that a query against
+   somebody else's retention does not have, and this stays a correlation surface. */
+.panorama-ctx {
+  border-left: 3px solid var(--border-strong); padding: 6px 0 6px 9px;
+  margin: 0 0 10px; font-size: 12px; display: flex; flex-direction: column; gap: 4px;
+}
+.panorama-ctx:last-of-type { margin-bottom: 0; }
+.panorama-ctx-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.panorama-ctx code { font-size: 11px; overflow-wrap: anywhere; }
+.panorama-ctx p { margin: 0; }
+.panorama-ctx-available { border-left-color: var(--ok); }
+.panorama-ctx-empty, .panorama-ctx-not-configured, .panorama-ctx-unidentifiable { border-left-color: var(--border-strong); }
+.panorama-ctx-unreachable, .panorama-ctx-refused { border-left-color: var(--warn); }
+.panorama-measure { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+.panorama-measure-head { display: flex; justify-content: space-between; gap: 8px; }
+.panorama-spark {
+  display: flex; align-items: flex-end; gap: 1px; height: 34px;
+  background: var(--surface); border-radius: 3px; padding: 2px; overflow: hidden;
+}
+.panorama-spark-bar { flex: 1 1 0; min-width: 1px; background: var(--accent); border-radius: 1px; }
+.panorama-ctx-limits { margin-top: 10px; font-size: 11px; color: var(--muted); }
+.panorama-ctx-limits summary { cursor: pointer; }
+.panorama-ctx-limits ul { margin: 6px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 5px; }
+.panorama-ctx-limits b { color: var(--text); }
 .panorama-kv { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 8px; align-items: start; margin: 8px 0; font-size: 12px; }
 .panorama-kv span { color: var(--muted); }
 .panorama-kv b, .panorama-kv code { min-width: 0; overflow-wrap: anywhere; }
@@ -3335,14 +3385,36 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    halo (paint-order + a stroke in the page background) and the raised stacking of
    the hovered node. Without it a revealed name is unreadable exactly where the
    graph is dense, which is the only place it was needed. */
-.mesh-label { font-size: 12px; fill: var(--text); pointer-events: none; }
+.mesh-label { font-size: 15px; fill: var(--text); pointer-events: none; }
 .mesh-label-ink {
   opacity: 0; transition: opacity 80ms linear;
   paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round;
 }
-.mesh-named .mesh-label-ink { opacity: 1; }
+/* Which names are painted is decided by the zoom, not by the node count: the graph
+   is laid out in a world of its own size, so there is always room beside a node for
+   its name — what changes is whether that name is large enough on screen to read.
+   The tier classes are set from the current viewBox (see labelTier), so names appear
+   as the view moves in and nothing is re-rendered to show them. */
+.mesh-names-all .mesh-named .mesh-label-ink { opacity: 1; }
+.mesh-names-anchors .mesh-application.mesh-named .mesh-label-ink { opacity: 1; }
+/* An application's name is set larger because its circle is: it crosses the
+   readable threshold first, which is what makes "where is Billing" answerable
+   before the detail is. */
+.mesh-application .mesh-label { font-size: 26px; }
 .mesh-node:hover .mesh-label-ink,
 .mesh-node:focus-visible .mesh-label-ink { opacity: 1; }
+/* Pointing at a node shows what it is connected to. Everything unrelated falls
+   back rather than disappearing — a landscape with half of it deleted is a
+   different landscape, and the question is "what does this touch", not "what if
+   the rest were gone". */
+.mesh-relating .mesh-node { opacity: 0.22; transition: opacity 90ms linear; }
+.mesh-relating .mesh-edge { opacity: 0.08; }
+.mesh-relating .mesh-related,
+.mesh-relating .mesh-relating-self { opacity: 1; }
+.mesh-relating .mesh-related-edge { opacity: 1; stroke: var(--accent); stroke-width: 2.5; }
+.mesh-relating .mesh-related .mesh-label-ink,
+.mesh-relating .mesh-relating-self .mesh-label-ink { opacity: 1; }
+.mesh-relating .mesh-relating-self .mesh-body { stroke: var(--accent); stroke-width: 3; }
 /* The hovered node paints over its neighbours, so its name is legible even where
    the graph is at its densest. SVG has no z-index, so this is document order. */
 .mesh-node:hover, .mesh-node:focus-visible { transform-box: fill-box; }

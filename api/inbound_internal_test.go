@@ -581,3 +581,89 @@ func TestInboundSubStore(t *testing.T) {
 		t.Fatalf("delete idempotent: %v", err)
 	}
 }
+
+// A watch is validated against the kind of connector it names, because the kind is what
+// decides which half of the record is meaningful (ADR-0214). Each side is refused on
+// the other's kind too, so a watch cannot be saved carrying a field nothing will read.
+func TestValidateInboundWatchPerKind(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		kind string
+		rec  inboundSubscription
+		want string // "" = accepted; otherwise a substring of the refusal
+	}{
+		{"a clio watch needs its subject", connectorKindClio, inboundSubscription{}, "watchedSubject is required"},
+		{"a clio watch is not a query", connectorKindClio,
+			inboundSubscription{WatchedSubject: "/employees", JQL: "project = OPS"}, "jql belongs to a jira watch"},
+		{"a complete clio watch", connectorKindClio, inboundSubscription{WatchedSubject: "/employees"}, ""},
+
+		{"a jira watch needs its query", connectorKindJira, inboundSubscription{}, "jql is required"},
+		{"a jira watch is not a subject", connectorKindJira,
+			inboundSubscription{JQL: "project = OPS", WatchedSubject: "/employees"}, "belong to a clio watch"},
+		// The ordering is the bridge's: the cursor's progress depends on the last issue
+		// of a page being the newest one, so an authored ORDER BY is refused rather
+		// than silently overridden.
+		{"an authored ORDER BY", connectorKindJira,
+			inboundSubscription{JQL: "project = OPS ORDER BY created DESC"}, "must not carry an ORDER BY"},
+		// Jira Cloud refuses an unbounded query outright. Catching it here names the
+		// fix; from Jira it arrives as an HTTP 400 on every poll.
+		{"a query that only sorts", connectorKindJira,
+			inboundSubscription{JQL: "created > -1d"}, ""},
+		{"a query that restricts nothing", connectorKindJira,
+			inboundSubscription{JQL: "recently updated"}, "must restrict what it matches"},
+		{"an unknown cursor field", connectorKindJira,
+			inboundSubscription{JQL: "project = OPS", CursorField: "resolved"}, "cursorField must be"},
+		{"a negative cadence", connectorKindJira,
+			inboundSubscription{JQL: "project = OPS", PollSeconds: -1}, "cannot be negative"},
+		{"a complete jira watch", connectorKindJira, inboundSubscription{JQL: "project = OPS"}, ""},
+
+		{"a connector that does not exist", "", inboundSubscription{}, "no connector with that id"},
+		{"a kind with no inbound half", connectorKindMail, inboundSubscription{}, "has no inbound half"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := tc.rec
+			got := validateInboundWatch(tc.kind, &rec)
+			switch {
+			case tc.want == "" && got != "":
+				t.Fatalf("a usable watch was refused: %s", got)
+			case tc.want != "" && !strings.Contains(got, tc.want):
+				t.Fatalf("refusal = %q, want it to mention %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// A jira watch's cursor field is normalized on the way in, so no reader has to defend
+// against the empty value — and a clio watch's is cleared, because it has none.
+func TestValidateInboundWatchNormalizes(t *testing.T) {
+	jiraRec := inboundSubscription{JQL: "project = OPS"}
+	if msg := validateInboundWatch(connectorKindJira, &jiraRec); msg != "" {
+		t.Fatalf("refused: %s", msg)
+	}
+	if jiraRec.CursorField != "created" {
+		t.Errorf("cursorField = %q, want the default filled in", jiraRec.CursorField)
+	}
+	clioRec := inboundSubscription{WatchedSubject: "/e", CursorField: "created"}
+	if msg := validateInboundWatch(connectorKindClio, &clioRec); msg != "" {
+		t.Fatalf("refused: %s", msg)
+	}
+	if clioRec.CursorField != "" {
+		t.Errorf("cursorField = %q, want it cleared for a clio watch", clioRec.CursorField)
+	}
+}
+
+// A watch with its own cadence is read when it has elapsed and skipped when it has not.
+// Without a cadence it is read on every tick, which is what every clio subscription did
+// before per-watch pacing existed and still does.
+func TestInboundDueRespectsAWatchsOwnCadence(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	if !inboundDue(inboundSubscription{}, now) {
+		t.Error("a watch with no cadence of its own was skipped")
+	}
+	if inboundDue(inboundSubscription{PollSeconds: 60, LastPolledAt: now.Unix() - 30}, now) {
+		t.Error("a watch was read 30s into its own 60s cadence")
+	}
+	if !inboundDue(inboundSubscription{PollSeconds: 60, LastPolledAt: now.Unix() - 60}, now) {
+		t.Error("a watch was skipped after its cadence had elapsed")
+	}
+}

@@ -1,0 +1,138 @@
+openapi: 3.0.3
+info:
+  title: Petstore
+  version: 1.4.2
+servers:
+  - url: https://api.example.com/v1
+    description: production
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List every pet
+      responses:
+        '200':
+          description: a list of pets
+          headers:
+            X-Total-Count:
+              schema:
+                type: integer
+                example: 2
+          content:
+            application/json:
+              schema:
+                type: array
+                minItems: 2
+                items:
+                  $ref: '#/components/schemas/Pet'
+    post:
+      operationId: createPet
+      responses:
+        '201':
+          description: created
+          headers:
+            Location:
+              schema:
+                type: string
+                example: /v1/pets/1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+        '400':
+          description: the pet was not acceptable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pets/mine:
+    get:
+      operationId: myPets
+      responses:
+        '200':
+          description: the caller's pets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pet'
+  /pets/{petId}:
+    get:
+      operationId: getPet
+      responses:
+        '200':
+          description: one pet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+              examples:
+                fido:
+                  value:
+                    id: 7
+                    name: Fido
+                    status: available
+                rex:
+                  value:
+                    id: 8
+                    name: Rex
+                    status: sold
+        '404':
+          description: no such pet
+          content:
+            application/json:
+              example:
+                code: 404
+                message: no such pet
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: deletePet
+      responses:
+        '204':
+          description: gone
+  /reports/{year}-{month}.csv:
+    get:
+      operationId: monthlyReport
+      responses:
+        '200':
+          description: a report
+          content:
+            text/csv:
+              example: |
+                pets,adoptions
+                2,1
+components:
+  schemas:
+    Pet:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        name:
+          type: string
+        tag:
+          type: string
+        status:
+          type: string
+          enum: [available, pending, sold]
+        born:
+          type: string
+          format: date
+        parent:
+          $ref: '#/components/schemas/Pet'
+    Error:
+      allOf:
+        - type: object
+          required: [code]
+          properties:
+            code:
+              type: integer
+        - type: object
+          properties:
+            message:
+              type: string

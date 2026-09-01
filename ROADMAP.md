@@ -247,6 +247,19 @@ The control-flow basics most real models use.
   registry-only); credentials are still never authored in a model — an auth type
   plus a server-registered credential reference is a follow-up, alongside
   headers/query maps and FEEL-in-fields.
+  For trying such a task out before the API it calls exists — or without pointing a
+  draft at the real one — `atlas mock-openapi --spec petstore.yaml` serves a mock REST
+  API from an OpenAPI 3 document ([ADR-0217](docs/adr/0217-openapi-mock-server.md),
+  package `connector/rest/openapimock`): it compiles every operation at startup, answers
+  with the document's own examples where it states them and deterministic values
+  generated from its schemas where it does not, lets a caller ask for a stated error
+  path with `Prefer: code=404`, and refuses a status or example the document does not
+  describe rather than substituting one. Only the URL's host changes in the model.
+  `GET /__mock/calls` is the journal of what a run actually did and `GET /__mock/report`
+  is that journal in the Mockups envelope
+  ([ADR-0216](docs/adr/0216-mockups-are-one-view.md)). Request
+  validation against the schemas, stateful collections, and posting the report once the
+  Mockups route exists are follow-ups.
   **BMC Remedy is another Worker Type in the catalog**
   ([ADR-0106](docs/adr/0106-bmc-remedy-connector.md)): a service task marked
   `<atlas:remedyConnector connector form>` creates an entry (e.g. an incident on
@@ -922,8 +935,20 @@ for the derived whole-instance mesh above them.
   and the Technology elements needed to model artifacts, nodes, services, and
   networks; state the supported subset explicitly. The read-only, multi-view
   `diagram-js` canvas, ArchiMate renderer, selection properties, and zoom/pan
-  controls are complete; authoring, semantic rules, undo/redo, and save remain.
-- 🚧 **P2.5 — Landscape mesh:** derive a whole-instance graph from resources
+  controls are complete. Authoring ships in stages:
+  **a)** arranging a view — moving and resizing the shapes already on it, undo and
+  redo over those edits, and a save that writes the new geometry back. Complete.
+  The document is *spliced*, never re-serialised: §2 requires that
+  unsupported-but-standard content round-trips without loss, so the server writes
+  four numbers per moved shape and reads nothing else. That is also why the browser
+  does not write it — `XMLSerializer` normalises, so serialising the parsed copy
+  would quietly rewrite somebody's model every time a box was nudged. The canvas
+  sends what it knows, which is a list of moved shapes. An explicit rules provider
+  permits exactly those two edits and refuses the rest, because a canvas offering an
+  operation that cannot yet be saved is worse than one that never offered it; and
+  **b)** creating elements and relationships from a stated subset, with ArchiMate's
+  semantic connection rules. Open.
+- ✅ **P2.5 — Landscape mesh:** derive a whole-instance graph from resources
   Atlas already holds — process applications, deployed processes, call activities,
   workers, Worker Types, releases, deployment targets, DMN decisions — so
   Panorama is useful before anyone models anything, and treat the ArchiMate model as
@@ -942,13 +967,16 @@ for the derived whole-instance mesh above them.
   **c)** severity on the mesh, aggregating P4's seven observation states into three
   classes for zoom-out without replacing them, keeping unreachable and stale out of
   critical and always attributing a worst-of parent to the descendant that caused it.
-  Stages **a** and **b** are complete. Stage **c** ships the mapping, the worst-of
+  All three stages are complete. Stage **c** ships the mapping, the worst-of
   aggregation with attribution, and the two states this engine can already observe
   about itself without asking anything outside it — parked work on a process and a
-  worker that cannot serve work. **unreachable** and **stale** need a source outside
-  the process and a freshness contract to exceed, so they arrive with P4; until then
-  every mesh payload declares them unavailable with the reason, rather than letting
-  an unwatched instance render as uniformly healthy.
+  worker that cannot serve work. **unreachable** and **stale** stay unavailable on
+  the mesh, and that is now a standing property rather than a wait: P4c made both
+  producible, but only by asking a source outside this process, and the mesh draws
+  no deployment targets so it contacts nothing. Every mesh payload therefore
+  declares those two with the reason, rather than letting an unwatched instance
+  render as uniformly healthy — while the observation document, which does ask
+  peers, declares nothing unavailable.
 - 🚧 **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
   workers and job types, releases, local runtimes, and deployment targets. Preserve
@@ -999,12 +1027,53 @@ for the derived whole-instance mesh above them.
   binds nothing carries no mark, because most elements of a young model are unbound
   and a badge on each would make the diagram a wall of marks. The legend lists only
   the classes on that diagram and states what an unmarked element means.
-- 🔲 **P5 — Landscape intelligence:** compare desired and observed deployments
+- ✅ **P5 — Landscape intelligence:** compare desired and observed deployments
   over time and optionally query Prometheus/OpenSearch for historical context.
   Dependency/impact analysis and discovered-but-unmodeled resources move forward
   into P2.5, which derives the edges they need. P4 also unblocks the two observation
   states P2.5c declares unavailable (unreachable, stale). Panorama remains a
-  correlation surface, not a time-series or log database.
+  correlation surface, not a time-series or log database. Ships in stages:
+  **a)** the drift journal — what has been seen to change, and when. Complete. The
+  constraint above is the whole design: a store of samples is exactly what "not a
+  time-series database" forbids, so none is kept. What is kept are **transitions**.
+  A hundred identical readings produce nothing; one release going stale produces
+  one entry, with both states, the reason, and the moment it was noticed. A
+  finding therefore carries its own age — "degraded" and "degraded since nine this
+  morning" are different findings, and the second is the one somebody acts on. It
+  is recorded when somebody reads the observations rather than by a sweeper,
+  because nothing polls; it is runtime state that a restart empties, never written
+  to the log (I4/I6); and it is bounded per model and across models. All three of
+  those are *published* with every answer rather than documented here, because
+  without them "nothing changed" and "nobody looked" read alike; and
+  **b)** the adapters for historical context — the stores where continuous history
+  actually belongs, which is why (a) does not pretend to it. They *query* those
+  stores and keep nothing: ADR-0189 rejected copying remote metrics and logs into a
+  Panorama database by name, and a cache of somebody else's history is that database
+  with a shorter retention and no owner. Ships in two:
+  **b-i)** the event-log adapter, over the OpenSearch index Atlas already exports to
+  (ADR-0114). Complete. It answers about a process and about the application whose
+  processes those are, because every exported record carries its definition key —
+  and it answers about nothing else, because the log stores a job's type as an
+  interned index and names no node. Each of those is reported as its own state
+  rather than as an absence of data: a source's answer is one of six —
+  not-configured, unidentifiable, unreachable, refused, empty, available — and only
+  *empty* is a statement about the architecture rather than about the lookup. Every
+  source answers for every bound value, including the ones it cannot help with, so
+  the metrics store already says what it is before its adapter exists. Scoped to one
+  element and to an allowlist of windows, because each bound value costs a query
+  against a system that did not agree to be browsed; and
+  **b-ii)** the metrics adapter, over a Prometheus-compatible store. Complete. It
+  answers about a *node* through the runtime and deployment-target bindings and
+  never about one process, because ADR-0142 forbids labelling a metric by anything
+  the data can invent — which is why (b-i) did not wait for it. A node is
+  identified the only way a metrics store knows one, by the scrape target its
+  series came from: derived from a deployment target's base URL, and for this
+  server configured with `--metrics-instance`, because how this process appears in
+  somebody's Prometheus is their scrape configuration and guessing it would answer
+  about a different process while looking exactly like an answer about this one.
+  Counters are asked with `increase()` so a bucket is a count and the window total
+  is their sum; the queue-depth gauge is asked with `max_over_time()` and its total
+  is the peak, because adding two readings of a queue depth measures nothing.
 
 ## Milestone A — Modeler & authoring experience 🔲
 
