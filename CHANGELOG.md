@@ -40,7 +40,7 @@ _Changed_ / _Removed_ for each version.
   petstore.yaml` serves the paths a document describes, so a process with a REST
   connector task can be run end to end before the API it calls exists — or without
   pointing a draft at the real one
-  ([ADR-draft-openapi-mock-server](docs/adr/draft-openapi-mock-server.md)).
+  ([ADR-0217](docs/adr/0217-openapi-mock-server.md)).
 
   Where `atlas mock-remedy` hand-implements the endpoints of one Worker Type, this
   serves whatever a document describes, and only the URL's host changes in the model.

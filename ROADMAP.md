@@ -249,7 +249,7 @@ The control-flow basics most real models use.
   headers/query maps and FEEL-in-fields.
   For trying such a task out before the API it calls exists — or without pointing a
   draft at the real one — `atlas mock-openapi --spec petstore.yaml` serves a mock REST
-  API from an OpenAPI 3 document ([ADR-draft-openapi-mock-server](docs/adr/draft-openapi-mock-server.md),
+  API from an OpenAPI 3 document ([ADR-0217](docs/adr/0217-openapi-mock-server.md),
   package `connector/rest/openapimock`): it compiles every operation at startup, answers
   with the document's own examples where it states them and deterministic values
   generated from its schemas where it does not, lets a caller ask for a stated error

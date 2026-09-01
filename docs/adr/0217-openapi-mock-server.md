@@ -1,4 +1,4 @@
-# ADR-DRAFT: A mock REST API served from an OpenAPI document
+# ADR-0217: A mock REST API served from an OpenAPI document
 
 - **Status:** Accepted
 - **Date:** 2026-09-01
