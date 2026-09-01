@@ -301,7 +301,7 @@ The control-flow basics most real models use.
   has never held. Atlas does not supervise it by default; `--offload-connectors jira` opts
   in, and the in-process handler remains as the fallback `--in-process-connectors` returns
   to. Attachments and inbound events are follow-ups — for the inbound half see
-  [the Jira issue-watch draft](docs/adr/draft-jira-inbound-issue-watch.md).
+  [the Jira issue-watch draft](docs/adr/0214-jira-inbound-issue-watch.md).
 
 ## Milestone 2 — Events and timers 🚧
 

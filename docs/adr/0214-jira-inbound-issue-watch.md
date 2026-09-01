@@ -1,4 +1,4 @@
-# ADR-DRAFT: Jira as an inbound event source — a polled issue watch, deduplicated per issue
+# ADR-0214: Jira as an inbound event source — a polled issue watch, deduplicated per issue
 
 - **Status:** Proposed
 - **Date:** 2026-09-01
