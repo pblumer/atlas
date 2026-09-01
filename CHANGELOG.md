@@ -41,10 +41,13 @@ _Changed_ / _Removed_ for each version.
   target must be `https://` ([ADR-0129](docs/adr/0129-remote-deployment-targets.md)),
   and on-prem that certificate usually comes from a CA the sending host has never
   heard of. Point `--tls-ca` at its PEM bundle on the publishing server, and at the
-  same bundle on an `atlas worker --server https://…` running on another host. It
-  is *added* to the host's roots, never a replacement, and it reaches only those
-  two conversations — a Worker Type calling a third party keeps the host's trust
-  store, because that endpoint is somebody else's.
+  same bundle on an `atlas worker --server https://…` running on another host or an
+  `atlas mcp --server https://…` an agent drives it through. It is *added* to the
+  host's roots, never a replacement, and it reaches only Atlas calling Atlas — a
+  Worker Type calling a third party keeps the host's trust store, because that
+  endpoint is somebody else's. There is no switch to skip verification anywhere,
+  and a bundle that cannot be read stops the process at startup rather than
+  failing every call later.
 
 - **Helm: `atlas.tls`.** Mount a `kubernetes.io/tls` Secret (what cert-manager
   writes) and the chart passes the pair to the server and switches all three
