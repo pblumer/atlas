@@ -284,7 +284,7 @@ atlas/
 ├── expr/          FEEL expression compilation and evaluation
 ├── job/           Job store, worker subscription, gRPC streaming protocol
 ├── dmn/           DMN registry, resolver, validation, business-rule-task worker
-├── connector/     In-process service-task workers, one package per connector kind
+├── connector/     Worker Type implementations, one package per type (ADR-0203)
 │   ├── rest/          HTTP REST outbound (ADR-0067)
 │   ├── mail/          Outbound mail: SMTP, Gmail, Microsoft Graph (ADR-0079/0093)
 │   ├── sharepoint/    SharePoint list items via Graph (ADR-0141)
@@ -310,12 +310,17 @@ atlas/
 └── cmd/atlas/     The single binary (ADR-0011)
 ```
 
-Every package under `connector/` implements the same seam: the compiler turns an
-authored service task into a job carrying a reserved `compiler.*JobTypeIndex`, and
-that kind's in-process worker handles it off the processor goroutine, after fsync —
-so a connector call can never violate the hot-path or durability invariants
+Every package under `connector/` implements one **Worker Type** (ADR-0203) behind the
+same seam: the compiler turns an authored service task into a job carrying a reserved
+`compiler.*JobTypeIndex`, and a worker handles it off the processor goroutine, after
+fsync — so a worker's call can never violate the hot-path or durability invariants
 (ADR-0007, ADR-0067). Grouping them keeps that shared contract visible and makes
-adding a kind a new sub-package rather than another entry in a flat root.
+adding a Worker Type a new sub-package rather than another entry in a flat root.
+
+The directory keeps the name `connector/` on purpose: ADR-0203 renamed the concepts,
+not the persisted job type indices, the package paths or the `/api/v1/connectors`
+contract. Slice 7 of [the migration](architecture/worker-execution-migration.md)
+renames the packages, once the API transition is established.
 
 The sub-packages under `api/` are the parts of the server that depend on nothing
 else in it: a layout generator that only reads and writes BPMN XML, a session

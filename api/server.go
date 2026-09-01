@@ -54,6 +54,7 @@ import (
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/envname"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
@@ -112,22 +113,12 @@ func temisRegistryFromEnv() *temis.Registry {
 // connectorEnvKey normalizes a connector name into its environment-variable
 // fragment: upper-case, with each run of non-alphanumeric characters collapsed to
 // a single underscore and leading/trailing underscores trimmed.
-func connectorEnvKey(name string) string {
-	var b strings.Builder
-	pendingSep := false
-	for _, r := range strings.ToUpper(name) {
-		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			if pendingSep && b.Len() > 0 {
-				b.WriteByte('_')
-			}
-			pendingSep = false
-			b.WriteRune(r)
-		} else {
-			pendingSep = true
-		}
-	}
-	return b.String()
-}
+//
+// The fold itself is [envname.Key], because a worker reads the variables this
+// renders and a connector has to name the one it could not resolve. Three packages
+// applying the same rule separately is a bug an operator meets as "I set that
+// variable and it still says it is missing".
+func connectorEnvKey(name string) string { return envname.Key(name) }
 
 //go:embed web
 var webFS embed.FS
@@ -216,7 +207,12 @@ type Server struct {
 	// itself; their jobs park for an external worker. See [WithOffloadedConnectorKinds].
 	offloadedKinds []string
 	drafts         *draftStore // durable sidecar for saved-but-not-deployed diagrams
-	forms          *formStore  // durable sidecar for form definitions (ADR-0028)
+	// targetClient calls another Atlas — a deployment target (ADR-0129). It is set
+	// only where the operator named certificate authorities of their own with
+	// --tls-ca; nil means the default client, verifying against the host's roots
+	// (ADR-0191).
+	targetClient *http.Client
+	forms        *formStore // durable sidecar for form definitions (ADR-0028)
 	// playgroundScenarios holds saved Playground runs: the requests that make one,
 	// what it must show, and the last report it produced
 	// (ADR-draft-modeler-playground).
@@ -248,7 +244,20 @@ type Server struct {
 	playgroundTTL, playgroundSweep time.Duration
 	// panorama is the application-owned ArchiMate model library (ADR-0189),
 	// isolated as a per-area service under ADR-0147.
-	panorama         *panorama.Service
+	panorama *panorama.Service
+	// remoteNodes is what peer Atlas servers last said about themselves
+	// (ADR-0189 §6, P4c). It carries its own lock rather than living on the run
+	// loop, because it is written by goroutines waiting on the network and putting
+	// it behind the single writer would mean holding that writer across a remote
+	// call. Set once before Handler is mounted; the map inside is mutated under its
+	// own mutex thereafter.
+	remoteNodes *remoteNodeCache
+
+	// panoramaMesh is Panorama's derived landscape altitude (ADR-0211): a graph
+	// computed from this server's own resources, never stored. Separate from the
+	// model library above because declared intent and derived fact must not share
+	// a surface.
+	panoramaMesh     *panorama.Mesh
 	systemPIDs       map[string]bool     // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
 	deploySysProcs   bool                // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
 	userProvisioning bool                // opt-in: enable the user-provisioning connector for system processes (ADR-0123)
@@ -598,6 +607,32 @@ func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 // Passing the handler in makes that a decision this package owns rather than one
 // the wiring in cmd can make differently (ADR-0196).
 func WithMCP(h http.Handler) Option { return func(s *Server) { s.mcpHandler = h } }
+
+// mcpTransport is the MCP handler with one thing added: every request entering it
+// is stamped with mcpTransportHeader, which the adapter forwards on the API calls
+// its tools make. That is what lets the boundary tell a tool call apart from a
+// client driving /api/v1 with a token approved only for the transport — the two
+// carry the same credential and are otherwise the same request.
+//
+// Stamping rather than trusting: whatever the caller sent under that name is
+// replaced, so the marker is only ever a value this server put there. With
+// authentication off there is no internal token and the header is removed instead,
+// which keeps "no secret" from reading as "matched".
+//
+// The header goes on a clone, so the request the mux handed us is not mutated —
+// nothing downstream of this handler expects its headers to have been rewritten.
+func (s *Server) mcpTransport() http.Handler {
+	h := s.mcpHandler
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.Clone(r.Context())
+		if s.internalToken == "" {
+			r.Header.Del(mcpTransportHeader)
+		} else {
+			r.Header.Set(mcpTransportHeader, s.internalToken)
+		}
+		h.ServeHTTP(w, r)
+	})
+}
 
 // WithPublicFormsCORS allows the given web origins to call the unauthenticated
 // /public/forms endpoints cross-origin, so a process's start form can be embedded
@@ -1024,6 +1059,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	// The node identity is minted here rather than on the first read of the
+	// descriptor, for two reasons: a stable id must not be the side effect of
+	// somebody's GET, and a data directory this server cannot write to is an
+	// operator's problem to see at startup rather than weeks later on a request
+	// (ADR-0189 §6).
+	if _, err := ensureNodeIdentity(settings); err != nil {
+		return nil, err
+	}
 	// DMN reference models are resolved either from a temis model service (when
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
@@ -1035,6 +1078,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		proc:                proc,
 		store:               store,
 		dataDir:             dataDir,
+		remoteNodes:         newRemoteNodeCache(),
 		quit:                quit,
 		runLoop:             runloop.New(quit),
 		deployments:         map[uint64]*deployment{},
@@ -1149,7 +1193,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		},
 		token.New,
 		time.Now,
+		s.collectBindingCatalog,
+		s.collectFacts,
 	)
+	s.panoramaMesh = panorama.NewMesh(s.runLoop, s.collectLandscape, s.panorama.OverlaysOnLoop, meshMaxNodes)
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -2401,8 +2448,9 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// wiring is not a place where that decision should be makeable
 	// (ADR-0196).
 	if s.mcpHandler != nil {
-		mount(accessAuthenticated, roleAny, "/mcp", s.mcpHandler)
-		mount(accessAuthenticated, roleAny, "/mcp/", s.mcpHandler)
+		transport := s.mcpTransport()
+		mount(accessAuthenticated, roleAny, "/mcp", transport)
+		mount(accessAuthenticated, roleAny, "/mcp/", transport)
 	}
 
 	// Anything under /api/v1 that no route above claimed. Without this the UI's "/"

@@ -1,0 +1,39 @@
+{
+  "type": "default",
+  "id": "za-freigabe",
+  "components": [
+    {
+      "type": "text",
+      "text": "# ✅ Zugang freigeben\n\nDer Jira-Vorgang ist angelegt. Deine Entscheidung entscheidet, was mit ihm passiert: bei einer Freigabe wird er weitergeschaltet, sonst bleibt er offen und bekommt nur einen Kommentar."
+    },
+    {
+      "key": "antragsteller",
+      "type": "textfield",
+      "label": "Antragsteller",
+      "disabled": true
+    },
+    {
+      "key": "system",
+      "type": "textfield",
+      "label": "System",
+      "disabled": true
+    },
+    {
+      "key": "freigabe",
+      "type": "radio",
+      "label": "Entscheidung",
+      "values": [
+        { "label": "Freigeben", "value": "ja" },
+        { "label": "Ablehnen", "value": "nein" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "kommentar",
+      "type": "textarea",
+      "label": "Kommentar",
+      "description": "Geht so oder so nach Jira — als Notiz am Übergang oder als Ablehnungsgrund. Pflichtfeld aus demselben Grund wie die Begründung: leer würde die FEEL-Verkettung leeren und Jira einen leeren Kommentar schicken.",
+      "validate": { "required": true }
+    }
+  ]
+}

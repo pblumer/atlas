@@ -68,13 +68,18 @@ func writeRPC(w http.ResponseWriter, resp rpcResponse) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// callerFrom lifts the credentials off an incoming MCP request. Both of Atlas's
-// are taken, because both can legitimately arrive here: a bearer from a remote
-// MCP client, and a session cookie when the signed-in web UI drives a tool
-// itself. Neither is inspected — see the caller type.
+// callerFrom lifts the credentials off an incoming MCP request, and the marker
+// that says where it arrived. Both of Atlas's credentials are taken, because both
+// can legitimately arrive here: a bearer from a remote MCP client, and a session
+// cookie when the signed-in web UI drives a tool itself. None of the three is
+// inspected — see the caller type.
 func callerFrom(r *http.Request) caller {
 	return caller{
 		authorization: r.Header.Get("Authorization"),
 		cookie:        r.Header.Get("Cookie"),
+		// Not a credential, and taken for a different reason: it says this request is
+		// a tool call, which is what keeps a token approved for the transport alone
+		// from being confined away from the API calls its tools are (TransportHeader).
+		via: r.Header.Get(TransportHeader),
 	}
 }

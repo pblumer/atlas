@@ -40,15 +40,26 @@ type IDGenerator func() (string, error)
 // Clock supplies deterministic timestamps in tests.
 type Clock func() time.Time
 
+// CatalogResolver supplies the Atlas resources a document's bindings resolve
+// against, already filtered for this caller (ADR-0189 §4). Like AccessResolver it
+// runs inside a run-loop turn, so it may read the server's stores directly and
+// must not call Loop.Do recursively.
+type CatalogResolver func(r *http.Request) (Catalog, error)
+
 // Service serves the Panorama model-library HTTP area (ADR-0189). Its only
 // mutable dependency is Store, and every read and write of that store goes
 // through loop, preserving the design-time single-writer boundary.
 type Service struct {
-	loop   *runloop.Loop
-	store  *Store
-	access AccessResolver
-	newID  IDGenerator
-	now    Clock
+	loop    *runloop.Loop
+	store   *Store
+	access  AccessResolver
+	newID   IDGenerator
+	now     Clock
+	catalog CatalogResolver
+	// facts supplies the runtime observations of ADR-0189 §6. Optional: a server
+	// that wires none serves the model and its bindings and refuses the
+	// observation route, rather than answering it with an empty landscape.
+	facts FactsResolver
 }
 
 // CountForApplicationOnLoop counts models owned by one application. It is a
@@ -79,8 +90,12 @@ func (s *Service) CountsByApplicationOnLoop() (map[string]int, error) {
 }
 
 // New builds a Panorama service over a run-loop-owned store.
-func New(loop *runloop.Loop, store *Store, access AccessResolver, newID IDGenerator, now Clock) *Service {
-	return &Service{loop: loop, store: store, access: access, newID: newID, now: now}
+func New(loop *runloop.Loop, store *Store, access AccessResolver, newID IDGenerator, now Clock,
+	catalog CatalogResolver, facts FactsResolver) *Service {
+	return &Service{
+		loop: loop, store: store, access: access, newID: newID, now: now,
+		catalog: catalog, facts: facts,
+	}
 }
 
 type createRequest struct {

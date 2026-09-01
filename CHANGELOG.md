@@ -14,6 +14,72 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Atlas can terminate TLS itself.** `--tls-cert` and `--tls-key` turn `--addr`
+  into a TLS 1.3 listener, so the reverse proxy that used to be mandatory before
+  anyone outside the host could reach the server is now a choice
+  ([ADR-0191](docs/adr/0191-built-in-tls-listener.md)). Unset — both unset — is
+  today's behaviour exactly: plain HTTP, nothing changes on upgrade.
+
+  **Both files or neither.** Naming one without the other stops the server rather
+  than falling back to plaintext on the port you believed you had just secured.
+  The pair is re-read when either file changes, so a renewal needs no restart of a
+  stateful engine; a renewal caught half-written keeps serving the certificate it
+  has and logs `server.tls_reload_failed` rather than refusing handshakes.
+
+  **TLS 1.3 only, and that is the point.** Its cipher suites are fixed by the
+  protocol, so there is no cipher list to expose, nothing to weaken, and no
+  `--tls-min-version`. A client that cannot negotiate 1.3 is refused rather than
+  quietly downgraded.
+
+  With TLS on, the server also opens a plaintext listener on `127.0.0.1` with an
+  ephemeral port for its own children — the MCP adapter's loopback calls and any
+  worker it supervises. A certificate issued for a host name carries no name for
+  `127.0.0.1`, and the alternative would be a switch to skip verification, which
+  Atlas does not have and will not get.
+
+- **`--tls-ca`, so two Atlas servers with an internal CA can talk.** A deployment
+  target must be `https://` ([ADR-0129](docs/adr/0129-remote-deployment-targets.md)),
+  and on-prem that certificate usually comes from a CA the sending host has never
+  heard of. Point `--tls-ca` at its PEM bundle on the publishing server, and at the
+  same bundle on an `atlas worker --server https://…` running on another host or an
+  `atlas mcp --server https://…` an agent drives it through. It is *added* to the
+  host's roots, never a replacement, and it reaches only Atlas calling Atlas — a
+  Worker Type calling a third party keeps the host's trust store, because that
+  endpoint is somebody else's. There is no switch to skip verification anywhere,
+  and a bundle that cannot be read stops the process at startup rather than
+  failing every call later.
+
+- **Helm: `atlas.tls`.** Mount a `kubernetes.io/tls` Secret (what cert-manager
+  writes) and the chart passes the pair to the server and switches all three
+  probes to the HTTPS scheme. Off by default, because in a cluster the Ingress
+  usually holds the certificate.
+
+  **What TLS still does not cover:** `/metrics`, `/healthz` and `/readyz` are
+  unauthenticated by design, so a port reachable beyond the host still wants a
+  proxy in front of those paths — encryption is not authorization.
+
+- **The Active Directory Worker Type can search.** A new `search` operation answers
+  "is this group there, and what is its distinguished name?" —
+  ([ADR-0166](docs/adr/0166-active-directory-connector.md), fifth amendment). It takes
+  a base DN, a scope (`base`/`one`/`sub`, default `sub`), an RFC 4515 filter and an
+  entry cap, and writes `{found, count, dn, entries}` into its result variable.
+
+  It exists because a membership change cannot be modelled without it: `add-group-member`
+  addresses the group by its distinguished name, and a distinguished name is a position
+  in a tree rather than something a requester supplies. Until now the answer was to bind
+  the generic LDAP connector to the same directory just to ask — a second connector and
+  a second place to configure it, in the middle of one lifecycle. `found` is what a
+  gateway branches on (`=gruppe.found`), and `dn` is what the next task addresses
+  (`=gruppe.dn`); entries come back DN-sorted, so a redelivered job writes the same
+  answer. **Finding nothing completes the task with `found=false`** — checking whether
+  an entry exists is the point, so "no" is an answer rather than an incident. Exceeding
+  the cap fails instead of truncating, and every search is paged, so a domain
+  controller's size limit does not refuse a legitimate one.
+
+  New: [`examples/ad-gruppenzuweisung.bpmn`](examples/ad-gruppenzuweisung.bpmn) — find
+  the account, find the group (create it if it is not there), assign. The AD mockup
+  answers a search too, so the whole model runs without a domain controller.
+
 - **Sign in with your identity provider.** Atlas can now be an OpenID Connect
   relying party: people reach the login screen, press **Sign in with …**, and come
   back with a session ([ADR-0210](docs/adr/0210-federated-authentication.md)).
@@ -26,11 +92,115 @@ _Changed_ / _Removed_ for each version.
   in — which is what every installation has today.
 
   A first sign-in creates an account linked to the provider's *subject*, not the
-  email address, with the `user` role and nothing else; grant more under
-  Organization as for any account. The local password form stays, deliberately: a
-  provider that is unreachable must not lock an administrator out of their own
-  instance. Mapping the provider's groups onto Atlas roles is the next step and not
-  in this one.
+  email address. The local password form stays, deliberately: a provider that is
+  unreachable must not lock an administrator out of their own instance.
+
+- **Let the provider's groups decide roles.** Under **Organization → Single
+  sign-on** an administrator names one claim in the token and a list of exact
+  values it may carry, and each value names the Atlas roles it grants and the
+  groups it puts a person in. Onboarding and offboarding become a group membership
+  somebody already maintains: the role and the shared projects arrive at the next
+  sign-in and go away at the sign-in after the membership does.
+
+  **It is off until you turn it on**, and worth one decision before you do: while
+  it is on, whoever administers those groups administers this instance's roles, and
+  a role granted by hand is replaced at that person's next sign-in. Group
+  membership follows only for the groups your rules name — a group no rule mentions
+  is left alone, so a membership you added by hand there survives.
+
+  Nothing is granted by absence: somebody the provider says nothing about matches
+  no rule and holds `user`, which everybody who can sign in has either way. A rule
+  that could never work — a role Atlas does not enforce, a group that has been
+  deleted — is refused when you save it rather than ignored on every login.
+
+### Changed
+
+- **New Atlas mark.** The logo and the favicon are now a white peak carrying a
+  cross on a black tile, replacing the blue hexagon-and-flow mark and the `A`
+  letter tile the Console showed in its top bar, drawer, login screen, handbook,
+  public forms and consent page. Nothing about branding *behaviour* changed: an
+  org-wide logo uploaded under Appearance
+  ([ADR-0148](docs/adr/0148-org-wide-brand-logo.md)) still overrides it
+  everywhere, and removing that logo now restores the new mark instead of the
+  letter.
+
+- **The handbook and the examples teach Workers, not connectors.** The Console
+  renamed *Connectors* to *Workers* with the first slice of
+  [ADR-0203](docs/adr/0203-worker-execution-model.md); the documentation still
+  called the same thing three different things. It now uses one vocabulary
+  throughout: a **Worker Type** is a capability Atlas has (Jira, Mail, Active
+  Directory), a **Worker** is one configured target and identity of that type —
+  the name a task states — and a **Worker Instance** is a running process that
+  leases jobs. *Forms & connectors* is now *Forms & workers* and explains the
+  three levels and the `Task → Job → Worker` chain they sit on; the Active
+  Directory chapter uses two forests to show where they come apart (a second
+  directory is a second Worker, more throughput is more Worker Instances); the
+  glossary gained all three terms and keeps *Connector* as a legacy entry.
+
+  **No model changes.** A task still names its worker with `connector="…"`, the
+  extension elements are still `<atlas:mailConnector>` and friends, and
+  `atlas worker --connector mail` still names the worker type — the handbook now
+  says so explicitly, in a note that explains why. Every example's prose moved to
+  the new vocabulary; not one line of BPMN did.
+
+- **The Modeler says Worker too, and offers the names it is asking for.** The
+  Console and the handbook already speak
+  [ADR-0203](docs/adr/0203-worker-execution-model.md)'s vocabulary; the properties
+  panel was the last place calling all three things a connector. A service task now
+  picks a **Worker type** — and the entries dropped the `… Connector` suffix every
+  second one carried, so the list reads *Jira*, *PostgreSQL*, *BMC Remedy* — while
+  the field naming the concrete target is **Worker**, because that is what it names:
+  one endpoint and identity an operator registered on this server, not the
+  capability above it and not a replica below it. The section headings followed
+  (*Jira instance* → *Jira worker*, *Mail provider* → *Mail worker*): in this
+  vocabulary an *instance* is a Worker Instance, which is the one thing a model
+  never picks.
+
+  **The Worker field is a dropdown.** It offers this server's configured Workers of
+  that type, from `GET /api/v1/configured-workers` — Jira, Remedy, SharePoint and
+  the three SQL products join mail and clio, which already had one. The name of a
+  Worker is the single thing about a task that cannot be read off the model, and
+  typing it from memory is how a deploy fails on a hyphen. It stays a combobox, not
+  a closed list: a Worker that lives only in a worker process's own environment
+  (`ATLAS_POSTGRES_<NAME>_DSN` and friends) is registered nowhere the Modeler can
+  see, so a name may still be typed, and the Entra field keeps its free-text form
+  because it may be a FEEL expression choosing the tenant per instance. When the
+  server has no Worker of the type, the field now says so instead of opening an
+  empty list that looks broken.
+
+  Two hints stopped being true when the SQL and Entra types gained Console records
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md),
+  [ADR-0173](docs/adr/0173-generic-sql-connector.md)) and still claimed their Worker
+  could not be configured there; they now describe both places it can live.
+  Nothing in the model moved: the attribute is still `connector="…"` and the
+  extension elements are still `<atlas:jiraConnector>` and friends.
+
+### Fixed
+
+- **A feed scrape reached its worker without knowing it was a feed.** The resolved
+  job carried `format` and `maxItems`
+  ([ADR-0190](docs/adr/0190-webscrape-feed-extraction.md)), but the engine's payload
+  dropped both — so an offloaded `format="rss"` task fetched the feed as HTML and
+  failed compiling a CSS selector it had never authored, parking the instance on an
+  incident that named a selector nobody wrote. `webscrape` is offloaded by default,
+  so that was the path [`examples/blick-schlagzeilen.bpmn`](examples/blick-schlagzeilen.bpmn)
+  actually took; only `--in-process-connectors webscrape` worked. Both fields travel
+  now, and the entries come back as the `{title, link, description, published}`
+  objects the in-process path writes — the two paths share one definition of what a
+  scrape's result *is* (`webscrape.Items`) instead of building it twice.
+
+  The same class of gap in two connectors in one week is a missing check, not two
+  slips: every payload arm is now pinned against the resolved-job struct a worker
+  unmarshals into, in both directions. A field the job carries and the payload omits
+  fails the build, as does a key nothing on the far side reads.
+
+- **An AD task naming a Console-configured directory reached its worker without the
+  name.** The resolved job dropped `connector`, so a task authored the
+  [ADR-0206](docs/adr/0206-ad-as-a-console-connector.md) way — a directory an operator
+  created in the Console, rather than a `url` in the model — failed on the worker with
+  "has an empty url". The name travels now, and the Modeler's own descriptor learned
+  the `connector` attribute as well: bpmn-js drops an attribute it has no property for,
+  so opening such a task and pressing Save silently stripped it.
 
 ### Security
 
@@ -451,6 +621,76 @@ _Changed_ / _Removed_ for each version.
   served without a credential, now by declaration rather than by accident.
 
 ### Added
+
+- **Panorama models can say which Atlas resource an element means.** An ArchiMate
+  element in a Panorama model now carries **Atlas bindings**
+  ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)):
+  an Application Component names a process application, a Business Process names a
+  BPMN process id, an Application Service names a worker or job type, a Node names a
+  deployment target, an Artifact names a release. Select an element in the model
+  viewer to see what it is bound to, and bind it from a picker of the resources you
+  may see.
+
+  Bindings are ordinary ArchiMate properties in an `atlas.` namespace, so a bound
+  model stays a standard model: it exports as Open Exchange XML like any other and
+  its bindings travel into Archi or any conformant tool. The keys are an allowlist,
+  which is what keeps credentials out — `atlas.credentialRef` is refused because it
+  was never permitted, and a rejected value is never echoed back.
+
+  **The document stores an opaque id and nothing else.** Names come from the server
+  at read time, filtered by what you may see, so a model can never hold a stale copy
+  of one. A binding that no longer resolves stays visible and says which of three
+  things it is: outside your access, no longer on this server, or a kind this Atlas
+  version cannot resolve yet. Removing it would make a broken binding look like an
+  absent one, and the model would then look correct.
+
+  **Editing a binding does not reformat your document.** The writer splices the
+  bytes it needs to change and leaves everything else exactly as it was — comments,
+  indentation, attribute order, and any standard content Atlas does not model.
+
+- **Panorama shows the landscape you already have.** Panorama's landing view is now
+  a derived mesh of the whole instance
+  ([ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md)): applications, the
+  processes deployed under them, and the call activities between them, computed from
+  what Atlas already holds rather than from anything anybody drew. It therefore says
+  something on a server with no architecture model in it at all, and its edges are
+  facts the server can point at — a call activity *is* a dependency — resolved
+  through the same overrides the engine would follow, so the picture matches what
+  would actually run.
+
+  The graph is computed per requesting principal against the existing sharing scopes
+  (ADR-0071); nothing new to configure. Where your access cuts a dependency, the mesh
+  draws a **restricted** placeholder and keeps the edge instead of dropping it, and
+  the legend states how many there are — "this process depends on nothing" would be a
+  false statement when it means "you may not see what it depends on". A call target
+  that no deployment provides is shown as **unresolved**, which is a different finding
+  from a hidden one and is drawn differently. Clicking a process opens it in the
+  Operations live view: Panorama owns the landscape, and links into the process and
+  instance views rather than repeating them.
+
+  Nothing is stored — the mesh is a projection, recomputed on request, and it never
+  writes to an ArchiMate model. Above 400 nodes it collapses to applications and says
+  so in the legend rather than handing your browser a graph it cannot lay out; that
+  number is measured (a 400-node graph paints in about a second in Chromium), not
+  guessed.
+
+  **The landscape also draws what a process depends on besides another process:** the
+  **workers** its service tasks name, and the **decisions** its business-rule tasks
+  delegate to. That is the question a model cannot answer about itself — a task names
+  its worker by name and carries no endpoint and no secret, so nothing inside the
+  model can tell whether that name is configured on this server (ADR-0158). A process
+  pointing at a worker nobody configured deploys clean and parks its first token;
+  here it shows as **unresolved** before anything runs. A worker node carries its name
+  and its Worker Type and nothing else — the endpoint and the credential reference
+  stay on the server. Two references are deliberately *not* findings, mirroring the
+  deploy-time check exactly: one whose job type no managed Worker Type claims is not a
+  worker reference at all, and a name authored as a FEEL expression names no fixed
+  worker, since which one it reaches is known only at call time. Configured workers
+  and registered decisions that nothing references stay off the picture: the mesh is
+  the dependency graph, not an inventory.
+
+  **A search box** filters the mesh by name, kind or process id and reports how much
+  it is hiding — a filtered landscape otherwise looks exactly like a small one.
 
 - **Panorama opens ArchiMate diagrams.** An architecture model in the Panorama
   library now opens its Open Exchange Diagram views on a read-only `diagram-js`

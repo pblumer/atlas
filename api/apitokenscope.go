@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"net/http"
 	"sort"
 )
@@ -50,6 +51,11 @@ const (
 	// a token minted to talk to /mcp has no business driving /api/v1 directly. Like
 	// apiScopeDeploy it is not mintable, because nothing asks for it: it follows from
 	// which resource the person approved.
+	//
+	// "Directly" is the whole of the word: the adapter serving /mcp turns every tool
+	// call into an API request of its own, carrying this same token, so the scope
+	// confines the *tools* too unless those requests can be told apart. See
+	// mcpTransportHeader for how they say what they are.
 	apiScopeMCP = "mcp"
 
 	// apiScopeMetrics reaches the Prometheus exposition and nothing else. It is what
@@ -57,6 +63,13 @@ const (
 	// exactly one GET forever, which is the narrowest scope there is and the easiest
 	// one to hand out (ADR-0198).
 	apiScopeMetrics = "metrics"
+
+	// apiScopeStatus reaches this server's node descriptor and nothing else. It is
+	// what ADR-0189 §6 requires of remote correlation: another Atlas asking "who are
+	// you, and what can you be asked for" must not be handed a deploy credential to
+	// get the answer, and a credential handed to a peer should be the narrowest one
+	// that answers the question — here, one GET.
+	apiScopeStatus = "status"
 )
 
 // apiScopeAllowed is the complete reach of each confined scope. A scope absent
@@ -86,6 +99,11 @@ var apiScopeAllowed = map[string][]string{
 	apiScopeMetrics: {
 		"GET /metrics",
 	},
+	// Read-only, and deliberately not the PUT on the same path: a peer reads an
+	// identity, it never sets one.
+	apiScopeStatus: {
+		"GET /api/v1/node",
+	},
 	// The transport, both the exact path and everything under it, because that is
 	// how it is mounted. No method: the transport answers POST for JSON-RPC and GET
 	// for the event stream, and confining a scope to one of them would break the
@@ -96,10 +114,34 @@ var apiScopeAllowed = map[string][]string{
 	},
 }
 
+// mcpTransportHeader is how an API request says it is a *tool call* — one the MCP
+// adapter made while serving /mcp — rather than a client driving /api/v1 directly
+// with a token approved for the transport.
+//
+// It exists because the two are otherwise the same request. The adapter forwards its
+// caller's credential verbatim to a loopback URL (ADR-0196), so a tool call reaches
+// the API carrying an /mcp-scoped token and nothing that distinguishes it from the
+// direct use apiScopeMCP exists to refuse. Confining the scope without this gave a
+// grant for the transport the transport and *nothing it can do*: every tool answered
+// "this credential's scope (mcp) does not permit GET /api/v1/…".
+//
+// The value is this server's own internal token, stamped by [Server.mcpTransport] on
+// the way in, so the marker cannot be forged by whoever holds the confined token —
+// anyone who could supply the value already holds the credential of a process this
+// server started. And it relaxes the scope check only: a tool call is still held to
+// its caller's roles, so what this admits is exactly the tool surface and never the
+// admin routes an /mcp grant must not reach.
+//
+// The name is duplicated in the mcp package rather than imported, because the
+// dependency runs one way — this package takes an http.Handler and need not know
+// that one exists ([WithMCP]). TestMCPTransportHeaderMatchesTheAdapter holds the two
+// spellings together.
+const mcpTransportHeader = "X-Atlas-Via-MCP"
+
 // apiMintableScopes lists the scopes an API token may be minted with. It is not
 // every scope: apiScopeDeploy belongs to a credential with its own store, so
 // nothing here can ask for it.
-var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics}
+var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus}
 
 // apiScopes returns the mintable scopes, sorted, for the error message that names
 // them when a request asks for something else.
@@ -155,4 +197,34 @@ func apiScopeMayReach(scope string, r *http.Request) bool {
 	}
 	_, pattern := mux.Handler(r)
 	return pattern != ""
+}
+
+// scopeMayReach is [apiScopeMayReach] plus the single exception a confined scope
+// has: the MCP scope reaches the API surface when the request is a tool call this
+// server's own adapter made, which mcpTransportHeader is how it says so.
+//
+// It is a method rather than another entry in apiScopeAllowed because the exception
+// is not a set of patterns — it is a property of one request — and folding it into
+// that table would make the mcp scope read as unconfined to anyone checking what a
+// credential reaches.
+func (s *Server) scopeMayReach(scope string, r *http.Request) bool {
+	if apiScopeMayReach(scope, r) {
+		return true
+	}
+	return scope == apiScopeMCP && s.viaMCPTransport(r)
+}
+
+// viaMCPTransport reports whether a request carries the marker [Server.mcpTransport]
+// stamps on what enters /mcp.
+//
+// A server with no internal token — authentication off — never matches, rather than
+// matching the empty header every request has. That is the fail-closed direction and
+// the only one worth having: this admits a request that proves where it came from,
+// and an unset secret proves nothing.
+func (s *Server) viaMCPTransport(r *http.Request) bool {
+	if s.internalToken == "" {
+		return false
+	}
+	got := r.Header.Get(mcpTransportHeader)
+	return got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(s.internalToken)) == 1
 }

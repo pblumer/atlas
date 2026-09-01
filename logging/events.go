@@ -80,7 +80,15 @@ var (
 	ServerShuttingDown = newEvent("server.shutting_down")
 	ServerDocsEnabled  = newEvent("server.docs_enabled")
 	ServerMetrics      = newEvent("server.metrics_enabled")
-	DataDirOpened      = newEvent("server.data_dir_opened")
+	// The operator-supplied certificate, where this server terminates TLS itself
+	// (ADR-0191). ServerTLSReloaded is one line per renewal picked up without a
+	// restart; ServerTLSReloadFailed is the pair that changed on disk and could not
+	// be loaded, which leaves the previous certificate in service rather than
+	// refusing handshakes — so it is a WARN an operator must act on before the
+	// certificate that is still being served expires.
+	ServerTLSReloaded     = newEvent("server.tls_reloaded")
+	ServerTLSReloadFailed = newEvent("server.tls_reload_failed")
+	DataDirOpened         = newEvent("server.data_dir_opened")
 	// AuthDisabled is a server started with --auth=false: no login is required for
 	// anything. It is a WARN and it is loud because it is now the deliberate
 	// exception rather than the default — the one line that says this instance is
@@ -118,6 +126,11 @@ var (
 	// provider. It is the line that tells whoever reads the log after a failed login
 	// which issuer this server was asking, which is the first thing to check.
 	AuthOIDCConfigured = newEvent("auth.oidc_configured")
+	// AuthOIDCMappingSet records a change to the mapping from a provider's claims
+	// onto Atlas roles and groups. It is the change that explains every role change
+	// after it: from the moment the mapping is on, whoever administers the provider's
+	// groups administers this instance's roles.
+	AuthOIDCMappingSet = newEvent("auth.oidc_mapping_set")
 	// AuthRolesUpgraded is said once, on the first start after roles per endpoint
 	// group shipped, naming how many accounts kept what they could already do. It is
 	// the line an operator needs to see: nothing is narrower than it was yesterday

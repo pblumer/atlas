@@ -107,6 +107,25 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Product metadata", schemaObj(map[string]any{
 				"product": tString(), "version": tString(),
 			}))}},
+		// The node descriptor (ADR-0189 §6): which *runtime* is answering, as opposed
+		// to /api/v1/info's account of which binary. It is what makes cross-server
+		// correlation possible at all, so it is readable by any signed-in identity and
+		// by the least-privilege status scope a remote correlator is given; writing it
+		// is an operator act and stays with the administrator.
+		{"GET", "/api/v1/node", s.handleNode, apiOp{
+			summary: "This server's stable node descriptor: runtime identity, build, partition and supported features (ADR-0189)",
+			tag:     "System", role: roleAny,
+			resp: jsonBody("Node descriptor", schemaObj(map[string]any{
+				"id": tString(), "name": tString(), "environment": tString(),
+				"product": tString(), "version": tString(),
+				"partition": tInteger(), "partitions": tInteger(), "features": tArray(),
+			}, "id"))}},
+		{"PUT", "/api/v1/node", s.handleUpdateNode, apiOp{
+			summary: "Set this node's operator-owned display name, environment and labels (ADR-0189)",
+			tag:     "System", role: RoleAdmin,
+			req: jsonBody("Node identity", schemaObj(map[string]any{
+				"name": tString(), "environment": tString(), "labels": tObject(),
+			})), resp: jsonBody("Node descriptor", tObject())}},
 		{"GET", "/api/v1/stats", s.handleStats, apiOp{
 			summary: "Live active-instance counts, plus how many tokens are parked behind an unresolved incident", tag: "System", role: roleAny,
 			resp: jsonBody("Instance counts", schemaObj(map[string]any{
@@ -428,6 +447,14 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/panorama/validate", s.panorama.HandleValidate, apiOp{
 			summary: "Validate an ArchiMate Open Exchange document without storing it (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			req: xmlBody("ArchiMate Open Exchange XML"), resp: jsonBody("Validation result", tObject())}},
+		// The derived landscape mesh (ADR-0211): computed from this server's own
+		// resources per requesting principal, never stored, and never mixed into the
+		// ArchiMate documents above. Its status block declares which of ADR-0189 §6's
+		// observation states this build cannot produce, so a consumer knows what the
+		// absence of a finding is worth.
+		{"GET", "/api/v1/panorama/mesh", s.panoramaMesh.HandleGraph, apiOp{
+			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("Derived landscape graph", tObject())}},
 		{"GET", "/api/v1/panorama/models", s.panorama.HandleList, apiOp{
 			summary: "List application-owned Panorama model metadata visible to the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Panorama models", tArray())}},
@@ -447,6 +474,34 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "expectedRevision")), resp: jsonBody("Updated Panorama model metadata", tObject())}},
 		{"DELETE", "/api/v1/panorama/models/{id}", s.panorama.HandleDelete, apiOp{
 			summary: "Delete a Panorama model (ADR-0189)", tag: "Panorama", role: RoleModeler, status: http.StatusNoContent}},
+		// Atlas bindings (ADR-0189 §4): which Atlas resource an ArchiMate element
+		// refers to. Read resolves ids to names for this caller; write sets one key
+		// on one element and leaves the rest of the document byte-for-byte alone.
+		// The C4 projection (ADR-0211 §8). Read-only by construction: ArchiMate stays
+		// the only authored notation, and there is deliberately no write counterpart.
+		{"GET", "/api/v1/panorama/models/{id}/c4", s.panorama.HandleC4, apiOp{
+			summary: "Project a Panorama model into C4, reporting what the mapping cannot express (ADR-0211)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("C4 projection", tObject())}},
+		// The observation projection (ADR-0189 §6): the same bindings, read for what
+		// the instance is doing rather than for names. It writes nothing — the stored
+		// document is never mutated by observing it — and it is a separate route from
+		// the model so a caller who wants the drawing does not pay for a scan of
+		// every live instance.
+		{"GET", "/api/v1/panorama/models/{id}/observations", s.panorama.HandleObservations, apiOp{
+			summary: "Observe what a Panorama model's bound Atlas resources are currently doing (ADR-0189)",
+			tag:     "Panorama", role: RoleModeler,
+			resp: jsonBody("Observation document", tObject())}},
+		{"GET", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleBindings, apiOp{
+			summary: "Resolve a Panorama model's Atlas bindings for the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("Resolved Atlas bindings", tObject())}},
+		{"GET", "/api/v1/panorama/models/{id}/bindings/candidates", s.panorama.HandleBindingCandidates, apiOp{
+			summary: "List the Atlas resources the caller may bind one key to (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("Binding candidates", tObject())}},
+		{"PUT", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleSetBinding, apiOp{
+			summary: "Set one Atlas binding on one ArchiMate element (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			req: jsonBody("Binding assignment", schemaObj(map[string]any{
+				"expectedRevision": tInteger(), "elementId": tString(), "key": tString(), "values": tArray(),
+			}, "expectedRevision", "elementId", "key")), resp: jsonBody("Updated Panorama model metadata", tObject())}},
 		{"GET", "/api/v1/panorama/models/{id}/xml", s.panorama.HandleXML, apiOp{
 			summary: "Export a Panorama model as its original ArchiMate Open Exchange XML (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: xmlBody("ArchiMate Open Exchange XML")}},
@@ -841,7 +896,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Upload the org-wide brand logo — raw PNG or SVG body, max 512 KiB (admin-only when auth is on) (ADR-0148)", tag: "System", role: RoleAdmin, status: http.StatusNoContent,
 			req: &bodySpec{mediaType: "image/png", desc: "PNG or SVG logo bytes (Content-Type sets the format)", schema: map[string]any{"type": "string", "format": "binary"}}}},
 		{"DELETE", "/api/v1/settings/logo", s.handleDeleteLogo, apiOp{
-			summary: "Remove the org-wide brand logo, restoring the built-in letter mark (admin-only when auth is on) (ADR-0148)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
+			summary: "Remove the org-wide brand logo, restoring the built-in Atlas mark (admin-only when auth is on) (ADR-0148)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/settings/ad-mock", s.handleGetADMock, apiOp{
 			summary: "The org-wide Active Directory mockup switch: whether directory writes are simulated in the worker's memory instead of reaching a domain controller, and the seed file it starts from (ADR-0181)", tag: "Settings", role: roleAny,
@@ -863,6 +918,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 		{"DELETE", "/api/v1/settings/registration", s.handleDeleteRegistration, apiOp{
 			summary: "Switch self-service registration off (admin-only when auth is on) (ADR-0126)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
+
+		{"GET", "/api/v1/settings/oidc-mapping", s.handleGetOIDCMapping, apiOp{
+			summary: "Read the rule set that turns an identity provider's claim into Atlas roles and group membership (ADR-0210)", tag: "Auth", role: RoleAdmin,
+			resp: jsonBody("Claim mapping", tObject())}},
+		{"PUT", "/api/v1/settings/oidc-mapping", s.handleSetOIDCMapping, apiOp{
+			summary: "Store that rule set. While it is on, whoever administers the provider's groups administers this instance's roles; a rule naming a role Atlas does not enforce or a group that does not exist is refused here rather than granting nothing on every login (ADR-0210)", tag: "Auth", role: RoleAdmin,
+			req:  jsonBody("Claim mapping", tObject()),
+			resp: jsonBody("Claim mapping", tObject())}},
 
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
 			summary: "Log in with a username and password", tag: "Auth", role: roleAny,

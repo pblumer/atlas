@@ -573,7 +573,9 @@ type adOp struct {
 	needsPassword bool
 	needsMember   bool
 	needsNewDN    bool
-	isSync        bool // reads a subtree delta rather than acting on one entry
+	isSync        bool  // reads a subtree delta rather than acting on one entry
+	isSearch      bool  // reads what is under a base now, rather than acting on one entry
+	maxEntries    int32 // the default entry cap, for the two operations that return entries
 }
 
 var adOps = map[string]adOp{
@@ -592,16 +594,30 @@ var adOps = map[string]adOp{
 	"delete":              {},
 	"add-group-member":    {needsMember: true},
 	"remove-group-member": {needsMember: true},
-	// sync is the only AD operation that reads rather than writes, and the only one
-	// that addresses a subtree instead of an entry — so it is also the only one that
-	// does not take a dn.
-	"sync": {isSync: true},
+	// sync and search are the two AD operations that read rather than write, and the
+	// two that address a subtree instead of an entry — so they are also the two that
+	// take a baseDN rather than a dn.
+	"sync": {isSync: true, maxEntries: defaultAdSyncMaxEntries},
+	// search answers "is this entry there, and what is its DN?" — the question a
+	// membership change has to settle before it can name a group (ADR-0166, amended a
+	// fifth time).
+	"search": {isSearch: true, maxEntries: defaultAdSearchMaxEntries},
 }
 
-// defaultAdSyncMaxEntries caps one DirSync pass when the model authors no cap. A pass
-// is resumable by construction — the cookie says where it got to — so a bound here
-// costs nothing but a second pass, unlike a plain search where it costs the answer.
-const defaultAdSyncMaxEntries = 1000
+// The default entry caps for the two reading operations, applied when the model
+// authors none so the runtime interprets nothing (I5).
+//
+// They are the same number for different reasons, which is why they are two
+// constants. A DirSync pass is resumable by construction — the cookie says where it
+// got to — so capping it costs nothing but a second pass. A search has no such
+// resume: its cap is the sqldb row cap's argument (ADR-0173), a bound on what an
+// unqualified filter can pull into a process variable, and exceeding it fails the job
+// rather than truncating, because a short result set is a wrong answer and not a
+// partial one.
+const (
+	defaultAdSyncMaxEntries   = 1000
+	defaultAdSearchMaxEntries = 1000
+)
 
 // adOpNames lists the operations, sorted, for the error messages that say what was
 // expected.
@@ -617,9 +633,10 @@ func adOpNames() []string {
 // compileAdConnectorTask compiles an <atlas:adConnector> task: it performs an Active
 // Directory operation against a model-authored server via the job path (ADR-0166), not
 // an external service-task worker. AD speaks LDAP, so the server URL and DNs live in
-// the model and the bind password never does (a secret reference, ADR-0041); every
-// operation targets a dn. create-user takes an attribute variable; set-password a new
-// password; the group operations a member dn.
+// the model and the bind password never does (a secret reference, ADR-0041). Most
+// operations target a dn: create-user takes an attribute variable, set-password a new
+// password, the group operations a member dn. The two reading operations — sync and
+// search — take a baseDN and a result variable instead.
 func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Ad
 	// A task addresses its directory one of two ways: by the name of a connector an
@@ -647,10 +664,11 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	if !ok {
 		return 0, fmt.Errorf("compiler: ad connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(adOpNames(), ", "))
 	}
-	// Every operation but sync addresses an existing or to-be-created entry by dn —
-	// including move, where dn is the entry being moved and newDN where it lands.
-	// sync addresses a naming context instead, so it takes a baseDN.
-	if spec.isSync {
+	// The two reading operations address a subtree by baseDN; every other operation
+	// addresses an existing or to-be-created entry by dn — including move, where dn is
+	// the entry being moved and newDN where it lands.
+	switch {
+	case spec.isSync:
 		if strings.TrimSpace(cn.BaseDN) == "" {
 			return 0, fmt.Errorf("compiler: ad connector task %q operation sync needs a baseDN (the naming context root the delta is read from)", st.Id)
 		}
@@ -660,10 +678,23 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 		if strings.TrimSpace(cn.ResultVariable) == "" {
 			return 0, fmt.Errorf("compiler: ad connector task %q operation sync needs a resultVariable to receive the changes", st.Id)
 		}
-	} else if strings.TrimSpace(cn.DN) == "" {
-		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a dn", st.Id, op)
+	case spec.isSearch:
+		if strings.TrimSpace(cn.BaseDN) == "" {
+			return 0, fmt.Errorf("compiler: ad connector task %q operation search needs a baseDN (where in the tree to look)", st.Id)
+		}
+		if strings.TrimSpace(cn.ResultVariable) == "" {
+			return 0, fmt.Errorf("compiler: ad connector task %q operation search needs a resultVariable to receive what it found; a directory read that discards its result is one nothing asked for", st.Id)
+		}
+	default:
+		if strings.TrimSpace(cn.DN) == "" {
+			return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a dn", st.Id, op)
+		}
 	}
-	maxEntries, err := adSyncMaxEntries(st.Id, op, spec.isSync, cn.MaxEntries)
+	scope, err := adSearchScope(st.Id, op, spec.isSearch, cn.Scope)
+	if err != nil {
+		return 0, err
+	}
+	maxEntries, err := adMaxEntries(st.Id, op, spec, cn.MaxEntries)
 	if err != nil {
 		return 0, err
 	}
@@ -725,6 +756,7 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 		NewDN:          newDN,
 		BaseDN:         baseDN,
 		Filter:         filter,
+		Scope:          scope,
 		CookieVar:      strings.TrimSpace(cn.CookieVariable),
 		ResultVar:      strings.TrimSpace(cn.ResultVariable),
 		MaxEntries:     maxEntries,
@@ -733,19 +765,20 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	}), nil
 }
 
-// adSyncMaxEntries reads the authored cap for one DirSync pass. It applies to sync
-// alone; on any other operation it is an author believing something the connector
-// will not do, reported rather than ignored.
-func adSyncMaxEntries(taskID, op string, isSync bool, raw string) (int32, error) {
+// adMaxEntries reads the authored cap on what an operation returns. It applies to the
+// two reading operations; on any other it is an author believing something the
+// connector will not do, reported rather than ignored.
+func adMaxEntries(taskID, op string, spec adOp, raw string) (int32, error) {
+	reads := spec.isSync || spec.isSearch
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		if isSync {
-			return defaultAdSyncMaxEntries, nil
+		if reads {
+			return spec.maxEntries, nil
 		}
 		return 0, nil
 	}
-	if !isSync {
-		return 0, fmt.Errorf("compiler: ad connector task %q sets maxEntries on operation %q, which returns no entries (maxEntries applies to sync)", taskID, op)
+	if !reads {
+		return 0, fmt.Errorf("compiler: ad connector task %q sets maxEntries on operation %q, which returns no entries (maxEntries applies to sync and search)", taskID, op)
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {
@@ -755,6 +788,30 @@ func adSyncMaxEntries(taskID, op string, isSync bool, raw string) (int32, error)
 		return 0, fmt.Errorf("compiler: ad connector task %q has a negative maxEntries %d", taskID, n)
 	}
 	return int32(n), nil
+}
+
+// adSearchScope reads the authored search scope, defaulting an empty one to the whole
+// subtree — which is what "does this entry exist anywhere under here" means, and the
+// answer an author who did not think about scope wants.
+//
+// It belongs to search alone. A sync authors none because AD answers DirSync only for
+// the whole subtree, and the writing operations address one entry by DN, where a scope
+// would mean nothing at all — so authoring one there is refused rather than dropped.
+func adSearchScope(taskID, op string, isSearch bool, raw string) (string, error) {
+	scope := strings.ToLower(strings.TrimSpace(raw))
+	if !isSearch {
+		if scope != "" {
+			return "", fmt.Errorf("compiler: ad connector task %q sets a scope on operation %q, which addresses one entry rather than a subtree (scope applies to search)", taskID, op)
+		}
+		return "", nil
+	}
+	if scope == "" {
+		return "sub", nil
+	}
+	if !directoryScopes[scope] {
+		return "", fmt.Errorf("compiler: ad connector task %q has an unknown scope %q (want base, one, or sub)", taskID, raw)
+	}
+	return scope, nil
 }
 
 // soapVersions is the set of SOAP protocol versions a connector task can author. 1.1
@@ -843,9 +900,10 @@ const (
 	defaultLdapMaxEntries = 1000
 )
 
-// ldapScopes maps the authored search scope names to their canonical form. An empty
-// scope defaults to "sub" (whole subtree) at compile time.
-var ldapScopes = map[string]bool{"base": true, "one": true, "sub": true}
+// directoryScopes is the set of LDAP search scopes a model may author, shared by the
+// two connectors that search a directory. An empty scope defaults to "sub" (the whole
+// subtree) at compile time.
+var directoryScopes = map[string]bool{"base": true, "one": true, "sub": true}
 
 // compileLdapConnectorTask compiles an <atlas:ldapConnector> task: it performs a
 // directory operation against a model-authored LDAP server via the job path
@@ -873,7 +931,7 @@ func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		if scope == "" {
 			scope = "sub"
 		}
-		if !ldapScopes[scope] {
+		if !directoryScopes[scope] {
 			return 0, fmt.Errorf("compiler: ldap connector task %q has an unknown scope %q (want base, one, or sub)", st.Id, cn.Scope)
 		}
 	} else {

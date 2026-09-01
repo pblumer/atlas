@@ -28,6 +28,16 @@ const maxCSVBytes = 16 << 20 // 16 MiB
 // parts spill to temp files.
 const csvMultipartMemory = 4 << 20
 
+// multipartOverhead is the room the request gets on top of the file itself: the
+// MIME boundaries, the part headers and the other form fields.
+//
+// Without it the whole-request cap and the file cap were the same number, so the
+// request cap always tripped first — on a file of exactly the allowed size, and
+// on one a byte over. Both came back "read upload: http: request body too large",
+// a 400 that names neither the limit nor which part exceeded it, and the 413 the
+// code below writes could not be reached at all.
+const multipartOverhead = 1 << 20 // 1 MiB
+
 // arrivalReq is how a caller spreads a dataset over simulated time.
 type arrivalReq struct {
 	// Mode is "allAtOnce" (the default), "sequential", "every" or "poisson".
@@ -196,7 +206,7 @@ func (s *Service) HandleStartRun(w http.ResponseWriter, r *http.Request) {
 // not a configured integration, so asking them to describe the columns they just
 // exported would be asking twice.
 func (s *Service) HandleStartRunFromCSV(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxCSVBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, maxCSVBytes+multipartOverhead)
 	if err := r.ParseMultipartForm(csvMultipartMemory); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read upload: "+err.Error())
 		return

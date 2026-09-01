@@ -7,7 +7,7 @@ die **schweizerische Bundesverwaltung** (ISG/ISV, DSG, HERMES, BIT-Vorgaben).
 |----------|--------|
 | [`isds-konzept.md`](isds-konzept.md) | Antworten auf die Vorlage **P042-Hi01 — ISDS-Konzept** (BIT-Template V120 / NCSC V4.4): Systembeschreibung, Datenbeschreibung, Kommunikationsmatrix, Risiken und Schutzmassnahmen, Wiederherstellung, Ausserbetriebnahme |
 | [`isds-offene-punkte.md`](isds-offene-punkte.md) | Was **am Produkt** fehlt, bevor eine Einführung im Bund vertretbar ist — priorisiert, mit Bezug auf die Restrisiken des Konzepts |
-| [`zugriffsschutz-konzept.md`](zugriffsschutz-konzept.md) | **Konzept**: jede Schnittstelle hinter einen authentisierten Prinzipal — Schnittstelleninventar, der `/mcp`-Befund im Detail, acht Massnahmen und ein Stufenplan bis zur Tauglichkeit für einen produktiven PoC (schliesst R-08 / O-07). Dazu M10 (OAuth für gehostete MCP-Clients, umgesetzt) und M11 (Berechtigungen auf Konnektor-Ebene, offen) |
+| [`zugriffsschutz-konzept.md`](zugriffsschutz-konzept.md) | **Konzept**: jede Schnittstelle hinter einen authentisierten Prinzipal — Schnittstelleninventar, der `/mcp`-Befund im Detail, acht Massnahmen und ein Stufenplan bis zur Tauglichkeit für einen produktiven PoC (schliesst R-08 / O-07). Dazu M10 (OAuth für gehostete MCP-Clients, umgesetzt) und M11 (Berechtigungen auf Worker-Ebene, umgesetzt) |
 
 ## Gebrauchsanweisung
 
@@ -29,7 +29,7 @@ Eigenschaft ändert, ändert sie hier mit.** Das betrifft insbesondere
 - den Vault und die Secret-Auflösung (ADR-0041/0069/0070),
 - Aufbewahrung und Löschung (ADR-0115/0144),
 - Backup, Checkpoints und WAL-Kompaktierung (ADR-0107/0109/0131),
-- neue Connector-Kinds oder Endpunkte, die die Kommunikationsmatrix (Kap. 5.4)
+- neue Worker-Typen oder Endpunkte, die die Kommunikationsmatrix (Kap. 5.4)
   oder die Liste der unauthentisierten Routen (Kap. 6.1, R-08) verändern,
 - Flags und Umgebungsvariablen in `docs/install.md`.
 

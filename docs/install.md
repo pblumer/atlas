@@ -49,9 +49,12 @@ warning and the tasks in that language park until you install it.
 same directory will corrupt it. This is also why the Helm chart is a one-replica
 StatefulSet and must never become a Deployment.
 
-**Atlas speaks plain HTTP, never TLS.** The binary has no certificate handling at
-all. Put a TLS-terminating reverse proxy in front of it before anyone outside the
-host can reach it — see [Reverse proxy and TLS](#8-reverse-proxy-and-tls).
+**Nothing should reach Atlas in the clear.** The binary can terminate TLS itself —
+`--tls-cert` and `--tls-key` make `--addr` a TLS 1.3 listener — but it does not by
+default, and a TLS-terminating reverse proxy is still the other good answer. Pick
+one before anyone outside the host can reach it. TLS is not authorization either
+way: `/metrics`, `/healthz` and `/readyz` answer whoever can reach the port. See
+[TLS: in the binary, or in front of it](#8-tls-in-the-binary-or-in-front-of-it).
 
 ## Quick try
 
@@ -319,10 +322,42 @@ certificate, a moved discovery document, a closed network path — takes federat
 sign-in with it. The local password remains the way back in, and Atlas refuses to
 leave an instance without an enabled administrator.
 
+#### Letting the provider's groups decide roles
+
+Optional, and off until you turn it on. Under **Organization → Single sign-on** you
+name one claim in the provider's token and a list of exact values it may carry, and
+each value names the Atlas roles it grants and the groups it puts a person in. From
+that moment, onboarding and offboarding are a group membership somebody already
+maintains: the role and the shared projects arrive at the next sign-in, and go away
+at the sign-in after the membership does.
+
+The claim is whatever your provider emits — `groups` for many, `roles`, or a dotted
+path like `realm_access.roles` for Keycloak. Values are compared exactly; Atlas does
+not interpret them, so a group name, an object id and a role name all work as long
+as the token carries that string.
+
+Four things worth knowing before switching it on:
+
+- **Roles become the provider's to decide.** While the mapping is on, a role granted
+  by hand under **Organization → Users** is replaced at that person's next sign-in.
+  If you want to grant roles here, leave the mapping off.
+- **Group membership follows only for the groups your rules name.** A group no rule
+  mentions is left alone, so a membership you added by hand there survives.
+- **Nothing is granted by absence.** Somebody the provider says nothing about
+  matches no rule and gets `user` — which everybody who can sign in holds, mapping
+  or not.
+- **A rule that cannot work is refused when you save it**, not silently ignored at
+  every login: a role Atlas does not enforce, or a group that no longer exists.
+
+The mapping cannot lock you out of the local administrator account, which is not
+federated. If a mapping does leave the instance without a federated administrator,
+sign in locally — or reset that password on the host with
+`atlas reset-password --data-dir <dir> <username>` — and fix the rules.
+
 ### 7. Back up the vault key
 
 With the vault enabled (the default), the first start generates a master key at
-`<data-dir>/vault.key` and encrypts every stored connector secret with it. **A
+`<data-dir>/vault.key` and encrypts every stored worker secret with it. **A
 data directory without its key is not recoverable** — the secrets in it cannot be
 read back.
 
@@ -335,9 +370,47 @@ Two ways to handle it, pick one:
   disk, which is the stronger posture — see
   [ADR-0070](adr/0070-vault-on-by-default-with-generated-key.md).
 
-### 8. Reverse proxy and TLS
+### 8. TLS: in the binary, or in front of it
 
-Atlas serves plain HTTP. Terminate TLS in front of it. An nginx sketch:
+Two answers, and the one you want depends on what else is on the host.
+
+**In the binary.** Give `atlas serve` a certificate and it terminates TLS itself
+([ADR-0191](adr/0191-built-in-tls-listener.md)):
+
+```bash
+atlas serve --data-dir /var/lib/atlas/data \
+  --tls-cert /etc/atlas/tls.crt --tls-key /etc/atlas/tls.key
+```
+
+- **Both files or neither.** Naming one without the other stops the server rather
+  than falling back to plaintext on the port you believed you had just secured.
+- **TLS 1.3 only.** The suites are fixed by the protocol, so there is no cipher
+  list to configure, nothing to weaken, and no `--tls-min-version`. A client that
+  cannot negotiate 1.3 is refused rather than quietly downgraded — worth knowing if
+  TLS-inspecting middleboxes or Windows PowerShell 5.1 on unpatched hosts are in
+  the picture.
+- **A renewal needs no restart.** Both files are re-read when either changes on
+  disk, so `certbot renew` (or your cert-manager) is enough on its own. A renewal
+  caught half-written keeps the previous certificate in service and logs
+  `server.tls_reload_failed`; that is a warning to act on, not an outage.
+- **`--external-url` is usually unnecessary here.** Atlas derives its public origin
+  from the request, and a client that reached it over TLS is told `https://`. Set it
+  where clients arrive by an address the certificate does not name.
+- The certificate and key are read as the user `atlas serve` runs as. Keep them
+  `0600` and owned by that user; a key readable by everyone is the one file here
+  worth being strict about.
+
+Where TLS is on, the server also opens a second listener on `127.0.0.1` with an
+ephemeral port, in plaintext, for its own child processes — the MCP adapter's
+loopback calls and any worker this server supervises. It is not reachable from
+another host and needs no configuration; it exists because a certificate issued
+for `atlas.example.com` carries no name for `127.0.0.1`, and the alternative
+would be a switch to skip verification, which Atlas deliberately does not have.
+
+**In front of it.** The other answer, and still a good one where a proxy is on the
+host anyway — it does certificates for everything else you run, and it is where
+path rules belong. Atlas then serves plain HTTP and the proxy terminates TLS. An
+nginx sketch:
 
 ```nginx
 server {
@@ -376,40 +449,72 @@ If you do not want an agent surface at all, block it at the proxy:
 location /mcp { deny all; }
 ```
 
-### Who may configure a connector
+**What TLS does not cover, whichever way you terminate it.** Encryption is not
+authorization. `/metrics` is unauthenticated by design
+([ADR-0142](adr/0142-prometheus-metrics.md)), as are `/healthz` and `/readyz`,
+because a kubelet has no credential to offer. Turning the built-in listener on
+does not change that, so on a port that is reachable beyond the host either keep a
+proxy in front of those paths or run with `--metrics=false`.
 
-A connector has an **owner**: whoever created it. They, whoever they share it with,
-and administrators can see its endpoint and credential reference, change it, delete
-it, or give it an inbound subscription
-([ADR-0205](adr/0205-connector-ownership-and-event-delivery.md)). Everybody else
-still sees that it exists — its name, kind and whether it is usable — because that
-is what the modeler needs to author a task against it.
+**Publishing to another Atlas whose CA is your own.** A deployment target must be
+`https://` ([ADR-0129](adr/0129-remote-deployment-targets.md)), and the certificate
+on the receiving server is usually issued by an internal CA that the sending host
+has never heard of. Point `--tls-ca` at that CA's PEM bundle on the *sending*
+server, and at the same bundle on any `atlas worker --server https://…` running on
+another host or `atlas mcp --server https://…` an agent drives it through:
 
-Sharing is in **Console → Connectors**, beside each connector: add a person or a
-whole group as *may see it* or *may change it*, and withdraw either at any time.
-Ownership can be handed on, which is how a connector survives the person who made
-it — an ownerless connector is administrators-only.
+```bash
+atlas serve --tls-ca /etc/atlas/internal-ca.pem …
+atlas worker --server https://atlas.example.com --tls-ca /etc/atlas/internal-ca.pem …
+atlas mcp --server https://atlas.example.com --tls-ca /etc/atlas/internal-ca.pem
+```
+
+It is added to the host's roots rather than replacing them, and it reaches only
+those two conversations — a Worker Type calling a third party keeps the host's
+trust store, because that endpoint is somebody else's. There is no switch to skip
+verification anywhere in Atlas, and there will not be one: it would be the first
+thing reached for when a certificate is wrong, which is exactly when it must not
+be available.
+
+### Who may configure a worker
+
+A **worker** — one configured target of a Worker Type, which the Console used to call
+a connector ([ADR-0203](adr/0203-worker-execution-model.md)) — has an **owner**:
+whoever created it. They, whoever they share it with, and administrators can see its
+endpoint and credential reference, change it, delete it, or give it an inbound
+subscription ([ADR-0205](adr/0205-connector-ownership-and-event-delivery.md)).
+Everybody else still sees that it exists — its name, Worker Type and whether it is
+usable — because that is what the modeler needs to author a task against it.
+
+Sharing is in **Console → Workers**, beside each worker: add a person or a whole
+group as *may see it* or *may change it*, and withdraw either at any time. Ownership
+can be handed on, which is how a worker survives the person who made it — an
+ownerless worker is administrators-only.
 
 **Its events reach only the processes you allow.** An inbound subscription claims
 the message name it publishes under: a process deployed by somebody who cannot
-reach the connector will not be delivered those events, and pointing a connector at
-a name somebody else's process already listens for is refused rather than silently
+reach the worker will not be delivered those events, and pointing a worker at a name
+somebody else's process already listens for is refused rather than silently
 forwarding your post to them. Both refusals name the message, never the other
 party. If a deploy or a subscription is refused this way, rename the message in
-your model — or ask whoever owns the connector to share it with you.
+your model — or ask whoever owns the worker to share it with you.
 
 One thing this does **not** do: it does not reach the runtime. A deployed process
-resolves its connector by name whoever started it, and while a message correlates
-the engine still matches on name and key alone. This is a gate at the two points
-where a model and a connector meet, not isolation inside the engine.
+resolves its worker by name whoever started it, and while a message correlates the
+engine still matches on name and key alone. This is a gate at the two points where a
+model and a worker meet, not isolation inside the engine.
 
-**Upgrading:** connectors stored before this carry no owner and become
+**Upgrading:** workers stored before this carry no owner and become
 administrators-only until one is assigned. An administrator can hand each to its
 real owner from the same page. Processes deployed before this carry no deployer
 either, so they keep any message name they already listen for until they are
 redeployed — deploy them again to bring them under the claim.
 
 ### Connecting a hosted AI connector
+
+> **A different "connector".** This section is about an *MCP client* — claude.ai's
+> custom connectors and their equivalents — not about Atlas workers. The Atlas
+> concept that used to carry this name is a **worker** (above).
 
 A connector that runs on somebody else's infrastructure — claude.ai's, for
 instance — has nowhere for you to paste a token. Those connect over OAuth
@@ -533,7 +638,8 @@ set the service to stop with `SIGTERM`-equivalent behaviour and allow ~30 second
 so the engine finishes in-flight work.
 
 Then, as on Linux: grant the service account write access to `C:\Atlas\data`
-only, put IIS or another TLS terminator in front, and set
+only, give it a certificate (`--tls-cert`/`--tls-key`, PEM files — the Windows
+certificate store is not read) or put IIS in front as the TLS terminator, and set
 `ATLAS_ADMIN_USERNAME` / `ATLAS_ADMIN_PASSWORD` as machine-level environment
 variables before the first start with `--auth`.
 
@@ -569,10 +675,18 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--data-dir` | `atlas-data` | WAL, state store, and every other durable file |
 | `--auth` | `true` | Require login for the API, the UI and `/mcp`. `--auth=false` runs the server open — development and demos only; it logs a warning (`auth.disabled`) at startup. Sign-in attempts are throttled per address and per account, and every one is recorded (see [Logs](#logs)) |
 | `--oauth-dynamic-registration` | `false` | Let an OAuth client register itself ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html)), so a hosted MCP connector can be connected with nothing but this server's URL. Off by default: it is the only unauthenticated endpoint that writes durable state, and anyone who can reach the port could then appear on your people's consent screens under a name they chose — where such a client is labelled as self-registered ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). Also `ATLAS_OAUTH_DYNAMIC_REGISTRATION=1` |
-| `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. **Set this behind a reverse proxy:** Atlas terminates no TLS, so the origin it derives from a request is `http://…`, and every absolute URL it publishes — the OAuth discovery documents, the `WWW-Authenticate` challenge, the authorization and token endpoints — would name something no client can use ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). Also `ATLAS_EXTERNAL_URL` |
+| `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. **Set this behind a reverse proxy:** the scheme such a request arrives with is `http`, so every absolute URL Atlas publishes — the OAuth discovery documents, the `WWW-Authenticate` challenge, the authorization and token endpoints — would name something no client can use ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). With `--tls-cert` and clients reaching the server by the name on its certificate, the derived origin is already right; set it anyway if they reach it by anything else. Also `ATLAS_EXTERNAL_URL` |
+| `--tls-cert` | *(none)* | PEM certificate chain to serve `--addr` with. With `--tls-key`, this server terminates TLS 1.3 itself instead of a proxy doing it; unset, it serves plain HTTP. Both or neither — one alone refuses to start. The pair is re-read when either file changes, so a renewal needs no restart ([ADR-0191](adr/0191-built-in-tls-listener.md)). Also `ATLAS_TLS_CERT` |
+| `--tls-key` | *(none)* | PEM private key for `--tls-cert`. Also `ATLAS_TLS_KEY` |
+| `--tls-ca` | *(none)* | PEM bundle of certificate authorities to trust **in addition to** the host's, when this server calls another Atlas — publishing to a deployment target and reading its status back ([ADR-0129](adr/0129-remote-deployment-targets.md)). For an internally issued peer certificate. Never replaces the system roots, never skips verification, and does not touch Worker Types calling third parties. `atlas worker` and `atlas mcp` take the same flag, for their own hop to an `https://` server. Also `ATLAS_TLS_CA` |
+| `--oidc-issuer` | *(none)* | OpenID Connect issuer URL. Setting it makes Atlas a relying party: the login screen gains a "Sign in with …" button and two routes are mounted. With it unset nothing is mounted and no outbound connection is made. Also `ATLAS_OIDC_ISSUER` |
+| `--oidc-client-id` | *(none)* | Client id this server was registered under at that provider. Also `ATLAS_OIDC_CLIENT_ID` |
+| `--oidc-client-secret` | *(none)* | Client secret, if the provider issued one; omit it for a public client (the flow uses PKCE either way). Prefer `ATLAS_OIDC_CLIENT_SECRET`, so it stays out of `ps` |
+| `--oidc-scopes` | `openid profile email` | Scopes requested at the provider. Also `ATLAS_OIDC_SCOPES` |
+| `--oidc-name` | *(the issuer host)* | What the button on the login screen says. Also `ATLAS_OIDC_NAME` |
 | `--shutdown-timeout` | `10s` | Grace period for in-flight requests on shutdown |
 | `--docs` | `true` | Serve `/api/docs` and `/api/v1/openapi.json` |
-| `--vault` | `true` | Encrypted secret vault for connector credentials |
+| `--vault` | `true` | Encrypted secret vault for worker credentials |
 | `--user-provisioning` | `true` | Let the system project's approved processes manage Atlas logins |
 | `--powershell` | `true` | Run PowerShell script tasks via `pwsh` |
 | `--python` | `true` | Run Python script tasks via `python3` |
@@ -599,7 +713,7 @@ explicit `=false` — `--vault=false`, not `--no-vault`.
 | Command | Purpose |
 |---------|---------|
 | `atlas serve [flags]` | Run the engine, API, and UI. This is the default when no subcommand is given. |
-| `atlas mcp [--server URL] [--token TOKEN]` | Model Context Protocol adapter on stdio, proxying to a running server (default `http://localhost:8080`). `--token` (or `ATLAS_TOKEN`) is what it authenticates with against a server running `--auth` |
+| `atlas mcp [--server URL] [--token TOKEN] [--tls-ca FILE]` | Model Context Protocol adapter on stdio, proxying to a running server (default `http://localhost:8080`). `--token` (or `ATLAS_TOKEN`) is what it authenticates with against a server running `--auth`; `--tls-ca` (or `ATLAS_TLS_CA`) names a CA bundle to trust in addition to the host's, for an `https://` server whose certificate an internal CA issued |
 | `atlas reset-password [--data-dir DIR] [--create-admin] [--password-stdin] USERNAME` | Reset a local user's password straight against the data directory |
 | `atlas version` | Version, git revision, and Go toolchain |
 | `atlas help` | Usage |
@@ -612,10 +726,13 @@ history.
 | Variable | Used for |
 |----------|----------|
 | `ATLAS_TOKEN` | The credential `atlas worker` and `atlas mcp` authenticate with, and what supervised workers are given if you set it on the server. It must be an **API token** the server accepts (see below); an arbitrary value is refused, and the server warns at startup if you set one |
+| `ATLAS_TLS_CA` | A CA bundle `atlas serve`, `atlas worker` and `atlas mcp` trust **in addition to** the host's roots when they call another Atlas over `https`. For an internally issued certificate; it never replaces the system roots and never skips verification |
 | `ATLAS_ADMIN_USERNAME` | Bootstrap admin name (default `admin`); only read while the user store is empty and `--auth` is on |
 | `ATLAS_ADMIN_PASSWORD` | Bootstrap admin password; if unset, one is generated and logged once |
 | `ATLAS_VAULT_KEY` | Vault master key, 64 hex chars or base64; never written to disk |
 | `ATLAS_VAULT_KEY_FILE` | Path to a file holding that key |
+| `ATLAS_OIDC_ISSUER`, `ATLAS_OIDC_CLIENT_ID`, `ATLAS_OIDC_CLIENT_SECRET` | Defaults for the three `--oidc-*` flags above — the way to configure single sign-on without putting the secret on the command line ([Single sign-on](#single-sign-on-with-an-identity-provider)) |
+| `ATLAS_OIDC_SCOPES`, `ATLAS_OIDC_NAME` | Defaults for `--oidc-scopes` and `--oidc-name` |
 | `ATLAS_OPENSEARCH_URL` | Default for `--opensearch-url` |
 | `ATLAS_OPENSEARCH_INDEX` | Default for `--opensearch-index` |
 | `ATLAS_OPENSEARCH_USERNAME`, `ATLAS_OPENSEARCH_PASSWORD` | Exporter credentials (env-only) |
@@ -623,9 +740,9 @@ history.
 | `ATLAS_RETENTION_INTERVAL` | Default for `--retention-interval` |
 | `ATLAS_RETENTION_BATCH` | Default for `--retention-batch` |
 | `ATLAS_DMN_RESOLVER_URL`, `ATLAS_DMN_RESOLVER_TOKEN` | Resolve DMN models from a remote service instead of `<data-dir>/dmn-models` |
-| `ATLAS_TEMIS_CONNECTORS` | Comma-separated connector names, each configured by `ATLAS_TEMIS_<NAME>_URL` and `ATLAS_TEMIS_<NAME>_TOKEN` |
-| `ATLAS_CONNECTOR_<REF>_TOKEN` | Bearer token for the REST connector named `<REF>` |
-| `ATLAS_AD_MOCK`, `ATLAS_AD_MOCK_SEED` | Serve Active Directory tasks against a mock directory in the worker's memory, optionally seeded from an LDIF or DSML file ([ADR-0181](adr/0181-ad-connector-mock-mode.md)). For a worker Atlas supervises, prefer the switch in Console → Connectors → Active Directory: it needs no restart. These variables remain the way to configure a worker you start yourself, and the way a server decides before anyone has used that switch |
+| `ATLAS_TEMIS_CONNECTORS` | Comma-separated temis worker names, each configured by `ATLAS_TEMIS_<NAME>_URL` and `ATLAS_TEMIS_<NAME>_TOKEN`. The variable keeps the pre-ADR-0203 spelling |
+| `ATLAS_CONNECTOR_<REF>_TOKEN` | Bearer token for the credential reference `<REF>` a REST task names. The variable keeps the pre-ADR-0203 spelling |
+| `ATLAS_AD_MOCK`, `ATLAS_AD_MOCK_SEED` | Serve Active Directory tasks against a mock directory in the worker's memory, optionally seeded from an LDIF or DSML file ([ADR-0181](adr/0181-ad-connector-mock-mode.md)). For a worker Atlas supervises, prefer the switch in Console → Workers → Active Directory: it needs no restart. These variables remain the way to configure a worker you start yourself, and the way a server decides before anyone has used that switch |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Default for `--trace-endpoint`; the standard OpenTelemetry variable, honored so a deployment that already sets it needs no Atlas-specific flag |
 | `OTEL_SERVICE_NAME` | Name this process reports on exported traces (default `atlas`) |
 
@@ -765,6 +882,16 @@ atlas worker --server https://atlas.example.com --token "$ATLAS_TOKEN" --connect
 atlas mcp    --server https://atlas.example.com --token "$ATLAS_TOKEN"
 ```
 
+Where that server's certificate comes from your own CA rather than a public one,
+add `--tls-ca /etc/atlas/internal-ca.pem` (or `ATLAS_TLS_CA`) to either command.
+On a person's own machine the host trust store usually already carries it and the
+flag is unnecessary.
+
+`--connector` names the **Worker Type** this instance serves, not a configured
+worker: it keeps the pre-ADR-0203 spelling, like the `ATLAS_*_CONNECTORS` variables
+below. One such process is a *Worker Instance*, and starting more of them against the
+same server is how a job type is scaled.
+
 For Prometheus, that is two lines in the scrape config:
 
 ```yaml
@@ -832,7 +959,7 @@ unit; the parts are not independently consistent.
 | `state/` | Materialized state (embedded LSM store), rebuildable from the WAL |
 | `checkpoints/` | Recovery checkpoints, so a restart replays only the log after the newest one |
 | `vault.key` | Vault master key, mode `0600`, only when generated rather than supplied |
-| `vault/` | Encrypted connector secrets |
+| `vault/` | Encrypted worker secrets |
 | `deployments/`, `drafts/`, `forms/`, `projects/`, `releases/`, `users/`, `connectors/`, `settings/`, … | Design-time and administrative stores |
 | `dmn-models/` | DMN models, unless resolved remotely |
 | `exporter/` | OpenSearch export position, when the exporter is on |

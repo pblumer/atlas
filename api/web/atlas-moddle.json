@@ -146,6 +146,7 @@
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },
       "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
         { "name": "url", "type": "String", "isAttr": true },
         { "name": "bindDN", "type": "String", "isAttr": true },
         { "name": "bindSecret", "type": "String", "isAttr": true },
@@ -158,6 +159,7 @@
         { "name": "newDN", "type": "String", "isAttr": true },
         { "name": "baseDN", "type": "String", "isAttr": true },
         { "name": "filter", "type": "String", "isAttr": true },
+        { "name": "scope", "type": "String", "isAttr": true },
         { "name": "cookieVariable", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "maxEntries", "type": "String", "isAttr": true },

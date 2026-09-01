@@ -40,7 +40,7 @@
       const api = async (method, url) => {
         if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
         if (method === "GET" && /\/connector-kinds$/.test(url)) return { kinds: [{ id: "webscrape", placement: "worker" }] };
-        if (method === "GET" && /\/connectors$/.test(url)) return [];
+        if (method === "GET" && /\/(connectors|configured-workers)$/.test(url)) return [];
         if (method === "GET" && /\/processes$/.test(url)) return [];
         if (method === "GET" && /\/drafts$/.test(url)) return [];
         if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };

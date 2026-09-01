@@ -490,3 +490,73 @@ func TestACSVWithNoRowsIsRefused(t *testing.T) {
 		t.Errorf("status = %d, want 400 (body %s)", rec.Code, rec.Body)
 	}
 }
+
+// A dataset larger than the upload limit is refused by size, saying so. The
+// ceiling is on the CSV itself, and the request gets room on top of it for the
+// multipart envelope: with one number for both, the request cap tripped first and
+// every oversized upload came back a 400 that named neither the limit nor which
+// part had exceeded it.
+func TestACSVOverTheUploadLimitIsRefusedBySize(t *testing.T) {
+	svc := newService(t)
+	id := openBatchSession(t, svc)
+
+	// A valid CSV, just too much of it.
+	var b strings.Builder
+	b.Grow(maxCSVBytes + 64<<10)
+	b.WriteString("kunde\n")
+	row := strings.Repeat("x", 63) + "\n"
+	for b.Len() <= maxCSVBytes {
+		b.WriteString(row)
+	}
+	var body strings.Builder
+	mw := multipart.NewWriter(&body)
+	part, err := mw.CreateFormFile("file", "big.csv")
+	if err != nil {
+		t.Fatalf("multipart: %v", err)
+	}
+	if _, err := part.Write([]byte(b.String())); err != nil {
+		t.Fatalf("write csv: %v", err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("close multipart: %v", err)
+	}
+	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body.String()))
+	r.Header.Set("Content-Type", mw.FormDataContentType())
+	r.SetPathValue("id", id)
+	rec := httptest.NewRecorder()
+	svc.HandleStartRunFromCSV(rec, r)
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("code = %d, want 413; body %s", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), "larger than the upload limit") {
+		t.Errorf("body = %s, want it to name the limit", rec.Body)
+	}
+}
+
+// A report and a row with nothing in them still serialise as empty objects, not
+// nulls. Every client here iterates these maps; `null` is the value that makes a
+// fresh session, or a case that carries no variables, throw in the browser rather
+// than render as "nothing yet".
+func TestEmptyMapsTravelAsObjectsNotNull(t *testing.T) {
+	rep, err := json.Marshal(renderReport(playground.Report{}))
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+	for _, field := range []string{`"elements":{}`, `"pools":{}`, `"visits":{}`} {
+		if !strings.Contains(string(rep), field) {
+			t.Errorf("report is missing %s: %s", field, rep)
+		}
+	}
+	if strings.Contains(string(rep), "null") {
+		t.Errorf("report carries a null: %s", rep)
+	}
+
+	row, err := json.Marshal(renderRow(playground.CaseRow{}))
+	if err != nil {
+		t.Fatalf("marshal row: %v", err)
+	}
+	if !strings.Contains(string(row), `"variables":{}`) || strings.Contains(string(row), "null") {
+		t.Errorf("row = %s, want an empty variables object and no nulls", row)
+	}
+}

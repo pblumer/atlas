@@ -25,7 +25,7 @@ test.beforeEach(async ({ page }) => {
 // start collapsed), so the kind rows and their badges are on screen.
 async function openPicker(page, id) {
   await page.evaluate((el) => window.__select(el), id);
-  await page.locator(".pgroup-head", { hasText: "Type" }).click();
+  await page.locator(".pgroup-head", { hasText: "Worker type" }).click();
 }
 
 const badge = (page, kind) => page.locator(`.stkind-row[data-kind='${kind}'] .stkind-where`);
@@ -75,7 +75,7 @@ test("an offloaded kind says its jobs are leased by a worker, and where its cred
   const notice = page.locator(".stkind-notice");
   await expect(notice).toHaveClass(/stkind-notice-worker/);
   await expect(notice).toContainText("does not run this itself");
-  await expect(notice).toContainText("holds the connector");
+  await expect(notice).toContainText("holds the configured Worker");
   // The advice for an in-engine kind would be nonsense here: it is already on a worker.
   await expect(notice).not.toContainText("should prefer");
   expect(page.__errors).toEqual([]);

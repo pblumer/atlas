@@ -33,6 +33,23 @@ one answer removes both. The full argument is in
 A number, once assigned, is never reassigned — that is what makes `(ADR-0168)` in a
 comment safe to write.
 
+## Reading the older records: "connector"
+
+Records written before [ADR-0203](0203-worker-execution-model.md) say *connector*
+where the rest of the documentation now says **Worker Type** (an execution
+capability), **Worker** (one configured target and identity of that type) or
+**Worker Instance** (a process leasing its jobs) — the word meant all three
+depending on where it stood, which is why it was replaced.
+
+Those records are **not rewritten**: an ADR is immutable once accepted, and
+ADR-0203 says so explicitly — older connector wording is reconciled through links,
+not by editing history. So read ADR-0036, [ADR-0041](0041-connector-management-and-secret-store.md),
+[ADR-0067](0067-service-task-connector-catalog.md), ADR-0154/0166/0172/0173/0201 and
+their neighbours in their own vocabulary; ADR-0203 carries the mapping. The
+persisted contracts kept the old spelling too, on purpose: the `connector/` package
+paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
+`ATLAS_*_CONNECTORS` variables and the `/api/v1/connectors` routes.
+
 ## Index
 
 | ADR | Title | Status |
@@ -225,9 +242,9 @@ comment safe to write.
 | [0186](0186-embed-public-forms-cross-origin.md) | Embedding a public start form cross-origin (scoped CORS) | Proposed |
 | [0187](0187-postgres-change-events.md) | Database change events — captured in the database, read on a worker, deduplicated in the engine | Proposed |
 | [0188](0188-console-managed-sql-connectors.md) | A database is a Console entry, not a start parameter — and a worker is never a thing you create | Proposed |
-| [0189](0189-panorama-architecture-modeling-and-live-overlays.md) | Panorama architecture modeling and live operational overlays | Accepted |
+| [0189](0189-panorama-architecture-modeling-and-live-overlays.md) | Panorama architecture modeling and live operational overlays | Accepted (amended) |
 | [0190](0190-webscrape-feed-extraction.md) | Add explicit RSS and Atom extraction to the web-scraping connector | Proposed |
-| [0191](0191-built-in-tls-listener.md) | TLS 1.3 in the binary — an optional listener with operator-supplied certificates | Proposed |
+| [0191](0191-built-in-tls-listener.md) | TLS 1.3 in the binary — an optional listener with operator-supplied certificates | Accepted |
 | [0192](0192-remedy-default-offload.md) | BMC Remedy runs on a worker by default | Proposed |
 | [0193](0193-ad-mock-in-the-console.md) | The Active Directory mockup switch belongs in the Console | Proposed |
 | [0194](0194-api-tokens.md) | API tokens — a credential a machine can actually be given | Proposed |
@@ -247,6 +264,8 @@ comment safe to write.
 | [0208](0208-worker-type-packages.md) | Worker Type package contract, trust, and distribution | Proposed |
 | [0209](0209-roles-per-endpoint-group.md) | Roles per endpoint group | Accepted |
 | [0210](0210-federated-authentication.md) | Federated authentication | Accepted |
+| [0211](0211-panorama-derived-landscape-mesh.md) | Panorama's derived landscape mesh and notation projections | Accepted |
+| [0212](0212-element-template-applier.md) | The element-template applier, and what a template binding means in Atlas | Proposed |
 
 ## Status values
 

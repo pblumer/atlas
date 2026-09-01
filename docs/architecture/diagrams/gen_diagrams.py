@@ -275,7 +275,7 @@ gen_stack("overview", "Atlas — ArchiMate 3.2 layered view", [
     ("app", "APPLICATION  ·  the software that delivers it", [
         ("component", ["Atlas Engine", "Compiler · Processor", "Data model"]),
         ("component", ["Channels", "Web UI · REST API · MCP"]),
-        ("component", ["Connectors", "REST · Mail · Script", "DMN · clio"])]),
+        ("component", ["Workers", "REST · Mail · Script", "DMN · clio"])]),
     ("tec", "TECHNOLOGY  ·  the runtime that hosts it", [
         ("node", ["Single binary", "Go runtime, no CGO"]),
         ("node", ["Partitions", "single-writer"]),
@@ -310,7 +310,7 @@ gen_stack("application", "Application layer", [
         ("component", ["Graph", "Compiler"]), ("component", ["Processor", "single-writer"]),
         ("component", ["Data model", "applyToState"]), ("component", ["WAL", "manager"]),
         ("component", ["State-store", "wrapper"])]),
-    ("app", "CONNECTORS  ·  job workers", [
+    ("app", "WORKER TYPES  ·  job execution", [
         ("component", ["REST"]), ("component", ["Mail"]), ("component", ["Script"]),
         ("component", ["DMN / temis"]), ("component", ["clio bridge"])]),
 ], ["serve requests to", "create jobs for"])
@@ -322,7 +322,7 @@ gen_stack("technology", "Technology layer", [
         ("node", ["Partition N", "…"])]),
     ("tec", "DURABLE STORAGE", [
         ("node", ["Filesystem", "WAL segments + Pebble SST", "fsync · group commit"])]),
-    ("ext", "EXTERNAL SYSTEMS  ·  via connectors (gRPC / HTTPS)", [
+    ("ext", "EXTERNAL SYSTEMS  ·  via workers (gRPC / HTTPS)", [
         ("node", ["temis", "DMN/FEEL"]), ("node", ["clio", "event store"]),
         ("node", ["Gmail /", "MS Graph"]), ("node", ["polyglot", "job workers"])]),
 ], ["group commit", "gRPC / HTTPS"])

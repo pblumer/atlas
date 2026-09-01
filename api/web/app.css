@@ -55,11 +55,13 @@ b { font-weight: 600; }
 .mark {
   display: inline-grid; place-items: center;
   width: 24px; height: 24px; border-radius: 6px;
-  background: #14161a; color: #fff; font-weight: 800; font-size: 14px;
-  font-family: ui-monospace, monospace;
+  background: #000; color: #fff;
   overflow: hidden;
 }
-/* When an org logo is set, the mark holds the uploaded image instead of the "A":
+/* The built-in mark is an inline SVG glyph taking the box's colour; the tile is
+   this box's own background, so the glyph carries its padding in its viewBox. */
+.mark svg { width: 100%; height: 100%; display: block; }
+/* When an org logo is set, the mark holds the uploaded image instead of the glyph:
    drop the black tile so a transparent PNG/SVG sits on the bar cleanly, and fit
    the image inside the box without distortion. */
 .mark.has-logo { background: transparent; }
@@ -627,6 +629,22 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .panorama-props-empty b { color: var(--text); }
 .panorama-props-empty p { font-size: 12px; line-height: 1.5; }
 .panorama-selection-icon { font-size: 28px; color: var(--accent); margin-bottom: 8px; }
+/* Observations in the properties panel (ADR-0189 §6). The severity is a bar on
+   the left edge and a word, never a recoloured element: ArchiMate layer colours
+   carry semantics, and overwriting them with health is what the record forbids. */
+.panorama-obs {
+  border-left: 3px solid var(--border-strong); padding: 6px 0 6px 9px;
+  margin: 0 0 10px; font-size: 12px; display: flex; flex-direction: column; gap: 4px;
+}
+.panorama-obs:last-of-type { margin-bottom: 0; }
+.panorama-obs-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.panorama-obs p { margin: 0; color: var(--muted); }
+.panorama-obs code { font-size: 11px; overflow-wrap: anywhere; }
+.panorama-obs-detail { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; }
+.panorama-sev-critical { border-left-color: var(--danger); }
+.panorama-sev-attention { border-left-color: var(--warn); }
+.panorama-sev-ok { border-left-color: var(--ok); }
+.panorama-unwatched { font-style: italic; }
 .panorama-kv { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 8px; align-items: start; margin: 8px 0; font-size: 12px; }
 .panorama-kv span { color: var(--muted); }
 .panorama-kv b, .panorama-kv code { min-width: 0; overflow-wrap: anywhere; }
@@ -2660,7 +2678,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .logo-row { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
 .logo-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .logo-sample {
-  width: 40px; height: 40px; border-radius: 8px; font-size: 20px;
+  width: 40px; height: 40px; border-radius: 8px;
   border: 1px solid var(--border);
 }
 
@@ -3188,6 +3206,191 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .conn-share-head { font-size: 13px; font-weight: 600; }
 /* A connector somebody else configures: present, referenceable, and visibly not yours. */
 .conn-foreign td { opacity: .72; }
+
+/* Panorama's derived landscape mesh (ADR-0211). The graph is computed by the
+   server and laid out in the browser; these rules only style the result. Node
+   fills come from the kind table in panorama-mesh.js so the legend and the
+   canvas cannot drift apart. */
+.mesh-card { display: flex; flex-direction: column; gap: 12px; }
+.mesh-head { display: flex; align-items: baseline; gap: 12px; }
+.mesh-head h1 { margin: 0; }
+.mesh-legend {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.mesh-swatches { display: flex; flex-wrap: wrap; gap: 16px; }
+.mesh-swatch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.mesh-meta { font-size: 13px; color: var(--text); }
+/* A filtered or collapsed picture states so in words, not only in shading — the
+   whole point is that incompleteness is legible rather than inferred. */
+.mesh-note { margin: 0; font-size: 13px; color: var(--muted); }
+/* The surface is a fixed viewport rather than a box that grows to fit its content.
+   The canvas fills it exactly and the viewBox is computed to the same aspect ratio,
+   which is what removes the empty bands a settled graph used to sit inside: with
+   preserveAspectRatio's default, any mismatch between the two is letterboxed. */
+.mesh-stage { position: relative; flex: 1; min-width: 0; }
+.mesh-surface {
+  overflow: hidden; border: 1px solid var(--border); border-radius: 8px;
+  height: clamp(460px, 72vh, 960px);
+  /* pan-y, not none: a horizontal drag pans the zoomed mesh, and a vertical one
+     still scrolls the page. Trapping the page scroll under a full-width canvas is
+     the worse failure on a touch screen, and the zoom buttons stay reachable. */
+  touch-action: pan-y;
+}
+.mesh-canvas { display: block; width: 100%; height: 100%; background: var(--surface); }
+/* Grab only where there is something to grab: at the fitted frame the whole
+   landscape is already on screen and dragging is deliberately inert. */
+.mesh-canvas.mesh-zoomed { cursor: grab; }
+.mesh-canvas.mesh-zoomed:active { cursor: grabbing; }
+.mesh-zoom {
+  position: absolute; right: 10px; bottom: 10px; display: flex; gap: 4px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px;
+}
+.mesh-zoom button {
+  min-width: 30px; height: 26px; padding: 0 8px; font-size: 14px; line-height: 1;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+  color: var(--text); cursor: pointer;
+}
+.mesh-zoom button:hover { border-color: var(--border-strong); }
+.mesh-zoom button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mesh-edge { stroke: var(--border-strong); stroke-width: 1.5; }
+.mesh-edge-contains { stroke-dasharray: 4 4; opacity: 0.7; }
+/* Labels (ADR-0211 §7's legibility half). A few hundred names on one canvas is a
+   wall of text with circles behind it, so most names are revealed rather than
+   painted: the element is always in the DOM — screen readers and the node's
+   aria-label do not depend on hover — and only its ink is hidden, so showing one
+   costs a repaint and never a re-layout.
+
+   A label that appears over its neighbours needs to win against them, hence the
+   halo (paint-order + a stroke in the page background) and the raised stacking of
+   the hovered node. Without it a revealed name is unreadable exactly where the
+   graph is dense, which is the only place it was needed. */
+.mesh-label { font-size: 12px; fill: var(--text); pointer-events: none; }
+.mesh-label-ink {
+  opacity: 0; transition: opacity 80ms linear;
+  paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round;
+}
+.mesh-named .mesh-label-ink { opacity: 1; }
+.mesh-node:hover .mesh-label-ink,
+.mesh-node:focus-visible .mesh-label-ink { opacity: 1; }
+/* The hovered node paints over its neighbours, so its name is legible even where
+   the graph is at its densest. SVG has no z-index, so this is document order. */
+.mesh-node:hover, .mesh-node:focus-visible { transform-box: fill-box; }
+.mesh-node:hover circle, .mesh-node:focus-visible circle { stroke-width: 3; }
+.mesh-count { font-size: 12px; font-weight: 600; fill: var(--accent); }
+.mesh-node { cursor: default; }
+a .mesh-node { cursor: pointer; }
+a:hover .mesh-node circle { stroke-width: 3; }
+a:focus-visible .mesh-node circle { stroke: var(--accent); stroke-width: 3; }
+.mesh-search {
+  flex: 1; min-width: 0; max-width: 320px; padding: 6px 10px;
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
+}
+.mesh-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mesh-empty-filter { margin: 0; padding: 32px; text-align: center; color: var(--muted); }
+
+/* Impact analysis (ADR-0211 §6). The canvas and the panel are one answer: the
+   highlight says which, the panel says how many and whether the count is a floor. */
+.mesh-body { display: flex; gap: 12px; align-items: flex-start; }
+.mesh-body .mesh-stage { flex: 1; min-width: 0; }
+/* Narrower than it was: the canvas is the view, and 260px of permanent sidebar on
+   a 1280px screen took a fifth of the picture for a panel that is empty until
+   somebody selects something. */
+.mesh-side { width: 210px; flex: none; display: flex; flex-direction: column; gap: 10px; }
+.mesh-controls { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.mesh-controls label { color: var(--muted); }
+.mesh-controls select {
+  padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
+}
+.mesh-panel {
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); font-size: 13px; display: flex; flex-direction: column; gap: 8px;
+}
+.mesh-panel-empty { color: var(--muted); }
+.mesh-panel-empty p, .mesh-panel p { margin: 0; }
+.mesh-panel-head { display: flex; flex-direction: column; gap: 2px; }
+.mesh-impact-count { font-size: 13px; }
+.mesh-impact-count b { font-size: 18px; }
+/* A truncated answer is a warning, not a footnote: the number above it is a floor. */
+.mesh-truncated { color: var(--warn); }
+.mesh-drill { font-size: 13px; }
+.mesh-node { cursor: pointer; }
+.mesh-node:focus-visible circle { stroke: var(--accent); stroke-width: 3; }
+.mesh-in-impact circle { stroke-width: 3; }
+line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
+/* Dimmed rather than hidden: the rest of the landscape stays visible as context,
+   so an impact set reads as a part of the whole rather than as the whole. */
+.mesh-dimmed { opacity: 0.22; }
+@media (max-width: 900px) {
+  .mesh-body { flex-direction: column; }
+  .mesh-side { width: 100%; }
+  .mesh-stage { width: 100%; }
+}
+
+/* Atlas bindings in the Panorama properties panel (ADR-0189 §4). A binding shows
+   the server-resolved name; the id stays visible because it is what the document
+   actually stores and what another tool will read. */
+.panorama-binding { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.panorama-binding:last-child { border-bottom: 0; }
+.panorama-binding-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.panorama-binding-head span { font-size: 13px; color: var(--muted); }
+.panorama-binding p { margin: 4px 0 0; font-size: 13px; }
+.panorama-bound-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.panorama-bound { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 13px; }
+.panorama-bound code { font-size: 12px; }
+/* An unresolved binding is shown rather than hidden: removing it would make a
+   broken binding look like an absent one, and the model would then look correct. */
+.panorama-bound.unresolved { color: var(--warn); }
+.panorama-unresolved { font-size: 12px; }
+.panorama-pick { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.panorama-pick label { display: flex; align-items: baseline; gap: 8px; cursor: pointer; font-size: 13px; }
+
+/* Provenance on the landscape mesh (ADR-0211 §2): derived, modeled, or both. Shape
+   carries it as well as colour — a picture that mixed what Atlas found with what
+   somebody declared, without saying which is which, is the conflation the record
+   exists to prevent. */
+.mesh-prov-modeled .mesh-label { font-style: italic; }
+.mesh-prov-modeled circle { opacity: 0.9; }
+
+/* Severity (ADR-0211 §4). The badge is a glyph on a filled dot, so the class is
+   readable without colour perception; colour is the second channel, never the only
+   one. Node fills stay as the kind and the ArchiMate layer set them (ADR-0189 §6). */
+.mesh-badge-dot { fill: var(--surface); stroke: var(--border-strong); stroke-width: 1.5; }
+.mesh-badge-glyph { font-size: 10px; font-weight: 700; fill: var(--text); }
+.mesh-sev-critical .mesh-badge-dot { fill: var(--danger); stroke: var(--danger); }
+.mesh-sev-critical .mesh-badge-glyph { fill: #fff; }
+.mesh-sev-attention .mesh-badge-dot { fill: var(--warn-soft); stroke: var(--warn); }
+.mesh-sev-attention .mesh-badge-glyph { fill: var(--warn); }
+.mesh-sev-unknown .mesh-badge-dot { fill: var(--bg); stroke: var(--muted); }
+.mesh-sev-unknown .mesh-badge-glyph { fill: var(--muted); }
+.mesh-sev-glyph { font-size: 10px; font-weight: 700; fill: var(--text); }
+.mesh-finding {
+  display: flex; flex-direction: column; gap: 2px; font-size: 13px;
+  border-left: 3px solid var(--border-strong); padding-left: 8px;
+}
+.mesh-finding p { margin: 0; color: var(--muted); }
+.mesh-finding.mesh-sev-critical { border-left-color: var(--danger); }
+.mesh-finding.mesh-sev-attention { border-left-color: var(--warn); }
+.mesh-finding.mesh-sev-ok { border-left-color: var(--ok); }
+
+/* The C4 projection (ADR-0211 §8). Structure, relationships, and — never optional —
+   what the mapping could not express. */
+.c4-panel { padding: 16px 20px; overflow: auto; height: 100%; background: var(--surface); }
+.c4-head h2 { margin: 0 0 4px; font-size: 16px; }
+.c4-head p { margin: 0 0 12px; font-size: 13px; }
+.c4-tree, .c4-list { list-style: none; margin: 0; padding-left: 0; font-size: 13px; }
+.c4-tree .c4-tree { padding-left: 18px; border-left: 1px solid var(--border); margin-top: 6px; }
+.c4-tree > li, .c4-list > li { padding: 5px 0; }
+.c4-tree p { margin: 2px 0 0; font-size: 12px; }
+.c4-type {
+  display: inline-block; padding: 1px 6px; margin-right: 6px; border-radius: 4px;
+  background: var(--accent-soft); color: var(--accent); font-size: 11px;
+}
+.c4-reason { color: var(--warn); font-size: 12px; }
+.c4-loss h3 { color: var(--warn); }
 
 /* ---------- Playground tab (ADR-draft-modeler-playground) ----------
    The Playground runs the diagram on a throwaway sandbox of the real engine. Its

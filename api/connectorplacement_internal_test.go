@@ -169,27 +169,41 @@ func TestPlacementSaysEngineOnlyForTheUserProvisioningConnector(t *testing.T) {
 // catalogKindIDRe matches the `id: "rest",` of one SERVICE_TASK_KINDS entry.
 var catalogKindIDRe = regexp.MustCompile(`\bid:\s*"([a-zA-Z0-9_-]+)"`)
 
-// modelerCatalogKindIDs reads the ids out of editor.js's SERVICE_TASK_KINDS. It is
-// bounded to that array on purpose: the send task's Message kind is declared after
-// it and is not a connector.
-func modelerCatalogKindIDs(t *testing.T) []string {
+// modelerSource is editor.js, the whole Modeler panel implementation. Several drift
+// guards read it, so the file is opened in one place.
+func modelerSource(t *testing.T) string {
 	t.Helper()
 	src, err := os.ReadFile("web/editor.js")
 	if err != nil {
 		t.Fatalf("read editor.js: %v", err)
 	}
+	return string(src)
+}
+
+// modelerCatalogSource is the body of editor.js's SERVICE_TASK_KINDS array. It is
+// bounded to that array on purpose: the send task's Message kind is declared after
+// it and is not a connector.
+func modelerCatalogSource(t *testing.T) string {
+	t.Helper()
+	src := modelerSource(t)
 	const open = "const SERVICE_TASK_KINDS = ["
-	start := strings.Index(string(src), open)
+	start := strings.Index(src, open)
 	if start < 0 {
 		t.Fatal("editor.js has no SERVICE_TASK_KINDS array; the catalog must have been renamed")
 	}
-	rest := string(src)[start+len(open):]
+	rest := src[start+len(open):]
 	end := strings.Index(rest, "\n].map(")
 	if end < 0 {
 		t.Fatal("could not find the end of SERVICE_TASK_KINDS in editor.js")
 	}
+	return rest[:end]
+}
+
+// modelerCatalogKindIDs reads the ids out of editor.js's SERVICE_TASK_KINDS.
+func modelerCatalogKindIDs(t *testing.T) []string {
+	t.Helper()
 	var ids []string
-	for _, m := range catalogKindIDRe.FindAllStringSubmatch(rest[:end], -1) {
+	for _, m := range catalogKindIDRe.FindAllStringSubmatch(modelerCatalogSource(t), -1) {
 		ids = append(ids, m[1])
 	}
 	if len(ids) < 10 {

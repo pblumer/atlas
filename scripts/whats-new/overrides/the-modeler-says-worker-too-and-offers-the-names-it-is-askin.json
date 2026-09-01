@@ -1,0 +1,35 @@
+{
+  "tags": [
+    "Modeler",
+    "Workers"
+  ],
+  "title": {
+    "en": "The Modeler asks for a Worker — and offers the ones you have",
+    "de": "Der Modeler fragt nach einem Worker — und bietet die vorhandenen an"
+  },
+  "summary": {
+    "en": "A service task's properties panel still said Connector, while the Console had long since said Workers — so the field asking for a name and the page the names come from disagreed. The panel now uses the same three words as everywhere else: you pick a Worker type (the list reads Jira, PostgreSQL, BMC Remedy — the word Connector is gone from the names), and below it you name the Worker, meaning the one Jira site or database an administrator configured on this server. The Worker field is now a dropdown of exactly those, so the one thing you cannot read off your own model is no longer typed from memory. It still accepts a typed name, because a worker you run yourself can carry its target in its own environment where the Modeler cannot see it — and if this server has no worker of that type at all, the field says so instead of opening an empty list. Your models are untouched: the saved XML still says connector=\"…\", so anything already deployed keeps running exactly as it did.",
+    "de": "Im Eigenschaften-Panel einer Service-Aufgabe stand weiterhin Connector, während die Konsole längst Workers sagte — das Feld, das nach einem Namen fragt, und die Seite, auf der die Namen entstehen, sprachen also verschiedene Sprachen. Das Panel benutzt jetzt dieselben drei Begriffe wie alles andere: Sie wählen einen Worker-Typ (die Liste liest sich als Jira, PostgreSQL, BMC Remedy — das Wort Connector ist aus den Namen verschwunden), und darunter benennen Sie den Worker, also die eine Jira-Instanz oder Datenbank, die jemand auf diesem Server konfiguriert hat. Dieses Feld ist neu eine Auswahlliste genau dieser Worker; das Einzige, was Sie Ihrem eigenen Modell nicht ansehen können, muss damit nicht mehr aus dem Gedächtnis getippt werden. Ein getippter Name bleibt erlaubt, weil ein selbst betriebener Worker sein Ziel in der eigenen Umgebung tragen kann, wo der Modeler es nicht sieht — und wenn dieser Server gar keinen Worker dieses Typs kennt, sagt das Feld das, statt eine leere Liste zu öffnen. An Ihren Modellen ändert sich nichts: Im gespeicherten XML steht weiterhin connector=\"…\", Bereitgestelltes läuft unverändert weiter."
+  },
+  "tutorial": {
+    "en": [
+      "Open a process in the Modeler and select a service task, then switch to the Implement tab.",
+      "Worker type is the picker at the top — choose Jira, or whichever type the task should use.",
+      "In the group below it (Jira worker, Mail worker, …) click the Worker field: it lists the workers of that type configured under Console › Workers.",
+      "Nothing offered? Then this server has no worker of that type yet — the field says so, and Console › Workers is where one is added."
+    ],
+    "de": [
+      "Öffnen Sie einen Prozess im Modeler, wählen Sie eine Service-Aufgabe und wechseln Sie auf den Reiter Implement.",
+      "Worker type ist die Auswahl zuoberst — nehmen Sie Jira oder den Typ, den die Aufgabe braucht.",
+      "In der Gruppe darunter (Jira worker, Mail worker, …) klicken Sie ins Feld Worker: es listet die unter Console › Workers konfigurierten Worker dieses Typs.",
+      "Nichts zur Auswahl? Dann kennt dieser Server noch keinen Worker dieses Typs — das Feld sagt es, und angelegt wird einer unter Console › Workers."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

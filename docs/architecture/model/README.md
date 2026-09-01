@@ -24,7 +24,7 @@ tree by ArchiMate layer, plus generated diagram views:
 |--------|----------|
 | **Motivation** | Stakeholders, drivers, assessments, goals, outcomes, the four principles, the six invariants as requirements, and the constraints |
 | **Business** | Roles, business services, processes, events, objects, and the *Durable Execution* contract |
-| **Application** | The Atlas Engine core and its sub-components, channels, connectors, application services, data objects, interfaces |
+| **Application** | The Atlas Engine core and its sub-components, channels, workers, application services, data objects, interfaces |
 | **Technology** | Single binary, Go runtime, partitions, Pebble, filesystem, technology services, paths, artifacts |
 | **External Systems** | temis, clio, mail providers, external job workers |
 | **Implementation & Migration** | Plateaus M0–M6 (with a `Roadmap status` property) and the parallel workstreams |

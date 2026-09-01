@@ -8,7 +8,10 @@
 // `unicodePwd` attribute (UTF-16LE, quote-wrapped, LDAPS only), an account's
 // enabled/disabled state is a bit in `userAccountControl` (a read-modify-write), and
 // group membership is an *incremental* add/delete of a `member` value rather than a
-// whole-attribute replace.
+// whole-attribute replace. It also reads: a DirSync delta, which is AD's own
+// mechanism, and an ordinary search, which is not — a provisioning process has to ask
+// whether a group exists before it can put anybody in it, and making it bind a second
+// connector to the same directory to ask was a seam in the middle of one lifecycle.
 //
 // It inherits the job protocol's durability and non-blocking properties (ADR-0007):
 // the processor creates a job carrying [compiler.AdJobType] and never talks to AD
@@ -82,6 +85,28 @@ type DirSyncResult struct {
 	More    bool
 }
 
+// SearchRequest asks the directory what is under a base right now: the base DN, a
+// scope ("base"/"one"/"sub"), a filter (empty → "(objectClass=*)"), and the attributes
+// to return (nil → the server's default set).
+//
+// It is the generic LDAP connector's search request, deliberately — the two connectors
+// read a directory the same way, and only what AD *writes* differs.
+type SearchRequest struct {
+	BaseDN     string
+	Scope      string
+	Filter     string
+	Attributes []string
+	// PageSize drives the simple paged-results control (RFC 2696), so a domain
+	// controller's administrative size limit (1000 by default) does not refuse a
+	// legitimate search. 0 asks for one unpaged search.
+	PageSize int32
+	// MaxEntries caps how many entries may be returned. Exceeding it is an error
+	// rather than a truncation: a short result set is a wrong answer, not a partial
+	// one, and a process branching on "did I find the group?" would branch on it
+	// confidently. 0 is unbounded.
+	MaxEntries int32
+}
+
 // Conn is a bound AD connection the worker operates over and then closes. It is an
 // interface so the worker is testable without a live directory.
 type Conn interface {
@@ -98,10 +123,15 @@ type Conn interface {
 	// Delete removes an entry. AD refuses to delete a container that still has
 	// children, which is the behaviour a leaver process wants.
 	Delete(dn string) error
-	// DirSync reads what changed under a naming context since a cookie. It is the one
-	// read this connector does — search stays with the generic LDAP connector — and it
-	// is here because DirSync is Active Directory's own mechanism, not LDAP's.
+	// DirSync reads what changed under a naming context since a cookie. It is here
+	// because DirSync is Active Directory's own mechanism, not LDAP's.
 	DirSync(req DirSyncRequest) (DirSyncResult, error)
+	// Search reads what is under a base right now. It is an ordinary LDAP search and
+	// the generic connector can do it too; it is here because a provisioning process
+	// has to ask whether an entry exists before it can act on one — and having to bind
+	// a second connector to the same directory to ask is the seam this connector
+	// exists to remove (ADR-0166, amended a fifth time).
+	Search(req SearchRequest) ([]Entry, error)
 	Close() error
 }
 
@@ -252,7 +282,7 @@ func (c *goConn) DirSync(req DirSyncRequest) (DirSyncResult, error) {
 	if req.MaxEntries > 0 && len(res.Entries) > int(req.MaxEntries) {
 		return DirSyncResult{}, fmt.Errorf("ad: the sync pass under %s returned more than the %d-entry cap; raise maxEntries or narrow the filter", req.BaseDN, req.MaxEntries)
 	}
-	out := DirSyncResult{Entries: dirSyncEntries(res)}
+	out := DirSyncResult{Entries: entriesFrom(res)}
 	ctrl := goldap.FindControl(res.Controls, dirSyncOID)
 	if ctrl == nil {
 		// No control back means the server did not honour DirSync — most often the
@@ -270,8 +300,52 @@ func (c *goConn) DirSync(req DirSyncRequest) (DirSyncResult, error) {
 	return out, nil
 }
 
-// dirSyncEntries converts a search result into the connector's entry shape.
-func dirSyncEntries(res *goldap.SearchResult) []Entry {
+func (c *goConn) Search(req SearchRequest) ([]Entry, error) {
+	filter := req.Filter
+	if filter == "" {
+		filter = "(objectClass=*)"
+	}
+	// SizeLimit stays 0: the cap is enforced on the result rather than asked of the
+	// server, because a server-side size limit *truncates* where MaxEntries must fail.
+	sr := goldap.NewSearchRequest(
+		req.BaseDN, searchScope(req.Scope), goldap.NeverDerefAliases,
+		0, 0, false, filter, req.Attributes, nil,
+	)
+	var (
+		res *goldap.SearchResult
+		err error
+	)
+	if req.PageSize > 0 {
+		res, err = c.conn.SearchWithPaging(sr, uint32(req.PageSize))
+	} else {
+		res, err = c.conn.Search(sr)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("ad: search %s: %w", req.BaseDN, err)
+	}
+	if max := req.MaxEntries; max > 0 && len(res.Entries) > int(max) {
+		return nil, fmt.Errorf("ad: the search under %s returned more than the %d-entry cap; narrow the filter or raise maxEntries (truncating would be a wrong answer, not a partial one)", req.BaseDN, max)
+	}
+	return entriesFrom(res), nil
+}
+
+// searchScope maps an authored scope name onto go-ldap's constant. The compiler
+// refuses anything else, so an unknown one here can only be a job written before a
+// scope was authored at all: the whole subtree, which is what a search means when
+// nobody said otherwise.
+func searchScope(scope string) int {
+	switch strings.ToLower(strings.TrimSpace(scope)) {
+	case "base":
+		return goldap.ScopeBaseObject
+	case "one":
+		return goldap.ScopeSingleLevel
+	default:
+		return goldap.ScopeWholeSubtree
+	}
+}
+
+// entriesFrom converts a search result into the connector's entry shape.
+func entriesFrom(res *goldap.SearchResult) []Entry {
 	out := make([]Entry, 0, len(res.Entries))
 	for _, e := range res.Entries {
 		attrs := make(map[string][]string, len(e.Attributes))

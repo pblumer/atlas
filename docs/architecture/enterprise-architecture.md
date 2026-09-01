@@ -140,7 +140,7 @@ resolving into a blue application element:
 | **Process Modeler** | Process design & deployment (Modeler, MCP authoring) |
 | **Task Performer** | Human-task completion via forms |
 | **Operations** | Monitoring, incident resolution, timeline inspection |
-| **Integration Developer** | Authors job workers / connectors |
+| **Integration Developer** | Authors Worker Types and the workers that run them |
 | **Administrator** | Deploys the binary, manages secrets and sharing scopes |
 
 Four of these are now enforced by the product rather than only described here: an
@@ -148,8 +148,8 @@ account carries `modeler`, `operator`, `user` or `admin`, every endpoint names t
 role it requires, and the boundary checks it for every credential
 ([ADR-0209](../adr/0209-roles-per-endpoint-group.md)).
 Enterprise Architect and Integration Developer stay business roles with no
-technical counterpart: the first governs, and the second's work — connectors and
-job workers — is authoring, so it is carried by `modeler`.
+technical counterpart: the first governs, and the second's work — Worker Types and
+the workers that run them — is authoring, so it is carried by `modeler`.
 
 ### Business services — *behaviour* (what Atlas offers)
 
@@ -181,7 +181,7 @@ visible"* is modeled as a **contract** the platform honours.
 
 *The software components that realize the business services.* Colour: blue.
 
-![Application layer: channels serve the Atlas Engine core, which creates jobs for the connectors](diagrams/application.svg)
+![Application layer: channels serve the Atlas Engine core, which creates jobs for the workers](diagrams/application.svg)
 
 ### Application components — *active structure*
 
@@ -209,16 +209,23 @@ visible"* is modeled as a **contract** the platform honours.
 - **MCP Server** — authoring & operations over the Model Context Protocol, as a
   stdio adapter over the HTTP API ([ADR-0016](../adr/0016-mcp-server-over-http-api.md)).
 
-**Connectors / job workers** (each *assigned* to a job type):
+**Worker Types** (each *assigned* to one or more job types) — the execution
+capabilities Atlas ships, implemented one package per type under `connector/`
+([ADR-0203](../adr/0203-worker-execution-model.md)):
 
-| Connector | Purpose | Reference |
-|-----------|---------|-----------|
-| REST connector | Service task calls an external HTTP API | — |
-| Mail connector | Email via Gmail / Microsoft Graph (OAuth) | — |
-| Script-task worker | Polyglot scripts (e.g. PowerShell) as workers | [ADR-0047](../adr/0047-polyglot-script-tasks-via-job-workers.md) |
-| DMN / temis connector | Business-rule tasks against the temis engine | [ADR-0050](../adr/0050-temis-decision-connector.md), [ADR-0014](../adr/0014-dmn-business-rule-tasks-via-temis.md) |
+| Worker Type | Purpose | Reference |
+|-------------|---------|-----------|
+| REST | Service task calls an external HTTP API | — |
+| Mail | Email via Gmail / Microsoft Graph (OAuth) | — |
+| Script | Polyglot scripts (e.g. PowerShell) run outside the engine | [ADR-0047](../adr/0047-polyglot-script-tasks-via-job-workers.md) |
+| DMN / temis | Business-rule tasks against the temis engine | [ADR-0050](../adr/0050-temis-decision-connector.md), [ADR-0014](../adr/0014-dmn-business-rule-tasks-via-temis.md) |
 | clio event bridge | At-least-once ingestion of external events, idempotent delivery | [ADR-0075](../adr/0075-clio-inbound-event-bridge.md) |
-| CSV import worker | Bulk data import as a job | — |
+| CSV import | Bulk data import as a job | — |
+
+A **Worker** is one configured target of such a type — endpoint plus identity, with
+the credential held by reference — and a **Worker Instance** is a process leasing its
+jobs. Only the first two are architecture; the third is runtime topology, so no
+model and no diagram here names one.
 
 ### Application services — *behaviour* (these realize the business services)
 
@@ -272,7 +279,7 @@ gRPC streaming (job workers, [ADR-0007](../adr/0007-job-worker-protocol.md)) · 
 
 `atlas` binary · WAL segments · Pebble SST files · BPMN / DMN / form files.
 
-### External systems (attached through connectors)
+### External systems (reached by workers)
 
 **temis** (deterministic DMN/FEEL decision engine) · **clio** (event store /
 streaming source) · **Gmail / Microsoft Graph** (email) · **external job workers**
@@ -326,7 +333,7 @@ amber = in progress, grey = planned.
 | **M3 Structure** | Subprocesses, event subprocesses, call activities | 🔲 planned |
 | **M4 Operability** | Incidents, metrics, operational tooling | 🔲 planned |
 | **M5 Scale-out** | Cross-partition messaging and horizontal scale | 🔲 planned |
-| **M6 Ecosystem** | A broader connector / integration surface | 🔲 planned |
+| **M6 Ecosystem** | A broader Worker Type / integration surface | 🔲 planned |
 
 Two workstreams run **in parallel** to the engine timeline: **Milestone S**
 (single-binary server & web UI) and **Milestone A** (Modeler & authoring experience).
@@ -341,8 +348,8 @@ The seams between layers are where an ArchiMate model earns its keep.
 | Relationship | Example |
 |--------------|---------|
 | **Realization** (▷) | *Instance Execution service* ▷ *Business Process Automation*; *Durable append + group commit* ▷ the *Durable Execution* contract; the `atlas` *artifact* ▷ the *Atlas Engine* component. |
-| **Serving** (→) | *Atlas Engine* serves *Web UI*, *REST API*, *MCP*; *Pebble* / *Filesystem* serve *State store* / *WAL manager*; connectors serve the service tasks of domain processes. |
-| **Assignment** (●) | roles → business processes; each connector → a job type; a *partition* goroutine → exactly one *processor* (the single-writer invariant). |
+| **Serving** (→) | *Atlas Engine* serves *Web UI*, *REST API*, *MCP*; *Pebble* / *Filesystem* serve *State store* / *WAL manager*; workers serve the service tasks of domain processes. |
+| **Assignment** (●) | roles → business processes; each Worker Type → its job types; a *partition* goroutine → exactly one *processor* (the single-writer invariant). |
 | **Access** (◆) | *Processor* reads/writes the *event log* and *state store* (durable-before-visible); domain processes access *process variables* and *forms*; the *timeline service* reads the log for audit and replay. |
 | **Influence** (from Motivation) | the *durability* driver influences the *event-sourcing* principle, which realizes invariants 2, 4, and 6. |
 
@@ -376,7 +383,7 @@ the code and the deep-dives. This realizes the Option-4 follow-up recorded in
   workaround. See [`invariants.md`](invariants.md).
 - **Stay layered.** New user-facing capability is usually a *business service*
   realized by an *application service* realized by *technology*. Adding an
-  integration is almost always a new *connector* (application component) assigned to
+  integration is almost always a new *Worker Type* (application component) assigned to
   a job type — not a change to the single-writer core.
 - **This is a view, not the whole model.** It deliberately omits the fine-grained
   internal mechanics that [`ARCHITECTURE.md`](../ARCHITECTURE.md) and the

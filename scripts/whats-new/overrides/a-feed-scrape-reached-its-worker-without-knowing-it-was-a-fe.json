@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Connectors"
+  ],
+  "title": {
+    "en": "RSS and Atom scraping works again outside the engine",
+    "de": "RSS- und Atom-Scraping funktioniert wieder ausserhalb der Engine"
+  },
+  "summary": {
+    "en": "A scrape task set to a feed format lost that setting on its way to the worker that runs it, so it fetched the feed as a web page and then failed on a CSS selector nobody had entered. Because scraping runs outside the engine by default, that was every feed task. The setting and the item limit now arrive, and the headlines come back as entries with title, link, description and date.",
+    "de": "Ein Scraping-Task mit Feed-Format hat diese Einstellung auf dem Weg zum ausführenden Worker verloren — er hat den Feed dann als Webseite geholt und ist an einem CSS-Selektor gescheitert, den niemand eingetragen hatte. Weil Scraping standardmässig ausserhalb der Engine läuft, betraf das jeden Feed-Task. Einstellung und Anzahlbegrenzung kommen jetzt an, und die Schlagzeilen landen als Einträge mit Titel, Link, Beschreibung und Datum."
+  }
+}

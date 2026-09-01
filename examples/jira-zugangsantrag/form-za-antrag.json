@@ -1,0 +1,52 @@
+{
+  "type": "default",
+  "id": "za-antrag",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🎫 Zugang beantragen\n\nDer Antrag wird als Vorgang in Jira angelegt. Über die Freigabe entscheidet danach ein Mensch in Atlas — der Vorgang wird erst dann weitergeschaltet."
+    },
+    {
+      "key": "antragsteller",
+      "type": "textfield",
+      "label": "Antragsteller",
+      "description": "Wer bekommt den Zugang?",
+      "validate": { "required": true }
+    },
+    {
+      "key": "system",
+      "type": "textfield",
+      "label": "System",
+      "description": "Wofür wird der Zugang gebraucht?",
+      "validate": { "required": true }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung",
+      "description": "Steht später in der Beschreibung des Jira-Vorgangs. Pflichtfeld: die Beschreibung wird aus mehreren Werten zusammengesetzt, und ein fehlender davon macht in FEEL die ganze Verkettung leer.",
+      "validate": { "required": true }
+    },
+    {
+      "key": "jiraProjekt",
+      "type": "textfield",
+      "label": "Jira-Projekt",
+      "description": "Projektschlüssel, z. B. OPS. Reine Ziffern gelten als Projekt-Id.",
+      "validate": { "required": true }
+    },
+    {
+      "key": "vorgangstyp",
+      "type": "textfield",
+      "label": "Vorgangstyp",
+      "description": "So, wie Jira ihn nennt — z. B. Task oder Aufgabe.",
+      "validate": { "required": true }
+    },
+    {
+      "key": "transitionFertig",
+      "type": "textfield",
+      "label": "Übergang bei Freigabe",
+      "description": "Der Knopf, den du in deinem Jira-Workflow siehst, um den Vorgang abzuschließen — z. B. Fertig oder Done. Steht hier und nicht im Modell, weil jeder Jira-Workflow eigene Namen hat.",
+      "validate": { "required": true }
+    }
+  ]
+}

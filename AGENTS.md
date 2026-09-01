@@ -39,8 +39,12 @@ go build ./...
 # Run all tests
 go test ./...
 
-# Run tests with the race detector — MANDATORY before considering work done
-go test -race ./...
+# Run tests with the race detector — MANDATORY before considering work done.
+# -timeout raises Go's default 10-minute *per-package* limit: the api package
+# alone takes 8-11 minutes under -race, so on a slower machine the default fails
+# on elapsed time rather than on a defect, and the panic names whichever test
+# happened to be running. This is what CI runs, and what `make race` runs.
+go test -race -timeout=25m ./...
 
 # Vet and format checks (formatting must produce no output)
 go vet ./...
@@ -61,7 +65,7 @@ They are JS, not Go, so they are a separate CI job and are not part of the Go co
 cd e2e && npm ci && npx playwright install chromium && npm test
 ```
 
-**Definition of done for any code change:** `go build ./...`, `go test -race ./...`, `go vet ./...` all pass, and `gofmt -l .` is empty. Do not report a task complete until these are green.
+**Definition of done for any code change:** `go build ./...`, `go test -race -timeout=25m ./...`, `go vet ./...` all pass, and `gofmt -l .` is empty. Do not report a task complete until these are green. A `panic: test timed out` from `api` without `-timeout` is that missing flag, not a finding — re-run it with the flag before you go looking for a cause.
 
 ## Repository layout
 
@@ -77,7 +81,7 @@ checkpoint/ Recovery checkpoints and WAL compaction (ADR-0131)
 expr/       FEEL expression compilation and evaluation
 job/        Job store, worker subscription, gRPC streaming protocol
 dmn/        DMN registry, resolver, validation, and the business-rule-task worker
-connector/  In-process service-task workers — one package per connector kind
+connector/  Worker Type implementations — one package per type (ADR-0203)
 api/        HTTP API, web UI, command submission and queries
   runloop/    The single-writer boundary: a service reaches shared state only through it
   httpapi/    Response envelope, client IP, request principal — what every handler uses
@@ -93,10 +97,11 @@ opensearch/ OpenSearch event exporter (ADR-0114)
 cmd/atlas/  The single binary (ADR-0011)
 ```
 
-**`connector/` holds the service-task types.** Every kind that a model can put on a
-service task and that Atlas executes itself rides the same seam — a
-`TypeConnectorTask` compiles to a job carrying a reserved `compiler.*JobTypeIndex`,
-and an in-process worker picks it up off the hot path, after fsync (ADR-0007/0067):
+**`connector/` holds the Worker Types.** Every capability a model can put on a
+service task rides the same seam — a `TypeConnectorTask` compiles to a job carrying a
+reserved `compiler.*JobTypeIndex`, and a worker picks it up off the hot path, after
+fsync (ADR-0007/0067). Whether that worker runs inside the server process or in one
+Atlas supervises is an operator's choice, not the model's (ADR-0164/0168):
 
 ```
 connector/rest/        HTTP REST outbound (ADR-0067)
@@ -111,9 +116,23 @@ connector/script/      Polyglot script tasks: PowerShell, Python, JavaScript (AD
 connector/csvimport/   CSV-to-JSON, and the parser the upload check shares (ADR-0139/0084)
 ```
 
-Adding a connector kind is one package here plus one `managedConnectorKind` entry in
+Adding a Worker Type is one package here plus one `managedConnectorKind` entry in
 [`api/connectorkinds.go`](api/connectorkinds.go) — not edits scattered across the
 server.
+
+**Say Worker, not connector, in anything new you write.** [ADR-0203](docs/adr/0203-worker-execution-model.md)
+splits the old word into three: a **Worker Type** is a capability (`jira`, `mail`,
+`ad`), a **Worker** is one configured target and identity of that type — the name a
+task states — and a **Worker Instance** is a process leasing its jobs. Scaling adds
+Worker Instances, never a second Worker.
+
+The old spelling stays in the contracts that cannot change without breaking deployed
+models: these package paths, the `connector="…"` BPMN attribute, `atlas worker
+--connector`, the `ATLAS_*_CONNECTORS` variables and the `/api/v1/connectors` routes
+(aliased by `/api/v1/configured-workers`). Renaming the packages is slice 7 of
+[the migration](docs/architecture/worker-execution-migration.md); do not start it as
+a side effect of another change. Records written before ADR-0203 keep their wording —
+they are immutable, and `docs/adr/README.md` carries the mapping.
 
 **A new API area is a service, not more `Server` methods** (ADR-0147). Give it its
 own package under `api/`, hold a `*runloop.Loop` and take every other dependency
@@ -124,7 +143,7 @@ Reaching engine or design-time state goes through the loop and nothing else; tha
 is the single-writer invariant (I3), and it is the one thing a review of such a
 package must check line by line.
 
-**Adding a design-time store** (drafts, projects, forms, connectors, releases, …)
+**Adding a design-time store** (drafts, projects, forms, workers, releases, …)
 is one call to `sidecar.NewStore`: give it a directory, the name its errors carry,
 how a record states its key, and — only if it differs from the default — the
 listing order and the filename scheme. Do not hand-roll the read/write/list

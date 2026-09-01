@@ -62,6 +62,13 @@ type oidcClaims struct {
 	Email             string
 	Name              string
 	PreferredUsername string
+
+	// Raw is the whole validated claim set, for the one caller that cannot know in
+	// advance which claim it needs: the mapping from a provider's groups onto roles
+	// reads a claim an operator named (oidcmapping.go). It is what the token said and
+	// nothing more — it is filled in only after every check has passed, so there is
+	// no path by which an unverified claim reaches a decision.
+	Raw map[string]any
 }
 
 // jwkKey is one usable signing key from a provider's key set.
@@ -247,6 +254,10 @@ func verifyIDToken(raw string, keys *jwkSet, want oidcExpect) (oidcClaims, error
 	if err := json.Unmarshal(claimsJSON, &c); err != nil {
 		return oidcClaims{}, fmt.Errorf("oidc: id token claims are not JSON: %w", err)
 	}
+	claimSet := map[string]any{}
+	if err := json.Unmarshal(claimsJSON, &claimSet); err != nil {
+		return oidcClaims{}, fmt.Errorf("oidc: id token claims are not an object: %w", err)
+	}
 	switch {
 	case c.Issuer != want.issuer:
 		return oidcClaims{}, fmt.Errorf("oidc: id token issuer is %q, want %q", c.Issuer, want.issuer)
@@ -268,5 +279,6 @@ func verifyIDToken(raw string, keys *jwkSet, want oidcExpect) (oidcClaims, error
 		Email:             c.Email,
 		Name:              c.Name,
 		PreferredUsername: c.PreferredUsername,
+		Raw:               claimSet,
 	}, nil
 }
