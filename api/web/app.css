@@ -3575,6 +3575,14 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 /* In the Playground the properties panel steps aside: the mode already owns a side
    panel, and two of them leave the diagram — the thing being watched — a sliver. */
 .editor.pg-active .props, .editor.pg-active #props-resizer { display: none; }
+/* And so do the modelling affordances. The Playground *runs* the diagram — the
+   sandbox compiled the model as it stood when it started, so a shape added here
+   would not be in what is running, and the palette offering it is the panel
+   promising something it cannot do. The token simulation hides them for the same
+   reason; this mode was left out. */
+.editor.pg-active .djs-palette,
+.editor.pg-active .djs-context-pad,
+.editor.pg-active .djs-direct-editing-parent { display: none !important; }
 
 /* Step and Batch are two ways of driving one sandbox, so they are tabs inside the
    panel rather than two panels or two tabs in the editor's own bar: the sandbox,

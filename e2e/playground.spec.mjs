@@ -43,6 +43,10 @@ test("the tab is a mode: it takes the bar and the panel, and gives back the canv
   await expect(page.locator("#pg-panel")).toBeVisible();
   // Two side panels would leave the diagram — the thing being watched — a sliver.
   await expect(page.locator("#props")).toBeHidden();
+  // And nothing that offers to change the diagram: the Playground runs the model as
+  // it stood when the sandbox started, so a palette here promises an edit the run
+  // would not carry.
+  await expect(page.locator(".djs-palette")).toBeHidden();
 
   // The panel's ✕ leaves the mode through the tab that owns it, so the tab bar and the
   // panel cannot disagree about which mode is on.
@@ -50,6 +54,7 @@ test("the tab is a mode: it takes the bar and the panel, and gives back the canv
   await expect(page.locator("#pg-panel")).toBeHidden();
   await expect(page.locator('.etabs button[data-tab="design"]')).toHaveClass(/active/);
   await expect(page.locator("#props")).toBeVisible();
+  await expect(page.locator(".djs-palette")).toBeVisible();
   expect(page.__errors).toEqual([]);
 });
 
