@@ -2037,12 +2037,18 @@ type xmlAdConnector struct {
 	EntryVariable string `xml:"entryVariable,attr"`
 	NewPassword   string `xml:"newPassword,attr"`
 	NewDN         string `xml:"newDN,attr"`
-	// The sync (DirSync) operation reads changes since a cookie: BaseDN is the naming
-	// context root, Filter narrows what is reported, CookieVariable names the variable
-	// the cookie is read from *and written back to*, MaxEntries caps one pass, and
-	// ObjectSecurity selects the flag a non-privileged sync account needs (ADR-0166).
+	// The two reading operations share BaseDN (where the read starts), Filter (what it
+	// narrows to), MaxEntries (what caps it) and ResultVariable (what receives it).
+	//
+	// search reads what is under the base *now* and additionally takes a Scope
+	// ("base"/"one"/"sub", blank → sub). sync reads what changed since a cookie:
+	// CookieVariable names the variable the cookie is read from *and written back to*,
+	// ObjectSecurity selects the flag a non-privileged sync account needs, and there is
+	// no scope to author because AD answers DirSync only for the whole subtree
+	// (ADR-0166).
 	BaseDN         string `xml:"baseDN,attr"`
 	Filter         string `xml:"filter,attr"`
+	Scope          string `xml:"scope,attr"`
 	CookieVariable string `xml:"cookieVariable,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
 	MaxEntries     string `xml:"maxEntries,attr"`

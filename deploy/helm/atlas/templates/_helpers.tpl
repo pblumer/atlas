@@ -87,3 +87,18 @@ true
 true
 {{- end -}}
 {{- end }}
+
+{{/*
+atlas.probe renders one probe, forcing the HTTPS scheme where the server
+terminates TLS itself: the kubelet would otherwise speak plaintext to a TLS
+listener and the pod would never become ready. Its plaintext loopback listener is
+no help here — that one is bound on 127.0.0.1 by design (ADR-0191). A probe does
+not verify the certificate, so an internally issued one needs nothing further.
+*/}}
+{{- define "atlas.probe" -}}
+{{- $probe := deepCopy .probe -}}
+{{- if and .tls (hasKey $probe "httpGet") -}}
+{{- $_ := set $probe.httpGet "scheme" "HTTPS" -}}
+{{- end -}}
+{{- toYaml $probe -}}
+{{- end -}}

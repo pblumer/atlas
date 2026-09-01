@@ -263,3 +263,31 @@ func TestAPITokenMintValidation(t *testing.T) {
 		})
 	}
 }
+
+// TestStatusScopeReachesOnlyTheNodeDescriptor is the least-privilege half of
+// ADR-0189 §6. Cross-server correlation needs one peer to ask another "who are
+// you, and what can you be asked for" — and the credential handed over for that
+// must not be a credential to deploy, to read instance data, or to name this node.
+func TestStatusScopeReachesOnlyTheNodeDescriptor(t *testing.T) {
+	ts, admin := apiTokenServer(t)
+	secret, _ := mint(t, admin, ts, `{"name":"peer","scope":"status","expiresInDays":365}`)
+
+	code, body := bearerReq(t, ts, http.MethodGet, "/api/v1/node", "", secret)
+	if code != http.StatusOK {
+		t.Fatalf("a status token reading the descriptor = %d, want 200; body = %s", code, body)
+	}
+	if !strings.Contains(string(body), `"features"`) {
+		t.Errorf("the descriptor does not look like one: %.160s", body)
+	}
+
+	for _, path := range []string{"/api/v1/processes", "/api/v1/instances", "/api/v1/panorama/mesh", "/api/v1/info"} {
+		if code, _ := bearerReq(t, ts, http.MethodGet, path, "", secret); code != http.StatusForbidden {
+			t.Errorf("status token on GET %s = %d, want 403", path, code)
+		}
+	}
+	// Read-only by construction: a peer reads an identity, it never sets one, and
+	// the write half of this very path stays out of the scope.
+	if code, _ := bearerReq(t, ts, http.MethodPut, "/api/v1/node", `{"name":"hijacked"}`, secret); code != http.StatusForbidden {
+		t.Errorf("status token naming the node = %d, want 403", code)
+	}
+}

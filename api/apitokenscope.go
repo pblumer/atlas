@@ -63,6 +63,13 @@ const (
 	// exactly one GET forever, which is the narrowest scope there is and the easiest
 	// one to hand out (ADR-0198).
 	apiScopeMetrics = "metrics"
+
+	// apiScopeStatus reaches this server's node descriptor and nothing else. It is
+	// what ADR-0189 §6 requires of remote correlation: another Atlas asking "who are
+	// you, and what can you be asked for" must not be handed a deploy credential to
+	// get the answer, and a credential handed to a peer should be the narrowest one
+	// that answers the question — here, one GET.
+	apiScopeStatus = "status"
 )
 
 // apiScopeAllowed is the complete reach of each confined scope. A scope absent
@@ -94,6 +101,11 @@ var apiScopeAllowed = map[string][]string{
 	// what makes it able to cover this at all.
 	apiScopeMetrics: {
 		"GET /metrics",
+	},
+	// Read-only, and deliberately not the PUT on the same path: a peer reads an
+	// identity, it never sets one.
+	apiScopeStatus: {
+		"GET /api/v1/node",
 	},
 	// The transport, both the exact path and everything under it, because that is
 	// how it is mounted. No method: the transport answers POST for JSON-RPC and GET
@@ -132,7 +144,7 @@ const mcpTransportHeader = "X-Atlas-Via-MCP"
 // apiMintableScopes lists the scopes an API token may be minted with. It is not
 // every scope: apiScopeDeploy belongs to a credential with its own store, so
 // nothing here can ask for it.
-var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics}
+var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus}
 
 // apiScopes returns the mintable scopes, sorted, for the error message that names
 // them when a request asks for something else.

@@ -18,17 +18,97 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
 // is called in the legend. Restricted and unresolved are deliberately distinct —
 // "you may not see it" and "it is not deployed" are different findings, and a
 // picture that renders them alike answers the wrong question.
+// Radii carry rank as well as kind. At a few hundred nodes the eye sorts by size
+// before it reads anything, so an application has to be unmistakably the largest
+// thing on screen and a leaf unmistakably the smallest — otherwise every node
+// competes for attention and the picture reads as one texture.
 const KIND = {
-  application: { r: 26, fill: "var(--accent-soft)", stroke: "var(--accent)", label: "Application" },
-  process: { r: 18, fill: "var(--card)", stroke: "var(--border-strong)", label: "Process" },
+  application: { r: 30, fill: "var(--accent-soft)", stroke: "var(--accent)", label: "Application" },
+  process: { r: 17, fill: "var(--surface)", stroke: "var(--border-strong)", label: "Process" },
   // --ok is a fixed green rather than a shade of the configurable accent, so its
   // soft companion is a literal here too. There is no --ok-soft at :root, and
   // defining one would change the one other rule that already asks for it.
-  worker: { r: 15, fill: "#e8f5ec", stroke: "var(--ok)", label: "Worker" },
-  decision: { r: 15, fill: "var(--accent-soft)", stroke: "var(--accent-hover)", label: "Decision" },
-  restricted: { r: 14, fill: "var(--bg)", stroke: "var(--muted)", label: "Restricted — outside your access", dashed: true },
-  unresolved: { r: 14, fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
+  worker: { r: 12, fill: "#e8f5ec", stroke: "var(--ok)", label: "Worker" },
+  decision: { r: 12, fill: "var(--accent-soft)", stroke: "var(--accent-hover)", label: "Decision" },
+  restricted: { r: 11, fill: "var(--bg)", stroke: "var(--muted)", label: "Restricted — outside your access", dashed: true },
+  unresolved: { r: 11, fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
 };
+
+// PROVENANCE describes how a node is known (ADR-0211 §2). It is rendered on every
+// node, always: a picture that mixed what Atlas found with what somebody declared,
+// without saying which is which, is exactly the conflation the record exists to
+// prevent. Shape carries it as well as colour — a dashed ring for something only
+// declared, a second ring for something known from both sides.
+const PROVENANCE = {
+  derived: { label: "Derived — Atlas has it, nothing models it" },
+  both: { label: "Both — Atlas has it and a model binds to it", ring: true },
+  modeled: { label: "Modeled — a model declares it, Atlas does not have it", ghost: true },
+};
+
+// SEVERITY is ADR-0211 §4's three classes plus the neutral one, as this view draws
+// them. Two rules from the record are structural here rather than stylistic:
+//
+//   - Color is never the only channel. Every class carries a distinct glyph, and the
+//     legend is text, so the picture is readable without color perception.
+//   - Unknown is neutral, not a fourth level of badness. Most nodes on a young
+//     instance are unobserved, and drawing them as a problem makes the whole mesh a
+//     problem — which is how a status view teaches people to ignore it.
+const SEVERITY = {
+  critical: { glyph: "!", stroke: "var(--danger)", label: "Critical — it cannot do work" },
+  attention: { glyph: "•", stroke: "var(--warn)", label: "Attention — something inside it went wrong" },
+  ok: { glyph: "", stroke: "", label: "OK — nothing is wrong here" },
+  unknown: { glyph: "?", stroke: "", label: "Unwatched — nothing here observes it" },
+};
+
+// STATE_TEXT names the observation state under a severity (ADR-0189 §6). The class
+// is a reading aid for a zoomed-out picture and never a replacement: an operator
+// acting on a finding needs the state, so both are shown wherever there is room.
+const STATE_TEXT = {
+  healthy: "healthy",
+  degraded: "degraded",
+  "not-ready": "not ready",
+  unreachable: "unreachable",
+  stale: "stale",
+  unbound: "unbound — nothing observes it",
+};
+
+// LABEL_ALWAYS_BELOW is the graph size under which every node keeps its name on
+// screen. Above it, only the anchors do (see labelPolicy).
+//
+// The number is where clutter starts rather than a round guess: at the default
+// frame a name is about 90px wide and a node needs roughly 110px of clear space
+// around it to own one, which is about 25 nodes before labels begin overlapping
+// each other and the edges between them.
+const LABEL_ALWAYS_BELOW = 26;
+
+// labelPolicy decides which names are painted without being asked for.
+//
+// The problem it solves is that a few hundred names on one canvas is not a
+// landscape, it is a wall of text with circles behind it — the picture stops
+// carrying its own structure. Hiding them all is the obvious fix and the wrong
+// one: colour and size say *what kind* of thing a node is, and nothing says
+// *which* one, so a viewer would have to hover every node to find anything.
+//
+// So the rule is neither all nor none:
+//
+//   - Applications always keep their name. There are few of them, they are the
+//     largest things on screen, and they are what somebody navigates by — "where
+//     is Billing" is the first question asked of this view.
+//   - A small graph keeps every name. Under LABEL_ALWAYS_BELOW there is room, and
+//     hiding names there would be pure loss with nothing bought.
+//   - Everything else shows its name on hover and on keyboard focus, which the
+//     stylesheet does with no re-render, and the selected node keeps it while it
+//     is selected.
+//
+// Search covers the case none of that does: typing a name filters the graph, and
+// a filtered graph is usually small enough that every name comes back.
+function labelPolicy(graph) {
+  const dense = graph.nodes.length >= LABEL_ALWAYS_BELOW;
+  return {
+    dense,
+    shows: (node) => !dense || node.kind === "application",
+  };
+}
 
 // mulberry32 is a small seeded PRNG. The seed is fixed so the initial scatter —
 // and therefore the settled layout — is identical on every load of the same graph.
@@ -49,14 +129,19 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
   const random = mulberry32(0x5EED);
   const index = new Map(nodes.map((n, i) => [n.id, i]));
   const cx = width / 2, cy = height / 2;
+  // The frame is usually wider than it is tall. Both the initial scatter and the
+  // centring pull are shaped by that ratio, so the settled graph is the shape of the
+  // space it has to live in.
+  const aspect = Math.max(width, 1) / Math.max(height, 1);
+  const pullX = 1 / aspect, pullY = aspect;
 
   for (const n of nodes) {
-    // Seeded scatter on a ring, so nothing starts coincident (which would make the
-    // repulsion term divide by zero and fling nodes to infinity).
+    // Seeded scatter on an ellipse, so nothing starts coincident (which would make
+    // the repulsion term divide by zero and fling nodes to infinity).
     const angle = random() * Math.PI * 2;
-    const radius = 40 + random() * Math.min(width, height) * 0.35;
-    n.x = cx + Math.cos(angle) * radius;
-    n.y = cy + Math.sin(angle) * radius;
+    const radius = 0.15 + random() * 0.85;
+    n.x = cx + Math.cos(angle) * radius * width * 0.42;
+    n.y = cy + Math.sin(angle) * radius * height * 0.42;
     n.vx = 0; n.vy = 0;
   }
 
@@ -64,7 +149,14 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
     .map((e) => [index.get(e.from), index.get(e.to)])
     .filter(([a, b]) => a !== undefined && b !== undefined);
 
-  const repulsion = 5200, spring = 0.012, rest = 110, damping = 0.85;
+  // Repulsion scales with the graph so density stays roughly constant instead of
+  // rising with node count — the "Klüngel" a fixed constant produces, where fifty
+  // nodes are comfortable and three hundred are one dark blob.
+  const repulsion = 5200 * Math.max(1, Math.sqrt(nodes.length / 40));
+  const spring = 0.012, rest = 130, damping = 0.85;
+  // Every node's own footprint, so the separation pass below knows what "touching"
+  // means for this pair rather than assuming one radius for all of them.
+  const radii = nodes.map((n) => (KIND[n.kind] || KIND.process).r);
   for (let step = 0; step < iterations; step++) {
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
@@ -76,6 +168,18 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
         const d = Math.sqrt(d2);
         const fx = (dx / d) * force, fy = (dy / d) * force;
         a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
+
+        // Separation. Repulsion alone is a soft force that a spring can overpower,
+        // so two nodes joined by an edge will happily sit on top of each other —
+        // which is the one arrangement that makes a picture unreadable rather than
+        // merely tight. This pushes overlapping circles apart directly, and it is
+        // in the same pass because that pass already visits every pair.
+        const room = radii[i] + radii[j] + 10;
+        if (d < room) {
+          const push = (room - d) * 0.5;
+          a.x += (dx / d) * push; a.y += (dy / d) * push;
+          b.x -= (dx / d) * push; b.y -= (dy / d) * push;
+        }
       }
     }
     for (const [ai, bi] of links) {
@@ -87,24 +191,89 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
       a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
     }
     for (const n of nodes) {
-      n.vx += (cx - n.x) * 0.0012;
-      n.vy += (cy - n.y) * 0.0012;
+      // The pull toward the centre is anisotropic, weaker along the wider axis, so
+      // the graph settles into the shape of the frame instead of into a disc. A disc
+      // in a wide viewport is what produced the empty bands on either side: the
+      // content was never the shape of the space it had.
+      n.vx += (cx - n.x) * 0.0012 * pullX;
+      n.vy += (cy - n.y) * 0.0012 * pullY;
       n.vx *= damping; n.vy *= damping;
       n.x += n.vx; n.y += n.vy;
     }
   }
+  fitToFrame(nodes, width, height);
   return performance.now() - started;
 }
 
-// viewBoxFor frames the settled graph with a margin, so the whole mesh is visible
-// without the caller guessing a zoom level.
-function viewBoxFor(nodes, width, height) {
-  if (!nodes.length) return `0 0 ${width} ${height}`;
+// LABEL_MARGIN is the room a node needs around its own centre. It is asymmetric
+// because a node's label is: the text hangs below the circle (dy = r + 14) and is
+// centred, so the bottom and the sides carry more than the top does.
+//
+// It is smaller than the widest label because most labels are hidden until hovered
+// (see labelPolicy), and reserving room for text that is not on screen is how the
+// picture ends up smaller than the space it was given.
+const LABEL_MARGIN = { top: 26, right: 46, bottom: 42, left: 46 };
+
+// fitToFrame maps the settled graph onto the frame so it fills it, leaving only the
+// margin a label needs. The scale is uniform: stretching the axes independently
+// would fill the last pixel of the frame and misreport distance, and distance is the
+// one thing a force layout is trying to say.
+//
+// Positions are scaled, radii are not, so nodes stay round and legible at any graph
+// size. A single node — or a set that settled on one line — has no extent on some
+// axis, so that axis falls back to the frame rather than dividing by zero.
+export function fitToFrame(nodes, width, height, pad = LABEL_MARGIN) {
+  if (!nodes.length) return nodes;
+  // The margin is what a node's own decoration needs, not decoration itself: a label
+  // hangs below its circle, so the bottom needs more than the top, and a long name is
+  // centred so it overhangs sideways. Sizing each side to what it actually carries is
+  // what turns the leftover space back into picture.
+  const m = typeof pad === "number" ? { top: pad, right: pad, bottom: pad, left: pad } : pad;
   const xs = nodes.map((n) => n.x), ys = nodes.map((n) => n.y);
-  const pad = 70;
-  const minX = Math.min(...xs) - pad, maxX = Math.max(...xs) + pad;
-  const minY = Math.min(...ys) - pad, maxY = Math.max(...ys) + pad;
-  return `${minX} ${minY} ${Math.max(maxX - minX, 1)} ${Math.max(maxY - minY, 1)}`;
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const spanX = maxX - minX, spanY = maxY - minY;
+  const usableW = Math.max(width - m.left - m.right, 1);
+  const usableH = Math.max(height - m.top - m.bottom, 1);
+  const scale = Math.min(
+    spanX > 0.001 ? usableW / spanX : Infinity,
+    spanY > 0.001 ? usableH / spanY : Infinity,
+  );
+  // Everything coincident: nothing to scale, so centre it and stop.
+  const k = Number.isFinite(scale) ? scale : 1;
+  const offsetX = m.left + (usableW - spanX * k) / 2 - minX * k;
+  const offsetY = m.top + (usableH - spanY * k) / 2 - minY * k;
+  for (const n of nodes) {
+    n.x = n.x * k + offsetX;
+    n.y = n.y * k + offsetY;
+  }
+  return nodes;
+}
+
+// ZOOM_RANGE bounds how far the viewer can push the frame, as multiples of the
+// fitted one. Out is capped because zooming out past the content only adds the empty
+// space the fit exists to remove; in is capped where a node fills the frame and
+// there is nothing further to see.
+const ZOOM_RANGE = { min: 1 / 24, max: 1.6 };
+
+// zoomView returns the frame after zooming by `factor` about a point, in the same
+// user units as the frame itself. Zooming about the pointer rather than the centre
+// is what makes a wheel feel like a map instead of a slider: whatever is under the
+// cursor stays under it.
+//
+// Pure, so the behaviour can be checked without a browser: the frame is data, and
+// the only thing the DOM does with it is carry it into a viewBox attribute.
+export function zoomView(view, factor, focus, base) {
+  const limitOut = base.w * ZOOM_RANGE.max, limitIn = base.w * ZOOM_RANGE.min;
+  const w = Math.min(Math.max(view.w * factor, limitIn), limitOut);
+  const applied = w / view.w; // what the clamp actually allowed
+  const h = view.h * applied;
+  return {
+    x: focus.x - (focus.x - view.x) * applied,
+    y: focus.y - (focus.y - view.y) * applied,
+    w,
+    h,
+  };
 }
 
 // DEPENDENCY_EDGES are the edge kinds impact analysis walks. Containment is
@@ -206,9 +375,16 @@ function nodeTitle(node) {
     return `Nothing on this server provides the ${of} "${node.name}". Work reaching it would park.`;
   }
   const parts = [node.name || node.id];
+  if (node.modelName && node.modelName !== node.name) parts.push(`modeled as “${node.modelName}”`);
   if (node.processId) parts.push(`${node.processId} v${node.version}`);
   if (node.workerType) parts.push(`${node.workerType} worker`);
   if (node.children) parts.push(`${node.children} process(es) collapsed`);
+  // The state, then the reason, then — if it was inherited — which descendant it
+  // came from. ADR-0211 §4 requires the last of those: a red parent that cannot say
+  // which child is red is not actionable, and trains an operator to ignore the color.
+  if (node.state && node.state !== "unbound") parts.push(STATE_TEXT[node.state] || node.state);
+  if (node.reason) parts.push(node.reason);
+  if (node.severityFrom) parts.push(`inherited from ${node.severityFrom}`);
   return parts.join(" · ");
 }
 
@@ -217,7 +393,10 @@ function nodeTitle(node) {
 // node id, whose prefixes would make every term match its own kind by accident.
 function matches(node, term) {
   if (!term) return true;
-  const hay = [node.name, node.kind, node.processId, node.workerType]
+  // Severity and state are search axes, not only colours (ADR-0211 §6 names status
+  // among the things the mesh must be filterable by): typing "critical" is how an
+  // operator gets from a few hundred nodes to the handful that are broken.
+  const hay = [node.name, node.kind, node.processId, node.workerType, node.severity, node.state]
     .filter(Boolean).join(" ").toLowerCase();
   return hay.includes(term);
 }
@@ -257,17 +436,78 @@ function legendHTML(graph, layoutMs) {
     notes.push(`<p class="mesh-note">This landscape exceeded the size budget, so it is
       collapsed to applications. Each one states how many nodes it stands for.</p>`);
   }
+  // The comparison counts only mean something once a model has been overlaid; with
+  // none, saying "0 unmodeled" would imply the landscape had been checked.
+  const compared = graph.modeled > 0 || graph.unmodeled > 0 || graph.outOfScope > 0;
+  if (compared) {
+    if (graph.modeled > 0) {
+      notes.push(`<p class="mesh-note"><b>${graph.modeled}</b> node(s) are declared by a
+        model and not present here. That is drift the drawing alone could not show.</p>`);
+    }
+    if (graph.unmodeled > 0) {
+      notes.push(`<p class="mesh-note"><b>${graph.unmodeled}</b> node(s) exist here and no
+        model mentions them.</p>`);
+    }
+    if (graph.outOfScope > 0) {
+      notes.push(`<p class="mesh-note"><b>${graph.outOfScope}</b> binding(s) point at
+        releases, deployment targets or runtimes. This view does not draw those, so they
+        are neither matched nor missing — counted here so they are not simply dropped.</p>`);
+    }
+  }
+
+  // Severity swatches list only the classes actually on screen, for the same reason
+  // the kind swatches do: a legend describing findings the picture does not contain
+  // is a legend nobody reads twice.
+  const status = graph.status || {};
+  const severityPresent = new Set(graph.nodes.map((n) => n.severity).filter(Boolean));
+  const severity = ["critical", "attention", "ok", "unknown"]
+    .filter((key) => severityPresent.has(key))
+    .map((key) => `<span class="mesh-swatch mesh-sev-${key}">
+      <svg width="16" height="16" aria-hidden="true">
+        <circle cx="8" cy="8" r="6" fill="var(--surface)" stroke="${SEVERITY[key].stroke || "var(--border-strong)"}"
+          stroke-width="2"/>
+        ${SEVERITY[key].glyph ? `<text x="8" y="11.5" text-anchor="middle" class="mesh-sev-glyph">${esc(SEVERITY[key].glyph)}</text>` : ""}
+      </svg>${esc(SEVERITY[key].label)}</span>`).join("");
+
+  // What the picture cannot see is stated beside what it can. Without this an
+  // instance nothing observes renders as uniformly well, and a green view that has
+  // no way to go red is worse than no view.
+  if (Array.isArray(status.unavailable) && status.unavailable.length) {
+    notes.push(`<p class="mesh-note"><b>Not watched here:</b>
+      ${status.unavailable.map((u) => esc(STATE_TEXT[u.state] || u.state)).join(", ")}.
+      ${esc(status.unavailable[0].reason)}</p>`);
+  }
+  if (status.partial) {
+    notes.push(`<p class="mesh-note mesh-truncated">Counting parked work stopped at its
+      bound, so a node reported as OK here is a floor rather than a verdict.</p>`);
+  }
+
+  const provenanceKeys = compared ? ["derived", "both", "modeled"] : [];
+  const provenance = provenanceKeys.map((key) => `<span class="mesh-swatch">
+    <svg width="16" height="16" aria-hidden="true">
+      ${PROVENANCE[key].ring ? `<circle cx="8" cy="8" r="7" fill="none" stroke="var(--muted)" stroke-width="1" opacity="0.55"/>` : ""}
+      <circle cx="8" cy="8" r="5" fill="${PROVENANCE[key].ghost ? "none" : "var(--surface)"}"
+        stroke="var(--muted)" stroke-width="2"
+        ${PROVENANCE[key].ghost ? 'stroke-dasharray="3 2"' : ""}/>
+    </svg>${esc(PROVENANCE[key].label)}</span>`).join("");
+
   return `<div class="mesh-legend">
     <div class="mesh-swatches">${swatches}</div>
-    <div class="mesh-meta">Everything here is <b>derived</b> from this server's
-      resources — nothing on this view was drawn.
+    ${severity ? `<div class="mesh-swatches">${severity}</div>` : ""}
+    ${provenance ? `<div class="mesh-swatches">${provenance}</div>` : ""}
+    <div class="mesh-meta">${compared
+      ? `Compared against the architecture models you can see. Everything unmarked is
+         <b>derived</b> from this server's resources.`
+      : `Everything here is <b>derived</b> from this server's resources — nothing on this
+         view was drawn.`}
       <span class="muted">Laid out in ${Math.round(layoutMs)} ms.</span></div>
     ${notes.join("")}
   </div>`;
 }
 
-function renderGraph(graph, layoutMs, highlight) {
-  const width = 1200, height = 720;
+function renderGraph(graph, layoutMs, highlight, frame, selected) {
+  const { width, height } = frame;
+  const labels = labelPolicy(graph);
   const nodes = graph.nodes.map((n) => ({ ...n }));
   const ms = layout(nodes, graph.edges, { width, height }) + layoutMs;
   const at = new Map(nodes.map((n) => [n.id, n]));
@@ -293,17 +533,39 @@ function renderGraph(graph, layoutMs, highlight) {
     const state = highlight
       ? (highlight.has(n.id) ? " mesh-in-impact" : " mesh-dimmed")
       : "";
+    const prov = PROVENANCE[n.provenance] || PROVENANCE.derived;
+    const sev = SEVERITY[n.severity] || SEVERITY.unknown;
+    // Severity is drawn as a badge on the node's own outline rather than by
+    // recolouring it: the fill already carries the ArchiMate layer and the kind, and
+    // ADR-0189 §6 keeps those. The glyph is what makes the finding readable without
+    // colour perception at all.
+    const badge = sev.glyph
+      ? `<g class="mesh-badge" transform="translate(${(style.r * 0.72).toFixed(1)},${(-style.r * 0.72).toFixed(1)})">
+           <circle r="7" class="mesh-badge-dot"/>
+           <text text-anchor="middle" dy="3.5" class="mesh-badge-glyph">${esc(sev.glyph)}</text>
+         </g>`
+      : "";
+    // A name is painted when the policy says so, when this node is selected, or —
+    // through the stylesheet, with no re-render — while it is hovered or focused.
+    const named = labels.shows(n) || n.id === selected;
     return `<g transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"
-      class="mesh-node mesh-${n.kind}${state}" data-node-id="${esc(n.id)}"
+      class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")} mesh-sev-${esc(n.severity || "unknown")}${named ? " mesh-named" : ""}${state}"
+      data-node-id="${esc(n.id)}" data-severity="${esc(n.severity || "unknown")}"
       tabindex="0" role="button" aria-label="${esc(nodeTitle(n))}">
-      <circle r="${style.r}" fill="${style.fill}" stroke="${style.stroke}"
-        stroke-width="2" ${style.dashed ? 'stroke-dasharray="4 3"' : ""}/>
+      ${prov.ring ? `<circle r="${style.r + 4}" fill="none" stroke="${style.stroke}" stroke-width="1" opacity="0.55"/>` : ""}
+      <circle class="mesh-body" r="${style.r}" fill="${prov.ghost ? "none" : style.fill}" stroke="${sev.stroke || style.stroke}"
+        stroke-width="${sev.stroke ? 3 : 2}" ${style.dashed || prov.ghost ? 'stroke-dasharray="4 3"' : ""}/>
       ${n.children ? `<text class="mesh-count" text-anchor="middle" dy="4">${n.children}</text>` : ""}
-      <text class="mesh-label" text-anchor="middle" dy="${style.r + 14}">${label}</text>
+      ${badge}
+      <text class="mesh-label" text-anchor="middle" dy="${style.r + 14}"><tspan class="mesh-label-ink">${label}</tspan></text>
       <title>${esc(nodeTitle(n))}</title></g>`;
   }).join("");
 
-  return { ms, svg: `<svg class="mesh-canvas" viewBox="${viewBoxFor(nodes, width, height)}"
+  // The viewBox starts as the frame itself, because fitToFrame has already put the
+  // content inside exactly that box. Matching the frame's own aspect ratio is what
+  // removes the empty bands: with preserveAspectRatio's default, any other ratio is
+  // letterboxed, which is the blank space that used to surround a settled graph.
+  return { ms, svg: `<svg class="mesh-canvas" viewBox="0 0 ${width} ${height}"
     role="img" aria-label="Derived landscape mesh">
     <g class="mesh-edges">${edges}</g>${circles}</svg>` };
 }
@@ -333,11 +595,25 @@ function impactPanelHTML(node, result, direction, depth) {
         ${result.truncatedBy.length} node(s) outside your access, so there may be more
         beyond them. Treat the count as a lower bound.</p>`
     : "";
+  // The finding, in words, above the impact count. A node's colour says which class
+  // it is in; only the state and the reason say what to do about it, and where the
+  // severity was inherited the panel names the descendant it came from — a red
+  // parent that cannot say which child is red is not actionable (ADR-0211 §4).
+  const sev = SEVERITY[node.severity] || SEVERITY.unknown;
+  const inherited = node.severityFrom
+    ? `<span class="muted"> — inherited from ${esc(node.severityFrom)}</span>`
+    : "";
+  const finding = `<div class="mesh-finding mesh-sev-${esc(node.severity || "unknown")}">
+      <b>${esc(sev.label.split(" — ")[0])}</b>
+      <span class="muted">${esc(STATE_TEXT[node.state] || node.state || "unbound")}</span>
+      ${node.reason ? `<p>${esc(node.reason)}${inherited}</p>` : ""}
+    </div>`;
   return `<div class="mesh-panel">
     <div class="mesh-panel-head">
       <b>${esc(node.name || kindLabel)}</b>
       <span class="muted">${esc(kindLabel)}</span>
     </div>
+    ${finding}
     <div class="mesh-impact-count"><b>${others}</b> node(s) ${word}
       <span class="muted">within ${depth === Infinity ? "any" : depth} hop(s)</span></div>
     ${truncation}
@@ -374,7 +650,14 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     </div>
     <div id="mesh-legend-slot"></div>
     <div class="mesh-body">
-      <div id="mesh-surface" class="mesh-surface"></div>
+      <div class="mesh-stage">
+        <div id="mesh-surface" class="mesh-surface"></div>
+        <div class="mesh-zoom" role="group" aria-label="Zoom">
+          <button id="mesh-zoom-in" type="button" title="Zoom in">+</button>
+          <button id="mesh-zoom-out" type="button" title="Zoom out">−</button>
+          <button id="mesh-zoom-fit" type="button" title="Fit the whole landscape">Fit</button>
+        </div>
+      </div>
       <aside class="mesh-side">
         <div class="mesh-controls">
           <!-- Explicit for/id rather than a wrapping label: a select nested inside
@@ -401,6 +684,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
 
   const search = document.getElementById("mesh-search");
   const surface = document.getElementById("mesh-surface");
+  const zoomIn = document.getElementById("mesh-zoom-in");
+  const zoomOut = document.getElementById("mesh-zoom-out");
+  const zoomFit = document.getElementById("mesh-zoom-fit");
   const legendSlot = document.getElementById("mesh-legend-slot");
   const count = document.getElementById("mesh-count");
   const panel = document.getElementById("mesh-panel-slot");
@@ -408,6 +694,41 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const depthSelect = document.getElementById("mesh-depth");
 
   let selected = null;
+  // frame is the drawing surface in its own units, taken from the element rather
+  // than assumed, so the layout settles into the shape the viewer actually has.
+  // frameView is the part of it currently on screen; null means fitted, which is where
+  // every paint starts — the opening picture is the whole landscape.
+  let frame = { width: 1200, height: 720 };
+  let frameView = null;
+
+  function measure() {
+    const width = Math.max(surface.clientWidth || 0, 320);
+    const height = Math.max(surface.clientHeight || 0, 280);
+    frame = { width, height };
+  }
+
+  function applyView() {
+    const svg = surface.querySelector("svg");
+    if (!svg) return;
+    const v = frameView || { x: 0, y: 0, w: frame.width, h: frame.height };
+    svg.setAttribute("viewBox", `${v.x.toFixed(2)} ${v.y.toFixed(2)} ${v.w.toFixed(2)} ${v.h.toFixed(2)}`);
+    svg.classList.toggle("mesh-zoomed", frameView !== null);
+  }
+
+  function baseView() {
+    return { x: 0, y: 0, w: frame.width, h: frame.height };
+  }
+
+  // zoom keeps whatever is under `focus` under it, so the wheel behaves like a map.
+  // focus is in the frame's units; omitting it zooms about the centre, which is what
+  // the buttons want.
+  function zoom(factor, focus) {
+    const base = baseView();
+    const current = frameView || base;
+    const about = focus || { x: current.x + current.w / 2, y: current.y + current.h / 2 };
+    frameView = zoomView(current, factor, about, base);
+    applyView();
+  }
 
   function paint() {
     const term = search.value.trim().toLowerCase();
@@ -421,10 +742,12 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const result = selected ? impactFrom(shown, selected, { direction, depth }) : null;
     const highlight = result ? new Set(result.nodes) : null;
 
-    const { ms, svg } = renderGraph(shown, 0, highlight);
+    measure();
+    const { ms, svg } = renderGraph(shown, 0, highlight, frame, selected);
     surface.innerHTML = shown.nodes.length
       ? svg
       : `<p class="mesh-empty-filter">Nothing matches “${esc(term)}”.</p>`;
+    applyView();
     legendSlot.innerHTML = legendHTML(shown, ms);
     panel.innerHTML = impactPanelHTML(
       shown.nodes.find((n) => n.id === selected) || null, result, direction, depth);
@@ -437,7 +760,68 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     selected = selected === id ? null : id; // clicking the selection again clears it
     paint();
   }
+  // pointToFrame maps a browser point onto the frame's own units, through whatever
+  // the current viewBox is. Without it a wheel zoom would drift: the pointer is in
+  // CSS pixels and the frame is not.
+  function pointToFrame(event) {
+    const svg = surface.querySelector("svg");
+    if (!svg) return null;
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const v = frameView || baseView();
+    return {
+      x: v.x + ((event.clientX - rect.left) / rect.width) * v.w,
+      y: v.y + ((event.clientY - rect.top) / rect.height) * v.h,
+    };
+  }
+
+  // dragged suppresses the click that ends a pan. Panning and selecting share the
+  // same surface, and a drag that also selected whatever it started on would make
+  // the picture impossible to move without changing the answer beside it.
+  let panning = null, dragged = false;
+  surface.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    // Panning is only meaningful once something is off-screen. At the fitted frame
+    // the whole landscape is already visible, so a drag there could only push it
+    // out of view and reintroduce the empty space the fit exists to remove.
+    if (!frameView || frameView.w >= frame.width) return;
+    const from = pointToFrame(event);
+    if (!from) return;
+    panning = { from, start: frameView || baseView(), id: event.pointerId };
+    dragged = false;
+  });
+  surface.addEventListener("pointermove", (event) => {
+    if (!panning || event.pointerId !== panning.id) return;
+    const svg = surface.querySelector("svg");
+    const rect = svg?.getBoundingClientRect();
+    if (!rect?.width) return;
+    const dx = ((event.clientX - rect.left) / rect.width) * panning.start.w;
+    const dy = ((event.clientY - rect.top) / rect.height) * panning.start.h;
+    const moveX = panning.from.x - (panning.start.x + dx);
+    const moveY = panning.from.y - (panning.start.y + dy);
+    if (Math.abs(moveX) + Math.abs(moveY) > 4) dragged = true;
+    if (!dragged) return;
+    frameView = { ...panning.start, x: panning.start.x + moveX, y: panning.start.y + moveY };
+    applyView();
+  });
+  const endPan = () => { panning = null; };
+  surface.addEventListener("pointerup", endPan);
+  surface.addEventListener("pointercancel", endPan);
+  surface.addEventListener("pointerleave", endPan);
+
+  surface.addEventListener("wheel", (event) => {
+    const focus = pointToFrame(event);
+    if (!focus) return;
+    event.preventDefault();
+    zoom(event.deltaY > 0 ? 1.18 : 1 / 1.18, focus);
+  }, { passive: false });
+
+  zoomIn.addEventListener("click", () => zoom(1 / 1.3));
+  zoomOut.addEventListener("click", () => zoom(1.3));
+  zoomFit.addEventListener("click", () => { frameView = null; applyView(); });
+
   surface.addEventListener("click", (event) => {
+    if (dragged) { dragged = false; return; }
     const node = event.target.closest("[data-node-id]");
     if (node) select(node.getAttribute("data-node-id"));
     else selected = null, paint();
@@ -458,9 +842,23 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   let pending;
   search.addEventListener("input", () => {
     clearTimeout(pending);
+    // A filter changes what is on screen, so the frame the viewer had zoomed into is
+    // about a picture that no longer exists. Refitting is the honest reset; keeping
+    // the old frame would land them on empty space and read as a broken view.
+    frameView = null;
     pending = setTimeout(paint, 120);
   });
   paint();
+
+  // The layout is a function of the frame, so a resized window is a different
+  // picture. Debounced, because a drag-resize fires continuously and the simulation
+  // is the expensive part.
+  let resizing;
+  const onResize = () => {
+    clearTimeout(resizing);
+    resizing = setTimeout(() => { frameView = null; paint(); }, 200);
+  };
+  window.addEventListener("resize", onResize);
 
   if (fetchMs > 2000) toast(`The landscape took ${Math.round(fetchMs)} ms to derive.`);
 }

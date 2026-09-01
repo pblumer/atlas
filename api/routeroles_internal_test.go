@@ -27,7 +27,11 @@ import (
 // before roles existed, so an account that keeps modeler, operator and user on
 // upgrade can still do exactly what it could yesterday: everything except these.
 var wantAdminRoutes = []string{
-	// The instance itself: its log, its data, its recovery.
+	// The instance itself: its log, its data, its recovery, and the identity it
+	// presents to other servers (ADR-0189 §6). Reading that identity is open to any
+	// signed-in caller — correlation needs it — but naming this node is an operator
+	// act, because the name is what an architect binds a model element to.
+	"PUT /api/v1/node",
 	"GET /api/v1/logs",
 	"GET /api/v1/backup",
 	"POST /api/v1/restore",
@@ -85,6 +89,12 @@ var wantAdminRoutes = []string{
 	"PUT /api/v1/settings/ad-mock",
 	"PUT /api/v1/settings/registration",
 	"DELETE /api/v1/settings/registration",
+
+	// The claim mapping is admin-only in both directions, unlike the three above:
+	// its rules name the provider's group identifiers, and nothing on the login
+	// screen needs them.
+	"GET /api/v1/settings/oidc-mapping",
+	"PUT /api/v1/settings/oidc-mapping",
 
 	// Who exists, what they may do, and the record of what they did.
 	"GET /api/v1/users",

@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Zugangsantrag mit Freigabe (Jira)
+
+  Der Prozess koordiniert, Jira dokumentiert, ein Mensch entscheidet: Der Antrag
+  legt einen Vorgang an, die Freigabe passiert als User-Task in Atlas, und je nach
+  Entscheidung wird der Vorgang weitergeschaltet oder bleibt offen mit einem
+  Ablehnungskommentar.
+
+  Start (Formular za-antrag: antragsteller, system, begruendung, jiraProjekt,
+         vorgangstyp, transitionFertig)
+   -> Service-Task "Jira-Vorgang anlegen"   (create-issue -> ticket)
+   -> User-Task    "Zugang freigeben"       (Formular za-freigabe; freigabe, kommentar)
+   -> (X) Gateway  "Freigegeben?"           (default -> abgelehnt)
+        [ja]   -> Service-Task "Vorgang abschliessen"  (transition-issue + Kommentar)
+        [nein] -> Service-Task "Ablehnung vermerken"   (add-comment, unten)
+   -> (X) Join
+   -> Ende "Antrag bearbeitet"
+
+  Warum der Default die Ablehnung ist: Bei einem Zugangsantrag ist die
+  konservative Antwort "nicht freigeben". Ein Gateway ohne passende Bedingung
+  darf nicht versehentlich Zugang gewaehren.
+
+  Warum drei Operationen und nicht eine: create-issue schreibt den Vorgang,
+  transition-issue bewegt ihn *und* kommentiert ihn im selben Aufruf (Jira traegt
+  eine Notiz am Uebergang), add-comment ist der Weg, eine Ablehnung festzuhalten,
+  ohne den Vorgang zu schliessen — abgelehnt heisst hier "bleibt offen, ein Mensch
+  sieht es sich an", nicht "erledigt".
+
+  Die Falle, in die man hier laeuft: FEEL-Verkettung propagiert null. Ist eine der
+  verketteten Variablen nicht gesetzt, ist das *ganze* Ergebnis null und landet als
+  leerer String in Jira — nicht etwa nur der fehlende Teil. Deshalb sind
+  begruendung und kommentar in den Formularen Pflichtfelder und nicht optional.
+
+  Der Uebergangsname (transitionFertig) steht bewusst im Startformular, nicht im
+  Modell: Der Konnektor loest einen Uebergang nach dem Namen auf, den Jira auf dem
+  Knopf zeigt, und der ist pro Workflow verschieden. So laeuft dasselbe Modell
+  gegen jedes Projekt.
+
+  Voraussetzung: ein Konnektor namens "jira" unter Console -> Connectors. Siehe
+  README.md; zuerst jira-verbindungstest.bpmn laufen lassen.
+
+  BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=200, Ablehnungszweig bei y=340.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_jira_zugangsantrag" targetNamespace="http://atlas/examples">
+  <process id="proc_jira_zugangsantrag" name="Zugangsantrag mit Freigabe (Jira)" isExecutable="true">
+    <documentation>Legt einen Zugangsantrag als Jira-Vorgang an, holt eine menschliche Freigabe in Atlas ein und schaltet den Vorgang weiter oder vermerkt die Ablehnung. Startvariablen kommen aus dem Formular za-antrag; der Konnektor heisst "jira".</documentation>
+
+    <startEvent id="start" name="Antrag eingegangen">
+      <extensionElements>
+        <zeebe:formDefinition formId="za-antrag"/>
+      </extensionElements>
+      <outgoing>f_start_anlegen</outgoing>
+    </startEvent>
+
+    <serviceTask id="anlegen" name="Jira-Vorgang anlegen">
+      <documentation>Jira-Konnektor, create-issue. Projekt und Vorgangstyp kommen als FEEL aus dem Startformular, damit dasselbe Modell gegen jedes Projekt laeuft. resultVariable schreibt die Antwort ({id, key, self}) nach "ticket"; alle spaeteren Schritte adressieren den Vorgang als =ticket.key. Das Label atlas-demo ist eine FEEL-Liste und bleibt eine Liste — der Konnektor entscheidet die JSON-Form an der Art des Werts, nicht am Aussehen seines Textes.</documentation>
+      <extensionElements>
+        <atlas:jiraConnector connector="jira" operation="create-issue"
+          project="=jiraProjekt"
+          issueType="=vorgangstyp"
+          summary="=&quot;Zugang zu &quot; + system + &quot; für &quot; + antragsteller"
+          description="=&quot;Antragsteller: &quot; + antragsteller + &quot;\nSystem: &quot; + system + &quot;\nBegründung: &quot; + begruendung + &quot;\n\nAngelegt von Atlas, Prozessinstanz &quot; + processInstanceKey"
+          resultVariable="ticket">
+          <atlas:jiraField name="labels" value="=[&quot;atlas-demo&quot;]"/>
+        </atlas:jiraConnector>
+      </extensionElements>
+      <incoming>f_start_anlegen</incoming>
+      <outgoing>f_anlegen_freigeben</outgoing>
+    </serviceTask>
+
+    <userTask id="freigeben" name="Zugang freigeben">
+      <documentation>Die Entscheidung bleibt menschlich: Der Prozess legt den Vorgang an und bereitet alles vor, aber ob der Zugang kommt, entscheidet eine Person in der Tasks-App. Das Formular za-freigabe setzt freigabe (ja|nein) und kommentar.</documentation>
+      <extensionElements>
+        <zeebe:formDefinition formId="za-freigabe"/>
+      </extensionElements>
+      <incoming>f_anlegen_freigeben</incoming>
+      <outgoing>f_freigeben_gw</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="entscheidung" name="Freigegeben?" default="f_abgelehnt">
+      <documentation>Default ist die Ablehnung, nicht die Freigabe: Ein Gateway, dessen Bedingung nicht greift, darf bei einem Zugangsantrag nicht versehentlich Zugang gewaehren.</documentation>
+      <incoming>f_freigeben_gw</incoming>
+      <outgoing>f_freigegeben</outgoing>
+      <outgoing>f_abgelehnt</outgoing>
+    </exclusiveGateway>
+
+    <serviceTask id="abschliessen" name="Vorgang abschliessen">
+      <documentation>Jira-Konnektor, transition-issue. Der Uebergang wird mit dem Namen angegeben, den Jira auf dem Knopf zeigt — der Konnektor loest dessen id vorher auf, damit das Modell nicht an einer Workflow-Konfiguration haengt. Der Kommentar reist im selben Aufruf mit: Jira traegt ihn als Notiz am Uebergang ein, das spart einen zweiten Task. Diese Operation gibt nichts zurueck (204), deshalb hat sie bewusst keine resultVariable — der Compiler wuerde eine auch abweisen.</documentation>
+      <extensionElements>
+        <atlas:jiraConnector connector="jira" operation="transition-issue"
+          issueKey="=ticket.key"
+          transition="=transitionFertig"
+          comment="=&quot;Freigegeben in Atlas.\n\n&quot; + kommentar"/>
+      </extensionElements>
+      <incoming>f_freigegeben</incoming>
+      <outgoing>f_abschliessen_join</outgoing>
+    </serviceTask>
+
+    <serviceTask id="ablehnen" name="Ablehnung vermerken">
+      <documentation>Jira-Konnektor, add-comment. Bewusst kein Uebergang: Eine Ablehnung schliesst den Vorgang nicht, sie haelt fest, warum nicht freigegeben wurde, und laesst ihn fuer einen Menschen offen. Welcher Uebergang eine Ablehnung in einem fremden Jira-Workflow waere, weiss dieses Modell ohnehin nicht.</documentation>
+      <extensionElements>
+        <atlas:jiraConnector connector="jira" operation="add-comment"
+          issueKey="=ticket.key"
+          comment="=&quot;Antrag abgelehnt in Atlas.\n\nBegründung: &quot; + kommentar"/>
+      </extensionElements>
+      <incoming>f_abgelehnt</incoming>
+      <outgoing>f_ablehnen_join</outgoing>
+    </serviceTask>
+
+    <exclusiveGateway id="join">
+      <incoming>f_abschliessen_join</incoming>
+      <incoming>f_ablehnen_join</incoming>
+      <outgoing>f_join_ende</outgoing>
+    </exclusiveGateway>
+
+    <endEvent id="ende" name="Antrag bearbeitet">
+      <incoming>f_join_ende</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_anlegen" sourceRef="start" targetRef="anlegen"/>
+    <sequenceFlow id="f_anlegen_freigeben" sourceRef="anlegen" targetRef="freigeben"/>
+    <sequenceFlow id="f_freigeben_gw" sourceRef="freigeben" targetRef="entscheidung"/>
+    <sequenceFlow id="f_freigegeben" name="ja" sourceRef="entscheidung" targetRef="abschliessen">
+      <conditionExpression>= freigabe = "ja"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_abgelehnt" name="nein" sourceRef="entscheidung" targetRef="ablehnen"/>
+    <sequenceFlow id="f_abschliessen_join" sourceRef="abschliessen" targetRef="join"/>
+    <sequenceFlow id="f_ablehnen_join" sourceRef="ablehnen" targetRef="join"/>
+    <sequenceFlow id="f_join_ende" sourceRef="join" targetRef="ende"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_jira_zugangsantrag">
+    <bpmndi:BPMNPlane id="BPMNPlane_jira_zugangsantrag" bpmnElement="proc_jira_zugangsantrag">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="152" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="128" y="225" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="anlegen_di" bpmnElement="anlegen">
+        <omgdc:Bounds x="240" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="freigeben_di" bpmnElement="freigeben">
+        <omgdc:Bounds x="400" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="entscheidung_di" bpmnElement="entscheidung" isMarkerVisible="true">
+        <omgdc:Bounds x="560" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="542" y="142" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="abschliessen_di" bpmnElement="abschliessen">
+        <omgdc:Bounds x="670" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ablehnen_di" bpmnElement="ablehnen">
+        <omgdc:Bounds x="670" y="300" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="join_di" bpmnElement="join" isMarkerVisible="true">
+        <omgdc:Bounds x="830" y="175" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="940" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="916" y="225" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f_start_anlegen_di" bpmnElement="f_start_anlegen">
+        <omgdi:waypoint x="188" y="200"/><omgdi:waypoint x="240" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_anlegen_freigeben_di" bpmnElement="f_anlegen_freigeben">
+        <omgdi:waypoint x="340" y="200"/><omgdi:waypoint x="400" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_freigeben_gw_di" bpmnElement="f_freigeben_gw">
+        <omgdi:waypoint x="500" y="200"/><omgdi:waypoint x="560" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_freigegeben_di" bpmnElement="f_freigegeben">
+        <omgdi:waypoint x="610" y="200"/><omgdi:waypoint x="670" y="200"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="626" y="176" width="20" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_abgelehnt_di" bpmnElement="f_abgelehnt">
+        <omgdi:waypoint x="585" y="225"/><omgdi:waypoint x="585" y="340"/><omgdi:waypoint x="670" y="340"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="595" y="250" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_abschliessen_join_di" bpmnElement="f_abschliessen_join">
+        <omgdi:waypoint x="770" y="200"/><omgdi:waypoint x="830" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ablehnen_join_di" bpmnElement="f_ablehnen_join">
+        <omgdi:waypoint x="770" y="340"/><omgdi:waypoint x="855" y="340"/><omgdi:waypoint x="855" y="225"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_join_ende_di" bpmnElement="f_join_ende">
+        <omgdi:waypoint x="880" y="200"/><omgdi:waypoint x="940" y="200"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

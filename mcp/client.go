@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -85,6 +87,26 @@ type ClientOption func(*Client)
 // An empty token is a no-op, so callers can pass it unconditionally.
 func WithBearer(token string) ClientOption {
 	return func(c *Client) { c.token = token }
+}
+
+// WithTLSRoots verifies the server's certificate against pool in addition to the
+// host's roots, for the stdio adapter pointed at an https:// Atlas whose
+// certificate an internal CA issued (atlas mcp --tls-ca).
+//
+// It is a trust anchor and not a way around verification: there is no
+// skip-verify switch here, in api/targetstore.go, or anywhere else in Atlas
+// (ADR-0191). A nil pool leaves the client exactly as it was — verifying against
+// the host's roots — so callers can pass it unconditionally.
+func WithTLSRoots(pool *x509.CertPool) ClientOption {
+	return func(c *Client) {
+		if pool == nil {
+			return
+		}
+		c.http = &http.Client{
+			Timeout:   c.http.Timeout,
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}},
+		}
+	}
 }
 
 // NewClient builds a Client for the Atlas server at baseURL (e.g.

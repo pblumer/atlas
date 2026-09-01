@@ -45,6 +45,95 @@
       }
     },
     {
+      "id": "atlas-can-terminate-tls-itself",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Atlas can serve HTTPS on its own now",
+        "de": "Atlas kann jetzt selbst HTTPS sprechen"
+      },
+      "summary": {
+        "en": "Until now the binary spoke plain HTTP and nothing else, so anything reachable beyond its own host needed a reverse proxy in front of it to hold the certificate. That proxy is now a choice rather than a requirement: give the server a certificate and a key and it terminates TLS itself. Both files or neither — naming one without the other stops the server instead of quietly listening in the clear on the port you believed you had just secured. It re-reads the pair whenever either file changes, so a renewal reaches a running server without a restart, and a renewal caught half-written keeps the certificate that still works rather than refusing connections until somebody notices. Only TLS 1.3 is offered, which is the point: its ciphers are fixed by the protocol, so there is no cipher list to configure, nothing to weaken by accident, and nothing to explain to an auditor. Worth knowing before you switch: a client too old to speak TLS 1.3 is refused rather than quietly downgraded, and encryption is not authorization — the health and metrics endpoints answer whoever can reach the port, so a port open to the world still wants something in front of those paths.",
+        "de": "Bisher sprach das Binary ausschliesslich unverschlüsseltes HTTP; wer den Server über den eigenen Host hinaus erreichbar machen wollte, brauchte davor einen Reverse Proxy, der das Zertifikat hält. Dieser Proxy ist jetzt eine Wahl und keine Voraussetzung mehr: Gib dem Server ein Zertifikat und einen Schlüssel, und er terminiert TLS selbst. Beide Dateien oder keine — wer nur eine angibt, bekommt keinen Serverstart statt eines Servers, der still im Klartext auf dem Port lauscht, den man gerade abgesichert glaubte. Das Paar wird neu gelesen, sobald sich eine der beiden Dateien ändert; eine Erneuerung erreicht damit einen laufenden Server ohne Neustart, und eine halb geschriebene Erneuerung behält das noch gültige Zertifikat, statt Verbindungen abzulehnen, bis es jemand merkt. Angeboten wird nur TLS 1.3, und genau das ist der Punkt: Die Cipher sind im Protokoll festgelegt, es gibt also keine Cipher-Liste zu konfigurieren, nichts versehentlich zu schwächen und nichts einem Audit zu erklären. Vor dem Umschalten wissenswert: Ein Client, der kein TLS 1.3 kann, wird abgewiesen und nicht still heruntergestuft — und Verschlüsselung ist keine Autorisierung: Die Health- und Metrics-Endpunkte antworten jedem, der den Port erreicht, ein öffentlich offener Port will davor also weiterhin etwas stehen haben."
+      },
+      "link": {
+        "label": "ADR-0191",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0191-built-in-tls-listener.md"
+      },
+      "tags": [
+        "Security",
+        "Operations"
+      ]
+    },
+    {
+      "id": "tls-ca-so-two-atlas-servers-with-an-internal-ca-can-talk",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Publishing to another Atlas works with your own certificate authority",
+        "de": "Publizieren auf einen anderen Atlas klappt jetzt auch mit eigener CA"
+      },
+      "summary": {
+        "en": "Publishing an application to another Atlas has always required that server to be reachable over https, and rightly so: the token that authorises the push would otherwise cross the network in the clear. On-prem, that certificate is usually issued by your own certificate authority, which the sending machine has never heard of — so the push failed at verification, and the only fixes were touching the host's trust store or building your own container image. You can now point the sending server at your CA's bundle — and any worker on another host, or the MCP adapter an agent drives a remote Atlas through, at the same one. It is added to the certificates the host already trusts rather than replacing them, so a target with a publicly issued certificate keeps working, and it applies only to Atlas talking to Atlas — a worker calling Jira, a mail server or Microsoft Graph keeps the machine's own trust store, because those endpoints are somebody else's. What it is deliberately not is a way to skip verification: there is no such switch anywhere in Atlas, because it would be the first thing reached for at exactly the moment a certificate must not be ignored.",
+        "de": "Eine Applikation auf einen anderen Atlas zu publizieren verlangt seit jeher, dass dieser Server über https erreichbar ist — zu Recht, denn sonst liefe das Token, das den Push autorisiert, im Klartext über das Netz. On-Prem stammt dieses Zertifikat meist von der eigenen Zertifizierungsstelle, die der sendende Rechner nicht kennt: Der Push scheiterte an der Prüfung, und helfen konnte nur, den Trust-Store des Hosts anzufassen oder ein eigenes Container-Image zu bauen. Jetzt lässt sich dem sendenden Server das Bundle der eigenen CA nennen — und ebenso einem Worker auf einem anderen Host oder dem MCP-Adapter, über den ein Agent einen entfernten Atlas bedient. Es kommt zu den Zertifikaten hinzu, denen der Host ohnehin traut, statt sie zu ersetzen; ein Ziel mit öffentlich ausgestelltem Zertifikat funktioniert also unverändert weiter. Und es gilt nur für Atlas-zu-Atlas: Ein Worker, der Jira, einen Mailserver oder Microsoft Graph aufruft, behält den Trust-Store der Maschine, denn diese Endpunkte gehören jemand anderem. Was es bewusst nicht ist: ein Weg, die Prüfung zu überspringen. Einen solchen Schalter gibt es in Atlas nirgends — er wäre das Erste, wonach man griffe, genau in dem Moment, in dem ein Zertifikat nicht ignoriert werden darf."
+      },
+      "link": {
+        "label": "ADR-0129",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0129-remote-deployment-targets.md"
+      },
+      "tags": [
+        "Security",
+        "Operations"
+      ]
+    },
+    {
+      "id": "the-active-directory-worker-type-can-search",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Active Directory: look an account or a group up first",
+        "de": "Active Directory: Konto oder Gruppe zuerst nachschlagen"
+      },
+      "summary": {
+        "en": "A new operation, Find entry (search), asks the directory whether an account or a group is there — and hands back its full name in the tree, ready for the next step to use. That is what a membership change was missing: you can only put somebody into a group once you know the group exists and where it sits. Finding nothing is an answer, not an error: the step completes and a gateway takes the other path.",
+        "de": "Ein neuer Vorgang, Eintrag suchen, fragt das Verzeichnis, ob es ein Konto oder eine Gruppe gibt — und liefert deren vollständigen Namen im Verzeichnisbaum gleich mit, verwendbar im nächsten Schritt. Genau das fehlte einer Gruppenzuweisung: jemanden in eine Gruppe aufzunehmen geht erst, wenn feststeht, dass es die Gruppe gibt und wo sie liegt. Nichts gefunden ist dabei eine Antwort und kein Fehler: der Schritt wird abgeschlossen, und ein Gateway nimmt den anderen Weg."
+      },
+      "link": {
+        "label": "ADR-0166",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0166-active-directory-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the Modeler and put a service task on the canvas.",
+          "In Implement, choose the Active Directory Connector, then Operation → Find entry (search).",
+          "Set the Base DN to where you want to look (e.g. ou=groups,dc=example,dc=com), the Scope, and a Filter such as (&(objectClass=group)(cn=Vertrieb)).",
+          "Name a Result variable, e.g. gruppe.",
+          "Branch on =gruppe.found with an exclusive gateway, and give the next task's Target DN the value =gruppe.dn."
+        ],
+        "de": [
+          "Modeler öffnen und einen Service-Task auf die Fläche ziehen.",
+          "Unter Implement den Active Directory Connector wählen, dann Operation → Find entry (search).",
+          "Base DN setzen, wo gesucht werden soll (z.B. ou=groups,dc=example,dc=com), dazu Scope und einen Filter wie (&(objectClass=group)(cn=Vertrieb)).",
+          "Eine Result variable vergeben, z.B. gruppe.",
+          "Mit einem exklusiven Gateway auf =gruppe.found verzweigen und dem nächsten Task als Target DN den Wert =gruppe.dn geben."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "sign-in-with-your-identity-provider",
       "version": "Unreleased",
       "date": null,
@@ -72,6 +161,57 @@
         },
         "route": "#/console/org"
       }
+    },
+    {
+      "id": "let-the-provider-s-groups-decide-roles",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Let the provider's groups decide roles",
+        "de": "Die Gruppen des Anbieters entscheiden über die Rollen"
+      },
+      "summary": {
+        "en": "Signing in with your identity provider granted nothing until now: a first sign-in produced an account with the user role, and an administrator granted the rest by hand. Under Organization → Single sign-on you can now name one claim in the provider's token and a list of exact values it may carry, and say what each value grants — Atlas roles, and membership of Atlas groups. Onboarding and offboarding then become a group membership somebody already maintains: the role and the shared projects arrive at the next sign-in and go away at the sign-in after the membership does. It is off until you turn it on, and worth one decision before you do: while it is on, whoever administers those groups administers this instance's roles, and a role you grant by hand is replaced at that person's next sign-in. Group membership follows only for the groups your rules name, so a group you manage yourself is left alone. Nothing is granted by absence — somebody the provider says nothing about matches no rule and simply holds user — and a rule that could never work, naming a role Atlas does not enforce or a group you have deleted, is refused when you save it rather than ignored on every login.",
+        "de": "Die Anmeldung über Ihren Identitätsanbieter vergab bisher nichts: Die erste Anmeldung legte ein Konto mit der Rolle «user» an, den Rest vergab eine Administratorin von Hand. Unter «Organization → Single sign-on» benennen Sie jetzt einen Claim im Token des Anbieters und eine Liste genauer Werte, die er tragen darf — und zu jedem Wert, was er vergibt: Atlas-Rollen und die Mitgliedschaft in Atlas-Gruppen. Ein- und Austritt sind damit eine Gruppenmitgliedschaft, die ohnehin jemand pflegt: Rolle und geteilte Projekte kommen mit der nächsten Anmeldung und verschwinden mit der übernächsten, wenn die Mitgliedschaft weg ist. Es ist ausgeschaltet, bis Sie es einschalten — und diese eine Entscheidung ist es wert: Solange es an ist, verwaltet die Rollen dieser Installation, wer jene Gruppen verwaltet, und eine von Hand vergebene Rolle wird bei der nächsten Anmeldung dieser Person ersetzt. Die Gruppenmitgliedschaft folgt nur für die Gruppen, die Ihre Regeln nennen; eine Gruppe, die Sie selbst pflegen, bleibt unberührt. Abwesenheit vergibt nichts — wer beim Anbieter in keiner genannten Gruppe ist, trifft auf keine Regel und behält schlicht «user» — und eine Regel, die nie funktionieren könnte, weil sie eine Rolle nennt, die Atlas nicht durchsetzt, oder eine gelöschte Gruppe, wird beim Speichern abgewiesen statt bei jeder Anmeldung still übergangen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security",
+        "Console"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Organization",
+          "de": "Organization öffnen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
+      "id": "new-atlas-mark",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Atlas has a new mark",
+        "de": "Atlas hat eine neue Marke"
+      },
+      "summary": {
+        "en": "The little square beside the Atlas name — in the top bar, the app drawer, on the sign-in screen, in the handbook and on public forms — is now a white peak carrying a cross on black, and the browser tab icon changes with it. Nothing you have set is affected: if your organisation uploaded its own logo under Organization → Appearance, that is still what everyone sees, and removing it now brings back the new mark instead of the old A.",
+        "de": "Das kleine Quadrat neben dem Atlas-Namen — in der Topbar, in der App-Schublade, auf dem Anmeldebildschirm, im Handbuch und auf öffentlichen Formularen — zeigt jetzt einen weissen Berg mit Kreuz auf Schwarz, und das Symbol im Browser-Tab wechselt mit. An Ihren Einstellungen ändert das nichts: Hat Ihre Organisation unter „Organization → Appearance“ ein eigenes Logo hochgeladen, sehen weiterhin alle dieses; wird es entfernt, erscheint neu die neue Marke statt des alten A."
+      },
+      "link": {
+        "label": "ADR-0148",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0148-org-wide-brand-logo.md"
+      },
+      "tags": [
+        "Console",
+        "Organization"
+      ]
     },
     {
       "id": "the-handbook-and-the-examples-teach-workers-not-connectors",
@@ -117,6 +257,99 @@
       }
     },
     {
+      "id": "the-modeler-says-worker-too-and-offers-the-names-it-is-askin",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The Modeler asks for a Worker — and offers the ones you have",
+        "de": "Der Modeler fragt nach einem Worker — und bietet die vorhandenen an"
+      },
+      "summary": {
+        "en": "A service task's properties panel still said Connector, while the Console had long since said Workers — so the field asking for a name and the page the names come from disagreed. The panel now uses the same three words as everywhere else: you pick a Worker type (the list reads Jira, PostgreSQL, BMC Remedy — the word Connector is gone from the names), and below it you name the Worker, meaning the one Jira site or database an administrator configured on this server. The Worker field is now a dropdown of exactly those, so the one thing you cannot read off your own model is no longer typed from memory. It still accepts a typed name, because a worker you run yourself can carry its target in its own environment where the Modeler cannot see it — and if this server has no worker of that type at all, the field says so instead of opening an empty list. Your models are untouched: the saved XML still says connector=\"…\", so anything already deployed keeps running exactly as it did.",
+        "de": "Im Eigenschaften-Panel einer Service-Aufgabe stand weiterhin Connector, während die Konsole längst Workers sagte — das Feld, das nach einem Namen fragt, und die Seite, auf der die Namen entstehen, sprachen also verschiedene Sprachen. Das Panel benutzt jetzt dieselben drei Begriffe wie alles andere: Sie wählen einen Worker-Typ (die Liste liest sich als Jira, PostgreSQL, BMC Remedy — das Wort Connector ist aus den Namen verschwunden), und darunter benennen Sie den Worker, also die eine Jira-Instanz oder Datenbank, die jemand auf diesem Server konfiguriert hat. Dieses Feld ist neu eine Auswahlliste genau dieser Worker; das Einzige, was Sie Ihrem eigenen Modell nicht ansehen können, muss damit nicht mehr aus dem Gedächtnis getippt werden. Ein getippter Name bleibt erlaubt, weil ein selbst betriebener Worker sein Ziel in der eigenen Umgebung tragen kann, wo der Modeler es nicht sieht — und wenn dieser Server gar keinen Worker dieses Typs kennt, sagt das Feld das, statt eine leere Liste zu öffnen. An Ihren Modellen ändert sich nichts: Im gespeicherten XML steht weiterhin connector=\"…\", Bereitgestelltes läuft unverändert weiter."
+      },
+      "link": {
+        "label": "ADR-0203",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0203-worker-execution-model.md"
+      },
+      "tags": [
+        "Modeler",
+        "Workers"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a process in the Modeler and select a service task, then switch to the Implement tab.",
+          "Worker type is the picker at the top — choose Jira, or whichever type the task should use.",
+          "In the group below it (Jira worker, Mail worker, …) click the Worker field: it lists the workers of that type configured under Console › Workers.",
+          "Nothing offered? Then this server has no worker of that type yet — the field says so, and Console › Workers is where one is added."
+        ],
+        "de": [
+          "Öffnen Sie einen Prozess im Modeler, wählen Sie eine Service-Aufgabe und wechseln Sie auf den Reiter Implement.",
+          "Worker type ist die Auswahl zuoberst — nehmen Sie Jira oder den Typ, den die Aufgabe braucht.",
+          "In der Gruppe darunter (Jira worker, Mail worker, …) klicken Sie ins Feld Worker: es listet die unter Console › Workers konfigurierten Worker dieses Typs.",
+          "Nichts zur Auswahl? Dann kennt dieser Server noch keinen Worker dieses Typs — das Feld sagt es, und angelegt wird einer unter Console › Workers."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-feed-scrape-reached-its-worker-without-knowing-it-was-a-fe",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "RSS and Atom scraping works again outside the engine",
+        "de": "RSS- und Atom-Scraping funktioniert wieder ausserhalb der Engine"
+      },
+      "summary": {
+        "en": "A scrape task set to a feed format lost that setting on its way to the worker that runs it, so it fetched the feed as a web page and then failed on a CSS selector nobody had entered. Because scraping runs outside the engine by default, that was every feed task. The setting and the item limit now arrive, and the headlines come back as entries with title, link, description and date.",
+        "de": "Ein Scraping-Task mit Feed-Format hat diese Einstellung auf dem Weg zum ausführenden Worker verloren — er hat den Feed dann als Webseite geholt und ist an einem CSS-Selektor gescheitert, den niemand eingetragen hatte. Weil Scraping standardmässig ausserhalb der Engine läuft, betraf das jeden Feed-Task. Einstellung und Anzahlbegrenzung kommen jetzt an, und die Schlagzeilen landen als Einträge mit Titel, Link, Beschreibung und Datum."
+      },
+      "link": {
+        "label": "ADR-0190",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0190-webscrape-feed-extraction.md"
+      },
+      "tags": [
+        "Connectors"
+      ]
+    },
+    {
+      "id": "an-ad-task-naming-a-console-configured-directory-reached-its",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "An AD task that names a configured directory now reaches it",
+        "de": "Ein AD-Task, der ein eingerichtetes Verzeichnis nennt, erreicht es jetzt"
+      },
+      "summary": {
+        "en": "If a task pointed at an Active Directory you had set up under Workers — by its name, instead of writing the server address into the model — the name was lost on the way to the worker, and the task failed with \"empty url\". It arrives now. The Modeler also stopped dropping that name when you opened such a task and pressed Save.",
+        "de": "Wenn ein Task auf ein Active Directory zeigte, das Sie unter Workers eingerichtet hatten — über dessen Namen, statt die Serveradresse ins Modell zu schreiben — ging der Name auf dem Weg zum Worker verloren, und der Task scheiterte mit „empty url\". Er kommt jetzt an. Und der Modeler wirft den Namen nicht mehr weg, wenn Sie so einen Task öffnen und speichern."
+      },
+      "link": {
+        "label": "ADR-0206",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0206-ad-as-a-console-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "not-every-account-may-deploy-any-more",
       "version": "Unreleased",
       "date": null,
@@ -144,203 +377,6 @@
         },
         "route": "#/console/org"
       }
-    },
-    {
-      "id": "an-inbound-connector-s-events-reach-only-the-processes-you-a",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Incoming events reach only the processes you allow",
-        "de": "Eingehende Ereignisse erreichen nur die Prozesse, die Sie erlauben"
-      },
-      "summary": {
-        "en": "Giving a connector an owner stopped other people changing it. It did not stop them receiving what it brings in: an incoming connector hands its events to whichever process listens for the message name, and a name is not a secret. Now the subscription claims that name. A process deployed by somebody who cannot reach your connector will not be given those events, and if you try to point a connector at a name somebody else's process already listens for, Atlas refuses instead of quietly forwarding your post to them. Both refusals tell you the message name so you can rename it or ask for access, and neither tells you whose process or whose connector is on the other side — that would give away exactly what a private connector keeps to itself. Renaming a subscription or switching a disabled one back on goes through the same check, and deploying a whole project is refused before anything is registered, so you never end up half-deployed. Two limits worth knowing: an administrator passes both checks, and a process deployed before this update keeps any name it already listens for until you deploy it again.",
-        "de": "Einem Konnektor eine Eigentümerin zu geben, hat andere davon abgehalten, ihn zu ändern. Es hat sie nicht davon abgehalten, zu empfangen, was er hereinbringt: Ein eingehender Konnektor übergibt seine Ereignisse an jeden Prozess, der auf den Nachrichtennamen hört — und ein Name ist kein Geheimnis. Jetzt beansprucht das Abonnement diesen Namen. Ein Prozess, den jemand deployt hat, der Ihren Konnektor nicht erreichen darf, bekommt diese Ereignisse nicht mehr. Und wenn Sie einen Konnektor auf einen Namen richten wollen, auf den bereits der Prozess einer anderen Person hört, weist Atlas das ab, statt Ihre Post stillschweigend dorthin weiterzuleiten. Beide Abweisungen nennen Ihnen den Nachrichtennamen, damit Sie ihn ändern oder um Zugriff bitten können — und keine nennt Ihnen, wessen Prozess oder wessen Konnektor auf der anderen Seite steht; das würde genau das preisgeben, was ein privater Konnektor für sich behält. Ein Abonnement umzubenennen oder ein abgeschaltetes wieder einzuschalten geht durch dieselbe Prüfung, und ein ganzes Projekt wird abgewiesen, bevor irgendetwas registriert ist — halb deployt landen Sie also nie. Zwei Grenzen, die man kennen sollte: Eine Administratorin kommt durch beide Prüfungen, und ein Prozess, der vor dieser Aktualisierung deployt wurde, behält jeden Namen, auf den er schon hört, bis Sie ihn erneut deployen."
-      },
-      "link": {
-        "label": "ADR-0205",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0205-connector-ownership-and-event-delivery.md"
-      },
-      "tags": [
-        "Security",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Connectors",
-          "de": "Konnektoren öffnen"
-        },
-        "route": "#/console/connectors"
-      }
-    },
-    {
-      "id": "a-connector-belongs-to-somebody-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "A connector belongs to somebody now",
-        "de": "Ein Konnektor gehört jetzt jemandem"
-      },
-      "summary": {
-        "en": "Until now a connector belonged to nobody, and that turned out to mean more than it sounds: any account that could sign in was able to list every connector with its address and sender mailbox, change one, delete somebody else's, and point somebody else's incoming connector at a name of its choosing. A connector now has an owner — whoever created it — and only they, the people they share it with, and administrators can see or change its configuration. Sharing works the way sharing already works elsewhere in Atlas: add a person or a whole group, as may-see-it or may-change-it, and withdraw it again whenever you like, right beside the connector under Console → Connectors. Ownership can be handed on, so a connector outlives the person who set it up. Two things stay exactly as they were, on purpose. Everyone still sees that a connector exists, because that is what you need to build a task against it — what is now private is the address, the credential and the settings, not the name. And nothing here touches a running process: a deployed model reaches its connector whoever started it. One thing is still open and worth knowing: this protects a connector's settings, not yet the events an incoming connector brings in.",
-        "de": "Bisher gehörte ein Konnektor niemandem, und das hiess mehr, als es klingt: Jedes Konto, das sich anmelden konnte, durfte alle Konnektoren samt Adresse und Absenderpostfach auflisten, einen ändern, einen fremden löschen und einen fremden eingehenden Konnektor auf einen selbst gewählten Namen richten. Ein Konnektor hat jetzt eine Eigentümerin — die Person, die ihn angelegt hat — und nur sie, die Personen, mit denen sie ihn teilt, und Administratorinnen sehen oder ändern seine Konfiguration. Geteilt wird, wie in Atlas ohnehin geteilt wird: eine Person oder eine ganze Gruppe hinzufügen, als «darf sehen» oder «darf ändern», und jederzeit wieder zurückziehen — direkt neben dem Konnektor unter Console → Konnektoren. Das Eigentum lässt sich übergeben, damit ein Konnektor die Person überdauert, die ihn eingerichtet hat. Zwei Dinge bleiben mit Absicht genau wie bisher: Alle sehen weiterhin, dass ein Konnektor existiert — das braucht man, um eine Aufgabe dagegen zu bauen; privat sind Adresse, Zugangsdaten und Einstellungen, nicht der Name. Und an laufenden Prozessen ändert sich nichts: Ein deploytes Modell erreicht seinen Konnektor, wer immer es gestartet hat. Eines ist noch offen und sollte man wissen: Geschützt sind die Einstellungen eines Konnektors, noch nicht die Ereignisse, die ein eingehender Konnektor hereinbringt."
-      },
-      "link": {
-        "label": "ADR-0205",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0205-connector-ownership-and-event-delivery.md"
-      },
-      "tags": [
-        "Security",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Connectors",
-          "de": "Konnektoren öffnen"
-        },
-        "route": "#/console/connectors"
-      }
-    },
-    {
-      "id": "a-person-can-now-let-an-application-act-as-them",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "You can let an AI connector act as you — and take it back",
-        "de": "Sie können einem KI-Connector erlauben, in Ihrem Namen zu handeln — und es zurücknehmen"
-      },
-      "summary": {
-        "en": "A connector that runs on somebody else's infrastructure, like the one on claude.ai, had no way to reach an Atlas that requires a login: there is nowhere in it to paste a token, and handing one over would have left a long-lived key sitting in someone else's settings. Now nothing is handed over. The connector sends you to Atlas, you sign in and see who is asking and what they will be able to do, and you say yes or no. What the connector gets is a key that carries you: it can do what your account can do, everything it does is recorded under your name, and it can do nothing your account cannot. Approve a connector for the AI tools and it reaches those and nothing else. You can see your own approvals and withdraw any of them at any time; an administrator can withdraw anyone's, or remove the application entirely. Disabling someone's account withdraws theirs with it. An administrator registers the application once — see the install guide — and each person approves it for themselves.",
-        "de": "Ein Connector, der bei einem Dritten läuft — etwa der auf claude.ai —, kam an ein Atlas mit Anmeldung nicht heran: Es gibt darin keinen Ort für ein Token, und eines herauszugeben hätte einen langlebigen Schlüssel in fremden Einstellungen hinterlassen. Jetzt wird nichts herausgegeben. Der Connector schickt Sie zu Atlas, Sie melden sich an und sehen, wer fragt und was er können wird, und Sie sagen ja oder nein. Was der Connector bekommt, ist ein Schlüssel, der Sie trägt: Er kann, was Ihr Konto kann, alles erscheint unter Ihrem Namen, und er kann nichts, was Ihr Konto nicht kann. Erlauben Sie ihn für die KI-Werkzeuge, erreicht er genau diese und sonst nichts. Ihre eigenen Zustimmungen können Sie jederzeit einsehen und zurückziehen; eine Administratorin kann jede zurückziehen oder die Anwendung ganz entfernen. Wird ein Konto deaktiviert, verfallen seine Zustimmungen mit. Die Anwendung registriert eine Administratorin einmalig — siehe Installationsanleitung —, zustimmen tut danach jede Person für sich."
-      },
-      "link": {
-        "label": "ADR-0200",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0200-mcp-oauth-resource-server.md"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ]
-    },
-    {
-      "id": "connecting-an-ai-assistant-is-a-screen-now-not-a-request-bod",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Connecting an AI assistant is a screen now",
-        "de": "Einen KI-Assistenten anzuschliessen ist jetzt ein Bildschirm"
-      },
-      "summary": {
-        "en": "Letting an AI assistant work in Atlas used to mean sending a request by hand and reading the answer out of it. There is now a page for it: Console → AI access. Pick the application, press Create, and you get the three values its own dialog is asking for — the MCP server URL, a client id, and a secret shown once — each with a copy button. The page also checks the address Atlas publishes against the one you are looking at and tells you when they differ, which is the mistake that otherwise shows up much later as a connector that simply does not work, with nothing on screen to explain why. Below the form, the same page lists what is registered, marks anything that registered itself rather than being entered by someone, and shows the approvals people have given — your own, or everyone's if you administer this instance — each with the button that withdraws it. That last part matters most: an approval is the one thing here that belongs to the person rather than to the operator, and withdrawing one no longer requires anything but a click.",
-        "de": "Einem KI-Assistenten Zugang zu Atlas zu geben hiess bisher: eine Anfrage von Hand schicken und die Antwort daraus ablesen. Dafür gibt es jetzt eine Seite — Console → AI access. Anwendung auswählen, «Create» drücken, und Sie erhalten die drei Werte, nach denen deren Dialog fragt: die MCP-Server-URL, eine Client-ID und ein einmalig angezeigtes Geheimnis, jeweils mit Kopierknopf. Die Seite vergleicht ausserdem die Adresse, die Atlas veröffentlicht, mit der, die Sie gerade sehen, und sagt es Ihnen, wenn beide auseinandergehen — genau der Fehler, der sich sonst erst viel später zeigt, als Connector, der einfach nicht funktioniert, ohne dass irgendwo stünde warum. Unter dem Formular listet dieselbe Seite, was registriert ist, kennzeichnet, was sich selbst registriert hat statt von jemandem eingetragen worden zu sein, und zeigt die erteilten Zustimmungen — Ihre eigenen, oder alle, wenn Sie diese Instanz verwalten — jeweils mit dem Knopf, der sie zurückzieht. Das ist der wichtigste Teil: Eine Zustimmung ist das Einzige hier, das der Person gehört und nicht der Betreiberin, und sie zurückzuziehen braucht jetzt nichts als einen Klick."
-      },
-      "link": {
-        "label": "ADR-0200",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0200-mcp-oauth-resource-server.md"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open AI access",
-          "de": "KI-Zugang öffnen"
-        },
-        "route": "#/console/ai-access"
-      }
-    },
-    {
-      "id": "a-connector-can-now-register-itself-if-you-let-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "A connector can register itself — if you let it",
-        "de": "Ein Connector kann sich selbst registrieren — wenn Sie es erlauben"
-      },
-      "summary": {
-        "en": "Connecting an AI connector meant an administrator had to enter the application in Atlas first and hand over an id and a secret to paste in. That step can now be dropped: with self-registration switched on, a connector needs nothing but this server's address, and the person approves it as usual. It is off unless an operator turns it on, and that is deliberate — it is the one place in Atlas where somebody who has not signed in can leave something behind. What makes it safe to live with is that the approval screen says so: an application that registered itself is labelled there, in as many words, so nobody mistakes it for one that was checked. The name on that screen is the one the application chose for itself. Nothing is reached until a person says yes, and what they say yes to is bounded by their own account. How many self-registered applications are kept is limited, and a new one pushes out the oldest that nobody ever approved — never one somebody is using, so a stranger cannot take your access away by registering enough applications. If your connectors are few and known, leaving this off remains the stronger setup, and it is why that is the default.",
-        "de": "Einen KI-Connector anzuschliessen hiess bisher: Eine Administratorin trägt die Anwendung zuerst in Atlas ein und gibt ID und Geheimnis zum Einfügen heraus. Dieser Schritt kann jetzt entfallen. Ist die Selbstregistrierung eingeschaltet, braucht ein Connector nur noch die Adresse dieses Servers, und die Person stimmt wie gewohnt zu. Standardmässig ist sie aus, und das mit Absicht: Es ist die einzige Stelle in Atlas, an der jemand ohne Anmeldung etwas hinterlassen kann. Lebbar wird das dadurch, dass der Zustimmungsbildschirm es sagt — eine Anwendung, die sich selbst registriert hat, ist dort ausdrücklich als solche gekennzeichnet, damit sie niemand für eine geprüfte hält. Der Name dort ist der, den die Anwendung sich selbst gegeben hat. Erreicht wird nichts, bevor eine Person zustimmt, und was sie zustimmt, ist durch ihr eigenes Konto begrenzt. Wie viele selbstregistrierte Anwendungen aufbewahrt werden, ist begrenzt; eine neue verdrängt die älteste, der nie jemand zugestimmt hat — nie eine, die jemand benutzt. So kann Ihnen kein Fremder den Zugang entziehen, indem er genug Anwendungen registriert. Sind Ihre Connectoren wenige und bekannt, bleibt es die stärkere Einstellung, dies ausgeschaltet zu lassen — deshalb ist es die Voreinstellung."
-      },
-      "link": {
-        "label": "ADR-0200",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0200-mcp-oauth-resource-server.md"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ]
-    },
-    {
-      "id": "a-refused-request-now-says-what-refused-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "A refused request now says what refused it",
-        "de": "Eine abgewiesene Anfrage sagt jetzt, wer sie abgewiesen hat"
-      },
-      "summary": {
-        "en": "When Atlas turns a request away for want of a credential, it now points at a short public document describing what did the turning away — the discovery mechanism the Model Context Protocol requires of a server behind a login. That closes a failure with no visible cause: an AI connector running on somebody else's infrastructure has nowhere to keep a token, so on being refused it goes looking for a login procedure, guesses an address Atlas does not serve, and leaves you staring at a \"not found\" that explains nothing. If Atlas sits behind a reverse proxy, put your public address in --external-url: Atlas terminates no TLS itself, so the address it would otherwise work out is the wrong one. Plainly said: this does not yet make such a connector work. Atlas hands out no tokens of that kind, and the document says so instead of sending a client through a whole procedure to be turned away at the end. What changes is that the refusal can be read.",
-        "de": "Weist Atlas eine Anfrage mangels Zugangs ab, verweist es jetzt auf ein kurzes öffentliches Dokument, das beschreibt, wer da abgewiesen hat — der Auffindungsmechanismus, den das Model Context Protocol von einem Server hinter einer Anmeldung verlangt. Das schliesst einen Fehler, der bisher keine sichtbare Ursache hatte: Ein KI-Connector, der bei einem Dritten läuft, hat keinen Ort für ein Token; wird er abgewiesen, sucht er nach einem Anmeldeverfahren, rät eine Adresse, die Atlas nicht bedient, und zurück bleibt ein «nicht gefunden», das nichts erklärt. Steht Atlas hinter einem Reverse Proxy, tragen Sie Ihre öffentliche Adresse in --external-url ein: Atlas terminiert selbst kein TLS, die sonst ermittelte Adresse wäre also die falsche. Offen gesagt: Ein solcher Connector funktioniert damit noch nicht. Atlas stellt Tokens dieser Art nicht aus, und das Dokument sagt das, statt einen Client durch ein ganzes Verfahren zu schicken, um ihn am Ende abzuweisen. Was sich ändert, ist, dass die Abweisung lesbar wird."
-      },
-      "link": {
-        "label": "ADR-0200",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0200-mcp-oauth-resource-server.md"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ]
-    },
-    {
-      "id": "metrics-moved-behind-the-boundary-the-last-route-that-had-no",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "The monitoring endpoint asks for a credential now",
-        "de": "Der Monitoring-Endpunkt verlangt jetzt einen Zugang"
-      },
-      "summary": {
-        "en": "`/metrics` was the last address on the server that anybody could read without presenting anything — for a plain reason: until now a monitoring scraper had nothing it could present. With API tokens it does, so the exposition is gated like every other route, and a token scope named `metrics` reaches exactly this one address and nothing else. Worth being plain about the size of this: what `/metrics` carries is instance counts, batch times and queue depth — no process data and no business data. What it buys is that \"nothing here is reachable without a credential\" is now true without an exception. Breaking: every existing scrape configuration needs the token added, which for Prometheus is two lines. The health probes stay open, because a readiness check that needs a credential is useless in the incident it exists for.",
-        "de": "`/metrics` war die letzte Adresse dieses Servers, die jeder ohne Ausweis lesen konnte — aus einem einfachen Grund: Ein Monitoring-Scraper hatte bisher nichts, was er hätte vorzeigen können. Mit API-Tokens hat er es, und deshalb liegt die Metrik-Ausgabe jetzt hinter derselben Anmeldung wie jede andere Route; ein Token-Scope namens `metrics` erreicht genau diese eine Adresse und sonst nichts. Zur Grössenordnung, ganz offen: Was unter `/metrics` steht, sind Instanzzahlen, Batch-Zeiten und Warteschlangenlängen — keine Prozessdaten, keine Geschäftsdaten. Der Gewinn ist, dass „nichts ist ohne Zugang erreichbar\" jetzt ohne Fussnote stimmt. Brechend: Jede bestehende Scrape-Konfiguration braucht das Token — bei Prometheus sind das zwei Zeilen. Die Health-Probes bleiben offen, denn eine Bereitschaftsprüfung, die einen Zugang braucht, hilft in genau dem Vorfall nicht, für den es sie gibt."
-      },
-      "link": {
-        "label": "ADR-0142",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0142-prometheus-metrics.md"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ]
-    },
-    {
-      "id": "api-tokens-a-credential-a-machine-can-actually-be-given",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "API tokens: a credential you can hand to a machine",
-        "de": "API-Tokens: ein Zugang, den man einer Maschine geben kann"
-      },
-      "summary": {
-        "en": "A worker on another host, an AI assistant's bridge, a CI job — once a login is required, none of them had anything to present, and the `--token` flags they already carried had no value you could put in them. An administrator can now mint a token over `POST /api/v1/api-tokens`. The secret comes back exactly once and only its fingerprint is stored, so a lost token is reissued rather than looked up. Each one carries an expiry date and a scope: `worker` reaches the four calls a worker actually makes and nothing else, `metrics` reaches only the monitoring endpoint, and `full` reaches what a signed-in ordinary user reaches — never an administrator. Deleting a token revokes it from the next request onwards; an expired one is refused like an unknown one while its record stays in the list, so you can see what needs reissuing.",
-        "de": "Ein Worker auf einem anderen Host, die Brücke eines KI-Assistenten, ein CI-Job — sobald eine Anmeldung verlangt wird, hatte keiner von ihnen etwas vorzuweisen, und in den `--token`-Optionen, die es längst gab, stand kein Wert, den man hätte eintragen können. Ein Administrator kann jetzt über `POST /api/v1/api-tokens` ein Token ausstellen. Das Geheimnis kommt genau einmal zurück, gespeichert wird nur sein Fingerabdruck — ein verlorenes Token wird also neu ausgestellt und nicht nachgeschlagen. Jedes trägt ein Ablaufdatum und einen Scope: `worker` erreicht die vier Aufrufe, die ein Worker tatsächlich macht, und sonst nichts; `metrics` erreicht nur den Monitoring-Endpunkt; `full` erreicht, was ein angemeldeter gewöhnlicher Benutzer erreicht — nie ein Administrator. Löschen widerruft ein Token ab der nächsten Anfrage; ein abgelaufenes wird wie ein unbekanntes abgewiesen, bleibt aber in der Liste stehen, damit sichtbar ist, was neu ausgestellt gehört."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ]
     }
   ]
 }

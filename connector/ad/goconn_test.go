@@ -3,6 +3,8 @@ package ad
 import (
 	"strings"
 	"testing"
+
+	goldap "github.com/go-ldap/ldap/v3"
 )
 
 // TestGoConnOperations drives the real go-ldap adapter (GoDialer + goConn) against the
@@ -285,5 +287,94 @@ func TestGoConnDirSyncError(t *testing.T) {
 	defer conn.Close()
 	if _, err := conn.DirSync(DirSyncRequest{BaseDN: "dc=nope"}); err == nil {
 		t.Error("a refused DirSync must be an error")
+	}
+}
+
+// TestGoConnSearch drives the real go-ldap adapter's search against the test
+// directory: the base and the filter cross the wire and the entry comes back in the
+// connector's shape. The Conn fake the worker tests use never reaches this code.
+func TestGoConnSearch(t *testing.T) {
+	d := startTestDirectory(t, &testDirectory{
+		searchDN:    "cn=Vertrieb,ou=groups,dc=x",
+		searchAttrs: map[string][]string{"cn": {"Vertrieb"}},
+	})
+	conn, err := NewDialer().Dial(d.URL, "cn=svc,dc=x", "pw", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	entries, err := conn.Search(SearchRequest{
+		BaseDN: "ou=groups,dc=x", Scope: "one", Filter: "(cn=Vertrieb)", PageSize: 500,
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(entries) != 1 || entries[0].DN != "cn=Vertrieb,ou=groups,dc=x" {
+		t.Fatalf("entries = %+v", entries)
+	}
+	if entries[0].Attributes["cn"][0] != "Vertrieb" {
+		t.Errorf("attributes = %+v", entries[0].Attributes)
+	}
+	if ops, dns := d.seen(); !hasOp(ops, "search") || !hasDN(dns, "ou=groups,dc=x") {
+		t.Errorf("ops/dns = %v / %v, want the search and its base on the wire", ops, dns)
+	}
+}
+
+// An unpaged search — a job written before paging was on — still works, and the entry
+// cap still refuses to truncate.
+func TestGoConnSearchUnpagedAndCapped(t *testing.T) {
+	d := startTestDirectory(t, &testDirectory{searchDN: "cn=Arno,dc=x"})
+	conn, err := NewDialer().Dial(d.URL, "", "", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	// No page size, no filter: the connector's own "(objectClass=*)" goes out.
+	entries, err := conn.Search(SearchRequest{BaseDN: "dc=x"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %+v", entries)
+	}
+	// The directory answers one entry, so a cap of zero-plus-nothing passes and a cap
+	// below the result refuses rather than handing back a short answer.
+	if _, err := conn.Search(SearchRequest{BaseDN: "dc=x", MaxEntries: 1}); err != nil {
+		t.Errorf("a search inside its cap must succeed: %v", err)
+	}
+	_, err = conn.Search(SearchRequest{BaseDN: "dc=x", MaxEntries: -1})
+	if err != nil {
+		t.Errorf("a non-positive cap is unbounded: %v", err)
+	}
+}
+
+// A server that refuses the search fails it, rather than the process continuing on an
+// empty result it would read as "not there".
+func TestGoConnSearchError(t *testing.T) {
+	d := startTestDirectory(t, &testDirectory{result: 32}) // noSuchObject
+	conn, err := NewDialer().Dial(d.URL, "", "", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+	if _, err := conn.Search(SearchRequest{BaseDN: "ou=weg,dc=x"}); err == nil {
+		t.Error("a refused search must be an error")
+	}
+}
+
+// The scopes a model may author reach go-ldap's own constants; anything else is the
+// whole subtree, which is what a search means when nobody said otherwise.
+func TestSearchScope(t *testing.T) {
+	for in, want := range map[string]int{
+		"base": goldap.ScopeBaseObject,
+		"ONE":  goldap.ScopeSingleLevel,
+		" sub": goldap.ScopeWholeSubtree,
+		"":     goldap.ScopeWholeSubtree,
+	} {
+		if got := searchScope(in); got != want {
+			t.Errorf("searchScope(%q) = %d, want %d", in, got, want)
+		}
 	}
 }

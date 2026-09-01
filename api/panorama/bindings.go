@@ -62,8 +62,11 @@ var allowedOn = map[string][]string{
 // Atlas process applications, and one process application can contribute to
 // several components.
 type Binding struct {
-	ElementID   string   `json:"elementId"`
-	ElementType string   `json:"elementType"`
+	ElementID   string `json:"elementId"`
+	ElementType string `json:"elementType"`
+	// ElementName is what the architect called it. The mesh overlay shows it, and
+	// for an element Atlas has no resource for it is the only name there is.
+	ElementName string   `json:"elementName,omitempty"`
 	Key         string   `json:"key"`
 	Values      []string `json:"values"`
 }
@@ -112,6 +115,7 @@ func ExtractBindings(data []byte) (BindingSet, error) {
 	type occurrence struct {
 		elementID, elementType, defRef, value string
 	}
+	elementNames := map[string]string{}
 	var occurrences []occurrence
 	defNames := map[string]string{}
 
@@ -162,8 +166,18 @@ func ExtractBindings(data []byte) (BindingSet, error) {
 			depth--
 			switch tok.Name.Local {
 			case "name":
-				if defID != "" && capture != nil {
-					defNames[defID] = strings.TrimSpace(capture.String())
+				// The same <name> tag names the model, a property definition, an
+				// element, a relationship and a view. Which one this is depends on
+				// what is open around it, so both arms are guarded rather than
+				// assuming the nearest ancestor.
+				if capture != nil {
+					text := strings.TrimSpace(capture.String())
+					switch {
+					case defID != "":
+						defNames[defID] = text
+					case elementID != "":
+						elementNames[elementID] = text
+					}
 				}
 				capture = nil
 			case "value":
@@ -216,7 +230,8 @@ func ExtractBindings(data []byte) (BindingSet, error) {
 		at, seen := index[occ.elementID+"\x00"+name]
 		if !seen {
 			set.Bindings = append(set.Bindings, Binding{
-				ElementID: occ.elementID, ElementType: occ.elementType, Key: name,
+				ElementID: occ.elementID, ElementType: occ.elementType,
+				ElementName: elementNames[occ.elementID], Key: name,
 			})
 			at = len(set.Bindings) - 1
 			index[occ.elementID+"\x00"+name] = at

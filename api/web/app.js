@@ -6,7 +6,7 @@ import {
   setServerAccent, resetServerAccent, syncFromServer,
 } from "./theme.js";
 import {
-  LOGO_URL, hasLogoCached, applyLogo, syncLogoFromServer,
+  LOGO_URL, BUILTIN_MARK, hasLogoCached, applyLogo, syncLogoFromServer,
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
@@ -16,7 +16,7 @@ import {
   incidentConnectorChip,
   repairFormFlow,
 } from "./incidents.js";
-import { editConnectorFlow, connectorShape, connectorUsageHTML, deleteConnectorFlow } from "./connectordialog.js";
+import { editConnectorFlow, connectorShape, connectorCreateBody, connectorUsageHTML, deleteConnectorFlow } from "./connectordialog.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
@@ -517,32 +517,32 @@ const CONNECTORS = [
   },
   {
     id: "clio", name: "clio", kind: "Event store",
-    desc: "Durable event log with registered schemas and reduce specs. A clio connector task sends, queries, or reads events off the processor loop; the endpoint and token are managed below and resolved from the vault. Authored via the clio Event Store Connector service-task type.",
+    desc: "Durable event log with registered schemas and reduce specs. A clio connector task sends, queries, or reads events off the processor loop; the endpoint and token are managed below and resolved from the vault. Authored on a service task with the clio Event Store Worker Type.",
     refs: "ADR-0036 · ADR-0041", status: "active", statusLabel: "configurable",
   },
   {
     id: "http-rest", name: "HTTP REST", kind: "REST API",
-    desc: "Calls a model-authored REST endpoint from a service task off the processor loop — method, URL, headers, query parameters, and basic/bearer/apiKey auth (secrets resolved server-side) — writing the JSON response into a result variable. Authored via the REST Outbound Connector service-task type.",
+    desc: "Calls a model-authored REST endpoint from a service task off the processor loop — method, URL, headers, query parameters, and basic/bearer/apiKey auth (secrets resolved server-side) — writing the JSON response into a result variable. Authored on a service task with the REST Outbound Worker Type.",
     refs: "ADR-0036 · ADR-0041 · ADR-0067", status: "active", statusLabel: "embedded",
   },
   {
     id: "mail", name: "Mail", kind: "Outbound e-mail",
-    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token) — or the “preview” provider, which needs neither and delivers to the in-app Outbox so a mail task can be tried before a real provider exists. Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
+    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token) — or the “preview” provider, which needs neither and delivers to the in-app Outbox so a mail task can be tried before a real provider exists. Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored on a service task with the E-Mail Outbound Worker Type.",
     refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
   },
   {
     id: "sharepoint", name: "SharePoint", kind: "List item",
-    desc: "Creates a list item in a Microsoft SharePoint site from a service task off the processor loop via the Graph API (OAuth2 app-only or refresh-token). The site, list, and item fields are model-authored (FEEL-capable) and the created item's JSON is written into a result variable; the Graph base and credentials are managed below and resolved from the vault. Authored via the SharePoint Connector service-task type.",
+    desc: "Creates a list item in a Microsoft SharePoint site from a service task off the processor loop via the Graph API (OAuth2 app-only or refresh-token). The site, list, and item fields are model-authored (FEEL-capable) and the created item's JSON is written into a result variable; the Graph base and credentials are managed below and resolved from the vault. Authored on a service task with the SharePoint Worker Type.",
     refs: "ADR-0041 · ADR-0093 · ADR-0141", status: "active", statusLabel: "configurable",
   },
   {
     id: "jira", name: "Jira", kind: "Issue tracker",
-    desc: "Performs one Atlassian Jira operation from a service task off the processor loop via the REST API: create an issue, read one, update it, move it through its workflow, comment on it, assign it, or search with JQL. The operation and its values are model-authored (FEEL-capable) and what Jira returned is written into a result variable; the site URL and the credential bundle — {email, apiToken} for Jira Cloud or {token} for a Data Center personal access token — are managed below and resolved from the vault. Authored via the Jira Connector service-task type.",
+    desc: "Performs one Atlassian Jira operation from a service task off the processor loop via the REST API: create an issue, read one, update it, move it through its workflow, comment on it, assign it, or search with JQL. The operation and its values are model-authored (FEEL-capable) and what Jira returned is written into a result variable; the site URL and the credential bundle — {email, apiToken} for Jira Cloud or {token} for a Data Center personal access token — are managed below and resolved from the vault. Authored on a service task with the Jira Worker Type.",
     refs: "ADR-0041 · ADR-0201", status: "active", statusLabel: "configurable",
   },
   {
     id: "remedy", name: "BMC Remedy", kind: "ITSM",
-    desc: "Creates an entry (e.g. an incident) in a BMC Remedy / Helix ITSM form from a service task off the processor loop via the AR System REST API. The form and its field values are model-authored (FEEL-capable) and the created entry's id is written into a result variable; the base URL and the {username,password} credential bundle are managed below and resolved from the vault. Authored via the BMC Remedy Connector service-task type.",
+    desc: "Creates an entry (e.g. an incident) in a BMC Remedy / Helix ITSM form from a service task off the processor loop via the AR System REST API. The form and its field values are model-authored (FEEL-capable) and the created entry's id is written into a result variable; the base URL and the {username,password} credential bundle are managed below and resolved from the vault. Authored on a service task with the BMC Remedy Worker Type.",
     refs: "ADR-0041 · ADR-0106", status: "active", statusLabel: "configurable",
   },
   {
@@ -1049,22 +1049,91 @@ async function viewConsoleEngine() {
       </div>
     </div>`;
   view.innerHTML += `
+    <div class="card" id="node-card" style="margin-top:14px">
+      <h2>This node</h2>
+      <p class="muted">The identity this server presents to other Atlas servers (ADR-0189). The id is
+      minted once and survives restarts — it is what a landscape view correlates against, and what an
+      architecture model binds to with <code>atlas.runtimeId</code>. The name is for people; the id is
+      for machines, and changing the name never changes the id.</p>
+      <div id="node-info" class="muted">loading…</div>
+    </div>`;
+  view.innerHTML += `
     <div class="card" id="build-card" style="margin-top:14px">
       <h2>Build</h2>
       <p class="muted">Which commit this running server was built from — check it against the merged code to confirm the deployed binary is up to date.</p>
       <div id="build-info" class="muted">loading…</div>
     </div>`;
   try {
-    const [procs, stats, info] = await Promise.all([
+    const [procs, stats, info, node] = await Promise.all([
       api("GET", "/api/v1/processes"),
       api("GET", "/api/v1/stats"),
       api("GET", "/api/v1/info"),
+      api("GET", "/api/v1/node"),
     ]);
     document.getElementById("e-pi").textContent = stats.activeProcessInstances;
     document.getElementById("e-ei").textContent = stats.activeElementInstances;
     document.getElementById("e-dep").textContent = procs.length;
     document.getElementById("build-info").innerHTML = buildInfoHTML(info);
+    mountNodeCard(node);
   } catch (e) { toast(e.message, "err"); }
+}
+
+// nodeInfoHTML renders the node descriptor. The id is shown in full and
+// monospaced: it is a value somebody copies into a model binding, and a truncated
+// identifier is one that gets pasted wrong.
+//
+// The features list is what this node advertises it can be asked for. It is
+// derived server-side from the routes actually mounted, so it is worth showing
+// verbatim rather than summarising: an operator comparing two servers is looking
+// for the difference.
+function nodeInfoHTML(n) {
+  n = n || {};
+  const labels = Object.entries(n.labels || {});
+  const rows = [
+    ["Runtime id", `<span style="font-family:ui-monospace,monospace">${esc(n.id || "—")}</span>`],
+    ["Name", esc(n.name || "—")],
+    ["Environment", esc(n.environment || "—")],
+    ["Partition", `${esc(String(n.partition ?? "—"))} of ${esc(String(n.partitions ?? "—"))}`],
+    ["Labels", labels.length
+      ? labels.map(([k, v]) => `<span class="pill">${esc(k)}=${esc(v)}</span>`).join(" ")
+      : "<span class=\"muted\">none</span>"],
+    ["Features", (n.features || []).length
+      ? (n.features || []).map((f) => `<code>${esc(f)}</code>`).join(" ")
+      : "<span class=\"muted\">none advertised</span>"],
+  ];
+  return `<table class="kv-table">${rows.map(([k, v]) =>
+    `<tr><td style="padding:2px 16px 2px 0; color:var(--muted); vertical-align:top">${k}</td><td>${v}</td></tr>`).join("")}</table>`;
+}
+
+// mountNodeCard renders the descriptor and, for an administrator, the form that
+// names it. Naming is admin-only on the server (ADR-0209), so the form is not
+// offered to anybody else rather than offered and refused.
+function mountNodeCard(node) {
+  const slot = document.getElementById("node-info");
+  if (!slot) return;
+  const editable = mayUse("admin");
+  slot.innerHTML = nodeInfoHTML(node) + (editable ? `
+    <form id="node-form" class="row" style="gap:10px; margin-top:12px; flex-wrap:wrap; align-items:flex-end">
+      <label class="field" style="margin:0"><span>Name</span>
+        <input id="node-name" type="text" maxlength="200" placeholder="e.g. Zurich primary"
+          value="${esc(node.name || "")}" /></label>
+      <label class="field" style="margin:0"><span>Environment</span>
+        <input id="node-env" type="text" maxlength="200" placeholder="e.g. production"
+          value="${esc(node.environment || "")}" /></label>
+      <button class="btn" type="submit">Save</button>
+    </form>` : "");
+  if (!editable) return;
+  document.getElementById("node-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const saved = await api("PUT", "/api/v1/node", {
+        name: document.getElementById("node-name").value,
+        environment: document.getElementById("node-env").value,
+      });
+      mountNodeCard(saved);
+      toast("Node identity saved");
+    } catch (e) { toast(e.message, "err"); }
+  });
 }
 
 // buildInfoHTML renders the version/VCS metadata from GET /api/v1/info: the version
@@ -1748,7 +1817,10 @@ async function viewConsoleOrg() {
         <p class="muted" style="padding:0 18px; margin:6px 0 12px">${AUTH.enabled
           ? "Login is enforced for this instance."
           : "Login is <b>not</b> enforced — start the server with <code>--auth</code> to require these accounts."}
-          Roles are the hook for finer permissions later; today only <span class="chip">admin</span> is enforced (it gates this page).</p>
+          Every route names the role that reaches it: <span class="chip">admin</span> for this page and the
+          rest of the instance's configuration, <span class="chip">modeler</span> to deploy and to author,
+          <span class="chip">operator</span> to run what is deployed, <span class="chip">user</span> for a
+          person's own task list.</p>
         <div id="user-form-slot" style="padding:0 18px"></div>
         <table data-dt-key="users">
           <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th><th></th></tr></thead>
@@ -1803,6 +1875,18 @@ async function viewConsoleOrg() {
       </table>
     </div>`;
 
+  // Single sign-on: which provider (if any) this instance offers, and what its
+  // claims are allowed to decide here. Admin-gated like the roster, so it is only
+  // loaded when the roster was not denied.
+  let provider = null;
+  let mapping = null;
+  if (!denied) {
+    try { provider = ((await api("GET", "/api/v1/auth/providers")) || [])[0] || null; } catch { /* none */ }
+    if (provider) {
+      try { mapping = await api("GET", "/api/v1/settings/oidc-mapping"); } catch { mapping = null; }
+    }
+  }
+
   if (superseded(gen)) return; // navigated away while the roster loaded
   view.innerHTML = `
     <div class="card">
@@ -1813,11 +1897,13 @@ async function viewConsoleOrg() {
     </div>
     ${usersCard}
     ${groupsCard}
+    ${denied ? "" : ssoCard(provider, mapping, groups)}
     ${appearanceCard()}`;
 
   // Appearance is wired before the (admin-gated) user handlers so it works even when
   // the user roster is denied to a non-admin.
   wireAppearance();
+  wireSSO(groups);
 
   if (denied) return;
   const reload = () => viewConsoleOrg();
@@ -1871,6 +1957,121 @@ async function viewConsoleOrg() {
   });
 }
 
+// ---------- Single sign-on (ADR-0210) ----------
+//
+// Two questions are answered here, and only these two: which claim in the
+// provider's token to read, and what its values grant. Where the provider is —
+// issuer, client id, secret — is start-up configuration and deliberately not
+// editable from a browser.
+//
+// The switch is worth the sentence it carries: from the moment it is on, whoever
+// administers the provider's groups administers this instance's roles, and a role
+// granted by hand here is replaced at that person's next sign-in.
+
+// SSO_ROLES is what a rule may grant. `user` is missing on purpose — everybody who
+// can sign in at all holds it, so offering it as a grant would suggest it could be
+// withheld.
+const SSO_ROLES = ["admin", "modeler", "operator"];
+
+function ssoRuleRow(rule, groups) {
+  const roles = new Set(rule.roles || []);
+  const inGroups = new Set(rule.groups || []);
+  const box = (kind, value, label, on) => `<label class="field inline" style="margin:0 12px 4px 0">
+      <input type="checkbox" data-sso="${kind}" value="${esc(value)}"${on ? " checked" : ""} />
+      <span>${esc(label)}</span></label>`;
+  return `<tr class="sso-rule">
+      <td style="vertical-align:top"><input class="field" data-sso="value" style="margin:0"
+        value="${esc(rule.value || "")}" placeholder="atlas-modeller" spellcheck="false"
+        aria-label="Claim value" /></td>
+      <td style="vertical-align:top">${SSO_ROLES.map((r) => box("role", r, r, roles.has(r))).join("")}</td>
+      <td style="vertical-align:top">${groups.length
+        ? groups.map((g) => box("group", g.id, g.name, inGroups.has(g.id))).join("")
+        : `<span class="muted" style="font-size:12px">No groups yet.</span>`}</td>
+      <td style="text-align:right; vertical-align:top">
+        <button type="button" class="btn ghost danger" data-sso-act="remove"
+          title="Delete this rule">Remove</button></td>
+    </tr>`;
+}
+
+function ssoCard(provider, mapping, groups) {
+  if (!provider) {
+    return `
+      <div class="card" style="margin-top:18px">
+        <h2>Single sign-on</h2>
+        <p class="muted" style="margin:6px 0 0">No identity provider is configured, so everybody signs in
+        with a username and password. Start the server with <code>--oidc-issuer</code>,
+        <code>--oidc-client-id</code> and <code>--oidc-client-secret</code> to offer one.</p>
+      </div>`;
+  }
+  const m = mapping || { enabled: false, claim: "", rules: [] };
+  const rules = m.rules || [];
+  return `
+    <div class="card" id="sso-card" style="margin-top:18px">
+      <div class="between"><h2>Single sign-on</h2>
+        <button type="button" class="btn" id="sso-save" title="Store this mapping">Save mapping</button></div>
+      <p class="muted" style="margin:6px 0 14px">People can sign in with
+      <b>${esc(provider.name || provider.id)}</b>. Below is what that provider's claims decide here.
+      A rule matches one claim value exactly and grants what it names; somebody the provider says
+      nothing about matches nothing and is granted nothing. Everybody who can sign in holds
+      <span class="chip">user</span> either way.</p>
+      <label class="field inline" style="margin:0 0 10px">
+        <input type="checkbox" id="sso-enabled"${m.enabled ? " checked" : ""} />
+        <span>Let the provider's claims decide roles and group membership</span>
+      </label>
+      <p class="muted" style="margin:0 0 14px; font-size:12px">While this is on, whoever administers the
+      provider's groups administers this instance's roles: a role granted by hand is replaced at that
+      person's next sign-in, and so is their membership of the groups named below. Groups no rule names
+      are left alone.</p>
+      <label class="field" style="max-width:420px">
+        <span>Claim to read</span>
+        <input type="text" id="sso-claim" value="${esc(m.claim || "")}" spellcheck="false"
+          placeholder="groups" aria-label="Claim to read" />
+      </label>
+      <p class="muted" style="margin:6px 0 14px; font-size:12px">A claim name, or a dotted path for the
+      providers that nest it — <code>groups</code>, <code>roles</code>,
+      <code>realm_access.roles</code>.</p>
+      <table>
+        <thead><tr><th style="width:26%">Claim value</th><th style="width:28%">Grants roles</th>
+          <th>Adds to groups</th><th></th></tr></thead>
+        <tbody id="sso-rules">${rules.map((r) => ssoRuleRow(r, groups)).join("")}</tbody>
+      </table>
+      <button type="button" class="btn ghost" id="sso-add" style="margin-top:12px"
+        title="Add a rule">Add rule</button>
+    </div>`;
+}
+
+function wireSSO(groups) {
+  const card = document.getElementById("sso-card");
+  if (!card) return;
+  const rows = document.getElementById("sso-rules");
+  card.addEventListener("click", async (e) => {
+    if (e.target.closest("#sso-add")) {
+      rows.insertAdjacentHTML("beforeend", ssoRuleRow({}, groups));
+      return;
+    }
+    const rm = e.target.closest("button[data-sso-act='remove']");
+    if (rm) { rm.closest("tr").remove(); return; }
+    if (!e.target.closest("#sso-save")) return;
+    const body = {
+      enabled: document.getElementById("sso-enabled").checked,
+      claim: document.getElementById("sso-claim").value.trim(),
+      rules: [...rows.querySelectorAll("tr.sso-rule")].map((tr) => ({
+        value: tr.querySelector("[data-sso='value']").value.trim(),
+        roles: [...tr.querySelectorAll("[data-sso='role']:checked")].map((c) => c.value),
+        groups: [...tr.querySelectorAll("[data-sso='group']:checked")].map((c) => c.value),
+      })),
+    };
+    try {
+      await api("PUT", "/api/v1/settings/oidc-mapping", body);
+      toast(body.enabled ? "Sign-on mapping saved and in effect" : "Sign-on mapping saved (switched off)", "ok");
+    } catch (err) {
+      // The server refuses a mapping that could not do what it says, and its reason
+      // names the rule — so show it rather than a generic failure.
+      toast(err.message || "Couldn't save the mapping", "err");
+    }
+  });
+}
+
 // appearanceCard renders the "Appearance" panel in Organization: a row of brand
 // presets plus a custom colour picker that re-tints the whole UI to a company
 // colour (theme.js). The choice is org-wide — persisted on the server and applied
@@ -1912,7 +2113,7 @@ function appearanceCard() {
         a PNG or SVG up to 512&nbsp;KiB, shown in the top bar and on the login screen for everyone on this instance.</p>
         <div class="logo-controls">
           <span class="mark logo-sample${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
-            hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : "A"
+            hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
           }</span>
           <label class="btn sm" style="cursor:pointer">
             Upload logo…
@@ -2000,7 +2201,7 @@ function wireAppearance() {
 // wireLogo connects the Appearance panel's logo upload and remove controls to
 // logo.js. Uploading previews the new mark instantly (applyLogo runs against the
 // whole shell) and persists it org-wide; a failed write (e.g. a non-admin) is
-// surfaced. Remove clears it back to the built-in letter mark.
+// surfaced. Remove clears it back to the built-in Atlas mark.
 function wireLogo() {
   const file = document.getElementById("logo-file");
   const remove = document.getElementById("logo-remove");
@@ -3180,7 +3381,7 @@ function wireConnectorManagement(connectors) {
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
-        <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="off" placeholder="postgresql://postgres.abc:\u2026@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require"/></label>
+        <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password" placeholder="postgresql://postgres.abc:\u2026@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit" title="Add this connector">Add</button>
         <button class="btn neutral mail-only" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
@@ -3214,7 +3415,18 @@ function wireConnectorManagement(connectors) {
         // one field that appears for those kinds and for no other. It is not marked
         // required: an operator who already keeps the DSN in the vault names its key in
         // the reference field instead, and the server refuses a record with neither.
-        form.querySelectorAll(".sql-only").forEach((el) => { el.style.display = sh.sql ? "" : "none"; });
+        // Hidden is not enough: a display:none input is still in the form, so its value
+        // is still submitted — and a type="password" field is exactly what a password
+        // manager fills in whether or not anyone can see it. Disabling it takes it out
+        // of the FormData entirely, and clearing it means switching kinds cannot carry
+        // a DSN typed for a previous one into the next create.
+        form.querySelectorAll(".sql-only").forEach((el) => {
+          el.style.display = sh.sql ? "" : "none";
+          el.querySelectorAll("input").forEach((inp) => {
+            if (!sh.sql) inp.value = "";
+            inp.disabled = !sh.sql;
+          });
+        });
         senderIn.required = sh.sender;
         endpointField.style.display = sh.endpoint ? "" : "none";
         endpointIn.required = sh.endpoint;
@@ -3258,20 +3470,7 @@ function wireConnectorManagement(connectors) {
       });
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const f = new FormData(e.target);
-        const body = {
-          name: (f.get("name") || "").trim(),
-          kind: (f.get("kind") || "temis").trim(),
-          endpoint: (f.get("endpoint") || "").trim(),
-          sender: (f.get("sender") || "").trim(),
-          credentialsRef: (f.get("credentialsRef") || "").trim(),
-        };
-        if (body.kind === "mail") body.provider = (f.get("provider") || "smtp").trim();
-        // Sent only when there is one, so a non-SQL create never carries the field and
-        // the server's "this applies only to a SQL connector" check cannot misfire on
-        // an empty string the form always renders.
-        const conn = (f.get("connectionString") || "").trim();
-        if (conn) body.connectionString = conn;
+        const body = connectorCreateBody(e.target);
         try {
           await api("POST", "/api/v1/connectors", body);
           toast("Connector added", "ok");

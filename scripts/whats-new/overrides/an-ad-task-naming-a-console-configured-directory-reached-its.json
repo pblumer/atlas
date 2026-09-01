@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Connectors",
+    "Modeler"
+  ],
+  "title": {
+    "en": "An AD task that names a configured directory now reaches it",
+    "de": "Ein AD-Task, der ein eingerichtetes Verzeichnis nennt, erreicht es jetzt"
+  },
+  "summary": {
+    "en": "If a task pointed at an Active Directory you had set up under Workers — by its name, instead of writing the server address into the model — the name was lost on the way to the worker, and the task failed with \"empty url\". It arrives now. The Modeler also stopped dropping that name when you opened such a task and pressed Save.",
+    "de": "Wenn ein Task auf ein Active Directory zeigte, das Sie unter Workers eingerichtet hatten — über dessen Namen, statt die Serveradresse ins Modell zu schreiben — ging der Name auf dem Weg zum Worker verloren, und der Task scheiterte mit „empty url\". Er kommt jetzt an. Und der Modeler wirft den Namen nicht mehr weg, wenn Sie so einen Task öffnen und speichern."
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Workers öffnen"
+    },
+    "route": "#/console"
+  }
+}

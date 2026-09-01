@@ -40,6 +40,37 @@ type Result struct {
 	Entries        []FeedEntry
 }
 
+// Items is what a run's result becomes as the value of the process variable: the
+// scraped strings for an HTML scrape, or the feed's entries as
+// {title, link, description, published} objects for RSS/Atom (ADR-0190).
+//
+// Both halves call it. The in-process worker renders it through expr and one leased by
+// another process sends it as JSON on the wire, but *what a scrape means* is decided
+// here once — which is the property that was missing: the offloaded path built its own
+// list from Values alone, so a feed reached a model as an empty array even on the days
+// the format survived the hand-over at all.
+func Items(res Result) []any {
+	if res.Format == formatRSS || res.Format == formatAtom {
+		items := make([]any, len(res.Entries))
+		for i, entry := range res.Entries {
+			// Spelled out rather than marshalled from the struct, so the four keys a
+			// model reads are a decision here and not a consequence of field tags.
+			items[i] = map[string]any{
+				"title":       entry.Title,
+				"link":        entry.Link,
+				"description": entry.Description,
+				"published":   entry.Published,
+			}
+		}
+		return items
+	}
+	items := make([]any, len(res.Values))
+	for i, v := range res.Values {
+		items[i] = v
+	}
+	return items
+}
+
 // Resolve turns a compiled web-scrape task into a [Job] by evaluating its authored
 // values against the variables the task sees. Format and MaxItems are already
 // compile-time structural data (ADR-0190), so resolution copies rather than

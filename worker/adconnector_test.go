@@ -36,14 +36,15 @@ func (d *recordingDialer) Dial(url, bindDN, bindPassword string, startTLS bool) 
 }
 
 type recordingConn struct {
-	addDN   string
-	addAt   map[string][]string
-	modDN   string
-	mods    []ad.Mod
-	delDN   string
-	mdnDN   string
-	syncReq *ad.DirSyncRequest
-	closed  bool
+	addDN     string
+	addAt     map[string][]string
+	modDN     string
+	mods      []ad.Mod
+	delDN     string
+	mdnDN     string
+	syncReq   *ad.DirSyncRequest
+	searchReq *ad.SearchRequest
+	closed    bool
 }
 
 func (c *recordingConn) Add(dn string, attrs map[string][]string) error {
@@ -66,6 +67,10 @@ func (c *recordingConn) DirSync(req ad.DirSyncRequest) (ad.DirSyncResult, error)
 		Cookie:  []byte{0x01, 0x02},
 		More:    true,
 	}, nil
+}
+func (c *recordingConn) Search(req ad.SearchRequest) ([]ad.Entry, error) {
+	c.searchReq = &req
+	return []ad.Entry{{DN: "cn=Vertrieb,ou=groups,dc=x", Attributes: map[string][]string{"cn": {"Vertrieb"}}}}, nil
 }
 func (c *recordingConn) Close() error { c.closed = true; return nil }
 
@@ -147,6 +152,7 @@ func TestADResolvedDetailRoundTripsEveryField(t *testing.T) {
 		URL: "ldaps://dc:636", BindDN: "cn=svc,dc=x", BindSecret: "AD_BIND", StartTLS: true,
 		Operation: "create-user", DN: "cn=Arno,dc=x", MemberDN: "cn=g,dc=x",
 		NewDN: "cn=Arno,ou=neu,dc=x", NewPassword: "N3w!pass",
+		BaseDN: "dc=x", Filter: "(cn=Arno)", Scope: "one", ResultVariable: "r",
 		Attributes: map[string][]string{"sAMAccountName": {"arno"}},
 	}
 	// Marshal the way the engine's payload map is keyed, then read it back.
@@ -161,6 +167,7 @@ func TestADResolvedDetailRoundTripsEveryField(t *testing.T) {
 	for _, key := range []string{
 		"url", "bindDN", "bindSecretRef", "startTLS", "operation", "dn",
 		"memberDN", "newDN", "newPassword", "attributes",
+		"baseDN", "filter", "scope", "resultVariable",
 	} {
 		if _, ok := fields[key]; !ok {
 			t.Errorf("ad.Job does not serialize %q; the engine's payload map keys it", key)
@@ -725,5 +732,53 @@ func TestTheMockSeedReachesEveryDirectoryAsItsOwnCopy(t *testing.T) {
 		if len(got) != 1 || got[0].Attributes["userAccountControl"][0] != "514" {
 			t.Errorf("%s holds %v, want its own seeded account, disabled", url, got)
 		}
+	}
+}
+
+// A search reaches the directory as a search: the base, the scope and the filter the
+// engine resolved travel, and the result comes back as the object a process branches
+// on (ADR-0166, amended a fifth time).
+func TestRunADJobSearch(t *testing.T) {
+	dialer := &recordingDialer{}
+	out, err := RunADJob(context.Background(), adJob(map[string]any{
+		"url": "ldaps://dc", "operation": "search", "baseDN": "ou=groups,dc=x",
+		"scope": "one", "filter": "(cn=Vertrieb)", "maxEntries": 50,
+		"resultVariable": "gruppe",
+	}), dialer, adSecretFromEnv(envMap(nil)), nil)
+	if err != nil {
+		t.Fatalf("RunADJob: %v", err)
+	}
+	req := dialer.conn.searchReq
+	if req == nil {
+		t.Fatal("no search reached the directory")
+	}
+	if req.BaseDN != "ou=groups,dc=x" || req.Scope != "one" || req.Filter != "(cn=Vertrieb)" {
+		t.Errorf("request = %+v", req)
+	}
+	if req.MaxEntries != 50 || req.PageSize == 0 {
+		t.Errorf("maxEntries/pageSize = %d / %d", req.MaxEntries, req.PageSize)
+	}
+	res, ok := out["gruppe"].(map[string]any)
+	if !ok {
+		t.Fatalf("result = %#v, want the search's own object", out)
+	}
+	if res["found"] != true || res["dn"] != "cn=Vertrieb,ou=groups,dc=x" {
+		t.Errorf("result = %v, want the group it found and its dn", res)
+	}
+}
+
+// A job naming a Console-configured directory binds to that directory, not to a url
+// it does not carry (ADR-0206).
+func TestRunADJobNamedDirectory(t *testing.T) {
+	dirs := ad.NewRegistry()
+	dirs.Register("prod-forest", ad.Directory{URL: "ldaps://dc-prod:636", BindDN: "cn=svc,dc=x", Password: "hunter2"})
+	dialer := &recordingDialer{}
+	if _, err := RunADJob(context.Background(), adJob(map[string]any{
+		"connector": "prod-forest", "operation": "disable", "dn": "cn=Arno,dc=x",
+	}), dialer, adSecretFromEnv(envMap(nil)), dirs); err != nil {
+		t.Fatalf("RunADJob: %v", err)
+	}
+	if dialer.url != "ldaps://dc-prod:636" || dialer.bindPassword != "hunter2" {
+		t.Errorf("dialled %q as %q, want the configured directory", dialer.url, dialer.bindPassword)
 	}
 }

@@ -33,6 +33,72 @@ _Changed_ / _Removed_ for each version.
   view. A worker Atlas supervises is pointed at the endpoint automatically while the
   mockup is on; one you run yourself takes `ATLAS_AD_MOCK_VIEW_URL`.
 
+- **Atlas can terminate TLS itself.** `--tls-cert` and `--tls-key` turn `--addr`
+  into a TLS 1.3 listener, so the reverse proxy that used to be mandatory before
+  anyone outside the host could reach the server is now a choice
+  ([ADR-0191](docs/adr/0191-built-in-tls-listener.md)). Unset — both unset — is
+  today's behaviour exactly: plain HTTP, nothing changes on upgrade.
+
+  **Both files or neither.** Naming one without the other stops the server rather
+  than falling back to plaintext on the port you believed you had just secured.
+  The pair is re-read when either file changes, so a renewal needs no restart of a
+  stateful engine; a renewal caught half-written keeps serving the certificate it
+  has and logs `server.tls_reload_failed` rather than refusing handshakes.
+
+  **TLS 1.3 only, and that is the point.** Its cipher suites are fixed by the
+  protocol, so there is no cipher list to expose, nothing to weaken, and no
+  `--tls-min-version`. A client that cannot negotiate 1.3 is refused rather than
+  quietly downgraded.
+
+  With TLS on, the server also opens a plaintext listener on `127.0.0.1` with an
+  ephemeral port for its own children — the MCP adapter's loopback calls and any
+  worker it supervises. A certificate issued for a host name carries no name for
+  `127.0.0.1`, and the alternative would be a switch to skip verification, which
+  Atlas does not have and will not get.
+
+- **`--tls-ca`, so two Atlas servers with an internal CA can talk.** A deployment
+  target must be `https://` ([ADR-0129](docs/adr/0129-remote-deployment-targets.md)),
+  and on-prem that certificate usually comes from a CA the sending host has never
+  heard of. Point `--tls-ca` at its PEM bundle on the publishing server, and at the
+  same bundle on an `atlas worker --server https://…` running on another host or an
+  `atlas mcp --server https://…` an agent drives it through. It is *added* to the
+  host's roots, never a replacement, and it reaches only Atlas calling Atlas — a
+  Worker Type calling a third party keeps the host's trust store, because that
+  endpoint is somebody else's. There is no switch to skip verification anywhere,
+  and a bundle that cannot be read stops the process at startup rather than
+  failing every call later.
+
+- **Helm: `atlas.tls`.** Mount a `kubernetes.io/tls` Secret (what cert-manager
+  writes) and the chart passes the pair to the server and switches all three
+  probes to the HTTPS scheme. Off by default, because in a cluster the Ingress
+  usually holds the certificate.
+
+  **What TLS still does not cover:** `/metrics`, `/healthz` and `/readyz` are
+  unauthenticated by design, so a port reachable beyond the host still wants a
+  proxy in front of those paths — encryption is not authorization.
+
+- **The Active Directory Worker Type can search.** A new `search` operation answers
+  "is this group there, and what is its distinguished name?" —
+  ([ADR-0166](docs/adr/0166-active-directory-connector.md), fifth amendment). It takes
+  a base DN, a scope (`base`/`one`/`sub`, default `sub`), an RFC 4515 filter and an
+  entry cap, and writes `{found, count, dn, entries}` into its result variable.
+
+  It exists because a membership change cannot be modelled without it: `add-group-member`
+  addresses the group by its distinguished name, and a distinguished name is a position
+  in a tree rather than something a requester supplies. Until now the answer was to bind
+  the generic LDAP connector to the same directory just to ask — a second connector and
+  a second place to configure it, in the middle of one lifecycle. `found` is what a
+  gateway branches on (`=gruppe.found`), and `dn` is what the next task addresses
+  (`=gruppe.dn`); entries come back DN-sorted, so a redelivered job writes the same
+  answer. **Finding nothing completes the task with `found=false`** — checking whether
+  an entry exists is the point, so "no" is an answer rather than an incident. Exceeding
+  the cap fails instead of truncating, and every search is paged, so a domain
+  controller's size limit does not refuse a legitimate one.
+
+  New: [`examples/ad-gruppenzuweisung.bpmn`](examples/ad-gruppenzuweisung.bpmn) — find
+  the account, find the group (create it if it is not there), assign. The AD mockup
+  answers a search too, so the whole model runs without a domain controller.
+
 - **Sign in with your identity provider.** Atlas can now be an OpenID Connect
   relying party: people reach the login screen, press **Sign in with …**, and come
   back with a session ([ADR-0210](docs/adr/0210-federated-authentication.md)).
@@ -45,13 +111,37 @@ _Changed_ / _Removed_ for each version.
   in — which is what every installation has today.
 
   A first sign-in creates an account linked to the provider's *subject*, not the
-  email address, with the `user` role and nothing else; grant more under
-  Organization as for any account. The local password form stays, deliberately: a
-  provider that is unreachable must not lock an administrator out of their own
-  instance. Mapping the provider's groups onto Atlas roles is the next step and not
-  in this one.
+  email address. The local password form stays, deliberately: a provider that is
+  unreachable must not lock an administrator out of their own instance.
+
+- **Let the provider's groups decide roles.** Under **Organization → Single
+  sign-on** an administrator names one claim in the token and a list of exact
+  values it may carry, and each value names the Atlas roles it grants and the
+  groups it puts a person in. Onboarding and offboarding become a group membership
+  somebody already maintains: the role and the shared projects arrive at the next
+  sign-in and go away at the sign-in after the membership does.
+
+  **It is off until you turn it on**, and worth one decision before you do: while
+  it is on, whoever administers those groups administers this instance's roles, and
+  a role granted by hand is replaced at that person's next sign-in. Group
+  membership follows only for the groups your rules name — a group no rule mentions
+  is left alone, so a membership you added by hand there survives.
+
+  Nothing is granted by absence: somebody the provider says nothing about matches
+  no rule and holds `user`, which everybody who can sign in has either way. A rule
+  that could never work — a role Atlas does not enforce, a group that has been
+  deleted — is refused when you save it rather than ignored on every login.
 
 ### Changed
+
+- **New Atlas mark.** The logo and the favicon are now a white peak carrying a
+  cross on a black tile, replacing the blue hexagon-and-flow mark and the `A`
+  letter tile the Console showed in its top bar, drawer, login screen, handbook,
+  public forms and consent page. Nothing about branding *behaviour* changed: an
+  org-wide logo uploaded under Appearance
+  ([ADR-0148](docs/adr/0148-org-wide-brand-logo.md)) still overrides it
+  everywhere, and removing that logo now restores the new mark instead of the
+  letter.
 
 - **The handbook and the examples teach Workers, not connectors.** The Console
   renamed *Connectors* to *Workers* with the first slice of
@@ -71,6 +161,65 @@ _Changed_ / _Removed_ for each version.
   `atlas worker --connector mail` still names the worker type — the handbook now
   says so explicitly, in a note that explains why. Every example's prose moved to
   the new vocabulary; not one line of BPMN did.
+
+- **The Modeler says Worker too, and offers the names it is asking for.** The
+  Console and the handbook already speak
+  [ADR-0203](docs/adr/0203-worker-execution-model.md)'s vocabulary; the properties
+  panel was the last place calling all three things a connector. A service task now
+  picks a **Worker type** — and the entries dropped the `… Connector` suffix every
+  second one carried, so the list reads *Jira*, *PostgreSQL*, *BMC Remedy* — while
+  the field naming the concrete target is **Worker**, because that is what it names:
+  one endpoint and identity an operator registered on this server, not the
+  capability above it and not a replica below it. The section headings followed
+  (*Jira instance* → *Jira worker*, *Mail provider* → *Mail worker*): in this
+  vocabulary an *instance* is a Worker Instance, which is the one thing a model
+  never picks.
+
+  **The Worker field is a dropdown.** It offers this server's configured Workers of
+  that type, from `GET /api/v1/configured-workers` — Jira, Remedy, SharePoint and
+  the three SQL products join mail and clio, which already had one. The name of a
+  Worker is the single thing about a task that cannot be read off the model, and
+  typing it from memory is how a deploy fails on a hyphen. It stays a combobox, not
+  a closed list: a Worker that lives only in a worker process's own environment
+  (`ATLAS_POSTGRES_<NAME>_DSN` and friends) is registered nowhere the Modeler can
+  see, so a name may still be typed, and the Entra field keeps its free-text form
+  because it may be a FEEL expression choosing the tenant per instance. When the
+  server has no Worker of the type, the field now says so instead of opening an
+  empty list that looks broken.
+
+  Two hints stopped being true when the SQL and Entra types gained Console records
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md),
+  [ADR-0173](docs/adr/0173-generic-sql-connector.md)) and still claimed their Worker
+  could not be configured there; they now describe both places it can live.
+  Nothing in the model moved: the attribute is still `connector="…"` and the
+  extension elements are still `<atlas:jiraConnector>` and friends.
+
+### Fixed
+
+- **A feed scrape reached its worker without knowing it was a feed.** The resolved
+  job carried `format` and `maxItems`
+  ([ADR-0190](docs/adr/0190-webscrape-feed-extraction.md)), but the engine's payload
+  dropped both — so an offloaded `format="rss"` task fetched the feed as HTML and
+  failed compiling a CSS selector it had never authored, parking the instance on an
+  incident that named a selector nobody wrote. `webscrape` is offloaded by default,
+  so that was the path [`examples/blick-schlagzeilen.bpmn`](examples/blick-schlagzeilen.bpmn)
+  actually took; only `--in-process-connectors webscrape` worked. Both fields travel
+  now, and the entries come back as the `{title, link, description, published}`
+  objects the in-process path writes — the two paths share one definition of what a
+  scrape's result *is* (`webscrape.Items`) instead of building it twice.
+
+  The same class of gap in two connectors in one week is a missing check, not two
+  slips: every payload arm is now pinned against the resolved-job struct a worker
+  unmarshals into, in both directions. A field the job carries and the payload omits
+  fails the build, as does a key nothing on the far side reads.
+
+- **An AD task naming a Console-configured directory reached its worker without the
+  name.** The resolved job dropped `connector`, so a task authored the
+  [ADR-0206](docs/adr/0206-ad-as-a-console-connector.md) way — a directory an operator
+  created in the Console, rather than a `url` in the model — failed on the worker with
+  "has an empty url". The name travels now, and the Modeler's own descriptor learned
+  the `connector` attribute as well: bpmn-js drops an attribute it has no property for,
+  so opening such a task and pressing Save silently stripped it.
 
 ### Security
 

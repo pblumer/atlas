@@ -202,8 +202,13 @@ type Server struct {
 	superviseURL     string
 	// offloadedKinds are the managed connector kinds this server does not serve
 	// itself; their jobs park for an external worker. See [WithOffloadedConnectorKinds].
-	offloadedKinds   []string
-	drafts           *draftStore       // durable sidecar for saved-but-not-deployed diagrams
+	offloadedKinds []string
+	drafts         *draftStore // durable sidecar for saved-but-not-deployed diagrams
+	// targetClient calls another Atlas — a deployment target (ADR-0129). It is set
+	// only where the operator named certificate authorities of their own with
+	// --tls-ca; nil means the default client, verifying against the host's roots
+	// (ADR-0191).
+	targetClient     *http.Client
 	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
 	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
 	publicRate       *rateLimiter      // throttles the unauthenticated public endpoints
@@ -225,6 +230,14 @@ type Server struct {
 	// panorama is the application-owned ArchiMate model library (ADR-0189),
 	// isolated as a per-area service under ADR-0147.
 	panorama *panorama.Service
+	// remoteNodes is what peer Atlas servers last said about themselves
+	// (ADR-0189 §6, P4c). It carries its own lock rather than living on the run
+	// loop, because it is written by goroutines waiting on the network and putting
+	// it behind the single writer would mean holding that writer across a remote
+	// call. Set once before Handler is mounted; the map inside is mutated under its
+	// own mutex thereafter.
+	remoteNodes *remoteNodeCache
+
 	// panoramaMesh is Panorama's derived landscape altitude (ADR-0211): a graph
 	// computed from this server's own resources, never stored. Separate from the
 	// model library above because declared intent and derived fact must not share
@@ -1020,6 +1033,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	// The node identity is minted here rather than on the first read of the
+	// descriptor, for two reasons: a stable id must not be the side effect of
+	// somebody's GET, and a data directory this server cannot write to is an
+	// operator's problem to see at startup rather than weeks later on a request
+	// (ADR-0189 §6).
+	if _, err := ensureNodeIdentity(settings); err != nil {
+		return nil, err
+	}
 	// DMN reference models are resolved either from a temis model service (when
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
@@ -1031,6 +1052,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		proc:        proc,
 		store:       store,
 		dataDir:     dataDir,
+		remoteNodes: newRemoteNodeCache(),
 		quit:        quit,
 		runLoop:     runloop.New(quit),
 		deployments: map[uint64]*deployment{},
@@ -1147,8 +1169,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		token.New,
 		time.Now,
 		s.collectBindingCatalog,
+		s.collectFacts,
 	)
-	s.panoramaMesh = panorama.NewMesh(s.runLoop, s.collectLandscape, meshMaxNodes)
+	s.panoramaMesh = panorama.NewMesh(s.runLoop, s.collectLandscape, s.panorama.OverlaysOnLoop, meshMaxNodes)
 	for _, opt := range opts {
 		opt(s)
 	}

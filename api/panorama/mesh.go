@@ -47,10 +47,18 @@ const (
 	EdgeUses = "uses"
 )
 
-// Provenance values. Everything this slice derives is [ProvenanceDerived]; modeled
-// and both arrive with the ArchiMate overlay in P2.5b, which needs P3 bindings.
+// Provenance says how a node is known (ADR-0211 §2). The three are the point of
+// overlaying a model onto the mesh: without them you have two pictures and no
+// relationship between them.
 const (
+	// ProvenanceDerived: Atlas has this resource and no model binds to it.
 	ProvenanceDerived = "derived"
+	// ProvenanceModeled: a model declares this and Atlas does not have it. This is
+	// the half a drawn-only view can never show — the architecture says something
+	// exists and the instance disagrees.
+	ProvenanceModeled = "modeled"
+	// ProvenanceBoth: Atlas has it and a model binds to it.
+	ProvenanceBoth = "both"
 )
 
 // Application is one Atlas process application as the mesh sees it. CanView is
@@ -98,6 +106,9 @@ type Worker struct {
 	CanView        bool
 	Endpoint       string
 	CredentialsRef string
+	// State and Reason are this worker's observation, as on [Process].
+	State  string
+	Reason string
 }
 
 // Decision is one local DMN decision a business-rule task delegates to. A remote
@@ -121,6 +132,11 @@ type Process struct {
 	Calls         []Call
 	Workers       []WorkerUse
 	Decisions     []string
+	// State is the observation state (ADR-0189 §6) the server read for this
+	// process, and Reason is the sentence behind it. Empty means unbound: no
+	// observation applies, which is not a finding.
+	State  string
+	Reason string
 }
 
 // Landscape is everything the mesh derives from, already filtered for this caller.
@@ -129,10 +145,55 @@ type Landscape struct {
 	Processes    []Process
 	Workers      []Worker
 	Decisions    []Decision
+	// PartialStatus reports that the server stopped counting parked work before it
+	// had seen all of it. It travels with the landscape because only the collector
+	// knows it, and it must reach the payload: without it a process the scan never
+	// reached would be published as healthy on no evidence at all.
+	PartialStatus bool
+}
+
+// ModelElement is one bound ArchiMate element: what the architect called it, and
+// which Atlas ids its binding names (ADR-0189 §4).
+type ModelElement struct {
+	ElementID   string
+	ElementType string
+	Name        string
+	Key         string
+	Values      []string
+}
+
+// Overlay is what one Panorama model contributes to the mesh.
+type Overlay struct {
+	ModelID   string
+	ModelName string
+	Elements  []ModelElement
+}
+
+// overlayNodeID names a resource a model declares but Atlas does not have. It is
+// namespaced away from the derived ids on purpose: a derived process node is keyed
+// by deployment key while a binding names a BPMN process id, so reusing the derived
+// form would risk two different things claiming one id.
+func overlayNodeID(kind, value string) string { return ProvenanceModeled + ":" + kind + ":" + value }
+
+// overlayKind maps a binding key onto the mesh node kind it can match. A key absent
+// here binds something the mesh does not draw — a release, a deployment target, a
+// runtime. That is not absence, it is a different altitude, and reporting it as
+// absence would invent drift that is not there.
+//
+// The binding key keeps its ADR-0189 §4 spelling: atlas.connectorId is a wire
+// contract carried inside documents that already exist, and the Worker rename
+// (ADR-0203) is a vocabulary change in Atlas, not a licence to break them.
+var overlayKind = map[string]string{
+	KeyApplicationID: KindApplication,
+	KeyProcessID:     KindProcess,
+	KeyConnectorID:   KindWorker,
 }
 
 // Options tunes one derivation.
 type Options struct {
+	// Overlays are the Panorama models compared against this landscape. Empty
+	// leaves the mesh exactly as the derivation alone made it.
+	Overlays []Overlay
 	// MaxNodes is the size budget (ADR-0211 §7). Zero means unlimited. Over budget
 	// the graph collapses to applications and says so, rather than returning a graph
 	// the browser cannot lay out — or, worse, a truncated one that looks complete.
@@ -156,6 +217,24 @@ type Node struct {
 	// WorkerType is a worker node's Worker Type ("rest", "mail", …). Never its
 	// endpoint and never its credential reference — see [Worker].
 	WorkerType string `json:"workerType,omitempty"`
+	// The ArchiMate element bound to this node, when a model binds one. ModelName is
+	// carried beside Name rather than replacing it: the architect's name and the
+	// Atlas name are allowed to differ, and the difference is informative.
+	ModelElementID   string `json:"modelElementId,omitempty"`
+	ModelElementType string `json:"modelElementType,omitempty"`
+	ModelName        string `json:"modelName,omitempty"`
+	// State is the observation state behind Severity (ADR-0189 §6), kept beside it
+	// because the three classes are a reading aid and never a replacement: an
+	// operator acting on a finding needs the state, not the color.
+	State    string `json:"state"`
+	Severity string `json:"severity"`
+	// Reason is the sentence behind this node's severity, in the words of whatever
+	// observed it. Empty on a node with nothing to report.
+	Reason string `json:"reason,omitempty"`
+	// SeverityFrom names the descendant a node inherited its severity from, and is
+	// empty when the severity is the node's own. ADR-0211 §4 requires it: a red
+	// parent that cannot say which child is red is not actionable.
+	SeverityFrom string `json:"severityFrom,omitempty"`
 	// Children is how many nodes a collapsed application stands for. Set only when
 	// the graph is clustered.
 	Children int `json:"children,omitempty"`
@@ -179,6 +258,18 @@ type Graph struct {
 	// Clustered reports that the graph exceeded its size budget and collapsed to
 	// applications.
 	Clustered bool `json:"clustered"`
+	// The desired-versus-observed comparison, when a model was overlaid.
+	// Modeled counts what a model declares and Atlas does not have; Unmodeled counts
+	// what Atlas has and no model mentions.
+	Modeled   int `json:"modeled"`
+	Unmodeled int `json:"unmodeled"`
+	// OutOfScope counts bindings to kinds this picture does not draw — releases,
+	// deployment targets, runtimes. They are neither matched nor absent, and the
+	// count keeps that visible instead of silently dropping them.
+	OutOfScope int `json:"outOfScope"`
+	// Status is the severity summary and, as importantly, the declaration of which
+	// observation states this build cannot produce at all (ADR-0211 §4).
+	Status Status `json:"status"`
 }
 
 func applicationNodeID(id string) string  { return KindApplication + ":" + id }
@@ -269,6 +360,7 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		node := Node{
 			ID: processNodeID(p.Key), Kind: KindProcess, Name: p.Name,
 			Provenance: ProvenanceDerived, ProcessID: p.ProcessID, Version: p.Version,
+			State: p.State, Reason: p.Reason,
 		}
 		if _, ok := visibleApps[p.ApplicationID]; ok {
 			node.Application = applicationNodeID(p.ApplicationID)
@@ -355,6 +447,7 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		g.Nodes = append(g.Nodes, Node{
 			ID: workerNodeID(w.ID), Kind: KindWorker, Name: w.Name,
 			Provenance: ProvenanceDerived, WorkerType: w.Type,
+			State: w.State, Reason: w.Reason,
 		})
 	}
 	for _, id := range sortedKeys(usedDecisions) {
@@ -370,12 +463,20 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		return restricted[placeholders[i]] < restricted[placeholders[j]]
 	})
 	for _, key := range placeholders {
+		// No State, and therefore no severity beyond neutral. Whether a resource
+		// outside this caller's access is healthy or broken is a fact about that
+		// resource, and a placeholder that leaked it would turn the mesh into a
+		// side channel around the sharing scope it exists to honor (ADR-0211 §3).
 		g.Nodes = append(g.Nodes, Node{
 			ID: restricted[key], Kind: KindRestricted, Provenance: ProvenanceDerived,
 		})
 	}
 	g.Restricted = len(restricted)
 
+	// Unresolved nodes carry no state either, and for a different reason: there is
+	// no resource to observe. The finding is structural and the kind already states
+	// it; giving it a severity as well would report one fact twice, in two channels
+	// that could then disagree.
 	for _, id := range sortedKeys(unresolved) {
 		g.Nodes = append(g.Nodes, Node{
 			ID: id, Kind: KindUnresolved, Name: unresolved[id],
@@ -389,6 +490,8 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	// it is deliberately not covered by a contrived test. It is here because the next
 	// edge kinds (releases, targets) will make it reachable, and a comparator that is
 	// only total by accident sorts unstably the day that happens.
+	applyOverlays(&g, opts.Overlays, visible)
+
 	sort.SliceStable(g.Edges, func(i, j int) bool {
 		if g.Edges[i].From != g.Edges[j].From {
 			return g.Edges[i].From < g.Edges[j].From
@@ -400,19 +503,114 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	})
 
 	if opts.MaxNodes > 0 && len(g.Nodes) > opts.MaxNodes {
-		return cluster(g, visible, appIDs, visibleApps)
+		return cluster(g, visible, appIDs, visibleApps, land.PartialStatus)
 	}
+	applyStatus(&g, land.PartialStatus)
 	return g
+}
+
+// applyOverlays compares the declared architecture against the derived landscape
+// (ADR-0211 §11, P2.5b). It runs on the graph this caller can already see, so a
+// binding to a resource outside their access finds nothing and is reported as
+// modeled-but-absent — which is the honest answer to give them, and keeps the
+// overlay from becoming a way to read a name a sharing scope withholds.
+func applyOverlays(g *Graph, overlays []Overlay, visible []Process) {
+	if len(overlays) == 0 {
+		return
+	}
+	// A process is bound by BPMN process id while its derived node is keyed by
+	// deployment key. Matching on the wrong one would report every modeled process
+	// as absent, which reads as landscape-wide drift that is not there.
+	nodeByProcessID := make(map[string]string, len(visible))
+	for _, p := range visible {
+		nodeByProcessID[p.ProcessID] = processNodeID(p.Key)
+	}
+	at := make(map[string]int, len(g.Nodes))
+	for i, n := range g.Nodes {
+		at[n.ID] = i
+	}
+
+	// A resource may be bound by more than one model; the first binding names it and
+	// the rest confirm it, so a node is only ever marked once.
+	var added []Node
+	seenAdded := map[string]bool{}
+	for _, overlay := range overlays {
+		for _, element := range overlay.Elements {
+			kind, comparable := overlayKind[element.Key]
+			if !comparable {
+				g.OutOfScope += len(element.Values)
+				continue
+			}
+			for _, value := range element.Values {
+				var id string
+				switch kind {
+				case KindApplication:
+					id = applicationNodeID(value)
+				case KindProcess:
+					id = nodeByProcessID[value]
+				case KindWorker:
+					id = workerNodeID(value)
+				}
+				if index, found := at[id]; found && id != "" {
+					node := &g.Nodes[index]
+					node.Provenance = ProvenanceBoth
+					if node.ModelElementID == "" {
+						node.ModelElementID, node.ModelElementType = element.ElementID, element.ElementType
+						node.ModelName = element.Name
+					}
+					continue
+				}
+				absent := overlayNodeID(kind, value)
+				if seenAdded[absent] {
+					continue
+				}
+				seenAdded[absent] = true
+				added = append(added, Node{
+					ID: absent, Kind: kind, Name: element.Name, Provenance: ProvenanceModeled,
+					ModelElementID: element.ElementID, ModelElementType: element.ElementType,
+					ModelName: element.Name,
+				})
+			}
+		}
+	}
+	sort.SliceStable(added, func(i, j int) bool { return added[i].ID < added[j].ID })
+	g.Nodes = append(g.Nodes, added...)
+	g.Modeled = len(added)
+
+	// Unmodeled counts what Atlas has that nothing wrote down. Placeholders are not
+	// counted: a restricted node stands for something whose model status this caller
+	// cannot know, and an unresolved one is not a resource at all.
+	for _, n := range g.Nodes {
+		if n.Provenance != ProvenanceDerived {
+			continue
+		}
+		if n.Kind == KindRestricted || n.Kind == KindUnresolved {
+			continue
+		}
+		g.Unmodeled++
+	}
 }
 
 // cluster collapses an over-budget graph to its applications, recording how many
 // nodes each one stands for. It answers with less rather than with a picture the
 // browser cannot lay out, and Clustered says which of the two happened.
-func cluster(full Graph, visible []Process, appIDs []string, apps map[string]Application) Graph {
+func cluster(full Graph, visible []Process, appIDs []string, apps map[string]Application,
+	partial bool) Graph {
 	children := map[string]int{}
+	// Severity survives the collapse: an application hiding a critical process
+	// behind a count would be a worse picture than no picture. It is aggregated from
+	// the processes themselves rather than from the full graph's nodes, because the
+	// collapsed children are not in the result to be pointed at — which is also why
+	// the reason says how many were collapsed instead of naming one.
+	worst := map[string]Process{}
 	for _, p := range visible {
-		if _, ok := apps[p.ApplicationID]; ok {
-			children[p.ApplicationID]++
+		if _, ok := apps[p.ApplicationID]; !ok {
+			continue
+		}
+		children[p.ApplicationID]++
+		if have, seen := worst[p.ApplicationID]; !seen ||
+			severityRank[severityOf(p.State)] > severityRank[severityOf(have.State)] {
+			worst[p.ApplicationID] = p
 		}
 	}
 	out := Graph{
@@ -420,10 +618,16 @@ func cluster(full Graph, visible []Process, appIDs []string, apps map[string]App
 		Restricted: full.Restricted, Clustered: true,
 	}
 	for _, id := range appIDs {
-		out.Nodes = append(out.Nodes, Node{
+		node := Node{
 			ID: applicationNodeID(id), Kind: KindApplication, Name: apps[id].Name,
 			Provenance: ProvenanceDerived, Children: children[id],
-		})
+		}
+		if p, ok := worst[id]; ok && p.State != "" {
+			node.State = p.State
+			node.Reason = fmt.Sprintf("worst of %d collapsed process(es): %s", children[id], p.Reason)
+		}
+		out.Nodes = append(out.Nodes, node)
 	}
+	applyStatus(&out, partial)
 	return out
 }

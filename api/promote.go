@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -331,6 +333,36 @@ func (s *Server) bundleForRelease(appName string, rel applicationRelease, outErr
 // every failure mode — unreachable, refused, malformed reply — is that target's
 // reported outcome, because the caller is promoting to several independent servers
 // and one being down says nothing about the others.
+// WithTargetTLSRoots trusts an operator's certificate authorities, in addition to
+// the host's, when this server calls another Atlas — publishing an application to a
+// deployment target, and reading that target's status back.
+//
+// validateTargetURL demands https of a peer, and a peer on-prem usually presents a
+// certificate an internal CA issued, which the host's roots do not know. Without
+// this the only answer is the host's trust store, and in a container that is an
+// image change. It never replaces the system roots and it is never a way around
+// verification — the skip-verify switch this file refuses stays refused — and it
+// deliberately reaches no further than a peer Atlas: a connector calling a third
+// party keeps the host's roots, because its endpoint is somebody else's
+// (ADR-0129, ADR-0191).
+func WithTargetTLSRoots(pool *x509.CertPool) Option {
+	return func(s *Server) {
+		s.targetClient = &http.Client{Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
+		}}
+	}
+}
+
+// targetHTTP is the client the two calls to a peer use: the operator's, where they
+// named a CA, and otherwise the default one, which verifies against the host's
+// roots exactly as this code always has.
+func (s *Server) targetHTTP() *http.Client {
+	if s.targetClient != nil {
+		return s.targetClient
+	}
+	return http.DefaultClient
+}
+
 func (s *Server) pushBundle(ctx context.Context, tgt deploymentTarget, credential string, payload []byte) promoteResult {
 	out := promoteResult{TargetID: tgt.ID, TargetName: tgt.Name}
 
@@ -347,8 +379,9 @@ func (s *Server) pushBundle(ctx context.Context, tgt deploymentTarget, credentia
 		req.Header.Set("Authorization", "Bearer "+credential)
 	}
 
-	// The default transport verifies TLS. Nothing here relaxes that.
-	resp, err := http.DefaultClient.Do(req)
+	// The transport verifies TLS, against the host's roots plus whatever --tls-ca
+	// added. Nothing here relaxes that.
+	resp, err := s.targetHTTP().Do(req)
 	if err != nil {
 		out.Error = "unreachable: " + err.Error()
 		return out
@@ -475,7 +508,7 @@ func (s *Server) fillRemoteStatus(ctx context.Context, st *targetStatus, tgt dep
 	if credential != "" {
 		req.Header.Set("Authorization", "Bearer "+credential)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.targetHTTP().Do(req)
 	if err != nil {
 		st.Error = "unreachable: " + err.Error()
 		return

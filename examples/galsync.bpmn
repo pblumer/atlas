@@ -66,15 +66,17 @@
         </bpmn:extensionElements>
       </bpmn:serviceTask>
 
-      <!-- Is this person already in the target address book? The AD worker type
-           deliberately has no search (ADR-0166) — reading a directory belongs to the
-           generic LDAP worker type, so that is what looks the contact up. -->
+      <!-- Is this person already in the target address book? The same AD worker type
+           that writes the contact also reads it (ADR-0166, fifth amendment): a search
+           used to belong to the generic LDAP worker type, which meant binding a second
+           connector to the same forest just to ask. `treffer` is {found, count, dn,
+           entries} — the gateway branches on found, the update addresses dn. -->
       <bpmn:serviceTask id="suche_kontakt" name="Kontakt suchen">
         <bpmn:extensionElements>
-          <atlas:ldapConnector url="=zielForest" bindDN="=zielBindDN" bindSecret="GALSYNC_ZIEL"
-                               operation="search" baseDN="=zielOU" scope="one"
-                               filter="=&quot;(targetAddress=SMTP:&quot; + eintrag.attributes.mail[1] + &quot;)&quot;"
-                               maxEntries="2" resultVariable="treffer"/>
+          <atlas:adConnector url="=zielForest" bindDN="=zielBindDN" bindSecret="GALSYNC_ZIEL"
+                             operation="search" baseDN="=zielOU" scope="one"
+                             filter="=&quot;(targetAddress=SMTP:&quot; + eintrag.attributes.mail[1] + &quot;)&quot;"
+                             maxEntries="2" resultVariable="treffer"/>
         </bpmn:extensionElements>
       </bpmn:serviceTask>
 
@@ -107,7 +109,7 @@
         <bpmn:extensionElements>
           <atlas:adConnector url="=zielForest" bindDN="=zielBindDN" bindSecret="GALSYNC_ZIEL"
                              operation="update-attributes"
-                             dn="=treffer[1].dn" entryVariable="kontakt"/>
+                             dn="=treffer.dn" entryVariable="kontakt"/>
         </bpmn:extensionElements>
       </bpmn:serviceTask>
 
@@ -122,7 +124,7 @@
       <bpmn:sequenceFlow id="e4" sourceRef="suche_kontakt" targetRef="baue_kontakt"/>
       <bpmn:sequenceFlow id="e5" sourceRef="baue_kontakt" targetRef="vorhanden"/>
       <bpmn:sequenceFlow id="e6" sourceRef="vorhanden" targetRef="aktualisiere_kontakt">
-        <bpmn:conditionExpression>=count(treffer) &gt; 0</bpmn:conditionExpression>
+        <bpmn:conditionExpression>=treffer.found</bpmn:conditionExpression>
       </bpmn:sequenceFlow>
       <bpmn:sequenceFlow id="e7" sourceRef="vorhanden" targetRef="lege_kontakt_an"/>
       <bpmn:sequenceFlow id="e8" sourceRef="entferne_kontakt" targetRef="eintrag_join"/>

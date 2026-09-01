@@ -2110,12 +2110,12 @@ function withRetries(kind) {
 // generically from this data, so no bespoke panel code is needed per kind.
 const SERVICE_TASK_KINDS = [
   {
-    id: "worker", name: "Job worker", group: "No connector", desc: "Handled by an external job worker", icon: "⚙",
+    id: "worker", name: "Job worker", group: "No Worker Type", desc: "Handled by an external job worker", icon: "⚙",
     ext: "zeebe:TaskDefinition",
     fields: [{ key: "type", label: "Job type", placeholder: "payment" }],
   },
   {
-    id: "rest", name: "REST Outbound Connector", group: "Web & API", desc: "Invoke a REST API", icon: "R",
+    id: "rest", name: "REST Outbound", group: "Web & API", desc: "Invoke a REST API", icon: "R",
     // glyph is the canvas type marker shown in the Implement/runtime views (drawImplBadges),
     // the connector's counterpart to a script task's language icon. The plain job worker
     // has none — the gear bpmn-js already draws IS the service-task symbol. A globe reads
@@ -2145,7 +2145,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "scim", name: "SCIM Provisioning Connector", group: "Directory & identity", desc: "Create, read, or update a user or group on a SCIM 2.0 provider", icon: "I",
+    id: "scim", name: "SCIM Provisioning", group: "Directory & identity", desc: "Create, read, or update a user or group on a SCIM 2.0 provider", icon: "I",
     // A person mark with an outbound arrow reads "push this identity to another
     // system", which is what SCIM is for — distinct from the user-provisioning
     // connector's plain person, which acts on Atlas's own login store.
@@ -2198,7 +2198,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "ldap", name: "LDAP Directory Connector", group: "Directory & identity", desc: "Search a directory or add, modify, or delete an entry over LDAP", icon: "L",
+    id: "ldap", name: "LDAP Directory", group: "Directory & identity", desc: "Search a directory or add, modify, or delete an entry over LDAP", icon: "L",
     // A root node branching into three children reads "directory tree" at a glance —
     // the hierarchy is what distinguishes LDAP from the flat HTTP connectors.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c2620f"/><path d="M8 4.7v1.7M4.6 6.4h6.8M4.6 6.4v2.5M8 6.4v2.5M11.4 6.4v2.5" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/><g fill="#fff"><circle cx="8" cy="3.4" r="1.3"/><circle cx="4.6" cy="10.2" r="1.3"/><circle cx="8" cy="10.2" r="1.3"/><circle cx="11.4" cy="10.2" r="1.3"/></g></svg>`,
@@ -2206,7 +2206,7 @@ const SERVICE_TASK_KINDS = [
     fields: [
       { group: "Directory server" },
       { key: "url", label: "Server URL", placeholder: "ldaps://dc.example.com:636", fx: true, hint: "ldap://host:389 for a plain connection, ldaps://host:636 for TLS. May be a FEEL expression (fx)." },
-      { key: "bindDN", label: "Bind DN", placeholder: "cn=svc-atlas,ou=service,dc=example,dc=com", fx: true, hint: "The account the connector binds as. Empty binds anonymously." },
+      { key: "bindDN", label: "Bind DN", placeholder: "cn=svc-atlas,ou=service,dc=example,dc=com", fx: true, hint: "The account the worker binds as. Empty binds anonymously." },
       {
         key: "bindSecret", label: "Bind password reference", placeholder: "LDAP_BIND",
         hint: "The password lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the password itself.",
@@ -2267,7 +2267,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "soap", name: "SOAP / Web Services Connector", group: "Web & API", desc: "Invoke a SOAP operation on a legacy web service (WSDL)", icon: "W",
+    id: "soap", name: "SOAP / Web Services", group: "Web & API", desc: "Invoke a SOAP operation on a legacy web service (WSDL)", icon: "W",
     // An envelope mark reads "SOAP envelope" at a glance — the wrapper that distinguishes
     // a SOAP call from the flat REST globe, on a teal tile to stand apart from the HTTP
     // connectors.
@@ -2304,7 +2304,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "ad", name: "Active Directory Connector", group: "Directory & identity", desc: "Create a user, set a password, enable/disable an account, or manage group membership in AD", icon: "A",
+    id: "ad", name: "Active Directory", group: "Directory & identity", desc: "Create a user, set a password, enable/disable an account, or manage group membership in AD", icon: "A",
     // A person mark on an azure tile reads "directory account" at a glance — AD's
     // people-and-groups focus, distinct from the generic LDAP tree.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#2f6fb0"/><circle cx="8" cy="6" r="2.1" fill="#fff"/><path d="M3.9 12.4c0-2.3 1.9-3.6 4.1-3.6s4.1 1.3 4.1 3.6z" fill="#fff"/></svg>`,
@@ -2312,7 +2312,7 @@ const SERVICE_TASK_KINDS = [
     fields: [
       { group: "Directory server" },
       { key: "url", label: "Server URL", placeholder: "ldaps://dc.example.com:636", fx: true, hint: "ldaps://host:636 — a password set requires an encrypted channel. May be a FEEL expression (fx)." },
-      { key: "bindDN", label: "Bind DN", placeholder: "cn=svc-atlas,ou=service,dc=example,dc=com", fx: true, hint: "The account the connector binds as. Empty binds anonymously." },
+      { key: "bindDN", label: "Bind DN", placeholder: "cn=svc-atlas,ou=service,dc=example,dc=com", fx: true, hint: "The account the worker binds as. Empty binds anonymously." },
       {
         key: "bindSecret", label: "Bind password reference", placeholder: "AD_BIND",
         hint: "The password lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the password itself.",
@@ -2337,18 +2337,34 @@ const SERVICE_TASK_KINDS = [
           { v: "delete", l: "Delete entry" },
           { v: "add-group-member", l: "Add group member" },
           { v: "remove-group-member", l: "Remove group member" },
+          { v: "search", l: "Find entry (search)" },
           { v: "sync", l: "Read changes (DirSync)" },
         ],
       },
       {
-        key: "baseDN", label: "Base DN", placeholder: "dc=example,dc=com", fx: true,
-        showIf: (v) => v.operation === "sync",
-        hint: "The naming context the delta is read from. Active Directory answers DirSync only at a naming context root and only for the whole subtree, so there is no scope to choose. May be a FEEL expression (fx).",
+        key: "baseDN", label: "Base DN", fx: true,
+        placeholder: (v) => (v.operation === "search" ? "ou=groups,dc=example,dc=com" : "dc=example,dc=com"),
+        showIf: (v) => v.operation === "sync" || v.operation === "search",
+        hint: (v) => v.operation === "search"
+          ? "Where in the tree to look — e.g. ou=groups,dc=example,dc=com. Together with the scope below it decides what the search may find at all. May be a FEEL expression (fx)."
+          : "The naming context the delta is read from. Active Directory answers DirSync only at a naming context root and only for the whole subtree, so there is no scope to choose. May be a FEEL expression (fx).",
+      },
+      {
+        key: "scope", label: "Scope", type: "select",
+        showIf: (v) => v.operation === "search",
+        options: [
+          { v: "", l: "Subtree — the base and everything below it" },
+          { v: "one", l: "One level — the base's immediate children" },
+          { v: "base", l: "Base — the entry at the base DN itself" },
+        ],
+        hint: "How far below the base DN to look. Subtree is the default and the answer to \"does this exist anywhere under here\"; one level is what you want when the base is the OU the entry must sit directly in.",
       },
       {
         key: "filter", label: "Filter", placeholder: "(objectClass=user)", fx: true,
-        showIf: (v) => v.operation === "sync",
-        hint: "Narrows what the pass reports. An RFC 4515 filter; empty reports every changed object.",
+        showIf: (v) => v.operation === "sync" || v.operation === "search",
+        hint: (v) => v.operation === "search"
+          ? "Which entries count as a match. An RFC 4515 filter, e.g. (&(objectClass=group)(cn=Vertrieb)) for one group or (sAMAccountName=amaier) for one account; empty matches everything under the base. May be a FEEL expression (fx), so the process can look for the name it is actually about — e.g. =\"(sAMAccountName=\" + kuerzel + \")\"."
+          : "Narrows what the pass reports. An RFC 4515 filter; empty reports every changed object.",
       },
       {
         key: "cookieVariable", label: "Cookie variable", placeholder: "dirsyncCookie",
@@ -2357,8 +2373,10 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "maxEntries", label: "Maximum entries", placeholder: "1000",
-        showIf: (v) => v.operation === "sync",
-        hint: "Caps one pass. Unlike a plain search this costs nothing but a second pass, because the cookie says where this one got to. Empty uses 1000; 0 is unbounded.",
+        showIf: (v) => v.operation === "sync" || v.operation === "search",
+        hint: (v) => v.operation === "search"
+          ? "Caps what the search may return. Exceeding it fails the task rather than shortening the answer — a truncated result is a wrong answer, not a partial one, and a process branching on \"did I find it?\" would branch on it confidently. Empty uses 1000; 0 is unbounded."
+          : "Caps one pass. Unlike a plain search this costs nothing but a second pass, because the cookie says where this one got to. Empty uses 1000; 0 is unbounded.",
       },
       {
         key: "objectSecurity", label: "Object security", type: "select",
@@ -2368,7 +2386,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "dn", label: "Target DN", placeholder: "cn=Arno Meier,ou=users,dc=example,dc=com", fx: true,
-        showIf: (v) => v.operation !== "sync",
+        showIf: (v) => v.operation !== "sync" && v.operation !== "search",
         hint: "The entry the operation acts on: the user for create/update/password/enable/disable/delete, the group for a membership change, or the entry being moved. May be a FEEL expression (fx).",
       },
       {
@@ -2391,16 +2409,19 @@ const SERVICE_TASK_KINDS = [
         showIf: (v) => v.operation === "add-group-member" || v.operation === "remove-group-member",
         hint: "The member added to or removed from the group named in Target DN. May be a FEEL expression (fx).",
       },
-      { group: "Output", showIf: (v) => v.operation === "sync" },
+      { group: "Output", showIf: (v) => v.operation === "sync" || v.operation === "search" },
       {
-        key: "resultVariable", label: "Result variable", resultType: "object", placeholder: "aenderungen",
-        showIf: (v) => v.operation === "sync",
-        hint: "Receives {entries, more}. A deleted object arrives as an entry carrying isDeleted=TRUE — AD reports a deletion as a change, not as an absence. 'more' says further changes are already waiting, so a loop can go straight round again instead of waiting for its timer.",
+        key: "resultVariable", label: "Result variable", resultType: "object",
+        placeholder: (v) => (v.operation === "search" ? "gruppe" : "aenderungen"),
+        showIf: (v) => v.operation === "sync" || v.operation === "search",
+        hint: (v) => v.operation === "search"
+          ? "Receives {found, count, dn, entries}. 'found' is what a gateway branches on — =gruppe.found — and 'dn' is the distinguished name of the first entry found, ready to hand straight to a following task's Target DN as =gruppe.dn. The entries are DN-sorted, so 'dn' is the same one every time. Nothing found is an answer, not a failure: the task completes with found=false."
+          : "Receives {entries, more}. A deleted object arrives as an entry carrying isDeleted=TRUE — AD reports a deletion as a change, not as an absence. 'more' says further changes are already waiting, so a loop can go straight round again instead of waiting for its timer.",
       },
     ],
   },
   {
-    id: "ldif", name: "Directory File Connector", group: "Files", desc: "Read or write directory entries held in an LDIF or DSML file", icon: "D",
+    id: "ldif", name: "Directory File", group: "Files", desc: "Read or write directory entries held in an LDIF or DSML file", icon: "D",
     // A document mark with a directory node on it: the LDAP tile's hierarchy, on a
     // page — a file of entries rather than a live directory.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#8a5a2b"/><path d="M4.4 2.9h4.4l2.8 2.8v7.4H4.4z" fill="#fff"/><path d="M8.8 2.9v2.8h2.8" fill="#8a5a2b" opacity=".45"/><g fill="#8a5a2b"><circle cx="7.7" cy="8" r="1"/><circle cx="6" cy="11" r="1"/><circle cx="9.4" cy="11" r="1"/></g><path d="M7.7 9v.8M6 9.8h3.4M6 9.8V10M9.4 9.8V10" stroke="#8a5a2b" stroke-width=".8" fill="none"/></svg>`,
@@ -2428,7 +2449,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "entra", name: "Microsoft Entra ID Connector", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete), groups (create, read, list, delta, update, delete, members and owners), Teams (create, add members and owners, channels, archive), and licences and directory-role assignments", icon: "E",
+    id: "entra", name: "Microsoft Entra ID", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete), groups (create, read, list, delta, update, delete, members and owners), Teams (create, add members and owners, channels, archive), and licences and directory-role assignments", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
     // AD connector, moved to the cloud — the pair should read as siblings.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
@@ -2436,8 +2457,8 @@ const SERVICE_TASK_KINDS = [
     fields: [
       { group: "Tenant" },
       {
-        key: "connector", label: "Connector", placeholder: "contoso", fx: true,
-        hint: "Names an Entra tenant a *worker* is configured for. Unlike other kinds this is not configured in the Console: the tenant id, client id and client secret live in the worker's own environment (ATLAS_ENTRA_<NAME>_*), so the engine never holds a credential that can create or disable accounts (ADR-0172). May be a FEEL expression (fx) — e.g. =tenant — so one process can serve several tenants, the name resolved from its own variables at call time.",
+        key: "connector", label: "Worker", placeholder: "contoso", fx: true,
+        hint: "The configured Entra Worker this task manages the directory through, by the name it has under Workers in the Console — or a tenant a worker you run yourself names in its own environment (ATLAS_ENTRA_<NAME>_*). Either way the tenant id, client id and client secret reach that worker and not the engine, which therefore never holds a credential that can create or disable accounts (ADR-0172). This one field offers no dropdown because it may be a FEEL expression (fx) — e.g. =tenant — so one process can serve several tenants, the name resolved from its own variables at call time.",
       },
       { group: "Operation" },
       {
@@ -2561,14 +2582,14 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mssql", name: "Microsoft SQL Server Connector", group: "Database", desc: "Run one query or statement against a SQL Server database on a worker", icon: "S",
+    id: "mssql", name: "Microsoft SQL Server", group: "Database", desc: "Run one query or statement against a SQL Server database on a worker", icon: "S",
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#a4373a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#a4373a" opacity=".45"/></svg>`,
     ext: "atlas:MssqlConnector",
     fields: [
       { group: "Database" },
       {
-        key: "connector", label: "Connector", placeholder: "hr-db",
-        hint: "Names a SQL Server database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MSSQL_<NAME>_DSN), so the engine never holds a database credential (ADR-0173).",
+        key: "connector", label: "Worker", datalist: "mssql", placeholder: "hr-db",
+        hint: "The configured SQL Server Worker this statement runs on, by the name it has under Workers in the Console. Its connection string is sealed into the vault there, or read by a worker you run yourself from its own environment (ATLAS_MSSQL_<NAME>_DSN) — either way the engine never holds a database credential (ADR-0173).",
       },
       { group: "Statement" },
       {
@@ -2599,14 +2620,14 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mariadb", name: "MariaDB Connector", group: "Database", desc: "Run one query or statement against a MariaDB database on a worker", icon: "M",
+    id: "mariadb", name: "MariaDB", group: "Database", desc: "Run one query or statement against a MariaDB database on a worker", icon: "M",
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c0765a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#c0765a" opacity=".45"/></svg>`,
     ext: "atlas:MariadbConnector",
     fields: [
       { group: "Database" },
       {
-        key: "connector", label: "Connector", placeholder: "hr-db",
-        hint: "Names a MariaDB database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MARIADB_<NAME>_DSN), so the engine never holds a database credential (ADR-0173).",
+        key: "connector", label: "Worker", datalist: "mariadb", placeholder: "hr-db",
+        hint: "The configured MariaDB Worker this statement runs on, by the name it has under Workers in the Console. Its connection string is sealed into the vault there, or read by a worker you run yourself from its own environment (ATLAS_MARIADB_<NAME>_DSN) — either way the engine never holds a database credential (ADR-0173).",
       },
       { group: "Statement" },
       {
@@ -2637,14 +2658,14 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "postgres", name: "PostgreSQL Connector", group: "Database", desc: "Run one query or statement against a PostgreSQL database on a worker", icon: "P",
+    id: "postgres", name: "PostgreSQL", group: "Database", desc: "Run one query or statement against a PostgreSQL database on a worker", icon: "P",
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#31648c"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#31648c" opacity=".45"/></svg>`,
     ext: "atlas:PostgresConnector",
     fields: [
       { group: "Database" },
       {
-        key: "connector", label: "Connector", placeholder: "hr-db",
-        hint: "Names a PostgreSQL database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_POSTGRES_<NAME>_DSN), so the engine never holds a database credential (ADR-0173).",
+        key: "connector", label: "Worker", datalist: "postgres", placeholder: "hr-db",
+        hint: "The configured PostgreSQL Worker this statement runs on, by the name it has under Workers in the Console. Its connection string is sealed into the vault there, or read by a worker you run yourself from its own environment (ATLAS_POSTGRES_<NAME>_DSN) — either way the engine never holds a database credential (ADR-0173).",
       },
       { group: "Statement" },
       {
@@ -2675,7 +2696,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "clio", name: "clio Event Store Connector", group: "Messaging & events", desc: "Send, query, or read events on a clio event store", icon: "C",
+    id: "clio", name: "clio Event Store", group: "Messaging & events", desc: "Send, query, or read events on a clio event store", icon: "C",
     // A stacked event-stream mark on a violet tile reads "append-only event log" at a
     // glance — clio's counterpart to REST's globe. Three white rows with a leading
     // dot suggest a growing stream of events; the drawImplBadges/stkind-icon CSS adds
@@ -2683,8 +2704,8 @@ const SERVICE_TASK_KINDS = [
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#7c5cff"/><circle cx="4.1" cy="4.6" r="1.05" fill="#fff"/><rect x="6.4" y="3.85" width="6.2" height="1.5" rx="0.75" fill="#fff"/><circle cx="4.1" cy="8" r="1.05" fill="#fff"/><rect x="6.4" y="7.25" width="6.2" height="1.5" rx="0.75" fill="#fff"/><circle cx="4.1" cy="11.4" r="1.05" fill="#fff"/><rect x="6.4" y="10.65" width="6.2" height="1.5" rx="0.75" fill="#fff"/></svg>`,
     ext: "atlas:ClioConnector",
     fields: [
-      { group: "clio connector" },
-      { key: "connector", label: "Connector", datalist: "clio", placeholder: "orders-clio", hint: "Names a server-registered clio connector (its endpoint and token live on the server, never in the model)." },
+      { group: "clio worker" },
+      { key: "connector", label: "Worker", datalist: "clio", placeholder: "orders-clio", hint: "The configured clio Worker this task writes through, by the name it has under Workers in the Console. Its endpoint and token live on the server, never in the model." },
       {
         key: "operation", label: "Operation", type: "select", reRender: true,
         options: [{ v: "write", l: "Send event (write-events)" }, { v: "query", l: "Query state (get_state / run_query)" }, { v: "read", l: "Read events (read-events)" }],
@@ -2701,7 +2722,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mail", name: "E-Mail Outbound Connector", group: "Messaging & events", desc: "Send an e-mail via a mail provider", icon: "M",
+    id: "mail", name: "E-Mail Outbound", group: "Messaging & events", desc: "Send an e-mail via a mail provider", icon: "M",
     // An envelope on a warm amber tile reads "outbound mail" at a glance — the mail
     // connector's counterpart to REST's globe and clio's event stream. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2709,20 +2730,20 @@ const SERVICE_TASK_KINDS = [
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#e5484d"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
     ext: "atlas:MailConnector",
     fields: [
-      { group: "Mail provider" },
-      { key: "connector", label: "Connector", datalist: "mail", placeholder: "office365", hint: "Names a server-registered mail provider (its host, credentials, and default sender live on the server, never in the model)." },
+      { group: "Mail worker" },
+      { key: "connector", label: "Worker", datalist: "mail", placeholder: "office365", hint: "The configured mail Worker this task sends through, by the name it has under Workers in the Console. Its host, credentials and default sender live on the server, never in the model." },
       { group: "Message" },
       { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, hint: "Comma-separated recipients. A value may be a FEEL expression (fx)." },
       { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true },
       { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, hint: "Delivered but never shown in the message headers." },
-      { key: "from", label: "From", placeholder: "leave empty for the connector's default sender", fx: true },
+      { key: "from", label: "From", placeholder: "leave empty for the Worker's default sender", fx: true },
       { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true },
       { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, hint: "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion." },
       { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
     ],
   },
   {
-    id: "csv", name: "Text File Connector", group: "Files", desc: "Read or write a table in a text file: delimited (CSV), fixed-width, or attribute-value pairs", icon: "T",
+    id: "csv", name: "Text File", group: "Files", desc: "Read or write a table in a text file: delimited (CSV), fixed-width, or attribute-value pairs", icon: "T",
     // A grid/table mark on a teal tile reads "tabular data ↔ rows" at a glance — the
     // file connector's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2775,7 +2796,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "sharepoint", name: "SharePoint Connector", group: "Applications", desc: "Create a list item in a SharePoint site", icon: "S",
+    id: "sharepoint", name: "SharePoint", group: "Applications", desc: "Create a list item in a SharePoint site", icon: "S",
     // A list/grid mark on a Microsoft-teal tile reads "SharePoint list" at a glance —
     // this connector's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2783,8 +2804,8 @@ const SERVICE_TASK_KINDS = [
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#038387"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 6.2h9.2M6 3.9v8.2" stroke="#fff" stroke-width="1.1"/></svg>`,
     ext: "atlas:SharePointConnector",
     fields: [
-      { group: "SharePoint provider" },
-      { key: "connector", label: "Connector", placeholder: "contoso", hint: "Names a server-registered SharePoint provider (its Graph base and OAuth credential live on the server, never in the model)." },
+      { group: "SharePoint worker" },
+      { key: "connector", label: "Worker", datalist: "sharepoint", placeholder: "contoso", hint: "The configured SharePoint Worker this task creates the item through, by the name it has under Workers in the Console. Its Graph base and OAuth credential live on the server, never in the model." },
       { group: "Target" },
       { key: "site", label: "Site", placeholder: "contoso.sharepoint.com,<siteId>,<webId>", fx: true, hint: "The Microsoft Graph site identifier. A value may be a FEEL expression (fx)." },
       { key: "list", label: "List", placeholder: "Incidents", fx: true, hint: "The list name or id the item is created in." },
@@ -2795,7 +2816,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "remedy", name: "BMC Remedy Connector", group: "Applications", desc: "Create an incident/entry in BMC Remedy (Helix ITSM)", icon: "B",
+    id: "remedy", name: "BMC Remedy", group: "Applications", desc: "Create an incident/entry in BMC Remedy (Helix ITSM)", icon: "B",
     // A ticket/incident mark on a BMC-orange tile reads "ITSM ticket" at a glance — the
     // Remedy connector's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2803,8 +2824,8 @@ const SERVICE_TASK_KINDS = [
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#f76808"/><rect x="3" y="4.4" width="10" height="7.2" rx="1.2" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M5.4 7h5.2M5.4 9h3.2" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/></svg>`,
     ext: "atlas:RemedyConnector",
     fields: [
-      { group: "Remedy instance" },
-      { key: "connector", label: "Connector", placeholder: "helix-itsm", hint: "Names a server-registered Remedy instance (its base URL and credentials live on the server, never in the model)." },
+      { group: "Remedy worker" },
+      { key: "connector", label: "Worker", datalist: "remedy", placeholder: "helix-itsm", hint: "The configured Remedy Worker this task creates the entry through, by the name it has under Workers in the Console. Its base URL and credentials live on the server, never in the model." },
       { group: "Entry" },
       { key: "form", label: "Form", placeholder: "HPD:IncidentInterface_Create", fx: true, hint: "The Remedy form the entry is created in. May be a FEEL expression (fx)." },
       { key: "fields", label: "Fields", type: "map", childType: "atlas:RemedyField", fx: true, hint: "The entry's field values, keyed by Remedy field name. A value may be a FEEL expression (fx)." },
@@ -2813,7 +2834,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "jira", name: "Jira Connector", group: "Applications", desc: "Create, read, update, transition, comment on, assign, or search Jira issues", icon: "J",
+    id: "jira", name: "Jira", group: "Applications", desc: "Create, read, update, transition, comment on, assign, or search Jira issues", icon: "J",
     // A check-mark inside a rounded square on Atlassian blue: the issue, ticked —
     // this connector's counterpart to REST's globe and Remedy's ticket. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2821,8 +2842,8 @@ const SERVICE_TASK_KINDS = [
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#1868db"/><rect x="3.2" y="3.2" width="9.6" height="9.6" rx="1.6" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M5.6 8.2l1.7 1.8 3.2-3.4" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`,
     ext: "atlas:JiraConnector",
     fields: [
-      { group: "Jira instance" },
-      { key: "connector", label: "Connector", placeholder: "acme", hint: "Names a server-registered Jira instance (its base URL and credential live on the server, never in the model)." },
+      { group: "Jira worker" },
+      { key: "connector", label: "Worker", datalist: "jira", placeholder: "acme", hint: "The configured Jira Worker this task runs against, by the name it has under Workers in the Console. Its base URL and credential live on the server, never in the model." },
       { group: "Operation" },
       {
         key: "operation", label: "Operation", type: "select", reRender: true,
@@ -2861,7 +2882,7 @@ const SERVICE_TASK_KINDS = [
       {
         key: "description", label: "Description", placeholder: "=begruendung", fx: true,
         showIf: (v) => v.operation === "create-issue" || v.operation === "update-issue",
-        hint: "The issue's description. Plain text or Jira wiki markup — this connector speaks Jira's v2 API, so a description is a string, not a document tree. May be a FEEL expression (fx).",
+        hint: "The issue's description. Plain text or Jira wiki markup — this Worker Type speaks Jira's v2 API, so a description is a string, not a document tree. May be a FEEL expression (fx).",
       },
       {
         key: "transition", label: "Transition", placeholder: "Fertig", fx: true,
@@ -2911,7 +2932,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-  id: "webscrape", name: "Web Scraping Connector", group: "Web & API", desc: "Extract HTML or read an RSS/Atom feed", icon: "W",
+  id: "webscrape", name: "Web Scraping", group: "Web & API", desc: "Extract HTML or read an RSS/Atom feed", icon: "W",
   // A spider-web mark on an indigo tile reads "web scraping" at a glance — this
   // connector's counterpart to REST's globe and mail's envelope. The
   // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2946,7 +2967,7 @@ const SERVICE_TASK_KINDS = [
   ],
 },
   {
-    id: "userconnector", name: "User Provisioning Connector", group: "Directory & identity", desc: "Create, set the password of, or disable an Atlas login", icon: "U",
+    id: "userconnector", name: "User Provisioning", group: "Directory & identity", desc: "Create, set the password of, or disable an Atlas login", icon: "U",
     // A person mark on a teal tile reads "user account" at a glance. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white figure strokes.
@@ -2982,7 +3003,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mockup", name: "Mockup (Simulation)", group: "No connector", desc: "Let the engine simulate this task — random duration, scripted output, optional failures", icon: "K",
+    id: "mockup", name: "Mockup (Simulation)", group: "No Worker Type", desc: "Let the engine simulate this task — random duration, scripted output, optional failures", icon: "K",
     // A beaker on a slate tile reads "simulation / lab" at a glance — the mockup
     // task's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -3036,17 +3057,29 @@ function stMapRowHTML(fieldKey, name, value) {
 // tooling's template chooser within the buildless panel (ADR-0067/0012); the field
 // form is generic over text/select/map fields, section groups, and showIf
 // visibility so a new connector kind needs no bespoke panel code.
-// fillConnectorDatalist populates a <datalist> with the names of the server-registered
-// connectors of one kind ("mail" | "clio" | "temis"), so a connector field offers the
-// configured names as a dropdown. It is a helper, not a constraint: env-configured
-// connectors need not be listed and the field stays free text, so a fetch failure just
-// leaves it empty.
-function fillConnectorDatalist(api, dl, kind) {
+// fillWorkerDatalist populates a <datalist> with the configured Workers of one Worker
+// Type ("jira" | "mail" | "temis" | …), so the field that names one offers them as a
+// dropdown. The name of a configured Worker is the one thing about a task an author
+// cannot read off the model — it is created in the Console, on the server — and typing
+// it from memory is how a deploy fails on a name that differs by a hyphen.
+//
+// It stays a helper, not a constraint: a Worker a process holds only in its own
+// environment (the SQL and Entra types, ADR-0172/0173) is registered nowhere the Modeler
+// can see it, so the field remains free text and a fetch failure just leaves it empty.
+// An empty dropdown and a field that never had one look the same, which is what `note`
+// is for: it says so, instead of leaving an author to wonder.
+function fillWorkerDatalist(api, dl, note, kind) {
   if (!api || !dl) return;
-  api("GET", "/api/v1/connectors").then((list) => {
-    dl.innerHTML = (list || [])
+  api("GET", "/api/v1/configured-workers").then((list) => {
+    const names = (list || [])
       .filter((c) => c && c.enabled && c.kind === kind && (c.name || "").trim())
-      .map((c) => `<option value="${esc(c.name)}"></option>`).join("");
+      .map((c) => c.name);
+    dl.innerHTML = names.map((n) => `<option value="${esc(n)}"></option>`).join("");
+    if (note) {
+      note.textContent = names.length
+        ? ""
+        : "No Worker of this type is configured on this server — an operator adds one under Workers in the Console.";
+    }
   }).catch(() => { /* no suggestions; the field stays free text */ });
 }
 
@@ -3064,27 +3097,24 @@ function placementBadgeHTML(id) {
 // curId. Shared by the service task (SERVICE_TASK_KINDS) and the send task, which prepends a
 // Message kind (ADR-0112); the click/filter handlers key off the .stkind-row markup.
 const ST_KIND_GROUPS = ["Directory & identity", "Database", "Web & API", "Files",
-  "Applications", "Messaging & events", "No connector"];
-
-// pickerLabel is a kind's name as the *list* shows it. All but three catalog names end
-// in "Connector", so in a list of connectors the word tells them apart from nothing while
-// pushing the part that does to the right. Dropped from the row only: the heading under
-// the picker still names the chosen kind in full, where it reads as a title rather than
-// as one of nineteen.
-const pickerLabel = (name) => String(name || "").replace(/\s+Connector$/, "");
+  "Applications", "Messaging & events", "No Worker Type"];
 
 // stKindRow renders one picker row, with the placement badge that says where this kind's
 // work runs on this server (ADR-0164/0168/0173). One line per kind: the description is
 // the row's tooltip, and is spelled out under the kind currently chosen — the one an
 // author is reading rather than scanning past. Nineteen two-line cards were four screens
 // for a single choice.
+//
+// The names no longer carry the word "Connector" (ADR-0203), but the BPMN attribute, the
+// CLI and years of habit still do, so the row stays searchable by it: typing the old word
+// finds the Worker Types rather than nothing.
 function stKindRow(k, curId) {
   const chosen = k.id === curId;
   return `
     <div class="stkind-row${chosen ? " stkind-row-on" : ""}" data-kind="${k.id}"
-         data-match="${esc((k.name + " " + k.desc).toLowerCase())}" title="${esc(k.desc)}">
+         data-match="${esc((k.name + " " + k.desc + " connector").toLowerCase())}" title="${esc(k.desc)}">
       <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
-      <span class="stkind-name"><b>${esc(pickerLabel(k.name))}</b>${chosen
+      <span class="stkind-name"><b>${esc(k.name)}</b>${chosen
         ? `<span class="stkind-desc">${esc(k.desc)}</span>` : ""}</span>
       ${placementBadgeHTML(k.id)}
     </div>`;
@@ -3111,14 +3141,14 @@ function stKindRowsHTML(kinds, curId) {
     </div>`).join("");
 }
 
-// Which connector kinds this server has a configured, enabled connector for. Cached at
+// Which Worker Types this server has a configured, enabled Worker for. Cached at
 // module scope because the properties panel is rebuilt on every selection; empty until
 // the first fetch lands, which just means the picker shows the plain catalog.
 let configuredKinds = new Set();
 
 function loadConfiguredKinds(api, onChange) {
   if (!api) return;
-  api("GET", "/api/v1/connectors").then((list) => {
+  api("GET", "/api/v1/configured-workers").then((list) => {
     const next = new Set((list || []).filter((c) => c && c.enabled && c.kind).map((c) => c.kind));
     const same = next.size === configuredKinds.size && [...next].every((k) => configuredKinds.has(k));
     configuredKinds = next;
@@ -3130,13 +3160,20 @@ function loadConfiguredKinds(api, onChange) {
 // extension, generic over text/select/map fields, section groups, and showIf visibility.
 function stKindFieldsHTML(cur, ext) {
   let fields = "";
-  for (const f of cur.fields) {
-    if (f.group) {
-      if (f.showIf && !f.showIf(ext)) continue;
-      fields += `<h3>${esc(f.group)}</h3>`;
+  for (const field of cur.fields) {
+    if (field.group) {
+      if (field.showIf && !field.showIf(ext)) continue;
+      fields += `<h3>${esc(field.group)}</h3>`;
       continue;
     }
-    if (f.showIf && !f.showIf(ext)) continue;
+    if (field.showIf && !field.showIf(ext)) continue;
+    // A placeholder is usually a static string; a field two operations share (the AD
+    // base DN and result variable, which a search and a sync both author) may give a
+    // function of the current extension values, so the example matches the operation
+    // actually chosen rather than the other one.
+    const f = typeof field.placeholder === "function"
+      ? { ...field, placeholder: field.placeholder(ext) }
+      : field;
     if (f.type === "map") {
       const list = Array.isArray(ext[f.key]) ? ext[f.key] : [];
       const rowsHTML = list.map((kv) => stMapRowHTML(f.key, kv.name, kv.value)).join("");
@@ -3175,8 +3212,8 @@ function stKindFieldsHTML(cur, ext) {
       fields += `<label class="field"><span>${esc(f.label)}</span>
         <textarea id="f-st-${f.key}" rows="${f.rows || 1}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.datalist) {
-      // A combobox: a free-text field that also offers the server-registered connectors
-      // of this kind as a dropdown (populated after render, see the field wiring).
+      // A combobox: a free-text field that also offers this server's configured Workers
+      // of the kind as a dropdown (populated after render, see the field wiring).
       fields += `<label class="field"><span>${esc(f.label)}</span>
         <input type="text" id="f-st-${f.key}" list="dl-st-${f.key}" autocomplete="off" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/>
         <datalist id="dl-st-${f.key}"></datalist></label>`;
@@ -3189,6 +3226,8 @@ function stKindFieldsHTML(cur, ext) {
     // extension values instead, so the note can describe what THIS operation returns.
     const hintText = typeof f.hint === "function" ? f.hint(ext) : f.hint;
     if (hintText) fields += `<p class="muted" style="font-size:12px">${esc(hintText)}</p>`;
+    // The Worker picker's empty state, filled in once the fetch lands (fillWorkerDatalist).
+    if (f.datalist) fields += `<p class="muted" id="nt-st-${f.key}" style="font-size:12px"></p>`;
   }
   return fields;
 }
@@ -3264,12 +3303,12 @@ const PLACEMENT_TAIL = {
       that job type; these kinds keep working and are being moved out of the engine.`,
     "engine-only": `Its work changes this server&rsquo;s own state rather than calling anything out,
       so there is nothing to move onto a worker.`,
-    "worker": `Its jobs wait for a worker serving this job type — Atlas supervises one for the kinds
-      it offloads by default. That worker holds the connector&rsquo;s configuration, so the credential
-      lives where it is used; <b>Workers</b> in the Console shows which names are served and which
-      are configured nowhere (ADR-0168).`,
-    "worker-only": `The worker holds the connection and its credential &mdash; the model names the
-      connector and nothing else (ADR-0168).`,
+    "worker": `Its jobs wait for a worker process serving this job type — Atlas supervises one for
+      the kinds it offloads by default. That process holds the configured Worker&rsquo;s endpoint and
+      credential, so the credential lives where it is used; <b>Workers</b> in the Console shows which
+      names are served and which are configured nowhere (ADR-0168).`,
+    "worker-only": `The worker process holds the connection and its credential &mdash; the model
+      names the Worker and nothing else (ADR-0168).`,
   },
   script: {
     "engine": `A script that hangs holds the loop with it. Atlas normally runs script tasks on a
@@ -3341,8 +3380,8 @@ function stKindHeadingHTML(cur) {
 function serviceTaskKindHTML(bo) {
   const cur = serviceTaskKind(bo);
   const ext = findExt(bo, cur.ext) || {};
-  return `<h3>Type</h3>
-    <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
+  return `<h3>Worker type</h3>
+    <input type="text" id="f-stkind-filter" placeholder="Search Worker type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
     ${stKindHeadingHTML(cur)}${placementNoticeHTML(cur.id, "connector")}${stKindFieldsHTML(cur, ext)}`;
 }
@@ -5165,13 +5204,14 @@ function wireProperties(root, modeler, api, projectId, toast) {
             <label class="field"><span>Evaluation${placementBadgeHTML(brtKind)}</span>
               <select id="f-brt-mode">
                 <option value="local" ${mode === "local" ? "selected" : ""}>Embedded DMN — a decision deployed here</option>
-                <option value="connector" ${mode === "connector" ? "selected" : ""}>External (temis connector)</option>
+                <option value="connector" ${mode === "connector" ? "selected" : ""}>External (temis worker)</option>
               </select></label>
             ${placementNoticeHTML(brtKind, brtKind)}`;
           if (mode === "connector") {
-            html += `<label class="field"><span>Connector</span>
+            html += `<label class="field"><span>Worker</span>
               <input type="text" id="f-connector" list="dl-connector" autocomplete="off" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/>
-              <datalist id="dl-connector"></datalist></label>`;
+              <datalist id="dl-connector"></datalist></label>
+              <p class="muted" id="nt-connector" style="font-size:12px"></p>`;
           }
           const binding = cd.bindingType === "deployment" ? "deployment" : "latest";
           const bindingField = mode === "local" ? `
@@ -5748,8 +5788,11 @@ function wireProperties(root, modeler, api, projectId, toast) {
         saveKindFields();
         if (f.reRender) show(element); // e.g. auth type: reveal the scheme's fields
       });
-      // A connector field offers the server's registered connectors of its kind.
-      if (f.datalist) fillConnectorDatalist(api, body.querySelector("#dl-st-" + f.key), f.datalist);
+      // A Worker field offers this server's configured Workers of its type.
+      if (f.datalist) {
+        fillWorkerDatalist(api, body.querySelector("#dl-st-" + f.key),
+          body.querySelector("#nt-st-" + f.key), f.datalist);
+      }
     }
     // Value-or-expression (fx) support: an fx field can hold a literal or a FEEL
     // expression (stored '=' prefixed, exactly what the compiler keys on). The
@@ -5871,7 +5914,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       fconnector.addEventListener("change", () => savePreservingPanel(() => {
         upsertExt(modeler, element, "atlas:TemisConnector", { connector: (fconnector.value || "").trim() });
       }));
-      fillConnectorDatalist(api, body.querySelector("#dl-connector"), "temis");
+      fillWorkerDatalist(api, body.querySelector("#dl-connector"), body.querySelector("#nt-connector"), "temis");
     }
 
     // Decision picker: populate from the DMN references' decisions and, on pick,
