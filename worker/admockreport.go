@@ -68,10 +68,12 @@ type adMockReporter struct {
 	worker string
 	dir    *ad.MockDirectory
 	client *http.Client
-	// backoff is this reporter's own copy of the startup schedule, taken when it was
-	// built. The startup report runs on a goroutine that outlives the call that
-	// started it — and, in a test binary, the test that started it — so reading the
-	// package variable from there is a read racing whatever the next test does to it.
+
+	// backoff is this reporter's copy of adMockStartupBackoff, taken when it is
+	// constructed. The startup report runs on a detached goroutine that outlives
+	// whatever created it, so reading the package variable from inside that loop
+	// races with anything that replaces it — which a test legitimately does. Copying
+	// it here confines that read to the constructing goroutine.
 	backoff []time.Duration
 
 	mu   sync.Mutex
@@ -110,8 +112,7 @@ func newADMockReporter(env func(string) string, dir *ad.MockDirectory) *adMockRe
 // arrive before the server is up, and the job's own report carries the whole directory
 // anyway.
 //
-// A var, not a const, so a test can shrink it — each reporter copies it when it is
-// built, so shrinking it touches nothing already running.
+// A var, not a const, so a test can shrink it.
 var adMockStartupBackoff = []time.Duration{
 	250 * time.Millisecond, 500 * time.Millisecond, time.Second,
 	2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second,

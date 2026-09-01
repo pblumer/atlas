@@ -67,11 +67,75 @@ const observations = {
       source: "instances", state: "degraded", severity: "attention",
       reason: "2 token(s) are parked behind an unresolved incident.",
       detail: { parkedTokens: "2" },
+      // The journal has seen this one turn over, so the finding carries its age.
+      changedAt: 1_699_999_000, previousState: "healthy",
     },
   ],
 };
 
-function installMock(page, { role = "owner", onPut, observing = true } = {}) {
+// drift is what previous reads established about this model (ADR-0189 P5): a list
+// of transitions, newest first, with the three limits it publishes about itself.
+const driftDocument = {
+  contractVersion: 1,
+  since: 1_699_990_000,
+  truncated: false,
+  entries: [
+    {
+      elementId: "bp-fulfil", key: "atlas.processId", value: "fulfil",
+      from: "healthy", to: "degraded", at: 1_699_999_000,
+      reason: "2 token(s) are parked behind an unresolved incident.",
+    },
+    {
+      elementId: "app-orders", key: "atlas.applicationId", value: "proj-abc",
+      from: "not-ready", to: "healthy", at: 1_699_995_000,
+      reason: "3 process(es) deployed, 1 live instance(s), nothing parked.",
+    },
+  ],
+  limits: [
+    { limit: "only what was looked at", reason: "Observations are computed when somebody asks for them; nothing polls." },
+    { limit: "not durable", reason: "This is runtime state and a restart empties it." },
+    { limit: "bounded", reason: "The most recent changes are kept and older ones are dropped." },
+  ],
+};
+
+// contextDocument is what the stores outside Atlas said. One source answered, one
+// could not identify the thing at all — the distinction the six states exist for.
+const contextDocument = {
+  contractVersion: 1,
+  elementId: "app-orders",
+  observedAt: 1_700_000_000,
+  window: { window: "24h", from: 1_699_913_600, to: 1_700_000_000 },
+  truncated: false,
+  results: [
+    {
+      source: "events", key: "atlas.applicationId", value: "proj-abc", state: "available",
+      measures: [
+        {
+          name: "instancesStarted", label: "Instances started", total: 42,
+          buckets: [
+            { at: 1_699_913_600, value: 0 },
+            { at: 1_699_960_000, value: 30 },
+            { at: 1_699_990_000, value: 12 },
+          ],
+        },
+      ],
+      detail: { notCounted: "incidents, which the exported record does not attribute to a definition" },
+    },
+    {
+      source: "metrics", key: "atlas.applicationId", value: "proj-abc",
+      state: "unidentifiable",
+      reason: "Atlas's metrics carry no per-element labels by design, so a metrics store can answer about a node and never about one process.",
+    },
+  ],
+  limits: [
+    { limit: "not Atlas's memory", reason: "Both stores are external and retained on their own terms." },
+    { limit: "a query, not a copy", reason: "Nothing here is stored or cached." },
+    { limit: "only what a store can identify", reason: "Atlas's metrics carry no per-element labels by design." },
+  ],
+};
+
+function installMock(page, { role = "owner", onPut, observing = true, drift = driftDocument,
+  context = contextDocument, onContext } = {}) {
   page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -91,6 +155,15 @@ function installMock(page, { role = "owner", onPut, observing = true } = {}) {
       return route.fulfill({ json: { key, supported: true, candidates: [
         { id: "proj-abc", name: "Billing" }, { id: "proj-new", name: "Collections" },
       ] } });
+    }
+    if (path === `/api/v1/panorama/models/${modelId}/context`) {
+      onContext?.(new URL(request.url()).searchParams.get("element"));
+      if (!context) return route.fulfill({ status: 501, json: { error: "this server reads no historical context" } });
+      return route.fulfill({ json: context });
+    }
+    if (path === `/api/v1/panorama/models/${modelId}/drift`) {
+      if (!drift) return route.fulfill({ status: 404, json: { error: "no such model" } });
+      return route.fulfill({ json: drift });
     }
     if (path === `/api/v1/panorama/models/${modelId}/observations`) {
       if (!observing) return route.fulfill({ status: 501, json: { error: "this server observes nothing" } });
@@ -349,4 +422,173 @@ test("a diagram with nothing observed is unmarked and says why", async ({ page }
 
   await expect(page.locator(".panorama-canvas-mark")).toHaveCount(0);
   await expect(page.locator(".panorama-live-legend")).toHaveCount(0);
+});
+
+// The drift journal in the panel (ADR-0189 P5). The record allows a correlation
+// surface and forbids a time-series database, so what is shown is transitions —
+// and, beside them, the three things the journal cannot see. Those limits are the
+// contractual half: without them "nothing changed" and "nobody looked" read alike.
+test("shows what changed about the selected element, with what it cannot see", async ({ page }) => {
+  installMock(page);
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await page.locator('.djs-element[data-element-id="n-bp"]').click();
+
+  const panel = page.locator(".panorama-properties");
+  await expect(panel).toContainText("What changed");
+  // The direction is the finding: healthy → degraded is somebody's incident.
+  const entry = panel.locator(".panorama-drift-entry").first();
+  await expect(entry).toContainText("healthy");
+  await expect(entry).toContainText("degraded");
+  await expect(entry).toContainText("2 token(s) are parked");
+
+  // Scoped to the selection, like the panel it sits in — the model's other change
+  // is counted rather than listed, so the narrowing is visible rather than silent.
+  await expect(panel.locator(".panorama-drift-entry")).toHaveCount(1);
+  await expect(panel).toContainText("1 other recorded change(s) in this model");
+  await expect(panel).toContainText("Recorded since");
+
+  // A history that hides what it cannot see is worse than no history.
+  const limits = panel.locator(".panorama-drift-limits");
+  await expect(limits).toContainText("only what was looked at");
+  await expect(limits).toContainText("not durable");
+  await expect(limits).toContainText("bounded");
+});
+
+// "Degraded" and "degraded since nine this morning" are different findings, and
+// the second is the one somebody acts on. The age rides on the observation, so no
+// second request is needed to tell a standing condition from an incident.
+test("a finding says when it last changed and what it was before", async ({ page }) => {
+  installMock(page);
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await page.locator('.djs-element[data-element-id="n-bp"]').click();
+
+  const since = page.locator(".panorama-properties .panorama-obs-since");
+  await expect(since).toContainText("Changed");
+  await expect(since).toContainText("was healthy");
+});
+
+// Nothing has been seen to change about this element. That is said outright rather
+// than by an empty section, because an absent history and an uneventful one are
+// different answers.
+test("an element with no recorded change says so rather than showing an empty list", async ({ page }) => {
+  installMock(page, { drift: { contractVersion: 1, since: 0, truncated: false, entries: [], limits: [] } });
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await page.locator('.djs-element[data-element-id="n-app"]').click();
+
+  const panel = page.locator(".panorama-properties");
+  await expect(panel).toContainText("Nothing has been seen to change about this element");
+  await expect(panel.locator(".panorama-drift-entry")).toHaveCount(0);
+  // An empty journal has no moment to speak from, so it claims none.
+  await expect(panel).not.toContainText("Recorded since");
+});
+
+// The journal is additive: a model whose history cannot be read is still a model
+// worth opening, and the viewer must not lose the diagram over it.
+test("a model whose history cannot be read still opens", async ({ page }) => {
+  installMock(page, { drift: null });
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await page.locator('.djs-element[data-element-id="n-app"]').click();
+
+  const panel = page.locator(".panorama-properties");
+  await expect(panel).toContainText("Atlas bindings");
+  await expect(panel).toContainText("Live");
+  await expect(panel).not.toContainText("What changed");
+  expect(pageErrors).toEqual([]);
+});
+
+// A body this code cannot read is treated as a history that never arrived. Showing
+// "nothing has been seen to change" from it would turn a contract fault into a
+// finding about the architecture — the one mistake this section exists to avoid.
+test("a history in a shape this code cannot read is treated as absent", async ({ page }) => {
+  installMock(page, { drift: { contractVersion: 99 } });
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await page.locator('.djs-element[data-element-id="n-bp"]').click();
+
+  const panel = page.locator(".panorama-properties");
+  await expect(panel).toContainText("Live");
+  await expect(panel).not.toContainText("What changed");
+  expect(pageErrors).toEqual([]);
+});
+
+// Historical context from stores outside Atlas (ADR-0189 P5b). The panel asks the
+// question on demand and keeps nothing — the record rejected copying somebody
+// else's history into a Panorama database by name.
+test("looks up history on demand and says which store answered", async ({ page }) => {
+  const asked = [];
+  installMock(page, { onContext: (element) => asked.push(element) });
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await page.locator('.djs-element[data-element-id="n-app"]').click();
+
+  const panel = page.locator(".panorama-properties");
+  await expect(panel).toContainText("History");
+  // Nothing is fetched until somebody asks: a query costs a system that did not
+  // agree to be browsed.
+  expect(asked).toEqual([]);
+  await expect(panel).toContainText("Asks the stores outside Atlas");
+
+  await page.getByRole("button", { name: "Look up history" }).click();
+  await expect.poll(() => asked).toEqual(["app-orders"]);
+
+  // The store that answered is named, because an operator disagreeing with a number
+  // needs to know which system to go and argue with.
+  await expect(panel).toContainText("Event log");
+  await expect(panel).toContainText("Instances started");
+  await expect(panel).toContainText("42");
+  // Shape, drawn as a strip rather than a chart: this is not a time series and must
+  // not look like one.
+  await expect(panel.locator(".panorama-spark-bar")).toHaveCount(3);
+
+  // A store that cannot name the thing says so, and is not reported as an absence
+  // of data — the distinction the six states exist for.
+  await expect(panel).toContainText("Metrics");
+  await expect(panel).toContainText("unidentifiable");
+  await expect(panel).toContainText("no per-element labels");
+
+  // A real gap is named rather than silently omitted.
+  await expect(panel).toContainText("Not counted");
+  await expect(panel).toContainText("incidents");
+
+  // And what the surface cannot do travels with the answer.
+  const limits = panel.locator(".panorama-ctx-limits");
+  await expect(limits).toContainText("not Atlas's memory");
+  await expect(limits).toContainText("a query, not a copy");
+  await expect(panel).toContainText("Nothing here is stored");
+});
+
+// Selecting another element must clear the history: one element's numbers shown
+// under another's name is the worst thing this panel could do.
+test("history does not follow the selection to another element", async ({ page }) => {
+  installMock(page);
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await page.locator('.djs-element[data-element-id="n-app"]').click();
+  await page.getByRole("button", { name: "Look up history" }).click();
+  await expect(page.locator(".panorama-properties")).toContainText("Instances started");
+
+  await page.locator('.djs-element[data-element-id="n-bp"]').click();
+  const panel = page.locator(".panorama-properties");
+  await expect(panel).not.toContainText("Instances started");
+  await expect(panel).toContainText("Look up history");
+});
+
+// A server that reads no history refuses the route. The panel says the lookup did
+// not happen rather than rendering an architecture with no past.
+test("a server that reads no history says the lookup failed, not that nothing happened", async ({ page }) => {
+  installMock(page, { context: null });
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await page.locator('.djs-element[data-element-id="n-app"]').click();
+  await page.getByRole("button", { name: "Look up history" }).click();
+
+  const panel = page.locator(".panorama-properties");
+  await expect(panel).toContainText("could not be read");
+  await expect(panel).not.toContainText("Instances started");
+  expect(pageErrors).toEqual([]);
 });

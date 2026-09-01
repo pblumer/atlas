@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Connectors",
+    "Operations"
+  ],
+  "title": {
+    "en": "A new Jira ticket can start a process",
+    "de": "Ein neues Jira-Ticket kann einen Prozess starten"
+  },
+  "summary": {
+    "en": "Until now a process could write to Jira but never hear from it. A Jira connector now has an Events tab: give it a Jira query and a message name, and every issue the query finds starts the processes waiting for that message — and wakes the instances waiting on it. Atlas asks Jira on a schedule, so nothing has to reach your server from the internet. A new watch starts from now, so pointing one at a project with years of tickets does not start a process for each of them. The process receives the issue key, project, type, summary, status and reporter, and the whole issue for anything else. Watching changed tickets instead of new ones is the same setting, moved one field over.",
+    "de": "Bisher konnte ein Prozess nach Jira schreiben, aber nie von Jira hören. Ein Jira-Konnektor hat jetzt einen Reiter „Events\": Sie hinterlegen eine Jira-Abfrage und einen Nachrichtennamen, und jeder gefundene Vorgang startet die Prozesse, die auf diese Nachricht warten — und weckt die Instanzen, die daran hängen. Atlas fragt Jira in einem Takt ab; es muss also nichts aus dem Internet Ihren Server erreichen. Eine neue Überwachung beginnt ab jetzt: Sie auf ein Projekt mit jahrelanger Historie zu richten startet nicht pro Alt-Ticket einen Prozess. Der Prozess bekommt Vorgangsschlüssel, Projekt, Typ, Titel, Status und Melder — und den ganzen Vorgang für alles Weitere. Geänderte statt neuer Tickets zu überwachen ist dieselbe Einstellung, ein Feld weiter."
+  }
+}

@@ -1614,7 +1614,7 @@ async function viewConsoleConnectors() {
              <div class="conn-problem" title="${esc(c.problem)}">${esc(c.problem)}</div>`
           : '<span class="pill ok"><span class="dot"></span>enabled</span>'}</td>
       <td style="text-align:right; white-space:nowrap">
-        ${c.kind === "clio" ? '<button class="btn ghost" data-cact="provision" title="Mint a scoped clio key and store it as this connector\'s credential">Provision access</button><button class="btn ghost" data-cact="subs" title="Manage inbound event subscriptions for this connector">Events</button>' : ""}
+        ${c.kind === "clio" ? '<button class="btn ghost" data-cact="provision" title="Mint a scoped clio key and store it as this connector\'s credential">Provision access</button>' : ""}${c.kind === "clio" || c.kind === "jira" ? '<button class="btn ghost" data-cact="subs" title="Manage inbound event watches for this connector">Events</button>' : ""}
         ${c.kind === "mail" ? '<button class="btn ghost" data-cact="test" title="Check this connector — connect and authenticate, or send a test message">Test</button>' : ""}
         ${connScope(c).owner ? '<button class="btn ghost" data-cact="share" title="Decide who else may configure this connector">Share</button>' : ""}
         ${connScope(c).editor ? `<button class="btn ghost" data-cact="edit" title="Edit this connector’s settings">Edit</button>
@@ -3489,7 +3489,7 @@ function wireConnectorManagement(connectors) {
       if (!c) return;
       try {
         if (btn.dataset.cact === "subs") {
-          await toggleInboundSubs(btn.closest("tr"), id);
+          await toggleInboundSubs(btn.closest("tr"), id, c.kind);
           return;
         } else if (btn.dataset.cact === "share") {
           await toggleConnectorShare(c, viewConsoleConnectors);
@@ -3665,7 +3665,7 @@ async function toggleConnectorShare(c, reload) {
   });
 }
 
-async function toggleInboundSubs(row, connectorId) {
+async function toggleInboundSubs(row, connectorId, kind) {
   const existing = row.nextElementSibling;
   if (existing && existing.classList.contains("subs-row")) {
     existing.remove();
@@ -3673,41 +3673,65 @@ async function toggleInboundSubs(row, connectorId) {
   }
   const subs = (await api("GET", "/api/v1/connectors/" + encodeURIComponent(connectorId) + "/inbound-subscriptions")) || [];
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
-      <td><code>${esc(s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}</td>
+      <td><code>${esc(s.jql || s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
       <td>${s.enabled ? '<span class="pill ok"><span class="dot"></span>on</span>' : '<span class="pill warn"><span class="dot"></span>off</span>'}</td>
       <td style="text-align:right"><button class="btn ghost danger" data-sdel title="Delete this subscription">Delete</button></td>
     </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">No subscriptions. Add one below to have clio events start or wake processes.</td></tr>`;
-  const panel = document.createElement("tr");
-  panel.className = "subs-row";
-  panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
-    <div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0075).</div>
-    <table style="width:100%"><tbody id="subs-body">${list}</tbody></table>
-    <form id="subs-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin-top:10px">
-      <label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="/employees" required/></label>
-      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="employee.created" required/></label>
-      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="= subjectTail"/></label>
-      <button class="btn" type="submit" title="Add this inbound event subscription">Add</button>
-      <label class="check" style="grid-column:1 / -1;margin:0;display:flex;gap:8px;align-items:center">
+  const isJira = kind === "jira";
+  const what = isJira
+    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as Atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet.</div>`
+    : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0075).</div>`;
+  const source = isJira
+    ? `<label class="field" style="margin:0"><span>JQL</span><input name="jql" placeholder="project = OPS AND issuetype = Bug" required/></label>`
+    : `<label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="/employees" required/></label>`;
+  const extra = isJira
+    ? `<label class="check" style="grid-column:1 / -1;margin:0;display:flex;gap:12px;align-items:center">
+        <span>Watch</span>
+        <select name="cursorField" class="input" style="width:auto">
+          <option value="created">new issues</option>
+          <option value="updated">changed issues</option>
+        </select>
+        <span class="muted">Write no <code>ORDER BY</code>: the watch orders by this field itself, because that is what makes its resume position mean anything. The query must restrict what it matches — Jira refuses an unbounded one — so name at least a project.</span>
+      </label>
+      <div class="muted" style="grid-column:1 / -1">The correlation key (FEEL) sees <code>issueKey</code>, <code>issueId</code>, <code>projectKey</code>, <code>issueType</code>, <code>summary</code>, <code>status</code>, <code>reporter</code>, <code>created</code>, <code>updated</code>, <code>eventType</code>, and <code>issue</code> — the whole issue, for anything not named here. These are also seeded as process variables on the started instance. A new watch is forward-only: existing issues are skipped, so adding one to a project with a long history does not start a process per old ticket.</div>`
+    : `<label class="check" style="grid-column:1 / -1;margin:0;display:flex;gap:8px;align-items:center">
         <input type="checkbox" name="recursive"/>
         <span>Recursive — also watch the subject's subtree (a watch on <code>/employees</code> catches an event written to <code>/employees/E-123456</code>).</span>
       </label>
-      <div class="muted" style="grid-column:1 / -1">The correlation key (FEEL) sees the event body plus <code>subject</code>, <code>subjectTail</code> (the last path segment, e.g. <code>E-123456</code>), <code>eventType</code> and <code>eventId</code>. These are also seeded as process variables on the started/woken instance.</div>
+      <div class="muted" style="grid-column:1 / -1">The correlation key (FEEL) sees the event body plus <code>subject</code>, <code>subjectTail</code> (the last path segment, e.g. <code>E-123456</code>), <code>eventType</code> and <code>eventId</code>. These are also seeded as process variables on the started/woken instance.</div>`;
+  const panel = document.createElement("tr");
+  panel.className = "subs-row";
+  panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
+    ${what}
+    <table style="width:100%"><tbody id="subs-body">${list}</tbody></table>
+    <form id="subs-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin-top:10px">
+      ${source}
+      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
+      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isJira ? "= issueKey" : "= subjectTail"}"/></label>
+      <button class="btn" type="submit" title="Add this inbound event watch">Add</button>
+      ${extra}
     </form></td>`;
   row.after(panel);
   panel.querySelector("#subs-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
     try {
-      await api("POST", "/api/v1/connectors/" + encodeURIComponent(connectorId) + "/inbound-subscriptions", {
-        watchedSubject: (f.get("watchedSubject") || "").trim(),
+      const body = {
         messageName: (f.get("messageName") || "").trim(),
         correlationKey: (f.get("correlationKey") || "").trim(),
-        recursive: f.get("recursive") === "on",
-      });
+      };
+      if (isJira) {
+        body.jql = (f.get("jql") || "").trim();
+        body.cursorField = f.get("cursorField") || "created";
+      } else {
+        body.watchedSubject = (f.get("watchedSubject") || "").trim();
+        body.recursive = f.get("recursive") === "on";
+      }
+      await api("POST", "/api/v1/connectors/" + encodeURIComponent(connectorId) + "/inbound-subscriptions", body);
       toast("Subscription added", "ok");
       panel.remove();
-      await toggleInboundSubs(row, connectorId);
+      await toggleInboundSubs(row, connectorId, kind);
     } catch (err) { toast("Could not add subscription: " + err.message, "err"); }
   });
   panel.querySelector("#subs-body").addEventListener("click", async (e) => {
@@ -3717,7 +3741,7 @@ async function toggleInboundSubs(row, connectorId) {
     try {
       await api("DELETE", "/api/v1/inbound-subscriptions/" + encodeURIComponent(sid));
       panel.remove();
-      await toggleInboundSubs(row, connectorId);
+      await toggleInboundSubs(row, connectorId, kind);
     } catch (err) { toast("Could not delete subscription: " + err.message, "err"); }
   });
 }

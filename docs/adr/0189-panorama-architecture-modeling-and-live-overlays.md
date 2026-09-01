@@ -1,6 +1,6 @@
 # ADR-0189: Panorama architecture modeling and live operational overlays
 
-- **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; see the amendment note below)
+- **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; amended 2026-09-01 — P5's "over time" is a journal of transitions, not a store of samples, and its historical context is a query rather than a copy; see the amendment notes below)
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 
@@ -30,6 +30,77 @@
 >   derived graph produces the edges both need, so they arrive with it rather than three
 >   slices later. P5 keeps desired-versus-observed drift over time and the optional
 >   Prometheus/OpenSearch adapters.
+
+> **Amendment (2026-09-01): P5's "over time" is a journal of transitions.** This record
+> allows Panorama to correlate and forbids it to become "a monitoring or time-series
+> database" (see the non-goals below). P5's *desired-versus-observed drift over time*
+> has to be delivered inside that, and a store of samples is exactly the thing the
+> non-goal names. So none is kept. What is kept is a **transition**: when a bound
+> value's observation state changes between two reads, that change is recorded once —
+> both states, the reason, and the moment it was noticed. A hundred identical readings
+> produce nothing; one release going stale produces one entry.
+>
+> Three properties follow, and all three are *published with every answer* rather than
+> only recorded here — a history that hides what it cannot see is worse than no history,
+> because without them "nothing changed" and "nobody looked" read alike:
+>
+> - **It sees only what was looked at.** Observations are computed when somebody asks
+>   for them; nothing polls, and §6 is why. A state that changed and changed back
+>   between two views leaves no trace. Continuous history is what the optional
+>   Prometheus/OpenSearch adapters are for, and they remain optional.
+> - **It does not survive a restart.** This is runtime state, like the worker registry
+>   and the peer descriptor cache: never written to the log, never rebuilt by
+>   `applyToState` (I4/I6). *When* a transient fact was noticed is not an architecture
+>   fact, and the declarative model stays untouched by observation exactly as §6 says.
+> - **It is bounded**, per model and across models, and each answer says from which
+>   moment it can still speak.
+>
+> §6's seven states and its rule that layer fills are never recolored are unaffected: a
+> transition is a pair of those states, and it is rendered as text beside a finding.
+
+> **Amendment (2026-09-01): P5's historical context is a query, never a copy.** The
+> options above rejected "copy all remote metrics and logs into a Panorama-specific
+> internal database" and selected the projection instead, noting that "historical
+> charts may query dedicated backends such as Prometheus or OpenSearch later; they
+> remain external sources of historical data." P5b is that later. It queries those
+> stores when somebody asks and keeps nothing — a cache of somebody else's history
+> is the rejected database with a shorter retention and no owner.
+>
+> What each store may be asked is decided by what it can **identify**, and the two
+> answers are not symmetric:
+>
+> - The exported event log (ADR-0114) carries each record's process definition key,
+>   so it answers about a process and about the application whose processes those
+>   are. It stores a job's type as an interned index — a number meaningless outside
+>   the process that wrote it — so it cannot answer about a connector or a job type.
+>   An incident names its instance and not its definition, so no single query
+>   attributes one; that gap is named in the answer rather than left as a silence.
+> - Metrics (ADR-0142) carry no per-element labels *by design*: that record forbids
+>   labelling by process id, instance key, or any other value the data can invent,
+>   because one such label turns a metric into unboundedly many series. A metrics
+>   store therefore answers about a node and never about one process — and it
+>   identifies that node the only way it knows one, by the scrape target the series
+>   came from. Atlas derives that from a deployment target's base URL. For the
+>   server itself it cannot derive it at all, because how this process appears in
+>   somebody's Prometheus is their scrape configuration; that one is configured, and
+>   left unset the local runtime is reported unidentifiable rather than silently
+>   matched to whichever series is nearest. Guessing it would answer a question
+>   about a different process while looking exactly like an answer about this one.
+>
+> Neither limit is a gap to close later, so neither is reported as an absence of
+> data. A source's answer for one bound value is one of six states —
+> *not-configured*, *unidentifiable*, *unreachable*, *refused*, *empty*,
+> *available* — because each sends an operator somewhere different, and only
+> *empty* is a statement about the architecture rather than about the lookup. Every
+> source answers for every value, including the ones it cannot help with: a row
+> left out is indistinguishable from a store nobody thought to ask.
+>
+> Three further constraints hold. The route is scoped to **one element**, because
+> every bound value costs a query against a system that did not agree to be
+> browsed. The window is an **allowlist**, because an arbitrary range is an
+> arbitrary query on somebody else's cluster. And the run-loop split is §6's: ids
+> become definition keys on the loop under the caller's sharing scope, and the
+> query itself runs off it (I3).
 
 ## Context
 
@@ -378,10 +449,12 @@ diagnostics, and retention of the original source model.
    deployment targets; no secret material.
 5. **P4 — Live Panorama:** stable node descriptor, local and remote observation
    projection, freshness/partial-failure semantics, and accessible overlays.
-6. **P5 — Landscape intelligence:** desired-versus-observed drift over time and
-   optional Prometheus/OpenSearch adapters for historical context. Dependency/impact
-   analysis and discovery of unmodeled resources moved to P2.5 in the 2026-08-31
-   amendment.
+6. **P5 — Landscape intelligence:** desired-versus-observed drift over time — a
+   journal of transitions rather than a store of samples — and optional
+   Prometheus/OpenSearch adapters for historical context, which query those stores
+   rather than copying them; both per the 2026-09-01 amendments.
+   Dependency/impact analysis and discovery of unmodeled resources moved to P2.5 in
+   the 2026-08-31 amendment.
 
 Each slice ships end to end: API, persistence where applicable, embedded UI,
 authorization, tests, documentation, and OpenAPI contract. A slice is not complete

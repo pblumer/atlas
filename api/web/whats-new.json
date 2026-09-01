@@ -2,6 +2,50 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "a-jira-issue-can-start-a-process",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A new Jira ticket can start a process",
+        "de": "Ein neues Jira-Ticket kann einen Prozess starten"
+      },
+      "summary": {
+        "en": "Until now a process could write to Jira but never hear from it. A Jira connector now has an Events tab: give it a Jira query and a message name, and every issue the query finds starts the processes waiting for that message — and wakes the instances waiting on it. Atlas asks Jira on a schedule, so nothing has to reach your server from the internet. A new watch starts from now, so pointing one at a project with years of tickets does not start a process for each of them. The process receives the issue key, project, type, summary, status and reporter, and the whole issue for anything else. Watching changed tickets instead of new ones is the same setting, moved one field over.",
+        "de": "Bisher konnte ein Prozess nach Jira schreiben, aber nie von Jira hören. Ein Jira-Konnektor hat jetzt einen Reiter „Events\": Sie hinterlegen eine Jira-Abfrage und einen Nachrichtennamen, und jeder gefundene Vorgang startet die Prozesse, die auf diese Nachricht warten — und weckt die Instanzen, die daran hängen. Atlas fragt Jira in einem Takt ab; es muss also nichts aus dem Internet Ihren Server erreichen. Eine neue Überwachung beginnt ab jetzt: Sie auf ein Projekt mit jahrelanger Historie zu richten startet nicht pro Alt-Ticket einen Prozess. Der Prozess bekommt Vorgangsschlüssel, Projekt, Typ, Titel, Status und Melder — und den ganzen Vorgang für alles Weitere. Geänderte statt neuer Tickets zu überwachen ist dieselbe Einstellung, ein Feld weiter."
+      },
+      "link": {
+        "label": "ADR-0214",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0214-jira-inbound-issue-watch.md"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ]
+    },
+    {
+      "id": "the-jira-kind-can-be-supervised",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Atlas can run the Jira worker for you again",
+        "de": "Atlas kann den Jira-Worker wieder selbst betreiben"
+      },
+      "summary": {
+        "en": "Asking Atlas to run a Jira worker did not start one — it stopped the server from starting at all, with a message saying there is no such kind. Jira could therefore only be served by a worker you launched yourself, never by one Atlas supervises, which is the one the Workers view shows; so it looked like a worker that simply was not there. It starts now, and a check was added so the next connector cannot ship in the same state.",
+        "de": "Atlas zu bitten, einen Jira-Worker zu betreiben, startete keinen — es verhinderte, dass der Server überhaupt startet, mit der Meldung, es gebe diese Art nicht. Jira konnte deshalb nur von einem Worker bedient werden, den Sie selbst starten, nie von einem, den Atlas beaufsichtigt — und genau den zeigt die Worker-Ansicht. Es sah also aus wie ein Worker, den es schlicht nicht gibt. Er startet jetzt, und eine Prüfung sorgt dafür, dass der nächste Konnektor nicht im selben Zustand ausgeliefert wird."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ]
+    },
+    {
       "id": "mock-any-rest-api-from-its-openapi-document",
       "version": "Unreleased",
       "date": null,
@@ -299,70 +343,6 @@
         },
         "route": "#/console/workers"
       }
-    },
-    {
-      "id": "the-modeler-says-worker-too-and-offers-the-names-it-is-askin",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The Modeler asks for a Worker — and offers the ones you have",
-        "de": "Der Modeler fragt nach einem Worker — und bietet die vorhandenen an"
-      },
-      "summary": {
-        "en": "A service task's properties panel still said Connector, while the Console had long since said Workers — so the field asking for a name and the page the names come from disagreed. The panel now uses the same three words as everywhere else: you pick a Worker type (the list reads Jira, PostgreSQL, BMC Remedy — the word Connector is gone from the names), and below it you name the Worker, meaning the one Jira site or database an administrator configured on this server. The Worker field is now a dropdown of exactly those, so the one thing you cannot read off your own model is no longer typed from memory. It still accepts a typed name, because a worker you run yourself can carry its target in its own environment where the Modeler cannot see it — and if this server has no worker of that type at all, the field says so instead of opening an empty list. Your models are untouched: the saved XML still says connector=\"…\", so anything already deployed keeps running exactly as it did.",
-        "de": "Im Eigenschaften-Panel einer Service-Aufgabe stand weiterhin Connector, während die Konsole längst Workers sagte — das Feld, das nach einem Namen fragt, und die Seite, auf der die Namen entstehen, sprachen also verschiedene Sprachen. Das Panel benutzt jetzt dieselben drei Begriffe wie alles andere: Sie wählen einen Worker-Typ (die Liste liest sich als Jira, PostgreSQL, BMC Remedy — das Wort Connector ist aus den Namen verschwunden), und darunter benennen Sie den Worker, also die eine Jira-Instanz oder Datenbank, die jemand auf diesem Server konfiguriert hat. Dieses Feld ist neu eine Auswahlliste genau dieser Worker; das Einzige, was Sie Ihrem eigenen Modell nicht ansehen können, muss damit nicht mehr aus dem Gedächtnis getippt werden. Ein getippter Name bleibt erlaubt, weil ein selbst betriebener Worker sein Ziel in der eigenen Umgebung tragen kann, wo der Modeler es nicht sieht — und wenn dieser Server gar keinen Worker dieses Typs kennt, sagt das Feld das, statt eine leere Liste zu öffnen. An Ihren Modellen ändert sich nichts: Im gespeicherten XML steht weiterhin connector=\"…\", Bereitgestelltes läuft unverändert weiter."
-      },
-      "link": {
-        "label": "ADR-0203",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0203-worker-execution-model.md"
-      },
-      "tags": [
-        "Modeler",
-        "Workers"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and select a service task, then switch to the Implement tab.",
-          "Worker type is the picker at the top — choose Jira, or whichever type the task should use.",
-          "In the group below it (Jira worker, Mail worker, …) click the Worker field: it lists the workers of that type configured under Console › Workers.",
-          "Nothing offered? Then this server has no worker of that type yet — the field says so, and Console › Workers is where one is added."
-        ],
-        "de": [
-          "Öffnen Sie einen Prozess im Modeler, wählen Sie eine Service-Aufgabe und wechseln Sie auf den Reiter Implement.",
-          "Worker type ist die Auswahl zuoberst — nehmen Sie Jira oder den Typ, den die Aufgabe braucht.",
-          "In der Gruppe darunter (Jira worker, Mail worker, …) klicken Sie ins Feld Worker: es listet die unter Console › Workers konfigurierten Worker dieses Typs.",
-          "Nichts zur Auswahl? Dann kennt dieser Server noch keinen Worker dieses Typs — das Feld sagt es, und angelegt wird einer unter Console › Workers."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-jira-search-called-an-endpoint-jira-cloud-has-removed",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Jira search works again on Jira Cloud",
-        "de": "Die Jira-Suche funktioniert wieder mit Jira Cloud"
-      },
-      "summary": {
-        "en": "Atlassian switched off the search endpoint this connector used, so a Jira task set to Search (JQL) failed against Jira Cloud with a bare \"gone\" from the server. The search now uses the endpoint Atlassian replaced it with, and asks for the same set of issue fields as before, so a model that reads the summary of a found issue keeps working unchanged. The other six Jira operations were never affected, and Jira Data Center is unaffected by the change altogether.",
-        "de": "Atlassian hat den Suchendpunkt abgeschaltet, den dieser Konnektor verwendet hat — eine Jira-Aufgabe mit der Operation Suche (JQL) scheiterte gegen Jira Cloud daher an einem blossen \"gone\" des Servers. Die Suche nutzt jetzt den Endpunkt, den Atlassian an dessen Stelle gesetzt hat, und fordert dieselben Vorgangsfelder an wie zuvor — ein Modell, das etwa den Titel eines gefundenen Vorgangs liest, funktioniert unverändert weiter. Die sechs übrigen Jira-Operationen waren nie betroffen, und Jira Data Center ist von der Änderung gar nicht berührt."
-      },
-      "link": {
-        "label": "ADR-0201",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0201-jira-connector.md"
-      },
-      "tags": [
-        "Connectors"
-      ]
     }
   ]
 }

@@ -273,11 +273,19 @@ type Connectors struct {
 	Unconfigured []string
 }
 
-// KnownConnectorKinds are the kinds [BuiltinConnectors] implements, for the error a
-// misspelling produces. A kind may serve several job types — script serves one per
-// language — which is why a caller must not check this by counting handlers.
+// KnownConnectorKinds are the kinds [BuiltinConnectors] implements. A kind may serve
+// several job types — script serves one per language — which is why a caller must not
+// check this by counting handlers.
+//
+// It is not only the error a misspelling produces. `atlas --supervise-connector` refuses
+// a kind that is not here *at startup*, so a kind implemented below but missing from
+// this list cannot be given a supervised worker at all: the server exits rather than
+// starts. That is how the jira kind shipped able to run on a worker an operator launched
+// by hand and unable to be supervised by the server — the list is hand-written and the
+// case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
+// the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "csv", "entra", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "webscrape"}
+	return []string{"ad", "csv", "entra", "jira", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

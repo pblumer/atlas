@@ -14,6 +14,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A Jira issue can start a process.** A Jira connector now carries inbound event
+  watches beside its outbound operations
+  ([ADR-0214](docs/adr/0214-jira-inbound-issue-watch.md)): Console → Connectors →
+  Events takes a JQL and a message name, and every issue the query matches is
+  published as an Atlas message, so a message-start process runs per new ticket and a
+  waiting instance is woken. Atlas polls, so nothing has to reach the server from the
+  internet. A new watch is forward-only — pointing one at a project with a long
+  history does not start a process per old ticket — and the correlation key and the
+  started instance see `issueKey`, `projectKey`, `issueType`, `summary`, `status`,
+  `reporter` and the whole issue. A watch on changed rather than new issues is the
+  same watch with its cursor field moved to `updated`. The bridge that carries this
+  is no longer clio's alone: what a source *is* moved behind an interface, and an
+  existing clio subscription keeps its resume position and its idempotency mark
+  byte-for-byte.
+
+- **The jira kind can be supervised.** `atlas --supervise-connector jira` refused to
+  start the *server* — `KnownConnectorKinds` is a hand-written list beside the switch
+  that is the real implementation, and the jira case was added without it, so the kind
+  could be served by a worker started by hand and never by one Atlas supervises. Which
+  is the path the Workers view shows, so it looked like a worker that does not exist.
+  A test now holds the list to the switch in both directions.
+
 - **Mock any REST API from its OpenAPI document.** `atlas mock-openapi --spec
   petstore.yaml` serves the paths a document describes, so a process with a REST
   connector task can be run end to end before the API it calls exists — or without
