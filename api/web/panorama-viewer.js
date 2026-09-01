@@ -258,6 +258,113 @@ function driftHTML(drift, item) {
   </section>`;
 }
 
+// CONTEXT_STATE is what each of the six context states means to a reader. They are
+// six rather than two because every one of them sends somebody somewhere different,
+// and a panel that rendered them all as "no data" would undo the distinction the
+// whole surface exists to make.
+const CONTEXT_STATE = {
+  "not-configured": "No such store is wired here, so nothing was asked.",
+  unidentifiable: "This store cannot name a thing of this kind.",
+  unreachable: "The store could not be reached, so nothing is known about this window.",
+  refused: "The store declined the query.",
+  empty: "The store holds nothing for this in this window.",
+  available: "",
+};
+
+// CONTEXT_SOURCE is the store behind an answer. An operator who disagrees with a
+// number needs to know which system to go and argue with.
+const CONTEXT_SOURCE = { events: "Event log", metrics: "Metrics" };
+
+// sparkHTML draws one measure as a bar strip.
+//
+// It is a strip rather than a chart because this is not a time series and must not
+// look like one: ADR-0189 keeps Panorama a correlation surface, and a smooth line
+// with axes would promise a continuity that a query against somebody else's
+// retention does not have. What it shows is shape — quiet, then busy, then quiet —
+// which is the whole of what "has it been like this" needs.
+//
+// Every bar carries its own count as a title, so the shape is readable without a
+// hover and exact without a legend.
+function sparkHTML(measure) {
+  const buckets = Array.isArray(measure.buckets) ? measure.buckets : [];
+  if (!buckets.length) {
+    return `<p class="muted">No buckets in this window.</p>`;
+  }
+  const peak = buckets.reduce((max, b) => Math.max(max, Number(b.value) || 0), 0);
+  const bars = buckets.map((b) => {
+    const value = Number(b.value) || 0;
+    // A zero bucket keeps a hairline rather than vanishing: an empty interval is a
+    // reading, and a gap where one should be reads as missing data.
+    const height = peak > 0 ? Math.max(2, Math.round((value / peak) * 100)) : 2;
+    const when = new Date((b.at || 0) * 1000).toLocaleString();
+    return `<span class="panorama-spark-bar" style="height:${height}%" title="${esc(when)}: ${esc(String(value))}"></span>`;
+  }).join("");
+  return `<div class="panorama-spark" role="img"
+    aria-label="${esc(measure.label || measure.name)}: ${esc(String(measure.total ?? 0))} over the window">${bars}</div>`;
+}
+
+// contextHTML is what the stores outside Atlas say about the selected element.
+//
+// It is fetched on demand rather than with the view: every bound value costs a
+// query against somebody else's cluster, and a panel that fired those on every
+// selection would make browsing a model expensive for a system that did not agree
+// to it.
+function contextHTML(ctx, loading) {
+  if (loading) {
+    return `<section class="psec"><h3>History</h3>
+      <p class="muted">Asking the stores outside Atlas…</p></section>`;
+  }
+  if (!ctx) {
+    return `<section class="psec"><h3>History</h3>
+      <button class="btn ghost small" data-tool="context">Look up history</button>
+      <p class="muted">Asks the stores outside Atlas what they hold about this element.
+      Nothing is stored here.</p></section>`;
+  }
+  // A lookup that failed is its own state, distinct from one nobody has run. They
+  // arrived here as the same absent value once, and the panel then re-offered the
+  // button as though the request had never happened \u2014 which tells a reader that
+  // nothing is wrong. It is the same conflation the six states below exist to
+  // prevent, one layer up.
+  if (ctx.failed || !Array.isArray(ctx.results)) {
+    return `<section class="psec"><h3>History</h3>
+      <button class="btn ghost small" data-tool="context">Try again</button>
+      <p class="muted">The history could not be read, so nothing is known about this
+      element\u2019s past \u2014 which is not the same as nothing having happened.</p></section>`;
+  }
+  const limits = (Array.isArray(ctx.limits) ? ctx.limits : []).map((l) =>
+    `<li><b>${esc(l.limit)}</b> — ${esc(l.reason)}</li>`).join("");
+  const rows = ctx.results.map((r) => {
+    const measures = (r.measures || []).map((m) => `
+      <div class="panorama-measure">
+        <div class="panorama-measure-head">
+          <span>${esc(m.label || m.name)}</span><b>${esc(String(m.total ?? 0))}</b>
+        </div>
+        ${sparkHTML(m)}
+      </div>`).join("");
+    const notCounted = r.detail && r.detail.notCounted
+      ? `<p class="muted">Not counted: ${esc(r.detail.notCounted)}.</p>` : "";
+    return `<div class="panorama-ctx panorama-ctx-${esc(r.state)}">
+      <div class="panorama-ctx-head">
+        <b>${esc(CONTEXT_SOURCE[r.source] || r.source)}</b>
+        <span class="muted">${esc(r.state)}</span>
+      </div>
+      <code>${esc(r.key)} = ${esc(r.value)}</code>
+      ${r.reason || CONTEXT_STATE[r.state]
+        ? `<p class="muted">${esc(r.reason || CONTEXT_STATE[r.state])}</p>` : ""}
+      ${measures}${notCounted}
+    </div>`;
+  }).join("");
+  const window = ctx.window || {};
+  return `<section class="psec"><h3>History</h3>
+    ${rows || `<p class="muted">This element binds nothing, so there is nothing to ask about.</p>`}
+    ${ctx.truncated ? `<p class="muted">Some answers were dropped to keep this bounded.</p>` : ""}
+    <p class="muted">Window ${esc(window.window || "")}, read at
+      ${esc(new Date((ctx.observedAt || 0) * 1000).toLocaleTimeString())}. Nothing here is stored.</p>
+    <details class="panorama-ctx-limits"><summary>What this history cannot do</summary>
+      <ul>${limits}</ul></details>
+  </section>`;
+}
+
 // detailHTML renders the numbers behind the sentence — a version, a count — for a
 // reader who wants them. Sorted, because this is something people compare between
 // two servers.
@@ -268,7 +375,7 @@ function detailHTML(detail) {
     .map(([k, v]) => `<span><span class="muted">${esc(k)}</span> ${esc(v)}</span>`).join("")}</div>`;
 }
 
-function propertiesHTML(item, resolution, canEdit, observations, drift) {
+function propertiesHTML(item, resolution, canEdit, observations, drift, ctx, ctxLoading) {
   if (!item) return `<div class="panorama-props-empty">
     <div class="panorama-selection-icon">◇</div>
     <b>Nothing selected</b>
@@ -288,7 +395,8 @@ function propertiesHTML(item, resolution, canEdit, observations, drift) {
     ${item.documentation ? `<section class="psec"><h3>Documentation</h3><p>${esc(item.documentation)}</p></section>` : ""}
     ${bindingsHTML(item, resolution, canEdit)}
     ${liveHTML(item, observations)}
-    ${driftHTML(drift, item)}`;
+    ${driftHTML(drift, item)}
+    ${item.kind === "relationship" ? "" : contextHTML(ctx, ctxLoading)}`;
 }
 
 // pickBinding is the picker ADR-0189 §4 asks for: a user selects from resources
@@ -556,9 +664,32 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
   let revision = model.revision;
   let selected = null;
 
+  // Context is per element and fetched on demand, so it is cleared whenever the
+  // selection moves: showing one element's history under another's name would be
+  // the worst thing this panel could do.
+  let ctx = null;
+  let ctxLoading = false;
   const paintProperties = () => {
-    properties.innerHTML = propertiesHTML(selected, resolution, canEdit, live, drift);
+    properties.innerHTML = propertiesHTML(selected, resolution, canEdit, live, drift, ctx, ctxLoading);
   };
+
+  // The lookup is a button rather than an automatic fetch: every bound value costs
+  // a query against a system that did not agree to be browsed.
+  properties.addEventListener("click", async (event) => {
+    if (!event.target.closest('[data-tool="context"]') || !selected) return;
+    const forElement = selected.id;
+    ctxLoading = true;
+    paintProperties();
+    const answer = await api("GET",
+      `/api/v1/panorama/models/${encodeURIComponent(id)}/context?element=${encodeURIComponent(forElement)}`)
+      .catch(() => ({ failed: true }));
+    // The selection may have moved while the stores were being asked. A late answer
+    // is dropped rather than painted under whatever is selected now.
+    if (!selected || selected.id !== forElement) return;
+    ctxLoading = false;
+    ctx = answer;
+    paintProperties();
+  });
 
   let viewer = null;
   const select = (diagramView) => {
@@ -566,7 +697,12 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
       canvas.innerHTML = `<div class="panorama-no-view"><div>◇</div><h2>No diagram views</h2><p>This model contains reusable ArchiMate elements, but no Diagram view yet.</p></div>`;
       return;
     }
-    if (!viewer) viewer = new vendor.Viewer(canvas, (item) => { selected = item; paintProperties(); });
+    if (!viewer) viewer = new vendor.Viewer(canvas, (item) => {
+      selected = item;
+      ctx = null;
+      ctxLoading = false;
+      paintProperties();
+    });
     viewer.render(diagramView);
     // The renderer adds its shapes synchronously, so the DOM is there to decorate
     // the moment render returns. Re-marking on every view switch is not an

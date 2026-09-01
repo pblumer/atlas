@@ -120,6 +120,13 @@ var mcpOmittedRoutes = map[string]string{
 	// Its shape is also at contract version 1 and still settling, and an MCP tool is
 	// a public contract.
 	"GET /api/v1/panorama/models/{id}/observations": "an architecture reading surface over facts an agent already reaches directly; contract still settling",
+	// Historical context (ADR-0189 P5b) reads stores outside Atlas on the caller's
+	// behalf. An agent that wants a metric or a log line asks the store that owns it,
+	// with the whole query language available, rather than through a keyhole that
+	// answers three fixed measures; and a tool here would let one agent fan queries
+	// across somebody else's cluster from a loop. Its contract is also at version 1
+	// and still settling, like the observations above.
+	"GET /api/v1/panorama/models/{id}/context": "a keyhole onto stores an agent should query directly; contract still settling",
 	// The drift journal (ADR-0189 P5) is the same reading surface over time, and it
 	// is explicitly not durable: an agent handed it as a tool would read a
 	// restart-emptied journal as an absence of change, which is the one reading it

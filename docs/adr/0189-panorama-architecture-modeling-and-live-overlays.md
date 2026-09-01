@@ -1,6 +1,6 @@
 # ADR-0189: Panorama architecture modeling and live operational overlays
 
-- **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; amended 2026-09-01 — P5's "over time" is a journal of transitions, not a store of samples; see the amendment notes below)
+- **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; amended 2026-09-01 — P5's "over time" is a journal of transitions, not a store of samples, and its historical context is a query rather than a copy; see the amendment notes below)
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 
@@ -57,6 +57,43 @@
 >
 > §6's seven states and its rule that layer fills are never recolored are unaffected: a
 > transition is a pair of those states, and it is rendered as text beside a finding.
+
+> **Amendment (2026-09-01): P5's historical context is a query, never a copy.** The
+> options above rejected "copy all remote metrics and logs into a Panorama-specific
+> internal database" and selected the projection instead, noting that "historical
+> charts may query dedicated backends such as Prometheus or OpenSearch later; they
+> remain external sources of historical data." P5b is that later. It queries those
+> stores when somebody asks and keeps nothing — a cache of somebody else's history
+> is the rejected database with a shorter retention and no owner.
+>
+> What each store may be asked is decided by what it can **identify**, and the two
+> answers are not symmetric:
+>
+> - The exported event log (ADR-0114) carries each record's process definition key,
+>   so it answers about a process and about the application whose processes those
+>   are. It stores a job's type as an interned index — a number meaningless outside
+>   the process that wrote it — so it cannot answer about a connector or a job type.
+>   An incident names its instance and not its definition, so no single query
+>   attributes one; that gap is named in the answer rather than left as a silence.
+> - Metrics (ADR-0142) carry no per-element labels *by design*: that record forbids
+>   labelling by process id, instance key, or any other value the data can invent,
+>   because one such label turns a metric into unboundedly many series. A metrics
+>   store therefore answers about a node and never about one process.
+>
+> Neither limit is a gap to close later, so neither is reported as an absence of
+> data. A source's answer for one bound value is one of six states —
+> *not-configured*, *unidentifiable*, *unreachable*, *refused*, *empty*,
+> *available* — because each sends an operator somewhere different, and only
+> *empty* is a statement about the architecture rather than about the lookup. Every
+> source answers for every value, including the ones it cannot help with: a row
+> left out is indistinguishable from a store nobody thought to ask.
+>
+> Three further constraints hold. The route is scoped to **one element**, because
+> every bound value costs a query against a system that did not agree to be
+> browsed. The window is an **allowlist**, because an arbitrary range is an
+> arbitrary query on somebody else's cluster. And the run-loop split is §6's: ids
+> become definition keys on the loop under the caller's sharing scope, and the
+> query itself runs off it (I3).
 
 ## Context
 
@@ -406,8 +443,9 @@ diagnostics, and retention of the original source model.
 5. **P4 — Live Panorama:** stable node descriptor, local and remote observation
    projection, freshness/partial-failure semantics, and accessible overlays.
 6. **P5 — Landscape intelligence:** desired-versus-observed drift over time — a
-   journal of transitions rather than a store of samples, per the 2026-09-01
-   amendment — and optional Prometheus/OpenSearch adapters for historical context.
+   journal of transitions rather than a store of samples — and optional
+   Prometheus/OpenSearch adapters for historical context, which query those stores
+   rather than copying them; both per the 2026-09-01 amendments.
    Dependency/impact analysis and discovery of unmodeled resources moved to P2.5 in
    the 2026-08-31 amendment.
 

@@ -1004,9 +1004,27 @@ for the derived whole-instance mesh above them.
   to the log (I4/I6); and it is bounded per model and across models. All three of
   those are *published* with every answer rather than documented here, because
   without them "nothing changed" and "nobody looked" read alike; and
-  **b)** the optional Prometheus/OpenSearch adapters for historical context. Open,
-  and deliberately last: they are where continuous history belongs, which is why
-  (a) does not pretend to it.
+  **b)** the adapters for historical context — the stores where continuous history
+  actually belongs, which is why (a) does not pretend to it. They *query* those
+  stores and keep nothing: ADR-0189 rejected copying remote metrics and logs into a
+  Panorama database by name, and a cache of somebody else's history is that database
+  with a shorter retention and no owner. Ships in two:
+  **b-i)** the event-log adapter, over the OpenSearch index Atlas already exports to
+  (ADR-0114). Complete. It answers about a process and about the application whose
+  processes those are, because every exported record carries its definition key —
+  and it answers about nothing else, because the log stores a job's type as an
+  interned index and names no node. Each of those is reported as its own state
+  rather than as an absence of data: a source's answer is one of six —
+  not-configured, unidentifiable, unreachable, refused, empty, available — and only
+  *empty* is a statement about the architecture rather than about the lookup. Every
+  source answers for every bound value, including the ones it cannot help with, so
+  the metrics store already says what it is before its adapter exists. Scoped to one
+  element and to an allowlist of windows, because each bound value costs a query
+  against a system that did not agree to be browsed; and
+  **b-ii)** the Prometheus adapter. Open. Metrics carry no per-element labels by
+  design (ADR-0142 forbids labelling by anything the data can invent), so it will
+  answer about a *node* through the runtime and deployment-target bindings and never
+  about one process — which is why (b-i) does not wait for it.
 
 ## Milestone A — Modeler & authoring experience 🔲
 

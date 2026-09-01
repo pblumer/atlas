@@ -391,8 +391,13 @@ type Server struct {
 	// exporter runs on its own goroutine off the run loop — it only reads the durable
 	// WAL files and the state store's applied-position watermark, never the processor
 	// — so it never touches the single-writer invariant (I3).
-	osExportCfg  opensearch.Config
-	exporter     *opensearch.Exporter
+	osExportCfg opensearch.Config
+	exporter    *opensearch.Exporter
+	// eventSearch, when non-nil, replaces the client Panorama's historical context
+	// reads the exported event log through (ADR-0189 P5b), so a test drives the
+	// adapter without a live cluster. Nil in production, where a client is built
+	// from osExportCfg per call.
+	eventSearch  opensearch.Searcher
 	exporterPoll time.Duration
 	// exporterTicks, when non-nil, replaces the exporter loop's real ticker so a test
 	// drives each export pass explicitly rather than racing a wall-clock cadence.
@@ -1170,7 +1175,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		time.Now,
 		s.collectBindingCatalog,
 		s.collectFacts,
-	)
+	).WithContextResolver(s.collectContext)
 	s.panoramaMesh = panorama.NewMesh(s.runLoop, s.collectLandscape, s.panorama.OverlaysOnLoop, meshMaxNodes)
 	for _, opt := range opts {
 		opt(s)
