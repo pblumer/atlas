@@ -87,6 +87,7 @@ func (c *HTTPClient) cloud() bool { return strings.TrimSpace(c.conn.Token) == ""
 // then raises an incident (ADR-0061), rather than completing a token on work that did
 // not happen.
 func (c *HTTPClient) Do(ctx context.Context, req Request) (any, error) {
+	req = trimIdentifiers(req)
 	switch req.Operation {
 	case "create-issue":
 		return c.call(ctx, http.MethodPost, apiBase+"/issue", map[string]any{"fields": c.createFields(req)}, req)
@@ -109,6 +110,25 @@ func (c *HTTPClient) Do(ctx context.Context, req Request) (any, error) {
 	default:
 		return nil, fmt.Errorf("jira: unknown operation %q (want %s)", req.Operation, strings.Join(OpNames(), ", "))
 	}
+}
+
+// trimIdentifiers strips surrounding whitespace from the values that *name* something
+// in Jira — an issue, a project, an issue type, a transition, an account. Whitespace is
+// never part of such a name, and Jira compares them exactly: a project key that arrived
+// as "OPS " is answered with "The target project does not exist or you do not have
+// permission to create issues in it", which reads as a wrong key or a missing grant and
+// sends an operator looking in Jira for a fault that is a stray space in a form field.
+//
+// It is deliberately only the identifiers. A summary, a description, a comment and a
+// JQL are content: what they contain is the author's business, and silently reshaping
+// text a model composed would be a different kind of surprise.
+func trimIdentifiers(req Request) Request {
+	req.Issue = strings.TrimSpace(req.Issue)
+	req.Project = strings.TrimSpace(req.Project)
+	req.IssueType = strings.TrimSpace(req.IssueType)
+	req.Transition = strings.TrimSpace(req.Transition)
+	req.Assignee = strings.TrimSpace(req.Assignee)
+	return req
 }
 
 // createFields builds the field object an issue is created from: the project and the

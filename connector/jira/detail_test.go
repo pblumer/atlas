@@ -473,3 +473,64 @@ func TestResolveRefusesATaskWithNoDetail(t *testing.T) {
 		t.Fatal("a connector task with no detail was resolved")
 	}
 }
+
+// Whitespace is never part of a name in Jira, and Jira compares names exactly: a
+// project key that arrives as "OPS " is refused with a message about the project not
+// existing, which sends an operator looking in Jira for a fault that is a stray space
+// in a form field. Every value that *names* something is trimmed on the way out.
+func TestIdentifiersAreTrimmedBeforeTheyReachJira(t *testing.T) {
+	f, srv := newFakeJira(t)
+	f.answers["POST /rest/api/2/issue"] = map[string]any{"id": "10001", "key": "OPS-42"}
+	if _, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{
+		Operation: "create-issue", Project: "  OPS\t", IssueType: " Task ",
+		Summary: "  ein Titel mit Rand  ",
+	}); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	fields, _ := f.only(t).body["fields"].(map[string]any)
+	project, _ := fields["project"].(map[string]any)
+	issuetype, _ := fields["issuetype"].(map[string]any)
+	if project["key"] != "OPS" {
+		t.Errorf("project = %+v, want the key trimmed to OPS", fields["project"])
+	}
+	if issuetype["name"] != "Task" {
+		t.Errorf("issuetype = %+v, want the name trimmed to Task", fields["issuetype"])
+	}
+	// Content is not identifiers: what a model composed is sent as composed.
+	if fields["summary"] != "  ein Titel mit Rand  " {
+		t.Errorf("summary = %q, want it sent exactly as authored", fields["summary"])
+	}
+}
+
+// A padded project key that is all digits is still read as an id rather than a key —
+// the trim happens before the digits test, so " 10000 " addresses project 10000 and not
+// a project whose key is a number with spaces around it.
+func TestATrimmedNumericProjectIsStillAnID(t *testing.T) {
+	f, srv := newFakeJira(t)
+	f.answers["POST /rest/api/2/issue"] = map[string]any{"id": "1", "key": "OPS-1"}
+	if _, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{
+		Operation: "create-issue", Project: " 10000 ", IssueType: "Task", Summary: "x",
+	}); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	fields, _ := f.only(t).body["fields"].(map[string]any)
+	project, _ := fields["project"].(map[string]any)
+	if project["id"] != "10000" {
+		t.Errorf("project = %+v, want it addressed by id 10000", fields["project"])
+	}
+}
+
+// An issue key goes into the request path, where a stray space would be percent-encoded
+// into a URL naming an issue that cannot exist.
+func TestAPaddedIssueKeyDoesNotReachTheURL(t *testing.T) {
+	f, srv := newFakeJira(t)
+	f.answers["GET /rest/api/2/issue/OPS-42"] = map[string]any{"key": "OPS-42"}
+	if _, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{
+		Operation: "get-issue", Issue: " OPS-42 ",
+	}); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if got := f.only(t).path; got != "/rest/api/2/issue/OPS-42" {
+		t.Errorf("path = %q, want the key trimmed before it is escaped into the URL", got)
+	}
+}
