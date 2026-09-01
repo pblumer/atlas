@@ -109,6 +109,14 @@ func AddRelationship(data []byte, add NewRelationship) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	// Checked before the ends are looked up, because it is the more useful answer:
+	// a document with no <elements> block has no elements either, and "there is
+	// nowhere to put a relationship" says what is wrong with the document rather
+	// than blaming the caller for naming an element that could not have existed.
+	if index.relationshipsClose < 0 && index.elementsBlockEnd < 0 {
+		return nil, "", fmt.Errorf("panorama: the document has no <elements> block, " +
+			"so there is nowhere to put a relationship")
+	}
 	sourceType, sourceKnown := index.elementTypes[add.Source]
 	targetType, targetKnown := index.elementTypes[add.Target]
 	switch {
@@ -134,8 +142,13 @@ func AddRelationship(data []byte, add NewRelationship) ([]byte, string, error) {
 	case !drawnTarget:
 		return nil, "", fmt.Errorf("panorama: element %q is not on this view", add.Target)
 	}
-	if index.relationshipsClose < 0 {
-		return nil, "", fmt.Errorf("panorama: the document has no <relationships> block to add to")
+	// A model with no relationships yet has no block to put one in. Refusing would
+	// mean nobody could ever draw their first relationship, so the block is created
+	// where the schema puts it — immediately after <elements>, which is the sequence
+	// the exchange format requires.
+	insertAt, indent, wrap := index.relationshipsClose, index.relationshipsIndent, false
+	if insertAt < 0 {
+		insertAt, indent, wrap = index.elementsBlockEnd, index.elementsIndent, true
 	}
 
 	minted, err := mintIDs(index.taken, "rel", "conn")
@@ -145,12 +158,18 @@ func AddRelationship(data []byte, add NewRelationship) ([]byte, string, error) {
 	relationshipID, connectionID := minted[0], minted[1]
 
 	relationship := fmt.Sprintf("%s<%srelationship identifier=%q source=%q target=%q xsi:type=%q/>",
-		index.relationshipsIndent, index.prefix, relationshipID, add.Source, add.Target, add.Type)
+		indent, index.prefix, relationshipID, add.Source, add.Target, add.Type)
+	if wrap {
+		// The whole block, indented like <elements> was, with the relationship inside.
+		blockIndent := indentBefore(data, index.elementsBlockEnd)
+		relationship = fmt.Sprintf("%s<%srelationships>%s%s</%srelationships>",
+			blockIndent, index.prefix, relationship, blockIndent, index.prefix)
+	}
 	connection := fmt.Sprintf("%s<%sconnection identifier=%q relationshipRef=%q source=%q target=%q/>",
 		view.indent, index.prefix, connectionID, relationshipID, sourceNode, targetNode)
 
 	return applyEdits(data, []edit{
-		{from: index.relationshipsClose, to: index.relationshipsClose, text: relationship},
+		{from: insertAt, to: insertAt, text: relationship},
 		{from: view.close, to: view.close, text: connection},
 	}), relationshipID, nil
 }
@@ -183,8 +202,12 @@ type contentIndex struct {
 	elementTypes map[string]string
 	views        map[string]*viewSpan
 
-	elementsClose       int
-	elementsIndent      string
+	elementsClose  int
+	elementsIndent string
+	// elementsBlockEnd is just past </elements>, where a <relationships> block goes
+	// when the document has none — the position the exchange schema's sequence puts
+	// it in.
+	elementsBlockEnd    int
 	relationshipsClose  int
 	relationshipsIndent string
 }
@@ -194,6 +217,7 @@ func indexContent(data []byte) (contentIndex, error) {
 	index := contentIndex{
 		taken: map[string]bool{}, elementTypes: map[string]string{},
 		views: map[string]*viewSpan{}, elementsClose: -1, relationshipsClose: -1,
+		elementsBlockEnd: -1,
 	}
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	depth, inViews := 0, 0
@@ -262,6 +286,7 @@ func indexContent(data []byte) (contentIndex, error) {
 			switch tok.Name.Local {
 			case "elements":
 				index.elementsClose = insertBefore(data, at)
+				index.elementsBlockEnd = end
 				if index.elementsIndent == "" {
 					index.elementsIndent = indentBefore(data, at) + "  "
 				}

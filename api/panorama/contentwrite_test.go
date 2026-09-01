@@ -346,9 +346,16 @@ func TestAddRelationshipNeedsSomewhereToPutIt(t *testing.T) {
 		t.Errorf("err = %v, want the missing target named", err)
 	}
 
-	// And a document with no relationships block at all.
+}
+
+// TestTheFirstRelationshipCreatesItsBlock. A model that has never had a
+// relationship has no block to put one in. Refusing would mean nobody could ever
+// draw their first — so the block is created where the exchange schema's sequence
+// puts it, immediately after <elements>.
+func TestTheFirstRelationshipCreatesItsBlock(t *testing.T) {
 	noBlock := `<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" identifier="m">
+  <name xml:lang="en">First relationship</name>
   <elements>
     <element identifier="a" xsi:type="ApplicationComponent"><name>A</name></element>
     <element identifier="b" xsi:type="ApplicationService"><name>B</name></element>
@@ -358,11 +365,48 @@ func TestAddRelationshipNeedsSomewhereToPutIt(t *testing.T) {
     <node identifier="nb" elementRef="b" x="20" y="0" w="10" h="10"/>
   </view></diagrams></views>
 </model>`
-	_, _, err = AddRelationship([]byte(noBlock), NewRelationship{
+	out, id, err := AddRelationship([]byte(noBlock), NewRelationship{
 		Type: "Realization", Source: "a", Target: "b", ViewID: "v1",
 	})
-	if err == nil || !strings.Contains(err.Error(), "relationships") {
-		t.Errorf("err = %v, want it to say there is nowhere to put it", err)
+	if err != nil {
+		t.Fatalf("the first relationship was refused: %v", err)
+	}
+	got := string(out)
+	if !strings.Contains(got, "<relationships>") {
+		t.Errorf("no block was created:\n%s", got)
+	}
+	// After </elements> and before <views>, which is the order the schema requires —
+	// a block in the wrong place is a document that no longer validates.
+	elements := strings.Index(got, "</elements>")
+	block := strings.Index(got, "<relationships>")
+	views := strings.Index(got, "<views>")
+	if !(elements < block && block < views) {
+		t.Errorf("the block landed out of sequence (elements %d, block %d, views %d)", elements, block, views)
+	}
+	if !strings.Contains(got, `identifier="`+id+`"`) {
+		t.Errorf("the relationship is not inside the new block:\n%s", got)
+	}
+	if validation := Validate(out); !validation.Valid {
+		t.Errorf("creating the block produced an invalid document: %+v", validation.Problems)
+	}
+
+	// A second relationship goes into the block the first one made, rather than
+	// creating another.
+	out, _, err = AddRelationship(out, NewRelationship{
+		Type: "Association", Source: "b", Target: "a", ViewID: "v1",
+	})
+	if err != nil {
+		t.Fatalf("the second relationship: %v", err)
+	}
+	if got := strings.Count(string(out), "<relationships>"); got != 1 {
+		t.Errorf("the document has %d relationship blocks, want 1", got)
+	}
+
+	// A document with no <elements> block has nowhere to anchor one, and says so.
+	if _, _, err := AddRelationship([]byte(`<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" identifier="m">
+  <views><diagrams><view identifier="v1"><name>V</name></view></diagrams></views>
+</model>`), NewRelationship{Type: "Association", Source: "a", Target: "b", ViewID: "v1"}); err == nil {
+		t.Error("a relationship was written into a document with no elements block")
 	}
 }
 

@@ -254,6 +254,12 @@ var mcpOmittedRoutes = map[string]string{
 	// this route adds is the narrower question of what *Atlas* currently authors,
 	// which is only useful to the canvas that has to enforce it during a drag.
 	"GET /api/v1/panorama/subset": "the palette and matrix this build enforces, useful to the canvas rather than to an agent reasoning about a model",
+	// Creating architecture content is authoring, and it rides with the rest of the
+	// Panorama authoring surface rather than ahead of it: an agent that could add
+	// elements and draw relationships would be modelling somebody's landscape, and
+	// what a diagram should contain is the judgement the model exists to record.
+	"POST /api/v1/panorama/models/{id}/elements":      "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	"POST /api/v1/panorama/models/{id}/relationships": "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
 	// The derived landscape mesh (ADR-0211) is read-only and would make an obvious
 	// agent tool — "what depends on this connector" is exactly the question. It is
 	// omitted for now because its payload shape is still moving: P2.5 adds node and
