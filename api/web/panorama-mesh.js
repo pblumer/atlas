@@ -72,42 +72,50 @@ const STATE_TEXT = {
   unbound: "unbound — nothing observes it",
 };
 
-// LABEL_ALWAYS_BELOW is the graph size under which every node keeps its name on
-// screen. Above it, only the anchors do (see labelPolicy).
+// LABEL_TIERS decides which names are painted, from how large they will actually
+// come out on screen.
 //
-// The number is where clutter starts rather than a round guess: at the default
-// frame a name is about 90px wide and a node needs roughly 110px of clear space
-// around it to own one, which is about 25 nodes before labels begin overlapping
-// each other and the edges between them.
-const LABEL_ALWAYS_BELOW = 26;
+// This used to be a rule about *density*: under about twenty-five nodes every name
+// was painted, above it only the applications, because a few hundred names on one
+// canvas is a wall of text with circles behind it. That rule was solving the wrong
+// problem. Names collided because the graph was compressed into the viewport, so
+// there was no room between nodes for them — and the count was standing in for the
+// crowding it caused.
+//
+// With the graph laid out in a world of its own size there is always room beside a
+// node for its name, in world units. What decides whether it can be *read* is how
+// much of the screen a world unit gets, which is the zoom. So the question becomes
+// the honest one: at this magnification, is this text large enough to read? A name
+// is painted when it is, and it is not painted when it would be a smear — which is
+// what a zoomed-out universe should look like, and why zooming in is how you read
+// it.
+//
+// Applications cross the threshold first. They are the largest things on screen and
+// carry the largest names, and they are what somebody navigates by: "where is
+// Billing" is the first question asked of this view, and it has to be answerable
+// before the detail is.
+//
+// Everything else still shows its name on hover and on keyboard focus, which the
+// stylesheet does with no re-render, and the selected node keeps it while selected.
+const LABEL_TIERS = {
+  // The font sizes, in world units, that the stylesheet paints each tier at. They
+  // are sized against the circles they belong to — a process is 17 units across the
+  // radius, an application 30 — so a name stays proportionate to its node at every
+  // magnification instead of swelling or shrinking relative to it.
+  all: 15,
+  anchors: 26,
+  // readable is the smallest rendered text worth painting, in screen pixels. Below
+  // it a name is not small, it is noise sitting on top of the structure the picture
+  // is carrying.
+  readable: 7,
+};
 
-// labelPolicy decides which names are painted without being asked for.
-//
-// The problem it solves is that a few hundred names on one canvas is not a
-// landscape, it is a wall of text with circles behind it — the picture stops
-// carrying its own structure. Hiding them all is the obvious fix and the wrong
-// one: colour and size say *what kind* of thing a node is, and nothing says
-// *which* one, so a viewer would have to hover every node to find anything.
-//
-// So the rule is neither all nor none:
-//
-//   - Applications always keep their name. There are few of them, they are the
-//     largest things on screen, and they are what somebody navigates by — "where
-//     is Billing" is the first question asked of this view.
-//   - A small graph keeps every name. Under LABEL_ALWAYS_BELOW there is room, and
-//     hiding names there would be pure loss with nothing bought.
-//   - Everything else shows its name on hover and on keyboard focus, which the
-//     stylesheet does with no re-render, and the selected node keeps it while it
-//     is selected.
-//
-// Search covers the case none of that does: typing a name filters the graph, and
-// a filtered graph is usually small enough that every name comes back.
-function labelPolicy(graph) {
-  const dense = graph.nodes.length >= LABEL_ALWAYS_BELOW;
-  return {
-    dense,
-    shows: (node) => !dense || node.kind === "application",
-  };
+// labelTier reports which names a given magnification can carry. scale is screen
+// pixels per world unit.
+export function labelTier(scale) {
+  if (LABEL_TIERS.all * scale >= LABEL_TIERS.readable) return "all";
+  if (LABEL_TIERS.anchors * scale >= LABEL_TIERS.readable) return "anchors";
+  return "none";
 }
 
 // mulberry32 is a small seeded PRNG. The seed is fixed so the initial scatter —
@@ -119,6 +127,71 @@ function mulberry32(seed) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+// NODE_ROOM is the personal space a node needs beyond its own circle: enough for
+// its name and a gap to the next one. It is what makes the difference between a
+// graph that is technically non-overlapping and one somebody can read.
+const NODE_ROOM = 34;
+
+// WORLD_FILL is how much of the world the nodes' own cells take up. A low number is
+// what makes this a universe rather than a pile: at 1.0 the nodes would tile the
+// space edge to edge, and everything interesting about a force layout — which
+// things sit near which — is carried by the emptiness between them.
+const WORLD_FILL = 0.09;
+
+// worldFor sizes the space the graph is laid out in, from the graph rather than
+// from the viewport.
+//
+// This is the correction that matters. The layout used to settle inside the frame
+// and then be scaled to fill it — and fitToFrame scales *positions* while radii
+// stay fixed, so any graph whose settled extent exceeded the frame was compressed
+// into it with its circles left at full size. That is arithmetic that guarantees
+// overlap, and it got worse with every node added, which is exactly how a landscape
+// ends up as a knot of interpenetrating bubbles.
+//
+// So the world grows with the content instead. The frame is a window onto it, the
+// opening view shows the whole thing, and reading it closely is what the zoom is
+// for. A small graph still gets at least a frame's worth of world, so nothing
+// changes for the handful-of-nodes case that was already comfortable.
+function worldFor(nodes, frame) {
+  let cells = 0;
+  for (const n of nodes) {
+    const cell = 2 * ((KIND[n.kind] || KIND.process).r + NODE_ROOM);
+    cells += cell * cell;
+  }
+  const aspect = Math.max(frame.width, 1) / Math.max(frame.height, 1);
+  const area = Math.max(cells / WORLD_FILL, frame.width * frame.height);
+  const width = Math.sqrt(area * aspect);
+  return { width, height: width / aspect };
+}
+
+// separate pushes overlapping circles apart until none intersect, in whatever
+// coordinates it is handed.
+//
+// It runs *after* the fit as well as inside the settle, and that is the point: the
+// settle's guarantee is made in layout coordinates, and a rescale carries positions
+// across while radii stay behind. Re-establishing it where the circles are actually
+// drawn is the only place the guarantee means anything.
+function separate(nodes, radii, gap, rounds = 24) {
+  for (let round = 0; round < rounds; round++) {
+    let moved = false;
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        let dx = a.x - b.x, dy = a.y - b.y;
+        let d = Math.hypot(dx, dy);
+        if (d < 0.01) { dx = 0.1; dy = 0.1; d = 0.1414; }
+        const room = radii[i] + radii[j] + gap;
+        if (d >= room) continue;
+        const push = (room - d) / 2;
+        a.x += (dx / d) * push; a.y += (dy / d) * push;
+        b.x -= (dx / d) * push; b.y -= (dy / d) * push;
+        moved = true;
+      }
+    }
+    if (!moved) return;
+  }
 }
 
 // layout settles the graph with repulsion between every pair, springs along edges,
@@ -152,8 +225,13 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
   // Repulsion scales with the graph so density stays roughly constant instead of
   // rising with node count — the "Klüngel" a fixed constant produces, where fifty
   // nodes are comfortable and three hundred are one dark blob.
-  const repulsion = 5200 * Math.max(1, Math.sqrt(nodes.length / 40));
-  const spring = 0.012, rest = 130, damping = 0.85;
+  // Both scale with the world: a graph settled at a fixed spring length inside a
+  // world sized for its content is a knot in the middle of an empty field, and
+  // enlarging that knot is not the same as spreading it out.
+  const reach = Math.min(width, height);
+  const repulsion = 5200 * Math.max(1, Math.sqrt(nodes.length / 40)) * Math.max(1, reach / 720);
+  const spring = 0.012, damping = 0.85;
+  const rest = Math.max(130, reach * 0.16);
   // Every node's own footprint, so the separation pass below knows what "touching"
   // means for this pair rather than assuming one radius for all of them.
   const radii = nodes.map((n) => (KIND[n.kind] || KIND.process).r);
@@ -174,7 +252,7 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
         // which is the one arrangement that makes a picture unreadable rather than
         // merely tight. This pushes overlapping circles apart directly, and it is
         // in the same pass because that pass already visits every pair.
-        const room = radii[i] + radii[j] + 10;
+        const room = radii[i] + radii[j] + NODE_ROOM;
         if (d < room) {
           const push = (room - d) * 0.5;
           a.x += (dx / d) * push; a.y += (dy / d) * push;
@@ -202,6 +280,11 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
     }
   }
   fitToFrame(nodes, width, height);
+  // And once more where the circles are actually drawn. The fit scales positions
+  // and leaves radii alone, so whatever the settle guaranteed is only true again
+  // after this. Anything it moves outside the world is pulled back by the re-fit.
+  separate(nodes, radii, NODE_ROOM);
+  fitToFrame(nodes, width, height);
   return performance.now() - started;
 }
 
@@ -209,9 +292,9 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
 // because a node's label is: the text hangs below the circle (dy = r + 14) and is
 // centred, so the bottom and the sides carry more than the top does.
 //
-// It is smaller than the widest label because most labels are hidden until hovered
-// (see labelPolicy), and reserving room for text that is not on screen is how the
-// picture ends up smaller than the space it was given.
+// It is smaller than the widest label because a name is painted only once the zoom
+// makes it readable (see labelTier), and reserving room for text that is not on
+// screen is how the picture ends up smaller than the space it was given.
 const LABEL_MARGIN = { top: 26, right: 46, bottom: 42, left: 46 };
 
 // fitToFrame maps the settled graph onto the frame so it fills it, leaving only the
@@ -506,8 +589,11 @@ function legendHTML(graph, layoutMs) {
 }
 
 function renderGraph(graph, layoutMs, highlight, frame, selected) {
-  const { width, height } = frame;
-  const labels = labelPolicy(graph);
+  // The graph is laid out in a world of its own size, not in the viewport. The
+  // frame only decides that world's shape, so the opening view fills the window
+  // without letterboxing.
+  const world = worldFor(graph.nodes, frame);
+  const { width, height } = world;
   const nodes = graph.nodes.map((n) => ({ ...n }));
   const ms = layout(nodes, graph.edges, { width, height }) + layoutMs;
   const at = new Map(nodes.map((n) => [n.id, n]));
@@ -521,6 +607,7 @@ function renderGraph(graph, layoutMs, highlight, frame, selected) {
       : "";
     return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}"
       x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"
+      data-from="${esc(e.from)}" data-to="${esc(e.to)}"
       class="mesh-edge${dashed ? " mesh-edge-contains" : ""}${state}"/>`;
   }).join("");
 
@@ -545,9 +632,11 @@ function renderGraph(graph, layoutMs, highlight, frame, selected) {
            <text text-anchor="middle" dy="3.5" class="mesh-badge-glyph">${esc(sev.glyph)}</text>
          </g>`
       : "";
-    // A name is painted when the policy says so, when this node is selected, or —
-    // through the stylesheet, with no re-render — while it is hovered or focused.
-    const named = labels.shows(n) || n.id === selected;
+    // Every node carries its name. Which of them are painted is the stylesheet's
+    // decision, from the current magnification (see labelTier) — so zooming reveals
+    // names with no re-render, and a selected, hovered or focused node keeps its own
+    // whatever the zoom is.
+    const named = Boolean(label) || n.id === selected;
     return `<g transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"
       class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")} mesh-sev-${esc(n.severity || "unknown")}${named ? " mesh-named" : ""}${state}"
       data-node-id="${esc(n.id)}" data-severity="${esc(n.severity || "unknown")}"
@@ -561,11 +650,11 @@ function renderGraph(graph, layoutMs, highlight, frame, selected) {
       <title>${esc(nodeTitle(n))}</title></g>`;
   }).join("");
 
-  // The viewBox starts as the frame itself, because fitToFrame has already put the
-  // content inside exactly that box. Matching the frame's own aspect ratio is what
-  // removes the empty bands: with preserveAspectRatio's default, any other ratio is
-  // letterboxed, which is the blank space that used to surround a settled graph.
-  return { ms, svg: `<svg class="mesh-canvas" viewBox="0 0 ${width} ${height}"
+  // The viewBox starts as the whole world, because that is what fitToFrame put the
+  // content inside. The world carries the frame's own aspect ratio, so with
+  // preserveAspectRatio's default there is nothing to letterbox — the opening
+  // picture is the entire landscape, filling the window.
+  return { ms, world, svg: `<svg class="mesh-canvas" viewBox="0 0 ${width} ${height}"
     role="img" aria-label="Derived landscape mesh">
     <g class="mesh-edges">${edges}</g>${circles}</svg>` };
 }
@@ -700,6 +789,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // every paint starts — the opening picture is the whole landscape.
   let frame = { width: 1200, height: 720 };
   let frameView = null;
+  // world is the box the graph was actually laid out in, and the base view is that
+  // box rather than the frame: the frame is a window, not the canvas.
+  let world = { width: 1200, height: 720 };
 
   function measure() {
     const width = Math.max(surface.clientWidth || 0, 320);
@@ -710,13 +802,19 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function applyView() {
     const svg = surface.querySelector("svg");
     if (!svg) return;
-    const v = frameView || { x: 0, y: 0, w: frame.width, h: frame.height };
+    const v = frameView || baseView();
     svg.setAttribute("viewBox", `${v.x.toFixed(2)} ${v.y.toFixed(2)} ${v.w.toFixed(2)} ${v.h.toFixed(2)}`);
     svg.classList.toggle("mesh-zoomed", frameView !== null);
+    // Screen pixels per world unit, which is what decides whether a name can be
+    // read. Toggling a class is the whole of it: names appear and disappear as the
+    // view moves, with nothing re-rendered and no layout recomputed.
+    const tier = labelTier(frame.width / Math.max(v.w, 1));
+    svg.classList.toggle("mesh-names-all", tier === "all");
+    svg.classList.toggle("mesh-names-anchors", tier === "anchors");
   }
 
   function baseView() {
-    return { x: 0, y: 0, w: frame.width, h: frame.height };
+    return { x: 0, y: 0, w: world.width, h: world.height };
   }
 
   // zoom keeps whatever is under `focus` under it, so the wheel behaves like a map.
@@ -743,7 +841,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const highlight = result ? new Set(result.nodes) : null;
 
     measure();
-    const { ms, svg } = renderGraph(shown, 0, highlight, frame, selected);
+    const painted = renderGraph(shown, 0, highlight, frame, selected);
+    const { ms, svg } = painted;
+    world = painted.world;
     surface.innerHTML = shown.nodes.length
       ? svg
       : `<p class="mesh-empty-filter">Nothing matches “${esc(term)}”.</p>`;
@@ -760,6 +860,55 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     selected = selected === id ? null : id; // clicking the selection again clears it
     paint();
   }
+
+  // Which bubble is connected to which, shown by pointing at one.
+  //
+  // Impact analysis already answers this properly — it walks the dependency edges
+  // to whatever depth is asked for, and states the answer in words beside the
+  // picture. But it needs a click, and it answers a bigger question than the one
+  // somebody has while reading: *what is this touching?* That question is asked
+  // dozens of times while scanning a landscape and deserves to cost nothing.
+  //
+  // So hovering a node lifts its immediate neighbours and the edges to them, and
+  // lets everything else fall back. It is one hop deliberately: the transitive
+  // answer is what selecting is for, and a hover that lit up half the landscape
+  // would be a worse version of it rather than a different tool. Nothing is
+  // re-laid-out and nothing is re-rendered — the classes go on and come off, so the
+  // picture cannot move under the pointer while it is being read.
+  let lit = null;
+  function relate(id) {
+    if (lit === id) return;
+    lit = id;
+    const svg = surface.querySelector("svg");
+    if (!svg) return;
+    svg.classList.toggle("mesh-relating", id !== null);
+    const neighbours = new Set();
+    for (const line of svg.querySelectorAll(".mesh-edge")) {
+      const from = line.dataset.from, to = line.dataset.to;
+      const touches = id !== null && (from === id || to === id);
+      line.classList.toggle("mesh-related-edge", touches);
+      if (touches) neighbours.add(from === id ? to : from);
+    }
+    for (const node of svg.querySelectorAll(".mesh-node")) {
+      const nodeId = node.dataset.nodeId;
+      node.classList.toggle("mesh-related", neighbours.has(nodeId));
+      node.classList.toggle("mesh-relating-self", id !== null && nodeId === id);
+    }
+  }
+  surface.addEventListener("pointerover", (event) => {
+    const node = event.target.closest?.(".mesh-node");
+    relate(node ? node.dataset.nodeId : null);
+  });
+  surface.addEventListener("pointerleave", () => relate(null));
+  // Keyboard reaches the same answer: the relationships are part of what the view
+  // says, not a reward for owning a mouse.
+  surface.addEventListener("focusin", (event) => {
+    const node = event.target.closest?.(".mesh-node");
+    if (node) relate(node.dataset.nodeId);
+  });
+  surface.addEventListener("focusout", (event) => {
+    if (!surface.contains(event.relatedTarget)) relate(null);
+  });
   // pointToFrame maps a browser point onto the frame's own units, through whatever
   // the current viewBox is. Without it a wheel zoom would drift: the pointer is in
   // CSS pixels and the frame is not.
@@ -784,7 +933,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // Panning is only meaningful once something is off-screen. At the fitted frame
     // the whole landscape is already visible, so a drag there could only push it
     // out of view and reintroduce the empty space the fit exists to remove.
-    if (!frameView || frameView.w >= frame.width) return;
+    if (!frameView || frameView.w >= world.width) return;
     const from = pointToFrame(event);
     if (!from) return;
     panning = { from, start: frameView || baseView(), id: event.pointerId };
