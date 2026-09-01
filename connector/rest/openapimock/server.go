@@ -43,7 +43,7 @@ type Call struct {
 }
 
 // Report is this mock in the envelope the Console's Mockups view takes
-// (ADR-draft-mockups-are-one-view): a header the server understands and a payload it
+// (ADR-0216): a header the server understands and a payload it
 // does not. At is missing on purpose — it is stamped by whoever accepts the report,
 // never by the reporter.
 type Report struct {

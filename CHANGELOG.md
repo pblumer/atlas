@@ -59,7 +59,7 @@ _Changed_ / _Removed_ for each version.
   `GET /__mock/calls` is the journal of what a run actually did — method, path,
   operation, status, the `X-Request-ID` a job carries, and the body it sent — and
   `GET /__mock/report` is that journal in the envelope the Console's Mockups view takes
-  ([ADR-draft-mockups-are-one-view](docs/adr/draft-mockups-are-one-view.md)), so this
+  ([ADR-0216](docs/adr/0216-mockups-are-one-view.md)), so this
   mockup reports where the others are moving rather than becoming a fourth place to
   look.
 

@@ -30,7 +30,7 @@
 // Two endpoints outside the document answer "what did my run actually do":
 // `GET /__mock/calls` is the journal of served calls, and `GET /__mock/report` is that
 // journal and the operation table in the envelope the Console's Mockups view takes
-// (ADR-draft-mockups-are-one-view), so this mock reports into the same place as every
+// (ADR-0216), so this mock reports into the same place as every
 // other one rather than becoming a fourth place to look.
 package openapimock
 

@@ -257,7 +257,7 @@ The control-flow basics most real models use.
   describe rather than substituting one. Only the URL's host changes in the model.
   `GET /__mock/calls` is the journal of what a run actually did and `GET /__mock/report`
   is that journal in the Mockups envelope
-  ([ADR-draft-mockups-are-one-view](docs/adr/draft-mockups-are-one-view.md)). Request
+  ([ADR-0216](docs/adr/0216-mockups-are-one-view.md)). Request
   validation against the schemas, stateful collections, and posting the report once the
   Mockups route exists are follow-ups.
   **BMC Remedy is another Worker Type in the catalog**

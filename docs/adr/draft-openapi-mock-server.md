@@ -44,7 +44,7 @@ took the trouble — the exact example responses.
   connector work off the run loop; a mockup facility inside the engine would pull it
   back.
 - **One place to look at what a mockup did**
-  ([ADR-draft-mockups-are-one-view](draft-mockups-are-one-view.md)). Atlas already had
+  ([ADR-0216](0216-mockups-are-one-view.md)). Atlas already had
   three mockups reporting into three different places. A fourth shape is the thing that
   record exists to stop.
 
@@ -87,7 +87,7 @@ Chosen option: **"a spec-driven mock server as a subcommand"**, in package
   `GET /__mock/calls` is the journal — what was called, in what order, with which
   `X-Request-ID` (the job key) and body — and `GET /__mock/report` is that journal and
   the operation table inside the envelope
-  [ADR-draft-mockups-are-one-view](draft-mockups-are-one-view.md) defines, under kind
+  [ADR-0216](0216-mockups-are-one-view.md) defines, under kind
   `openapi`. The endpoints sit under `/__mock/` rather than `/mock/` because a document
   is free to describe `/mock/anything`.
 - **YAML is a direct dependency now** (`gopkg.in/yaml.v3`, already in the module graph).
@@ -155,7 +155,7 @@ validation is the first follow-up, not a gap this record is unaware of.
 ## Links
 
 - builds on [ADR-0181](0181-ad-connector-mock-mode.md) (a mock is faithful where being faithful is the point)
-- relates to [ADR-draft-mockups-are-one-view](draft-mockups-are-one-view.md) (the envelope this mock reports in)
+- relates to [ADR-0216](0216-mockups-are-one-view.md) (the envelope this mock reports in)
 - relates to [ADR-0067](0067-service-task-connector-catalog.md) (the REST connector task this stands in for)
 - relates to [ADR-0106](0106-bmc-remedy-connector.md) (the hand-written mock this generalizes)
 - contrasts [ADR-0120](0120-mockup-service-task.md) (simulating the task rather than the API)

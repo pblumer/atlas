@@ -1169,7 +1169,7 @@ func runMockServer(addr string, handler http.Handler) error {
 // generated from its schemas where it does not, always the same way for the same
 // document. GET /__mock/calls is the journal of what a run actually did, and
 // GET /__mock/report is that journal in the envelope the Console's Mockups view takes
-// (ADR-draft-mockups-are-one-view).
+// (ADR-0216).
 func runMockOpenAPI(args []string) error {
 	fs := flag.NewFlagSet("mock-openapi", flag.ExitOnError)
 	specPath := fs.String("spec", "", "path to the OpenAPI 3 document (JSON or YAML) to mock — required")
