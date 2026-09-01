@@ -1,8 +1,11 @@
 package panorama
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -144,4 +147,83 @@ func TestSetLayoutRouteNeedsWriteAccess(t *testing.T) {
 		"expectedRevision": 1,
 		"changes":          []map[string]any{{"nodeId": "n-1", "x": 1, "y": 1, "w": 10, "h": 10}},
 	}, http.StatusNotFound)
+}
+
+// TestSetLayoutRouteReportsEveryWayTheSaveCanFail. Each of these leaves the
+// document alone, and each has to say which kind of failure it is: a caller's
+// mistake, a model that is gone, or a server that could not read its own store.
+// Reporting one as another sends somebody to the wrong place.
+func TestSetLayoutRouteReportsEveryWayTheSaveCanFail(t *testing.T) {
+	good := map[string]any{
+		"expectedRevision": 1,
+		"changes":          []map[string]any{{"nodeId": "n-1", "x": 1, "y": 1, "w": 10, "h": 10}},
+	}
+
+	t.Run("malformed body", func(t *testing.T) {
+		fx := newServiceFixture(t)
+		seedView(t, fx, "app-1")
+		req := httptest.NewRequest(http.MethodPut,
+			"/api/v1/panorama/models/"+testModelID+"/layout", strings.NewReader("{"))
+		req.Header.Set("Content-Type", "application/json")
+		req.SetPathValue("id", testModelID)
+		invoke(t, fx.service.HandleSetLayout, req, http.StatusBadRequest)
+	})
+
+	t.Run("no such model", func(t *testing.T) {
+		fx := newServiceFixture(t)
+		layoutRequest(t, fx, good, http.StatusNotFound)
+	})
+
+	t.Run("unreadable store", func(t *testing.T) {
+		fx := newServiceFixture(t)
+		seedView(t, fx, "app-1")
+		if err := os.WriteFile(filepath.Join(fx.store.Dir(), testModelID+".json"), []byte("{"), 0o644); err != nil {
+			t.Fatalf("write corrupt model: %v", err)
+		}
+		layoutRequest(t, fx, good, http.StatusInternalServerError)
+	})
+
+	t.Run("access resolver fails", func(t *testing.T) {
+		fx := newServiceFixture(t)
+		seedView(t, fx, "app-1")
+		fx.service.access = func(*http.Request, string) (ApplicationAccess, error) {
+			return ApplicationAccess{}, errors.New("access failed")
+		}
+		layoutRequest(t, fx, good, http.StatusInternalServerError)
+	})
+
+	// A store that cannot be *written* is not provoked here: the tests run as root,
+	// which ignores the permission bits that would cause it, and removing the
+	// directory makes the read report "no such model" rather than a write failure —
+	// which the case above already covers. The path is the same one every other
+	// Panorama write takes.
+}
+
+// TestSetLayoutRouteRefusesToStoreAnInvalidDocument. The writer only ever splices
+// four numbers, so this should be unreachable — which is exactly why it is checked
+// rather than assumed. Validating the result is what turns "it only splices" from a
+// claim into something the server proves before it saves.
+func TestSetLayoutRouteRefusesToStoreAnInvalidDocument(t *testing.T) {
+	fx := newServiceFixture(t)
+	// A document that already fails validation: the splice will succeed and the
+	// check after it must refuse to store the result.
+	if err := fx.store.Save(Model{
+		ID: testModelID, ApplicationID: "app-1", Name: "Broken", Notation: NotationArchiMate32,
+		Revision: 1, UpdatedAt: 1,
+		XML: `<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/">
+  <views><diagrams><view identifier="v">
+    <node identifier="n-1" elementRef="gone" x="1" y="1" w="2" h="2"/>
+  </view></diagrams></views>
+</model>`,
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	body := layoutRequest(t, fx, map[string]any{
+		"expectedRevision": 1,
+		"changes":          []map[string]any{{"nodeId": "n-1", "x": 9, "y": 9, "w": 20, "h": 20}},
+	}, http.StatusBadRequest).Body.String()
+	if !strings.Contains(body, "would not validate") {
+		t.Errorf("body = %s, want it to say the result was refused", body)
+	}
 }
