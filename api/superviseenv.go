@@ -167,7 +167,11 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// Remedy is provisioned for exactly mail's reason: its base URL and service
 		// account live in the connector store and the vault (ADR-0106), so a supervised
 		// worker holding neither could serve no Remedy task at all.
-		connectorKindRemedy:   s.remedyWorkerEnv,
+		connectorKindRemedy: s.remedyWorkerEnv,
+		// Jira is provisioned for exactly Remedy's reason: its site URL and credential
+		// live in the connector store and the vault (ADR-0201), so a supervised worker
+		// holding neither could serve no Jira task at all.
+		connectorKindJira:     s.jiraWorkerEnv,
 		connectorKindPostgres: func() []string { return s.sqlWorkerEnvByName(connectorKindPostgres) },
 		connectorKindMariaDB:  func() []string { return s.sqlWorkerEnvByName(connectorKindMariaDB) },
 		connectorKindMSSQL:    func() []string { return s.sqlWorkerEnvByName(connectorKindMSSQL) },
@@ -432,6 +436,135 @@ func remedyBundleParse(raw string) (remedyCredentials, bool) {
 		return remedyCredentials{}, false
 	}
 	return c, true
+}
+
+// Environment a supervised Jira worker reads its sites from — the same names an
+// operator sets by hand for an external worker (there is no private channel, ADR-0157).
+// jiraEnvPrefix matches the worker's own constant of the same name;
+// TestSupervisedJiraEnvUsesTheWorkersOwnNames holds the two together.
+const (
+	jiraEnvPrefix     = "ATLAS_JIRA_"
+	jiraConnectorsEnv = jiraEnvPrefix + "CONNECTORS"
+)
+
+// jiraWorkerEnv renders this server's Jira connectors as the environment a supervised
+// worker builds the identical clients from: the site URL and, out of the vault bundle
+// behind each connector's credentialsRef, either the Cloud {email, apiToken} pair or a
+// Data Center personal access token.
+//
+// It is Remedy's story with an issue tracker in place of an AR System (ADR-0201/0168).
+// The site URL and the credential live in the connector store and the vault, which a
+// supervised worker can read no more than it can read the engine's memory — so
+// offloading Jira without this would hand every Jira task to a worker with no site to
+// file against.
+//
+// Exactly one credential shape is rendered per connector, chosen the way
+// jira.NewProviderClient chooses it, so the supervised worker cannot end up talking to
+// a product the engine thinks it is not: the shape decides the authentication scheme,
+// how an assignee is addressed, and which search endpoint is used.
+//
+// A connector an operator configured on the host is left untouched and kept in the
+// rendered list: the child inherits ATLAS_JIRA_<NAME>_* already, and dropping its name
+// would let a store connector silently take the whole list away from it.
+//
+// It reads the connector store and the vault, so it runs on the run-loop goroutine
+// (their owner, invariant I3), like buildJiraClients does.
+func (s *Server) jiraWorkerEnv() []string {
+	var (
+		env       []string
+		names     []string
+		fromStore bool // a store connector contributed a name; only then must CONNECTORS be rendered
+	)
+	seen := map[string]bool{}
+	addName := func(n string) {
+		if n = strings.TrimSpace(n); n != "" && !seen[n] {
+			seen[n] = true
+			names = append(names, n)
+		}
+	}
+	// Instances an operator set directly on the host: inherited by the child as they
+	// are, so nothing is rendered for them — they are only kept in the list below.
+	for _, name := range splitConnectorList(os.Getenv(jiraConnectorsEnv)) {
+		addName(name)
+	}
+	s.do(func() {
+		recs, err := s.connectors.LoadAll()
+		if err != nil {
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the connector store for a supervised jira worker",
+				slog.String("error", err.Error()))
+			return
+		}
+		sort.Slice(recs, func(i, j int) bool { return recs[i].Name < recs[j].Name })
+		taken := map[string]string{}
+		for _, c := range recs {
+			if c.Kind != connectorKindJira || !c.Enabled {
+				continue
+			}
+			envKey := connectorEnvKey(c.Name)
+			if envKey == "" {
+				continue
+			}
+			// Two names that fold to one variable would silently give one the other's
+			// credential — the mail/entra collision, left out for the same reason.
+			if first, dup := taken[envKey]; dup {
+				logging.Warn(logging.WorkerSupervisorFailed,
+					"two jira connectors share one environment name; the second is not handed to the supervised worker",
+					slog.String("connector", c.Name), slog.String("collidesWith", first))
+				continue
+			}
+			endpoint := strings.TrimSpace(c.Endpoint)
+			creds, ok := jiraBundleParse(s.resolveConnectorSecret(c.CredentialsRef))
+			// A connector with no site, or whose bundle does not resolve (no secret set
+			// yet, or neither shape), is left out rather than handed over half-filled:
+			// the worker then refuses at startup on a *named* instance missing a field,
+			// which would take down every other kind it serves. Left out, it simply is
+			// not served, and the Console shows the connector as configured-not-working.
+			if endpoint == "" || !ok {
+				continue
+			}
+			taken[envKey] = c.Name
+			key := jiraEnvPrefix + envKey + "_"
+			env = append(env, key+"URL="+endpoint)
+			if creds.Token != "" {
+				env = append(env, key+"TOKEN="+creds.Token)
+			} else {
+				env = append(env, key+"EMAIL="+creds.Email, key+"API_TOKEN="+creds.APIToken)
+			}
+			addName(c.Name)
+			fromStore = true
+		}
+	})
+	// Only a store connector needs CONNECTORS rendered: an operator who set it on the
+	// host has it inherited by the child already. When the store does contribute,
+	// render the union so a host-named instance is not lost to the override.
+	if !fromStore {
+		return nil
+	}
+	return append(env, jiraConnectorsEnv+"="+strings.Join(names, ","))
+}
+
+// jiraBundleParse parses the vault bundle a jira connector's credentialsRef names
+// (ADR-0201) and returns it reduced to the one shape that will be used. The precedence
+// is jira.NewProviderClient's — a Data Center token wins over a Cloud pair — so a
+// supervised worker is handed the same product the engine would have talked to rather
+// than a second guess at it. ok is false when the bundle is absent, invalid JSON, or
+// neither shape.
+func jiraBundleParse(raw string) (jiraCredentials, bool) {
+	if strings.TrimSpace(raw) == "" {
+		return jiraCredentials{}, false
+	}
+	var c jiraCredentials
+	if err := json.Unmarshal([]byte(raw), &c); err != nil {
+		return jiraCredentials{}, false
+	}
+	switch {
+	case strings.TrimSpace(c.Token) != "":
+		return jiraCredentials{Token: strings.TrimSpace(c.Token)}, true
+	case strings.TrimSpace(c.Email) != "" && strings.TrimSpace(c.APIToken) != "":
+		return jiraCredentials{Email: strings.TrimSpace(c.Email), APIToken: strings.TrimSpace(c.APIToken)}, true
+	default:
+		return jiraCredentials{}, false
+	}
 }
 
 // adDirectoryEnvLocked renders the Console-configured AD directories a supervised

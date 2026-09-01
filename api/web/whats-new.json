@@ -149,6 +149,28 @@
       }
     },
     {
+      "id": "the-jira-worker-type-runs-on-a-worker",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Jira tasks can run outside the engine now",
+        "de": "Jira-Tasks laufen jetzt auch ausserhalb der Engine"
+      },
+      "summary": {
+        "en": "Jira was listed as a kind you could move onto a worker, but no worker could actually serve it — moving it left every Jira task waiting for nobody. There is a real Jira worker now. It holds the site address and the Atlassian login in its own configuration, so it can work as an account the engine has never seen, and reach a Jira the engine cannot. A worker Atlas starts for you is handed all of that from Connectors and the vault, with nothing to set by hand. Running Jira inside the engine still works and is still the default.",
+        "de": "Jira war als Typ aufgeführt, den man auf einen Worker auslagern kann — nur konnte ihn kein Worker tatsächlich bedienen, und ausgelagert wartete jeder Jira-Task auf niemanden. Jetzt gibt es einen echten Jira-Worker. Er hält die Adresse der Jira-Instanz und die Atlassian-Anmeldung in seiner eigenen Konfiguration, kann also als Konto arbeiten, das die Engine nie gesehen hat, und ein Jira erreichen, an das die Engine nicht herankommt. Einem Worker, den Atlas selbst startet, wird das alles aus den Konnektoren und dem Tresor mitgegeben — von Hand ist nichts zu setzen. Jira in der Engine läuft weiterhin und bleibt die Voreinstellung."
+      },
+      "link": {
+        "label": "ADR-0168",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0168-connector-work-on-a-worker.md"
+      },
+      "tags": [
+        "Connectors",
+        "Workers"
+      ]
+    },
+    {
       "id": "new-atlas-mark",
       "version": "Unreleased",
       "date": null,
@@ -212,6 +234,27 @@
         },
         "route": "#/console/workers"
       }
+    },
+    {
+      "id": "a-jira-search-called-an-endpoint-jira-cloud-has-removed",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Jira search works again on Jira Cloud",
+        "de": "Die Jira-Suche funktioniert wieder mit Jira Cloud"
+      },
+      "summary": {
+        "en": "Atlassian switched off the search endpoint this connector used, so a Jira task set to Search (JQL) failed against Jira Cloud with a bare \"gone\" from the server. The search now uses the endpoint Atlassian replaced it with, and asks for the same set of issue fields as before, so a model that reads the summary of a found issue keeps working unchanged. The other six Jira operations were never affected, and Jira Data Center is unaffected by the change altogether.",
+        "de": "Atlassian hat den Suchendpunkt abgeschaltet, den dieser Konnektor verwendet hat — eine Jira-Aufgabe mit der Operation Suche (JQL) scheiterte gegen Jira Cloud daher an einem blossen \"gone\" des Servers. Die Suche nutzt jetzt den Endpunkt, den Atlassian an dessen Stelle gesetzt hat, und fordert dieselben Vorgangsfelder an wie zuvor — ein Modell, das etwa den Titel eines gefundenen Vorgangs liest, funktioniert unverändert weiter. Die sechs übrigen Jira-Operationen waren nie betroffen, und Jira Data Center ist von der Änderung gar nicht berührt."
+      },
+      "link": {
+        "label": "ADR-0201",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0201-jira-connector.md"
+      },
+      "tags": [
+        "Connectors"
+      ]
     },
     {
       "id": "a-feed-scrape-reached-its-worker-without-knowing-it-was-a-fe",
@@ -290,64 +333,6 @@
           "de": "Organization öffnen"
         },
         "route": "#/console/org"
-      }
-    },
-    {
-      "id": "an-inbound-connector-s-events-reach-only-the-processes-you-a",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Incoming events reach only the processes you allow",
-        "de": "Eingehende Ereignisse erreichen nur die Prozesse, die Sie erlauben"
-      },
-      "summary": {
-        "en": "Giving a connector an owner stopped other people changing it. It did not stop them receiving what it brings in: an incoming connector hands its events to whichever process listens for the message name, and a name is not a secret. Now the subscription claims that name. A process deployed by somebody who cannot reach your connector will not be given those events, and if you try to point a connector at a name somebody else's process already listens for, Atlas refuses instead of quietly forwarding your post to them. Both refusals tell you the message name so you can rename it or ask for access, and neither tells you whose process or whose connector is on the other side — that would give away exactly what a private connector keeps to itself. Renaming a subscription or switching a disabled one back on goes through the same check, and deploying a whole project is refused before anything is registered, so you never end up half-deployed. Two limits worth knowing: an administrator passes both checks, and a process deployed before this update keeps any name it already listens for until you deploy it again.",
-        "de": "Einem Konnektor eine Eigentümerin zu geben, hat andere davon abgehalten, ihn zu ändern. Es hat sie nicht davon abgehalten, zu empfangen, was er hereinbringt: Ein eingehender Konnektor übergibt seine Ereignisse an jeden Prozess, der auf den Nachrichtennamen hört — und ein Name ist kein Geheimnis. Jetzt beansprucht das Abonnement diesen Namen. Ein Prozess, den jemand deployt hat, der Ihren Konnektor nicht erreichen darf, bekommt diese Ereignisse nicht mehr. Und wenn Sie einen Konnektor auf einen Namen richten wollen, auf den bereits der Prozess einer anderen Person hört, weist Atlas das ab, statt Ihre Post stillschweigend dorthin weiterzuleiten. Beide Abweisungen nennen Ihnen den Nachrichtennamen, damit Sie ihn ändern oder um Zugriff bitten können — und keine nennt Ihnen, wessen Prozess oder wessen Konnektor auf der anderen Seite steht; das würde genau das preisgeben, was ein privater Konnektor für sich behält. Ein Abonnement umzubenennen oder ein abgeschaltetes wieder einzuschalten geht durch dieselbe Prüfung, und ein ganzes Projekt wird abgewiesen, bevor irgendetwas registriert ist — halb deployt landen Sie also nie. Zwei Grenzen, die man kennen sollte: Eine Administratorin kommt durch beide Prüfungen, und ein Prozess, der vor dieser Aktualisierung deployt wurde, behält jeden Namen, auf den er schon hört, bis Sie ihn erneut deployen."
-      },
-      "link": {
-        "label": "ADR-0205",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0205-connector-ownership-and-event-delivery.md"
-      },
-      "tags": [
-        "Security",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Connectors",
-          "de": "Konnektoren öffnen"
-        },
-        "route": "#/console/connectors"
-      }
-    },
-    {
-      "id": "a-connector-belongs-to-somebody-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "A connector belongs to somebody now",
-        "de": "Ein Konnektor gehört jetzt jemandem"
-      },
-      "summary": {
-        "en": "Until now a connector belonged to nobody, and that turned out to mean more than it sounds: any account that could sign in was able to list every connector with its address and sender mailbox, change one, delete somebody else's, and point somebody else's incoming connector at a name of its choosing. A connector now has an owner — whoever created it — and only they, the people they share it with, and administrators can see or change its configuration. Sharing works the way sharing already works elsewhere in Atlas: add a person or a whole group, as may-see-it or may-change-it, and withdraw it again whenever you like, right beside the connector under Console → Connectors. Ownership can be handed on, so a connector outlives the person who set it up. Two things stay exactly as they were, on purpose. Everyone still sees that a connector exists, because that is what you need to build a task against it — what is now private is the address, the credential and the settings, not the name. And nothing here touches a running process: a deployed model reaches its connector whoever started it. One thing is still open and worth knowing: this protects a connector's settings, not yet the events an incoming connector brings in.",
-        "de": "Bisher gehörte ein Konnektor niemandem, und das hiess mehr, als es klingt: Jedes Konto, das sich anmelden konnte, durfte alle Konnektoren samt Adresse und Absenderpostfach auflisten, einen ändern, einen fremden löschen und einen fremden eingehenden Konnektor auf einen selbst gewählten Namen richten. Ein Konnektor hat jetzt eine Eigentümerin — die Person, die ihn angelegt hat — und nur sie, die Personen, mit denen sie ihn teilt, und Administratorinnen sehen oder ändern seine Konfiguration. Geteilt wird, wie in Atlas ohnehin geteilt wird: eine Person oder eine ganze Gruppe hinzufügen, als «darf sehen» oder «darf ändern», und jederzeit wieder zurückziehen — direkt neben dem Konnektor unter Console → Konnektoren. Das Eigentum lässt sich übergeben, damit ein Konnektor die Person überdauert, die ihn eingerichtet hat. Zwei Dinge bleiben mit Absicht genau wie bisher: Alle sehen weiterhin, dass ein Konnektor existiert — das braucht man, um eine Aufgabe dagegen zu bauen; privat sind Adresse, Zugangsdaten und Einstellungen, nicht der Name. Und an laufenden Prozessen ändert sich nichts: Ein deploytes Modell erreicht seinen Konnektor, wer immer es gestartet hat. Eines ist noch offen und sollte man wissen: Geschützt sind die Einstellungen eines Konnektors, noch nicht die Ereignisse, die ein eingehender Konnektor hereinbringt."
-      },
-      "link": {
-        "label": "ADR-0205",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0205-connector-ownership-and-event-delivery.md"
-      },
-      "tags": [
-        "Security",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Connectors",
-          "de": "Konnektoren öffnen"
-        },
-        "route": "#/console/connectors"
       }
     }
   ]

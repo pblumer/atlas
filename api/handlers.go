@@ -18,6 +18,7 @@ import (
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/entra"
+	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
@@ -4712,6 +4713,24 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "remedy", Fields: map[string]any{
 			"connector": j.Connector, "form": j.Form, "values": j.Values,
 			"requestId": j.RequestID, "resultVariable": j.ResultVariable,
+		}}
+	case compiler.JiraJobTypeIndex:
+		// The operation and its values travel; the site URL and the {email, apiToken}
+		// or personal-access token do not. Jira is Remedy's situation exactly — one
+		// operator-managed instance behind a name (ADR-0201) — so what names the
+		// credential is the connector's name, resolved against the worker's own
+		// configuration. That is also what lets the worker operate as a different
+		// Atlassian account from anything the engine holds.
+		j, err := jira.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "jira", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "issue": j.Issue,
+			"project": j.Project, "issueType": j.IssueType, "summary": j.Summary,
+			"description": j.Description, "transition": j.Transition, "comment": j.Comment,
+			"assignee": j.Assignee, "jql": j.JQL, "maxResults": j.MaxResults,
+			"fields": j.Fields, "requestId": j.RequestID, "resultVariable": j.ResultVariable,
 		}}
 	case compiler.MsSqlJobTypeIndex, compiler.MariaDBJobTypeIndex, compiler.PostgresJobTypeIndex:
 		// The statement and its bound parameters travel; the DSN does not exist here

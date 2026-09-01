@@ -326,6 +326,87 @@ const remedyPullBPMN = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmn:process>
 </bpmn:definitions>`
 
+// TestPullingAJiraJobResolvesTheTaskAndCarriesNoCredential is the engine's half of
+// giving Jira a worker at all (ADR-0201/0203), checked where the engine hands the work
+// over.
+//
+// What a leased Jira job carries is the *resolved* task: the connector's name, the
+// operation, every authored value with its FEEL already evaluated against the instance,
+// and the job key as the X-Request-ID an at-least-once replay repeats. What it does not
+// carry — and has nowhere to put — is the site URL, an email or an API token. Before
+// this the kind had no worker at all: `offloadableKinds` advertised it as movable while
+// `worker/connectors.go` had no case for it, so --offload-connectors jira stripped the
+// in-process handler and left the job type served by nobody.
+func TestPullingAJiraJobResolvesTheTaskAndCarriesNoCredential(t *testing.T) {
+	srv := newServerWithOptions(t, WithOffloadedConnectorKinds([]string{connectorKindJira}))
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", jiraPullBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/processes/1/instances",
+		`{"variables":{"betreff":"Zugang für Rechnungswesen"}}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("start instance: status=%d body=%s", code, body)
+	}
+
+	code, got := pull(t, srv, fmt.Sprintf(`{"type":%q,"worker":"w1"}`, compiler.JiraJobType))
+	if code != http.StatusOK {
+		t.Fatalf("pull: status=%d", code)
+	}
+	if len(got.Jobs) != 1 {
+		t.Fatalf("pulled %d jobs, want the one Jira task", len(got.Jobs))
+	}
+	j := got.Jobs[0]
+	if j.Connector == nil {
+		t.Fatal("the leased job carries no resolved connector detail; the worker would have nothing to perform")
+	}
+	if j.Connector.Kind != connectorKindJira {
+		t.Errorf("kind = %q, want %q", j.Connector.Kind, connectorKindJira)
+	}
+	f := j.Connector.Fields
+	for _, tc := range []struct{ key, want string }{
+		{"connector", "acme"},
+		{"operation", "create-issue"},
+		{"project", "OPS"},
+		{"issueType", "Task"},
+		// The FEEL summary was evaluated by the engine, against this instance's
+		// variables, before the job was handed out — a worker has neither the compiled
+		// process nor the scope chain to do it itself.
+		{"summary", "Zugang für Rechnungswesen"},
+		{"resultVariable", "ticket"},
+	} {
+		if f[tc.key] != tc.want {
+			t.Errorf("%s = %v, want %q", tc.key, f[tc.key], tc.want)
+		}
+	}
+	if f["requestId"] != strconv.FormatUint(j.JobKey, 10) {
+		t.Errorf("requestId = %v, want the job key %d, which is what makes a replay recognizable", f["requestId"], j.JobKey)
+	}
+	// There is nowhere in the payload for a credential, and nothing that resembles one.
+	for _, forbidden := range []string{"url", "endpoint", "email", "apiToken", "token", "password"} {
+		if _, present := f[forbidden]; present {
+			t.Errorf("the resolved payload carries %q; a worker's credential must come from its own environment", forbidden)
+		}
+	}
+}
+
+// jiraPullBPMN is a Jira connector task with literal values and one FEEL value, so a
+// resolved payload shows both halves of what the engine evaluates.
+const jiraPullBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="ticketing" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:jiraConnector connector="acme" operation="create-issue" project="OPS"
+                             issueType="Task" summary="=betreff" resultVariable="ticket"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
 // The check above is only worth anything if it could fail, and it could not if every
 // managed kind were provisioned. Naming the ones that are not is what keeps it a
 // real constraint rather than a tautology that grew one.
