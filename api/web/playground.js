@@ -14,7 +14,7 @@
 //           durations, a bottleneck ranking, the run over time, and a heat map
 //           of what the data used and what it never reached. "Does this hold up?"
 //
-// See ADR-draft-modeler-playground.
+// See ADR-0215.
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

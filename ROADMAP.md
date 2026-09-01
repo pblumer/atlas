@@ -1063,7 +1063,7 @@ the hand-written Details panel one vertical slice at a time:
   simulator — identical semantics to production by construction.
 
 **Playground** — a third Modeler tab beside Design and Implement
-([ADR-draft-modeler-playground](docs/adr/draft-modeler-playground.md)), building on
+([ADR-0215](docs/adr/0215-modeler-playground.md)), building on
 the Play-mode sandbox above and extending it from "step one instance" to "run a
 dataset of up to 50 000 cases":
 - ✅ **Sandbox session**: a sandbox over a draft *or* a deployed version — own

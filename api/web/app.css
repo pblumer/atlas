@@ -3461,7 +3461,7 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .c4-reason { color: var(--warn); font-size: 12px; }
 .c4-loss h3 { color: var(--warn); }
 
-/* ---------- Playground tab (ADR-draft-modeler-playground) ----------
+/* ---------- Playground tab (ADR-0215) ----------
    The Playground runs the diagram on a throwaway sandbox of the real engine. Its
    control strip borrows .sim-bar from the Design view's token simulation, and its
    side panel borrows .vars-panel, so the two play modes read as siblings; only the

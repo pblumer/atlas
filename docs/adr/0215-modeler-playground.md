@@ -1,4 +1,4 @@
-# ADR-DRAFT: The Modeler Playground — batch simulation and analysis of a draft
+# ADR-0215: The Modeler Playground — batch simulation and analysis of a draft
 
 - **Status:** Proposed
 - **Date:** 2026-08-31

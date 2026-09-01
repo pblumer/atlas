@@ -139,7 +139,7 @@ var mcpOmittedRoutes = map[string]string{
 	// operator watches and occasionally forces before a restart. Same category as
 	// backup/restore — it concerns the data directory, not the processes running in it,
 	// and the control deletes WAL segments when compaction is on.
-	// The Playground (ADR-draft-modeler-playground) is a live sandbox bound to the
+	// The Playground (ADR-0215) is a live sandbox bound to the
 	// person who opened it: a session holds an engine and a temp directory, it is
 	// reclaimed on a TTL of disuse, and it exists to let an *author* watch a model
 	// run. An agent that wants to know how a model behaves has the durable surface

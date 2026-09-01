@@ -215,7 +215,7 @@ type Server struct {
 	forms        *formStore // durable sidecar for form definitions (ADR-0028)
 	// playgroundScenarios holds saved Playground runs: the requests that make one,
 	// what it must show, and the last report it produced
-	// (ADR-draft-modeler-playground).
+	// (ADR-0215).
 	playgroundScenarios *playgroundScenarioStore
 	publicLinks         *publicLinkStore  // durable sidecar for public start links (ADR-0029)
 	publicRate          *rateLimiter      // throttles the unauthenticated public endpoints
@@ -236,7 +236,7 @@ type Server struct {
 	processDocs *processdoc.Service
 	// playground serves the Modeler's Playground area, and playgroundSessions
 	// holds its live sandboxes. Each sandbox owns its own single-writer goroutine,
-	// so neither field is guarded by this server's run loop (ADR-draft-modeler-playground).
+	// so neither field is guarded by this server's run loop (ADR-0215).
 	playground         *playgroundapi.Service
 	playgroundSessions *playground.Registry
 	// playgroundTTL is how long an untouched sandbox is kept and playgroundSweep
@@ -1215,7 +1215,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// The Playground's sandboxes are engines of their own, so the registry is not
 	// behind this server's run loop — but *finding* the model a session runs is
 	// design-time state and authorization, and both stay here
-	// (ADR-draft-modeler-playground). Built after the options, so
+	// (ADR-0215). Built after the options, so
 	// WithPlaygroundSessions reaches the registry it configures.
 	s.playgroundSessions = playground.NewRegistry(s.playgroundTTL, playgroundMaxSessions)
 	s.playground = playgroundapi.New(s.playgroundSessions, s.playgroundModel, startVarsFromMap)
@@ -2267,7 +2267,7 @@ func (s *Server) playgroundReaper(every time.Duration) {
 // playgroundModel resolves the model a Playground session is asked to run, and
 // decides whether this request may read it. It is the one place the Playground
 // touches design-time state, so both the lookup and the authorization live here
-// rather than in the service (ADR-draft-modeler-playground).
+// rather than in the service (ADR-0215).
 //
 // A draft is read under the same per-artifact rule its own XML route uses
 // (ADR-0071): running somebody's draft in a sandbox is reading it.

@@ -631,7 +631,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
   // The Playground is a mode rather than a level of detail: it takes over the bar
   // and a side panel, so the tab toggle switches it on instead of only re-rendering
-  // the properties panel (ADR-draft-modeler-playground).
+  // the properties panel (ADR-0215).
   playground = attachPlayground(root, { api, toast, modeler });
   wireTabs(root, () => {
     rerender();

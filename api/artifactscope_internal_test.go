@@ -140,12 +140,12 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 		{"move draft into target (authorizeTargetProject)", "PATCH", "/api/v1/drafts/d2", `{"projectId":"pdir"}`},
 		// Opening a Playground sandbox on a draft reads that draft, so it goes through
 		// the same authorization — and fails the same way when the project cannot be
-		// read (ADR-draft-modeler-playground).
+		// read (ADR-0215).
 		{"playground on a draft (authorizeArtifact)", "POST", "/api/v1/playground/sessions", `{"source":"draft","ref":"d1"}`},
 		// A saved Playground scenario is a design-time artifact like the rest, so it
 		// inherits its project's scope on every door into it: reading one, keeping a
 		// baseline on it, overwriting it, deleting it, and filing a new one into a
-		// project (ADR-draft-modeler-playground, ADR-0071).
+		// project (ADR-0215, ADR-0071).
 		{"read scenario (authorizeArtifact)", "GET", "/api/v1/playground/scenarios/s1", ""},
 		{"scenario baseline (authorizeArtifact)", "PUT", "/api/v1/playground/scenarios/s1/baseline", `{"cases":1}`},
 		{"delete scenario (authorizeArtifact)", "DELETE", "/api/v1/playground/scenarios/s1", ""},

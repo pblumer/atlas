@@ -261,7 +261,7 @@ func TestArtifactScopeFormsAndRefs(t *testing.T) {
 
 // A saved Playground scenario is a design-time artifact, so it inherits its
 // project's scope like a draft or a form (ADR-0071,
-// ADR-draft-modeler-playground). It carries a dataset and a set of targets
+// ADR-0215). It carries a dataset and a set of targets
 // somebody chose, which is exactly the kind of thing that must not be readable —
 // or quietly editable — by everyone with an account.
 func TestPlaygroundScenarioScope(t *testing.T) {

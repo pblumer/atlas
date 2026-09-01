@@ -1,5 +1,5 @@
 // End-to-end coverage for the Playground tab's browser half (api/web/playground.js,
-// ADR-draft-modeler-playground).
+// ADR-0215).
 //
 // The tab is a mode, not a level of detail: it takes over the control strip and a side
 // panel, and it drives a server-side sandbox over a dozen endpoints. The Go tests cover
