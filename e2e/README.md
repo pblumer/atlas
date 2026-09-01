@@ -31,6 +31,35 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires
   manually** (the ⚡ / `step()` path).
+- **`playground.spec.mjs`** ([ADR-draft-modeler-playground](../docs/adr/draft-modeler-playground.md)):
+  the **Playground tab** — a mode rather than a level of detail, so it takes the control
+  strip and a side panel and gives the properties panel's width back to the diagram;
+  starting a sandbox sends the diagram *on screen* rather than a stored copy; a job waiting
+  for a person becomes a Complete button, and completing it repaints the run onto the canvas
+  with the runtime view's own markers; malformed start variables are reported instead of
+  posted; editing the diagram says the run no longer matches it; and leaving the editor
+  releases the server-side sandbox rather than leaving it to its TTL.
+
+  And the **batch half**: the pool setup is read off the diagram (a row per task the
+  author drew) and travels with the sandbox as a stub policy; a run is started, polled
+  until it stops, and *stops being polled* once it has; the report ranks bottlenecks by
+  queueing time and draws the run over simulated time; the heat map shades both shapes
+  and sequence flows and names the paths the data never reached — resolving a flow the
+  server named by its two ends against the client's own registry; a CSV dataset is
+  uploaded as a file rather than parsed in the browser (the one call that cannot go
+  through the `api()` helper, so the harness intercepts `fetch` to see it); and stopping
+  a batch leaves what it did readable.
+
+  And the **scenario half**: the checkboxes an author ticks become the expectations a
+  build exits on, resolved against the run that happened rather than the dataset in
+  the box; a failed check is marked and the verdict is a badge before it is a table;
+  a saved scenario is offered before a sandbox exists and *replaces* it when opened,
+  because the stub policy travels with it; saving one stores the three requests
+  themselves, seed included, so re-running it gives the same figures; a run is set
+  beside the stored baseline with only what moved shown, and only where moving has a
+  direction; a failing run cannot be kept as the baseline; and a CSV-driven run says
+  why it cannot be saved at all. Drives the real `mountEditor` and `playground.js`
+  against a mock Playground API.
 - **`gateways.spec.mjs`** (ADR-0096): the **exclusive** gateway pauses for a choice and routes
   down the picked branch (and **auto-decide** runs it hands-free); the **parallel** gateway
   forks both branches and the join merges to one completion; the **inclusive** gateway

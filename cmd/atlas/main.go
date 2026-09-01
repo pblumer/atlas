@@ -96,6 +96,17 @@ func main() {
 		if err := runMockRemedy(args); err != nil {
 			fatal("atlas mock-remedy", err)
 		}
+	case "playground":
+		if err := runPlaygroundScenario(args, os.Stdout); err != nil {
+			// A run that happened and did not meet its expectations leaves its own
+			// status: a CI job has to tell "the process no longer holds up" from "the
+			// server was unreachable", and it can only do that if the two differ. The
+			// checks are already printed, so there is nothing left to say.
+			if errors.Is(err, errScenarioFailed) {
+				os.Exit(exitScenarioFailed)
+			}
+			fatal("atlas playground", err)
+		}
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -138,6 +149,7 @@ Usage:
   atlas import-mim     [flags] FILE Convert a MIM/FIM XOML workflow to BPMN 2.0
   atlas check-job-types [flags]     Check a data directory's job-type table for index collisions
   atlas mock-remedy    [flags]      Run a mock BMC Remedy AR System for the Remedy connector
+  atlas playground     [flags]      Run a saved Playground scenario and exit on its verdict
   atlas version                     Print the version and build metadata
 
 Run "atlas <command> -h" for the flags of a command.

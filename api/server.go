@@ -39,6 +39,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -74,9 +75,11 @@ import (
 	"github.com/pblumer/atlas/metrics"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/opensearch"
+	"github.com/pblumer/atlas/playground"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/tracing"
 
+	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
 	"github.com/pblumer/atlas/api/token"
 	"github.com/pblumer/atlas/api/vault"
@@ -208,25 +211,37 @@ type Server struct {
 	// only where the operator named certificate authorities of their own with
 	// --tls-ca; nil means the default client, verifying against the host's roots
 	// (ADR-0191).
-	targetClient     *http.Client
-	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
-	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
-	publicRate       *rateLimiter      // throttles the unauthenticated public endpoints
-	registerRate     *rateLimiter      // throttles OAuth self-registration, on its own budget
-	logins           *loginGuard       // throttles authentication attempts (see loginguard.go)
-	projects         *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
-	releases         *releaseStore     // durable sidecar for application releases (ADR-0128)
-	grantAudit       *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
-	deployTokenStore *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
-	deployTokens     *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
-	apiTokenStore    *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
-	apiTokens        *apiTokenIndex    // in-memory hash->token index, same discipline as the deploy one
-	targets          *targetStore      // durable sidecar for peer deployment targets (ADR-0129)
-	appVersions      map[string]int32  // applicationId → highest release version published (ADR-0128)
+	targetClient *http.Client
+	forms        *formStore // durable sidecar for form definitions (ADR-0028)
+	// playgroundScenarios holds saved Playground runs: the requests that make one,
+	// what it must show, and the last report it produced
+	// (ADR-draft-modeler-playground).
+	playgroundScenarios *playgroundScenarioStore
+	publicLinks         *publicLinkStore  // durable sidecar for public start links (ADR-0029)
+	publicRate          *rateLimiter      // throttles the unauthenticated public endpoints
+	registerRate        *rateLimiter      // throttles OAuth self-registration, on its own budget
+	logins              *loginGuard       // throttles authentication attempts (see loginguard.go)
+	projects            *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
+	releases            *releaseStore     // durable sidecar for application releases (ADR-0128)
+	grantAudit          *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
+	deployTokenStore    *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
+	deployTokens        *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
+	apiTokenStore       *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
+	apiTokens           *apiTokenIndex    // in-memory hash->token index, same discipline as the deploy one
+	targets             *targetStore      // durable sidecar for peer deployment targets (ADR-0129)
+	appVersions         map[string]int32  // applicationId → highest release version published (ADR-0128)
 	// processDocs is the documentation area as a self-contained service: it owns
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
 	processDocs *processdoc.Service
+	// playground serves the Modeler's Playground area, and playgroundSessions
+	// holds its live sandboxes. Each sandbox owns its own single-writer goroutine,
+	// so neither field is guarded by this server's run loop (ADR-draft-modeler-playground).
+	playground         *playgroundapi.Service
+	playgroundSessions *playground.Registry
+	// playgroundTTL is how long an untouched sandbox is kept and playgroundSweep
+	// how often the reaper looks; WithPlaygroundSessions overrides both.
+	playgroundTTL, playgroundSweep time.Duration
 	// panorama is the application-owned ArchiMate model library (ADR-0189),
 	// isolated as a per-area service under ADR-0147.
 	panorama *panorama.Service
@@ -784,6 +799,21 @@ func WithRetentionInterval(d time.Duration) Option {
 	}
 }
 
+// WithPlaygroundSessions sets how long an untouched Playground sandbox is kept and
+// how often the sweep looks for one to reclaim. Non-positive values restore the
+// defaults. An operator with long-running exploratory sessions can raise the TTL;
+// tests pass a short one to exercise the sweep.
+func WithPlaygroundSessions(ttl, sweep time.Duration) Option {
+	return func(s *Server) {
+		if ttl > 0 {
+			s.playgroundTTL = ttl
+		}
+		if sweep > 0 {
+			s.playgroundSweep = sweep
+		}
+	}
+}
+
 // WithRetentionBatch caps how many finished instances one retention sweep tick
 // evaluates and purges (ADR-0115), bounding the work a single tick does on the run
 // loop; a larger backlog then drains as bounded catch-up across ticks. A non-positive
@@ -942,6 +972,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	playgroundScenarios, err := newPlaygroundScenarioStore(filepath.Join(dataDir, "playground-scenarios"))
+	if err != nil {
+		return nil, err
+	}
 	forms, err := newFormStore(filepath.Join(dataDir, "forms"))
 	if err != nil {
 		return nil, err
@@ -1064,11 +1098,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// Created unconditionally, not with a connector registry: AD is worker-only
 		// (ADR-0206), so this server never holds a mock
 		// directory of its own and is only ever the place the workers' reports land.
-		adMockView:  ad.NewMockView(0),
-		jobWaiters:  newJobWaiters(),
-		drafts:      drafts,
-		forms:       forms,
-		publicLinks: publicLinks,
+		adMockView:          ad.NewMockView(0),
+		jobWaiters:          newJobWaiters(),
+		drafts:              drafts,
+		forms:               forms,
+		playgroundScenarios: playgroundScenarios,
+		publicLinks:         publicLinks,
 		// A public start link tolerates a modest burst then ~1 start/sec per IP;
 		// generous for a human intake form, throttling for a script (ADR-0029).
 		publicRate: newRateLimiter(20, 1),
@@ -1101,6 +1136,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		repositoryStore:   repositoryStore,
 		inboundSubs:       inboundSubs,
 		settings:          settings,
+		playgroundTTL:     playgroundSessionTTL, // WithPlaygroundSessions overrides both of these
+		playgroundSweep:   playgroundReapInterval,
 		inboundPoll:       2 * time.Second,          // default cadence; WithInboundPollInterval overrides, 0 disables
 		inboundBatch:      defaultInboundBatch,      // per-poll ReadEvents cap; WithInboundBatchLimit overrides
 		exporterPoll:      5 * time.Second,          // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
@@ -1175,6 +1212,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	for _, opt := range opts {
 		opt(s)
 	}
+	// The Playground's sandboxes are engines of their own, so the registry is not
+	// behind this server's run loop — but *finding* the model a session runs is
+	// design-time state and authorization, and both stay here
+	// (ADR-draft-modeler-playground). Built after the options, so
+	// WithPlaygroundSessions reaches the registry it configures.
+	s.playgroundSessions = playground.NewRegistry(s.playgroundTTL, playgroundMaxSessions)
+	s.playground = playgroundapi.New(s.playgroundSessions, s.playgroundModel, startVarsFromMap)
 	// The encrypted secret vault (ADR-0069) is on by default (ADR-0070) unless
 	// WithoutVault disabled it. An operator key from the environment is preferred
 	// and never persisted; absent one, a key is loaded from — or generated into —
@@ -1463,6 +1507,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// the run loop — the collab registry is its own mutex-guarded, engine-independent
 	// state — so it never touches the processor or the invariants.
 	go s.collabReaper(collab.ReapInterval)
+	// A Playground sandbox is a live engine and a directory on disk, and a closed
+	// browser tab never says goodbye. The reaper is what keeps an abandoned session
+	// from holding either for ever. Like the collaboration reaper it runs off the
+	// run loop: sessions own their own writers.
+	s.wg.Add(1)
+	go s.playgroundReaper(s.playgroundSweep)
 	// The clio inbound bridge polls configured subscriptions and republishes new
 	// clio events as Atlas messages (ADR-0075). It is a separate goroutine like the
 	// timer scheduler — it does its network reads off the run loop and hands only the
@@ -2181,6 +2231,85 @@ func (s *Server) collabReaper(every time.Duration) {
 					slog.Int("participants", n), slog.Duration("ttl", collab.ParticipantTTL))
 			}
 		}
+	}
+}
+
+// Playground session bounds. A session holds a compiled model, two open stores
+// and a goroutine, so both numbers are resource limits rather than tuning knobs:
+// long enough that a person can think between two steps, few enough that a
+// server cannot be talked into holding a fleet of engines.
+const (
+	playgroundSessionTTL   = 30 * time.Minute
+	playgroundMaxSessions  = 8
+	playgroundReapInterval = time.Minute
+)
+
+// playgroundReaper closes Playground sessions nobody has touched for the TTL.
+func (s *Server) playgroundReaper(every time.Duration) {
+	defer s.wg.Done()
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-s.quit:
+			s.playgroundSessions.CloseAll()
+			return
+		case <-t.C:
+			if n := s.playgroundSessions.Reap(time.Now()); n > 0 {
+				logging.Info(logging.PlaygroundSessionsReaped,
+					"closed Playground sessions nobody came back to",
+					slog.Int("sessions", n), slog.Duration("ttl", s.playgroundTTL))
+			}
+		}
+	}
+}
+
+// playgroundModel resolves the model a Playground session is asked to run, and
+// decides whether this request may read it. It is the one place the Playground
+// touches design-time state, so both the lookup and the authorization live here
+// rather than in the service (ADR-draft-modeler-playground).
+//
+// A draft is read under the same per-artifact rule its own XML route uses
+// (ADR-0071): running somebody's draft in a sandbox is reading it.
+func (s *Server) playgroundModel(r *http.Request, kind, ref string) ([]byte, int, string) {
+	switch kind {
+	case "draft":
+		var (
+			rec     draft
+			ok      bool
+			readErr error
+		)
+		s.do(func() { rec, ok, readErr = s.drafts.Get(ref) })
+		switch {
+		case readErr != nil:
+			return nil, http.StatusInternalServerError, "read draft: " + readErr.Error()
+		case !ok:
+			return nil, http.StatusNotFound, "no draft with that process id"
+		}
+		if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleViewer); code != 0 {
+			return nil, code, msg
+		}
+		return []byte(rec.XML), 0, ""
+	case "process":
+		key, err := strconv.ParseUint(ref, 10, 64)
+		if err != nil {
+			return nil, http.StatusBadRequest, "invalid definition key"
+		}
+		var raw []byte
+		s.do(func() {
+			if d, ok := s.deployments[key]; ok {
+				raw = d.xml
+			}
+		})
+		if raw == nil {
+			return nil, http.StatusNotFound, "no deployment with that key"
+		}
+		// A deployed definition's XML is readable by any principal, exactly as
+		// GET /api/v1/processes/{key}/xml serves it; running it in a sandbox reads
+		// no more than that. The draft case above is the one with an owner to check.
+		return raw, 0, ""
+	default:
+		return nil, http.StatusBadRequest, "unknown model source"
 	}
 }
 

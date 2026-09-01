@@ -20,6 +20,7 @@ import { formFieldKeys, formFieldTypes, loadFormViewer } from "./formviewer.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
+import { attachPlayground } from "./playground.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -197,12 +198,20 @@ function docTitle(label) { document.title = label ? `${label} · Atlas` : "Atlas
 // window.__atlasCleanup) when navigating away so nothing keeps running.
 export function cleanup() {
   generation++; // supersede any in-flight mount (see `generation` above)
+  // A Playground sandbox is a live engine on the server. Leaving the editor
+  // releases it now rather than leaving it to its TTL.
+  if (playground) { try { playground.destroy(); } catch { /* ignore */ } playground = null; }
   if (onLayoutKey) { document.removeEventListener("keydown", onLayoutKey, true); onLayoutKey = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
 window.__atlasCleanup = cleanup;
+
+// playground is the Playground tab's controller for the editor currently mounted
+// (null when no editor is open). Module-level, like `current`, because cleanup()
+// has to reach it from outside a mount.
+let playground = null;
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -487,6 +496,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <div class="etabs">
           <button data-tab="design" class="active" title="Draw the diagram and its flow">Design</button>
           <button data-tab="implement" title="Configure the technical details of each element">Implement</button>
+          <button data-tab="playground" title="Run this diagram on the real engine in a throwaway sandbox — no deploy, no side effects">Playground</button>
         </div>
         <div style="flex:1"></div>
         <button class="btn neutral sim-toggle" id="sim-toggle" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough" aria-pressed="false">&#9654; Token simulation</button>
@@ -619,7 +629,15 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   refreshBadges(); // reflect the initial tab for the diagram just imported
   const refreshPoolCaptions = makePoolProcessCaptions(modeler);
   refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
-  wireTabs(root, () => { rerender(); refreshBadges(); });
+  // The Playground is a mode rather than a level of detail: it takes over the bar
+  // and a side panel, so the tab toggle switches it on instead of only re-rendering
+  // the properties panel (ADR-draft-modeler-playground).
+  playground = attachPlayground(root, { api, toast, modeler });
+  wireTabs(root, () => {
+    rerender();
+    refreshBadges();
+    playground.setActive(activeTab(root) === "playground");
+  });
   wireActions(root, modeler, api, toast, projectId);
   wireEditorVars(root, modeler, api);
   wireProblems(root, modeler, api);

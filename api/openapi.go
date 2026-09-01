@@ -83,6 +83,12 @@ func xmlBody(desc string) *bodySpec {
 	return &bodySpec{mediaType: "application/xml", schema: tString(), desc: desc}
 }
 
+// csvBody describes a text/csv download — a streamed table rather than a JSON
+// document, so a caller can read it with a spreadsheet or a pipe.
+func csvBody(desc string) *bodySpec {
+	return &bodySpec{mediaType: "text/csv", schema: tString(), desc: desc}
+}
+
 // eventStreamBody describes a Server-Sent Events response — a long-lived
 // text/event-stream of newline-delimited frames rather than a single JSON body
 // (ADR-0140's live collaboration transport).
@@ -694,6 +700,85 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Deploy a project's artifacts (deprecated: use POST /api/v1/applications/{id}/deploy)", tag: "Projects", role: RoleModeler, deprecated: true, resp: jsonBody("Deploy result", tObject())}},
 		{"GET", "/api/v1/projects/{id}/audit", s.handleListProjectAudit, apiOp{
 			summary: "A project's access-control history (deprecated: use GET /api/v1/applications/{id}/audit)", tag: "Projects", role: RoleModeler, deprecated: true, resp: jsonBody("Grant audit events", tArray())}},
+
+		{"POST", "/api/v1/playground/sessions", s.playground.HandleOpen, apiOp{
+			summary: "Open a Playground session on a draft, a deployed definition, or an inline model", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Session to open", tObject()), resp: jsonBody("Session", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}", s.playground.HandleStatus, apiOp{
+			summary: "Read a Playground session's state", tag: "Playground", role: RoleModeler, resp: jsonBody("Session", tObject())}},
+		{"DELETE", "/api/v1/playground/sessions/{id}", s.playground.HandleClose, apiOp{
+			summary: "Close a Playground session and discard its sandbox", tag: "Playground", role: RoleModeler, resp: jsonBody("Closed", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/cases", s.playground.HandleStartCase, apiOp{
+			summary: "Start one case in a Playground session", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Start variables", tObject()), resp: jsonBody("Case", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}/cases/{caseKey}", s.playground.HandleCase, apiOp{
+			summary: "Read what became of one Playground case", tag: "Playground", role: RoleModeler, resp: jsonBody("Case", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/run", s.playground.HandleRun, apiOp{
+			summary: "Run a Playground session until it comes to rest, its budget stops it, or it is paused", tag: "Playground", role: RoleModeler,
+			resp: jsonBody("Progress", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/step", s.playground.HandleStep, apiOp{
+			summary: "Carry out exactly one occurrence in a Playground session", tag: "Playground", role: RoleModeler, resp: jsonBody("Occurrence", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/pause", s.playground.HandlePause, apiOp{
+			summary: "Hold a Playground run at its next occurrence", tag: "Playground", role: RoleModeler, resp: jsonBody("Paused", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/resume", s.playground.HandleResume, apiOp{
+			summary: "Let a paused Playground session run again", tag: "Playground", role: RoleModeler, resp: jsonBody("Paused", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/clock", s.playground.HandleAdvanceClock, apiOp{
+			summary: "Jump a Playground session's simulated clock and fire what came due", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Advance", tObject()), resp: jsonBody("Simulated time", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/messages", s.playground.HandlePublishMessage, apiOp{
+			summary: "Publish a message into a Playground session", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Message", tObject()), resp: jsonBody("Published", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}/tasks", s.playground.HandleTasks, apiOp{
+			summary: "List the Playground jobs waiting for a person", tag: "Playground", role: RoleModeler, resp: jsonBody("Tasks", tArray())}},
+		{"POST", "/api/v1/playground/sessions/{id}/tasks/{jobKey}/complete", s.playground.HandleCompleteTask, apiOp{
+			summary: "Complete a parked Playground task by hand", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Output variables", tObject()), resp: jsonBody("Completed", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}/overlay", s.playground.HandleOverlay, apiOp{
+			summary: "Read a Playground run's per-element visit counts", tag: "Playground", role: RoleModeler, resp: jsonBody("Element visits", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}/heatmap", s.playground.HandleHeatMap, apiOp{
+			summary: "Read a Playground run's element and sequence-flow token counts, including the paths it never took",
+			tag:     "Playground", role: RoleModeler, resp: jsonBody("Heat map", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/runs", s.playground.HandleStartRun, apiOp{
+			summary: "Start a Playground batch over a dataset sent inline", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Cases and arrival profile", tObject()), resp: jsonBody("Run status", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/runs/csv", s.playground.HandleStartRunFromCSV, apiOp{
+			summary: "Start a Playground batch over an uploaded CSV, one case per row", tag: "Playground", role: RoleModeler,
+			resp: jsonBody("Run status", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}/runs", s.playground.HandleRunStatus, apiOp{
+			summary: "Read how far a Playground batch has got", tag: "Playground", role: RoleModeler, resp: jsonBody("Run status", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/runs/cancel", s.playground.HandleCancelRun, apiOp{
+			summary: "Stop a Playground batch, leaving what it did readable", tag: "Playground", role: RoleModeler, resp: jsonBody("Run status", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}/report", s.playground.HandleReport, apiOp{
+			summary: "Read a Playground run's summary: outcomes, durations, elements and pools", tag: "Playground", role: RoleModeler,
+			resp: jsonBody("Run report", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}/results", s.playground.HandleResults, apiOp{
+			summary: "Read one page of a Playground run's per-case results", tag: "Playground", role: RoleModeler,
+			resp: jsonBody("Results page", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}/results.csv", s.playground.HandleResultsCSV, apiOp{
+			summary: "Download a Playground run's per-case results as CSV", tag: "Playground", role: RoleModeler,
+			resp: csvBody("Results as CSV")}},
+		{"POST", "/api/v1/playground/sessions/{id}/verdict", s.playground.HandleVerdict, apiOp{
+			summary: "Judge a Playground run against a set of expectations", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Expectations", tObject()), resp: jsonBody("Verdict", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/compare", s.playground.HandleCompare, apiOp{
+			summary: "Set a Playground run beside an earlier run's report", tag: "Playground", role: RoleModeler,
+			req: jsonBody("A baseline report", tObject()), resp: jsonBody("Comparison", tObject())}},
+
+		{"POST", "/api/v1/playground/scenarios", s.handleSaveScenario, apiOp{
+			summary: "Save a Playground scenario: the requests that make a run, and what it must show", tag: "Playground",
+			role: RoleModeler, req: jsonBody("Scenario", tObject()), resp: jsonBody("Saved scenario", tObject())}},
+		{"GET", "/api/v1/playground/scenarios", s.handleListScenarios, apiOp{
+			summary: "List saved Playground scenarios", tag: "Playground", role: RoleModeler,
+			resp: jsonBody("Scenarios", tArray())}},
+		{"GET", "/api/v1/playground/scenarios/{id}", s.handleGetScenario, apiOp{
+			summary: "Read one Playground scenario with its spec and baseline", tag: "Playground", role: RoleModeler,
+			resp: jsonBody("Scenario", tObject())}},
+		{"PUT", "/api/v1/playground/scenarios/{id}/baseline", s.handleSaveScenarioBaseline, apiOp{
+			summary: "Keep a run's report as the scenario's baseline", tag: "Playground", role: RoleModeler,
+			req: jsonBody("A run report", tObject()), resp: jsonBody("Saved scenario", tObject())}},
+		{"DELETE", "/api/v1/playground/scenarios/{id}", s.handleDeleteScenario, apiOp{
+			summary: "Delete a saved Playground scenario", tag: "Playground", role: RoleModeler,
+			resp: jsonBody("Deleted", tObject())}},
 
 		{"POST", "/api/v1/dmnrefs", s.handleCreateDmnRef, apiOp{
 			summary: "Create a DMN reference artifact", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN reference", tObject()), resp: jsonBody("Created reference", tObject())}},

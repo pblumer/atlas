@@ -80,15 +80,28 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 		return rec.Code
 	}
 
-	// A) projectsByID error → the four scope-filtered list handlers 500.
+	// A) projectsByID error → every scope-filtered list handler 500s. A listing that
+	// cannot work out who may see what must not answer with the entries it happened
+	// to read: an empty list and a hidden one look the same to the reader.
 	realProjects := srv.projects
 	srv.projects = brokenStore(newProjectStore(filepath.Join(t.TempDir(), "gone")))
-	for _, p := range []string{"/api/v1/drafts", "/api/v1/dmnrefs", "/api/v1/forms", "/api/v1/decisions"} {
+	for _, p := range []string{"/api/v1/drafts", "/api/v1/dmnrefs", "/api/v1/forms", "/api/v1/decisions",
+		"/api/v1/playground/scenarios"} {
 		if got := do(http.MethodGet, p, ""); got != http.StatusInternalServerError {
 			t.Fatalf("GET %s with broken projects = %d, want 500", p, got)
 		}
 	}
 	srv.projects = realProjects
+
+	// The artifact store itself failing is the same answer: a scenario listing is
+	// read by somebody about to run one, and "there are none" is the wrong thing to
+	// tell them when the truth is "they could not be read".
+	realScenarios := srv.playgroundScenarios
+	srv.playgroundScenarios = brokenStore(newPlaygroundScenarioStore(filepath.Join(t.TempDir(), "gone")))
+	if got := do(http.MethodGet, "/api/v1/playground/scenarios", ""); got != http.StatusInternalServerError {
+		t.Fatalf("GET scenarios with a broken store = %d, want 500", got)
+	}
+	srv.playgroundScenarios = realScenarios
 
 	// B) A project whose record is a directory errors on read; an artifact filed
 	// under it makes every authorize step 500.
@@ -104,6 +117,10 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 	must(srv.dmnrefs.Save(dmnRef{ID: "r1", Name: "R", ModelRef: "m", ProjectID: "pdir", CreatedAt: 1}))
 	must(srv.forms.Save(form{ID: "f1", Name: "F", ProjectID: "pdir", Schema: "{}", SavedAt: 1}))
 	must(srv.drafts.Save(draft{ProcessID: "d2", XML: "<x/>", SavedAt: 1})) // ungrouped, for a move target test
+	must(srv.playgroundScenarios.Save(playgroundScenario{
+		ID: "s1", Name: "S", ProcessID: "d1", ProjectID: "pdir", SavedAt: 1,
+		Spec: `{"open":{},"run":{}}`,
+	}))
 
 	cases := []struct {
 		name, method, path, body string
@@ -121,6 +138,21 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 		{"create dmnref (authorizeTargetProject)", "POST", "/api/v1/dmnrefs", `{"name":"N","modelRef":"m","projectId":"pdir"}`},
 		{"create draft (authorizeTargetProject)", "POST", "/api/v1/drafts?projectId=pdir", scopeBPMN("newp")},
 		{"move draft into target (authorizeTargetProject)", "PATCH", "/api/v1/drafts/d2", `{"projectId":"pdir"}`},
+		// Opening a Playground sandbox on a draft reads that draft, so it goes through
+		// the same authorization — and fails the same way when the project cannot be
+		// read (ADR-draft-modeler-playground).
+		{"playground on a draft (authorizeArtifact)", "POST", "/api/v1/playground/sessions", `{"source":"draft","ref":"d1"}`},
+		// A saved Playground scenario is a design-time artifact like the rest, so it
+		// inherits its project's scope on every door into it: reading one, keeping a
+		// baseline on it, overwriting it, deleting it, and filing a new one into a
+		// project (ADR-draft-modeler-playground, ADR-0071).
+		{"read scenario (authorizeArtifact)", "GET", "/api/v1/playground/scenarios/s1", ""},
+		{"scenario baseline (authorizeArtifact)", "PUT", "/api/v1/playground/scenarios/s1/baseline", `{"cases":1}`},
+		{"delete scenario (authorizeArtifact)", "DELETE", "/api/v1/playground/scenarios/s1", ""},
+		{"overwrite scenario (authorizeArtifact source)", "POST", "/api/v1/playground/scenarios",
+			`{"id":"s1","processId":"d1","spec":{"open":{},"run":{}}}`},
+		{"create scenario (authorizeTargetProject)", "POST", "/api/v1/playground/scenarios",
+			`{"id":"s2","processId":"d1","projectId":"pdir","spec":{"open":{},"run":{}}}`},
 	}
 	for _, tc := range cases {
 		if got := do(tc.method, tc.path, tc.body); got != http.StatusInternalServerError {
@@ -132,6 +164,7 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 	must(os.MkdirAll(srv.drafts.FileFor("ddir"), 0o755))
 	must(os.MkdirAll(srv.dmnrefs.FileFor("rdir"), 0o755))
 	must(os.MkdirAll(srv.forms.FileFor("fdir"), 0o755))
+	must(os.MkdirAll(srv.playgroundScenarios.FileFor("sdir"), 0o755))
 	storeErr := []struct {
 		name, method, path, body string
 	}{
@@ -142,6 +175,11 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 		{"update dmnref get error", "PATCH", "/api/v1/dmnrefs/rdir", `{"name":"x"}`},
 		{"delete form get error", "DELETE", "/api/v1/forms/fdir", ""},
 		{"save form existing-read error", "POST", "/api/v1/forms", `{"id":"fdir","schema":{}}`},
+		{"playground draft read error", "POST", "/api/v1/playground/sessions", `{"source":"draft","ref":"ddir"}`},
+		{"read scenario get error", "GET", "/api/v1/playground/scenarios/sdir", ""},
+		{"delete scenario get error", "DELETE", "/api/v1/playground/scenarios/sdir", ""},
+		{"save scenario existing-read error", "POST", "/api/v1/playground/scenarios",
+			`{"id":"sdir","processId":"d1","spec":{"open":{},"run":{}}}`},
 	}
 	for _, tc := range storeErr {
 		if got := do(tc.method, tc.path, tc.body); got != http.StatusInternalServerError {

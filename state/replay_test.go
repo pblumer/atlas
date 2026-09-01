@@ -56,3 +56,51 @@ func TestElementReplayHistory(t *testing.T) {
 		t.Fatalf("replay history = %#v, want %#v", got, want)
 	}
 }
+
+// A whole-run analysis asks what happened across every instance, not inside one.
+// AllElementReplay answers that in a single iteration: a scan per instance over
+// fifty thousand of them is fifty thousand iterators, which is the cost the
+// Playground's heat map would otherwise pay every time somebody looks at it.
+func TestAllElementReplay(t *testing.T) {
+	s := openStore(t)
+	first := model.NewKey(1, 10)
+	second := model.NewKey(1, 11)
+
+	commit(t, s, func(tx *state.Tx) error {
+		rows := []struct {
+			pi        uint64
+			ts        int64
+			pos       uint64
+			elementID int32
+		}{
+			{second, 150, 15, 9},
+			{first, 100, 10, 1},
+			{first, 200, 20, 2},
+			{second, 250, 25, 8},
+		}
+		for _, row := range rows {
+			if err := tx.RecordElementReplay(row.pi, row.ts, row.pos, row.elementID, 0, 0, 0, -1, state.ReplayActivated); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	type row struct {
+		pi        uint64
+		elementID int32
+	}
+	var got []row
+	if err := s.AllElementReplay(func(pi uint64, _ int64, _ uint64, v state.ElementReplayValue) error {
+		got = append(got, row{pi: pi, elementID: v.ElementID})
+		return nil
+	}); err != nil {
+		t.Fatalf("AllElementReplay: %v", err)
+	}
+	// Grouped by instance and in time order within one, which is what lets a
+	// caller walk it beside an ascending list of the instances it cares about.
+	want := []row{{first, 1}, {first, 2}, {second, 9}, {second, 8}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("all replay = %#v, want %#v", got, want)
+	}
+}

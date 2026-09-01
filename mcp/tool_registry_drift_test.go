@@ -139,6 +139,50 @@ var mcpOmittedRoutes = map[string]string{
 	// operator watches and occasionally forces before a restart. Same category as
 	// backup/restore — it concerns the data directory, not the processes running in it,
 	// and the control deletes WAL segments when compaction is on.
+	// The Playground (ADR-draft-modeler-playground) is a live sandbox bound to the
+	// person who opened it: a session holds an engine and a temp directory, it is
+	// reclaimed on a TTL of disuse, and it exists to let an *author* watch a model
+	// run. An agent that wants to know how a model behaves has the durable surface
+	// for it — deploy it and drive the instance — and would otherwise be holding
+	// sandboxes nobody is watching. Revisit if the Modeler copilot (ADR-0032) grows
+	// a reason to try a model before proposing it.
+	"POST /api/v1/playground/sessions":                              "opens a live sandbox bound to its author, not an agent action",
+	"GET /api/v1/playground/sessions/{id}":                          "state of an author's sandbox session",
+	"DELETE /api/v1/playground/sessions/{id}":                       "closes an author's sandbox session",
+	"POST /api/v1/playground/sessions/{id}/cases":                   "drives an author's sandbox; an agent uses the durable start path",
+	"GET /api/v1/playground/sessions/{id}/cases/{caseKey}":          "reads a case out of an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/run":                     "drives an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/step":                    "drives an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/pause":                   "drives an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/resume":                  "drives an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/clock":                   "moves an author's sandbox clock",
+	"POST /api/v1/playground/sessions/{id}/messages":                "drives an author's sandbox",
+	"GET /api/v1/playground/sessions/{id}/tasks":                    "lists what waits in an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/tasks/{jobKey}/complete": "answers a task in an author's sandbox",
+	"GET /api/v1/playground/sessions/{id}/overlay":                  "per-element counts of an author's sandbox run",
+	"GET /api/v1/playground/sessions/{id}/heatmap":                  "element and flow counts of an author's sandbox run",
+	"POST /api/v1/playground/sessions/{id}/verdict":                 "judges an author's sandbox run against their expectations",
+	"POST /api/v1/playground/sessions/{id}/compare":                 "sets an author's sandbox run beside an earlier one",
+
+	// Saved Playground scenarios are design-time records an author keeps beside a
+	// draft. The automation path for them is `atlas playground` — a CLI that replays
+	// the scenario's own requests and exits on the verdict, which is what a CI job
+	// wants. Exposing them as tools as well is a deliberate later choice, not an
+	// oversight: it would let an agent author and run regression scenarios, which is
+	// a capability worth deciding on its own merits.
+	"POST /api/v1/playground/scenarios":                 "author's saved sandbox scenario; automated via the atlas playground CLI",
+	"GET /api/v1/playground/scenarios":                  "author's saved sandbox scenarios; automated via the atlas playground CLI",
+	"GET /api/v1/playground/scenarios/{id}":             "author's saved sandbox scenario; automated via the atlas playground CLI",
+	"PUT /api/v1/playground/scenarios/{id}/baseline":    "keeps a sandbox run as an author's baseline",
+	"DELETE /api/v1/playground/scenarios/{id}":          "deletes an author's saved sandbox scenario",
+	"POST /api/v1/playground/sessions/{id}/runs":        "starts a batch in an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/runs/csv":    "starts a batch from an uploaded dataset in an author's sandbox",
+	"GET /api/v1/playground/sessions/{id}/runs":         "progress of a batch in an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/runs/cancel": "stops a batch in an author's sandbox",
+	"GET /api/v1/playground/sessions/{id}/report":       "summary of an author's sandbox run",
+	"GET /api/v1/playground/sessions/{id}/results":      "per-case results of an author's sandbox run",
+	"GET /api/v1/playground/sessions/{id}/results.csv":  "the same results as a download",
+
 	// Leasing is the external worker protocol's own surface (ADR-0007), not an agent
 	// action: an MCP agent that completes a job does so as an operator, on a job it was
 	// pointed at, and never needs to hold one against other workers.

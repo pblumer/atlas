@@ -1,0 +1,227 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas Playground tab e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js and api/web/playground.js against a mock
+         Playground API, so the tab's browser half can be verified without a server.
+
+         The mock stands in for one sandbox session running a two-task process: a user
+         task that waits for the person at the keyboard, and a job the stub answers. It
+         records every call, so a test can prove the panel talks to the endpoints it
+         claims to — and that leaving the editor releases the sandbox rather than
+         leaving it to its TTL. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor, cleanup } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_pg" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="credit" name="Kreditantrag" isExecutable="true">
+    <bpmn:startEvent id="start" name="Antrag eingegangen"><bpmn:outgoing>f1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="review" name="Antrag prüfen"><bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="score" name="Bonität prüfen">
+      <bpmn:extensionElements><zeebe:taskDefinition type="scoring" /></bpmn:extensionElements>
+      <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="done" name="Entschieden"><bpmn:incoming>f3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="score"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="score" targetRef="done"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="credit">
+    <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="review_di" bpmnElement="review"><dc:Bounds x="250" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="score_di" bpmnElement="score"><dc:Bounds x="400" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="done_di" bpmnElement="done"><dc:Bounds x="550" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="250" y="200"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="350" y="200"/><di:waypoint x="400" y="200"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="500" y="200"/><di:waypoint x="550" y="200"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // The mock sandbox. It knows three states — before the case, the case parked on
+      // the user task, and the case finished — which is all the tab's wiring needs to
+      // be exercised end to end.
+      const SESSION = "sess-1";
+      let phase = "idle";
+      window.__calls = [];
+
+      // The batch half of the mock. A run is "running" for one poll and then
+      // finished, which is enough to prove the panel polls, stops polling, and
+      // then reads the report and the heat map exactly once each.
+      let batch = null;   // null | {polls, cancelled}
+      const runStatus = () => {
+        if (!batch) return { state: "idle", occurrences: 0, cases: 0, completed: 0 };
+        if (batch.cancelled) return { state: "cancelled", occurrences: 4, cases: 3, completed: 1,
+          simTime: "2026-03-05T09:00:00Z" };
+        const running = batch.polls++ < 1;
+        return running
+          ? { state: "running", occurrences: 2, cases: 3, completed: 1, simTime: "2026-03-05T08:30:00Z" }
+          : { state: "finished", occurrences: 9, cases: 3, completed: 3, simTime: "2026-03-05T11:00:00Z" };
+      };
+      const REPORT = {
+        cases: 3, completed: 3, incidents: 0, maxInFlight: 3,
+        simStart: "2026-03-05T08:00:00Z", simEnd: "2026-03-05T11:00:00Z",
+        duration: { count: 3, minMillis: 3600000, p50Millis: 7200000, p90Millis: 10800000,
+                    maxMillis: 10800000, meanMillis: 7200000 },
+        elements: {
+          review: { runs: 3, workMillis: 10800000, waitMillis: 10800000, maxWaitMillis: 7200000 },
+          score: { runs: 3, workMillis: 180000, waitMillis: 0, maxWaitMillis: 0 },
+        },
+        pools: { clerks: { capacity: 1, served: 3, busyMillis: 10800000,
+                           availableMillis: 10800000, maxQueue: 2, utilisationPercent: 100 } },
+        visits: { start: 3, review: 3, score: 3, done: 3 },
+        timeline: {
+          widthMillis: 3600000,
+          buckets: [
+            { at: "2026-03-05T08:00:00Z", started: 3, completed: 0, inFlight: 3 },
+            { at: "2026-03-05T09:00:00Z", started: 0, completed: 1, inFlight: 2 },
+            { at: "2026-03-05T10:00:00Z", started: 0, completed: 2, inFlight: 0 },
+          ],
+        },
+      };
+      // The scenario half: one saved run, its stored baseline, and the verdict the
+      // server would return for it. Enough to prove the panel stores what it runs
+      // and shows back what it is told.
+      let scenarios = [{ id: "nightly", name: "Nightly load", processId: "credit",
+                         savedAt: 1, hasBaseline: true }];
+      const SCENARIO = {
+        id: "nightly", name: "Nightly load", processId: "credit", savedAt: 1,
+        spec: {
+          open: { source: "xml", xml: "<stored/>", seed: 4711,
+                  stubs: { human: { minMillis: 3600000, maxMillis: 3600000 },
+                           pools: { clerks: { capacity: 2 } }, poolOf: { review: "clerks" } } },
+          run: { cases: [{ amount: 10 }, { amount: 5000 }], arrival: { mode: "every", intervalMillis: 900000 } },
+          expect: { minCompleted: 2, maxIncidents: 0, maxP90Millis: 7200000,
+                    minVisits: { review: 1 }, maxQueue: { clerks: 5 } },
+        },
+        baseline: { cases: 3, completed: 3, incidents: 0, maxInFlight: 3,
+          duration: { count: 3, minMillis: 3600000, p50Millis: 7200000, p90Millis: 10800000,
+                      maxMillis: 10800000, meanMillis: 7200000 },
+          elements: { review: { runs: 3, workMillis: 10800000, waitMillis: 36000000, maxWaitMillis: 14400000 } },
+          pools: { clerks: { capacity: 1, served: 3, busyMillis: 10800000,
+                             availableMillis: 10800000, maxQueue: 9, utilisationPercent: 100 } },
+          visits: {} },
+        baselineAt: 1,
+      };
+      const VERDICT = { passed: false, checks: [
+        { name: "cases completed", want: "at least 3", got: "3 of 3", passed: true },
+        { name: "incidents", want: "at most 0", got: "0", passed: true },
+        { name: "queue at clerks", want: "at most 5", got: "9", passed: false },
+      ] };
+      const COMPARISON = { deltas: [
+        { name: "cases completed", unit: "count", before: 3, after: 3, better: false, worse: false },
+        { name: "p90 duration", unit: "millis", before: 10800000, after: 7200000, better: true, worse: false },
+        { name: "queue at clerks", unit: "count", before: 9, after: 12, better: false, worse: true },
+        { name: "utilisation at clerks", unit: "percent", before: 100, after: 62, better: false, worse: false },
+      ] };
+
+      // One flow the data never took, so the coverage list has something to say.
+      const HEATMAP = {
+        maxCount: 3,
+        elements: [{ id: "start", count: 3 }, { id: "review", count: 3 },
+                   { id: "score", count: 3 }, { id: "done", count: 3 }],
+        flows: [{ from: "start", to: "review", count: 3 },
+                { from: "review", to: "score", count: 3 },
+                { from: "score", to: "done", count: 0 }],
+      };
+
+      const tasks = () => (phase === "parked"
+        ? [{ jobKey: "77", instanceKey: "5", element: "review", human: true }]
+        : []);
+      const visits = () => ({
+        idle: {},
+        parked: { start: 1, review: 1 },
+        done: { start: 1, review: 1, score: 1, done: 1 },
+      }[phase]);
+      const theCase = () => (phase === "done"
+        ? { instanceKey: "5", state: "completed", path: ["start", "review", "score", "done"],
+            variables: { amount: "12400", decision: "approved" }, incidents: 0 }
+        : { instanceKey: "5", state: "active", path: ["start", "review"],
+            variables: { amount: "12400" }, incidents: 0 });
+
+      const api = async (method, url, body) => {
+        window.__calls.push({ method, url, body });
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        if (method === "GET" && /\/forms$/.test(url)) return [];
+        if (method === "POST" && /\/playground\/sessions$/.test(url)) {
+          phase = "idle";
+          return { id: SESSION, processId: "credit", seed: 4711,
+                   simTime: "2026-03-05T08:00:00Z", createdAt: "2026-03-05T08:00:00Z",
+                   lastUsed: "2026-03-05T08:00:00Z", paused: false, openTasks: 0 };
+        }
+        if (method === "POST" && /\/cases$/.test(url)) { phase = "parked"; return theCase(); }
+        if (method === "GET" && /\/tasks$/.test(url)) return tasks();
+        if (method === "GET" && /\/overlay$/.test(url)) return visits();
+        if (method === "GET" && /\/cases\/\d+$/.test(url)) return theCase();
+        if (method === "POST" && /\/tasks\/\d+\/complete$/.test(url)) { phase = "done"; return { completed: true }; }
+        if (method === "POST" && /\/run$/.test(url)) {
+          return { occurrences: 1, quiescent: true, simTime: "2026-03-05T08:01:00Z", paused: false };
+        }
+        if (method === "POST" && /\/step$/.test(url)) {
+          return { happened: true, kind: "jobCompleted", element: "score",
+                   at: "2026-03-05T08:01:00Z", simTime: "2026-03-05T08:01:00Z" };
+        }
+        if (method === "GET" && /\/playground\/sessions\/[\w-]+$/.test(url)) {
+          return { id: SESSION, processId: "credit", seed: 4711,
+                   simTime: phase === "done" ? "2026-03-05T08:01:00Z" : "2026-03-05T08:00:00Z",
+                   createdAt: "2026-03-05T08:00:00Z", lastUsed: "2026-03-05T08:00:00Z",
+                   paused: false, openTasks: tasks().length };
+        }
+        if (method === "POST" && /\/runs\/cancel$/.test(url)) { batch.cancelled = true; return runStatus(); }
+        if (method === "POST" && /\/runs$/.test(url)) { batch = { polls: 0, cancelled: false }; return runStatus(); }
+        if (method === "GET" && /\/runs$/.test(url)) return runStatus();
+        if (method === "GET" && /\/report$/.test(url)) return REPORT;
+        if (method === "GET" && /\/heatmap$/.test(url)) return HEATMAP;
+        if (method === "POST" && /\/verdict$/.test(url)) return VERDICT;
+        if (method === "POST" && /\/compare$/.test(url)) return COMPARISON;
+        if (method === "GET" && /\/playground\/scenarios\?/.test(url)) return scenarios;
+        if (method === "GET" && /\/playground\/scenarios\/[\w-]+$/.test(url)) return SCENARIO;
+        if (method === "POST" && /\/playground\/scenarios$/.test(url)) {
+          scenarios = [{ id: body.id, name: body.name, processId: body.processId, savedAt: 2, hasBaseline: false }];
+          return scenarios[0];
+        }
+        if (method === "PUT" && /\/baseline$/.test(url)) return { id: "nightly", hasBaseline: true };
+        if (method === "DELETE" && /\/playground\/scenarios\//.test(url)) { scenarios = []; return { deleted: true }; }
+        if (method === "DELETE" && /\/playground\/sessions\//.test(url)) return { closed: true };
+        return {};
+      };
+
+      // The CSV upload is the one call that cannot go through the api() helper: it
+      // is multipart, and the helper JSON-encodes its body. Intercepting fetch is
+      // how the harness sees it at all — and the shape of that request (a "file"
+      // part and an "arrival" field) is exactly what is worth pinning.
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (init && init.method === "POST" && /\/runs\/csv$/.test(url)) {
+          const form = init.body;
+          window.__calls.push({ method: "POST", url, body: {
+            file: form.get("file") && form.get("file").name,
+            arrival: JSON.parse(form.get("arrival")),
+          } });
+          batch = { polls: 0, cancelled: false };
+          return new Response(JSON.stringify(runStatus()), { status: 202,
+            headers: { "Content-Type": "application/json" } });
+        }
+        return realFetch(input, init);
+      };
+
+      window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });
+      window.__leave = () => cleanup();
+      window.__ready = true;
+    </script>
+  </body>
+</html>

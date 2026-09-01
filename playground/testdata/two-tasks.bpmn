@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_two_tasks" targetNamespace="http://atlas/playground">
+  <process id="two-tasks" name="Two tasks" isExecutable="true">
+    <documentation>Playground fixture: two jobs in a row, so a step can be told apart from a run — one occurrence at a time — and so the overlay has more than one element to count.</documentation>
+    <startEvent id="start" name="Start"/>
+    <serviceTask id="first" name="First">
+      <extensionElements>
+        <zeebe:taskDefinition type="alpha"/>
+      </extensionElements>
+    </serviceTask>
+    <serviceTask id="second" name="Second">
+      <extensionElements>
+        <zeebe:taskDefinition type="beta"/>
+      </extensionElements>
+    </serviceTask>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="first"/>
+    <sequenceFlow id="f2" sourceRef="first" targetRef="second"/>
+    <sequenceFlow id="f3" sourceRef="second" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="two-tasks">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_first" bpmnElement="first"><dc:Bounds x="250" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_second" bpmnElement="second"><dc:Bounds x="400" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="550" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="250" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="350" y="200"/><di:waypoint x="400" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="500" y="200"/><di:waypoint x="550" y="200"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
