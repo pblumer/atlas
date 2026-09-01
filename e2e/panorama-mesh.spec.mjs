@@ -456,3 +456,112 @@ test("pans once zoomed in, and is inert at the fitted frame", async ({ page }) =
   // make the picture impossible to move.
   await expect(page.locator(".mesh-panel-empty")).toBeVisible();
 });
+
+// meshOf builds a landscape of n processes under one application, for the label
+// policy — which is a function of how crowded the picture is.
+function meshOf(processes) {
+  const graph = {
+    nodes: [{ id: "application:a1", kind: "application", name: "Billing", provenance: "derived" }],
+    edges: [], restricted: 0, clustered: false,
+  };
+  for (let i = 0; i < processes; i++) {
+    graph.nodes.push({
+      id: `process:${i}`, kind: "process", name: `Process ${i}`, provenance: "derived",
+      application: "application:a1", processId: `p${i}`, version: 1,
+    });
+    graph.edges.push({ from: "application:a1", to: `process:${i}`, kind: "contains" });
+  }
+  return graph;
+}
+
+// A few hundred names on one canvas is not a landscape, it is a wall of text with
+// circles behind it. Above the clutter threshold only the anchors keep a name —
+// applications, which are what somebody navigates by — and the rest are revealed.
+test("a crowded landscape names its applications and reveals the rest", async ({ page }) => {
+  installMock(page, meshOf(40));
+  await page.goto("/index.html#/panorama/landscape");
+
+  await expect(page.locator('[data-node-id="application:a1"]')).toHaveClass(/mesh-named/);
+  await expect(page.locator('[data-node-id="process:0"]')).not.toHaveClass(/mesh-named/);
+
+  // The name is in the DOM either way: it is the node's accessible label and a
+  // screen reader must not depend on a pointer to reach it.
+  await expect(page.locator('[data-node-id="process:0"] .mesh-label')).toHaveText("Process 0");
+  await expect(page.locator('[data-node-id="process:0"]'))
+    .toHaveAttribute("aria-label", /Process 0/);
+
+  // Hovering reveals it, without re-rendering the graph.
+  const ink = page.locator('[data-node-id="process:0"] .mesh-label-ink');
+  await expect(ink).toHaveCSS("opacity", "0");
+  await page.locator('[data-node-id="process:0"]').hover();
+  await expect(ink).toHaveCSS("opacity", "1");
+});
+
+// Below the threshold there is room, and hiding names would be pure loss with
+// nothing bought.
+test("a small landscape keeps every name on screen", async ({ page }) => {
+  installMock(page, meshOf(4));
+  await page.goto("/index.html#/panorama/landscape");
+
+  await expect(page.locator(".mesh-node")).toHaveCount(5);
+  for (const id of ["application:a1", "process:0", "process:3"]) {
+    await expect(page.locator(`[data-node-id="${id}"]`)).toHaveClass(/mesh-named/);
+  }
+});
+
+// Two things bring a name back in a crowded graph without hovering: selecting the
+// node, and filtering down to it. Both are how somebody actually looks for one.
+test("selecting or filtering brings a name back", async ({ page }) => {
+  installMock(page, meshOf(40));
+  await page.goto("/index.html#/panorama/landscape");
+
+  await page.locator('[data-node-id="process:7"]').click();
+  await expect(page.locator('[data-node-id="process:7"]')).toHaveClass(/mesh-named/);
+
+  await page.locator("#mesh-search").fill("Process 12");
+  await expect(page.locator(".mesh-node")).toHaveCount(1);
+  await expect(page.locator('[data-node-id="process:12"]')).toHaveClass(/mesh-named/);
+});
+
+// Size carries rank as well as kind: at a few hundred nodes the eye sorts by size
+// before it reads anything, so an application has to be unmistakably the largest.
+test("kinds are told apart by size, not only by colour", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+
+  // mesh-body is the node's own circle: a group can also hold a provenance ring
+  // and a severity badge, and either would answer with the wrong radius.
+  const radius = async (id) => Number(
+    await page.locator(`[data-node-id="${id}"] .mesh-body`).getAttribute("r"));
+  const application = await radius("application:a1");
+  const process = await radius("process:1");
+  const worker = await radius("worker:c1");
+  expect(application).toBeGreaterThan(process * 1.5);
+  expect(process).toBeGreaterThan(worker);
+});
+
+// The separation pass exists because repulsion alone is a soft force a spring can
+// overpower, and two circles sitting on top of each other is the one arrangement
+// that makes the picture unreadable rather than merely tight.
+test("nodes do not overlap each other", async ({ page }) => {
+  installMock(page, meshOf(30));
+  await page.goto("/index.html#/panorama/landscape");
+
+  const overlaps = await page.evaluate(() => {
+    const at = [...document.querySelectorAll(".mesh-node")].map((g) => {
+      const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform"));
+      const circle = g.querySelector(".mesh-body");
+      return { x: +m[1], y: +m[2], r: Number(circle.getAttribute("r")) };
+    });
+    let worst = 0;
+    for (let i = 0; i < at.length; i++) {
+      for (let j = i + 1; j < at.length; j++) {
+        const gap = Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y) - at[i].r - at[j].r;
+        worst = Math.min(worst, gap);
+      }
+    }
+    return worst;
+  });
+  // Negative means two circles intersect. A little slack for the fit's rescaling.
+  expect(overlaps).toBeGreaterThan(-2);
+});
