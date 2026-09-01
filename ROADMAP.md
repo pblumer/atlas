@@ -967,10 +967,16 @@ for the derived whole-instance mesh above them.
   request is served, so nothing in it has a freshness contract to exceed. Staleness
   and unreachability are both properties of a source outside this process, and both
   arrive with (c);
-  **c)** remote node descriptors and status through deployment-target bindings,
-  resolved server-side off the run loop with bounded concurrency, deadlines,
-  response-size limits and per-target error isolation — which is what first makes
-  **unreachable** and **stale** producible; and
+  **c)** remote node descriptors through deployment-target bindings, resolved
+  server-side off the run loop with bounded concurrency, a deadline, a
+  response-size limit, TLS verified by the same client the promotion path uses,
+  and per-target error isolation. Complete. It is what first makes **unreachable**
+  and **stale** producible, and keeps them apart: unreachable is *nothing is
+  known*, stale is *something is known and may be wrong*. The observation document
+  therefore declares nothing unavailable; the landscape mesh still declares those
+  two, because it draws no deployment targets and so contacts nothing. A peer that
+  answers also identifies its runtime, so a model binding another node's
+  `atlas.runtimeId` observes it too; and
   **d)** observations on the ArchiMate canvas as borders and badges with a text
   legend, layer colors intact.
 - 🔲 **P5 — Landscape intelligence:** compare desired and observed deployments

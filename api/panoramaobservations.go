@@ -28,19 +28,54 @@ import (
 // Run-loop goroutine only.
 
 // collectFacts gathers what this server can currently say about the resources a
-// model may bind to.
+// model may bind to, in two phases.
+//
+// Phase one runs on the run loop and reads this server's own state. Phase two runs
+// off it and asks the peers, because a remote call must not hold the single writer
+// (I3) — one unresponsive target would otherwise stall every request on this
+// server, which is a far worse failure than an incomplete architecture view.
+//
+// Splitting it this way is why [panorama.FactsResolver] is called off the loop and
+// takes its own turn: the boundary belongs where the network is, not at the
+// handler.
 func (s *Server) collectFacts(r *http.Request) (panorama.Facts, error) {
-	projs, err := s.projectsByID()
+	var (
+		facts panorama.Facts
+		peers []remoteTarget
+		err   error
+		ran   bool
+	)
+	s.do(func() { ran = true; facts, peers, err = s.collectLocalFacts(r) })
+	if !ran {
+		return panorama.Facts{}, panorama.ErrShuttingDown
+	}
 	if err != nil {
 		return panorama.Facts{}, err
+	}
+	// Off the loop from here. A peer that is down is a row that says so, never an
+	// error that empties the document.
+	s.observeRemoteNodes(r.Context(), peers, facts)
+	return facts, nil
+}
+
+// collectLocalFacts is phase one: everything readable from this server's own
+// state, plus the peers phase two will ask and the credentials to present. The
+// credentials are resolved here because reading the vault is a run-loop read; they
+// never leave this process except as an Authorization header.
+//
+// Run-loop goroutine only.
+func (s *Server) collectLocalFacts(r *http.Request) (panorama.Facts, []remoteTarget, error) {
+	projs, err := s.projectsByID()
+	if err != nil {
+		return panorama.Facts{}, nil, err
 	}
 	parked, partial, err := s.incidentsByDefinition()
 	if err != nil {
-		return panorama.Facts{}, err
+		return panorama.Facts{}, nil, err
 	}
 	live, err := s.instancesByDefinition()
 	if err != nil {
-		return panorama.Facts{}, err
+		return panorama.Facts{}, nil, err
 	}
 
 	facts := panorama.Facts{
@@ -96,13 +131,14 @@ func (s *Server) collectFacts(r *http.Request) (panorama.Facts, error) {
 	}
 
 	if err := s.collectWorkerFacts(r, facts.Connectors); err != nil {
-		return panorama.Facts{}, err
+		return panorama.Facts{}, nil, err
 	}
-	if err := s.collectRuntimeAndTargetFacts(facts); err != nil {
-		return panorama.Facts{}, err
+	peers, err := s.collectRuntimeAndTargetFacts(facts)
+	if err != nil {
+		return panorama.Facts{}, nil, err
 	}
 	if err := s.collectReleaseFacts(r, projs, facts.Releases); err != nil {
-		return panorama.Facts{}, err
+		return panorama.Facts{}, nil, err
 	}
 
 	// A truncated incident scan makes every "no work is parked" a floor rather than
@@ -116,7 +152,7 @@ func (s *Server) collectFacts(r *http.Request) (panorama.Facts, error) {
 			}
 		}
 	}
-	return facts, nil
+	return facts, peers, nil
 }
 
 // appTotals is what one application's deployed processes add up to.
@@ -185,12 +221,15 @@ func (s *Server) collectWorkerFacts(r *http.Request, into map[string]panorama.Fa
 	return nil
 }
 
-// collectRuntimeAndTargetFacts observes this node, and says honestly that a
-// deployment target's status is not something this build reads.
-func (s *Server) collectRuntimeAndTargetFacts(facts panorama.Facts) error {
+// collectRuntimeAndTargetFacts observes this node and returns the peers phase two
+// will ask about the rest.
+//
+// Run-loop goroutine only: it reads the node identity, the target store and the
+// vault.
+func (s *Server) collectRuntimeAndTargetFacts(facts panorama.Facts) ([]remoteTarget, error) {
 	node, err := s.nodeIdentity()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// This server is answering, so it is healthy by the only evidence that matters
 	// for a runtime: it is here. Any *other* runtime id is absent from the map and
@@ -208,21 +247,26 @@ func (s *Server) collectRuntimeAndTargetFacts(facts panorama.Facts) error {
 
 	targets, err := s.targets.LoadAll()
 	if err != nil {
-		return err
+		return nil, err
 	}
+	peers := make([]remoteTarget, 0, len(targets))
 	for _, t := range targets {
-		// Configured, and that is all this build knows. Its readiness lives behind a
-		// call to the target itself, so reporting anything but unbound would be
-		// inventing an observation nobody made. Its base URL and credential
-		// reference stay out regardless.
+		// A placeholder that phase two overwrites. It is written here anyway so a
+		// target always has a row: if the fan-out is cut short — a cancelled
+		// request, a context that expired — the document still lists the target and
+		// says nothing is known about it, rather than dropping it and reading as an
+		// architecture with one fewer peer than it has.
 		facts.Targets[t.ID] = panorama.Fact{
-			Source: panorama.SourceNone, State: panorama.StateUnbound,
-			Reason: "This target is configured here, but its status is only knowable " +
-				"by asking it, which this server does not yet do.",
-			Detail: map[string]string{"name": t.Name},
+			Source: panorama.SourceRemote, State: panorama.StateUnbound,
+			Reason: "This target was not asked.",
+			Detail: map[string]string{"target": t.Name},
 		}
+		// The credential is resolved on the loop, because reading the vault is a
+		// loop read. It travels no further than the Authorization header phase two
+		// sets, and reaches no payload, no log line and no error message.
+		peers = append(peers, remoteTarget{target: t, credential: s.resolveConnectorSecret(t.CredentialRef)})
 	}
-	return nil
+	return peers, nil
 }
 
 // collectReleaseFacts is the desired-versus-observed comparison ADR-0189 §6 names

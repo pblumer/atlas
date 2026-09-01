@@ -87,25 +87,36 @@ type UnavailableState struct {
 	Reason string `json:"reason"`
 }
 
-// unobservable is what a mesh computed by this build can never say. Both entries
-// need a source outside this process and a freshness contract to measure against —
-// which is the observation projection of ADR-0189 P4, not yet built. Inventing a
-// timeout here to synthesize them would make the mesh cry wolf on a schedule
-// nobody chose.
+// unobservable is what a *mesh* computed by this build can never say.
+//
+// Both entries need a source outside this process. The observation projection now
+// has one — it asks peer Atlas nodes through deployment-target bindings — but the
+// mesh does not draw deployment targets, so nothing it renders has a source that
+// can be out of reach or out of date. That is why this list and
+// [unobservableInDocument] are two lists rather than one: they were identical only
+// for as long as neither surface could reach anything, and keeping them merged
+// would have made one of them lie the moment the other gained a capability.
 var unobservable = []UnavailableState{
 	{
 		State: StateUnreachable,
-		Reason: "This view contacts no source outside the engine, so it can never report " +
-			"that one could not be reached. Unreachability arrives with the observation " +
-			"projection (ADR-0189 P4).",
+		Reason: "This view draws only what this engine holds, so it contacts nothing and can " +
+			"never report that something could not be reached. The observation projection " +
+			"over a model's bindings does reach peers, and reports both (ADR-0189 §6).",
 	},
 	{
 		State: StateStale,
 		Reason: "Every fact here is read from this server's own state when the request is " +
-			"served, so no observation has a freshness contract to exceed. Staleness " +
-			"arrives with the observation projection (ADR-0189 P4).",
+			"served, so no observation has a freshness contract to exceed. The observation " +
+			"projection over a model's bindings does hold one, and reports both (ADR-0189 §6).",
 	},
 }
+
+// unobservableInDocument is what an *observation document* cannot produce. It is
+// empty: the document reaches peers, so every one of ADR-0189 §6's states is
+// reachable in it. Stated as an explicit empty list rather than left nil, because
+// "there is nothing this cannot see" is a claim worth making out loud — and one a
+// reader can hold the code to.
+var unobservableInDocument = []UnavailableState{}
 
 // Status summarizes the severity of one derived mesh.
 type Status struct {
