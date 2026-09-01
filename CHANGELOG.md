@@ -233,15 +233,6 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
-- **A data race in the Active Directory mock's startup report.** `go test -race`
-  failed on `TestADMockJobSucceedsWhenTheReportFails`: the startup report runs on a
-  goroutine nothing waits for — a worker must come up whether or not the server it
-  reports to is answering yet — and it read the retry backoff from a package variable
-  the test restored on `t.Cleanup`, while that goroutine was still retrying. Each
-  reporter now captures the backoff when it is built, which removes the shared mutable
-  state rather than synchronizing it: the goroutine reads a field written once, before
-  it started. No behaviour changes.
-
 - **A Jira search called an endpoint Jira Cloud has removed.** The `search`
   operation posted to `/rest/api/2/search` with `startAt` paging; Atlassian
   progressively shut that endpoint down across Cloud over 2025, and a switched-over
