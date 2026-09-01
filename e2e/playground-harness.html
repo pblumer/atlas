@@ -185,6 +185,26 @@
         if (method === "GET" && /\/runs$/.test(url)) return runStatus();
         if (method === "GET" && /\/report$/.test(url)) return REPORT;
         if (method === "GET" && /\/heatmap$/.test(url)) return HEATMAP;
+        // The preview a described dataset asks for. The rows are derived from the
+        // description so the spec can check that what was typed reached the server,
+        // which is the only half of the generator the browser owns.
+        if (method === "POST" && /\/generate(\?|$)/.test(url)) {
+          const fields = body.fields || [];
+          return {
+            total: body.count,
+            columns: fields.map((f) => f.name),
+            rows: [0, 1, 2].map((i) => {
+              const row = {};
+              for (const f of fields) {
+                row[f.name] = f.kind === "int" ? f.min + i
+                  : f.kind === "sequence" ? `${f.prefix}00${i + 1}`
+                    : f.kind === "choice" ? f.choices[i % f.choices.length].value
+                      : f.kind === "bool" ? i === 0 : String(f.kind);
+              }
+              return row;
+            }),
+          };
+        }
         if (method === "POST" && /\/verdict$/.test(url)) return VERDICT;
         if (method === "POST" && /\/compare$/.test(url)) return COMPARISON;
         if (method === "GET" && /\/playground\/scenarios\?/.test(url)) return scenarios;

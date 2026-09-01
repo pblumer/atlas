@@ -3534,6 +3534,51 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .pg-file { display: flex; align-items: center; gap: 8px; margin: 6px 8px; font-size: 12px; flex-wrap: wrap; }
 .pg-file input[type="file"] { font-size: 11px; max-width: 100%; }
 
+/* Three ways in, one at a time. Only one of them drives the run, so showing all
+   three at once would invite filling in two and wondering which won. */
+.pg-source { display: flex; gap: 4px; margin: 6px 8px; }
+.pg-source button {
+  flex: 1; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--muted); font: 500 11.5px/1.4 inherit; cursor: pointer;
+}
+.pg-source button:hover { color: var(--text); }
+.pg-source button.active { background: var(--surface); color: var(--text); border-color: var(--border-strong); }
+
+/* A described field takes two lines: what it is called and how it is drawn, then
+   that kind's parameters. One line does not fit a panel this narrow — a name beside
+   three boxes shows "amount" as "amour", and a date field with two offsets and a
+   checkbox is unreadable. The parameters share the second line, so the block keeps
+   its shape as the kind changes under it. */
+.pg-fields { display: flex; flex-direction: column; gap: 8px; margin: 6px 8px; }
+.pg-field { display: flex; flex-direction: column; gap: 4px; }
+.pg-field-head, .pg-field-args { display: flex; align-items: center; gap: 4px; }
+/* The kind is the longer label of the two on its line, so it gets the wider share
+   — "whole number" reading as "whole numbe" is the panel lying about the choice. */
+.pg-field-head select { flex: 1.25; }
+.pg-field input[type="text"], .pg-field input[type="number"], .pg-field select {
+  font: 12px/1.4 inherit; padding: 4px 6px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--bg); color: var(--text); min-width: 0; flex: 1;
+}
+.pg-field input:focus, .pg-field select:focus {
+  outline: none; border-color: var(--accent); background: var(--surface);
+}
+.pg-field input[type="checkbox"] { flex: none; }
+.pg-field .pg-check { margin: 0; flex: none; white-space: nowrap; font-size: 11px; }
+.pg-field .icon-btn { flex: none; }
+
+/* The preview is small on purpose: it is read to check that an amount looks like
+   an amount, not to inspect the dataset. */
+.pg-preview { margin: 4px 8px; overflow-x: auto; }
+.pg-preview table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.pg-preview th {
+  text-align: left; padding: 3px 6px; color: var(--muted); font-weight: 600;
+  border-bottom: 1px solid var(--border-strong); white-space: nowrap;
+}
+.pg-preview td {
+  padding: 3px 6px; border-bottom: 1px solid var(--border); white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 /* A batch reports its progress from the O(1) status endpoint, so the bar moves
    even on a run of fifty thousand cases. */
 .pg-progress { height: 6px; margin: 6px 8px; border-radius: 999px; background: var(--bg); overflow: hidden; }

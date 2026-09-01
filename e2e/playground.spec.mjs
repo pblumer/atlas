@@ -220,6 +220,7 @@ test("the heat map shades elements and flows, and names what was never reached",
 
 test("a CSV dataset is uploaded as a file, not parsed in the browser", async ({ page }) => {
   await switchToBatch(page);
+  await page.locator('#pg-panel button[data-source="csv"]').click();
   await page.locator("#pg-csv").setInputFiles({
     name: "antraege.csv",
     mimeType: "text/csv",
@@ -366,6 +367,7 @@ test("a failing run cannot be kept as the baseline", async ({ page }) => {
 
 test("a CSV run says why it cannot be saved as a scenario", async ({ page }) => {
   await switchToBatch(page);
+  await page.locator('#pg-panel button[data-source="csv"]').click();
   await page.locator("#pg-csv").setInputFiles({
     name: "rows.csv", mimeType: "text/csv", buffer: Buffer.from("kunde\nA\n"),
   });
@@ -373,5 +375,81 @@ test("a CSV run says why it cannot be saved as a scenario", async ({ page }) => 
   // real import uses, and are not in the browser to store.
   await expect(page.locator("#pg-scenario-save")).toHaveCount(0);
   await expect(page.locator("#pg-panel")).toContainText("cannot be saved as a scenario");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a dataset is described rather than listed, and the description is what runs", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator('#pg-panel button[data-source="generated"]').click();
+
+  // It opens on the dataset everybody wants first: a few hundred cases with a
+  // random amount. Nobody types three hundred of those, which is the whole point.
+  await expect(page.locator("#pg-gen-count")).toHaveValue("300");
+  await expect(page.locator('.pg-field [data-gen="name"]').first()).toHaveValue("amount");
+
+  await page.locator("#pg-gen-count").fill("500");
+  // A second field: a weighted choice, which is how the rare branch stays rare.
+  await page.locator("#pg-gen-add").click();
+  const tier = page.locator(".pg-field").nth(1);
+  await tier.locator('[data-gen="name"]').fill("tier");
+  await tier.locator('[data-gen="kind"]').selectOption("choice");
+  await tier.locator('[data-gen="choices"]').fill("gold:1, standard:9");
+
+  // The preview is read before the run, and says it is the run rather than a
+  // sample of what one might look like.
+  await page.locator("#pg-gen-preview").click();
+  await expect(page.locator(".pg-preview th").first()).toHaveText("amount");
+  await expect(page.locator(".pg-preview th").nth(1)).toHaveText("tier");
+  await expect(page.locator("#pg-panel")).toContainText("of 500");
+
+  await page.locator("#pg-batch").click();
+  const started = (await calls(page)).find((c) => c.method === "POST" && /\/runs$/.test(c.url));
+  // The description travels, not five hundred rows built here: that is what keeps
+  // the request small and the run repeatable.
+  expect(started.body.cases).toBeUndefined();
+  expect(started.body.generate.count).toBe(500);
+  expect(started.body.generate.fields).toEqual([
+    { name: "amount", kind: "int", min: 100, max: 5000 },
+    { name: "tier", kind: "choice", choices: [{ value: "gold", weight: 1 }, { value: "standard", weight: 9 }] },
+  ]);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a described dataset is saved as a scenario, which an uploaded one cannot be", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator('#pg-panel button[data-source="generated"]').click();
+  await page.locator("#pg-scenario-name").fill("Three hundred applications");
+  await page.locator("#pg-scenario-save").click();
+
+  const saved = (await calls(page)).find((c) => c.method === "POST" && /\/playground\/scenarios$/.test(c.url));
+  // The stored run is the description, so re-running it next month produces the
+  // same five hundred amounts — which is what a CSV upload can never offer.
+  expect(saved.body.spec.run.cases).toBeUndefined();
+  expect(saved.body.spec.run.generate.count).toBe(300);
+  expect(saved.body.spec.run.generate.fields[0]).toEqual({ name: "amount", kind: "int", min: 100, max: 5000 });
+  expect(saved.body.spec.open.seed).toBe(4711);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a field's kind decides which parameters it shows", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator('#pg-panel button[data-source="generated"]').click();
+  const field = page.locator(".pg-field").first();
+
+  // A whole number is bounded; a sequence is not bounded at all, it is prefixed.
+  await expect(field.locator('[data-gen="min"]')).toBeVisible();
+  await field.locator('[data-gen="kind"]').selectOption("sequence");
+  await expect(field.locator('[data-gen="min"]')).toHaveCount(0);
+  await field.locator('[data-gen="prefix"]').fill("ORDER-");
+
+  await page.locator("#pg-gen-preview").click();
+  await expect(page.locator(".pg-preview td").first()).toHaveText("ORDER-001");
+
+  // A removed field is gone from what runs, not merely hidden.
+  await page.locator("[data-gen-del]").first().click();
+  await expect(page.locator(".pg-field")).toHaveCount(0);
+  await page.locator("#pg-batch").click();
+  const started = (await calls(page)).find((c) => c.method === "POST" && /\/runs$/.test(c.url));
+  expect(started.body.generate.fields).toEqual([]);
   expect(page.__errors).toEqual([]);
 });

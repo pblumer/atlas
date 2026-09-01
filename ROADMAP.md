@@ -1078,9 +1078,16 @@ dataset of up to 50 000 cases":
   markers. **Batch**: a dataset, an arrival profile, a live progress bar, and the
   report. Pools are configured against the tasks the author drew, read off the canvas
   rather than retyped. [`api/web/playground.js`](api/web/playground.js).
-- ✅ **Data in**: a case list typed into the panel, or a CSV uploaded and parsed by
-  the ADR-0084/0139 row parsing against the file's own header. A per-field
-  generator ("300 cases with a random amount") is not there yet.
+- ✅ **Data in**, three ways: a case list typed into the panel, a CSV uploaded and
+  parsed by the ADR-0084/0139 row parsing against the file's own header, or the
+  dataset **described** instead of listed — a count plus, per start variable, how it
+  is drawn (a number in a range, a weighted choice, a boolean with a probability, a
+  constant, a sequence numbering the cases, a date in a window around the run's
+  start). Twenty lines produce three hundred cases, drawn from the run's seed and the
+  case's position so the same description always produces the same dataset — and,
+  unlike an uploaded file, one a scenario can store. The panel previews the first
+  rows, which are the run's own first rows because no case's draw depends on the ones
+  after it. [`playground/generate.go`](playground/generate.go).
 - ✅ **Timing profile**: all at once, sequential, a fixed takt or a Poisson stream,
   each confined to business hours — realized as an arrival plan over the sandbox's
   **virtual clock**, computed up front from the seed so the stream is reproducible
@@ -1133,10 +1140,10 @@ dataset of up to 50 000 cases":
   `--keep-baseline` do the same against the stored baseline; `--file` runs one from a
   JSON file being reviewed in a pull request.
   [`cmd/atlas/playgroundrun.go`](cmd/atlas/playgroundrun.go).
-- 🔲 **Still open**: a per-field data generator ("300 cases with a random amount"),
-  the click from a results row into the replay view, and saving a scenario from a
-  CSV-driven run — its rows are parsed on the server, so the browser has nothing to
-  store.
+- 🔲 **Still open**: the click from a results row into the replay view. Saving a
+  scenario from a CSV-driven run stays impossible on purpose — its rows are parsed on
+  the server, so the browser has nothing to store — and the generator is the answer
+  to what that was wanted for.
 
 **Version history** ([ADR-0031](docs/adr/0031-diagram-version-history.md)):
 - 🔲 A **Versions** control: explicit named checkpoints (immutable snapshots)
