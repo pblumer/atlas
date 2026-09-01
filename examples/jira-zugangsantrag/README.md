@@ -53,3 +53,48 @@ Ergebnis in `ticket` — `{id, key, self}`. Der Vorgang ist in Jira da.
 Parkt ein Token stattdessen mit einem Incident, sagt der Incident, woran es liegt:
 ein nicht konfigurierter Worker-Name und ein konfigurierter, aber kaputter sind
 zwei verschiedene Meldungen.
+
+## Der Zugangsantrag
+
+Der Prozess koordiniert, Jira dokumentiert, ein Mensch entscheidet:
+
+```
+Antrag (Formular)
+  → Jira-Vorgang anlegen        create-issue      → ticket
+  → Zugang freigeben            User-Task in Atlas
+  → Freigegeben?                (X) Default: ablehnen
+       ja   → Vorgang abschliessen   transition-issue + Kommentar
+       nein → Ablehnung vermerken    add-comment
+  → Antrag bearbeitet
+```
+
+Drei Dinge daran sind Absicht und keine Willkür:
+
+**Der Default des Gateways ist die Ablehnung.** Bei einem Zugangsantrag ist die
+konservative Antwort „nicht freigeben"; ein Gateway, dessen Bedingung nicht greift,
+darf keinen Zugang gewähren.
+
+**Ablehnen schaltet nichts weiter.** Es hält fest, warum nicht freigegeben wurde,
+und lässt den Vorgang für einen Menschen offen. Welcher Übergang eine Ablehnung in
+einem fremden Jira-Workflow wäre, weiß das Modell ohnehin nicht.
+
+**Der Übergangsname steht im Startformular, nicht im Modell.** Der Konnektor löst
+einen Übergang über den Namen auf, den Jira auf dem Knopf zeigt — und der ist pro
+Workflow verschieden. So läuft dasselbe Modell gegen jedes Projekt.
+
+### Die Falle, die zwei Pflichtfelder erklärt
+
+FEEL-Verkettung propagiert `null`: Ist *eine* der verketteten Variablen nicht
+gesetzt, ist das **ganze** Ergebnis null — nicht nur der fehlende Teil — und landet
+als leerer String in Jira. Deshalb sind `begruendung` und `kommentar` in den
+Formularen Pflichtfelder. Wer sie optional machen will, muss die Verkettung
+absichern, nicht das Formular lockern.
+
+### Ausprobieren
+
+1. Beide Formulare und beide Modelle in ein Projekt deployen.
+2. `jira-verbindungstest` starten — läuft der durch, stimmt die Einrichtung.
+3. `jira-zugangsantrag` starten, Formular ausfüllen.
+4. Der Vorgang steht in Jira. In Atlas wartet unter **Tasks** die Freigabe.
+5. Freigeben → der Vorgang wird weitergeschaltet und trägt die Notiz.
+   Ablehnen → er bleibt offen und bekommt den Ablehnungsgrund als Kommentar.
