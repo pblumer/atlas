@@ -1004,7 +1004,48 @@ for the derived whole-instance mesh above them.
   Dependency/impact analysis and discovered-but-unmodeled resources move forward
   into P2.5, which derives the edges they need. P4 also unblocks the two observation
   states P2.5c declares unavailable (unreachable, stale). Panorama remains a
-  correlation surface, not a time-series or log database.
+  correlation surface, not a time-series or log database. Ships in stages:
+  **a)** the drift journal — what has been seen to change, and when. Complete. The
+  constraint above is the whole design: a store of samples is exactly what "not a
+  time-series database" forbids, so none is kept. What is kept are **transitions**.
+  A hundred identical readings produce nothing; one release going stale produces
+  one entry, with both states, the reason, and the moment it was noticed. A
+  finding therefore carries its own age — "degraded" and "degraded since nine this
+  morning" are different findings, and the second is the one somebody acts on. It
+  is recorded when somebody reads the observations rather than by a sweeper,
+  because nothing polls; it is runtime state that a restart empties, never written
+  to the log (I4/I6); and it is bounded per model and across models. All three of
+  those are *published* with every answer rather than documented here, because
+  without them "nothing changed" and "nobody looked" read alike; and
+  **b)** the adapters for historical context — the stores where continuous history
+  actually belongs, which is why (a) does not pretend to it. They *query* those
+  stores and keep nothing: ADR-0189 rejected copying remote metrics and logs into a
+  Panorama database by name, and a cache of somebody else's history is that database
+  with a shorter retention and no owner. Ships in two:
+  **b-i)** the event-log adapter, over the OpenSearch index Atlas already exports to
+  (ADR-0114). Complete. It answers about a process and about the application whose
+  processes those are, because every exported record carries its definition key —
+  and it answers about nothing else, because the log stores a job's type as an
+  interned index and names no node. Each of those is reported as its own state
+  rather than as an absence of data: a source's answer is one of six —
+  not-configured, unidentifiable, unreachable, refused, empty, available — and only
+  *empty* is a statement about the architecture rather than about the lookup. Every
+  source answers for every bound value, including the ones it cannot help with, so
+  the metrics store already says what it is before its adapter exists. Scoped to one
+  element and to an allowlist of windows, because each bound value costs a query
+  against a system that did not agree to be browsed; and
+  **b-ii)** the metrics adapter, over a Prometheus-compatible store. Complete. It
+  answers about a *node* through the runtime and deployment-target bindings and
+  never about one process, because ADR-0142 forbids labelling a metric by anything
+  the data can invent — which is why (b-i) did not wait for it. A node is
+  identified the only way a metrics store knows one, by the scrape target its
+  series came from: derived from a deployment target's base URL, and for this
+  server configured with `--metrics-instance`, because how this process appears in
+  somebody's Prometheus is their scrape configuration and guessing it would answer
+  about a different process while looking exactly like an answer about this one.
+  Counters are asked with `increase()` so a bucket is a count and the window total
+  is their sum; the queue-depth gauge is asked with `max_over_time()` and its total
+  is the peak, because adding two readings of a queue depth measures nothing.
 
 ## Milestone A — Modeler & authoring experience 🔲
 

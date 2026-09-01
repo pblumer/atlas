@@ -64,5 +64,26 @@ func (s *Service) HandleObservations(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "collect observations: "+err.Error())
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, Observe(set, facts, s.now().Unix()))
+	// Recording is what turns a sequence of reads into a history, and it happens
+	// here rather than in a sweeper because nothing polls: the journal sees what
+	// somebody looked at, which is the limit it publishes rather than hides.
+	httpapi.JSON(w, http.StatusOK,
+		s.journal.Record(model.ID, Observe(set, facts, s.now().Unix())))
+}
+
+// HandleDrift returns what has been seen to change about one model, newest first.
+//
+// It is a separate route from the observations because the two answer different
+// questions and cost different things: "what is happening" needs the engine read,
+// "what changed" is a read of what previous answers already established. A caller
+// watching a landscape asks the first often and the second rarely.
+func (s *Service) HandleDrift(w http.ResponseWriter, r *http.Request) {
+	model, refusal, err := s.readModel(r, r.PathValue("id"))
+	if writeReadOutcome(w, refusal, err) {
+		return
+	}
+	// The same access check as every other read of this model: a history of what
+	// changed is a history of the model's own bindings, and must not outlive the
+	// permission to read them.
+	httpapi.JSON(w, http.StatusOK, s.journal.Document(model.ID))
 }
