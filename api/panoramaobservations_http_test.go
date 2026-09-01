@@ -106,8 +106,10 @@ func TestObservationsSeeTheInstanceThroughTheModel(t *testing.T) {
 	if doc.ObservedAt == 0 {
 		t.Error("the document does not say when it was read")
 	}
-	if len(doc.Unavailable) == 0 {
-		t.Error("the document does not say what it cannot observe")
+	// Nothing is out of this document's reach: it asks peers, so every one of
+	// ADR-0189 §6's states is reachable in it, and the empty list is that claim.
+	if len(doc.Unavailable) != 0 {
+		t.Errorf("the document declares %+v unavailable", doc.Unavailable)
 	}
 
 	// The application is running and nothing is parked.
@@ -417,12 +419,20 @@ func TestObservationsCoverWorkersTargetsAndAnEmptyApplication(t *testing.T) {
 		}
 	}
 
+	// The target is asked now, and there is nothing at that address, so the honest
+	// answer is unreachable rather than a blank row. Unreachable is *attention*,
+	// not critical (ADR-0211 §4): "I could not reach it" and "it is broken" are
+	// different findings.
 	state, reason, _ = observedValue(t, doc, "atlas.deploymentTargetId", target.ID)
-	if state != "unbound" {
-		t.Errorf("a deployment target = %q (%s), want unbound until it is asked", state, reason)
+	if state != "unreachable" {
+		t.Errorf("a target that does not answer = %q (%s), want unreachable", state, reason)
 	}
-	if !strings.Contains(reason, "asking it") {
-		t.Errorf("target reason = %q, want it to say why nothing is known", reason)
+	// And the reason says what kind of failure it was without repeating the address
+	// back. The base URL is this operator's infrastructure map, and this document is
+	// opened by anyone with modeler access — the leak check above is the assertion,
+	// this is the readability half of it.
+	if reason == "" || strings.Contains(reason, "http") {
+		t.Errorf("target reason = %q, want a category rather than a URL", reason)
 	}
 
 	state, reason, detail = observedValue(t, doc, "atlas.applicationId", app.ID)
@@ -463,5 +473,80 @@ func TestReleaseObservationReportsAProcessThatIsGone(t *testing.T) {
 	// The application went with it: nothing of it is deployed any more.
 	if state, _, _ := observedValue(t, doc, "atlas.applicationId", appID); state != "not-ready" {
 		t.Errorf("application after undeploy = %q, want not-ready", state)
+	}
+}
+
+// TestObservationsReachARealPeer closes the loop P4a opened. That slice built the
+// descriptor a peer asks for; this one is the asking, and the two halves are the
+// same code talking to itself — which is the only way to know the contract holds.
+//
+// It is a second Atlas, not a stub: a stub would prove this server can parse what
+// this test wrote, and nothing about whether the descriptor route actually answers
+// what the reader expects.
+func TestObservationsReachARealPeer(t *testing.T) {
+	peer := newTestServer(t)
+	peerNode := getNode(t, peer)
+	if code, body := doReq(t, peer, http.MethodPut, "/api/v1/node",
+		`{"name":"Geneva standby","environment":"staging"}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("name the peer: status = %d, body = %s", code, body)
+	}
+
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/applications", `{"name":"Billing"}`, "application/json")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create application: status = %d, body = %s", code, body)
+	}
+	var app struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &app); err != nil {
+		t.Fatalf("decode application: %v", err)
+	}
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/targets",
+		mustJSON(t, map[string]any{"name": "Geneva", "baseUrl": peer.URL}), "application/json")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create target: status = %d, body = %s", code, body)
+	}
+	var target struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &target); err != nil {
+		t.Fatalf("decode target: %v", err)
+	}
+
+	// The model binds the target *and* the peer's own runtime id — the second is
+	// only knowable because the peer publishes a stable one, which is what the
+	// descriptor is for.
+	modelID := observedModel(t, ts, app.ID, app.ID, "no-such-process", "no-such-release", peerNode.ID)
+	code, body = doReq(t, ts, http.MethodPut, "/api/v1/panorama/models/"+modelID, mustJSON(t, map[string]any{
+		"expectedRevision": 1, "name": "Observed",
+		"xml": widerArchiMate(app.ID, "no-such-worker", target.ID),
+	}), "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("rebind the model to the target: status = %d, body = %s", code, body)
+	}
+
+	doc := getObservations(t, ts, modelID)
+	state, reason, detail := observedValue(t, doc, "atlas.deploymentTargetId", target.ID)
+	if state != "healthy" {
+		t.Fatalf("a peer that is up = %q (%s)", state, reason)
+	}
+	// What the peer calls itself, not what this server calls the target: the
+	// descriptor exists so a landscape can name a runtime the way its own operator
+	// does.
+	if detail["node"] != "Geneva standby (staging)" {
+		t.Errorf("detail = %v, want the peer's own name", detail)
+	}
+	if detail["runtimeId"] != peerNode.ID {
+		t.Errorf("detail = %v, want the peer's stable id", detail)
+	}
+	// Never the peer's address: this document is opened by anyone with modeler
+	// access, and where a peer lives is this operator's infrastructure map.
+	code, raw := doReq(t, ts, http.MethodGet, "/api/v1/panorama/models/"+modelID+"/observations", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("observations status = %d", code)
+	}
+	if strings.Contains(string(raw), peer.URL) || strings.Contains(string(raw), "127.0.0.1") {
+		t.Errorf("the document carries the peer's address: %s", raw)
 	}
 }

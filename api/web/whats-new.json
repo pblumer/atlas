@@ -33,8 +33,8 @@
         "de": "Publizieren auf einen anderen Atlas klappt jetzt auch mit eigener CA"
       },
       "summary": {
-        "en": "Publishing an application to another Atlas has always required that server to be reachable over https, and rightly so: the token that authorises the push would otherwise cross the network in the clear. On-prem, that certificate is usually issued by your own certificate authority, which the sending machine has never heard of — so the push failed at verification, and the only fixes were touching the host's trust store or building your own container image. You can now point the sending server, and any worker on another host, at your CA's bundle. It is added to the certificates the host already trusts rather than replacing them, so a target with a publicly issued certificate keeps working, and it applies only to Atlas talking to Atlas — a worker calling Jira, a mail server or Microsoft Graph keeps the machine's own trust store, because those endpoints are somebody else's. What it is deliberately not is a way to skip verification: there is no such switch anywhere in Atlas, because it would be the first thing reached for at exactly the moment a certificate must not be ignored.",
-        "de": "Eine Applikation auf einen anderen Atlas zu publizieren verlangt seit jeher, dass dieser Server über https erreichbar ist — zu Recht, denn sonst liefe das Token, das den Push autorisiert, im Klartext über das Netz. On-Prem stammt dieses Zertifikat meist von der eigenen Zertifizierungsstelle, die der sendende Rechner nicht kennt: Der Push scheiterte an der Prüfung, und helfen konnte nur, den Trust-Store des Hosts anzufassen oder ein eigenes Container-Image zu bauen. Jetzt lässt sich dem sendenden Server — und einem Worker auf einem anderen Host — das Bundle der eigenen CA nennen. Es kommt zu den Zertifikaten hinzu, denen der Host ohnehin traut, statt sie zu ersetzen; ein Ziel mit öffentlich ausgestelltem Zertifikat funktioniert also unverändert weiter. Und es gilt nur für Atlas-zu-Atlas: Ein Worker, der Jira, einen Mailserver oder Microsoft Graph aufruft, behält den Trust-Store der Maschine, denn diese Endpunkte gehören jemand anderem. Was es bewusst nicht ist: ein Weg, die Prüfung zu überspringen. Einen solchen Schalter gibt es in Atlas nirgends — er wäre das Erste, wonach man griffe, genau in dem Moment, in dem ein Zertifikat nicht ignoriert werden darf."
+        "en": "Publishing an application to another Atlas has always required that server to be reachable over https, and rightly so: the token that authorises the push would otherwise cross the network in the clear. On-prem, that certificate is usually issued by your own certificate authority, which the sending machine has never heard of — so the push failed at verification, and the only fixes were touching the host's trust store or building your own container image. You can now point the sending server at your CA's bundle — and any worker on another host, or the MCP adapter an agent drives a remote Atlas through, at the same one. It is added to the certificates the host already trusts rather than replacing them, so a target with a publicly issued certificate keeps working, and it applies only to Atlas talking to Atlas — a worker calling Jira, a mail server or Microsoft Graph keeps the machine's own trust store, because those endpoints are somebody else's. What it is deliberately not is a way to skip verification: there is no such switch anywhere in Atlas, because it would be the first thing reached for at exactly the moment a certificate must not be ignored.",
+        "de": "Eine Applikation auf einen anderen Atlas zu publizieren verlangt seit jeher, dass dieser Server über https erreichbar ist — zu Recht, denn sonst liefe das Token, das den Push autorisiert, im Klartext über das Netz. On-Prem stammt dieses Zertifikat meist von der eigenen Zertifizierungsstelle, die der sendende Rechner nicht kennt: Der Push scheiterte an der Prüfung, und helfen konnte nur, den Trust-Store des Hosts anzufassen oder ein eigenes Container-Image zu bauen. Jetzt lässt sich dem sendenden Server das Bundle der eigenen CA nennen — und ebenso einem Worker auf einem anderen Host oder dem MCP-Adapter, über den ein Agent einen entfernten Atlas bedient. Es kommt zu den Zertifikaten hinzu, denen der Host ohnehin traut, statt sie zu ersetzen; ein Ziel mit öffentlich ausgestelltem Zertifikat funktioniert also unverändert weiter. Und es gilt nur für Atlas-zu-Atlas: Ein Worker, der Jira, einen Mailserver oder Microsoft Graph aufruft, behält den Trust-Store der Maschine, denn diese Endpunkte gehören jemand anderem. Was es bewusst nicht ist: ein Weg, die Prüfung zu überspringen. Einen solchen Schalter gibt es in Atlas nirgends — er wäre das Erste, wonach man griffe, genau in dem Moment, in dem ein Zertifikat nicht ignoriert werden darf."
       },
       "link": {
         "label": "ADR-0129",
@@ -236,6 +236,49 @@
       }
     },
     {
+      "id": "the-modeler-says-worker-too-and-offers-the-names-it-is-askin",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The Modeler asks for a Worker — and offers the ones you have",
+        "de": "Der Modeler fragt nach einem Worker — und bietet die vorhandenen an"
+      },
+      "summary": {
+        "en": "A service task's properties panel still said Connector, while the Console had long since said Workers — so the field asking for a name and the page the names come from disagreed. The panel now uses the same three words as everywhere else: you pick a Worker type (the list reads Jira, PostgreSQL, BMC Remedy — the word Connector is gone from the names), and below it you name the Worker, meaning the one Jira site or database an administrator configured on this server. The Worker field is now a dropdown of exactly those, so the one thing you cannot read off your own model is no longer typed from memory. It still accepts a typed name, because a worker you run yourself can carry its target in its own environment where the Modeler cannot see it — and if this server has no worker of that type at all, the field says so instead of opening an empty list. Your models are untouched: the saved XML still says connector=\"…\", so anything already deployed keeps running exactly as it did.",
+        "de": "Im Eigenschaften-Panel einer Service-Aufgabe stand weiterhin Connector, während die Konsole längst Workers sagte — das Feld, das nach einem Namen fragt, und die Seite, auf der die Namen entstehen, sprachen also verschiedene Sprachen. Das Panel benutzt jetzt dieselben drei Begriffe wie alles andere: Sie wählen einen Worker-Typ (die Liste liest sich als Jira, PostgreSQL, BMC Remedy — das Wort Connector ist aus den Namen verschwunden), und darunter benennen Sie den Worker, also die eine Jira-Instanz oder Datenbank, die jemand auf diesem Server konfiguriert hat. Dieses Feld ist neu eine Auswahlliste genau dieser Worker; das Einzige, was Sie Ihrem eigenen Modell nicht ansehen können, muss damit nicht mehr aus dem Gedächtnis getippt werden. Ein getippter Name bleibt erlaubt, weil ein selbst betriebener Worker sein Ziel in der eigenen Umgebung tragen kann, wo der Modeler es nicht sieht — und wenn dieser Server gar keinen Worker dieses Typs kennt, sagt das Feld das, statt eine leere Liste zu öffnen. An Ihren Modellen ändert sich nichts: Im gespeicherten XML steht weiterhin connector=\"…\", Bereitgestelltes läuft unverändert weiter."
+      },
+      "link": {
+        "label": "ADR-0203",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0203-worker-execution-model.md"
+      },
+      "tags": [
+        "Modeler",
+        "Workers"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a process in the Modeler and select a service task, then switch to the Implement tab.",
+          "Worker type is the picker at the top — choose Jira, or whichever type the task should use.",
+          "In the group below it (Jira worker, Mail worker, …) click the Worker field: it lists the workers of that type configured under Console › Workers.",
+          "Nothing offered? Then this server has no worker of that type yet — the field says so, and Console › Workers is where one is added."
+        ],
+        "de": [
+          "Öffnen Sie einen Prozess im Modeler, wählen Sie eine Service-Aufgabe und wechseln Sie auf den Reiter Implement.",
+          "Worker type ist die Auswahl zuoberst — nehmen Sie Jira oder den Typ, den die Aufgabe braucht.",
+          "In der Gruppe darunter (Jira worker, Mail worker, …) klicken Sie ins Feld Worker: es listet die unter Console › Workers konfigurierten Worker dieses Typs.",
+          "Nichts zur Auswahl? Dann kennt dieser Server noch keinen Worker dieses Typs — das Feld sagt es, und angelegt wird einer unter Console › Workers."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-jira-search-called-an-endpoint-jira-cloud-has-removed",
       "version": "Unreleased",
       "date": null,
@@ -304,35 +347,6 @@
           "de": "Workers öffnen"
         },
         "route": "#/console"
-      }
-    },
-    {
-      "id": "not-every-account-may-deploy-any-more",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Accounts now have roles, and not every account may deploy",
-        "de": "Konten haben jetzt Rollen — und nicht jedes Konto darf deployen"
-      },
-      "summary": {
-        "en": "Until now, being signed in was the whole answer: any account could deploy a model, cancel somebody's instances or run a script. Deploying is code execution, so that was the wrong default for anything but a workshop. Every endpoint now names the role it needs — admin, modeler, operator or user — and the server checks it before the request reaches anything, whether it arrives from a browser, an API token or an AI assistant over MCP. An account carries several roles; they are a list, not a ladder. Your upgrade takes nothing away: every existing account keeps modeler, operator and user, so everything except administration, and what you narrow afterwards stays narrow. New accounts get user. Grant the roles under Organization, where each one says what it lets the person do.",
-        "de": "Bisher war «angemeldet» die ganze Antwort: Jedes Konto konnte ein Modell deployen, fremde Instanzen abbrechen oder ein Skript ausführen. Deployen ist Codeausführung — für alles ausser einem Workshop war das die falsche Vorgabe. Jetzt nennt jeder Endpunkt die Rolle, die er verlangt — admin, modeler, operator oder user —, und der Server prüft sie, bevor die Anfrage irgendetwas erreicht: aus dem Browser, mit einem API-Token oder über MCP von einem KI-Assistenten. Ein Konto trägt mehrere Rollen; sie sind eine Liste, keine Rangfolge. Die Aktualisierung nimmt nichts weg: Jedes bestehende Konto behält modeler, operator und user — also alles ausser der Administration —, und was Sie danach enger stellen, bleibt eng. Neue Konten bekommen user. Vergeben werden die Rollen unter «Organization»; dort steht bei jeder, was sie erlaubt."
-      },
-      "link": {
-        "label": "ADR-0209",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0209-roles-per-endpoint-group.md"
-      },
-      "tags": [
-        "Security",
-        "Console"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organization öffnen"
-        },
-        "route": "#/console/org"
       }
     }
   ]

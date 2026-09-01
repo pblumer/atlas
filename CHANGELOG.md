@@ -41,10 +41,13 @@ _Changed_ / _Removed_ for each version.
   target must be `https://` ([ADR-0129](docs/adr/0129-remote-deployment-targets.md)),
   and on-prem that certificate usually comes from a CA the sending host has never
   heard of. Point `--tls-ca` at its PEM bundle on the publishing server, and at the
-  same bundle on an `atlas worker --server https://…` running on another host. It
-  is *added* to the host's roots, never a replacement, and it reaches only those
-  two conversations — a Worker Type calling a third party keeps the host's trust
-  store, because that endpoint is somebody else's.
+  same bundle on an `atlas worker --server https://…` running on another host or an
+  `atlas mcp --server https://…` an agent drives it through. It is *added* to the
+  host's roots, never a replacement, and it reaches only Atlas calling Atlas — a
+  Worker Type calling a third party keeps the host's trust store, because that
+  endpoint is somebody else's. There is no switch to skip verification anywhere,
+  and a bundle that cannot be read stops the process at startup rather than
+  failing every call later.
 
 - **Helm: `atlas.tls`.** Mount a `kubernetes.io/tls` Secret (what cert-manager
   writes) and the chart passes the pair to the server and switches all three
@@ -154,6 +157,38 @@ _Changed_ / _Removed_ for each version.
   `atlas worker --connector mail` still names the worker type — the handbook now
   says so explicitly, in a note that explains why. Every example's prose moved to
   the new vocabulary; not one line of BPMN did.
+
+- **The Modeler says Worker too, and offers the names it is asking for.** The
+  Console and the handbook already speak
+  [ADR-0203](docs/adr/0203-worker-execution-model.md)'s vocabulary; the properties
+  panel was the last place calling all three things a connector. A service task now
+  picks a **Worker type** — and the entries dropped the `… Connector` suffix every
+  second one carried, so the list reads *Jira*, *PostgreSQL*, *BMC Remedy* — while
+  the field naming the concrete target is **Worker**, because that is what it names:
+  one endpoint and identity an operator registered on this server, not the
+  capability above it and not a replica below it. The section headings followed
+  (*Jira instance* → *Jira worker*, *Mail provider* → *Mail worker*): in this
+  vocabulary an *instance* is a Worker Instance, which is the one thing a model
+  never picks.
+
+  **The Worker field is a dropdown.** It offers this server's configured Workers of
+  that type, from `GET /api/v1/configured-workers` — Jira, Remedy, SharePoint and
+  the three SQL products join mail and clio, which already had one. The name of a
+  Worker is the single thing about a task that cannot be read off the model, and
+  typing it from memory is how a deploy fails on a hyphen. It stays a combobox, not
+  a closed list: a Worker that lives only in a worker process's own environment
+  (`ATLAS_POSTGRES_<NAME>_DSN` and friends) is registered nowhere the Modeler can
+  see, so a name may still be typed, and the Entra field keeps its free-text form
+  because it may be a FEEL expression choosing the tenant per instance. When the
+  server has no Worker of the type, the field now says so instead of opening an
+  empty list that looks broken.
+
+  Two hints stopped being true when the SQL and Entra types gained Console records
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md),
+  [ADR-0173](docs/adr/0173-generic-sql-connector.md)) and still claimed their Worker
+  could not be configured there; they now describe both places it can live.
+  Nothing in the model moved: the attribute is still `connector="…"` and the
+  extension elements are still `<atlas:jiraConnector>` and friends.
 
 ### Fixed
 

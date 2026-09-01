@@ -461,11 +461,12 @@ proxy in front of those paths or run with `--metrics=false`.
 on the receiving server is usually issued by an internal CA that the sending host
 has never heard of. Point `--tls-ca` at that CA's PEM bundle on the *sending*
 server, and at the same bundle on any `atlas worker --server https://…` running on
-another host:
+another host or `atlas mcp --server https://…` an agent drives it through:
 
 ```bash
 atlas serve --tls-ca /etc/atlas/internal-ca.pem …
 atlas worker --server https://atlas.example.com --tls-ca /etc/atlas/internal-ca.pem …
+atlas mcp --server https://atlas.example.com --tls-ca /etc/atlas/internal-ca.pem
 ```
 
 It is added to the host's roots rather than replacing them, and it reaches only
@@ -677,7 +678,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. **Set this behind a reverse proxy:** the scheme such a request arrives with is `http`, so every absolute URL Atlas publishes — the OAuth discovery documents, the `WWW-Authenticate` challenge, the authorization and token endpoints — would name something no client can use ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). With `--tls-cert` and clients reaching the server by the name on its certificate, the derived origin is already right; set it anyway if they reach it by anything else. Also `ATLAS_EXTERNAL_URL` |
 | `--tls-cert` | *(none)* | PEM certificate chain to serve `--addr` with. With `--tls-key`, this server terminates TLS 1.3 itself instead of a proxy doing it; unset, it serves plain HTTP. Both or neither — one alone refuses to start. The pair is re-read when either file changes, so a renewal needs no restart ([ADR-0191](adr/0191-built-in-tls-listener.md)). Also `ATLAS_TLS_CERT` |
 | `--tls-key` | *(none)* | PEM private key for `--tls-cert`. Also `ATLAS_TLS_KEY` |
-| `--tls-ca` | *(none)* | PEM bundle of certificate authorities to trust **in addition to** the host's, when this server calls another Atlas — publishing to a deployment target and reading its status back ([ADR-0129](adr/0129-remote-deployment-targets.md)). For an internally issued peer certificate. Never replaces the system roots, never skips verification, and does not touch Worker Types calling third parties. `atlas worker` takes the same flag. Also `ATLAS_TLS_CA` |
+| `--tls-ca` | *(none)* | PEM bundle of certificate authorities to trust **in addition to** the host's, when this server calls another Atlas — publishing to a deployment target and reading its status back ([ADR-0129](adr/0129-remote-deployment-targets.md)). For an internally issued peer certificate. Never replaces the system roots, never skips verification, and does not touch Worker Types calling third parties. `atlas worker` and `atlas mcp` take the same flag, for their own hop to an `https://` server. Also `ATLAS_TLS_CA` |
 | `--oidc-issuer` | *(none)* | OpenID Connect issuer URL. Setting it makes Atlas a relying party: the login screen gains a "Sign in with …" button and two routes are mounted. With it unset nothing is mounted and no outbound connection is made. Also `ATLAS_OIDC_ISSUER` |
 | `--oidc-client-id` | *(none)* | Client id this server was registered under at that provider. Also `ATLAS_OIDC_CLIENT_ID` |
 | `--oidc-client-secret` | *(none)* | Client secret, if the provider issued one; omit it for a public client (the flow uses PKCE either way). Prefer `ATLAS_OIDC_CLIENT_SECRET`, so it stays out of `ps` |
@@ -712,7 +713,7 @@ explicit `=false` — `--vault=false`, not `--no-vault`.
 | Command | Purpose |
 |---------|---------|
 | `atlas serve [flags]` | Run the engine, API, and UI. This is the default when no subcommand is given. |
-| `atlas mcp [--server URL] [--token TOKEN]` | Model Context Protocol adapter on stdio, proxying to a running server (default `http://localhost:8080`). `--token` (or `ATLAS_TOKEN`) is what it authenticates with against a server running `--auth` |
+| `atlas mcp [--server URL] [--token TOKEN] [--tls-ca FILE]` | Model Context Protocol adapter on stdio, proxying to a running server (default `http://localhost:8080`). `--token` (or `ATLAS_TOKEN`) is what it authenticates with against a server running `--auth`; `--tls-ca` (or `ATLAS_TLS_CA`) names a CA bundle to trust in addition to the host's, for an `https://` server whose certificate an internal CA issued |
 | `atlas reset-password [--data-dir DIR] [--create-admin] [--password-stdin] USERNAME` | Reset a local user's password straight against the data directory |
 | `atlas version` | Version, git revision, and Go toolchain |
 | `atlas help` | Usage |
@@ -725,6 +726,7 @@ history.
 | Variable | Used for |
 |----------|----------|
 | `ATLAS_TOKEN` | The credential `atlas worker` and `atlas mcp` authenticate with, and what supervised workers are given if you set it on the server. It must be an **API token** the server accepts (see below); an arbitrary value is refused, and the server warns at startup if you set one |
+| `ATLAS_TLS_CA` | A CA bundle `atlas serve`, `atlas worker` and `atlas mcp` trust **in addition to** the host's roots when they call another Atlas over `https`. For an internally issued certificate; it never replaces the system roots and never skips verification |
 | `ATLAS_ADMIN_USERNAME` | Bootstrap admin name (default `admin`); only read while the user store is empty and `--auth` is on |
 | `ATLAS_ADMIN_PASSWORD` | Bootstrap admin password; if unset, one is generated and logged once |
 | `ATLAS_VAULT_KEY` | Vault master key, 64 hex chars or base64; never written to disk |
@@ -879,6 +881,11 @@ Then hand it over as `--token` or `ATLAS_TOKEN`:
 atlas worker --server https://atlas.example.com --token "$ATLAS_TOKEN" --connector script
 atlas mcp    --server https://atlas.example.com --token "$ATLAS_TOKEN"
 ```
+
+Where that server's certificate comes from your own CA rather than a public one,
+add `--tls-ca /etc/atlas/internal-ca.pem` (or `ATLAS_TLS_CA`) to either command.
+On a person's own machine the host trust store usually already carries it and the
+flag is unnecessary.
 
 `--connector` names the **Worker Type** this instance serves, not a configured
 worker: it keeps the pre-ADR-0203 spelling, like the `ATLAS_*_CONNECTORS` variables

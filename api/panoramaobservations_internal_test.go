@@ -11,15 +11,15 @@ import (
 	"github.com/pblumer/atlas/wal"
 )
 
-// TestCollectFactsReportsStoreFailures. Every source this projection reads can
-// fail, and each failure has to reach the caller as a failure.
+// TestCollectLocalFactsReportsStoreFailures. Every source this projection reads on
+// the run loop can fail, and each failure has to reach the caller as a failure.
 //
 // The alternative is what makes this worth a test of its own: a store that cannot
 // be read yields no facts, and a document built from no facts reports every bound
 // element as unobserved — an architecture where nothing is running. That is the
 // single most damaging thing a live view can say incorrectly, and it would say it
 // with a 200.
-func TestCollectFactsReportsStoreFailures(t *testing.T) {
+func TestCollectLocalFactsReportsStoreFailures(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 
 	// A collector needs more stores than storesFor builds, so each case starts from
@@ -105,7 +105,7 @@ func TestCollectFactsReportsStoreFailures(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := whole(t)
 			breakOne(t, s)
-			if _, err := s.collectFacts(req); err == nil {
+			if _, _, err := s.collectLocalFacts(req); err == nil {
 				t.Fatal("a broken source produced a full set of facts")
 			}
 		})
@@ -115,9 +115,13 @@ func TestCollectFactsReportsStoreFailures(t *testing.T) {
 	// failing for the reason they claim rather than because the fixture is wrong.
 	s := whole(t)
 	seeded(t, s)
-	facts, err := s.collectFacts(req)
+	facts, peers, err := s.collectLocalFacts(req)
 	if err != nil {
-		t.Fatalf("collectFacts on a healthy server: %v", err)
+		t.Fatalf("collectLocalFacts on a healthy server: %v", err)
+	}
+	// No targets are configured, so there is nobody for phase two to ask.
+	if len(peers) != 0 {
+		t.Errorf("peers = %+v, want none on a server with no deployment targets", peers)
 	}
 	if facts.JobTypes != nil {
 		t.Error("JobTypes is present; nothing on this server observes a job type")
