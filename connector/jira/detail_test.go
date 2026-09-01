@@ -464,3 +464,12 @@ func TestSearchOnCloudStopsOnARepeatedToken(t *testing.T) {
 		t.Errorf("requests = %d, want the read to stop once the token repeated", calls)
 	}
 }
+
+// Resolve refuses a task with no detail rather than producing a Job with an empty
+// operation, which the client would then reject with a message about the operation
+// instead of about the model.
+func TestResolveRefusesATaskWithNoDetail(t *testing.T) {
+	if _, err := jira.Resolve(nil, nil, nil, nil, 1, 2); err == nil {
+		t.Fatal("a connector task with no detail was resolved")
+	}
+}

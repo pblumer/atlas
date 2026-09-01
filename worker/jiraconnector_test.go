@@ -242,3 +242,27 @@ func TestAJiraJobForAnUnheldConnectorNamesIt(t *testing.T) {
 		t.Fatalf("error = %v, want the unheld connector named", err)
 	}
 }
+
+// A payload whose shape does not match the resolved job is reported as such. It is the
+// one failure the worker can meet that is neither Jira's nor the model's: the engine
+// sent something this worker cannot read, and saying so beats acting on a zero value.
+func TestAJiraJobWithAnUnreadableDetailSaysSo(t *testing.T) {
+	built, err := worker.BuiltinConnectors(fakeEnv(map[string]string{
+		"ATLAS_JIRA_CONNECTORS": "acme",
+		"ATLAS_JIRA_ACME_URL":   "https://acme.atlassian.net",
+		"ATLAS_JIRA_ACME_TOKEN": "pat",
+	}), "jira")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	_, err = built.Handlers[compiler.JiraJobType].Run(context.Background(), worker.Job{
+		JobKey: 3, Type: compiler.JiraJobType,
+		Connector: &worker.ConnectorPayload{Kind: "jira", Fields: map[string]any{
+			"connector": "acme", "operation": "search",
+			"maxResults": "not a number", // int32 on the far side
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "cannot read the resolved detail") {
+		t.Fatalf("error = %v, want it to name the unreadable payload", err)
+	}
+}

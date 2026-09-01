@@ -439,6 +439,110 @@ func TestJiraBundleShapeMatchesTheConnector(t *testing.T) {
 	}
 }
 
+// The bundle parser refuses everything that is not one of the two shapes, because a
+// half-filled one handed to a worker becomes a startup failure that takes down every
+// other kind that worker serves.
+func TestJiraBundleParseRefusesEverythingButTheTwoShapes(t *testing.T) {
+	for _, tc := range []struct{ name, raw string }{
+		{"absent", ""},
+		{"whitespace", "   "},
+		{"not JSON at all", "pat"},
+		{"an empty object", "{}"},
+		{"a Cloud pair missing its token", `{"email":"bot@acme.example"}`},
+		{"a Cloud pair missing its address", `{"apiToken":"t0ken"}`},
+		{"blank values", `{"email":"  ","apiToken":"  ","token":"  "}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got, ok := jiraBundleParse(tc.raw); ok {
+				t.Errorf("jiraBundleParse(%q) = %+v, true; want it refused", tc.raw, got)
+			}
+		})
+	}
+}
+
+// A Jira instance an operator set on the host is inherited by a supervised child as it
+// stands, so nothing is rendered for it — but its name must survive into the list, or a
+// store connector's CONNECTORS would silently take the host's instance away from it.
+func TestSupervisedJiraEnvKeepsAHostConfiguredInstance(t *testing.T) {
+	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	t.Setenv(jiraConnectorsEnv, "onthehost")
+	if err := srv.connectors.Save(connector{
+		ID: "1", Name: "fromstore", Kind: connectorKindJira,
+		Endpoint: "https://acme.atlassian.net", CredentialsRef: "jira-creds",
+		Enabled: true, CreatedAt: 1,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	t.Setenv("ATLAS_CONNECTOR_JIRA_CREDS_TOKEN", `{"token":"pat"}`)
+
+	env := envOf(t, srv.jiraWorkerEnv())
+	names := env[jiraConnectorsEnv]
+	if !strings.Contains(names, "onthehost") || !strings.Contains(names, "fromstore") {
+		t.Errorf("%s = %q, want the union of the host's instance and the store's", jiraConnectorsEnv, names)
+	}
+	// Nothing is rendered for the host's own instance: the child already inherits it.
+	if _, rendered := env["ATLAS_JIRA_ONTHEHOST_URL"]; rendered {
+		t.Error("the host's instance was re-rendered; the child inherits it already")
+	}
+}
+
+// Two connector names that fold to one environment variable would silently give one of
+// them the other's credential — a worker authenticating to a Jira site as the wrong
+// Atlassian account. The second is left out and warned about instead, the same rule
+// mail and entra follow.
+func TestSupervisedJiraEnvDropsAFoldingNameCollision(t *testing.T) {
+	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	// "acme-jira" and "acme_jira" both fold to ACME_JIRA.
+	if err := srv.connectors.Save(connector{
+		ID: "1", Name: "acme-jira", Kind: connectorKindJira,
+		Endpoint: "https://first.atlassian.net", CredentialsRef: "first-creds",
+		Enabled: true, CreatedAt: 1,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := srv.connectors.Save(connector{
+		ID: "2", Name: "acme_jira", Kind: connectorKindJira,
+		Endpoint: "https://second.atlassian.net", CredentialsRef: "second-creds",
+		Enabled: true, CreatedAt: 2,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	t.Setenv("ATLAS_CONNECTOR_FIRST_CREDS_TOKEN", `{"token":"first"}`)
+	t.Setenv("ATLAS_CONNECTOR_SECOND_CREDS_TOKEN", `{"token":"second"}`)
+
+	env := envOf(t, srv.jiraWorkerEnv())
+	// Whichever sorts first wins the variable; the point is that the loser's credential
+	// is not what the winner's name resolves to.
+	if env["ATLAS_JIRA_ACME_JIRA_URL"] != "https://first.atlassian.net" || env["ATLAS_JIRA_ACME_JIRA_TOKEN"] != "first" {
+		t.Errorf("url/token = %q/%q, want the first connector's own pair", env["ATLAS_JIRA_ACME_JIRA_URL"], env["ATLAS_JIRA_ACME_JIRA_TOKEN"])
+	}
+	if strings.Contains(env[jiraConnectorsEnv], "acme_jira") {
+		t.Errorf("%s = %q, want the colliding second name left out rather than named with the first's credential",
+			jiraConnectorsEnv, env[jiraConnectorsEnv])
+	}
+}
+
+// A Jira connector the store cannot be read for hands over nothing rather than a
+// partial list: a worker given half the instances would serve the other half's tasks
+// with "no connector registered", which reads as a configuration nobody made.
+func TestSupervisedJiraEnvSurvivesABrokenStore(t *testing.T) {
+	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
+	if env := srv.jiraWorkerEnv(); len(env) != 0 {
+		t.Errorf("env = %v, want nothing handed over when the store cannot be read", env)
+	}
+}
+
+// With no Jira connector in the store there is nothing to hand over, and CONNECTORS is
+// deliberately not rendered — writing it would hand a child an empty list that overrides
+// what it inherits.
+func TestSupervisedJiraEnvRendersNothingWithoutAStoreConnector(t *testing.T) {
+	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	if env := srv.jiraWorkerEnv(); len(env) != 0 {
+		t.Errorf("env = %v, want nothing rendered when no store connector contributes", env)
+	}
+}
+
 // A Jira connector whose bundle does not resolve is left out entirely rather than
 // handed over half-filled: the worker refuses a *named* instance missing a field at
 // startup, which would take down every other kind it serves.
