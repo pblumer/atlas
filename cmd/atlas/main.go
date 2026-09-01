@@ -35,6 +35,7 @@ import (
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/checkpoint"
 	remedymock "github.com/pblumer/atlas/connector/remedy/mock"
+	"github.com/pblumer/atlas/connector/rest/openapimock"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/jobtype"
@@ -97,6 +98,10 @@ func main() {
 		if err := runMockRemedy(args); err != nil {
 			fatal("atlas mock-remedy", err)
 		}
+	case "mock-openapi":
+		if err := runMockOpenAPI(args); err != nil {
+			fatal("atlas mock-openapi", err)
+		}
 	case "playground":
 		if err := runPlaygroundScenario(args, os.Stdout); err != nil {
 			// A run that happened and did not meet its expectations leaves its own
@@ -150,6 +155,7 @@ Usage:
   atlas import-mim     [flags] FILE Convert a MIM/FIM XOML workflow to BPMN 2.0
   atlas check-job-types [flags]     Check a data directory's job-type table for index collisions
   atlas mock-remedy    [flags]      Run a mock BMC Remedy AR System for the Remedy connector
+  atlas mock-openapi   [flags]      Serve a mock REST API from an OpenAPI document
   atlas playground     [flags]      Run a saved Playground scenario and exit on its verdict
   atlas version                     Print the version and build metadata
 
@@ -1124,7 +1130,14 @@ func runMockRemedy(args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "wire it up: set a Remedy connector's endpoint to %s and store its {\"username\":…,\"password\":…} bundle in the vault\n", base)
 
-	httpSrv := &http.Server{Addr: *addr, Handler: mock.Handler()}
+	return runMockServer(*addr, mock.Handler())
+}
+
+// runMockServer serves a mock until the process is interrupted. Both mock
+// subcommands land here: a mock is a foreground dev aid, so it stays out of the
+// server's structured logging and shuts down on the signal a terminal sends.
+func runMockServer(addr string, handler http.Handler) error {
+	httpSrv := &http.Server{Addr: addr, Handler: handler}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errCh := make(chan error, 1)
@@ -1144,6 +1157,80 @@ func runMockRemedy(args []string) error {
 		defer cancel()
 		return httpSrv.Shutdown(shutCtx)
 	}
+}
+
+// runMockOpenAPI serves a mock REST API from an OpenAPI 3 document, so a process with
+// a REST connector task can be run before the API it calls exists — or without
+// pointing a draft at the real one. Where `atlas mock-remedy` hand-implements the
+// endpoints of one Worker Type, this serves whatever a document describes: point a
+// REST task's url at the address it prints and nothing else about the model changes.
+//
+// What it answers is the document's own examples where it states them and values
+// generated from its schemas where it does not, always the same way for the same
+// document. GET /__mock/calls is the journal of what a run actually did, and
+// GET /__mock/report is that journal in the envelope the Console's Mockups view takes
+// (ADR-0216).
+func runMockOpenAPI(args []string) error {
+	fs := flag.NewFlagSet("mock-openapi", flag.ExitOnError)
+	specPath := fs.String("spec", "", "path to the OpenAPI 3 document (JSON or YAML) to mock — required")
+	addr := fs.String("addr", ":8009", "HTTP listen address for the mock API")
+	basePath := fs.String("base-path", "", `serve the document's paths under this prefix instead of the path in its first server URL ("/" serves them at the root)`)
+	id := fs.String("id", defaultWorkerID(), "name this mock reports itself under")
+	quiet := fs.Bool("quiet", false, "do not print one line per served call")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*specPath) == "" {
+		return errors.New("--spec is required: the OpenAPI document to mock")
+	}
+	spec, err := openapimock.LoadFile(*specPath)
+	if err != nil {
+		return err
+	}
+	opts := []openapimock.Option{openapimock.WithID(*id)}
+	if !*quiet {
+		opts = append(opts, openapimock.WithLog(os.Stderr))
+	}
+	if *basePath != "" {
+		opts = append(opts, openapimock.WithBasePath(*basePath))
+	}
+	mock := openapimock.New(spec, opts...)
+
+	printMockOpenAPIBanner(os.Stderr, spec, mock, *specPath, *addr, loopbackURL(*addr))
+	return runMockServer(*addr, mock.Handler())
+}
+
+// printMockOpenAPIBanner tells the operator what was loaded and what to do with it.
+// Like the Remedy mock's, it is a human-facing hint written straight to stderr: a mock
+// is a dev aid, and stays out of the structured logging pipeline the server uses.
+func printMockOpenAPIBanner(w io.Writer, spec *openapimock.Spec, mock *openapimock.Server, specPath, addr, base string) {
+	fmt.Fprintf(w, "atlas mock-openapi: %s — %d operations from %s, listening on %s\n",
+		spec.Name(), len(spec.Operations), specPath, addr)
+	// The routes are the thing an operator needs in front of them, but a large
+	// document would bury the rest of the banner, so a long list is cut short and the
+	// journal below answers what was actually called.
+	const shown = 10
+	// The compiled order is the matcher's — most specific first — which reads as
+	// shuffled to a person. A banner is for reading, so it goes back to path order.
+	routes := make([]openapimock.Operation, len(spec.Operations))
+	copy(routes, spec.Operations)
+	sort.Slice(routes, func(i, j int) bool {
+		if routes[i].Path != routes[j].Path {
+			return routes[i].Path < routes[j].Path
+		}
+		return routes[i].Method < routes[j].Method
+	})
+	for i, op := range routes {
+		if i == shown {
+			fmt.Fprintf(w, "  … and %d more\n", len(routes)-shown)
+			break
+		}
+		fmt.Fprintf(w, "  %-6s %s%s%s\n", op.Method, base, mock.BasePath(), op.Path)
+	}
+	fmt.Fprintf(w, "  journal: GET %s/__mock/calls\n", base)
+	fmt.Fprintf(w, "  report:  GET %s/__mock/report\n", base)
+	fmt.Fprintf(w, "wire it up: point a REST connector task's url at %s%s/… — the model needs no other change\n", base, mock.BasePath())
+	fmt.Fprintln(w, "  a caller asks for a stated error path with the header `Prefer: code=404`")
 }
 
 // runResetPassword sets a local user's password directly against the on-disk user
