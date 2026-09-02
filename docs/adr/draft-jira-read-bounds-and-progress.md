@@ -14,6 +14,18 @@ looked alive.
 Two mechanisms in the Jira reading path can consume without limit, and both were
 introduced as correctness measures rather than as oversights.
 
+**Where each of them runs matters, and the two halves differ.** A Jira *connector task*
+is offloaded by default and served by a supervised worker process
+([ADR-0164](0164-no-in-process-service-tasks.md)/[ADR-0218](0218-jira-default-offload.md)):
+`applyOffloadedKinds` removes its handler from the engine's job runner at startup, so
+the engine never runs one. The *watch* is not a job at all — it has no job type, nothing
+to lease, and no worker form. It is a ticker goroutine in the server that reaches the
+run loop through `s.do`, and `applyOffloadedKinds` does not touch the client registry it
+reads through, so the server keeps building a Jira client (and holding the site
+credential) for the watch alone. ADR-0214 named moving the reader onto the worker as a
+follow-up and it has not happened. So everything below about run-loop pressure is about
+the watch, and the search ceiling has to hold in both processes.
+
 **1. The watch cursor can stop moving.** A jira watch resumes from a `created >=` /
 `updated >=` clause ([ADR-0214](0214-jira-inbound-issue-watch.md)). JQL compares those
 to the minute, and Jira's search index lags its writes, so the cursor is deliberately
