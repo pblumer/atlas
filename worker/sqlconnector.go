@@ -81,6 +81,23 @@ func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Regist
 	return reg, names, nil
 }
 
+// ProbeSQL opens one database and checks that it answers. It is what the Console's
+// connector check calls, handed to the server as api.WithSQLProbe by whoever assembles
+// the binary.
+//
+// It lives here and not in the api package for the reason the blank imports above do:
+// this is where the drivers are, and the engine deliberately links none of them
+// (ADR-0173). The pool it opens is closed again immediately — a check is one
+// connection, not a registration.
+func ProbeSQL(ctx context.Context, p sqldb.Product, dsn string) error {
+	client, err := sqldb.Open(p, dsn)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+	return client.Ping(ctx)
+}
+
 // RunSQLJob executes a resolved SQL job through a registry the caller owns. It is
 // exported for the same reason RunMailJob is: the environment is only the default
 // place a worker's connection strings come from, and a caller embedding this package

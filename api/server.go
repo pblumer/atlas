@@ -369,6 +369,12 @@ type Server struct {
 	// exists anywhere but in a worker's memory either.
 	adMockView *ad.MockView
 
+	// sqlProbe checks a SQL connector's connection string, when the binary that built
+	// this server linked a database driver (WithSQLProbe). Nil is the ordinary state
+	// of an embedder, and the Console's check says so rather than reporting a
+	// connector broken.
+	sqlProbe SQLProbe
+
 	// sharePointRegistry resolves a connector name to the Microsoft Graph client for
 	// SharePoint connector tasks (ADR-0141), built from the managed connector store at
 	// startup and rebuilt on every connector change, with each connector's OAuth

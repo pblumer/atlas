@@ -491,7 +491,11 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		return err
 	}
 
-	apiOpts := []api.Option{api.WithLogBuffer(logs), api.WithSystemProcesses()}
+	// This binary links the database drivers (through the worker package), so it can
+	// hand the server a way to check a SQL connector's connection string. The api
+	// package deliberately links none of them (ADR-0173), which is why the check is
+	// wired in here rather than imported there.
+	apiOpts := []api.Option{api.WithLogBuffer(logs), api.WithSystemProcesses(), api.WithSQLProbe(worker.ProbeSQL)}
 	if tp.Enabled() {
 		apiOpts = append(apiOpts, api.WithTracing())
 		logging.Info(logging.TracingEnabled, "exporting request traces to an OTLP collector",

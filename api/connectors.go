@@ -19,6 +19,7 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/sharepoint"
+	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/temis"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -1000,8 +1001,14 @@ func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
 	if req.Kind == "" {
 		req.Kind = connectorKindMail
 	}
+	if product, ok := sqldb.ProductByName(req.Kind); ok {
+		s.testSQLConnector(w, r, product, &req)
+		return
+	}
 	if req.Kind != connectorKindMail {
-		httpapi.Error(w, http.StatusBadRequest, "only a mail connector can be checked today")
+		httpapi.Error(w, http.StatusBadRequest,
+			"a "+req.Kind+" connector cannot be checked yet; today the check covers mail and the SQL databases ("+
+				strings.Join(sqlConnectorKinds(), ", ")+")")
 		return
 	}
 	if msg := validateMailConnector(&req.createConnectorParams); msg != "" {
@@ -1066,6 +1073,57 @@ func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, map[string]any{"ok": true, "detail": connectorTestDetail(req.Provider, req.Endpoint, to)})
+}
+
+// testSQLConnector answers the check for one of the SQL kinds: it resolves the
+// connection string the operator typed or referenced, and dials it.
+//
+// The connection string is resolved here and dialled off the run loop, in that order,
+// for the reason mail's does the same: the vault's owner is the run loop (I3) and a
+// network call on it would park the engine behind a database that is not answering.
+func (s *Server) testSQLConnector(w http.ResponseWriter, r *http.Request, product sqldb.Product, req *connectorTestReq) {
+	dsn := strings.TrimSpace(req.ConnectionString)
+	if dsn == "" && strings.TrimSpace(req.CredentialsRef) == "" {
+		httpapi.Error(w, http.StatusBadRequest,
+			"checking a "+product.Name+" connector needs a connectionString to dial, or a credentialsRef naming one already in the vault")
+		return
+	}
+	if dsn == "" {
+		var (
+			mayUse    bool
+			lookupErr error
+		)
+		s.do(func() {
+			if mayUse, lookupErr = s.mayUseCredentialRef(r, req.CredentialsRef); !mayUse || lookupErr != nil {
+				return
+			}
+			dsn = strings.TrimSpace(s.resolveConnectorSecret(req.CredentialsRef))
+		})
+		if lookupErr != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "read connectors: "+lookupErr.Error())
+			return
+		}
+		if !mayUse {
+			// Named somebody else's credential — refused rather than quietly checked
+			// without it, which would report a failure about a permission (ADR-0205).
+			httpapi.Error(w, http.StatusForbidden,
+				"that credential reference belongs to a connector you may not edit")
+			return
+		}
+		if dsn == "" {
+			// The state a connector is in between being created and having its secret
+			// set. Reported as itself rather than handed to the driver as an empty
+			// string, which each of the three reports differently.
+			httpapi.JSON(w, http.StatusOK, map[string]any{"ok": false,
+				"detail": "The vault holds no connection string under " + req.CredentialsRef + ", so there is nothing to dial."})
+			return
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), connectorTestTimeout)
+	defer cancel()
+	ok, detail := s.checkSQLConnector(ctx, product, dsn)
+	httpapi.JSON(w, http.StatusOK, map[string]any{"ok": ok, "detail": detail})
 }
 
 // connectorTestDetail says what the check actually proved, rather than "OK" — the

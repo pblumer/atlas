@@ -1615,7 +1615,7 @@ async function viewConsoleConnectors() {
           : '<span class="pill ok"><span class="dot"></span>enabled</span>'}</td>
       <td style="text-align:right; white-space:nowrap">
         ${c.kind === "clio" ? '<button class="btn ghost" data-cact="provision" title="Mint a scoped clio key and store it as this connector\'s credential">Provision access</button>' : ""}${c.kind === "clio" || c.kind === "jira" ? '<button class="btn ghost" data-cact="subs" title="Manage inbound event watches for this connector">Events</button>' : ""}
-        ${c.kind === "mail" ? '<button class="btn ghost" data-cact="test" title="Check this connector — connect and authenticate, or send a test message">Test</button>' : ""}
+        ${connectorShape(c.kind, c.provider).test ? `<button class="btn ghost" data-cact="test" title="${c.kind === "mail" ? "Check this connector — connect and authenticate, or send a test message" : "Check this connector — dial its database and authenticate"}">Test</button>` : ""}
         ${connScope(c).owner ? '<button class="btn ghost" data-cact="share" title="Decide who else may configure this connector">Share</button>' : ""}
         ${connScope(c).editor ? `<button class="btn ghost" data-cact="edit" title="Edit this connector’s settings">Edit</button>
         <button class="btn ghost" data-cact="toggle" title="${c.enabled ? "Disable this connector (its tasks will park)" : "Enable this connector"}">${c.enabled ? "Disable" : "Enable"}</button>` : ""}
@@ -3384,7 +3384,7 @@ function wireConnectorManagement(connectors) {
         <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password" placeholder="postgresql://postgres.abc:\u2026@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit" title="Add this connector">Add</button>
-        <button class="btn neutral mail-only" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
+        <button class="btn neutral conn-f-test" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
         <p class="conn-test-result" style="flex:1 1 100%;margin:0;font-size:12.5px" hidden></p>
         <p class="muted mail-only conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p></form>`;
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
@@ -3427,6 +3427,8 @@ function wireConnectorManagement(connectors) {
             inp.disabled = !sh.sql;
           });
         });
+        // The check covers mail and the SQL databases; the other kinds have none yet.
+        form.querySelector(".conn-f-test").style.display = sh.test ? "" : "none";
         senderIn.required = sh.sender;
         endpointField.style.display = sh.endpoint ? "" : "none";
         endpointIn.required = sh.endpoint;
@@ -3460,6 +3462,11 @@ function wireConnectorManagement(connectors) {
             endpoint: (f.get("endpoint") || "").trim(),
             sender: (f.get("sender") || "").trim(),
             credentialsRef: (f.get("credentialsRef") || "").trim(),
+            // A SQL connector's whole configuration is this string, so checking it
+            // before it is sealed is the only moment the operator can still fix it in
+            // the field they are looking at. The field is disabled for other kinds, so
+            // FormData carries nothing for them.
+            connectionString: (f.get("connectionString") || "").trim(),
           });
           testOut.className = "conn-test-result " + (res.ok ? "ok" : "err");
           testOut.textContent = (res.ok ? "✓ " : "✕ ") + (res.detail || (res.ok ? "Works." : "Failed."));
@@ -3499,10 +3506,15 @@ function wireConnectorManagement(connectors) {
           return;
         } else if (btn.dataset.cact === "test") {
           // Empty recipient = stop at the door (connect, authenticate). A recipient
-          // makes it a real send, which is the only thing that proves delivery.
-          const to = window.prompt(
-            `Test "${c.name}".\n\nSend a test message to which address?\nLeave empty to only check the connection and credential.`, "");
-          if (to == null) return;
+          // makes it a real send, which is the only thing that proves delivery. Only
+          // mail has that second half: a database check dials and stops, because the
+          // equivalent of "send one to see" would be running a statement.
+          let to = "";
+          if (c.kind === "mail") {
+            to = window.prompt(
+              `Test "${c.name}".\n\nSend a test message to which address?\nLeave empty to only check the connection and credential.`, "");
+            if (to == null) return;
+          }
           btn.disabled = true;
           try {
             const res = await api("POST", "/api/v1/connectors/test", {

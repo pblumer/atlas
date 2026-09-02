@@ -81,6 +81,10 @@ export function connectorShape(kind, provider) {
   return {
     mail,
     sql,
+    // Which kinds can be checked without saving. A mail connector connects and
+    // authenticates; a SQL connector dials its connection string. The rest have no
+    // check yet, and the server says so by name rather than silently doing nothing.
+    test: mail || sql,
     provider: mail,
     endpoint: !bundle && !preview,
     // A mail connector always has a sender: it is the default From address, and the
@@ -214,8 +218,7 @@ function askConnector({ api, connector, intro, extraLabel }) {
       show(".conn-f-endpoint", sh.endpoint);
       show(".conn-f-sender", sh.sender);
       show(".conn-f-credref", sh.credRef !== "none");
-      // Only mail can be checked without saving; the other kinds have no test today.
-      show(".conn-f-test", sh.mail);
+      show(".conn-f-test", sh.test);
       endpointIn.placeholder = sh.endpointPlaceholder;
       ov.querySelector(".conn-credref-label").textContent = sh.credRefLabel;
       credRefIn.placeholder = sh.credRefPlaceholder;
@@ -231,6 +234,10 @@ function askConnector({ api, connector, intro, extraLabel }) {
       testOut.textContent = "Checking…";
       btn.disabled = true;
       try {
+        // A SQL connector is checked through the vault reference it already has: the
+        // dialog never shows a connection string back, so there is nothing typed here
+        // to check instead. Which is the case that matters — an operator opens this
+        // dialog because a connector *stopped* working.
         const res = await api("POST", "/api/v1/connectors/test", {
           name: c.name, kind: c.kind, provider: providerSel.value,
           endpoint: endpointIn.value.trim(), sender: senderIn.value.trim(),
