@@ -87,28 +87,52 @@ type UnavailableState struct {
 	Reason string `json:"reason"`
 }
 
-// unobservable is what a *mesh* computed by this build can never say.
+// unobservableWithoutPeers is what a mesh that drew no deployment target cannot say.
 //
-// Both entries need a source outside this process. The observation projection now
-// has one — it asks peer Atlas nodes through deployment-target bindings — but the
-// mesh does not draw deployment targets, so nothing it renders has a source that
-// can be out of reach or out of date. That is why this list and
-// [unobservableInDocument] are two lists rather than one: they were identical only
-// for as long as neither surface could reach anything, and keeping them merged
-// would have made one of them lie the moment the other gained a capability.
-var unobservable = []UnavailableState{
+// Both entries need a source outside this process, and a landscape with no peer on
+// it contacted nothing: every other node is read from this server's own state while
+// the request is being served, so it can neither fail to be reached nor go out of
+// date. Those two states are then not "nothing is wrong" — they are questions this
+// particular picture never asked, and the payload says so rather than letting an
+// absence read as an answer.
+//
+// It is a *property of one response*, not of the build. A landscape that drew a peer
+// can produce both, and declaring otherwise beside a stale target node would be the
+// payload contradicting its own picture — see [unobservableFor].
+var unobservableWithoutPeers = []UnavailableState{
 	{
 		State: StateUnreachable,
-		Reason: "This view draws only what this engine holds, so it contacts nothing and can " +
-			"never report that something could not be reached. The observation projection " +
-			"over a model's bindings does reach peers, and reports both (ADR-0189 §6).",
+		Reason: "Nothing on this landscape is reached over the network — no deployment target " +
+			"is drawn here — so it cannot report that something could not be reached. " +
+			"Configure a deployment target and this landscape reports it, as the " +
+			"observation projection over a model's bindings already does (ADR-0189 §6).",
 	},
 	{
 		State: StateStale,
 		Reason: "Every fact here is read from this server's own state when the request is " +
-			"served, so no observation has a freshness contract to exceed. The observation " +
-			"projection over a model's bindings does hold one, and reports both (ADR-0189 §6).",
+			"served, so no observation on this landscape has a freshness contract to " +
+			"exceed. Only a peer's answer holds one: configure a deployment target and " +
+			"this landscape reports it, as the observation projection over a model's " +
+			"bindings already does (ADR-0189 §6).",
 	},
+}
+
+// unobservableFor names what *this* graph cannot say, from what it actually drew.
+//
+// Derived rather than fixed, because it stopped being a property of the build the
+// moment the landscape gained a kind that is asked over the network. A payload that
+// declared "unreachable cannot happen here" beside a target node reporting exactly
+// that would be a contract nobody could rely on again.
+func unobservableFor(g *Graph) []UnavailableState {
+	for _, n := range g.Nodes {
+		if n.Kind == KindTarget {
+			// A peer is drawn, so both states are producible on this landscape. The
+			// empty list is the same claim [unobservableInDocument] makes, and it is
+			// worth making out loud: there is nothing here this picture cannot see.
+			return []UnavailableState{}
+		}
+	}
+	return unobservableWithoutPeers
 }
 
 // unobservableInDocument is what an *observation document* cannot produce. It is
@@ -196,7 +220,7 @@ func applyStatus(g *Graph, partial bool) {
 		n.Severity, n.SeverityFrom, n.Reason = got.class, got.from, got.reason
 	}
 
-	g.Status = Status{Partial: partial, Unavailable: unobservable}
+	g.Status = Status{Partial: partial, Unavailable: unobservableFor(g)}
 	for _, n := range g.Nodes {
 		switch n.Severity {
 		case SeverityOK:

@@ -10,7 +10,9 @@
   2026-09-02 — §7 gains saved views, a findings list, and a heartbeat on the nodes
   that have one, and §4's node carries its incident count; amended 2026-09-02 — a
   node can be drilled into, and a finding names the element the work is parked on;
-  amended 2026-09-02 — §7 gives each kind its own outline)
+  amended 2026-09-02 — §7 gives each kind its own outline; amended 2026-09-02 — the
+  landscape draws deployment targets, so §4's unreachable and stale are producible
+  on it and what a payload declares unproducible is derived from what it drew)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -498,6 +500,42 @@ unaffected.
 >
 > The legend is rendered by the same function the nodes are, so it cannot come to
 > disagree with the picture it explains.
+
+> **Amendment (2026-09-02, sixth): the landscape asks its peers.**
+> §4 had two states it could never produce — *unreachable* and *stale* — and the
+> reason was structural: everything the mesh drew was read from this server's own
+> state while the request was being served, so nothing could fail to be contacted or
+> go out of date. That was true and useless. An operator scanning the landscape for
+> trouble could not see that a whole peer had gone away.
+>
+> The landscape draws **deployment targets** now. They are asked off the run loop,
+> through the same cache and the same rules ADR-0189 §6's observation projection
+> uses, so the two surfaces cannot come to disagree about whether a peer is stale or
+> unreachable — they read one answer through one set of rules. A peer that stops
+> answering is a node with a finding on it, and it beats like any other finding.
+>
+> Three things this pins down:
+>
+> - **The reach happens off the loop, and the shape enforces it.** The collector
+>   hands back the landscape *and a closure* holding what it resolved while it was on
+>   the loop — the target list, the credential each presents. Holding the single
+>   writer across an eight-second timeout would stop every other design-time request
+>   on the server (I3), so the test asserts the loop is free while the closure runs
+>   rather than merely that it was called.
+> - **What a payload declares unproducible is derived from what it drew.** A
+>   landscape with a peer on it produces both states and declares neither; one
+>   without still declares both, and names the deployment target that would change
+>   that rather than only saying it cannot. A response that went on claiming
+>   "unreachable cannot happen here" beside a target reporting exactly that would be
+>   a contract nobody could rely on again.
+> - **No edge is derived to a target.** A promotion is an act, not a stored
+>   relationship: this server does not record which of its applications is running
+>   over there, so a line from one to a target would be an assertion nobody made. It
+>   sits beside the landscape rather than in it, which is what it is.
+>
+> A target carries its operator's name for it and nothing else — never the base URL
+> or the credential reference. Those are this operator's map of where their
+> infrastructure lives, and a landscape is opened by anybody with modeler access.
 
 ### 7. A stated size budget, and a server-side fallback
 

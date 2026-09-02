@@ -1,8 +1,11 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/panorama"
@@ -40,14 +43,14 @@ const meshMaxNodes = 400
 // does not enumerate every deployed version: the landscape is the current state, so
 // one node per process id at its current version, which is also what keeps a server
 // with a long deploy history inside the size budget.
-func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, error) {
+func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama.ReachOut, error) {
 	projs, err := s.projectsByID()
 	if err != nil {
-		return panorama.Landscape{}, err
+		return panorama.Landscape{}, nil, err
 	}
 	overrides, err := s.callOverrides.LoadAll()
 	if err != nil {
-		return panorama.Landscape{}, err
+		return panorama.Landscape{}, nil, err
 	}
 	ovByPID := make(map[string]callOverride, len(overrides))
 	for _, rec := range overrides {
@@ -59,7 +62,7 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, error) {
 	// What the mesh emits is Worker vocabulary.
 	confWorkers, err := s.connectors.LoadAll()
 	if err != nil {
-		return panorama.Landscape{}, err
+		return panorama.Landscape{}, nil, err
 	}
 	principal := httpapi.PrincipalFrom(r.Context())
 	held, polled := s.workerHoldings()
@@ -82,7 +85,7 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, error) {
 	// hundred processes is the difference between a view and an outage.
 	parked, partial, err := s.incidentsByDefinition()
 	if err != nil {
-		return panorama.Landscape{}, err
+		return panorama.Landscape{}, nil, err
 	}
 	land.PartialStatus = partial
 
@@ -135,7 +138,82 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, error) {
 		proc.Decisions = d.cp.BusinessRuleDecisions()
 		land.Processes = append(land.Processes, proc)
 	}
-	return land, nil
+
+	// The peers, named here and asked off the loop. Naming them on the loop is what
+	// the two halves are for: the target list and the credential each one presents
+	// are loop reads, and the call that uses them is the one thing that must never
+	// hold the single writer (I3).
+	targets, err := s.targets.LoadAll()
+	if err != nil {
+		return panorama.Landscape{}, nil, err
+	}
+	peers := make([]remoteTarget, 0, len(targets))
+	for _, t := range targets {
+		// A row every target gets whether or not the fan-out reaches it. If the
+		// request is cancelled before the answers come back, the landscape still
+		// draws the peer and says it was not asked — which is a different thing from
+		// unreachable, and from a landscape quietly one peer short.
+		land.Targets = append(land.Targets, panorama.Target{
+			ID: t.ID, Name: t.Name,
+			State:  panorama.StateUnbound,
+			Reason: "This target was not asked.",
+		})
+		// Resolved on the loop because reading the vault is a loop read. It travels
+		// no further than the Authorization header the fan-out sets, and reaches no
+		// payload, no log line and no error message.
+		peers = append(peers, remoteTarget{target: t, credential: s.resolveConnectorSecret(t.CredentialRef)})
+	}
+
+	return land, func(ctx context.Context, out *panorama.Landscape) {
+		s.observeLandscapeTargets(ctx, peers, out)
+	}, nil
+}
+
+// observeLandscapeTargets asks every peer who it is and folds the answer into the
+// landscape's target rows.
+//
+// Off the run loop. It shares [remoteFacts] with the observation projection rather
+// than deciding for itself what a silent peer means, so the landscape and the model
+// overlay cannot come to disagree about whether a target is stale or unreachable —
+// they read the same cache through the same rules.
+func (s *Server) observeLandscapeTargets(ctx context.Context, peers []remoteTarget,
+	land *panorama.Landscape) {
+	if len(peers) == 0 {
+		return
+	}
+	live := make(map[string]bool, len(peers))
+	for _, p := range peers {
+		live[p.target.ID] = true
+	}
+	s.remoteNodes.retain(live)
+
+	answers := make([]panorama.Fact, len(peers))
+	var wg sync.WaitGroup
+	gate := make(chan struct{}, maxRemoteNodeConcurrency)
+	for i, peer := range peers {
+		wg.Add(1)
+		go func(i int, peer remoteTarget) {
+			defer wg.Done()
+			gate <- struct{}{}
+			defer func() { <-gate }()
+			obs := s.remoteNodeObservation(ctx, peer)
+			// Written to its own slot rather than through a shared map: one index per
+			// peer needs no lock, and a peer that is down must not be able to affect
+			// what any other peer's row says.
+			answers[i], _, _ = remoteFacts(peer.target, obs, time.Now())
+		}(i, peer)
+	}
+	wg.Wait()
+
+	byID := make(map[string]panorama.Fact, len(peers))
+	for i, peer := range peers {
+		byID[peer.target.ID] = answers[i]
+	}
+	for i := range land.Targets {
+		if fact, ok := byID[land.Targets[i].ID]; ok {
+			land.Targets[i].State, land.Targets[i].Reason = fact.State, fact.Reason
+		}
+	}
 }
 
 // workerUses resolves a process's worker references — the names its tasks state in

@@ -255,3 +255,110 @@ func TestPanoramaMeshNeverCarriesAWorkerEndpoint(t *testing.T) {
 		t.Errorf("configured worker missing from %+v", g.Nodes)
 	}
 }
+
+// TestLandscapeDrawsItsPeersAndSaysWhatTheyAre is what makes unreachable and stale
+// producible on the landscape at all.
+//
+// Before this the mesh contacted nothing, so it declared both states unproducible —
+// true, and useless: an operator scanning the picture for trouble could not see that
+// a whole peer had gone away. A deployment target that does not answer is now a node
+// on the landscape with a finding on it.
+func TestLandscapeDrawsItsPeersAndSaysWhatTheyAre(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/panorama/mesh", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("mesh status = %d, body = %s", code, body)
+	}
+	var bare struct {
+		Nodes  []struct{ ID, Kind string } `json:"nodes"`
+		Status struct {
+			Unavailable []struct{ State, Reason string } `json:"unavailable"`
+		} `json:"status"`
+	}
+	if err := json.Unmarshal(body, &bare); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	// With no target configured the landscape reaches nothing, and says so — naming
+	// what would change that rather than only that it cannot.
+	if len(bare.Status.Unavailable) != 2 {
+		t.Fatalf("a peerless landscape declares %#v, want unreachable and stale",
+			bare.Status.Unavailable)
+	}
+	for _, u := range bare.Status.Unavailable {
+		if !strings.Contains(u.Reason, "deployment target") {
+			t.Errorf("%q does not say what would make it producible: %q", u.State, u.Reason)
+		}
+	}
+
+	// Now configure one. Nothing is listening at that address, so asking it is the
+	// case this whole slice is for.
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/targets",
+		`{"name":"Production","baseUrl":"https://atlas.example.test"}`, "application/json")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create target status = %d, body = %s", code, body)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/panorama/mesh", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("mesh status = %d, body = %s", code, body)
+	}
+	var peered struct {
+		Nodes []struct {
+			ID       string `json:"id"`
+			Kind     string `json:"kind"`
+			Name     string `json:"name"`
+			State    string `json:"state"`
+			Severity string `json:"severity"`
+			Reason   string `json:"reason"`
+		} `json:"nodes"`
+		Status struct {
+			Unavailable []struct{ State, Reason string } `json:"unavailable"`
+		} `json:"status"`
+	}
+	if err := json.Unmarshal(body, &peered); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+
+	var target *struct {
+		ID       string `json:"id"`
+		Kind     string `json:"kind"`
+		Name     string `json:"name"`
+		State    string `json:"state"`
+		Severity string `json:"severity"`
+		Reason   string `json:"reason"`
+	}
+	for i := range peered.Nodes {
+		if peered.Nodes[i].Kind == "target" {
+			target = &peered.Nodes[i]
+		}
+	}
+	if target == nil {
+		t.Fatalf("no target node on the landscape: %s", body)
+	}
+	if target.Name != "Production" {
+		t.Errorf("target name = %q, want the operator's name for it", target.Name)
+	}
+	// Unreachable, not critical: "I could not reach it" and "it is broken" are
+	// different findings (ADR-0211 §4).
+	if target.State != "unreachable" || target.Severity != "attention" {
+		t.Errorf("a peer that does not answer = %q/%q, want unreachable and attention",
+			target.State, target.Severity)
+	}
+	if target.Reason == "" {
+		t.Error("the target carries no reason; a finding without one is not actionable")
+	}
+	// And the payload stops declaring what it can now produce.
+	if len(peered.Status.Unavailable) != 0 {
+		t.Errorf("Unavailable = %#v on a landscape that drew a peer", peered.Status.Unavailable)
+	}
+
+	// The base URL never reaches the payload: it is this operator's map of where
+	// their infrastructure lives, and the landscape is opened by anybody with
+	// modeler access.
+	for _, leak := range []string{"atlas.example.test", "https://", "credentialRef"} {
+		if strings.Contains(string(body), leak) {
+			t.Errorf("the landscape leaks %q: %s", leak, body)
+		}
+	}
+}

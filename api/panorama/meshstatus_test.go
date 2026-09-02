@@ -42,10 +42,14 @@ func TestSeverityMapsEachStateThroughOneTable(t *testing.T) {
 }
 
 // TestGraphDeclaresWhatItCannotObserve is the honesty this slice turns on. Two of
-// ADR-0189 §6's seven states need a source outside this process, and this build has
-// none — so the payload says so. Without that, an instance with nothing watching it
-// renders as uniformly healthy, and a green picture that cannot go red is worse
-// than no picture at all.
+// ADR-0189 §6's seven states need a source outside this process, and a landscape
+// that drew no peer contacted nothing — so the payload says so. Without that, an
+// instance with nothing watching it renders as uniformly healthy, and a green
+// picture that cannot go red is worse than no picture at all.
+//
+// The declaration is a property of *this* response rather than of the build: a
+// landscape that does draw a peer produces both states, and declares neither. That
+// half is pinned in TestALandscapeWithAPeerDeclaresNothingUnavailable.
 func TestGraphDeclaresWhatItCannotObserve(t *testing.T) {
 	g := DeriveGraph(Landscape{
 		Applications: []Application{app("a", "Billing")},
@@ -60,10 +64,12 @@ func TestGraphDeclaresWhatItCannotObserve(t *testing.T) {
 		if declared[state] == "" {
 			t.Fatalf("state %q is not declared unavailable: %#v", state, g.Status.Unavailable)
 		}
-		// The reason has to point somewhere. Saying "this cannot be known" is only
-		// half an answer when it *can* be known one surface over.
-		if !strings.Contains(declared[state], "observation projection") {
-			t.Errorf("%q says it cannot be produced but not where it can: %q", state, declared[state])
+		// The reason has to point somewhere, and now at the remedy for *this* view:
+		// saying "this cannot be known" is only half an answer when the thing that
+		// would make it knowable is one configuration step away.
+		if !strings.Contains(declared[state], "deployment target") {
+			t.Errorf("%q says it cannot be produced but not what would change that: %q",
+				state, declared[state])
 		}
 	}
 	// A state the server does produce must not be listed: declaring a capability
@@ -480,5 +486,44 @@ func TestIncidentSitesRideOnlyOnTheProcessThatCanPointAtThem(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), "sites") {
 		t.Errorf("a node with no sites still names the field: %s", encoded)
+	}
+}
+
+// TestALandscapeWithAPeerDeclaresNothingUnavailable is the other half, and the one
+// that would rot silently. A payload that went on saying "unreachable cannot happen
+// here" beside a target node reporting exactly that would be a contract nobody could
+// rely on again — so the declaration is derived from what the graph actually drew.
+func TestALandscapeWithAPeerDeclaresNothingUnavailable(t *testing.T) {
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a", "Billing")},
+		Processes:    []Process{withStatus(proc(1, "p", "Invoice", "a"), StateHealthy, "No work is parked.")},
+		Targets: []Target{{
+			ID: "t1", Name: "Production", State: StateUnreachable,
+			Reason: "This peer did not answer.",
+		}},
+	}, Options{})
+
+	if len(g.Status.Unavailable) != 0 {
+		t.Errorf("a landscape drawing a peer declares %#v unavailable; it can produce both",
+			g.Status.Unavailable)
+	}
+	// Stated as an empty list rather than left nil: the renderer iterates it, and
+	// "there is nothing here this picture cannot see" is a claim worth making out
+	// loud rather than by omission.
+	if g.Status.Unavailable == nil {
+		t.Error("unavailable is null rather than an empty list")
+	}
+
+	// And the peer is on the picture with the state that made the difference, which
+	// is the whole reason the declaration changed.
+	node := nodeByID(t, g, "target:t1")
+	if node.State != StateUnreachable || node.Severity != SeverityAttention {
+		t.Errorf("the target = %q/%q, want unreachable and attention", node.State, node.Severity)
+	}
+	// Unreachable is *attention*, never critical: "I could not reach it" and "it is
+	// broken" are different findings, and a view that painted them alike loses its
+	// credibility on the first network fault.
+	if node.Reason == "" {
+		t.Error("the target carries no reason; a finding without one is not actionable")
 	}
 }

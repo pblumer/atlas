@@ -49,6 +49,11 @@ const KIND = {
   // Shape comes from the id, which names the kind of thing that is missing — see
   // shapeForNode. The fallback is the same "no kind" diamond.
   unresolved: { r: 11, grow: 3, shape: "diamond", fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
+  // A peer Atlas this server can promote to. Drawn large, because it is the only
+  // thing on this landscape whose state was fetched over the network — and therefore
+  // the only one that can be *unreachable* or *stale*, which is exactly what somebody
+  // scanning for trouble needs to find first.
+  target: { r: 24, grow: 6, shape: "pentagon", fill: "var(--surface)", stroke: "var(--accent-hover)", label: "Deployment target — a peer this server can promote to" },
 };
 
 // Shape is the third channel, after colour and size, and the one that survives what
@@ -92,6 +97,9 @@ export function shapeVertices(shape, r) {
     case "triangle": return at(3, -Math.PI / 2);
     // Flat top and bottom, which is what reads as a hexagon rather than as a blob.
     case "hexagon": return at(6, 0);
+    // Point up, so it is told from the hexagon by silhouette rather than by counting
+    // corners — which nobody does at a glance, and nobody can do at all zoomed out.
+    case "pentagon": return at(5, -Math.PI / 2);
     case "diamond": return at(4, -Math.PI / 2);
     // Axis-aligned, so it reads as a tile rather than as a rotated diamond. Its
     // half-diagonal is r, which is what keeps it inside the reserved circle.
@@ -142,6 +150,11 @@ export function radiusFor(node, degree) {
   const reach = Math.log2(1 + Math.max(0, degree || 0)) / Math.log2(1 + DEGREE_FULL);
   return style.r + (style.grow || 0) * Math.min(1, reach);
 }
+
+// A target is not part of the dependency graph — no edge is derived to it, because
+// a promotion is an act rather than a stored relationship and this server does not
+// record which of its applications is running over there. It sits beside the
+// landscape rather than in it, which is what it is.
 
 // PROVENANCE describes how a node is known (ADR-0211 §2). It is rendered on every
 // node, always: a picture that mixed what Atlas found with what somebody declared,
@@ -734,6 +747,14 @@ function hrefFor(node) {
 }
 
 function nodeTitle(node) {
+  if (node.kind === "target") {
+    // Never its base URL: that is this operator's map of where their infrastructure
+    // lives, and a landscape is opened by anybody with modeler access.
+    const parts = [node.name || node.id, "deployment target"];
+    if (node.state && node.state !== "unbound") parts.push(STATE_TEXT[node.state] || node.state);
+    if (node.reason) parts.push(node.reason);
+    return parts.join(" · ");
+  }
   if (node.kind === "restricted") {
     return "A resource outside your access. The dependency is real; its identity is not shown.";
   }
