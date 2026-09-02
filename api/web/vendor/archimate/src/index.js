@@ -227,11 +227,23 @@ const dock = (shape, other) => {
 // yet. Creating elements and drawing relationships arrive with their own slices and
 // their own semantic rules; until then the canvas must not offer them, because an
 // edit that cannot be saved is worse than one that cannot be made.
-function ArchiMateRules(eventBus) {
+function ArchiMateRules(eventBus, archimateSubset) {
+  this.subset = archimateSubset;
   RuleProvider.call(this, eventBus);
 }
 inherits(ArchiMateRules, RuleProvider);
-ArchiMateRules.$inject = [ "eventBus" ];
+ArchiMateRules.$inject = [ "eventBus", "archimateSubset" ];
+
+// Subset holds the table the server served, and answers the two questions the
+// canvas asks of it. It is a thin wrapper on purpose: the rules live on the
+// server, and anything decided here would be a second copy of them.
+function Subset(config) {
+  this.matrix = (config && config.matrix) || {};
+}
+Subset.$inject = [ "config.subset" ];
+Subset.prototype.allowedBetween = function(sourceType, targetType) {
+  return this.matrix[sourceType + ">" + targetType] || [];
+};
 ArchiMateRules.prototype.init = function() {
   this.addRule("elements.move", ({ shapes, target }) => {
     // Only shapes, and only within the view they are already on: re-parenting a
@@ -242,6 +254,11 @@ ArchiMateRules.prototype.init = function() {
     return shapes.every((shape) => shape.type === "archimate:shape");
   });
   this.addRule("shape.resize", ({ shape }) => shape.type === "archimate:shape");
+  // Creating content is not something this canvas does locally. An element or a
+  // relationship is written by the server — which owns the document and the
+  // subset — and the view is re-read, so there is never a shape on screen that the
+  // document does not have. These stay refused for that reason rather than because
+  // the operations are unwanted.
   for (const forbidden of [ "shape.create", "connection.create", "elements.delete", "connection.reconnect" ]) {
     this.addRule(forbidden, () => false);
   }
@@ -251,6 +268,7 @@ const RulesProviderModule = {
   __depends__: [ RulesModule ],
   __init__: [ "archimateRules" ],
   archimateRules: [ "type", ArchiMateRules ],
+  archimateSubset: [ "type", Subset ],
 };
 
 // The modules a read-only canvas loads, and the ones authoring adds on top.
@@ -262,6 +280,10 @@ export class Viewer {
     this.editable = Boolean(options.editable);
     this.diagram = new Diagram({
       canvas: { container },
+      // The subset the server served, handed to the rules provider. An editable
+      // canvas without it would allow every connection, which is worse than
+      // allowing none: the canvas would promise what the write path refuses.
+      subset: options.subset || { matrix: {} },
       modules: this.editable ? [ ...VIEW_MODULES, ...EDIT_MODULES ] : VIEW_MODULES,
     });
     this.canvas = this.diagram.get("canvas");
@@ -297,6 +319,15 @@ export class Viewer {
       changes.push({ nodeId: id, ...now });
     }
     return changes;
+  }
+
+  // allowedFrom is what may be drawn between two elements, read from the table the
+  // server served. It is what the connect menu is built from, so the menu only ever
+  // offers choices the write path accepts — a canvas that offered more would be
+  // making a promise the server breaks.
+  allowedFrom(sourceType, targetType) {
+    if (!this.editable) return [];
+    return this.diagram.get("archimateSubset").allowedBetween(sourceType, targetType);
   }
 
   undo() { this.commandStack?.canUndo() && this.commandStack.undo(); }

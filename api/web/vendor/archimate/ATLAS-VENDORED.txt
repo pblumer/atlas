@@ -8,6 +8,12 @@ It contains:
   - the Atlas-owned Open Group ArchiMate Model Exchange parser, renderer, and
     editing rules in src/index.js
 
+The canvas never creates an element or a relationship itself. Both are written by
+the server, which owns the document and the authoring subset, and the view is
+re-read — so there is never a shape on screen the document does not have. The
+canvas is handed the subset's relationship matrix so a menu offers only what the
+write path will accept.
+
 The editing modules (modeling, move, resize, outline, rules) are part of the
 bundle whether or not a given canvas loads them, which is what doubled its size
 when authoring arrived. They are instantiated only for an editable canvas, so a
@@ -28,4 +34,4 @@ Do not edit archimate-viewer.js by hand. To rebuild:
     api/web/vendor/archimate/diagram-js.css
 
 SHA-256 archimate-viewer.js:
-5942222cbbe0d52a8bf0124bc40826b1e4b76e2769d98661f2c97fcd94786c73
+e96cb6777d120af81f2411e8c254e50a5192d6a2b985b6058095e2c806081e52

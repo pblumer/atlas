@@ -505,6 +505,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Read historical context for one element from the stores outside Atlas (ADR-0189)",
 			tag:     "Panorama", role: RoleModeler,
 			resp: jsonBody("Historical context document", tObject())}},
+		// The authoring subset (ADR-0189 §2): the palette and the relationship matrix
+		// the canvas enforces. Served rather than duplicated in the browser, so the
+		// rule the canvas applies during a drag and the rule the server applies on
+		// write cannot disagree.
+		{"GET", "/api/v1/panorama/subset", s.panorama.HandleSubset, apiOp{
+			summary: "The ArchiMate element and relationship subset Atlas can author (ADR-0189)",
+			tag:     "Panorama", role: RoleModeler,
+			resp: jsonBody("Authoring subset and relationship matrix", tObject())}},
 		// Moving shapes on a view (ADR-0189 §2). Separate from the model update
 		// because it can do exactly one thing: the canvas sends what moved, never a
 		// document, so a browser's serialiser can never rewrite somebody's model.
@@ -513,6 +521,20 @@ func (s *Server) apiRoutes() []apiRoute {
 			tag:     "Panorama", role: RoleModeler,
 			req:  jsonBody("Moved shapes and the revision they were read at", tObject()),
 			resp: jsonBody("The updated model summary", tObject())}},
+		// Creating content (ADR-0189 §2). Two routes rather than one: adding a box and
+		// joining two boxes fail in different ways and refuse for different reasons.
+		// Neither takes a document — the canvas sends what it did, and the server
+		// writes it, so §2's round-trip guarantee stays where the document is.
+		{"POST", "/api/v1/panorama/models/{id}/elements", s.panorama.HandleAddElement, apiOp{
+			summary: "Create an ArchiMate element and place it on a view (ADR-0189)",
+			tag:     "Panorama", role: RoleModeler,
+			req:  jsonBody("The element to create and where it goes", tObject()),
+			resp: jsonBody("The updated model and the shape's identifier", tObject())}},
+		{"POST", "/api/v1/panorama/models/{id}/relationships", s.panorama.HandleAddRelationship, apiOp{
+			summary: "Draw a relationship between two elements on a view, within the authoring subset (ADR-0189)",
+			tag:     "Panorama", role: RoleModeler,
+			req:  jsonBody("The relationship to draw", tObject()),
+			resp: jsonBody("The updated model and the relationship's identifier", tObject())}},
 		{"GET", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleBindings, apiOp{
 			summary: "Resolve a Panorama model's Atlas bindings for the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Resolved Atlas bindings", tObject())}},

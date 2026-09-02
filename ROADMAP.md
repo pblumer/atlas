@@ -928,7 +928,7 @@ for the derived whole-instance mesh above them.
   ArchiMate Model Exchange XML; keep reusable elements/relationships separate from
   their views; use optimistic revisions, bounded XML parsing, backup/restore, and
   interoperability fixtures.
-- 🚧 **P2 — ArchiMate editor:** ship a separate, reproducibly vendored
+- ✅ **P2 — ArchiMate editor:** ship a separate, reproducibly vendored
   `diagram-js` bundle with an Atlas-owned ArchiMate palette, semantic connection
   rules, property panel, multi-view canvas, undo/redo, save/reload, and browser E2E
   coverage. Start with Capability, Business Process, the core Application layer,
@@ -947,7 +947,17 @@ for the derived whole-instance mesh above them.
   permits exactly those two edits and refuses the rest, because a canvas offering an
   operation that cannot yet be saved is worse than one that never offered it; and
   **b)** creating elements and relationships from a stated subset, with ArchiMate's
-  semantic connection rules. Open.
+  semantic connection rules. Complete. The subset is *one* table: the canvas has to
+  refuse a connection while it is being dragged and the server has to refuse it on
+  write, so the table is served to the browser rather than duplicated in it — a
+  palette or a menu offering what the write path rejects is a promise the server
+  breaks. The rules are predicates over the standard's own layer and aspect rather
+  than a matrix of type pairs, so a reader can check them against ArchiMate by
+  reading them. Refusals are told apart: *out of subset* is this build's limit,
+  *not in ArchiMate* is a fact about the notation, and the message teaches the rule
+  rather than only refusing. The canvas creates nothing locally — the server writes
+  the element or relationship and the view is re-read, so there is never a shape on
+  screen the document does not have.
 - ✅ **P2.5 — Landscape mesh:** derive a whole-instance graph from resources
   Atlas already holds — process applications, deployed processes, call activities,
   workers, Worker Types, releases, deployment targets, DMN decisions — so

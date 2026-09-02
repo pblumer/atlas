@@ -81,10 +81,33 @@
 >   pans the view rather than being refused.
 > - **An explicit rules provider permits only what a slice implements.** With no
 >   rules provider diagram-js allows everything, including operations that would
->   change the canvas and never reach the document. Creating elements and drawing
->   relationships arrive with their own slice and their own semantic rules; until
->   then they are refused, because an edit that cannot be saved is worse than one
->   that cannot be made.
+>   change the canvas and never reach the document. An edit that cannot be saved is
+>   worse than one that cannot be made.
+>
+> **Amendment (2026-09-01): the authoring subset is one table, and the canvas
+> creates nothing.** §2 asks for a relationship matrix that is "semantic
+> validation, not just a visual hint", enforced while authoring, and for a UI that
+> states its implemented subset. Both are met by giving the rules a single home on
+> the server and serving them: the canvas has to refuse a connection during a drag
+> and the server has to refuse it on write, and two copies of a matrix is how a
+> canvas comes to offer an arrow the server rejects.
+>
+> The rules are written as predicates over the standard's own layer and aspect
+> rather than as a table of type pairs — twenty element types against ten
+> relationship types is four hundred cells nobody can check, while "a component
+> does not trigger a component; its behaviour does" is one line that a reader can
+> compare against the specification.
+>
+> Three refusals are kept apart, because they send somebody to three different
+> places: *out of subset* is a limit of this build and reading is unaffected by it;
+> *not in ArchiMate* is a fact about the notation no version of Atlas will change;
+> *self-reference* is a drop that missed. Each explains the rule rather than only
+> refusing — a canvas is where most people meet a notation.
+>
+> And the canvas creates nothing locally. An element or a relationship is written
+> by the server, which owns both the document and the subset, and the view is
+> re-read — so there is never a shape on screen that the document does not have,
+> and the round-trip guarantee stays in one place.
 
 > **Amendment (2026-09-01): P5's historical context is a query, never a copy.** The
 > options above rejected "copy all remote metrics and logs into a Panorama-specific

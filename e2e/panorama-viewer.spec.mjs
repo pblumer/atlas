@@ -26,7 +26,30 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
   </diagrams></views>
 </model>`;
 
-function installMock(page, { role = "owner", onLayout } = {}) {
+// subset is what the server says may be authored. The palette and the connect menu
+// are both built from it, so this fixture is what decides what the canvas offers.
+const subset = {
+  version: 1,
+  elements: [
+    { type: "ApplicationComponent", label: "Application component", layer: "application", aspect: "active" },
+    { type: "ApplicationService", label: "Application service", layer: "application", aspect: "behavior" },
+    { type: "Node", label: "Node", layer: "technology", aspect: "active" },
+  ],
+  relationships: [
+    { type: "Realization", label: "Realization", rule: "Something concrete makes something more abstract real." },
+    { type: "Association", label: "Association", rule: "Related in a way the others do not capture." },
+  ],
+  matrix: {
+    "ApplicationComponent>ApplicationService": ["Realization", "Association"],
+    "ApplicationComponent>Node": ["Association"],
+  },
+  limits: [
+    { limit: "an authoring subset, not all of ArchiMate 3.2", reason: "Atlas authors the listed types and refuses the rest." },
+  ],
+};
+
+function installMock(page, { role = "owner", onLayout, onAdd, onConnect,
+  served = subset } = {}) {
   page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -42,6 +65,18 @@ function installMock(page, { role = "owner", onLayout } = {}) {
     }
     if (path === `/api/v1/panorama/models/${modelId}/xml`) {
       return route.fulfill({ contentType: "application/xml", body: xml });
+    }
+    if (path === "/api/v1/panorama/subset") {
+      if (!served) return route.fulfill({ status: 500, json: { error: "no subset" } });
+      return route.fulfill({ json: served });
+    }
+    if (path === `/api/v1/panorama/models/${modelId}/elements`) {
+      onAdd?.(JSON.parse(request.postData() || "{}"));
+      return route.fulfill({ json: { id: modelId, revision: 5, createdId: "n-new" } });
+    }
+    if (path === `/api/v1/panorama/models/${modelId}/relationships`) {
+      onConnect?.(JSON.parse(request.postData() || "{}"));
+      return route.fulfill({ json: { id: modelId, revision: 5, createdId: "rel-new" } });
     }
     if (path === `/api/v1/panorama/models/${modelId}/layout`) {
       onLayout?.(JSON.parse(request.postData() || "{}"));
@@ -185,4 +220,107 @@ test("a viewer cannot drag a shape", async ({ page }) => {
   expect(await placed()).toBe(before);
   await expect(page.locator(".panorama-status")).toContainText("Read only");
   await expect(page.locator('[data-tool="save"]')).toBeDisabled();
+});
+
+// The palette is built from the subset the server serves (ADR-0189 §2, P2b), not
+// from a list in the browser. A palette offering a type the server will not write
+// is a promise the server breaks, and one list is the only way that cannot happen.
+test("the palette offers what the server says it can author, and says what it cannot", async ({ page }) => {
+  const added = [];
+  installMock(page, { onAdd: (body) => added.push(body) });
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+
+  const palette = page.locator(".panorama-palette");
+  await expect(palette).toContainText("Application component");
+  await expect(palette).toContainText("Node");
+  // Grouped by ArchiMate layer, which is how somebody looks for one.
+  await expect(palette).toContainText("application");
+  await expect(palette).toContainText("technology");
+  // Nothing outside the served subset is offered.
+  await expect(palette).not.toContainText("Business process");
+
+  // The record forbids claiming complete ArchiMate 3.2 authoring, and a palette is
+  // the one thing somebody reads without reading anything else.
+  await expect(palette.locator(".panorama-subset-limits")).toContainText("not all of ArchiMate 3.2");
+
+  page.once("dialog", (dialog) => dialog.accept("Billing API"));
+  await palette.locator('[data-add-type="ApplicationService"]').click();
+
+  await expect.poll(() => added.length).toBe(1);
+  expect(added[0]).toMatchObject({
+    type: "ApplicationService", name: "Billing API", expectedRevision: 4, viewId: "view-app",
+  });
+  // Sent as what to create, never as a document.
+  expect(JSON.stringify(added[0])).not.toContain("<model");
+});
+
+// A palette that could not be loaded offers nothing rather than guessing, because
+// a guess is exactly what the server may refuse.
+test("a palette that could not be loaded offers nothing", async ({ page }) => {
+  installMock(page, { served: null });
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await expect(page.locator(".panorama-palette")).toContainText("could not be loaded");
+  await expect(page.locator("[data-add-type]")).toHaveCount(0);
+  // And the model still opens: the palette is additive.
+  await expect(page.locator(".panorama-canvas .djs-element").first()).toBeVisible();
+  expect(pageErrors).toEqual([]);
+});
+
+// The connect menu offers only relationships ArchiMate permits between the two
+// elements, read from the same matrix the server enforces with. Somebody authoring
+// a model should meet the notation's rules by seeing what is offered, not by being
+// refused after the fact.
+test("the connect menu offers only what the matrix permits", async ({ page }) => {
+  const drawn = [];
+  installMock(page, { onConnect: (body) => drawn.push(body) });
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await page.locator('.djs-element[data-element-id="n-app"]').click();
+
+  const panel = page.locator(".panorama-properties");
+  await expect(panel).toContainText("Connect");
+  // app-orders is an ApplicationComponent and svc-orders an ApplicationService, so
+  // the matrix permits Realization and Association and nothing else.
+  const options = panel.locator('[data-connect-to="svc-orders"] option');
+  await expect(options).toHaveCount(2);
+  await expect(options.nth(0)).toHaveText("Realization");
+  await expect(panel).toContainText("Only relationships ArchiMate permits");
+
+  await panel.locator('[data-connect-to="svc-orders"]').selectOption("Realization");
+  await panel.locator('[data-connect="svc-orders"]').click();
+
+  await expect.poll(() => drawn.length).toBe(1);
+  expect(drawn[0]).toMatchObject({
+    type: "Realization", source: "app-orders", target: "svc-orders", expectedRevision: 4,
+  });
+});
+
+// A pair the subset says nothing may be drawn between is shown saying so, rather
+// than left out — the absence is a statement about the notation, and hiding it
+// would read as a gap in the page.
+test("a pair with nothing permitted says so instead of vanishing", async ({ page }) => {
+  installMock(page, {
+    served: { ...subset, matrix: { "ApplicationComponent>ApplicationService": [] } },
+  });
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await page.locator('.djs-element[data-element-id="n-app"]').click();
+
+  const panel = page.locator(".panorama-properties");
+  await expect(panel).toContainText("nothing may be drawn");
+  await expect(panel.locator("[data-connect]")).toHaveCount(0);
+});
+
+// A reader gets no palette and no connect menu. Not disabled ones — none: a
+// surface that looks like it authors and refuses every attempt is worse than one
+// that never offered.
+test("a viewer is offered no authoring at all", async ({ page }) => {
+  installMock(page, { role: "viewer" });
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await page.locator('.djs-element[data-element-id="n-app"]').click();
+
+  await expect(page.locator("[data-add-type]")).toHaveCount(0);
+  await expect(page.locator("[data-connect]")).toHaveCount(0);
+  await expect(page.locator(".panorama-properties")).not.toContainText("Connect");
 });

@@ -614,11 +614,19 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .panorama-view-tab.active { color: var(--text); border-bottom-color: var(--accent); }
 .panorama-status { color: var(--muted); font-size: 12px; white-space: nowrap; margin: 0 4px; }
 .panorama-lock { color: var(--ok); }
+/* The canvas controls belong to the canvas, so they are positioned against the
+   stage rather than against the editor — against the editor they sat on top of the
+   palette and swallowed its clicks.
+   The box itself takes no pointer events, only its buttons do. A floating control
+   over a diagram covers whatever is under it, and moving it to another corner only
+   changes which shapes it steals clicks from; both corners were tried, and both
+   broke a different test. */
 .panorama-tools {
-  position: absolute; left: 12px; top: 56px; z-index: 8; display: flex; flex-direction: column;
+  position: absolute; right: 12px; top: 12px; z-index: 8; display: flex; flex-direction: column;
   padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
-  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,.08); pointer-events: none;
 }
+.panorama-tools > * { pointer-events: auto; }
 .panorama-tools .icon-btn { width: 30px; height: 28px; border-radius: 4px; font-weight: 700; }
 .panorama-canvas { flex: 1; min-width: 0; height: 100%; position: relative; overflow: hidden; background: var(--diagram-bg); }
 .panorama-canvas .djs-container { font-family: inherit; }
@@ -630,7 +638,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    and a text legend. A layer colour is semantics — it says whether an element is
    business, application or technology — so nothing below sets `fill` on an element.
    The border is a separate rect drawn around it and the badge sits beside it. */
-.panorama-stage { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.panorama-stage { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
 .panorama-stage .panorama-canvas { flex: 1; }
 .panorama-canvas-mark { pointer-events: none; }
 .panorama-mark-border { fill: none; stroke-width: 2px; stroke-dasharray: none; }
@@ -699,6 +707,35 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .panorama-tool-sep {
   width: 1px; align-self: stretch; margin: 2px 4px; background: var(--border-strong);
 }
+/* The palette (ADR-0189 §2). Built from the subset the server serves, so it can
+   only offer what the write path accepts — and it carries that subset's limits
+   under a fold, because a palette is the one thing somebody reads without reading
+   anything else. */
+.panorama-palette {
+  width: 172px; flex: 0 0 auto; overflow-y: auto; padding: 10px;
+  border-right: 1px solid var(--border); background: var(--surface); font-size: 12px;
+}
+.panorama-palette h3 { margin: 0 0 8px; font-size: 12px; }
+.panorama-palette h4 {
+  margin: 10px 0 4px; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted);
+}
+.panorama-palette-item {
+  display: block; width: 100%; text-align: left; margin-bottom: 3px; padding: 4px 6px;
+  border: 1px solid var(--border); border-radius: 4px; background: var(--bg);
+  color: var(--text); font-size: 11px; cursor: pointer;
+}
+.panorama-palette-item:hover { border-color: var(--accent); }
+.panorama-palette-empty { padding: 8px; }
+.panorama-subset-limits { margin-top: 12px; font-size: 10px; color: var(--muted); }
+.panorama-subset-limits summary { cursor: pointer; }
+.panorama-subset-limits ul { margin: 6px 0 0; padding-left: 14px; display: flex; flex-direction: column; gap: 5px; }
+.panorama-subset-limits b { color: var(--text); }
+.panorama-connect-row {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 5px; font-size: 12px;
+}
+.panorama-connect-row > span:first-child { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.panorama-connect-row select { font-size: 11px; max-width: 120px; }
 .panorama-status.panorama-dirty { color: var(--warn); font-weight: 600; }
 /* Historical context from stores outside Atlas (ADR-0189 P5b). A bar strip, not a
    chart: a smooth line with axes would promise a continuity that a query against
