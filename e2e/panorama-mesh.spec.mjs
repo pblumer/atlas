@@ -129,6 +129,9 @@ test("stays inside its size budget", async ({ page }) => {
   await page.goto("/index.html#/panorama/landscape");
   await expect(page.locator(".mesh-canvas")).toBeVisible({ timeout: 30000 });
   await expect(page.locator(".mesh-node")).toHaveCount(400);
+  // The ranking walks from every node, so it is inside this measurement rather than
+  // beside it: if O(N·E) at the budget were a problem, this is where it would show.
+  await expect(page.locator(".mesh-rank-go").first()).toBeVisible();
   expect(Date.now() - started).toBeLessThan(15000);
 });
 
@@ -1640,4 +1643,120 @@ test("an export of a filtered landscape says it is filtered", async ({ page }) =
   // This payload carries no observation time, and the file says that rather than
   // dating itself from the browser that saved it.
   expect(svg).toContain("Observation time not reported by this server");
+});
+
+// Impact analysis beyond the count (ADR-0211 §6). A landscape where one worker is
+// what four processes reach, so the radius has a shape worth reporting.
+const radiusGraph = {
+  nodes: [
+    { id: "process:1", kind: "process", name: "Invoice", provenance: "derived", processId: "invoice", version: 1, severity: "ok", state: "healthy" },
+    { id: "process:2", kind: "process", name: "Dunning", provenance: "derived", processId: "dunning", version: 1, severity: "critical", state: "degraded", reason: "4 token(s) are parked.", incidents: 4 },
+    { id: "process:3", kind: "process", name: "Reminder", provenance: "derived", processId: "reminder", version: 1, severity: "ok", state: "healthy" },
+    { id: "process:4", kind: "process", name: "Signup", provenance: "derived", processId: "signup", version: 1, severity: "attention", state: "degraded", reason: "1 token is parked.", incidents: 1 },
+    { id: "worker:mail", kind: "worker", name: "ops-mail", provenance: "derived", workerType: "mail", severity: "ok", state: "healthy" },
+    { id: "decision:credit", kind: "decision", name: "Credit score", provenance: "derived", severity: "ok", state: "healthy" },
+  ],
+  edges: [
+    { from: "process:1", to: "process:2", kind: "calls" },
+    { from: "process:1", to: "worker:mail", kind: "uses" },
+    { from: "process:2", to: "worker:mail", kind: "uses" },
+    { from: "process:3", to: "worker:mail", kind: "uses" },
+    { from: "process:4", to: "worker:mail", kind: "uses" },
+    { from: "process:2", to: "decision:credit", kind: "uses" },
+  ],
+  restricted: 0,
+  clustered: false,
+  status: { ok: 4, attention: 1, critical: 1, unknown: 0, unavailable: [] },
+};
+
+// "Twelve depend on this" is a different sentence depending on how many of the
+// twelve are already burning, and the panel now says which.
+test("the impact answer says how bad the radius is and names it", async ({ page }) => {
+  installMock(page, radiusGraph);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-depth", "all");
+  await page.locator('[data-node-id="worker:mail"]').click();
+
+  const panel = page.locator(".mesh-panel");
+  await expect(panel.locator(".mesh-impact-count")).toContainText("4");
+  // The mix, with the class named beside its colour.
+  await expect(panel.locator(".mesh-impact-chip.mesh-sev-critical")).toContainText("1 critical");
+  await expect(panel.locator(".mesh-impact-chip.mesh-sev-attention")).toContainText("1 attention");
+  await expect(panel.locator(".mesh-impact-chip.mesh-sev-ok")).toContainText("2 ok");
+  // Read for triage and never as cause.
+  await expect(panel).toContainText("not what this node caused");
+
+  // And the nodes themselves, worst first, so the three that matter do not have to
+  // be hunted for among the highlighted circles.
+  const named = panel.locator(".mesh-impact-go .mesh-impact-who");
+  await expect(named).toHaveText(["Dunning", "Signup", "Invoice", "Reminder"]);
+
+  // Clicking one goes there, exactly as a finding does.
+  await panel.locator(".mesh-impact-go", { hasText: "Dunning" }).click();
+  await expect(page.locator(".mesh-panel-head")).toContainText("Dunning");
+});
+
+// Direct and transitive are different facts, and the panel keeps them apart: the
+// direct dependents are the ones whose owners get a call.
+test("the panel tells direct dependents from the ones further out", async ({ page }) => {
+  installMock(page, radiusGraph);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-depth", "all");
+  await page.locator('[data-node-id="decision:credit"]').click();
+
+  const panel = page.locator(".mesh-panel");
+  await expect(panel).toContainText("1 directly");
+  await expect(panel).toContainText("1 further out");
+  await expect(panel.locator(".mesh-impact-go", { hasText: "Dunning" })).toContainText("directly");
+  await expect(panel.locator(".mesh-impact-go", { hasText: "Invoice" })).toContainText("further out");
+});
+
+// The question a reader arrives with, which until now needed them to already
+// suspect the right node: which of these would hurt most.
+test("the landscape ranks its blast radii with nothing selected", async ({ page }) => {
+  installMock(page, radiusGraph);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-depth", "all");
+
+  const rank = page.locator(".mesh-rank");
+  await expect(rank.locator(".mesh-rank-head")).toContainText("Biggest blast radius");
+  await expect(rank.locator(".mesh-rank-who")).toHaveText([
+    "ops-mail", "Credit score", "Dunning",
+  ]);
+  await expect(rank.locator(".mesh-rank-go").first()).toContainText("4");
+  await expect(rank.locator(".mesh-rank-go").first()).toContainText("4 direct");
+
+  // It follows the controls rather than fixing its own question, so it and the
+  // panel are never two differently measured numbers on one page.
+  await page.selectOption("#mesh-direction", "dependencies");
+  await expect(rank.locator(".mesh-rank-head")).toContainText("Most dependent");
+  await expect(rank.locator(".mesh-rank-who").first()).toHaveText("Invoice");
+
+  // Clicking a row goes to the node, like every other list in this column.
+  await rank.locator(".mesh-rank-go").first().click();
+  await expect(page.locator(".mesh-panel-head")).toContainText("Invoice");
+});
+
+// A landscape whose processes call nothing has no radius to rank, and says that as
+// a fact about its edges rather than as reassurance.
+test("a landscape with no dependencies says there is nothing to rank", async ({ page }) => {
+  installMock(page, {
+    nodes: [
+      { id: "application:a1", kind: "application", name: "Billing", provenance: "derived", severity: "ok", state: "healthy" },
+      { id: "process:1", kind: "process", name: "Invoice", provenance: "derived", processId: "invoice", version: 1, severity: "ok", state: "healthy" },
+    ],
+    edges: [{ from: "application:a1", to: "process:1", kind: "contains" }],
+    restricted: 0, clustered: false,
+    status: { ok: 2, attention: 0, critical: 0, unknown: 0, unavailable: [] },
+  });
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const rank = page.locator(".mesh-rank");
+  await expect(rank).toContainText("no radius to rank");
+  // And why the one edge on screen did not count.
+  await expect(rank).toContainText("Containment is not counted");
 });

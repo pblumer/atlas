@@ -1007,7 +1007,14 @@ for the derived whole-instance mesh above them.
   it was drawn, what is hidden by the reader's access, and which states this build
   cannot produce at all are all rendered *into* the image, beside the same key the
   canvas uses. A file has no legend beside it, and an undated "all green" picture is
-  believed long after it stopped being true.
+  believed long after it stopped being true. **Impact analysis answers more than
+  "how many":** the radius is broken down by severity class — stated as triage and
+  never as cause, since a dependent's state is its own — the nodes in it are named
+  worst-first with direct told apart from transitive, and the walk runs from *every*
+  node so the landscape can be asked where the risk is with nothing selected. What
+  is deliberately absent is "is this the only way": every derived edge names exactly
+  one resolved provider, so that distinction would be a label with one answer, and a
+  label that never varies teaches a reader it exists when it does not.
 - ✅ **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
   workers and job types, releases, local runtimes, and deployment targets. Preserve

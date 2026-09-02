@@ -689,11 +689,28 @@ export function degreesOf(graph) {
 //   - Unknown ids return null rather than an empty set, for the same reason: an
 //     empty answer means "nothing depends on this", and that is a claim.
 //
-// Returns { nodes, edges, truncatedBy, complete } or null.
+// Returns { nodes, direct, edges, truncatedBy, complete } or null.
 export function impactFrom(graph, startId, { direction = "dependents", depth = Infinity } = {}) {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   if (!byId.has(startId)) return null;
+  const walked = walkImpact(edgeIndex(graph), byId, startId, { direction, depth });
+  return {
+    nodes: [...walked.hops.keys()],
+    // The nodes with an edge straight to this one. They are the difference between
+    // "who do I call about this" and "how far does it go": a direct dependent breaks
+    // at its own boundary, and everything past it breaks because that one did.
+    direct: [...walked.hops].filter(([, hop]) => hop === 1).map(([id]) => id),
+    edges: walked.edges,
+    truncatedBy: walked.truncatedBy,
+    complete: walked.truncatedBy.length === 0,
+  };
+}
 
+// edgeIndex builds the adjacency an impact walk needs, once. It is separate from
+// the walk because the ranking below walks from every node in the graph, and
+// rebuilding this per node would turn an O(N·E) answer into an O(N·E) answer with a
+// large constant in front of it for no reason.
+function edgeIndex(graph) {
   const forward = new Map(), backward = new Map();
   for (const e of graph.edges) {
     if (!DEPENDENCY_EDGES.has(e.kind)) continue;
@@ -702,40 +719,149 @@ export function impactFrom(graph, startId, { direction = "dependents", depth = I
     forward.get(e.from).push(e);
     backward.get(e.to).push(e);
   }
+  return { forward, backward };
+}
+
+// walkImpact is the traversal itself, shared by the single answer and the ranking.
+// One walk with two callers rather than two walks: the ranking's numbers and the
+// panel's have to be the same numbers, and the only way to guarantee that is for
+// them to come from the same code.
+//
+// hops maps every reached node to its distance from the start, which is what makes
+// "direct" answerable; edges are collected only when a caller wants to draw them.
+function walkImpact(index, byId, startId, { direction, depth, edges: wantEdges = true }) {
   const step = (id) => {
     const out = [];
-    if (direction !== "dependencies") out.push(...(backward.get(id) || []).map((e) => [e, e.from]));
-    if (direction !== "dependents") out.push(...(forward.get(id) || []).map((e) => [e, e.to]));
+    if (direction !== "dependencies") {
+      out.push(...(index.backward.get(id) || []).map((e) => [e, e.from]));
+    }
+    if (direction !== "dependents") {
+      out.push(...(index.forward.get(id) || []).map((e) => [e, e.to]));
+    }
     return out;
   };
 
-  const seen = new Set([startId]);
+  const hops = new Map([[startId, 0]]);
+  const seenEdges = new Set();
   const edges = [];
   const truncatedBy = [];
+  // Asking about the boundary itself is a different question from arriving at one.
+  // The edges *into* a placeholder are ours — the nodes at their other end are in
+  // this caller's own picture — so they are walked; what is beyond it is not, and
+  // the payload draws no edge out of a placeholder for exactly that reason. So the
+  // walk runs and the answer is a floor. Skipping the start instead would have
+  // answered "nothing depends on this", which is the one thing a boundary must
+  // never be allowed to say.
+  if (byId.get(startId)?.kind === "restricted") truncatedBy.push(startId);
   let frontier = [startId];
   for (let hop = 0; hop < depth && frontier.length; hop++) {
     const next = [];
     for (const id of frontier) {
       // A placeholder stands for something we may not see, so its own edges are not
       // ours to follow — it is a boundary, not a waypoint.
-      if (byId.get(id)?.kind === "restricted") continue;
+      if (id !== startId && byId.get(id)?.kind === "restricted") continue;
       for (const [edge, other] of step(id)) {
-        if (!edges.includes(edge)) edges.push(edge);
-        if (seen.has(other)) continue;
-        seen.add(other);
+        if (wantEdges && !seenEdges.has(edge)) {
+          seenEdges.add(edge);
+          edges.push(edge);
+        }
+        if (hops.has(other)) continue;
+        hops.set(other, hop + 1);
         if (byId.get(other)?.kind === "restricted") truncatedBy.push(other);
         next.push(other);
       }
     }
     frontier = next;
   }
+  return { hops, edges, truncatedBy };
+}
 
+// impactSummary is the answer's shape rather than only its size: how many, how many
+// of them are already in trouble, and how many are one edge away.
+//
+// The severity mix is *not* a causal claim, and the panel that renders it says so.
+// A node's class is what that node reports about itself; that three of a worker's
+// twelve dependents are critical may be the worker's fault, may be why the worker
+// looks busy, or may be unrelated. What the mix is good for is triage — a blast
+// radius that is already burning is a different morning from one that is quiet —
+// and stating causation from a correlation is how a panel stops being believed.
+export function impactSummary(graph, result, startId) {
+  if (!result) return null;
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const others = result.nodes.filter((id) => id !== startId);
+  const bySeverity = { critical: 0, attention: 0, ok: 0, unknown: 0 };
+  for (const id of others) {
+    const sev = byId.get(id)?.severity;
+    bySeverity[sev in bySeverity ? sev : "unknown"] += 1;
+  }
   return {
-    nodes: [...seen],
-    edges,
-    truncatedBy,
-    complete: truncatedBy.length === 0,
+    total: others.length,
+    direct: result.direct.length,
+    indirect: others.length - result.direct.length,
+    bySeverity,
+    complete: result.complete,
   };
+}
+
+// impactList names the nodes the count is counting, worst first.
+//
+// The count and the highlight together still leave the reader hunting: on four
+// hundred circles "twelve depend on this" means finding twelve lit dots, and the
+// three that matter are the ones already reporting a problem. This is the findings
+// list's argument applied to the impact answer — the same nodes, as an index.
+//
+// Direct before transitive within a severity, because those are the ones somebody
+// has to be told about first.
+export function impactList(graph, result, startId, { limit = 8 } = {}) {
+  if (!result) return [];
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const direct = new Set(result.direct);
+  return result.nodes
+    .filter((id) => id !== startId)
+    .map((id) => ({ ...(byId.get(id) || { id }), direct: direct.has(id) }))
+    .sort((a, b) =>
+      ((SEVERITY_ORDER[b.severity] ?? 0) - (SEVERITY_ORDER[a.severity] ?? 0)) ||
+      (Number(b.direct) - Number(a.direct)) ||
+      String(a.name || a.id).localeCompare(String(b.name || b.id)))
+    .slice(0, limit);
+}
+
+// blastRanking answers the impact question without being asked about a node first.
+//
+// Until now the analysis needed a selection, which means the reader had to already
+// suspect the node that matters — and "which of these four hundred would hurt most"
+// is the question they actually arrive with, especially before a change. So the walk
+// runs from every node and the results are ranked.
+//
+// It is O(N·E) over the graph already in the browser, which the size budget (§7)
+// bounds: past it the payload arrives collapsed to applications, so N is a few dozen
+// rather than a few hundred exactly where the ranking would have cost the most.
+//
+// Ties go to the node that is itself in trouble. Two nodes carrying twelve each are
+// not the same finding when one of them is already failing.
+export function blastRanking(graph, { direction = "dependents", depth = Infinity, limit = 6 } = {}) {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const index = edgeIndex(graph);
+  const rows = [];
+  for (const node of graph.nodes) {
+    const walked = walkImpact(index, byId, node.id, { direction, depth, edges: false });
+    const total = walked.hops.size - 1;
+    if (total <= 0) continue;
+    rows.push({
+      id: node.id, name: node.name, kind: node.kind, severity: node.severity,
+      total,
+      direct: [...walked.hops.values()].filter((hop) => hop === 1).length,
+      // A walk that stopped at a permission boundary produces a floor, not a total —
+      // and in a *ranking* that matters twice over, because the order is a claim
+      // about the rows as well as the numbers.
+      complete: walked.truncatedBy.length === 0,
+    });
+  }
+  rows.sort((a, b) =>
+    (b.total - a.total) ||
+    ((SEVERITY_ORDER[b.severity] ?? 0) - (SEVERITY_ORDER[a.severity] ?? 0)) ||
+    String(a.name || a.id).localeCompare(String(b.name || b.id)));
+  return rows.slice(0, limit);
 }
 
 // hrefFor is the drilldown. A process node leads to the Operations live view —
@@ -1088,6 +1214,51 @@ function renderGraph(graph, layoutMs, frame, { pinned, from } = {}) {
 }
 
 
+// rankingHTML answers "where is the risk on this landscape" without a selection.
+//
+// Impact analysis has always needed one, which quietly assumes the reader already
+// suspects the right node. Before a change, or on an instance somebody has just
+// been handed, that assumption is exactly wrong: the question is which node would
+// hurt most, and the only way to answer it by clicking was to click all of them.
+//
+// It follows the direction and depth controls rather than fixing its own, so this
+// list and the panel are always answering the same question. Two blast-radius
+// numbers on one page that were measured differently would be worse than one.
+function rankingHTML(graph, direction, depth) {
+  const rows = blastRanking(graph, { direction, depth });
+  const heading = direction === "dependencies" ? "Most dependent"
+    : direction === "both" ? "Most entangled" : "Biggest blast radius";
+  const sub = direction === "dependencies" ? "how much each one needs to work"
+    : direction === "both" ? "how much each one is connected to"
+    : "how much stops if this one does";
+  const reach = depth === Infinity ? "any" : depth;
+
+  if (!rows.length) {
+    // Said as a fact about the edges rather than as reassurance: a landscape whose
+    // processes call nothing has no blast radius to rank, and that is not the same
+    // as a safe one.
+    return `<div class="mesh-rank">
+      <div class="mesh-rank-head"><b>${esc(heading)}</b></div>
+      <p class="mesh-note">Nothing here depends on anything else within ${esc(reach)}
+      hop(s), so there is no radius to rank. Containment is not counted: an
+      application holds its processes, it does not depend on them.</p></div>`;
+  }
+  return `<div class="mesh-rank">
+    <div class="mesh-rank-head">
+      <b>${esc(heading)}</b>
+      <span class="muted">${esc(sub)}, within ${esc(reach)} hop(s)</span>
+    </div>
+    <ol class="mesh-rank-list">${rows.map((r) => `<li>
+      <button type="button" class="mesh-rank-go mesh-sev-${esc(r.severity || "unknown")}"
+        data-finding="${esc(r.id)}">
+        <span class="mesh-rank-who">${esc(r.name ||
+          String((KIND[r.kind] || {}).label || r.kind || r.id).split(" — ")[0])}</span>
+        <span class="mesh-rank-count">${r.complete ? "" : "at least "}<b>${r.total}</b>
+          node(s)<span class="muted"> · ${r.direct} direct</span></span>
+      </button></li>`).join("")}</ol>
+  </div>`;
+}
+
 // findingsHTML lists every node with something wrong with it, worst first.
 //
 // The picture already says which nodes those are, and on a landscape of four hundred
@@ -1168,7 +1339,7 @@ const SEVERITY_ORDER = { critical: 3, attention: 2, ok: 1, unknown: 0 };
 // point — a highlighted subgraph tells you *which*, a count tells you *how many*,
 // and "17 things depend on this worker" is the sentence somebody repeats in a
 // change-approval meeting.
-function impactPanelHTML(node, result, direction, depth, { pinned = false } = {}) {
+function impactPanelHTML(node, result, direction, depth, { pinned = false, graph = null } = {}) {
   if (!node) {
     return `<div class="mesh-panel mesh-panel-empty">
       <b>Nothing selected</b>
@@ -1190,6 +1361,39 @@ function impactPanelHTML(node, result, direction, depth, { pinned = false } = {}
   // An answer that stopped at a permission boundary must not read as a complete
   // one. This is the same rule the mesh applies to the picture, applied to the
   // analysis over it: the count below is a floor, not a total.
+  // How bad, and how close — the two things a count alone leaves out. The mix is
+  // read for triage and never as cause: these nodes report their own state, and a
+  // panel that implied this one produced it would be wrong the first time somebody
+  // checked.
+  const summary = graph && result ? impactSummary(graph, result, node.id) : null;
+  const classes = summary
+    ? ["critical", "attention", "ok", "unknown"].filter((k) => summary.bySeverity[k])
+    : [];
+  const mix = summary && summary.total ? `
+    <div class="mesh-impact-mix">${classes.map((k) => `
+      <span class="mesh-impact-chip mesh-sev-${k}"><b>${summary.bySeverity[k]}</b>
+        ${esc(SEVERITY[k].label.split(" — ")[0].toLowerCase())}</span>`).join("")}
+    </div>
+    <p class="mesh-note"><b>${summary.direct}</b> directly, <b>${summary.indirect}</b>
+      further out. What those nodes report is their own state — this says what the
+      blast radius currently looks like, not what this node caused.</p>` : "";
+
+  // The nodes themselves, so the answer can be acted on rather than only counted.
+  const named = graph && result ? impactList(graph, result, node.id) : [];
+  const shortLabel = (n) => n.name ||
+    String((KIND[n.kind] || {}).label || n.kind || n.id).split(" — ")[0];
+  const list = named.length ? `
+    <ul class="mesh-impact-list">${named.map((n) => `<li>
+      <button type="button" class="mesh-impact-go mesh-sev-${esc(n.severity || "unknown")}"
+        data-finding="${esc(n.id)}">
+        <span class="mesh-impact-who">${esc(shortLabel(n))}</span>
+        <span class="mesh-impact-hop">${n.direct ? "directly" : "further out"}${
+          n.state ? ` · ${esc(STATE_TEXT[n.state] || n.state)}` : ""}</span>
+      </button></li>`).join("")}</ul>
+    ${summary && summary.total > named.length
+      ? `<p class="mesh-note">${summary.total - named.length} more, worst first above.</p>`
+      : ""}` : "";
+
   const truncation = result && !result.complete
     ? `<p class="mesh-note mesh-truncated"><b>Incomplete.</b> The walk stopped at
         ${result.truncatedBy.length} node(s) outside your access, so there may be more
@@ -1217,7 +1421,9 @@ function impactPanelHTML(node, result, direction, depth, { pinned = false } = {}
     ${finding}
     <div class="mesh-impact-count"><b>${others}</b> node(s) ${word}
       <span class="muted">within ${depth === Infinity ? "any" : depth} hop(s)</span></div>
+    ${mix}
     ${truncation}
+    ${list}
     ${drill}
     ${release}
   </div>`;
@@ -1293,6 +1499,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
         </div>
         <div id="mesh-panel-slot"></div>
         <div id="mesh-findings-slot"></div>
+        <div id="mesh-ranking-slot"></div>
         <div class="mesh-views">
           <div class="mesh-views-head">
             <b>Saved views</b>
@@ -1325,6 +1532,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const dirSelect = document.getElementById("mesh-direction");
   const depthSelect = document.getElementById("mesh-depth");
   const findingsSlot = document.getElementById("mesh-findings-slot");
+  const rankingSlot = document.getElementById("mesh-ranking-slot");
   const viewList = document.getElementById("mesh-view-list");
   const viewForm = document.getElementById("mesh-view-save");
   const viewName = document.getElementById("mesh-view-name");
@@ -1441,6 +1649,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     applyView();
     legendSlot.innerHTML = legendHTML(shown, ms);
     findingsSlot.innerHTML = findingsHTML(shown);
+    paintRanking();
     // Matches and context counted apart. "5 of 101" over a picture where only one
     // node matched the term would be the header agreeing with the drawing and both
     // of them misreporting the search.
@@ -1455,6 +1664,16 @@ export async function mountPanoramaMesh(view, { api, toast }) {
         : `${graph.nodes.length} node(s), ${graph.edges.length} edge(s)`;
     }
     refresh();
+  }
+
+  // paintRanking is kept out of refresh deliberately. The ranking is about the
+  // graph and the two controls, not about the selection — recomputing a walk from
+  // every node each time somebody clicks a circle would spend the whole budget on an
+  // answer that had not changed.
+  function paintRanking() {
+    rankingSlot.innerHTML = rankingHTML(
+      shown, dirSelect.value,
+      depthSelect.value === "all" ? Infinity : Number(depthSelect.value));
   }
 
   // refresh answers the impact question about the current selection and shows the
@@ -1481,7 +1700,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     }
     panel.innerHTML = impactPanelHTML(
       shown.nodes.find((n) => n.id === selected) || null, result, direction, depth,
-      { pinned: pinned.has(selected) });
+      { pinned: pinned.has(selected), graph: shown });
   }
 
   // Releasing the one node the panel is about, without disturbing the arrangement
@@ -2029,8 +2248,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // Clicking a finding goes to it: selected, so the panel above explains it, and
   // framed, so it is on screen rather than somewhere in a landscape of four hundred
   // circles. Going *to* a finding is the whole reason the list is worth having.
-  findingsSlot.addEventListener("click", (event) => {
-    const id = event.target.closest?.("[data-finding]")?.getAttribute("data-finding");
+  // goToNode selects a node and brings the view to it. Three lists now offer the
+  // same gesture — the findings, the impact answer's own list, and the ranking — and
+  // they behave identically because they are one function.
+  function goToNode(id) {
     const node = id && at.get(id);
     if (!node) return;
     selected = id;
@@ -2042,7 +2263,14 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const h = frameView ? frameView.h : world.height * 0.3;
     frameView = { x: node.x - w / 2, y: node.y - h / 2, w, h };
     applyView();
-  });
+  }
+
+  for (const slot of [findingsSlot, rankingSlot, panel]) {
+    slot.addEventListener("click", (event) => {
+      const id = event.target.closest?.("[data-finding]")?.getAttribute("data-finding");
+      if (id) goToNode(id);
+    });
+  }
 
   viewForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -2126,12 +2354,21 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     event.preventDefault();
     select(node.getAttribute("data-node-id"));
   });
-  dirSelect.addEventListener("change", refresh);
+  dirSelect.addEventListener("change", () => {
+    refresh();
+    paintRanking();
+  });
   // Depth means two things at once, and only one of them is free. Inside a drilldown
   // it decides how far the picture reaches, so changing it is a different graph and
   // has to be laid out again; outside one it only bounds the impact walk, which is
   // classes on the nodes already drawn.
-  depthSelect.addEventListener("change", () => (drilled ? paint() : refresh()));
+  depthSelect.addEventListener("change", () => {
+    // A drilldown is cut to the depth on screen, so changing it re-cuts the picture
+    // and paint() repaints the ranking with it; otherwise only the answers change.
+    if (drilled) return paint();
+    refresh();
+    paintRanking();
+  });
 
   // Re-laying out on every keystroke is the wrong trade at 400 nodes, where the
   // simulation costs a few hundred milliseconds. A short debounce keeps typing

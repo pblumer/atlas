@@ -3685,6 +3685,52 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
 /* A truncated answer is a warning, not a footnote: the number above it is a floor. */
 .mesh-truncated { color: var(--warn); }
 .mesh-drill { font-size: 13px; }
+/* The severity mix of a blast radius. Chips rather than a sentence, because the
+   thing being read is a comparison between three numbers — and they carry the class
+   name beside the colour, since the colour is never the only channel (§4). */
+.mesh-impact-mix { display: flex; flex-wrap: wrap; gap: 6px; }
+.mesh-impact-chip {
+  display: inline-flex; align-items: baseline; gap: 4px; font-size: 11px;
+  padding: 2px 7px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+}
+.mesh-impact-chip b { font-size: 13px; color: var(--text); }
+.mesh-impact-chip.mesh-sev-critical { border-color: var(--danger); }
+.mesh-impact-chip.mesh-sev-attention { border-color: var(--mesh-attention); }
+/* The impacted nodes themselves. Same shape as the findings list, because it is the
+   same gesture — read a name, go to it — and two lists in one column that behaved
+   differently would be two things to learn. */
+.mesh-impact-list {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px;
+  max-height: 190px; overflow-y: auto;
+}
+.mesh-impact-go, .mesh-rank-go {
+  display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left;
+  padding: 5px 8px; font: inherit; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); border-left-width: 3px; border-radius: 6px;
+  background: var(--surface); color: var(--text);
+}
+.mesh-impact-go:hover, .mesh-rank-go:hover { border-color: var(--accent); }
+.mesh-impact-go.mesh-sev-critical, .mesh-rank-go.mesh-sev-critical { border-left-color: var(--danger); }
+.mesh-impact-go.mesh-sev-attention, .mesh-rank-go.mesh-sev-attention { border-left-color: var(--mesh-attention); }
+.mesh-impact-who, .mesh-rank-who {
+  font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mesh-impact-hop, .mesh-rank-count { color: var(--muted); font-size: 11px; }
+.mesh-rank-count b { font-size: 13px; color: var(--text); }
+/* The ranking: the impact question asked of the whole landscape rather than of one
+   node, so it sits under the findings and reads the same way. */
+.mesh-rank { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+/* Stacked rather than justified: the heading and what it measures are both long,
+   and side by side in a sidebar they squeeze each other into columns of one word. */
+.mesh-rank-head { display: flex; flex-direction: column; gap: 1px; }
+.mesh-rank-head .muted { font-size: 11px; }
+.mesh-rank-list {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px;
+}
+.mesh-rank :focus-visible, .mesh-impact-list :focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
 /* Findings: the same nodes the picture marks, as an index. On four hundred circles,
    spotting three red dots is hunting, and hunting is what somebody does instead of
    noticing — so the findings are also a list, worst first, and clicking one goes

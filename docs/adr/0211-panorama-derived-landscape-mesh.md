@@ -14,7 +14,10 @@
   landscape draws deployment targets, so §4's unreachable and stale are producible
   on it and what a payload declares unproducible is derived from what it drew; amended
   2026-09-02 — §10 gains the landscape's own export, which has only one class, and
-  the mesh payload carries the observation time that export has to render)
+  the mesh payload carries the observation time that export has to render; amended
+  2026-09-02 — §6's impact answer gains a severity breakdown, the names of the
+  nodes in it, and a ranking of every node's radius, and states why "is this the
+  only way" is not a question this graph can be asked)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -538,6 +541,54 @@ unaffected.
 > A target carries its operator's name for it and nothing else — never the base URL
 > or the credential reference. Those are this operator's map of where their
 > infrastructure lives, and a landscape is opened by anybody with modeler access.
+
+> **Amendment (2026-09-02): the impact answer says how bad and which, and the
+> landscape ranks its radii without being asked about a node first.**
+> The answer above was a count and a highlight, and both leave out what somebody
+> acts on. Three additions, and one deliberate non-addition:
+>
+> - **How bad.** The radius is broken down by §4's severity classes: "twelve depend
+>   on this — one critical, one attention, ten OK" is a different morning from twelve
+>   quiet ones, and the count is identical in both. It is stated as triage and never
+>   as cause. A node's class is what that node reports about itself; that three of a
+>   worker's dependents are critical may be the worker's fault, may be why the worker
+>   looks busy, or may be unrelated — and a panel that inferred causation from
+>   adjacency would be wrong the first time anybody checked, which is once.
+> - **Which.** The impacted nodes are named, worst first, direct before transitive
+>   within a class. This is the findings list's argument applied to the impact
+>   answer: on four hundred circles, "twelve depend on this" means finding twelve lit
+>   dots, and hunting is what somebody does instead of noticing. Direct and
+>   transitive are kept apart because they are different facts — the direct
+>   dependents are the ones whose owners get told.
+> - **Which node, out of all of them.** Impact analysis needed a selection, which
+>   assumes the reader already suspects the right node; before a change, or on an
+>   instance somebody has just been handed, that assumption is exactly backwards. The
+>   walk therefore runs from every node and the results are ranked. It is O(N·E) over
+>   the graph already in the browser, which §7's budget bounds — past it the payload
+>   arrives collapsed to applications, so N is a few dozen precisely where it would
+>   have cost the most. The ranking follows the direction and depth controls rather
+>   than fixing its own question: two blast-radius numbers on one page measured
+>   differently would be worse than one.
+>
+> **What is deliberately not built is "is this the only way".** The obvious next
+> question — of the twelve, how many would *stop* rather than merely be affected,
+> because this node is their only path — has one answer on this graph, for every
+> node, always: yes. Every edge §1 derives names exactly one resolved provider. A
+> call activity resolves through the deployment overrides to a single process, a
+> service task names a single worker, a business-rule task a single decision; where
+> the resolution fails the mesh draws *unresolved* rather than a second candidate.
+> There is no fan-out to alternatives anywhere in the derivation, so "does this
+> dependent have another way" is a label that never varies — and a label that never
+> varies teaches a reader that the distinction exists when it does not. It becomes a
+> real question the day the landscape derives something with more than one provider,
+> and not before.
+>
+> One correctness fix travels with this, found while ranking every node: asking about
+> a **restricted placeholder itself** used to report zero dependents and call the
+> answer complete. Arriving at a boundary and standing on one are different — the
+> nodes that point at a placeholder are in this caller's own picture, so they are
+> walked — and "nothing depends on this" is the single claim §6 says a boundary must
+> never be allowed to make. It now reports them, as a floor.
 
 ### 7. A stated size budget, and a server-side fallback
 
