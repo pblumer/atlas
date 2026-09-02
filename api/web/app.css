@@ -3513,7 +3513,15 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .mesh-node:hover, .mesh-node:focus-visible { transform-box: fill-box; }
 .mesh-node:hover circle, .mesh-node:focus-visible circle { stroke-width: 3; }
 .mesh-count { font-size: 12px; font-weight: 600; fill: var(--accent); }
-.mesh-node { cursor: default; }
+/* Dragging a node. The cursor says the bubbles are things you can pick up before
+   anybody tries, and the mark says which ones somebody already has: a node that is
+   not where the layout put it is a fact about the picture, and hiding it would make
+   the arrangement look like the simulation's own answer. */
+.mesh-node { cursor: grab; }
+.mesh-node:active { cursor: grabbing; }
+.mesh-pin { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; opacity: 0; }
+.mesh-pinned .mesh-pin { opacity: 1; }
+.mesh-zoom button:disabled { opacity: 0.45; cursor: default; }
 a .mesh-node { cursor: pointer; }
 a:hover .mesh-node circle { stroke-width: 3; }
 a:focus-visible .mesh-node circle { stroke: var(--accent); stroke-width: 3; }
@@ -3551,7 +3559,6 @@ a:focus-visible .mesh-node circle { stroke: var(--accent); stroke-width: 3; }
 /* A truncated answer is a warning, not a footnote: the number above it is a floor. */
 .mesh-truncated { color: var(--warn); }
 .mesh-drill { font-size: 13px; }
-.mesh-node { cursor: pointer; }
 .mesh-node:focus-visible circle { stroke: var(--accent); stroke-width: 3; }
 .mesh-in-impact circle { stroke-width: 3; }
 line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }

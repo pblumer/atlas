@@ -3,7 +3,9 @@
 - **Status:** Accepted (amended 2026-08-31 — §11 splits P2.5c's P4 dependency per
   state instead of holding the whole stage behind it; amended 2026-09-01 — §7 lays
   the graph out in a world of its own size rather than in the viewport, and names
-  by magnification rather than by node count)
+  by magnification rather than by node count; amended 2026-09-02 — §7 lets the
+  reader arrange the landscape by hand, and sizes a node by its connectivity as well
+  as by its kind)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -277,6 +279,51 @@ unaffected.
 >   lit half the landscape would be a worse version of it rather than a second tool.
 >   Nothing is re-laid-out and nothing is re-rendered, so the picture cannot move
 >   under the pointer while it is being read.
+
+> **Amendment (2026-09-02): the arrangement is the reader's, and size says how
+> connected a node is.**
+> Two more things §7's legibility half was missing, and both of them are about what
+> the eye does with a few hundred circles before it reads any of them.
+>
+> - **Nodes can be picked up.** The layout answers "where does this graph want to
+>   sit", which is the right first answer and never the last one: the person reading
+>   it knows things the simulation does not — that these four belong together, that
+>   this hub should be out of the way — and until now had no way to say so. Dragging
+>   a node moves it and the graph rearranges itself around it, which also makes
+>   adjacency visible in the motion rather than only in the lines. A dropped node
+>   stays dropped: this simulation settles once rather than running continuously, so
+>   releasing a node back into it would put it straight back where it started and
+>   make the whole gesture pointless. It is *pinned* instead — marked on the node,
+>   because a node that is not where the layout put it is a fact about the picture
+>   and hiding it would make the arrangement look like the simulation's own answer —
+>   and undone one node at a time or wholesale. While anything is pinned the fit is
+>   skipped, because fitting rescales every position and would slide the pins off the
+>   spots they were dropped on; that is the trade, and the arrangement is worth more
+>   than the last few percent of margin. The arrangement survives filtering and
+>   selecting, and it is not stored: nothing on this view is (§2). The same step is on
+>   the arrow keys for a focused node, because a convenience only some people can have
+>   is not one.
+>
+> - **Size carries connectivity as well as kind.** Kind alone made every process the
+>   same size, so the one that half the landscape hangs off looked exactly like a leaf
+>   — and finding it meant clicking through until the impact panel said so. A node is
+>   now drawn at its kind's floor plus however far its dependency count carries it up
+>   that kind's band, logarithmically, because the difference between one dependency
+>   and four is the one worth seeing and the difference between forty and fifty is not.
+>   The bands are closed: the largest process is smaller than the smallest application,
+>   so rank survives connectivity rather than competing with it, and size says two
+>   things at once without either overwriting the other. Containment is not counted,
+>   for the same reason §6 does not walk it — an application does not depend on the
+>   processes it holds, and counting them would make every application a hub by
+>   construction and say nothing. The reference degree is fixed rather than taken from
+>   the graph on screen, so a node does not change size when a filter removes some
+>   other node: its size describes the node, not the current screen.
+>
+> One consequence, and it was overdue: selecting a node no longer re-lays-out the
+> graph. Impact analysis is an answer *about the picture on screen*, so the picture
+> must not move while the answer is being given — and re-running a two-hundred-
+> iteration simulation to toggle two classes was costing a few hundred milliseconds
+> per click at the top of the budget.
 
 ### 7. A stated size budget, and a server-side fallback
 
