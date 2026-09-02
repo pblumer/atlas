@@ -250,7 +250,10 @@ export function attachPlayground(root, { api, toast, modeler }) {
     // What the run has to show, and what it showed. Expectations turn a report
     // somebody reads into a verdict something can act on — the same ones the
     // `atlas playground` runner exits a build on.
-    expect: { allFinish: true, noIncidents: true, p90Hours: "", mustReach: "", queue: {} },
+    // Rules are the half of the expectations a run-wide bound cannot state: they are
+    // judged case by case, so "small applications are paid out" is a thing the panel
+    // can say and a build can exit on.
+    expect: { allFinish: true, noIncidents: true, p90Hours: "", mustReach: "", queue: {}, rules: [] },
     verdict: null,
     comparison: null,
     // The saved scenarios of this diagram, and the one this session came from.
@@ -505,6 +508,15 @@ export function attachPlayground(root, { api, toast, modeler }) {
       if (String(v).trim() !== "" && Number(v) >= 0) queue[pool] = Number(v);
     }
     if (Object.keys(queue).length) e.maxQueue = queue;
+    const rules = (state.expect.rules || [])
+      .filter((r) => String(r.then || "").trim())
+      .map((r) => {
+        const out = { then: r.then.trim() };
+        if (String(r.when || "").trim()) out.when = r.when.trim();
+        if (String(r.name || "").trim()) out.name = r.name.trim();
+        return out;
+      });
+    if (rules.length) e.rules = rules;
     return e;
   }
 
@@ -513,7 +525,8 @@ export function attachPlayground(root, { api, toast, modeler }) {
   function expectFromBody(e) {
     const out = { allFinish: !!e.minCompleted, noIncidents: e.maxIncidents === 0,
       p90Hours: e.maxP90Millis ? String(e.maxP90Millis / 3_600_000) : "",
-      mustReach: Object.keys(e.minVisits || {}).join(", "), queue: {} };
+      mustReach: Object.keys(e.minVisits || {}).join(", "), queue: {},
+      rules: (e.rules || []).map((r) => ({ name: r.name || "", when: r.when || "", then: r.then || "" })) };
     for (const [pool, v] of Object.entries(e.maxQueue || {})) out.queue[pool] = String(v);
     return out;
   }
@@ -945,7 +958,63 @@ export function attachPlayground(root, { api, toast, modeler }) {
         <span class="muted">hours</span></div>
       <label class="field"><span>Must reach (element ids, comma separated)</span>
         <textarea id="pg-x-reach" rows="1" spellcheck="false">${esc(state.expect.mustReach)}</textarea></label>
-      ${queueRows}`;
+      ${queueRows}
+      ${rulesHTML()}`;
+  }
+
+  // rulesHTML is the per-case half of the expectations: a row per rule, in the
+  // language the diagram's own gateways are written in.
+  //
+  // The end events are offered off the canvas rather than typed, the way the pool
+  // rows are — an author asserts against the outcomes they drew, and the box stays
+  // editable for the assertions that are not about an end event.
+  function rulesHTML() {
+    const rows = (state.expect.rules || []).map(ruleRowHTML).join("");
+    return `
+      <div class="pg-sec"><b>Per case</b> <span class="muted">FEEL, optional</span></div>
+      ${rows || `<p class="muted">A rule holds a class of cases to an outcome —
+        <span class="mono">betrag &lt; 50000</span> must end at <span class="mono">genehmigt</span>.
+        A bound on the run cannot say that.</p>`}
+      <div class="pg-timing">
+        <button class="btn neutral small" id="pg-rule-add">Add a rule</button>
+      </div>`;
+  }
+
+  function ruleRowHTML(r, i) {
+    const ends = endEventsInDiagram();
+    const options = ends.map((e) =>
+      `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join("");
+    return `
+      <div class="pg-rule">
+        <div class="pg-rule-head">
+          <span class="muted">when</span>
+          <input type="text" data-rule="when" data-i="${i}" value="${esc(r.when)}"
+            placeholder="every case" aria-label="Which cases the rule is about" />
+          <button class="icon-btn" data-rule-del="${i}" title="Remove this rule"
+            aria-label="Remove this rule">&#10005;</button>
+        </div>
+        <div class="pg-rule-head">
+          <span class="muted">then</span>
+          <input type="text" data-rule="then" data-i="${i}" value="${esc(r.then)}"
+            placeholder="end = &quot;approved&quot;" aria-label="What those cases have to show" />
+          ${ends.length ? `<select data-rule-end="${i}" aria-label="Insert an end event">
+            <option value="">ends at…</option>${options}</select>` : ""}
+        </div>
+      </div>`;
+  }
+
+  // endEventsInDiagram lists the outcomes the author drew, so a rule is written
+  // against the diagram rather than against a list of ids retyped from it.
+  function endEventsInDiagram() {
+    let registry;
+    try { registry = modeler.get("elementRegistry"); } catch { return []; }
+    const out = [];
+    registry.forEach((e) => {
+      const bo = e.businessObject;
+      if (!bo || bo.$type !== "bpmn:EndEvent" || !bo.id) return;
+      out.push({ id: bo.id, name: bo.name || bo.id });
+    });
+    return out;
   }
 
   // scenarioSaveHTML is how a run becomes repeatable by somebody who is not here.
@@ -979,12 +1048,17 @@ export function attachPlayground(root, { api, toast, modeler }) {
       return `<div class="pg-sec"><b>Verdict</b></div>
         <p class="muted">Nothing was expected of this run, so there was nothing to check.</p>`;
     }
+    // The per-case rules are left out of this table and shown as their own
+    // breakdown below: a rule's statement is a sentence, and four columns of a 330 px
+    // panel wrap it to four lines and then truncate what it did.
+    const bounds = v.checks.filter((c) => !c.rule);
     return `
       <div class="pg-sec"><b>Verdict</b>
         <span class="pg-verdict ${v.passed ? "ok" : "bad"}">${v.passed ? "passed" : "failed"}</span></div>
-      <table class="pg-table pg-checks"><tbody>${v.checks.map((c) => `<tr class="${c.passed ? "" : "pg-bad"}">
+      <table class="pg-table pg-checks"><tbody>${bounds.map((c) => `<tr class="${c.passed ? "" : "pg-bad"}">
         <td>${c.passed ? "&#10003;" : "&#10007;"}</td><td>${esc(c.name)}</td>
         <td class="muted">${esc(c.want)}</td><td>${esc(c.got)}</td></tr>`).join("")}</tbody></table>
+      ${ruleBreakdownHTML(v.rules)}
       ${state.scenarioId ? `<div class="pg-actions">
         <button class="btn neutral small" id="pg-keep-baseline"${v.passed ? "" : " disabled"}
           title="${v.passed ? "Keep this run as what the next one is measured against"
@@ -994,6 +1068,39 @@ export function attachPlayground(root, { api, toast, modeler }) {
 
   // comparisonHTML is this run beside the stored baseline. Only what moved: a
   // table of unchanged numbers is where the two that did move go to hide.
+  // ruleBreakdownHTML is how a rule went, case by case: the split a single check
+  // line cannot carry, and the cases that broke it — a number sends somebody
+  // looking, the case numbers send them to the rows that did it.
+  function ruleBreakdownHTML(rules) {
+    if (!rules || !rules.length) return "";
+    return `
+      <div class="pg-sec"><b>Per case</b> <span class="muted">${rules.length} rule${rules.length === 1 ? "" : "s"}</span></div>
+      ${rules.map((r) => `
+        <div class="pg-rule-result${r.passed ? "" : " bad"}">
+          <div class="pg-rule-name">${esc(r.name)}</div>
+          <div class="pg-rule-split">
+            <span><b>${r.satisfied}</b> held</span>
+            ${r.violated ? `<span class="bad"><b>${r.violated}</b> broke it</span>` : ""}
+            ${r.undecided ? `<span class="muted"><b>${r.undecided}</b> unfinished</span>` : ""}
+            <span class="muted">of ${r.matched} matched, ${r.cases} run</span>
+          </div>
+          ${r.examples && r.examples.length ? `<div class="pg-rule-cases muted">cases ${
+            r.examples.slice(0, 12).map((i) => i + 1).join(", ")}${
+            r.truncated || r.examples.length > 12 ? ", and more" : ""}</div>` : ""}
+        </div>`).join("")}`;
+  }
+
+  // violatingCases is every case a rule broke on, as a set the results strip marks.
+  // The server sends a bounded sample, so a row past the sample is simply not
+  // marked; the breakdown above says the sample was cut.
+  function violatingCases() {
+    const out = new Set();
+    for (const r of (state.verdict && state.verdict.rules) || []) {
+      for (const i of r.examples || []) out.add(i);
+    }
+    return out;
+  }
+
   function comparisonHTML() {
     const c = state.comparison;
     if (!c || !c.deltas) return "";
@@ -1231,6 +1338,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const total = r.total || 0;
     const shown = rows.length;
     const names = variableColumns(rows);
+    const broke = violatingCases();
     return `
       <div class="pg-results-head">
         <b>Results</b>
@@ -1245,8 +1353,8 @@ export function attachPlayground(root, { api, toast, modeler }) {
           <table class="pg-table pg-cases">
             <thead><tr><th>case</th><th>outcome</th><th>duration</th><th>incidents</th>
               ${names.map((n) => `<th>${esc(n)}</th>`).join("")}</tr></thead>
-            <tbody>${rows.map((row) => `<tr${row.incidents ? ' class="pg-bad"' : ""}>
-              <td>${row.index + 1}</td>
+            <tbody>${rows.map((row) => `<tr${row.incidents || broke.has(row.index) ? ' class="pg-bad"' : ""}>
+              <td>${row.index + 1}${broke.has(row.index) ? ' <span title="This case broke a rule">&#10007;</span>' : ""}</td>
               <td class="mono">${esc(row.end || (row.state === "completed" ? "" : row.state))}</td>
               <td>${row.ended ? esc(fmtDur(row.durationMillis)) : "\u2014"}</td>
               <td>${row.incidents || ""}</td>
@@ -1450,6 +1558,17 @@ export function attachPlayground(root, { api, toast, modeler }) {
       render();
       return;
     }
+    if (e.target.closest("#pg-rule-add")) {
+      state.expect.rules.push({ name: "", when: "", then: "" });
+      render();
+      return;
+    }
+    const ruleDel = e.target.closest("[data-rule-del]");
+    if (ruleDel) {
+      state.expect.rules.splice(Number(ruleDel.dataset.ruleDel), 1);
+      render();
+      return;
+    }
     if (e.target.closest("#pg-gen-preview")) {
       guard("preview the dataset", previewDataset);
       return;
@@ -1501,6 +1620,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (t.id === "pg-x-reach") state.expect.mustReach = t.value;
     if (t.id === "pg-scenario-name") state.scenarioName = t.value;
     if (t.id === "pg-gen-count") state.gen.count = t.value;
+    if (t.dataset.rule) state.expect.rules[Number(t.dataset.i)][t.dataset.rule] = t.value;
     // A generated field's boxes are kept without re-rendering, like every other
     // box here: a render would move the caret to the end of the one being typed in.
     if (t.dataset.gen && t.dataset.gen !== "kind") {
@@ -1530,6 +1650,13 @@ export function attachPlayground(root, { api, toast, modeler }) {
       render();
     }
     if (t.dataset.gen === "onlyDate") state.gen.fields[Number(t.dataset.i)].onlyDate = t.checked;
+    if (t.dataset.ruleEnd != null && t.value) {
+      // The picker writes the assertion rather than being it: an author starts from
+      // the outcome they drew and is left with an expression they can edit into
+      // anything else FEEL can say.
+      state.expect.rules[Number(t.dataset.ruleEnd)].then = `end = ${JSON.stringify(t.value)}`;
+      render();
+    }
   };
 
   // One panel in three places: the same handlers, bound to each of them.

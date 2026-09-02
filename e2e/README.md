@@ -64,7 +64,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   beside the stored baseline with only what moved shown, and only where moving has a
   direction; a failing run cannot be kept as the baseline; a described dataset *is*
   saved as a scenario, which is what a CSV-driven run cannot do and what it says
-  instead. Drives the real `mountEditor` and `playground.js`
+  instead; and a **per-case rule** is written against the diagram (its end events are
+  offered off the canvas, the way the pool rows are), travels in the same body the
+  run-wide bounds do, comes back as a held/broke-it split rather than one number, and
+  marks the offending rows in the results strip. Drives the real `mountEditor` and `playground.js`
   against a mock Playground API.
 - **`gateways.spec.mjs`** (ADR-0096): the **exclusive** gateway pauses for a choice and routes
   down the picked branch (and **auto-decide** runs it hands-free); the **parallel** gateway

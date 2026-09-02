@@ -600,3 +600,62 @@ func TestAGeneratedScenarioReproducesItselfExactly(t *testing.T) {
 		}
 	}
 }
+
+// A per-case rule in a scenario becomes a check the build exits on, and the log
+// names the cases that broke it. "2 broke it" sends somebody looking; "cases 2 and
+// 3 broke it" sends them to the two rows that did.
+func TestTheRunnerNamesTheCasesThatBrokeARule(t *testing.T) {
+	ts, _ := liveServer(t)
+	saveScenario(t, ts, "rules", `{
+		"open": {"source":"draft","ref":"approval","seed":7,
+			"stubs":{"human":{"minMillis":600000,"maxMillis":600000}}},
+		"run": {"cases":[{"betrag":100},{"betrag":9000},{"betrag":9000}]},
+		"expect": {"minCompleted":3,"rules":[
+			{"name":"small ones reach the end","when":"betrag < 1000","then":"end = \"end\""},
+			{"name":"big ones go nowhere","when":"betrag > 1000","then":"end = \"nowhere\""}
+		]}
+	}`)
+
+	var out bytes.Buffer
+	err := runPlaygroundScenario([]string{"--server", ts.URL, "--scenario", "rules"}, &out)
+	if !errors.Is(err, errScenarioFailed) {
+		t.Fatalf("err = %v, want the scenario to have failed\n%s", err, out.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "ok   small ones reach the end") {
+		t.Errorf("the rule that held is not reported as a passing check:\n%s", got)
+	}
+	if !strings.Contains(got, "FAIL big ones go nowhere") {
+		t.Errorf("the broken rule is not reported as a failing check:\n%s", got)
+	}
+	// Numbered from one, as the results table numbers them.
+	if !strings.Contains(got, "big ones go nowhere: cases 2, 3") {
+		t.Errorf("the log does not name the offending cases:\n%s", got)
+	}
+	// A rule that held names nothing: a list of cases under a passing check is noise
+	// somebody has to read past.
+	if strings.Contains(got, "small ones reach the end: cases") {
+		t.Errorf("a rule nothing broke listed cases anyway:\n%s", got)
+	}
+}
+
+// The list of offending cases is bounded and says so, so a rule broken everywhere
+// does not fill a build log with numbers nobody reads.
+func TestTheListOfOffendingCasesIsBounded(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		idx       []int
+		truncated bool
+		want      string
+	}{
+		{"a few", []int{0, 4}, false, "cases 1, 5"},
+		{"more than fit", []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, false, "cases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, and more"},
+		{"a sample the server already cut", []int{0, 1}, true, "cases 1, 2, and more"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := offendingCases(tc.idx, tc.truncated); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

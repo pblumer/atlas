@@ -1209,6 +1209,15 @@ dataset of up to 50 000 cases":
   statement), and a queue bound per pool. A verdict is what a Playground somebody
   looks at cannot give: a number on a screen needs a reader to judge it.
   [`playground/expect.go`](playground/expect.go).
+- ✅ **Rules, judged case by case**: a `when` that selects cases and a `then` they
+  have to show, both in FEEL over the case's own variables plus the end event it
+  reached and how long it took. It is the statement a run-wide bound cannot make —
+  "an application under 50 000 from a grade-A customer is approved" is true of a
+  *case*, and a run that holds it nine times in ten is wrong for the tenth. The
+  offending cases are named and marked in the results table, the counts split into
+  held / broke it / unfinished, and the outcomes join the verdict as checks so one
+  thing decides whether a build goes red.
+  [`playground/rules.go`](playground/rules.go).
 - ✅ **Saved scenarios**: stored against the diagram as literally the three requests
   that make a run — open a session, start the batch, judge the report — so nothing
   has to be kept in step with the endpoints, because it *is* them. The seed the

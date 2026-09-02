@@ -522,3 +522,72 @@ test("the cases are read a page at a time under the diagram", async ({ page }) =
   await expect(page.locator(".pg-cases th")).toContainText(["case", "outcome", "duration", "incidents", "amount", "kunde"]);
   expect(page.__errors).toEqual([]);
 });
+
+test("a per-case rule is written against the diagram and judged case by case", async ({ page }) => {
+  await switchToBatch(page);
+  // Nothing is asserted per case until an author says so — and the panel says what
+  // the kind of statement is for rather than showing an empty box.
+  await expect(page.locator("#pg-setup")).toContainText("A rule holds a class of cases to an outcome");
+  await page.locator("#pg-rule-add").click();
+
+  const rule = page.locator(".pg-rule").first();
+  await rule.locator('[data-rule="when"]').fill("betrag < 1000");
+  // The end events come off the canvas, the way the pool rows do: an author asserts
+  // against the outcome they drew rather than one they retyped.
+  await rule.locator("[data-rule-end]").selectOption("done");
+  await expect(rule.locator('[data-rule="then"]')).toHaveValue('end = "done"');
+  // And the box stays editable, because not every assertion is about an end event.
+  await rule.locator('[data-rule="then"]').fill('end = "approved"');
+
+  await page.locator("#pg-rule-add").click();
+  const second = page.locator(".pg-rule").nth(1);
+  await second.locator('[data-rule="when"]').fill("betrag > 1000");
+  await second.locator('[data-rule="then"]').fill('end = "approved"');
+
+  await page.locator("#pg-batch").click();
+  await expect(page.locator(".pg-verdict")).toBeVisible();
+
+  // The rules travel in the same body the run-wide bounds do, so one request
+  // decides the verdict and a scenario stores both together.
+  const judged = (await calls(page)).find((c) => /\/verdict$/.test(c.url));
+  expect(judged.body.rules).toEqual([
+    { when: "betrag < 1000", then: 'end = "approved"' },
+    { when: "betrag > 1000", then: 'end = "approved"' },
+  ]);
+
+  // What came back is shown as a split, not as one number: held, broke it, and
+  // which cases did.
+  await expect(page.locator(".pg-rule-result")).toHaveCount(2);
+  await expect(page.locator(".pg-rule-result").first()).toContainText("2 held");
+  await expect(page.locator(".pg-rule-result").nth(1)).toContainText("1 broke it");
+  await expect(page.locator(".pg-rule-result").nth(1)).toContainText("cases 3");
+  await expect(page.locator(".pg-rule-result").nth(1)).toHaveClass(/bad/);
+  await expect(page.locator(".pg-rule-result").first()).not.toHaveClass(/bad/);
+
+  // And the offending case is marked in the results strip, so the number in the
+  // panel and the row under the diagram are the same case.
+  await expect(page.locator(".pg-cases tbody tr").nth(2)).toHaveClass(/pg-bad/);
+  await expect(page.locator(".pg-cases tbody tr").first()).not.toHaveClass(/pg-bad/);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a rule is stored in the scenario and read back into the boxes", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-rule-add").click();
+  const rule = page.locator(".pg-rule").first();
+  await rule.locator('[data-rule="when"]').fill("betrag < 1000");
+  await rule.locator('[data-rule="then"]').fill('end = "done"');
+  await page.locator("#pg-scenario-name").fill("Kleine Anträge");
+  await page.locator("#pg-scenario-save").click();
+
+  const saved = (await calls(page)).find((c) => c.method === "POST" && /\/playground\/scenarios$/.test(c.url));
+  expect(saved.body.spec.expect.rules).toEqual([{ when: "betrag < 1000", then: 'end = "done"' }]);
+
+  // A rule with nothing to show is a row somebody has not filled in yet, not a
+  // rule: it is left out rather than stored as an assertion that checks nothing.
+  await page.locator("#pg-rule-add").click();
+  await page.locator("#pg-scenario-save").click();
+  const again = (await calls(page)).filter((c) => c.method === "POST" && /\/playground\/scenarios$/.test(c.url));
+  expect(again[again.length - 1].body.spec.expect.rules).toHaveLength(1);
+  expect(page.__errors).toEqual([]);
+});

@@ -39,7 +39,7 @@ func checkFor(t *testing.T, v playground.Verdict, contains string) playground.Ch
 // checks is a pass, not a failure. Anything else would make "I have not said what
 // I expect yet" read as "the run is broken".
 func TestNoExpectationsIsAPass(t *testing.T) {
-	v := playground.Expectations{}.Judge(passing())
+	v := playground.Expectations{}.Judge(passing(), nil)
 	if !v.Passed || len(v.Checks) != 0 {
 		t.Errorf("verdict = %+v, want a pass with nothing checked", v)
 	}
@@ -59,7 +59,7 @@ func TestEveryFailureIsReportedAtOnce(t *testing.T) {
 		MinCompleted: 100,
 		MaxIncidents: &incidents,
 		MaxP90:       2 * time.Hour,
-	}.Judge(rep)
+	}.Judge(rep, nil)
 
 	if v.Passed {
 		t.Error("a run that missed three targets passed")
@@ -91,7 +91,7 @@ func TestCompletionIsJudged(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			rep := passing()
 			rep.Completed = tc.completed
-			v := playground.Expectations{MinCompleted: tc.min}.Judge(rep)
+			v := playground.Expectations{MinCompleted: tc.min}.Judge(rep, nil)
 			if v.Passed != tc.want {
 				t.Errorf("passed = %v, want %v (%+v)", v.Passed, tc.want, v.Checks)
 			}
@@ -107,10 +107,10 @@ func TestZeroIncidentsIsSayableAndOmittingItIsNot(t *testing.T) {
 	rep.Incidents = 1
 
 	none := 0
-	if v := (playground.Expectations{MaxIncidents: &none}).Judge(rep); v.Passed {
+	if v := (playground.Expectations{MaxIncidents: &none}).Judge(rep, nil); v.Passed {
 		t.Error("one incident passed a run that demanded none")
 	}
-	if v := (playground.Expectations{}).Judge(rep); !v.Passed {
+	if v := (playground.Expectations{}).Judge(rep, nil); !v.Passed {
 		t.Error("a run with an incident failed an expectation that never mentioned incidents")
 	}
 }
@@ -122,7 +122,7 @@ func TestDurationBoundsAreJudgedSeparately(t *testing.T) {
 	rep := passing()
 	rep.Duration.P50 = 90 * time.Minute
 
-	v := playground.Expectations{MaxP50: time.Hour, MaxP90: 4 * time.Hour}.Judge(rep)
+	v := playground.Expectations{MaxP50: time.Hour, MaxP90: 4 * time.Hour}.Judge(rep, nil)
 	if v.Passed {
 		t.Error("a median over its bound passed")
 	}
@@ -143,7 +143,7 @@ func TestVisitBoundsAssertCoverageAndOutcome(t *testing.T) {
 	v := playground.Expectations{
 		MinVisits: map[string]int64{"approve": 1, "escalate": 1},
 		MaxVisits: map[string]int64{"reject": 10},
-	}.Judge(rep)
+	}.Judge(rep, nil)
 	if v.Passed {
 		t.Error("a run that never reached \"escalate\" passed a scenario that demanded it")
 	}
@@ -166,17 +166,17 @@ func TestVisitBoundsAssertCoverageAndOutcome(t *testing.T) {
 func TestQueueBoundsAreJudgedPerPool(t *testing.T) {
 	rep := passing()
 
-	if v := (playground.Expectations{MaxQueue: map[string]int{"clerks": 10}}).Judge(rep); !v.Passed {
+	if v := (playground.Expectations{MaxQueue: map[string]int{"clerks": 10}}).Judge(rep, nil); !v.Passed {
 		t.Errorf("a queue of seven failed a bound of ten: %+v", v.Checks)
 	}
-	v := playground.Expectations{MaxQueue: map[string]int{"clerks": 5}}.Judge(rep)
+	v := playground.Expectations{MaxQueue: map[string]int{"clerks": 5}}.Judge(rep, nil)
 	if v.Passed {
 		t.Error("a queue of seven passed a bound of five")
 	}
 	// A bound on a pool the run does not have is a mistake in the scenario, not a
 	// silent pass: it usually means the pool was renamed and the assertion was left
 	// behind, which is exactly when an assertion must not go quiet.
-	missing := playground.Expectations{MaxQueue: map[string]int{"typists": 5}}.Judge(rep)
+	missing := playground.Expectations{MaxQueue: map[string]int{"typists": 5}}.Judge(rep, nil)
 	if missing.Passed {
 		t.Error("a bound on a pool that does not exist passed")
 	}
@@ -197,9 +197,9 @@ func TestChecksAreOrderedTheSameEveryTime(t *testing.T) {
 	rep.Pools["z-pool"] = playground.PoolStat{}
 	rep.Pools["a-pool"] = playground.PoolStat{}
 
-	first := e.Judge(rep)
+	first := e.Judge(rep, nil)
 	for i := 0; i < 20; i++ {
-		got := e.Judge(rep)
+		got := e.Judge(rep, nil)
 		for j := range got.Checks {
 			if got.Checks[j].Name != first.Checks[j].Name {
 				t.Fatalf("check %d = %q on this pass and %q on the first", j, got.Checks[j].Name, first.Checks[j].Name)
@@ -215,7 +215,7 @@ func TestDurationsAreReportedAtAReadablePrecision(t *testing.T) {
 	rep := passing()
 	rep.Duration.P90 = 8*time.Hour + 26*time.Minute + 41*time.Second + 615411361*time.Nanosecond
 
-	v := playground.Expectations{MaxP90: 72 * time.Hour}.Judge(rep)
+	v := playground.Expectations{MaxP90: 72 * time.Hour}.Judge(rep, nil)
 	c := checkFor(t, v, "p90")
 	if c.Got != "8h26m42s" {
 		t.Errorf("got = %q, want the same duration without the noise", c.Got)
@@ -225,8 +225,31 @@ func TestDurationsAreReportedAtAReadablePrecision(t *testing.T) {
 	}
 	// Under a minute the seconds are the signal, so they stay.
 	rep.Duration.P50 = 1500 * time.Millisecond
-	fast := checkFor(t, playground.Expectations{MaxP50: time.Minute}.Judge(rep), "median")
+	fast := checkFor(t, playground.Expectations{MaxP50: time.Minute}.Judge(rep, nil), "median")
 	if fast.Got != "1.5s" {
 		t.Errorf("a short duration = %q, want its seconds kept", fast.Got)
+	}
+}
+
+// A verdict is one list, but a reader is shown two: a bound on the run reads as a
+// line, a per-case rule as a statement with its own breakdown. Both decide the
+// verdict alike, so the mark is on the check rather than on the reader's guess.
+func TestARuleCheckSaysItCameFromARule(t *testing.T) {
+	rep := passing()
+	e := playground.Expectations{MinCompleted: 1}
+	v := e.Judge(rep, []playground.RuleOutcome{
+		{Rule: playground.Rule{Name: "small ones pay out"}, Cases: 3, Matched: 2, Satisfied: 2},
+	})
+	if len(v.Checks) != 2 {
+		t.Fatalf("checks = %d, want the bound and the rule", len(v.Checks))
+	}
+	if v.Checks[0].Rule {
+		t.Error("a bound on the run is marked as a rule")
+	}
+	if !v.Checks[1].Rule || v.Checks[1].Name != "small ones pay out" {
+		t.Errorf("the rule's check = %+v, want it named and marked", v.Checks[1])
+	}
+	if !v.Passed {
+		t.Error("a verdict whose rule held did not pass")
 	}
 }

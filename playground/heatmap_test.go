@@ -176,6 +176,10 @@ func TestEveryReadPathReportsAnUnreadableCase(t *testing.T) {
 		{"the report", func() error { _, err := sb.Report(); return err }},
 		{"the results page", func() error { _, _, err := sb.Cases(0, 10); return err }},
 		{"one case", func() error { _, err := sb.Case(broken); return err }},
+		{"the per-case rules", func() error {
+			_, err := sb.JudgeRules([]playground.Rule{{Then: `end = "paid"`}})
+			return err
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := tc.read(); err == nil {

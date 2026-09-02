@@ -2,6 +2,7 @@ package playground
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -192,5 +193,79 @@ func TestAMalformedJudgementOrComparisonIsRefused(t *testing.T) {
 				t.Errorf("code = %d, want 400; body %s", rec.Code, rec.Body)
 			}
 		})
+	}
+}
+
+// A rule is the expectation a run-wide bound cannot state: "the median is under
+// four hours" is true of a run, "a small application is paid out" is true of a
+// case, and a run that holds it nine times in ten is not nine tenths right.
+func TestARunIsJudgedCaseByCaseAgainstItsRules(t *testing.T) {
+	svc := newService(t)
+	id := openBatchSession(t, svc)
+	vals := map[string]string{"id": id}
+
+	call(t, svc.HandleStartRun, http.MethodPost,
+		`{"cases":[{"betrag":900},{"betrag":900},{"betrag":40000}],"arrival":{"mode":"allAtOnce"}}`, vals)
+	waitForRun(t, svc, id, "finished")
+
+	var v verdictResp
+	decodeInto(t, call(t, svc.HandleVerdict, http.MethodPost, `{"rules":[
+		{"name":"small ones finish","when":"betrag < 1000","then":"end = \"end\""},
+		{"when":"betrag > 1000","then":"end = \"nowhere\""}
+	]}`, vals), &v)
+
+	if len(v.Rules) != 2 {
+		t.Fatalf("rules = %d, want one outcome per rule: %+v", len(v.Rules), v.Rules)
+	}
+	held := v.Rules[0]
+	if held.Name != "small ones finish" || held.Matched != 2 || held.Satisfied != 2 || !held.Passed {
+		t.Errorf("the true rule = %+v, want two matched and both holding", held)
+	}
+	broken := v.Rules[1]
+	if broken.Matched != 1 || broken.Violated != 1 || broken.Passed {
+		t.Errorf("the false rule = %+v, want one matched and broken", broken)
+	}
+	// It names the offending case by its place in the dataset, so the panel can mark
+	// the row and a reader can go and look at it.
+	if len(broken.Examples) != 1 || broken.Examples[0] != 2 {
+		t.Errorf("examples = %v, want the third case", broken.Examples)
+	}
+	// And the verdict as a whole fails, so one thing decides whether a build is red.
+	if v.Passed {
+		t.Error("the verdict passed with a broken rule in it")
+	}
+	if v.Rules[0].Examples == nil {
+		t.Error("a rule nothing broke sent null instead of an empty list; every client here iterates it")
+	}
+}
+
+// A rule that will not compile is the caller's mistake, named as such. The
+// alternative is a rule that silently matches nothing for the rest of the run.
+func TestARuleThatWillNotCompileIsRefusedByName(t *testing.T) {
+	svc := newService(t)
+	vals := map[string]string{"id": openBatchSession(t, svc)}
+	call(t, svc.HandleStartRun, http.MethodPost, `{"cases":[{"betrag":1}]}`, vals)
+	waitForRun(t, svc, vals["id"], "finished")
+
+	rec := call(t, svc.HandleVerdict, http.MethodPost, `{"rules":[{"when":"betrag <","then":"true"}]}`, vals)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body %s", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), "not an expression") {
+		t.Errorf("body %s does not say what is wrong with the rule", rec.Body)
+	}
+}
+
+// A verdict with no rules still carries the field, because the panel and the
+// runner both read it. Null would be a client crash, not an empty list.
+func TestAVerdictWithNoRulesStillCarriesTheList(t *testing.T) {
+	svc := newService(t)
+	vals := map[string]string{"id": openBatchSession(t, svc)}
+	call(t, svc.HandleStartRun, http.MethodPost, `{"cases":[{"betrag":1}]}`, vals)
+	waitForRun(t, svc, vals["id"], "finished")
+
+	rec := call(t, svc.HandleVerdict, http.MethodPost, `{"minCompleted":1}`, vals)
+	if !strings.Contains(rec.Body.String(), `"rules":[]`) {
+		t.Errorf("body %s does not carry an empty rule list", rec.Body)
 	}
 }

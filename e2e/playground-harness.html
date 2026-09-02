@@ -119,6 +119,17 @@
         { name: "cases completed", want: "at least 3", got: "3 of 3", passed: true },
         { name: "incidents", want: "at most 0", got: "0", passed: true },
         { name: "queue at clerks", want: "at most 5", got: "9", passed: false },
+      ], rules: [] };
+
+      // What the server answers once the panel sends per-case rules: one that held
+      // and one that did not, with the cases that broke it named.
+      const RULE_VERDICT = { passed: false, checks: VERDICT.checks, rules: [
+        { name: "small ones are approved", when: "betrag < 1000", then: 'end = "approved"',
+          cases: 3, matched: 2, satisfied: 2, violated: 0, undecided: 0, passed: true,
+          examples: [], truncated: false },
+        { name: 'betrag > 1000 → end = "approved"', when: "betrag > 1000", then: 'end = "approved"',
+          cases: 3, matched: 1, satisfied: 0, violated: 1, undecided: 0, passed: false,
+          examples: [2], truncated: false },
       ] };
       const COMPARISON = { deltas: [
         { name: "cases completed", unit: "count", before: 3, after: 3, better: false, worse: false },
@@ -227,7 +238,11 @@
             }),
           };
         }
-        if (method === "POST" && /\/verdict$/.test(url)) return VERDICT;
+        // The rules half is answered only when the panel actually sent rules, so the
+        // specs that do not use them keep judging the run they always did.
+        if (method === "POST" && /\/verdict$/.test(url)) {
+          return body && body.rules && body.rules.length ? RULE_VERDICT : VERDICT;
+        }
         if (method === "POST" && /\/compare$/.test(url)) return COMPARISON;
         if (method === "GET" && /\/playground\/scenarios\?/.test(url)) return scenarios;
         if (method === "GET" && /\/playground\/scenarios\/[\w-]+$/.test(url)) return SCENARIO;
