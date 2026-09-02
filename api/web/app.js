@@ -5032,12 +5032,25 @@ async function viewWorkers() {
     }
     const allTypes = (data && data.types) || [];
     const workerRows = (data && data.workers) || [];
-    // An engine knows eighteen built-in job types and a given installation uses two
-    // of them. Listing every idle one buries the types someone actually deployed, so
-    // a quiet built-in stays folded away until asked for; anything with work, an
-    // incident, or a worker on it is never hidden.
+    // An engine knows two dozen built-in job types and a given installation uses two
+    // of them. Listing every idle one buries the types someone actually deployed, so a
+    // quiet built-in stays folded away until asked for.
+    //
+    // "Quiet" has to mean *unused*, which is what that sentence was always about — not
+    // merely "nothing on the queue right now". A kind the engine serves itself has
+    // nothing queued, nothing in flight and no puller (none may pull it), so on a
+    // busy-only test a connector that is working perfectly was folded away and one that
+    // was failing was not: it appeared when it broke and vanished when it was fixed. An
+    // operator looking for their Jira worker found nothing on a page whose whole subject
+    // is who is doing the work.
+    //
+    // A deployed process referencing the type is what says an installation uses it, so
+    // that keeps a row visible too. It is the same signal the Processes column shows,
+    // which is why that column had to start counting connector, script, rule and user
+    // tasks before this could lean on it.
     const busy = (t) => t.parked > 0 || t.inFlight > 0 || t.incidents > 0 || pullersOf(workerRows, t.type).length > 0;
-    const idleBuiltIns = allTypes.filter((t) => t.builtIn && !busy(t));
+    const inUse = (t) => busy(t) || (t.processes || []).length > 0;
+    const idleBuiltIns = allTypes.filter((t) => t.builtIn && !inUse(t));
     const typeRows = showAllTypes ? allTypes : allTypes.filter((t) => !idleBuiltIns.includes(t));
     const unserved = typeRows.filter(
       (t) => t.leasable && t.parked > 0 && !t.inFlight && !pullersOf(workerRows, t.type).length);

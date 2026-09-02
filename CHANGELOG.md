@@ -285,6 +285,20 @@ _Changed_ / _Removed_ for each version.
   never carried — and says so on the section
   ([ADR-0219](docs/adr/0219-variable-write-attribution.md)).
 
+- **The Workers view hid a connector that was working and showed one that was broken.**
+  A job type the engine serves itself has nothing queued, nothing in flight and no
+  worker pulling it — none may — so the fold that keeps quiet built-ins out of the way
+  treated a healthy in-process connector as noise. It appeared when it failed and
+  vanished when it was fixed, on the page whose whole subject is who is doing the work.
+  The fold now hides what an installation does not *use* rather than what is momentarily
+  quiet: a type a deployed process references stays visible.
+  That leans on the Processes column, which was itself short. It was filled from service
+  and send tasks alone — "the only elements carrying a job type the model authored",
+  which is true of the string and false of the job. A connector task, a script task, a
+  business-rule task and a user task each create a job under a reserved type, so every
+  Jira, clio, Active Directory, script, DMN and user-task row said nothing about which
+  process was waiting on it. All five node types are counted now.
+
 - **A Jira search called an endpoint Jira Cloud has removed.** The `search`
   operation posted to `/rest/api/2/search` with `startAt` paging; Atlassian
   progressively shut that endpoint down across Cloud over 2025, and a switched-over
