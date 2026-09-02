@@ -556,6 +556,14 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    name), and it is the one part a reader can reconstruct from the canvas. */
 .editor-bar > .crumbs { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .editor-bar > .btn { flex: none; }
+/* The overflow menu at the end of the bar (ADR-draft-modeler-bar-hierarchy). It borrows
+   the .dropdown-menu look but not app.js's delegated machinery — see wireBarMenu — so it
+   is placed here rather than by placeMenu's viewport coordinates. The bar sits in a
+   position:fixed .editor with nothing clipping it, so absolute is enough. */
+.editor-bar > .dropdown { flex: none; display: flex; }
+.editor-bar .dropdown-menu { position: absolute; left: auto; right: 0; top: calc(100% + 4px); }
+.editor-bar .bar-more { font-size: 20px; line-height: 1; padding: 3px 9px; }
+.editor-bar .bar-more[aria-expanded="true"] { background: var(--bg); border-color: var(--border); color: var(--text); }
 .editor-bar .etabs button { background: none; border: none; padding: 8px 12px; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
 .editor-bar .etabs button.active { color: var(--text); border-bottom-color: var(--accent); }
 .editor-bar .crumbs { color: var(--muted); font-size: 13px; margin-right: 6px; }
@@ -2569,7 +2577,13 @@ tr[hidden] { display: none; }
 .vars-group.collapsed .vars-group-body { display: none; }
 .var-row[draggable="true"] { cursor: grab; }
 .var-row[draggable="true"]:active { cursor: grabbing; }
-#vars-toggle.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+/* Token simulation and Variables are rows in the editor bar's overflow menu now
+   (ADR-draft-modeler-bar-hierarchy). A menu row says "on" with a check at its end — the
+   solid accent fill these two used to take is how a *button* reads as held down, and on
+   a menu row it reads as the row under the pointer instead. */
+.dropdown-menu button.active { color: var(--accent); }
+.dropdown-menu button.active .mi-icon { color: var(--accent); }
+.dropdown-menu button.active::after { content: "\2713"; margin-left: auto; padding-left: 14px; font-weight: 600; }
 
 /* ---------- Sharing scopes (ADR-0071): visibility pill + share dialog ---------- */
 .pill.vis { background: var(--bg); color: var(--muted); border: 1px solid var(--border); margin-left: 8px; vertical-align: middle; }
@@ -2671,9 +2685,6 @@ tr[hidden] { display: none; }
 /* ---------- Token simulation (Design view, ADR-0078) ---------- */
 /* A client-side walkthrough: tokens move along sequence flows so the control flow
    reads at a glance. No engine, no deploy — a teaching aid on the unsaved diagram. */
-.sim-toggle.active {
-  background: var(--accent); color: #fff; border-color: var(--accent);
-}
 /* In simulation mode the diagram is driven by tokens, not edited: hide the modeling
    affordances so clicks mean "spawn / choose a path", not "add a shape". */
 .editor.sim-active .djs-palette,
