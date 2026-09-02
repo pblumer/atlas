@@ -90,7 +90,7 @@ type createConnectorParams struct {
 // managedConnectorKinds is the ordered registry of managed connector kinds. Order is
 // preserved everywhere it is iterated (the startup wiring, the rebuild sequence, the
 // whitelist error message), so it stays stable across releases.
-var managedConnectorKinds = []managedConnectorKind{
+var managedConnectorKinds = append([]managedConnectorKind{
 	{
 		// A *central* business rule task delegates its decision to a remote temis
 		// service instead of the embedded library (ADR-0050). It registers via
@@ -305,35 +305,48 @@ var managedConnectorKinds = []managedConnectorKind{
 		validateCreate: validateADConnector,
 		jobTypes:       []int32{compiler.AdJobTypeIndex},
 	},
-	// The three SQL products (ADR-0173, ADR-0188). Each
-	// is worker-only for the same reason Entra is, and more strongly: a DSN *is* a
-	// credential, so the engine builds no client and registers no handler. The store
-	// entry exists so an operator can add a database in the Console instead of on a
-	// command line, and superviseEnv renders its connection string into the supervised
-	// worker's environment. An external worker is handed nothing and still reads its
-	// own environment, which is what keeps ADR-0173's promise intact for every worker
-	// Atlas does not start itself.
-	{
-		name:           connectorKindPostgres,
-		workerOnly:     true,
-		validateCreate: validateSQLConnector,
-		problem:        func(s *Server, name string) (string, bool) { return s.sqlConnectorProblem(connectorKindPostgres, name) },
-		jobTypes:       []int32{compiler.PostgresJobTypeIndex},
-	},
-	{
-		name:           connectorKindMariaDB,
-		workerOnly:     true,
-		validateCreate: validateSQLConnector,
-		problem:        func(s *Server, name string) (string, bool) { return s.sqlConnectorProblem(connectorKindMariaDB, name) },
-		jobTypes:       []int32{compiler.MariaDBJobTypeIndex},
-	},
-	{
-		name:           connectorKindMSSQL,
-		workerOnly:     true,
-		validateCreate: validateSQLConnector,
-		problem:        func(s *Server, name string) (string, bool) { return s.sqlConnectorProblem(connectorKindMSSQL, name) },
-		jobTypes:       []int32{compiler.MsSqlJobTypeIndex},
-	},
+}, sqlManagedConnectorKinds()...)
+
+// sqlManagedConnectorKinds are the three SQL products (ADR-0173, ADR-0188). Each is
+// worker-only for the same reason Entra is, and more strongly: a DSN *is* a credential,
+// so the engine builds no client and registers no handler. The store entry exists so an
+// operator can add a database in the Console instead of on a command line, and
+// superviseEnv renders its connection string into the supervised worker's environment.
+// An external worker is handed nothing and still reads its own environment, which is
+// what keeps ADR-0173's promise intact for every worker Atlas does not start itself.
+//
+// They are generated from one description rather than written three times, because
+// nothing about a product belongs here: the three differ in a driver name and a
+// placeholder syntax (sqldb.Product), never in how a Console record for one is
+// validated, disabled or reported broken. Three hand-written entries are three chances
+// for one product to quietly lose a rule the other two keep.
+func sqlManagedConnectorKinds() []managedConnectorKind {
+	kinds := make([]managedConnectorKind, 0, len(sqlConnectorProducts))
+	for _, p := range sqlConnectorProducts {
+		kinds = append(kinds, managedConnectorKind{
+			name:           p.name,
+			workerOnly:     true,
+			validateCreate: validateSQLConnector,
+			problem:        func(s *Server, connector string) (string, bool) { return s.sqlConnectorProblem(p.name, connector) },
+			jobTypes:       []int32{p.jobType},
+		})
+	}
+	return kinds
+}
+
+// sqlConnectorProducts is the one table of the SQL products this server manages: the
+// Console-facing kind name — the same word sqldb.Product, `atlas worker --connector`
+// and the BPMN extension use — and the reserved job type a task of it carries, in the
+// order the Console offers them. Everything else about the three is identical, and
+// sqlConnectorKinds reads its names from here so a product cannot be offered in one
+// list and absent from the other.
+var sqlConnectorProducts = []struct {
+	name    string
+	jobType int32
+}{
+	{connectorKindPostgres, compiler.PostgresJobTypeIndex},
+	{connectorKindMariaDB, compiler.MariaDBJobTypeIndex},
+	{connectorKindMSSQL, compiler.MsSqlJobTypeIndex},
 }
 
 // setupManagedConnectors wires every managed connector kind at startup: it creates each

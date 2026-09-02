@@ -107,12 +107,14 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, error) {
 		if d == nil || d.cp == nil {
 			continue
 		}
-		state, reason := processStatus(parked[d.Key])
+		tally := parked[d.Key]
+		state, reason := processStatus(tally.Count)
 		proc := panorama.Process{
 			Key: d.Key, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version,
 			ApplicationID: d.ProjectID,
 			CanView:       s.canViewArtifact(r, d.ProjectID, d.DeployedBy, projs),
-			State:         state, Reason: reason, Incidents: parked[d.Key],
+			State:         state, Reason: reason,
+			Incidents: tally.Count, Sites: tally.Sites,
 		}
 		for _, ref := range d.cp.CallActivities() {
 			call := panorama.Call{ElementID: ref.ElementId, CalledProcessID: ref.CalledProcessId}

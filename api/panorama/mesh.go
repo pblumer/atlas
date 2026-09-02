@@ -142,6 +142,37 @@ type Process struct {
 	// it, carried as a number so a reader can sort by it and a picture can show
 	// which of two degraded processes is the worse one.
 	Incidents int
+	// Sites are the places in this process where that work is parked.
+	Sites []IncidentSite
+}
+
+// IncidentSite is one element of a process with unresolved incidents on it.
+//
+// "Three tokens are parked" tells somebody there is a problem; "three tokens are
+// parked on the service task charge-card, and the last one said 502 Bad Gateway"
+// tells them where to go. That is the difference between a status view somebody
+// glances at and one they act on, and it costs the same read either way — the
+// engine already knows which element each incident is stuck on, because that is
+// how it resolves one.
+//
+// The element is named by its BPMN id and type rather than by a label. Only user
+// tasks carry a human title in a compiled process, so a label would be present for
+// some elements and absent for others — and an identifier that is sometimes there
+// is worse than one that is always there. It is also what the Operations view
+// shows, so the two name the same thing the same way.
+type IncidentSite struct {
+	// ElementID is the BPMN element id, which is what an operator searches the
+	// diagram for.
+	ElementID string `json:"elementId"`
+	// ElementType is the BPMN type ("ServiceTask", "CallActivity", …), so the id
+	// reads as a thing rather than as a string.
+	ElementType string `json:"elementType,omitempty"`
+	// Count is how many incidents are parked on this element.
+	Count int `json:"count"`
+	// Message is the first one seen here, not a summary of all of them: several
+	// incidents on one element usually share a cause, and inventing a combined
+	// sentence would be writing a message nobody produced. Operations has the rest.
+	Message string `json:"message,omitempty"`
 }
 
 // Landscape is everything the mesh derives from, already filtered for this caller.
@@ -249,6 +280,14 @@ type Node struct {
 	// node is in, and this says how much of it there is. A node with a count is
 	// always in a state that reports one, so the two can never disagree.
 	Incidents int `json:"incidents,omitempty"`
+	// Sites are where in the process that work is parked (see [IncidentSite]).
+	//
+	// Only a process node carries them, and a collapsed application deliberately
+	// does not: an element id without the process it belongs to is not something
+	// anybody can act on, and a list of them from six different processes would read
+	// as one broken diagram. The collapsed node keeps the summed count, which is the
+	// part that survives losing the context.
+	Sites []IncidentSite `json:"sites,omitempty"`
 	// Children is how many nodes a collapsed application stands for. Set only when
 	// the graph is clustered.
 	Children int `json:"children,omitempty"`
@@ -374,7 +413,7 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		node := Node{
 			ID: processNodeID(p.Key), Kind: KindProcess, Name: p.Name,
 			Provenance: ProvenanceDerived, ProcessID: p.ProcessID, Version: p.Version,
-			State: p.State, Reason: p.Reason, Incidents: p.Incidents,
+			State: p.State, Reason: p.Reason, Incidents: p.Incidents, Sites: p.Sites,
 		}
 		if _, ok := visibleApps[p.ApplicationID]; ok {
 			node.Application = applicationNodeID(p.ApplicationID)
