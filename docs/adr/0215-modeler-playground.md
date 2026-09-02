@@ -286,6 +286,66 @@ endpoint. A request carrying both a list and a description is refused rather tha
 resolved — it states two different things about what is about to run, and picking
 one silently is how a run comes to mean something other than what was asked.
 
+### One case out of the run
+
+A results row opens the case it names: the diagram drops the run's aggregate and
+draws that one case's path instead. It is the last thing the analysis cannot do — a
+report says the p90 is twenty-nine hours, a rule says four cases broke it, and both
+of them leave the reader wanting the one case in front of them.
+
+The steps are **numbered in the order the case reached them**, and that number is the
+whole difference between this and a second heat map: an element a case looped through
+carries every step it was, because "3, 7" is the loop and a single count would hide
+exactly what somebody opened the case to see. An unfinished case is drawn standing
+where it stopped rather than merely visited there, which is what a stuck case is
+opened for.
+
+It **reads rather than drives**. Step mode's controls act on the whole sandbox, so
+offering them over a finished batch would invite stepping a run that is over; the
+case is a view, and the one control is the way back to the run. The strip over the
+canvas names what is on screen instead of offering measures that are not being
+drawn, and the case's detail sits *above* the report rather than instead of it — the
+reader came from the run, and going back to it should not cost them the numbers they
+were reading.
+
+### The shape of the numbers, not only the numbers
+
+Two places in the panel a number alone was the wrong answer.
+
+**The arrival stream is drawn before the run.** "A stream of twenty per hour" and "one
+every three minutes" are the same rate and not the same picture: a Poisson stream is
+bursty, a takt is not, and a calendar cuts either of them into working days with
+nothing overnight. The bursts are what the pools downstream will feel, and they are
+invisible in the two boxes that describe them. So the panel draws the profile — a
+sparkline of how many cases land in each slice of the span — as soon as the timing
+changes.
+
+The shape comes **from the server**, from the same code that lays a plan's arrivals
+out. Computing it in the browser would have been less plumbing and a second
+implementation of the arithmetic: a picture drawn by anything but the planner is a
+picture of a stream nobody is going to get, and this record has already refused a
+second simulator once. The endpoint takes a *count* rather than the cases, because
+the timing does not depend on them — building fifty thousand rows to find out when
+they would arrive is paying the dataset's cost to answer a question it has no part
+in. A sequential plan is reported as having no schedule rather than as a flat line,
+because its next arrival waits on the run; that is a thing to say, not to draw.
+
+**Numbers that are compared carry a gauge.** The report's tables answer "which is the
+big one" badly — total waiting per element, utilisation per pool, and the duration of
+each case in a page of fifty are all read by scanning a column of formatted
+durations. Each of those now carries a track under it, filled to the value's share of
+its column's scale, and the four duration tiles share one scale so the spread between
+the fastest case and the slowest is a shape rather than four numbers to subtract.
+
+The rules are the same everywhere they appear. The **value stays in text** beside the
+gauge: a bar is the comparison, never the fact, and nothing here is read off a length
+alone. The **empty part of the track is drawn**, because a full bar with no track
+underlines its own number and a small one reads as a stray mark. A column is scaled
+to the **largest value in it**, so a length means something against the rows beside it
+— except utilisation, which is scaled to a full hundred, because the question there is
+how full a pool was rather than which of them was fullest, and a bar that filled at
+the busiest would read as saturated at forty percent.
+
 ### From a screen somebody reads to a check something runs
 
 A report answers "how did that go?" and needs a person to judge it. Two things

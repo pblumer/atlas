@@ -175,6 +175,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/playground/sessions/{id}/overlay":                  "per-element counts of an author's sandbox run",
 	"GET /api/v1/playground/sessions/{id}/heatmap":                  "element and flow counts of an author's sandbox run",
 	"POST /api/v1/playground/sessions/{id}/generate":                "previews the dataset an author is describing in their sandbox",
+	"POST /api/v1/playground/sessions/{id}/arrivals":                "previews the arrival stream an author is describing in their sandbox",
 	"POST /api/v1/playground/sessions/{id}/verdict":                 "judges an author's sandbox run against their expectations",
 	"POST /api/v1/playground/sessions/{id}/compare":                 "sets an author's sandbox run beside an earlier one",
 

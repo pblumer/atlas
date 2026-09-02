@@ -615,6 +615,7 @@ func TestASessionClosedUnderneathARequestIsNotFound(t *testing.T) {
 		"readCase": call(t, svc.HandleCase, http.MethodGet, "", map[string]string{"id": sess.ID, "caseKey": "1"}),
 		"complete": call(t, svc.HandleCompleteTask, http.MethodPost, "", map[string]string{"id": sess.ID, "jobKey": "1"}),
 		"generate": call(t, svc.HandleGeneratePreview, http.MethodPost, `{"count":1}`, id),
+		"arrivals": call(t, svc.HandleArrivalProfile, http.MethodPost, `{"count":1}`, id),
 		"generated run": call(t, svc.HandleStartRun, http.MethodPost,
 			`{"generate":{"count":1,"fields":[{"name":"n","kind":"int","max":9}]}}`, id),
 	} {

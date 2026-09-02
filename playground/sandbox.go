@@ -983,7 +983,7 @@ func (s *Sandbox) Case(piKey uint64) (CaseResult, error) {
 		return CaseResult{}, fmt.Errorf("playground: case path: %w", err)
 	}
 	if err := s.store.VariablesOfScope(piKey, func(v *model.VariableValue) error {
-		res.Variables[v.Name] = v.Text
+		res.Variables[v.Name] = variableText(v)
 		return nil
 	}); err != nil {
 		return CaseResult{}, fmt.Errorf("playground: case variables: %w", err)
