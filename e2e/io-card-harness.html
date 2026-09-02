@@ -99,6 +99,7 @@
         if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
         if (url.includes("/runtime")) return { elements: [] };
         if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        if (/\/instances\/\d+\/data-objects$/.test(url)) return [];
         return {};
       };
 

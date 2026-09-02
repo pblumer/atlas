@@ -272,7 +272,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Read the external variable overrides a process instance received — the \"who changed it\" audit trail, each with actor, scope, variable name, and typed new value (ADR-0098)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Variable overrides", tArray())}},
 		{"GET", "/api/v1/instances/{key}/data-objects", s.handleInstanceDataObjects, apiOp{
-			summary: "Read a process instance's data objects — each with its name, data state, and typed value", tag: "Instances", role: RoleOperator,
+			summary: "Read a process instance's data objects — each with its name, data state, typed value, declared class (itemSubjectRef), collection flag, and the trail of every state it passed through with the element that wrote it", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Instance data objects", tArray())}},
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
 			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances", role: RoleOperator,

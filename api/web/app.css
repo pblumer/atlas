@@ -3923,3 +3923,61 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .djs-connection.pg-heat-5 .djs-visual marker path { fill: #d93025 !important; stroke: #d93025 !important; }
 
 .token-badge.heat { background: var(--muted); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+
+/* ---- Data objects tab (ADR-draft-process-information-model) -----------------
+   The instance's data objects: what each datum is, what state it is in, what it
+   holds, and which element put it there. It reuses .vt so a data object and a
+   variable read alike in the same inspector — they are the same shape of thing,
+   and the columns a variable does not have (class, state, written by) are what
+   this tab exists to add. */
+.vt.do-table .c-name { width: 26%; }
+.vt.do-table .do-c-class, .vt.do-table .do-c-state, .vt.do-table .do-c-by { width: 1%; white-space: nowrap; }
+.vt.do-table .do-c-at { width: 1%; white-space: nowrap; color: var(--muted); font: 12px/1.5 ui-monospace, monospace; }
+
+.do-toggle {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0;
+  font: inherit; cursor: pointer; text-align: left; padding: 0; border: 0; background: none; color: inherit;
+}
+.do-toggle:hover .do-name { color: var(--accent); }
+.do-toggle .v-chev { color: var(--muted); flex: none; font-size: 10px; }
+.do-toggle:hover .v-chev { color: var(--accent); }
+
+/* The declared class is the model's word for what this datum *is* — the type slot BPMN
+   leaves opaque. It reads as a type, not as a value, so it is set apart like a tag. */
+.do-class {
+  font: 600 11px/1.5 system-ui, sans-serif; color: var(--accent);
+  border: 1px solid var(--accent-soft); border-radius: 5px; padding: 1px 6px; white-space: nowrap;
+}
+.do-class.none { color: var(--muted); border-color: var(--border); font-weight: 500; font-style: italic; }
+.do-coll {
+  font: 600 10px/1.5 system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+  border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 6px;
+}
+/* The data state is the per-datum lifecycle — the one thing a variable has no
+   equivalent for — so it carries the strongest mark in the row. */
+.do-state {
+  font: 600 11px/1.5 system-ui, sans-serif; color: var(--text);
+  background: var(--accent-soft); border-radius: 5px; padding: 2px 8px; white-space: nowrap;
+}
+.do-state.none { background: none; color: var(--muted); font-weight: 500; }
+.do-by { font: 12px/1.5 system-ui, sans-serif; color: var(--text); }
+.do-by.none { color: var(--muted); font-style: italic; }
+.vt.do-table .c-val.do-json { color: var(--accent); }
+
+/* The state trail: the object's own biography, opened under its row. Indented and
+   quieted so the table above stays the thing being scanned. */
+.vt .do-trail > td { padding: 0 12px 10px; background: var(--bg); }
+.vt .do-row.open { border-bottom: none; }
+.do-trail-box { border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.do-trail-h {
+  font: 11px/1.6 system-ui, sans-serif; color: var(--muted);
+  padding: 5px 10px; border-bottom: 1px solid var(--border); background: var(--panel, var(--bg));
+}
+.do-trail-h b { color: var(--text); font-weight: 600; }
+table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.do-trail-table td { padding: 5px 10px; vertical-align: top; border-bottom: 1px solid var(--border); }
+.do-trail-table tr:last-child td { border-bottom: none; }
+.do-trail-table .do-t-n { width: 1%; color: var(--muted); font: 11px/1.6 ui-monospace, monospace; }
+.do-trail-table .do-t-state { width: 1%; white-space: nowrap; font: 600 12px/1.5 system-ui, sans-serif; }
+.do-trail-table .do-t-by { width: 1%; white-space: nowrap; color: var(--text); }
+.do-trail-table .do-t-at { width: 1%; white-space: nowrap; color: var(--muted); font: 11.5px/1.6 ui-monospace, monospace; }

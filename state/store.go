@@ -632,6 +632,22 @@ func (s *Store) InjectCorruptIncident(elKey uint64) error {
 	return s.db.Set(keyIncident(elKey), []byte{0x01}, pebble.NoSync)
 }
 
+// InjectCorruptDataObject writes an undecodable record under a scope's data object,
+// and InjectCorruptDataObjectSnapshot one under its retained state trail. Like the
+// injectors above they are test/tooling affordances only: they let a caller exercise
+// the decode-error branches of DataObjectsOfScope and DataObjectSnapshotHistory, which
+// the instance Data view depends on to report a 500 rather than serve a datum with a
+// hole in its history — a trail missing its middle reads as a value that never passed
+// through a state it did. Production writes data objects through Tx.PutDataObject and
+// Tx.RecordDataObjectSnapshot, never these.
+func (s *Store) InjectCorruptDataObject(scope uint64, name string) error {
+	return s.db.Set(keyDataObject(scope, name), []byte{0x01}, pebble.NoSync)
+}
+
+func (s *Store) InjectCorruptDataObjectSnapshot(scope uint64, ts int64, pos uint64) error {
+	return s.db.Set(keyDataObjectSnapshot(scope, ts, pos), []byte{0x01}, pebble.NoSync)
+}
+
 // ActiveProcessInstances calls fn with the key and value of every live process
 // instance, via the process-instance column family — the operator "list running
 // instances" access pattern.

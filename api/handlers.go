@@ -2463,27 +2463,67 @@ func (s *Server) handleInstanceVariableAudit(w http.ResponseWriter, r *http.Requ
 // data state (the [received]/[approved] label), and its typed value. The value/kind
 // mirror a variable's; state is what a variable has not — the per-datum lifecycle
 // Atlas puts front and center (ADR-0053).
+//
+// Three of its fields are not on the value at all, and are what turn a list of
+// current values into a Data view worth opening. ItemType and IsCollection come from
+// the *definition* — what the model declared this datum to be — so an object states
+// its class rather than only whatever a FEEL expression last happened to put in it.
+// ProducedBy, At and History come from the *log*: which element wrote the value, when,
+// and every state the object passed through on the way here. That trail has been
+// recorded since ADR-0053 (cfDataObjectSnapshot) and, until now, never read.
 type dataObjectView struct {
 	Name  string `json:"name"`
 	State string `json:"state"`
 	Value any    `json:"value"`
 	Kind  string `json:"kind"`
+	// ItemType is the declared class behind BPMN's itemSubjectRef — the type slot the
+	// specification leaves opaque. Empty when the model declares none.
+	ItemType     string `json:"itemType"`
+	IsCollection bool   `json:"isCollection"`
+	// At is when the object was last written, ProducedBy the BPMN id of the element
+	// that wrote it. ProducedBy is empty in three cases the API deliberately does not
+	// distinguish, because all three mean "no element can be named": the seeding at
+	// instance creation (none ran), history recorded before write attribution existed,
+	// and a write by an element whose definition has since been deleted. Naming the
+	// wrong element would be worse than naming none — only the second is visibly
+	// missing.
+	At         int64             `json:"at"`
+	ProducedBy string            `json:"producedBy"`
+	History    []dataObjectState `json:"history"`
+}
+
+// dataObjectState is one entry in a data object's trail: the value and data state it
+// held after one write, and who made it. Ordered oldest first, the way the object
+// actually accrued.
+type dataObjectState struct {
+	At         int64  `json:"at"`
+	State      string `json:"state"`
+	Value      any    `json:"value"`
+	Kind       string `json:"kind"`
+	ProducedBy string `json:"producedBy"`
+}
+
+// dataObjectKindValue maps a data object's stored kind onto the JSON pair the UI
+// reads, exactly as a variable's does — a data object is variable-shaped by design
+// (ADR-0053), including the structured VarJSON payload of ADR-0037.
+func dataObjectKindValue(v *model.DataObjectValue) (string, any) {
+	switch v.Kind {
+	case model.VarBool:
+		return "boolean", v.Bool
+	case model.VarNumber:
+		return "number", json.Number(v.Text)
+	case model.VarString:
+		return "string", v.Text
+	case model.VarJSON:
+		return "json", json.RawMessage(v.Text)
+	default:
+		return "null", nil
+	}
 }
 
 func toDataObjectView(v *model.DataObjectValue) dataObjectView {
-	out := dataObjectView{Name: v.Name, State: v.State}
-	switch v.Kind {
-	case model.VarBool:
-		out.Kind, out.Value = "boolean", v.Bool
-	case model.VarNumber:
-		out.Kind, out.Value = "number", json.Number(v.Text)
-	case model.VarString:
-		out.Kind, out.Value = "string", v.Text
-	case model.VarJSON:
-		out.Kind, out.Value = "json", json.RawMessage(v.Text)
-	default:
-		out.Kind, out.Value = "null", nil
-	}
+	out := dataObjectView{Name: v.Name, State: v.State, History: []dataObjectState{}}
+	out.Kind, out.Value = dataObjectKindValue(v)
 	return out
 }
 
@@ -2506,12 +2546,141 @@ func (s *Server) handleInstanceDataObjects(w http.ResponseWriter, r *http.Reques
 			out = append(out, toDataObjectView(v))
 			return nil
 		})
+		if scanErr != nil || len(out) == 0 {
+			return
+		}
+		byName := make(map[string]*dataObjectView, len(out))
+		for i := range out {
+			byName[out[i].Name] = &out[i]
+		}
+		s.annotateDataObjects(key, byName, &scanErr)
 	})
 	if scanErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read data objects: "+scanErr.Error())
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// annotateDataObjects fills in what the stored value cannot say on its own: what the
+// model declared each object to be, and what the log says happened to it. Called under
+// the run loop with the views indexed by name.
+//
+// An instance whose definition is gone (deleted while it ran) keeps its values and
+// simply gains no declared class — the same posture the replay takes on an element
+// index it can no longer map. A read error is reported through errp; the caller turns
+// it into a 500 rather than serving a half-annotated list, because a trail missing its
+// middle would read as a datum that never passed through a state it did.
+func (s *Server) annotateDataObjects(key uint64, byName map[string]*dataObjectView, errp *error) {
+	pi, ok, err := s.store.ProcessInstance(key)
+	if err != nil {
+		*errp = err
+		return
+	}
+	if !ok {
+		return
+	}
+	// The declared half: itemSubjectRef and isCollection are compile-time facts about
+	// the datum, not runtime ones, so they come off the definition the instance is on.
+	if d, ok := s.deployments[pi.ProcessDefKey]; ok && d.cp != nil {
+		for _, do := range d.cp.DataObjects() {
+			v, ok := byName[d.cp.Intern(do.Name)]
+			if !ok {
+				continue
+			}
+			v.ItemType = d.cp.Intern(do.ItemType)
+			v.IsCollection = do.IsCollection
+		}
+	}
+	// The recorded half: the trail, oldest first — the scan is ordered by (timestamp,
+	// log position), which is the order the object actually accrued. Each entry keeps
+	// the producer *key* for now; resolving keys to element ids needs two more scans,
+	// and whether they are worth walking is not known until the trail has been read.
+	//
+	// A pending entry is addressed by (view, index) rather than by a pointer into the
+	// history slice: appending the next entry may move that slice, and a pointer taken
+	// before the move would write the producer into freed memory.
+	type pending struct {
+		view *dataObjectView
+		idx  int
+		key  uint64
+	}
+	var unresolved []pending
+	if err := s.store.DataObjectSnapshotHistory(key, func(ts int64, _ uint64, v *model.DataObjectValue) error {
+		view, ok := byName[v.Name]
+		if !ok {
+			return nil // an object of a scope this instance no longer carries
+		}
+		entry := dataObjectState{At: ts, State: v.State}
+		entry.Kind, entry.Value = dataObjectKindValue(v)
+		view.History = append(view.History, entry)
+		view.At = entry.At
+		if v.ProducerKey != 0 {
+			unresolved = append(unresolved, pending{view: view, idx: len(view.History) - 1, key: v.ProducerKey})
+		}
+		return nil
+	}); err != nil {
+		*errp = err
+		return
+	}
+	if len(unresolved) == 0 {
+		// Nothing to attribute: an instance whose objects are only seeded, or one recorded
+		// before write attribution existed. Either way the two scans below would find
+		// nothing to say, and an instance's element history is the largest of the three —
+		// so the common "no data written yet" read costs one scan, not three.
+		return
+	}
+	// Producer keys name element *instances*; the diagram needs element ids, and an
+	// index means whatever the definition in force at its own log position says it
+	// means — so the same version resolver the replay uses maps them (ADR-0162), rather
+	// than the definition the instance happens to be on now.
+	var migrations []migrationBoundary
+	if err := s.store.OperatorActionHistory(key, func(_ int64, pos uint64, v *model.OperatorActionValue) error {
+		if v.Kind == model.OperatorActionMigrate {
+			migrations = append(migrations, migrationBoundary{pos: pos, from: v.FromProcessDefKey})
+		}
+		return nil
+	}); err != nil {
+		*errp = err
+		return
+	}
+	ver := newVersionAt(migrations, pi.ProcessDefKey, func(defKey uint64) *compiler.CompiledProcess {
+		if dd, ok := s.deployments[defKey]; ok {
+			return dd.cp
+		}
+		return nil
+	})
+	type elementAt struct {
+		pos uint64
+		idx int32
+	}
+	producers := map[uint64]elementAt{}
+	if err := s.store.ElementReplayHistory(key, func(_ int64, pos uint64, v state.ElementReplayValue) error {
+		// The first record of an element instance is the one whose position resolves its
+		// index correctly: a migration between its activation and its write would make a
+		// later position name a different element.
+		if _, seen := producers[v.ElementInstanceKey]; !seen {
+			producers[v.ElementInstanceKey] = elementAt{pos: pos, idx: v.ElementID}
+		}
+		return nil
+	}); err != nil {
+		*errp = err
+		return
+	}
+	for _, p := range unresolved {
+		// An element whose instance is not in the retained history, or whose definition is
+		// gone, resolves to "" — the row then reads as unattributed rather than naming
+		// whichever element last happened to resolve. The write is a fact either way; only
+		// the label for it is missing.
+		var id string
+		if e, ok := producers[p.key]; ok {
+			id = ver.elementID(e.pos, e.idx)
+		}
+		p.view.History[p.idx].ProducedBy = id
+		// unresolved is in trail order, so the last write to touch a view is the one that
+		// left it in its current value — the write the row's summary names.
+		p.view.ProducedBy = id
+	}
 }
 
 // decisionEvaluationView renders one DMN decision evaluation for the operator UI

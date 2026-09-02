@@ -480,6 +480,17 @@ type DataObjectValue struct {
 	Kind     VarKind
 	Bool     bool
 	Text     string // number canonical string, string contents, or canonical JSON; empty otherwise
+	// ProducerKey names the element instance whose processing wrote this value: the
+	// activity whose data output association produced it (ADR-0058/0060). It is the
+	// fact that says *who wrote this*, which no diff of two data-object snapshots can
+	// recover — on two parallel branches both branches see both writes, so both appear
+	// to have made them. Data objects take the same answer variables took (ADR-0219).
+	//
+	// 0 means no element wrote it: the seeding at instance creation, or a record
+	// written before attribution existed. Stamped at command time and frozen into the
+	// event, never recomputed on replay (I6). Append-compatible: an old record ends
+	// after Text and decodes to 0.
+	ProducerKey uint64
 }
 
 func (*DataObjectValue) ValueType() ValueType { return VTDataObject }
@@ -494,7 +505,8 @@ func (v *DataObjectValue) encode(dst []byte) []byte {
 	} else {
 		dst = append(dst, 0)
 	}
-	return appendString(dst, v.Text)
+	dst = appendString(dst, v.Text)
+	return binary.LittleEndian.AppendUint64(dst, v.ProducerKey)
 }
 
 func (v *DataObjectValue) decode(src []byte) error {
@@ -518,11 +530,17 @@ func (v *DataObjectValue) decode(src []byte) error {
 	}
 	v.Kind = VarKind(rest[0])
 	v.Bool = rest[1] != 0
-	text, _, err := readString(rest[2:])
+	text, tail, err := readString(rest[2:])
 	if err != nil {
 		return err
 	}
 	v.Text = text
+	// ProducerKey is an appended field: a record written before it ends after the text
+	// and leaves it zero — "no element is known to have written this" (ADR-0219).
+	v.ProducerKey = 0
+	if len(tail) >= 8 {
+		v.ProducerKey = binary.LittleEndian.Uint64(tail)
+	}
 	return nil
 }
 

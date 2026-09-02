@@ -104,9 +104,23 @@ The control-flow basics most real models use.
   steps, and writing a member into an unset object creates it. The **Modeler** now
   authors all of this (ADR-0053): a `DataObjectReference` panel (name, data state,
   collection) and an association panel (the FEEL value, the target member/variable),
-  with input associations defaulting their target on draw. Next: a lineage view
-  folding the `SourcePos` chain, item-definition schema validation, list-index path
-  targets, and worker-backed data stores.
+  with input associations defaulting their target on draw. **The Operations replay
+  now has a Data tab** (ADR-draft-process-information-model, slice 1): every data
+  object the instance carries, with its declared class (the `itemSubjectRef` BPMN
+  leaves opaque), its collection flag, its current data state and typed value — and,
+  expandable per object, the **state trail**: every durable write, the state it moved
+  the object into, and *which element made it*. That last fact is newly recorded —
+  `DataObjectValue` gained a `ProducerKey` stamped at the one point every data-object
+  write funnels through, the same answer variables got in
+  [ADR-0219](docs/adr/0219-variable-write-attribution.md), because a diff of two
+  snapshots credits both branches of a fork with both writes. It is an appended field,
+  so instances already on disk still read and simply report their writes as
+  unattributed. Next, per that record: the **information model** — a UML class-diagram
+  subset owned by a process application, giving `itemSubjectRef` something real to
+  resolve against, so a data object has a declared type across processes and the
+  Problems panel can check data flow against it; then the instance **object diagram**,
+  and **data stores** bound to a class and a Worker (the cross-process channel BPMN
+  never specified).
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🚧 **Conformance tests against a curated BPMN model set** — the
   [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN

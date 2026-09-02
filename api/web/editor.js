@@ -8432,10 +8432,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
             <button data-tab="details" class="active" title="Show this step’s details">Details</button>
             <button data-tab="variables" title="Show the process variables at this step">Variables</button>
             <button data-tab="decisions" title="Show the decisions evaluated at this step">Decisions</button>
+            <button data-tab="data" title="Show the data objects this instance carries, their state, and where each value came from">Data</button>
           </div>
           <div class="ops-tab-body" id="tab-details"></div>
           <div class="ops-tab-body" id="tab-variables" hidden></div>
           <div class="ops-tab-body" id="tab-decisions" hidden></div>
+          <div class="ops-tab-body" id="tab-data" hidden></div>
         </div>
       </div>
       <div class="var-modal-ov" id="var-modal-ov" hidden>
@@ -8533,6 +8535,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const detailEl = root.querySelector("#tab-details");
   const varsEl = root.querySelector("#tab-variables");
   const decEl = root.querySelector("#tab-decisions");
+  const dataEl = root.querySelector("#tab-data");
   const decPop = root.querySelector("#dec-pop");
   const speedSel = root.querySelector("#speed");
 
@@ -8564,6 +8567,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let incidents = [];    // this instance's unresolved incidents, from the runtime poll (ADR-0061/0151)
   let decisions = [];    // this instance's DMN decision evaluations (ADR-0066)
   let curDecs = [];      // the evaluations the Decisions tab is currently showing (backs the hover popover)
+  let dataObjects = [];  // this instance's BPMN data objects, with their state trail (ADR-0053)
+  let openTrails = {};   // data-object name → whether its state trail is expanded
   let varFilter = "";    // Variables-tab name filter (persists across scrubs)
   let curVarList = [];   // the variable set the Variables tab is currently showing
   // Keys (scope\u0000name) the selected element itself wrote, when the Output side is
@@ -9232,7 +9237,123 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       </div>${body}`;
   }
 
-  function renderInspector() { renderDetail(); renderVars(); renderDecisions(); }
+  // doLabel names the element a data object's value came from the way the rest of the
+  // replay names elements: the modeler's own label where there is one, the BPMN id
+  // otherwise, and the raw id when the element is no longer on this diagram.
+  const doLabel = (elId) => {
+    if (!elId) return "";
+    const bo = (registry.get(elId) || {}).businessObject;
+    return (bo && (bo.name || bo.id)) || elId;
+  };
+
+  // doValueCell renders a data object's value the way the Variables tab renders a
+  // variable's: a structure is summarized rather than dumped, because a data object is
+  // variable-shaped by design (ADR-0053) and an operator scanning the two side by side
+  // should not have to learn two readings of the same thing.
+  const doValueCell = (d) => {
+    if (d.kind === "null" || d.value === null || d.value === undefined) {
+      return `<span class="c-val null" title="No value written yet — the object is declared and seeded, but no association has written it">unset</span>`;
+    }
+    if (d.kind === "json") {
+      const text = JSON.stringify(d.value);
+      const arr = Array.isArray(d.value);
+      return `<span class="c-val do-json" title="${esc(prettyJSON(text))}">${arr ? "[" : "{"}${esc(jsonSummary(text))}${arr ? "]" : "}"}</span>`;
+    }
+    const cls = d.kind === "boolean" ? "bool" : d.kind === "number" ? "num" : "str";
+    return `<span class="c-val ${cls}">${esc(String(d.value))}</span>`;
+  };
+
+  // renderDataObjects lists the data objects this instance carries: what each one is
+  // (its declared class), what lifecycle state it is in, what it holds, and — the part
+  // no variable view can answer — which element put that value there and when.
+  //
+  // Each row expands into the object's state trail, which is the reason data objects
+  // are event-sourced at all: [received] → [approved] is a sequence of durable facts,
+  // not a field that was overwritten. The trail is rendered from the whole history
+  // rather than clipped to the playhead: it is the datum's own biography, and reading
+  // where a value came from is exactly the moment an operator wants to see past the
+  // frame they are parked on.
+  function renderDataObjects() {
+    if (!dataObjects.length) {
+      dataEl.innerHTML = `<p class="ops-empty">This process declares no data objects. Draw a data object on the diagram and give an activity a data association, and the data it carries — its value, its state, and where each value came from — appears here.</p>`;
+      return;
+    }
+    // Who wrote a value, rendered per entry rather than per instance, because the three
+    // reasons an entry can name nobody are genuinely different and the trail's own shape
+    // tells them apart. The first entry is the seeding at instance creation — no element
+    // ran, and saying so is the true answer, not a gap. A later entry that names nobody
+    // is a gap: either this instance predates write attribution, or the element that
+    // wrote it is no longer on a deployed definition. Both are "we cannot say", and the
+    // one thing not to do is name an element that may be the wrong one.
+    const writtenBy = (h, i) => {
+      if (h.producedBy) return `<span class="do-by">${esc(doLabel(h.producedBy))}</span>`;
+      if (i === 0) return `<span class="do-by none" title="No element wrote this — it is the value the object was seeded with when the instance was created">seeded</span>`;
+      return `<span class="do-by none" title="This write cannot be attributed: the instance ran before Atlas recorded which element writes a data object, or the definition that element belonged to is gone">unknown</span>`;
+    };
+    const rows = dataObjects.map((d) => {
+      const open = !!openTrails[d.name];
+      const trail = d.history || [];
+      const cls = d.itemType
+        ? `<span class="do-class" title="The class this datum was declared to be (itemSubjectRef)">${esc(d.itemType)}</span>`
+        : `<span class="do-class none" title="The model declares no type for this object">untyped</span>`;
+      const coll = d.isCollection ? ` <span class="do-coll" title="Declared isCollection — this object holds a list">list</span>` : "";
+      const state = d.state
+        ? `<span class="do-state">${esc(d.state)}</span>`
+        : `<span class="do-state none" title="This object declares no data state">—</span>`;
+      // The row summarizes the object's most recent write, so it reads exactly as that
+      // write's row in the trail below does — one fact, told once.
+      const by = writtenBy({ producedBy: d.producedBy }, trail.length ? trail.length - 1 : 0);
+      const head = `<tr class="do-row${open ? " open" : ""}" data-do="${esc(d.name)}">
+        <td class="c-name">
+          <button type="button" class="do-toggle" aria-expanded="${open}" title="${open ? "Hide" : "Show"} the state trail of ${esc(d.name)}">
+            <span class="v-chev" aria-hidden="true">${open ? "▾" : "▸"}</span><span class="do-name">${esc(d.name)}</span>
+          </button>${coll}
+        </td>
+        <td class="do-c-class">${cls}</td>
+        <td class="do-c-state">${state}</td>
+        <td class="c-valcell">${doValueCell(d)}</td>
+        <td class="do-c-by">${by}</td>
+        <td class="do-c-at">${esc(fmtClock(d.at))}</td>
+      </tr>`;
+      if (!open) return head;
+      const entries = trail.map((h, i) => `<tr class="do-trail-row">
+          <td class="do-t-n">${i + 1}</td>
+          <td class="do-t-state">${h.state ? esc(h.state) : "—"}</td>
+          <td class="do-t-val">${doValueCell(h)}</td>
+          <td class="do-t-by">${writtenBy(h, i)}</td>
+          <td class="do-t-at">${esc(fmtClock(h.at))}</td>
+        </tr>`).join("");
+      return head + `<tr class="do-trail"><td colspan="6">
+        <div class="do-trail-box">
+          <div class="do-trail-h">State trail · every durable write to <b>${esc(d.name)}</b></div>
+          <table class="do-trail-table"><tbody>${entries || `<tr><td class="muted">nothing recorded yet</td></tr>`}</tbody></table>
+        </div></td></tr>`;
+    }).join("");
+    dataEl.innerHTML = `<div class="vp-head">
+        <span class="vp-title">Data objects</span>
+        <span class="vp-count">${dataObjects.length} object${dataObjects.length === 1 ? "" : "s"}</span>
+      </div>
+      <div class="v-scroll">
+        <table class="vt do-table">
+          <thead><tr><th>Name</th><th>Class</th><th>State</th><th>Value</th><th>Written by</th><th>When</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  // The trail toggles are inside a body that re-renders, so they are wired by
+  // delegation rather than re-bound on every render.
+  dataEl.addEventListener("click", (e) => {
+    const t = e.target.closest(".do-toggle");
+    if (!t || !dataEl.contains(t)) return;
+    const row = t.closest(".do-row");
+    if (!row) return;
+    const name = row.dataset.do;
+    openTrails[name] = !openTrails[name];
+    renderDataObjects();
+  });
+
+  function renderInspector() { renderDetail(); renderVars(); renderDecisions(); renderDataObjects(); }
 
   function updateClock() {
     if (!frames.length) { clockEl.textContent = "no frames yet"; return; }
@@ -9719,6 +9840,26 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     applyMeta(next);
     await loadRuntime();
     await refreshDecisions();
+    await refreshDataObjects();
+  }
+
+  // refreshDataObjects pulls the instance's data objects and re-renders the tab when
+  // anything about them moved — a value, a data state, or a new entry in a trail. A
+  // data object changes without the step count changing (an association writes on an
+  // activity's completion), so it cannot ride on the timeline's "grew" check.
+  async function refreshDataObjects() {
+    let next;
+    try { next = await api("GET", `/api/v1/instances/${key}/data-objects`); }
+    catch { return; } // transient; keep what we have
+    if (current !== viewer) return;
+    // The endpoint answers an array; anything else is a surface that does not serve this
+    // route, and the tab shows its empty state rather than throwing inside the poll —
+    // this runs on the same tick as the timeline and runtime refreshes.
+    if (!Array.isArray(next)) next = [];
+    const sig = (list) => list.map((d) => `${d.name}:${d.state}:${(d.history || []).length}:${d.at}`).join(",");
+    if (sig(next) === sig(dataObjects)) return;
+    dataObjects = next;
+    renderDataObjects();
   }
 
   // refreshDecisions pulls the instance's DMN evaluations and re-renders the tab
@@ -9758,6 +9899,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     detailEl.hidden = activeTab !== "details";
     varsEl.hidden = activeTab !== "variables";
     decEl.hidden = activeTab !== "decisions";
+    dataEl.hidden = activeTab !== "data";
   }));
   root.querySelector("#tg-end").addEventListener("change", (e) => { showEnd = e.target.checked; renderHistory(); });
   // The in/out card can cover whatever the modeler drew below a task, so it is the

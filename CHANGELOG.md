@@ -14,6 +14,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A process instance now shows the data it carries, and where each value came
+  from.** The Operations replay gained a **Data** tab beside Variables and Decisions:
+  every BPMN data object the instance holds, with the class the model declared it to
+  be (`itemSubjectRef`), whether it is a collection, the lifecycle state it is in
+  (`received` → `approved`), and its current value. Each row opens into the object's
+  **state trail** — every durable write, the state it moved the object into, when, and
+  **which element on the diagram made it**
+  ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md),
+  slice 1). Atlas has recorded a data object's every transition since data objects
+  became first class ([ADR-0053](docs/adr/0053-first-class-data-objects.md)); until
+  now nothing read that history back, so the one thing that distinguishes a data
+  object from a variable — that it has a life, not just a current value — was
+  invisible.
+
+  "Which element wrote this" is newly recorded rather than guessed. A data object's
+  event now carries the element instance that produced it, stamped where every write
+  already funnels through — the same answer variables got in
+  [ADR-0219](docs/adr/0219-variable-write-attribution.md), for the same reason: on a
+  parallel fork, both branches sit inside each other's window, so a diff of two
+  snapshots credits both writes to both branches. It is an **appended field**, so
+  instances already on disk keep reading and simply report their writes as
+  unattributed rather than naming an element that may be the wrong one.
+
+  This is the first slice of a larger answer to process data. BPMN can say what a
+  datum is called inside one process definition and nothing more: `itemSubjectRef`
+  points at a type the specification deliberately leaves opaque, and two processes'
+  `order` are unrelated strings. The record above proposes filling that slot with a
+  **UML class-diagram subset** owned by a process application — a shared vocabulary
+  above BPMN's per-definition scope, so a data object has a declared type across
+  processes, the Problems panel can check data flow against it, and a data store can
+  say which class it holds and which Worker backs it.
+
 - **A database task can be tried without a database.** The SQL Worker Types — MS SQL
   Server, MariaDB, PostgreSQL — were the only ones that could not be exercised at all
   without the production dependency, and the database a process reads is the HR system
