@@ -29,6 +29,19 @@ type Command struct {
 	// produced for a job-completion command. Both are external, non-hot-path
 	// intents, so a slice here does not affect the token-movement fast path.
 	StartVars []model.VariableValue
+	// StartElements names the root start events an instance-creation command seeds a
+	// token at. A *triggered* start — a correlating message, a broadcast signal, a
+	// fired start timer — carries exactly the one that fired, because a start event is
+	// a trigger and the one that happened is the one that instantiates.
+	//
+	// nil is the untriggered create (the API, a call activity), which seeds the
+	// process's own entry points instead; see startElementsFor. The zero value is
+	// therefore the safe one: a command that forgets to say what triggered it starts
+	// the process the way pressing Start does, never at somebody else's trigger.
+	//
+	// It rides only on the non-hot-path creation intent, alongside StartVars, so it
+	// never touches token movement (invariant I1).
+	StartElements []int32
 	// Decision carries a DMN decision evaluation a worker produced for a
 	// job-completion command (ADR-0066): the inputs, outputs, and trace it froze off
 	// the processor goroutine, recorded as history when the completion is folded. It

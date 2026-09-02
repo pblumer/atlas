@@ -391,6 +391,33 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A message start event ran the branches nobody triggered — and could feed itself
+  forever.** A start event is a trigger, and BPMN instantiates at the one that fired.
+  Atlas seeded a token at **every** root start event whatever created the instance, which
+  [ADR-0035](docs/adr/0035-message-start-events.md) recorded as a message start behaving
+  "exactly like a none start". True of a process with one start event; false of a process
+  with two — and the difference is not cosmetic. A Jira event watch
+  ([ADR-0214](docs/adr/0214-jira-inbound-issue-watch.md)) published
+  `jira.ticket.created`; the message-started instance also ran the none-start branch; that
+  branch created a Jira issue; the watch matched it; the next instance created the next
+  issue. The chain is visible in Operations — the instance for `PAT-13` holding
+  `newTicket = PAT-14`, the one for `PAT-14` holding `PAT-15` — and it stopped only when
+  the watch was deleted by hand. Nothing raised an error, because from the engine's side
+  nothing went wrong.
+
+  A trigger now instantiates at itself
+  ([ADR-draft-start-events-are-triggers](docs/adr/draft-start-events-are-triggers.md)):
+  the creation command carries the start event that fired, and the argument is
+  **required**, so a fourth kind of trigger cannot inherit the old behaviour by forgetting
+  it. A create nobody triggered — the API, a call activity — seeds the **none** start
+  events instead, which is what pressing Start means. A process whose only entry is a
+  message or a timer keeps ADR-0035's permissiveness and is seeded at every entry it has,
+  because an instance with no token at all is a worse answer than a permissive one.
+
+  **This changes behaviour for a deployed model with more than one root start event**: the
+  branches that used to run on every trigger now run only on their own. Nothing about the
+  recorded events changes, so recovery of an instance created before this is unaffected.
+
 - **A rejected REST call says what the far side objected to.** A non-2xx response from a
   REST connector task reported only `returned HTTP 400`, and threw away the body the
   server had already sent to explain it — leaving an operator to guess which of the URL,

@@ -181,7 +181,7 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 		})
 	}
 
-	for _, startID := range cp.StartEvents() {
+	for _, startID := range startElementsFor(cp, c.cmd.StartElements) {
 		node := cp.Node(startID)
 		key := c.NewKey()
 		c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
@@ -197,6 +197,57 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	// Arm the root-scope event subprocesses: each opens its trigger (message/timer) and
 	// waits, ready to run its handler while the instance runs (ADR-0082).
 	armEventSubprocesses(c, piKey, defKey, piKey, cp.RootEventSubprocesses())
+}
+
+// startElementsFor decides which root start events a new instance is seeded at.
+//
+// A start event is a *trigger*. When one fires — a correlating message, a broadcast
+// signal, a start timer coming due — it is that event that instantiates the process, and
+// seeding the others as well runs branches nobody triggered. With one start event the
+// difference is invisible, which is why ADR-0035 could record a message start as
+// behaving "exactly like a none start" and be right about every model that existed then.
+// With two it is not invisible at all: a Jira watch started a process whose *other*
+// branch created a Jira issue, the watch matched that issue, and the loop only stopped
+// when the watch was deleted (ADR-draft-start-events-are-triggers).
+//
+// triggered is what the creating command carried: exactly the event that fired, or nil
+// for a create nobody triggered — an API create, a call activity. Those seed the process
+// the way pressing Start does: at its **none** start events, the entry points that mean
+// "somebody starts this by hand".
+//
+// A process with no none start at all — its only entry is a message or a timer — keeps
+// ADR-0035's recorded permissiveness and is seeded at every entry it has. Narrowing it
+// to nothing would create an instance with no token: one that never ends, waiting for
+// nothing, which is a worse answer than the permissive one.
+func startElementsFor(cp *compiler.CompiledProcess, triggered []int32) []int32 {
+	if len(triggered) > 0 {
+		return triggered
+	}
+	starts := cp.StartEvents()
+	// The overwhelmingly common shape is one none start, and every none start is one an
+	// untriggered create means: answer it with the process's own slice and allocate
+	// nothing (invariant I1). Only a process that mixes kinds pays for the filter, and
+	// only when it is started by hand.
+	mixed := false
+	for _, id := range starts {
+		if cp.Node(id).Type != compiler.TypeStartEvent {
+			mixed = true
+			break
+		}
+	}
+	if !mixed {
+		return starts
+	}
+	none := starts[:0:0]
+	for _, id := range starts {
+		if cp.Node(id).Type == compiler.TypeStartEvent {
+			none = append(none, id)
+		}
+	}
+	if len(none) == 0 {
+		return starts
+	}
+	return none
 }
 
 // handleProcessInstanceTerminating cancels a running instance: it terminates
@@ -1138,7 +1189,8 @@ func fireStartTimer(c *ProcessingContext, timer model.TimerValue) {
 	// recurring schedule resumes cleanly when reactivated; a one-shot that came due
 	// while paused is simply skipped.
 	if c.p.ProcessActive(timer.ProcessDefKey) {
-		c.AppendCreateInstanceCommand(timer.ProcessDefKey, nil, "") // a timer start has no correlation key
+		// A timer start has no correlation key, and instantiates at the timer that fired.
+		c.AppendCreateInstanceCommand(timer.ProcessDefKey, nil, "", timer.TargetElementId)
 	}
 	if timer.Repetitions == 0 {
 		return // one-shot (duration/date) or a finite cycle that has run out
@@ -2270,7 +2322,7 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 				continue // a live instance for this key already exists (or is being started this batch)
 			}
 		}
-		c.AppendCreateInstanceCommand(ref.defKey, vars, startKey)
+		c.AppendCreateInstanceCommand(ref.defKey, vars, startKey, ref.elementId)
 		// Retain the delivery into the message-start event too, so the replay shows
 		// the message that opened the receiving pool. The receiver instance does not
 		// exist yet (the create is a followup), so its key is left 0 (ADR-0038).
@@ -2394,12 +2446,12 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 	// records none. This runs after the subscription scan so one broadcast can both
 	// fire waiting catches and start fresh instances, all recovered from the events
 	// the created instances emit.
-	for _, defKey := range c.p.signalStarts[name] {
+	for _, ref := range c.p.signalStarts[name] {
 		// A deactivated definition does not start on a broadcast signal (ADR-0119).
-		if !c.p.ProcessActive(defKey) {
+		if !c.p.ProcessActive(ref.defKey) {
 			continue
 		}
-		c.AppendCreateInstanceCommand(defKey, vars, "")
+		c.AppendCreateInstanceCommand(ref.defKey, vars, "", ref.elementId)
 	}
 }
 
