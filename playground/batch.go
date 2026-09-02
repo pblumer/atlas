@@ -317,11 +317,28 @@ func (s *Sandbox) Report() (Report, error) {
 	}
 	tl.finish()
 	rep.Timeline = *tl
-	if err := s.store.Incidents(func(_ uint64, _ *model.IncidentValue) error {
+	stuck := map[string]int{}
+	if err := s.store.Incidents(func(_ uint64, v *model.IncidentValue) error {
 		rep.Incidents++
+		id, err := s.incidentElement(v)
+		if err != nil {
+			return err
+		}
+		if id != "" {
+			stuck[id]++
+		}
 		return nil
 	}); err != nil {
 		return Report{}, fmt.Errorf("playground: count incidents: %w", err)
+	}
+	// Written back after the job stats are copied in, so the count lands on the
+	// element's existing entry: a failing answer is still an answer, so an element
+	// with incidents has a run and a work time too, and an overlay shading by
+	// incidents has to agree with one shading by runs about what happened there.
+	for id, n := range stuck {
+		st := rep.Elements[id]
+		st.Incidents = n
+		rep.Elements[id] = st
 	}
 	rep.Duration = summarise(durations)
 	return rep, nil
@@ -430,6 +447,27 @@ func (s *Sandbox) caseRow(index int, key uint64, incidents map[uint64]int) (Case
 		return CaseRow{}, false, err
 	}
 	return row, true, nil
+}
+
+// incidentElement is the BPMN id an incident is parked on.
+//
+// The element index in the record is relative to the compiled process the case
+// runs, so the definition is read rather than assumed: using the root's table for a
+// call activity's child would name a real element that is the wrong one, which is
+// worse than naming none.
+func (s *Sandbox) incidentElement(v *model.IncidentValue) (string, error) {
+	pi, ok, err := s.store.ProcessInstance(v.ProcessInstanceKey)
+	if err != nil {
+		return "", fmt.Errorf("playground: read the case an incident is on: %w", err)
+	}
+	if !ok {
+		return "", nil
+	}
+	cp := s.byKey[pi.ProcessDefKey]
+	if cp == nil {
+		return "", nil
+	}
+	return cp.ElementBpmnId(v.ElementId), nil
 }
 
 // lastElement is the BPMN id of the last element a case reached — its outcome,

@@ -53,7 +53,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   description rather than five hundred rows built in the browser; the mode lays the
   editor out in three columns and a strip, with the strip absent until there are cases
   to put in it and the cases read a page at a time from the server rather than held in
-  the browser; and stopping a batch leaves what it did readable.
+  the browser; the **overlay switcher** shades the diagram by one measure at a time,
+  changing the badges with it, keeping the flows out of the three measures an edge has
+  no value for, and leaving a zero alone except where zero means "never reached"; and
+  stopping a batch leaves what it did readable.
 
   And the **scenario half**: the checkboxes an author ticks become the expectations a
   build exits on, resolved against the run that happened rather than the dataset in

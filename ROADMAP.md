@@ -1191,6 +1191,12 @@ dataset of up to 50 000 cases":
   **timeline** — sixty slices of simulated time with arrivals, completions and work
   in flight, folded out of the cases' own instants in the pass the report already
   makes.
+- ✅ **Four overlays, one at a time**: the diagram shaded by token counts, work time,
+  queueing time or incidents, chosen over the canvas with the scale beside it — a
+  shade means nothing until it is read against one. Only the counts exist for a
+  sequence flow, so the other three leave the flows alone rather than colouring them
+  from a different quantity; and only for the counts does zero get its own shade,
+  because only there does it mean "never reached" rather than "none here".
 - ✅ **Heat map and coverage**: per-element *and* per-sequence-flow token counts,
   shaded onto the diagram, with the parts the data never reached drawn cold and
   listed by name. Element counts come from the ADR-0080 visit counters; flows have

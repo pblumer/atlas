@@ -213,10 +213,10 @@ test("the heat map shades elements and flows, and names what was never reached",
   // score → done against its own diagram.
   await expect(page.locator(".pg-cold")).toContainText("score → done");
 
-  // The toggle takes the shading off again, leaving the diagram as it was.
-  await page.locator("#pg-heat").click();
+  // "Off" takes the shading away again, leaving the diagram as it was.
+  await page.locator('#pg-overlay button[data-overlay="off"]').click();
   await expect(page.locator(".pg-heat-5")).toHaveCount(0);
-  await page.locator("#pg-heat").click();
+  await page.locator('#pg-overlay button[data-overlay="runs"]').click();
   await expect(page.locator('.djs-element[data-element-id="review"].pg-heat-5')).toHaveCount(1);
 
   // Stepping is a different question, so it is not answered on a shaded diagram.
@@ -589,5 +589,44 @@ test("a rule is stored in the scenario and read back into the boxes", async ({ p
   await page.locator("#pg-scenario-save").click();
   const again = (await calls(page)).filter((c) => c.method === "POST" && /\/playground\/scenarios$/.test(c.url));
   expect(again[again.length - 1].body.spec.expect.rules).toHaveLength(1);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the overlay shades the diagram by one measure at a time", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-batch").click();
+  await expect(page.locator("#pg-overlay")).toBeVisible();
+
+  // A run opens on the token counts, and the legend says what the darkest shade is
+  // worth — a colour means nothing until it is read against a scale.
+  await expect(page.locator('#pg-overlay button[data-overlay="runs"]')).toHaveClass(/active/);
+  await expect(page.locator(".pg-scale")).toContainText("3");
+  await expect(page.locator('[data-container-id="review"] .token-badge')).toHaveText("3");
+
+  // Waiting is a different quantity, so the badges change with the shading rather
+  // than staying behind as counts under a scale that is now in hours.
+  await page.locator('#pg-overlay button[data-overlay="wait"]').click();
+  await expect(page.locator('[data-container-id="review"] .token-badge')).toHaveText("3h");
+  await expect(page.locator(".pg-scale")).toContainText("3h");
+  // An element with nothing to say is left alone rather than drawn cold: the dashed
+  // "never reached" style belongs to the token counts, where zero means the data did
+  // not get there. Here zero means "no case waited", which is most of a healthy
+  // diagram — and a start event has no badge either.
+  await expect(page.locator('.djs-element[data-element-id="start"].pg-heat-0')).toHaveCount(0);
+  await expect(page.locator('[data-container-id="start"] .token-badge')).toHaveCount(0);
+  // And the flows step out: an edge has no waiting time, so shading it from the
+  // token counts would put two quantities on one picture.
+  await expect(page.locator("#pg-overlay")).toContainText("shapes only");
+  await expect(page.locator('.djs-element[data-element-id="f1"].pg-heat-5')).toHaveCount(0);
+
+  await page.locator('#pg-overlay button[data-overlay="incidents"]').click();
+  await expect(page.locator('[data-container-id="score"] .token-badge')).toHaveText("2");
+  await expect(page.locator('[data-container-id="review"] .token-badge')).toHaveCount(0);
+
+  // Duration is the work itself, which is a different picture again: the service
+  // task that runs in seconds is cold where the human task is hot.
+  await page.locator('#pg-overlay button[data-overlay="work"]').click();
+  await expect(page.locator('[data-container-id="review"] .token-badge')).toHaveText("3h");
+  await expect(page.locator('[data-container-id="score"] .token-badge')).toHaveText("3m");
   expect(page.__errors).toEqual([]);
 });

@@ -76,8 +76,10 @@
         duration: { count: 3, minMillis: 3600000, p50Millis: 7200000, p90Millis: 10800000,
                     maxMillis: 10800000, meanMillis: 7200000 },
         elements: {
-          review: { runs: 3, workMillis: 10800000, waitMillis: 10800000, maxWaitMillis: 7200000 },
-          score: { runs: 3, workMillis: 180000, waitMillis: 0, maxWaitMillis: 0 },
+          review: { runs: 3, workMillis: 10800000, waitMillis: 10800000, maxWaitMillis: 7200000, incidents: 0 },
+          // Two tokens parked on the scoring task, so the incidents overlay has
+          // somewhere to be hot that the other three do not.
+          score: { runs: 3, workMillis: 180000, waitMillis: 0, maxWaitMillis: 0, incidents: 2 },
         },
         pools: { clerks: { capacity: 1, served: 3, busyMillis: 10800000,
                            availableMillis: 10800000, maxQueue: 2, utilisationPercent: 100 } },
