@@ -899,6 +899,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Report a mock directory (used by an AD worker running in mockup mode)", tag: "Connectors", role: RoleOperator,
 			req: jsonBody("Mock directory", tObject()), status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/sql/mock-journal", s.handleSQLMockJournal, apiOp{
+			summary: "Show what a database mockup run was asked — every statement, with the values the process bound. Admin-gated: a bound parameter is whatever the process bound, and nothing can tell a password from an id", tag: "Connectors", role: RoleAdmin,
+			resp: jsonBody("Mock journals", schemaObj(map[string]any{"workers": tArray()}))}},
+		{"POST", "/api/v1/sql/mock-journal", s.handleReportSQLMockJournal, apiOp{
+			summary: "Report a mockup journal (used by a SQL worker running in mockup mode)", tag: "Connectors", role: RoleOperator,
+			req: jsonBody("Mock journal", tObject()), status: http.StatusNoContent}},
+
 		{"GET", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleListInboundSubscriptions, apiOp{
 			summary: "List a clio connector's inbound event subscriptions", tag: "Connectors", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},
 		{"POST", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleCreateInboundSubscription, apiOp{
