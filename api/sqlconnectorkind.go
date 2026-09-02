@@ -192,7 +192,7 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 			}
 			// And where to report the journal it ends up holding, so an operator can
 			// see what a run asked in Operations rather than reconstruct it from the
-			// worker's log (ADR-draft-sql-mock-journal). Only while the mockup is on:
+			// worker's log (ADR-0224). Only while the mockup is on:
 			// a worker talking to a real database has nothing to show here, and a
 			// "mock database" view fed by a live one would be the worst possible thing
 			// for that screen to be.

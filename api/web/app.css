@@ -3133,7 +3133,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .admock-ops { margin-top: 12px; }
 .admock-ops > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 
-/* ---------- Mock database journal (ADR-draft-sql-mock-journal) ---------- */
+/* ---------- Mock database journal (ADR-0224) ---------- */
 /* The mock directory's sibling, and deliberately flatter: there is no tree here
    because this mockup holds no state — what it has is a sequence, and a sequence
    reads best as rows. */

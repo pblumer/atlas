@@ -372,7 +372,7 @@ type Server struct {
 
 	// sqlMockView is what this server knows about the mockup runs its SQL workers have
 	// answered: the newest journal each reported. Memory, its own lock, off the run
-	// loop — runtime state, never engine state (ADR-draft-sql-mock-journal).
+	// loop — runtime state, never engine state (ADR-0224).
 	sqlMockView *sqldb.MockJournalView
 
 	// sqlProbe checks a SQL connector's connection string, when the binary that built

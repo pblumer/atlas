@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Making a mockup run visible (ADR-draft-sql-mock-journal).
+// Making a mockup run visible (ADR-0224).
 //
 // [MockDatabase] is memory, and deliberately so: a restart is an unseeded database and
 // nothing it answered was ever real. That is the right lifetime and the wrong

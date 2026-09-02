@@ -20,7 +20,7 @@ _Changed_ / _Removed_ for each version.
   reason. Those are the entries an operator comes for: reading one and pasting it into
   the answers under Workers is how a seed gets built, and until now that meant scrolling
   the worker's log past everything else it did
-  ([ADR-draft-sql-mock-journal](docs/adr/draft-sql-mock-journal.md)).
+  ([ADR-0224](docs/adr/0224-sql-mock-journal.md)).
 
   The shape is the mock directory's ([ADR-0213](docs/adr/0213-ad-mock-directory-in-the-console.md)):
   the worker snapshots its own journal and posts it, because a worker may sit in a

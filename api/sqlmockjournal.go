@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/connector/sqldb"
 )
 
-// The mockup run, made visible (ADR-draft-sql-mock-journal).
+// The mockup run, made visible (ADR-0224).
 //
 // A mock database lives in a SQL worker's memory (ADR-0221), which is the right
 // lifetime and, until this, an invisible one. The Console showed two things about it

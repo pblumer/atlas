@@ -15,8 +15,8 @@
         "de": "Wenn Sie einen Prozess gegen den Datenbank-Mockup laufen lassen, sehen Sie jetzt, was er tatsächlich gefragt hat. Betrieb, Mock database: pro Worker eine Karte, jede Anweisung in ihrer Reihenfolge, und darunter die Werte, die der Prozess gebunden hat. Interessant sind die roten — für die gab es keine hinterlegte Antwort, sie sind gescheitert, und eine davon zu lesen und in die Antworten unter Workers zu übernehmen ist der Weg, wie die Startdatei entsteht. Diese Schleife läuft jetzt vollständig in der Konsole statt über das Worker-Log. Zwei Dinge sollten Sie vorher wissen. Es gibt keine Tabelle zum Blättern: Der Mockup beantwortet Anweisungen und führt keine aus, ein INSERT ändert also nicht, was ein späteres SELECT liefert — Sie bekommen die Abfolge, keine Momentaufnahme von Daten. Und die Seite ist bewusst Administratoren vorbehalten, denn sie zeigt die gebundenen Werte: Ein Passwort auf dem Weg in eine Tabelle ist ein gebundener Parameter wie jeder andere, und nichts kann ihn von einer Id unterscheiden. Gespeichert wird nichts: Worker-Neustart leert das Journal, Atlas-Neustart die Ansicht."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0224",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0224-sql-mock-journal.md"
       },
       "tags": [
         "Operations",

@@ -6020,7 +6020,7 @@ async function viewADMockDirectory() {
 }
 
 // viewSQLMockJournal is the Operations "Mock database" view: what the SQL workers in
-// mockup mode were actually asked (ADR-draft-sql-mock-journal).
+// mockup mode were actually asked (ADR-0224).
 //
 // It is the mock directory's sibling with one difference that decides its whole shape.
 // That view answers "what is in the directory now" — state, so it draws a tree. This

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A mockup run is visible, and it carries what the process bound
+# ADR-0224: A mockup run is visible, and it carries what the process bound
 
 - **Status:** Proposed
 - **Date:** 2026-09-02

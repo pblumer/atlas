@@ -17,7 +17,7 @@ import (
 	"github.com/pblumer/atlas/logging"
 )
 
-// Reporting a mockup run to the Atlas that shows it (ADR-draft-sql-mock-journal).
+// Reporting a mockup run to the Atlas that shows it (ADR-0224).
 //
 // A mock database lives in this worker's memory, which is the right place for it and
 // the wrong place to *look* at it. The operator trying a process out is in the Console,
