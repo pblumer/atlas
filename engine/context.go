@@ -15,6 +15,14 @@ type ProcessingContext struct {
 	tx      *stateTx
 	p       *Processor
 	lastPos uint64 // position of the most recent event written here (for causality)
+	// producer is the element instance every variable written here is attributed to
+	// (ADR-draft-variable-write-attribution). It is derived from the command being
+	// processed — an element command names its element instance — and overridden by the
+	// handlers that write into an element other than the command's own: a job's outputs
+	// belong to the job's task, a message payload to the catch event it arrived on, a
+	// child instance's result to the call activity that started it. 0 means no element
+	// wrote it (start variables, an operator override).
+	producer uint64
 }
 
 // process returns the immutable compiled definition (invariant I5: read by
@@ -302,6 +310,11 @@ func (c *ProcessingContext) AppendTimerEvent(key uint64, intent model.Intent, v 
 // contents), so unlike the graph-derived events this one does allocate for its
 // strings — variables are runtime data, not hot-path token movement.
 func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.VariableValue) {
+	// Stamped here rather than at each call site so no path can forget it, and so a
+	// value copied out of one scope and re-written into another (a call activity
+	// promoting its child's result, a loop promoting its body's) can never carry the
+	// producer of the write it was copied from (ADR-draft-variable-write-attribution).
+	v.ProducerKey = c.producer
 	c.appendEvent(v.ScopeKey, model.VTVariable, intent, inflightValue{variable: v})
 	c.markConditionDirty(v.ScopeKey)
 }

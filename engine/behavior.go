@@ -614,6 +614,11 @@ func handleJobCompleted(c *ProcessingContext) {
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		resultScope = ioResultScope(c.process(ei.ProcessDefKey), job.ElementInstanceKey, ei)
 	}
+	// The command names the job, not the element, so the task the result belongs to has
+	// to be stated here — without it a worker's result would be the one write no element
+	// claims, which is the whole of what a service task produces
+	// (ADR-draft-variable-write-attribution).
+	c.producer = job.ElementInstanceKey
 	for i := range c.cmd.StartVars {
 		v := c.cmd.StartVars[i]
 		v.ScopeKey = resultScope
@@ -2207,6 +2212,10 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 		matches = append(matches, match{elKey: elKey, sub: *v})
 		return nil
 	}))
+	// A payload is attributed to the catch event that received it (below); the command
+	// driving this may itself be an element's — a throw event publishing the message — so
+	// the producer is put back rather than zeroed (ADR-draft-variable-write-attribution).
+	prevProducer := c.producer
 	for i := range matches {
 		m := matches[i]
 		c.AppendMessageSubscriptionEvent(m.elKey, model.IntentSubscriptionCorrelated, m.sub)
@@ -2220,11 +2229,16 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 			MessageName:                name,
 			CorrelationKey:             correlationKey,
 		})
+		// The payload is what this catch event produced for its instance, so it is
+		// attributed to the element that received it and not to whatever published the
+		// message.
+		c.producer = m.elKey
 		for j := range vars {
 			vv := vars[j]
 			vv.ScopeKey = m.sub.ProcessInstanceKey
 			c.AppendVariableEvent(model.IntentVariableCreated, vv)
 		}
+		c.producer = prevProducer
 		if ei := c.GetElementInstance(m.elKey); ei != nil {
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
@@ -2356,14 +2370,20 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 		matches = append(matches, match{elKey: elKey, sub: *v})
 		return nil
 	}))
+	prevProducer := c.producer
 	for i := range matches {
 		m := matches[i]
 		c.AppendSignalSubscriptionEvent(m.elKey, model.IntentSubscriptionCorrelated, m.sub)
+		// As in correlateMessage: the broadcast payload is the catch event's own
+		// production, not the broadcaster's, and the producer of the command that got
+		// here is put back afterwards (ADR-draft-variable-write-attribution).
+		c.producer = m.elKey
 		for j := range vars {
 			vv := vars[j]
 			vv.ScopeKey = m.sub.ProcessInstanceKey
 			c.AppendVariableEvent(model.IntentVariableCreated, vv)
 		}
+		c.producer = prevProducer
 		if ei := c.GetElementInstance(m.elKey); ei != nil {
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
@@ -3997,6 +4017,12 @@ func resumeCaller(c *ProcessingContext, childScope, callerKey uint64) {
 	}
 	callerCp := c.process(caller.ProcessDefKey)
 	detail := callerCp.CallActivity(callerCp.Node(caller.ElementId).Detail)
+	// What the child leaves in the caller is the call activity's own output, so it is
+	// attributed to it and not to whichever element of the *child* was completing when
+	// this ran (ADR-draft-variable-write-attribution). Restored before returning rather
+	// than deferred: a closure would allocate on the command path (I1).
+	prevProducer := c.producer
+	c.producer = callerKey
 	if detail.PropagateAllChild {
 		// All child variables merge into the caller's instance scope.
 		c.VariablesOfScope(childScope, func(v model.VariableValue) {
@@ -4010,6 +4036,7 @@ func resumeCaller(c *ProcessingContext, childScope, callerKey uint64) {
 			c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, callerCp, m, childScope, caller.ProcessInstanceKey))
 		}
 	}
+	c.producer = prevProducer
 	c.AppendElementCommand(callerKey, model.IntentCompleting, *caller)
 }
 

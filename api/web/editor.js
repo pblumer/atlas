@@ -8538,6 +8538,10 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
 
   let steps = [];    // element-activation audit timeline, oldest first
   let frames = [];   // complete logical token states, oldest first
+  // Whether this instance's history records which element wrote each variable
+  // (ADR-draft-variable-write-attribution). False for an instance that ran before it
+  // did — there the "out" side falls back to the old inference, and says so.
+  let attributed = !!tl.variableAttribution;
   let marked = [];   // element markers to clear on the next render
   let badges = [];   // overlay ids for the execution-count badges
   let visits = {};   // elementId → cumulative execution count (the badge number)
@@ -9325,27 +9329,40 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // among, the same way a subprocess-local does (ADR-0074).
   const localsOf = (s) => ((s && s.inputs) || []).map((v) => ({ ...v, scope: s.elementId, local: true }));
 
-  // writtenBy is what an element itself contributed: every value it added or rewrote
-  // between its activation and its completion. null while it is still running — there
+  // writtenBy is what an element itself produced. null while it is still running — there
   // is no "after" yet, which is a different statement from "it wrote nothing".
+  //
+  // Where the history records who wrote each value, that is simply read off the step: it
+  // is the element's own work and nothing else's. The fallback below is the inference it
+  // replaced — everything that changed between the element's activation and its
+  // completion — and it is only ever right on a single branch: two tasks running in
+  // parallel each finish after the other has written, so the diff hands each of them the
+  // other's variables too, which is what an operator reported seeing on a fork.
   function writtenBy(s) {
     const after = (s && s.variablesAfter) || null;
     if (!after) return null;
+    if (attributed) return (s && s.writes) || [];
     const before = new Map(((s && s.variables) || []).map((v) => [varRef(v), v.value]));
     return after.filter((v) => !before.has(varRef(v)) || before.get(varRef(v)) !== v.value);
   }
+
+  // What the out section says about itself on an instance whose log cannot name the
+  // writer — so the reader knows why a neighbouring branch's variable may be listed.
+  const LEGACY_OUT_HINT = "This instance ran before Atlas recorded which element wrote " +
+    "each variable, so this is everything that changed while the element ran — on " +
+    "parallel branches that includes the other branch's writes.";
 
   const ioValueText = (v) => {
     const text = isComplexVar(v) ? jsonSummary(v.value) : String(v.value);
     return text.length > 30 ? text.slice(0, 29) + "…" : text;
   };
-  const ioSection = (kind, list, empty) => {
+  const ioSection = (kind, list, empty, hint) => {
     const rows = (list || []).slice(0, IO_ROWS).map((v) => `<div class="io-row">
         <span class="io-n">${esc(v.name)}</span>
         <span class="io-v">${esc(ioValueText(v))}</span>
       </div>`).join("");
     const rest = (list || []).length - IO_ROWS;
-    return `<div class="io-sec ${kind}">
+    return `<div class="io-sec ${kind}"${hint ? ` title="${esc(hint)}"` : ""}>
         <span class="io-lbl">${kind}</span>
         <div class="io-rows">${rows || `<div class="io-none">${esc(empty)}</div>`}${
       rest > 0 ? `<div class="io-more">+${rest} more</div>` : ""}</div>
@@ -9389,10 +9406,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const outs = writtenBy(s);
     const loop = ioLoopLine(s);
     if (!ins.length && !(outs && outs.length) && !loop) return "";
+    const outSection = outs
+      ? ioSection("out", outs, "wrote nothing", attributed ? "" : LEGACY_OUT_HINT)
+      : ioSection("out", null, "still running");
     return `<div class="io-ov">
         <div class="io-ov-h">${esc(stepLabel(s))}</div>
         ${ioSection("in", ins, "no input mapping")}
-        ${outs ? ioSection("out", outs, "wrote nothing") : ioSection("out", null, "still running")}
+        ${outSection}
         ${loop}
       </div>`;
   }
@@ -9682,6 +9702,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (current !== viewer) return;
     // Rebuild only when the step set grows, so a poll never disturbs the operator's
     // current scrub position mid-replay.
+    // Read before the re-render below, which draws the in/out card off it.
+    attributed = !!next.variableAttribution;
     const list = next.steps || [], nextFrames = next.frames || [];
     const grew = list.length !== steps.length || nextFrames.length !== frames.length;
     if (grew) {

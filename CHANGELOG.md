@@ -272,6 +272,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A task's *out* section showed variables the neighbouring branch produced.** The
+  replay's in/out card inferred what an element wrote by diffing the variables it saw on
+  entry against the ones that stood when it finished — which on a parallel fork spans the
+  sibling branch's work, so both branches were credited with both writes and a task that
+  fetched tickets claimed to have created one. The engine now records **which element
+  wrote each variable** and the timeline carries it per step (`writes`), so the card and
+  the Variables tab state what the log says instead of guessing from two snapshots; a
+  gateway or an event, which writes nothing, now claims nothing. Attribution is a fact
+  frozen into the variable event and rebuilt by replay like every other. An instance that
+  ran before this keeps the old inference — a record cannot be back-filled with a fact it
+  never carried — and says so on the section
+  ([ADR-draft-variable-write-attribution](docs/adr/draft-variable-write-attribution.md)).
+
 - **A Jira search called an endpoint Jira Cloud has removed.** The `search`
   operation posted to `/rest/api/2/search` with `startAt` paging; Atlassian
   progressively shut that endpoint down across Cloud over 2025, and a switched-over

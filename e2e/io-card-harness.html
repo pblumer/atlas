@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas in/out-card e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountInstanceReplay against a mock `api`, for
+         the diagram's in/out card on a parallel fork (ADR-0161,
+         ADR-draft-variable-write-attribution): two branches that each write one variable,
+         so each one's *snapshot* holds both and only the recorded attribution can say
+         which task produced which. ?legacy=1 serves the same instance as one recorded
+         before attribution existed. bpmn assets are the production ones. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountInstanceReplay } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000;
+      const ns = (ms) => ms * 1e6;
+      const legacy = new URLSearchParams(location.search).has("legacy");
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_fork" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="forked" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f_0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:parallelGateway id="Fork_1"><bpmn:incoming>f_0</bpmn:incoming><bpmn:outgoing>f_1</bpmn:outgoing><bpmn:outgoing>f_2</bpmn:outgoing></bpmn:parallelGateway>
+    <bpmn:scriptTask id="Erstelle_1" name="erstelle ein Ticket"><bpmn:incoming>f_1</bpmn:incoming><bpmn:outgoing>f_3</bpmn:outgoing></bpmn:scriptTask>
+    <bpmn:scriptTask id="Hole_1" name="alle Tickets holen"><bpmn:incoming>f_2</bpmn:incoming><bpmn:outgoing>f_4</bpmn:outgoing></bpmn:scriptTask>
+    <bpmn:parallelGateway id="Join_1"><bpmn:incoming>f_3</bpmn:incoming><bpmn:incoming>f_4</bpmn:incoming><bpmn:outgoing>f_5</bpmn:outgoing></bpmn:parallelGateway>
+    <bpmn:endEvent id="End_1" name="Ende"><bpmn:incoming>f_5</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f_0" sourceRef="Start_1" targetRef="Fork_1"/>
+    <bpmn:sequenceFlow id="f_1" sourceRef="Fork_1" targetRef="Erstelle_1"/>
+    <bpmn:sequenceFlow id="f_2" sourceRef="Fork_1" targetRef="Hole_1"/>
+    <bpmn:sequenceFlow id="f_3" sourceRef="Erstelle_1" targetRef="Join_1"/>
+    <bpmn:sequenceFlow id="f_4" sourceRef="Hole_1" targetRef="Join_1"/>
+    <bpmn:sequenceFlow id="f_5" sourceRef="Join_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="forked">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Fork_1_di" bpmnElement="Fork_1"><dc:Bounds x="250" y="215" width="50" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Erstelle_1_di" bpmnElement="Erstelle_1"><dc:Bounds x="360" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Hole_1_di" bpmnElement="Hole_1"><dc:Bounds x="360" y="300" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Join_1_di" bpmnElement="Join_1"><dc:Bounds x="520" y="215" width="50" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="620" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f_0_di" bpmnElement="f_0"><di:waypoint x="196" y="240"/><di:waypoint x="250" y="240"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_1_di" bpmnElement="f_1"><di:waypoint x="275" y="215"/><di:waypoint x="275" y="140"/><di:waypoint x="360" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_2_di" bpmnElement="f_2"><di:waypoint x="275" y="265"/><di:waypoint x="275" y="340"/><di:waypoint x="360" y="340"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_3_di" bpmnElement="f_3"><di:waypoint x="460" y="140"/><di:waypoint x="545" y="140"/><di:waypoint x="545" y="215"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_4_di" bpmnElement="f_4"><di:waypoint x="460" y="340"/><di:waypoint x="545" y="340"/><di:waypoint x="545" y="265"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_5_di" bpmnElement="f_5"><di:waypoint x="570" y="240"/><di:waypoint x="620" y="240"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      const newTicket = { name: "newTicket", value: `{"key":"PAT-9"}`, kind: "json" };
+      const tickets = { name: "tickets", value: "[1,2,3,4]", kind: "json" };
+      // Both branches finish after the other has written, so both snapshots hold both
+      // variables — which is the whole reason the out side cannot be a diff.
+      const both = [newTicket, tickets];
+
+      const steps = [
+        { elementId: "Start_1", elementInstanceKey: "1000", type: "bpmn:startEvent", position: 1, tokenId: "1",
+          variables: [], variablesAfter: [] },
+        { elementId: "Fork_1", elementInstanceKey: "1001", type: "bpmn:parallelGateway", position: 2, tokenId: "1",
+          variables: [], variablesAfter: [] },
+        { elementId: "Erstelle_1", elementInstanceKey: "1002", type: "bpmn:scriptTask", position: 3, tokenId: "2",
+          variables: [], variablesAfter: both, writes: [newTicket] },
+        { elementId: "Hole_1", elementInstanceKey: "1003", type: "bpmn:scriptTask", position: 4, tokenId: "3",
+          variables: [newTicket], variablesAfter: both, writes: [tickets] },
+        { elementId: "Join_1", elementInstanceKey: "1004", type: "bpmn:parallelGateway", position: 5, tokenId: "2",
+          variables: both, variablesAfter: both },
+        { elementId: "End_1", elementInstanceKey: "1005", type: "bpmn:endEvent", position: 6, tokenId: "2",
+          variables: both, variablesAfter: both },
+      ].map((s, i) => ({ ...s, at: ns(T + i * 1000), endAt: ns(T + i * 1000 + 500) }));
+
+      const frames = steps.map((s, i) => ({
+        position: s.position, at: s.at,
+        tokens: i < steps.length - 1
+          ? [{ elementId: s.elementId, tokenId: s.tokenId, elementInstanceKey: s.elementInstanceKey, state: "active" }]
+          : [],
+      }));
+
+      // An instance recorded before attribution carries neither the flag nor the writes:
+      // the console has only the snapshots, and falls back to the difference between them.
+      const TIMELINE = {
+        processDefKey: "7", processId: "forked", version: 1, state: "completed", frames,
+        variableAttribution: !legacy,
+        steps: legacy ? steps.map(({ writes, ...s }) => s) : steps,
+      };
+
+      const api = async (method, url) => {
+        if (/\/instances\/\d+\/timeline$/.test(url)) return TIMELINE;
+        if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (url.includes("/runtime")) return { elements: [] };
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        return {};
+      };
+
+      window.__mount = () => mountInstanceReplay(view, { api, toast: noop, key: "281474976723211" });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

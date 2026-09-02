@@ -296,6 +296,14 @@ type timelineStep struct {
 	// the replay would report "no variables" for an element that in fact produced some.
 	// Absent while the element is still active or parked, since it has not finished.
 	VariablesAfter []variableView `json:"variablesAfter,omitempty"`
+	// Writes is what this element instance itself produced: every variable its own
+	// processing wrote, at the value it last wrote (ADR-draft-variable-write-attribution).
+	// This is the honest answer to "what came out of this task", which the difference
+	// between Variables and VariablesAfter is not — two branches of a fork each see the
+	// other's writes land inside their own window, so a diff credits both writes to both
+	// tasks. Absent for an element that wrote nothing, and for every element of an
+	// instance whose history predates attribution (see VariableAttribution).
+	Writes []variableView `json:"writes,omitempty"`
 	// Inputs is what this element itself was handed: the values its zeebe:ioMapping
 	// inputs were evaluated to, in its own activity-local scope (ADR-0068). Variables
 	// and VariablesAfter carry the process (and subprocess) scopes, so these locals are
@@ -407,6 +415,13 @@ type instanceTimelineResp struct {
 	// ignores this still gets correct per-step element ids; one that honours it can say
 	// why a step names an element the diagram does not contain.
 	Migrated bool `json:"migrated,omitempty"`
+	// VariableAttribution says this instance's history records *which element* wrote each
+	// variable (ADR-draft-variable-write-attribution), so a step's `writes` is the
+	// element's own production rather than a guess. It is false for an instance that ran
+	// before attribution existed: there the log cannot say, and a reader that wants an
+	// "out" list has only the old inference — what changed between the element's
+	// activation and its completion, which on a fork also contains the sibling's writes.
+	VariableAttribution bool `json:"variableAttribution,omitempty"`
 }
 
 type instanceResp struct {
@@ -1504,9 +1519,10 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			elementID int32
 		}
 		type varChange struct {
-			pos    uint64
-			endPos uint64 // last position the change's scope is live (^0 for the root scope)
-			view   variableView
+			pos      uint64
+			endPos   uint64 // last position the change's scope is live (^0 for the root scope)
+			producer uint64 // element instance that wrote it; 0 = none recorded
+			view     variableView
 		}
 		var (
 			stepRows []stepRow
@@ -1655,7 +1671,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			scanErr = s.store.VariableSnapshotHistory(key, func(_ int64, pos uint64, v *model.VariableValue) error {
 				view := toVariableView(v)
 				view.Actor = actorByPos[pos]
-				changes = append(changes, varChange{pos: pos, endPos: noEnd, view: view})
+				changes = append(changes, varChange{pos: pos, endPos: noEnd, producer: v.ProducerKey, view: view})
 				return nil
 			})
 		}
@@ -1667,7 +1683,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				view := toVariableView(v)
 				view.Scope = sp.label
 				view.Actor = actorByPos[pos]
-				changes = append(changes, varChange{pos: pos, endPos: sp.endPos, view: view})
+				changes = append(changes, varChange{pos: pos, endPos: sp.endPos, producer: v.ProducerKey, view: view})
 				return nil
 			})
 		}
@@ -2007,6 +2023,47 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				return vars[i].Name < vars[j].Name
 			})
 			resp.Steps[r.idx].VariablesAfter = vars
+		}
+
+		// What each element itself produced (ADR-draft-variable-write-attribution). The two
+		// folds above are snapshots — everything the instance held at a point in time — and
+		// the difference between them was, until the engine recorded who wrote what, the
+		// only available answer to "what did this task put there". On a fork it is the wrong
+		// answer: both branches run inside each other's window, so each branch's snapshot
+		// diff contains the sibling's writes too, and the diagram credited both variables to
+		// both tasks. Attribution is read straight off the change: the last value each
+		// element instance wrote, per (scope, name). An instance recorded before attribution
+		// existed reports none, which the flag on the response states so a reader can tell
+		// "wrote nothing" from "nothing was recorded".
+		byProducer := map[uint64]map[varKey]variableView{}
+		for _, c := range changes {
+			if c.producer == 0 {
+				continue // start variables, an operator override, or pre-attribution history
+			}
+			w := byProducer[c.producer]
+			if w == nil {
+				w = map[varKey]variableView{}
+				byProducer[c.producer] = w
+			}
+			w[varKey{c.view.Scope, c.view.Name}] = c.view
+		}
+		resp.VariableAttribution = len(byProducer) > 0
+		for i := range resp.Steps {
+			w := byProducer[resp.Steps[i].ElementInstanceKey]
+			if len(w) == 0 {
+				continue
+			}
+			vars := make([]variableView, 0, len(w))
+			for _, view := range w {
+				vars = append(vars, view)
+			}
+			sort.Slice(vars, func(a, b int) bool {
+				if vars[a].Scope != vars[b].Scope {
+					return vars[a].Scope < vars[b].Scope
+				}
+				return vars[a].Name < vars[b].Name
+			})
+			resp.Steps[i].Writes = vars
 		}
 		// With both variable folds in place, explain the loops: the model's condition and
 		// cap, and what each round led to (ADR-0077/0133). It runs last because a round's
