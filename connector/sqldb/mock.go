@@ -22,7 +22,7 @@ import (
 // answers that live in the worker's memory and are thrown away when it stops.
 // `atlas worker --connector mssql` with ATLAS_MSSQL_MOCK set serves SQL tasks this
 // way, so a model runs end to end against a database that does not exist
-// (ADR-draft-sql-mock-mode).
+// (ADR-0221).
 //
 // The switch is the *worker's*, not the model's, for the reason the AD mock's is: a
 // mockup flag on the task would be a model that behaves differently in test and in

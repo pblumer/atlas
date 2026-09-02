@@ -21,7 +21,7 @@ _Changed_ / _Removed_ for each version.
   at. A worker started with `ATLAS_MSSQL_MOCK=1` (or `ATLAS_MARIADB_MOCK`,
   `ATLAS_POSTGRES_MOCK`) now answers that product's statements from **seeded answers**
   in its own memory, with no connection string
-  ([ADR-draft-sql-mock-mode](docs/adr/draft-sql-mock-mode.md)). Nothing in the model
+  ([ADR-0221](docs/adr/0221-sql-mock-mode.md)). Nothing in the model
   changes — the same worker name, the same statement, the same parameters; what differs
   is which worker leases the jobs, so a model that runs through in mockup mode is the
   model that later runs in production.
@@ -61,7 +61,7 @@ _Changed_ / _Removed_ for each version.
   for the three SQL kinds — against the string typed in the create form, and against
   the vault reference of a saved connector, which is the case that matters because an
   operator opens that dialog when something *stopped* working
-  ([ADR-draft-checking-a-database-connector](docs/adr/draft-checking-a-database-connector.md)).
+  ([ADR-0220](docs/adr/0220-checking-a-database-connector.md)).
 
   The verdict says what it proved: *"Connected to `sa@db.example.com:1433/hr` and
   authenticated. No statement was run, so this does not prove the login may read or

@@ -1,4 +1,4 @@
-# ADR-DRAFT: The Console may dial a database, and the engine still links no driver
+# ADR-0220: The Console may dial a database, and the engine still links no driver
 
 - **Status:** Proposed
 - **Date:** 2026-09-02

@@ -15,8 +15,8 @@
         "de": "Ein Prozess, der aus einer Datenbank liest, war die eine Sorte, die sich nicht ausprobieren liess. Die Datenbank, aus der er liest, ist das HR- oder das ERP-System — genau deshalb ist sie interessant, und genau deshalb will niemand ein halbfertiges Modell darauf loslassen. Jetzt kann ein Worker SQL-Anweisungen stattdessen aus einer kleinen Datei mit vorbereiteten Antworten in seinem Arbeitsspeicher beantworten. Am Modell ändert sich dabei nichts: derselbe Worker-Name, dieselbe Anweisung, dieselben Parameter — nur wer die Jobs abholt, ist ein anderer. Das Modell, das im Mockup durchläuft, ist also dasselbe, das später produktiv läuft, und der Weg dorthin ist eine Umgebungsvariable und keine Änderung. Eine vorbereitete Antwort darf auch absichtlich scheitern — so probieren Sie den Fall aus, den eine echte Datenbank früher oder später liefert: derselbe Datensatz zweimal eingefügt. Und eine Anweisung, für die Sie nichts vorbereitet haben, kommt nicht still leer zurück: Sie scheitert und nennt Ihnen Anweisung und Werte, sodass Sie beides direkt in die Datei übernehmen können. Genau diese Verweigerung ist der Sinn der Sache — „keine Treffer\" ist eine echte fachliche Antwort, und ein Mockup, das sie erfindet, schiebt Ihrem Prozess eine Unwahrheit unter, und zwar in der Richtung, die am schwersten auffällt."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0221",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0221-sql-mock-mode.md"
       },
       "tags": [
         "Workers",
@@ -61,8 +61,8 @@
         "de": "Ein Datenbank-Worker wird mit einer einzigen Verbindungszeichenfolge eingerichtet, und die wird beim Speichern weggeschlossen — ein Tippfehler darin war ab da unsichtbar, und das Erste, was ihn bemerkte, war eine Aufgabe, die stehen blieb. Das Formular hat jetzt auch für SQL Server, MariaDB und PostgreSQL einen Knopf „Test connection\", so wie ihn Mail schon hatte. Er prüft, was Sie gerade getippt haben, bevor etwas gespeichert ist — und er prüft später einen Worker, der einmal lief und jetzt nicht mehr, was der Fall ist, der Menschen überhaupt in diesen Dialog führt. Die Antwort sagt, was sie belegt hat, statt nur „OK\": Sie nennt die Datenbank, die geantwortet hat, und erinnert daran, dass eine Verbindung noch keine Leseberechtigung auf die Tabellen ist, die Ihre Aufgabe nennt. Dieser Satz lohnt sich, denn „OK\" als „die Aufgabe wird laufen\" zu lesen ist der Weg, auf dem die nächste Überraschung als Incident ankommt statt als Meldung."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0220",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0220-checking-a-database-connector.md"
       },
       "tags": [
         "Console",

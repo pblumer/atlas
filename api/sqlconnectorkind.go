@@ -248,7 +248,7 @@ func (s *Server) sqlConnectorProblem(kind, name string) (string, bool) {
 type SQLProbe func(ctx context.Context, product sqldb.Product, dsn string) error
 
 // WithSQLProbe gives this server a way to check a SQL connector's connection string
-// (ADR-draft-checking-a-database-connector). Pass worker.ProbeSQL, which opens the
+// (ADR-0220). Pass worker.ProbeSQL, which opens the
 // product's driver and pings it.
 //
 // It is what makes the Console's check work for the SQL kinds. Without it the check

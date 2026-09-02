@@ -207,7 +207,7 @@ var (
 	// used to do (ADR-0202).
 	ADMockSeedUnusable = newEvent("ad_mock.seed_unusable")
 	// SQLMockEnabled is a SQL worker announcing that it answers database tasks from
-	// seeded answers in its own memory rather than from a database (ADR-draft-sql-mock-mode).
+	// seeded answers in its own memory rather than from a database (ADR-0221).
 	// A warning for the same reason the AD one is: a mock worker is indistinguishable
 	// from a working one everywhere else, because it completes the jobs it answers.
 	SQLMockEnabled = newEvent("sql_mock.enabled")

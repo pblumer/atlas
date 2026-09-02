@@ -1,4 +1,4 @@
-# ADR-DRAFT: A database task runs against seeded answers, not against a SQL engine
+# ADR-0221: A database task runs against seeded answers, not against a SQL engine
 
 - **Status:** Proposed
 - **Date:** 2026-09-02
