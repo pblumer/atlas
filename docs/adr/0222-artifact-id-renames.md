@@ -1,4 +1,4 @@
-# ADR-DRAFT: An artifact's id is its identity — renaming moves it, collisions are refused
+# ADR-0222: An artifact's id is its identity — renaming moves it, collisions are refused
 
 - **Status:** Proposed
 - **Date:** 2026-09-02

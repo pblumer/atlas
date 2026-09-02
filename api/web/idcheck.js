@@ -5,7 +5,7 @@
 // retyping one renames the artifact, and typing an id another artifact already holds
 // would land the save on top of it. The server settles both — a save renames rather
 // than leaving a duplicate behind, and refuses a collision with 409
-// (ADR-draft-artifact-id-renames) — but a refusal at Save arrives after the author has
+// (ADR-0222) — but a refusal at Save arrives after the author has
 // typed the id, tabbed away, and carried on believing it took.
 //
 // So the id is checked while it is being typed: the field turns red and says what holds

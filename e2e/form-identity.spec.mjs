@@ -9,7 +9,7 @@
 // There is one id now, and it is the schema's: it is reconciled from the stored id on
 // open, the chip mirrors it, and the save names the record it is editing so a changed
 // id moves the form instead of leaving a duplicate behind
-// (ADR-draft-artifact-id-renames).
+// (ADR-0222).
 import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {

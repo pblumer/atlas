@@ -275,6 +275,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0219](0219-variable-write-attribution.md) | Variable write attribution | Accepted |
 | [0220](0220-checking-a-database-connector.md) | The Console may dial a database, and the engine still links no driver | Proposed |
 | [0221](0221-sql-mock-mode.md) | A database task runs against seeded answers, not against a SQL engine | Proposed |
+| [0222](0222-artifact-id-renames.md) | An artifact's id is its identity — renaming moves it, collisions are refused | Proposed |
 
 ## Status values
 

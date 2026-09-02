@@ -156,7 +156,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   work. Drives the real `mountInstanceReplay` against a mock `api` serving both shapes of
   timeline (`?legacy=1` for the unattributed one).
 
-- **`id-check.spec.mjs`** ([ADR-draft-artifact-id-renames](../docs/adr/draft-artifact-id-renames.md)):
+- **`id-check.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **live id-availability check** on an artifact's ID field. A draft is stored under
   its process id and a form under the id a user task binds to, so saving onto an id
   something else already holds is refused — and a refusal at Save is too late, because
@@ -167,7 +167,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   re-renders on every selection does not pepper the server; and a burst of keystrokes
   asks exactly one question.
 
-- **`form-identity.spec.mjs`** ([ADR-draft-artifact-id-renames](../docs/adr/draft-artifact-id-renames.md)):
+- **`form-identity.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **form editor's single identity**, on the state that reported the bug — a form
   stored as `form-mtjs4` whose schema had drifted to `frm_jira_ticket_new`, so the
   toolbar chip and the properties panel showed different ids and the rename had never

@@ -285,7 +285,7 @@ textarea::placeholder {
 .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 .chip { display: inline-block; font: 12px/1.6 ui-monospace, monospace; padding: 1px 7px; border-radius: 5px; background: var(--bg); border: 1px solid var(--border); white-space: nowrap; }
 
-/* Artifact id availability (ADR-draft-artifact-id-renames). A draft is stored under its
+/* Artifact id availability (ADR-0222). A draft is stored under its
    process id and a form under its own id, so those fields are the artifact's identity:
    an id another artifact already holds is refused at Save, and the field says so while
    it is being typed rather than after. `.id-taken` is that collision; `.id-pending` is

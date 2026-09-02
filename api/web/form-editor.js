@@ -142,7 +142,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
   // independently of its schema, so editing the ID in the panel changed the document
   // and nothing else — the chip above kept showing the id the form was really stored
   // under, and the rename the author thought they had made never happened
-  // (ADR-draft-artifact-id-renames). The stored id is the truth on open, so stamp it
+  // (ADR-0222). The stored id is the truth on open, so stamp it
   // into the schema; from here the field IS the identity, and saving a changed one
   // renames the form.
   if (!schema || typeof schema !== "object") schema = blankSchema();
@@ -558,7 +558,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
         // What this save is editing. Empty on a form that has never been saved; a
         // different id means rename this record rather than create a second one, and
         // an id another form already holds comes back 409 instead of overwriting it
-        // (ADR-draft-artifact-id-renames).
+        // (ADR-0222).
         from: savedId,
       };
       const res = await api("POST", "/api/v1/forms", body);

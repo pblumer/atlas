@@ -2,7 +2,7 @@
 //
 // A draft is stored under its process id and a form under the id a user task binds to,
 // so those fields are the artifact's identity: saving onto an id something else already
-// holds is refused (ADR-draft-artifact-id-renames). A refusal at Save is too late to be
+// holds is refused (ADR-0222). A refusal at Save is too late to be
 // the whole answer — the author has typed the id and moved on — so the field checks
 // itself as it is typed. These assert what the author actually sees: the field goes red
 // and names what holds the id, an id that is free leaves no mark, and the artifact's own

@@ -4184,7 +4184,7 @@ type draftResp struct {
 // has never been saved — and is what makes the rename a move rather than a second
 // draft: the record is written under the new id and the one it came from is removed,
 // and a save that would land on an id another draft already holds is refused with 409
-// instead of silently overwriting that draft (ADR-draft-artifact-id-renames). A caller
+// instead of silently overwriting that draft (ADR-0222). A caller
 // that omits ?from= keeps the plain upsert-by-id behaviour, which is what an import, a
 // source-tree apply and the MCP authoring tools want.
 //

@@ -628,7 +628,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   // identity.draftId is the draft this editing session addresses — the id the diagram
   // was opened under, null for one that has never been saved. It is not the same thing
   // as the process id on the canvas: the author can retype that, and the two only
-  // agree again once the save has moved the record (ADR-draft-artifact-id-renames).
+  // agree again once the save has moved the record (ADR-0222).
   // Save reads it to ask for a rename rather than a second draft; the Process ID field
   // reads it to know which id is its own and therefore not a collision.
   //
@@ -5013,7 +5013,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         });
         // The Process ID is the draft's filename on the server, so it is checked as it
         // is typed: an id another draft already holds turns the field red here rather
-        // than coming back as a refused save (ADR-draft-artifact-id-renames).
+        // than coming back as a refused save (ADR-0222).
         if (identity && draftKeyProcess(modeler) === rootBo) {
           attachIdCheck(body.querySelector("#f-pid"), {
             api, kind: "drafts", noun: "draft", own: identity.ownId,
@@ -6292,7 +6292,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             // Scaffold the child only if no draft already holds that id — never clobber
             // existing work; just open it in that case. from="" makes that the server's
             // rule rather than only this check's, so a draft created between the two
-            // refuses instead of being overwritten (ADR-draft-artifact-id-renames).
+            // refuses instead of being overwritten (ADR-0222).
             const existing = await api("GET", "/api/v1/drafts").catch(() => []);
             if ((existing || []).some((d) => (d.processId || "") === pid)) {
               toast(`Opening existing draft “${pid}”`, "ok");
@@ -6828,7 +6828,7 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
   // ?from= names the draft this session opened, so the server can tell a rename from a
   // create: retyping the Process ID moves the record instead of leaving the old draft
   // behind as a duplicate, and a save onto an id another draft already holds comes back
-  // 409 rather than overwriting it (ADR-draft-artifact-id-renames).
+  // 409 rather than overwriting it (ADR-0222).
   const saveBtn = root.querySelector("#save");
 
   // saveDraft persists the diagram once. `retried` guards the one recovery below, so a
@@ -6866,7 +6866,7 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
       }
     } catch (e) {
       // A 409 says another draft already holds this process id, and the save refused
-      // rather than overwriting it (ADR-draft-artifact-id-renames). Pulling a deployed
+      // rather than overwriting it (ADR-0222). Pulling a deployed
       // definition back into an editable draft is the one case where landing on an
       // existing draft is the point — it is the same process — so there the overwrite
       // is offered by name. Everywhere else the id is the author's to change and the

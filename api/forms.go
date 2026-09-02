@@ -56,7 +56,7 @@ type saveFormResp struct {
 // that has never been saved) and turns a changed id into a move: the record is written
 // under the new id and the one it came from is removed, and a save that would land on
 // an id another form already holds is refused with 409 rather than overwriting it
-// (ADR-draft-artifact-id-renames). Omitting "from" keeps the plain upsert-by-id
+// (ADR-0222). Omitting "from" keeps the plain upsert-by-id
 // behaviour every non-interactive writer wants — an import, a source-tree apply, the
 // MCP authoring tools.
 func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {

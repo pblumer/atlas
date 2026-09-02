@@ -13,7 +13,7 @@ import (
 // under its own id. So retyping that id in the Modeler is a rename of the artifact,
 // which used to leave the original behind as a second copy — and, when something else
 // already held the new id, overwrite that instead. These cover the identity-aware save
-// that replaces both behaviours (ADR-draft-artifact-id-renames).
+// that replaces both behaviours (ADR-0222).
 
 // idBPMN is a minimal diagram carrying the given process id, which is what
 // handleSaveDraft keys the draft by.

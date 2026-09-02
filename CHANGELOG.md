@@ -374,7 +374,7 @@ _Changed_ / _Removed_ for each version.
   that already exists is the point rather than an accident — importing a `.bpmn`/`.form`
   file over the artifact it came from, and pulling a deployed definition back into a
   draft — now ask by name instead of doing it silently or refusing it
-  ([ADR-draft-artifact-id-renames](docs/adr/draft-artifact-id-renames.md)).
+  ([ADR-0222](docs/adr/0222-artifact-id-renames.md)).
 
 - **A task's *out* section showed variables the neighbouring branch produced.** The
   replay's in/out card inferred what an element wrote by diffing the variables it saw on

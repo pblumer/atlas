@@ -175,7 +175,7 @@ func TestProtectedProjectRefusesMutation(t *testing.T) {
 
 // TestProtectedArtifactRefusesRename covers the newer way to reach a platform-managed
 // artifact: an identity-aware save renames a record by writing it under a new id and
-// *deleting* the one it came from (ADR-draft-artifact-id-renames). The write's own
+// *deleting* the one it came from (ADR-0222). The write's own
 // protected check looks at the id being saved onto, which on a rename is a free one —
 // so the record being deleted has to be checked in its own right, or a rename would be
 // the way to take a system draft or form out of the project that protects it.

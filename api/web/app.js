@@ -3298,7 +3298,7 @@ async function createDmnRef(projectId, reload) {
 // Importing a file whose id already exists is not by itself a mistake — it is usually a
 // corrected export of the same artifact. What it must never be is silent, which is what
 // it was: you picked a file and the draft or form you already had was gone
-// (ADR-draft-artifact-id-renames).
+// (ADR-0222).
 // Declining the replacement returns null — not an error, since keeping what was there
 // is a perfectly good outcome — so the caller reports it as a cancellation rather than
 // a failure.
@@ -3336,7 +3336,7 @@ async function importArtifact(projectId, reload) {
       const name = (typeof schema.name === "string" && schema.name.trim()) || base || id;
       // "from" empty says this is a new form, so an id something already holds comes
       // back 409 instead of quietly replacing that form
-      // (ADR-draft-artifact-id-renames). Importing a file over a form you already have
+      // (ADR-0222). Importing a file over a form you already have
       // is a real intent — a corrected export of the same form — so it is offered by
       // name rather than refused; it is just never the default.
       const savedForm = await saveOrConfirmOverwrite(

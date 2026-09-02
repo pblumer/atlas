@@ -10,7 +10,7 @@ import (
 // process id, a form under the id a user task binds to. Renaming one is therefore a
 // move, and two artifacts can never share an id — which is why a save that would land
 // on an occupied id is refused (handleSaveDraft / handleSaveForm,
-// ADR-draft-artifact-id-renames).
+// ADR-0222).
 //
 // A refusal at Save is the backstop, not the whole answer: the author has by then
 // typed a new id, tabbed away, and built a mental model in which it took. These probes
