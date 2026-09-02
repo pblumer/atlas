@@ -2,6 +2,54 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "atlas-can-now-say-what-the-data-in-a-process-actually-is",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Say what an Order is — once, for every process",
+        "de": "Sagen, was eine Bestellung ist — einmal, für alle Prozesse"
+      },
+      "summary": {
+        "en": "BPMN lets you draw a data object and give it a type name, and then says nothing about what that type is. So two processes that both handle an order share the word \"Order\" and nothing else — no fields, no rules, no way to tell whether they mean the same thing. There is now a Data area with a class diagram in it: you draw an Order once, give it its fields with their types, and mark which of them is its business key — the thing that makes ORD-1 the same order in the ordering process, the invoicing process and the returns process. Three kinds of class carry the difference that matters: something the business can point at and identify, a structured value like an address that is just its contents, and a closed list of values like draft/approved/rejected. The canvas will not let you draw a relationship that makes no sense — you cannot point an arrow at a list of values, and an address cannot own parts, because it has no existence of its own to own them with — and when it refuses it tells you why, in the same words the server would use. It also says plainly which refusals are the notation talking and which are just what this version does not do yet. Every class can be shown as a JSON Schema, which is what a value gets checked against, and that view is honest about what it cannot express: a document is a tree, and two things that merely refer to each other are not.",
+        "de": "BPMN lässt Sie ein Datenobjekt zeichnen und ihm einen Typnamen geben — und sagt danach nichts darüber, was dieser Typ ist. Zwei Prozesse, die beide eine Bestellung bearbeiten, teilen sich also das Wort „Order\" und sonst nichts: keine Felder, keine Regeln, keine Möglichkeit festzustellen, ob dasselbe gemeint ist. Es gibt jetzt einen Bereich „Data\" mit einem Klassendiagramm darin: Sie zeichnen eine Bestellung einmal, geben ihr ihre Felder mit Typen und markieren, welches davon ihr fachlicher Schlüssel ist — das, was ORD-1 im Bestellprozess, im Fakturaprozess und im Retourenprozess zur selben Bestellung macht. Drei Klassenarten tragen den Unterschied, auf den es ankommt: etwas, das die Fachseite benennen und identifizieren kann; ein strukturierter Wert wie eine Adresse, der nur aus seinem Inhalt besteht; und eine abgeschlossene Werteliste wie Entwurf/freigegeben/abgelehnt. Die Zeichenfläche lässt keine Beziehung zu, die keinen Sinn ergibt — auf eine Werteliste zeigt kein Pfeil, und eine Adresse kann keine Teile besitzen, weil sie selbst keine eigene Existenz hat — und wenn sie ablehnt, sagt sie warum, mit denselben Worten wie der Server. Sie sagt auch klar, welche Ablehnung die Notation selbst ist und welche nur das, was diese Version noch nicht kann. Jede Klasse lässt sich als JSON Schema anzeigen — das, woran ein Wert geprüft wird — und diese Ansicht ist ehrlich darüber, was sie nicht ausdrücken kann: ein Dokument ist ein Baum, und zwei Dinge, die nur aufeinander verweisen, sind keiner."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data",
+        "Modeling",
+        "UML"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data in the app drawer. The Model tab lists the information models; create one and pick the application it belongs to.",
+          "Press “+ Business object” and name it Order. Add its attributes in the panel on the right — an id as text, a date, an amount as a number.",
+          "Tick the ⚿ box next to id. That is the business key: what makes two of these the same one.",
+          "Add a second class, then press a relationship button in the toolbar and click the two boxes to connect them. Try pointing one at an enumeration — it will refuse and tell you why.",
+          "Press “View JSON Schema” on a class to see the contract a value of it is checked against, and what the projection had to leave out.",
+          "Switch to the Instances tab to see the data objects your running processes are actually carrying, grouped by the type they declare."
+        ],
+        "de": [
+          "Öffnen Sie „Data\" in der App-Leiste. Der Reiter „Model\" listet die Informationsmodelle; legen Sie eines an und wählen Sie die Applikation dazu.",
+          "Drücken Sie „+ Business object\" und nennen Sie die Klasse Order. Ergänzen Sie rechts im Panel ihre Attribute — eine id als Text, ein Datum, einen Betrag als Zahl.",
+          "Setzen Sie das Häkchen ⚿ neben id. Das ist der fachliche Schlüssel: das, was zwei davon zur selben Sache macht.",
+          "Legen Sie eine zweite Klasse an, drücken Sie in der Leiste eine Beziehungsart und klicken Sie die beiden Kästen an. Versuchen Sie ruhig, auf eine Aufzählung zu zeigen — es wird abgelehnt, mit Begründung.",
+          "Drücken Sie bei einer Klasse „View JSON Schema\", um den Vertrag zu sehen, an dem ein Wert geprüft wird — und was die Projektion weglassen musste.",
+          "Wechseln Sie auf „Instances\", um zu sehen, welche Datenobjekte Ihre laufenden Prozesse tatsächlich tragen, gruppiert nach dem Typ, den sie deklarieren."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Data öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "a-process-instance-now-shows-the-data-it-carries-and-where-e",
       "version": "Unreleased",
       "date": null,
@@ -351,35 +399,6 @@
       "link": {
         "label": "ADR-0210",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0210-federated-authentication.md"
-      },
-      "tags": [
-        "Security",
-        "Console"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organization öffnen"
-        },
-        "route": "#/console/org"
-      }
-    },
-    {
-      "id": "let-the-provider-s-groups-decide-roles",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Let the provider's groups decide roles",
-        "de": "Die Gruppen des Anbieters entscheiden über die Rollen"
-      },
-      "summary": {
-        "en": "Signing in with your identity provider granted nothing until now: a first sign-in produced an account with the user role, and an administrator granted the rest by hand. Under Organization → Single sign-on you can now name one claim in the provider's token and a list of exact values it may carry, and say what each value grants — Atlas roles, and membership of Atlas groups. Onboarding and offboarding then become a group membership somebody already maintains: the role and the shared projects arrive at the next sign-in and go away at the sign-in after the membership does. It is off until you turn it on, and worth one decision before you do: while it is on, whoever administers those groups administers this instance's roles, and a role you grant by hand is replaced at that person's next sign-in. Group membership follows only for the groups your rules name, so a group you manage yourself is left alone. Nothing is granted by absence — somebody the provider says nothing about matches no rule and simply holds user — and a rule that could never work, naming a role Atlas does not enforce or a group you have deleted, is refused when you save it rather than ignored on every login.",
-        "de": "Die Anmeldung über Ihren Identitätsanbieter vergab bisher nichts: Die erste Anmeldung legte ein Konto mit der Rolle «user» an, den Rest vergab eine Administratorin von Hand. Unter «Organization → Single sign-on» benennen Sie jetzt einen Claim im Token des Anbieters und eine Liste genauer Werte, die er tragen darf — und zu jedem Wert, was er vergibt: Atlas-Rollen und die Mitgliedschaft in Atlas-Gruppen. Ein- und Austritt sind damit eine Gruppenmitgliedschaft, die ohnehin jemand pflegt: Rolle und geteilte Projekte kommen mit der nächsten Anmeldung und verschwinden mit der übernächsten, wenn die Mitgliedschaft weg ist. Es ist ausgeschaltet, bis Sie es einschalten — und diese eine Entscheidung ist es wert: Solange es an ist, verwaltet die Rollen dieser Installation, wer jene Gruppen verwaltet, und eine von Hand vergebene Rolle wird bei der nächsten Anmeldung dieser Person ersetzt. Die Gruppenmitgliedschaft folgt nur für die Gruppen, die Ihre Regeln nennen; eine Gruppe, die Sie selbst pflegen, bleibt unberührt. Abwesenheit vergibt nichts — wer beim Anbieter in keiner genannten Gruppe ist, trifft auf keine Regel und behält schlicht «user» — und eine Regel, die nie funktionieren könnte, weil sie eine Rolle nennt, die Atlas nicht durchsetzt, oder eine gelöschte Gruppe, wird beim Speichern abgewiesen statt bei jeder Anmeldung still übergangen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
         "Security",

@@ -2683,6 +2683,110 @@ func (s *Server) annotateDataObjects(key uint64, byName map[string]*dataObjectVi
 	}
 }
 
+// crossInstanceDataObject is one datum a running instance is carrying, seen from the
+// data's side rather than the process's. It is deliberately leaner than
+// dataObjectView: no trail and no attribution, because those need a scan of the
+// instance's whole element history and this view reads many instances at once. Both
+// are one click away in that instance's Data tab.
+type crossInstanceDataObject struct {
+	InstanceKey   uint64 `json:"instanceKey"`
+	ProcessID     string `json:"processId"`
+	ProcessDefKey uint64 `json:"processDefKey"`
+	Name          string `json:"name"`
+	ItemType      string `json:"itemType"`
+	IsCollection  bool   `json:"isCollection"`
+	State         string `json:"state"`
+	Value         any    `json:"value"`
+	Kind          string `json:"kind"`
+}
+
+// dataObjectsAcrossInstancesLimit caps the sweep. This walks every running instance,
+// so it is a listing rather than a query: it answers "what data is out there right
+// now", and the answer stops being readable long before it stops being cheap.
+const dataObjectsAcrossInstancesLimit = 500
+
+// handleDataObjectsAcrossInstances lists the data objects the running instances
+// carry, newest instance first — the process landscape read from the data's side.
+//
+// It is the first step of the question the information model exists to answer
+// ("which processes touch an Order?") and it is honest about being only the first:
+// it groups by the *declared type name*, which is what the BPMN model wrote in
+// itemSubjectRef, and joins nothing against a resolved class. Resolution at deploy
+// time, and correlation by business key, are the following slices.
+//
+// Only running instances are swept. A finished instance's data is retained and
+// readable through its own endpoint, but sweeping history would turn a listing into
+// a scan of everything Atlas has ever run.
+func (s *Server) handleDataObjectsAcrossInstances(w http.ResponseWriter, r *http.Request) {
+	classFilter := strings.TrimSpace(r.URL.Query().Get("class"))
+	out := []crossInstanceDataObject{}
+	var scanErr error
+	s.do(func() {
+		type instanceRow struct {
+			key uint64
+			pi  *model.ProcessInstanceValue
+		}
+		var rows []instanceRow
+		scanErr = s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+			c := *v
+			rows = append(rows, instanceRow{key: key, pi: &c})
+			return nil
+		})
+		if scanErr != nil {
+			return
+		}
+		// Newest instance first, so a sweep that hits the cap keeps the rows an
+		// operator is most likely to be looking for.
+		sort.Slice(rows, func(a, b int) bool { return rows[a].key > rows[b].key })
+
+		for _, row := range rows {
+			if len(out) >= dataObjectsAcrossInstancesLimit {
+				break
+			}
+			// The declared half comes off the definition, exactly as the per-instance
+			// read does; an instance whose definition is gone simply reports no class.
+			declared := map[string]compiler.CompiledDataObject{}
+			processID := ""
+			if d, ok := s.deployments[row.pi.ProcessDefKey]; ok && d.cp != nil {
+				processID = d.ProcessID
+				for _, do := range d.cp.DataObjects() {
+					declared[d.cp.Intern(do.Name)] = do
+				}
+			}
+			cp := func(idx int32) string {
+				if d, ok := s.deployments[row.pi.ProcessDefKey]; ok && d.cp != nil {
+					return d.cp.Intern(idx)
+				}
+				return ""
+			}
+			err := s.store.DataObjectsOfScope(row.key, func(v *model.DataObjectValue) error {
+				item := crossInstanceDataObject{
+					InstanceKey: row.key, ProcessID: processID, ProcessDefKey: row.pi.ProcessDefKey,
+					Name: v.Name, State: v.State,
+				}
+				if do, ok := declared[v.Name]; ok {
+					item.ItemType, item.IsCollection = cp(do.ItemType), do.IsCollection
+				}
+				if classFilter != "" && item.ItemType != classFilter {
+					return nil
+				}
+				item.Kind, item.Value = dataObjectKindValue(v)
+				out = append(out, item)
+				return nil
+			})
+			if err != nil {
+				scanErr = err
+				return
+			}
+		}
+	})
+	if scanErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read data objects: "+scanErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, out)
+}
+
 // decisionEvaluationView renders one DMN decision evaluation for the operator UI
 // (ADR-0066): when it ran, which business rule task on the diagram made it, which
 // decision it evaluated, and — the point of the record — the input context it saw,

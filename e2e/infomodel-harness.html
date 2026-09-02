@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas information-model e2e harness</title>
+    <!-- Drives the *real* api/web/infomodel-editor.js against a mock `api`, so the
+         class canvas is exercised as it ships. The subset served here is the real
+         one, captured from GET /api/v1/infomodel/subset — the point of the canvas is
+         that it carries no rules of its own, and a harness that invented a subset
+         would test the opposite. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountClassDiagram } from "/infomodel-editor.js";
+
+      const view = document.getElementById("view");
+      window.__toasts = [];
+      const toast = (msg, kind) => window.__toasts.push({ msg, kind });
+
+      const SUBSET = {
+        version: 1,
+        notation: "UML 2.5 class diagram (subset)",
+        stereotypes: [
+          { stereotype: "businessObject", label: "Business object", hasIdentity: true, hasAttributes: true,
+            meaning: "Something the business tracks and can point at." },
+          { stereotype: "valueType", label: "Value type", hasIdentity: false, hasAttributes: true,
+            meaning: "A structured value with no existence of its own." },
+          { stereotype: "enumeration", label: "Enumeration", hasIdentity: false, hasAttributes: false,
+            meaning: "A closed set of named values." },
+        ],
+        associationKinds: [
+          { kind: "association", label: "Association", directed: false, rule: "Two things are related." },
+          { kind: "aggregation", label: "Aggregation", directed: true, rule: "A whole groups parts." },
+          { kind: "composition", label: "Composition", directed: true, rule: "A whole owns its parts." },
+          { kind: "generalization", label: "Generalization", directed: true, rule: "The specific thing is a kind of the general thing." },
+        ],
+        primitives: [
+          { type: "string", label: "Text", jsonType: "string" },
+          { type: "number", label: "Number", jsonType: "number" },
+          { type: "date", label: "Date", jsonType: "string", jsonFormat: "date" },
+        ],
+        multiplicities: [
+          { multiplicity: "0..1", label: "Optional", required: false, collection: false },
+          { multiplicity: "1", label: "Exactly one", required: true, collection: false },
+          { multiplicity: "0..*", label: "Any number", required: false, collection: true },
+          { multiplicity: "1..*", label: "One or more", required: true, collection: true },
+        ],
+        matrix: {
+          "businessObject>businessObject": ["association", "aggregation", "composition", "generalization"],
+          "businessObject>valueType": ["association", "aggregation", "composition"],
+          "businessObject>enumeration": [],
+          "valueType>businessObject": ["association"],
+          "valueType>valueType": ["association", "generalization"],
+          "valueType>enumeration": [],
+          "enumeration>businessObject": [],
+          "enumeration>valueType": [],
+          "enumeration>enumeration": [],
+        },
+        limits: [
+          { area: "Interfaces, operations and visibility", reason: "Behaviour belongs to the BPMN model beside it." },
+          { area: "Storage detail", reason: "Where a datum lives is the data store's question." },
+        ],
+      };
+
+      const MODEL = {
+        id: "m1", applicationId: "app-1", name: "Sales", documentation: "", revision: 3,
+        classes: [
+          { id: "c1", name: "Customer", stereotype: "businessObject", identity: ["number"], x: 40, y: 40,
+            attributes: [
+              { name: "number", type: "string", multiplicity: "1" },
+              { name: "name", type: "string", multiplicity: "1" },
+            ] },
+          { id: "c2", name: "Order", stereotype: "businessObject", identity: ["id"], x: 340, y: 40,
+            attributes: [
+              { name: "id", type: "string", multiplicity: "1" },
+              { name: "placedOn", type: "date", multiplicity: "0..1" },
+            ] },
+          { id: "c3", name: "Address", stereotype: "valueType", identity: [], x: 340, y: 260,
+            attributes: [{ name: "city", type: "string", multiplicity: "1" }] },
+          { id: "c4", name: "OrderStatus", stereotype: "enumeration", x: 40, y: 260,
+            literals: ["draft", "approved"] },
+        ],
+        associations: [
+          { id: "a1", kind: "association", name: "places",
+            from: { classId: "c1", role: "customer", multiplicity: "1" },
+            to: { classId: "c2", role: "orders", multiplicity: "0..*" } },
+        ],
+        validation: { valid: true, findings: [] },
+      };
+
+      // The saved payload is captured so a test can assert what the canvas actually
+      // sends — the local handles in particular, which the server is the one to remap.
+      window.__saved = null;
+      const api = async (method, url, body) => {
+        if (method === "GET" && /\/infomodel\/subset$/.test(url)) return SUBSET;
+        if (method === "GET" && /\/infomodel\/models\/[^/]+$/.test(url)) return structuredClone(MODEL);
+        if (method === "GET" && /\/schema\?/.test(url)) {
+          return {
+            class: "Order",
+            schema: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "Order", type: "object",
+              properties: { id: { type: "string" } }, required: ["id"] },
+            loss: [{ area: "Business key", reason: "JSON Schema has no keyword for identity." }],
+          };
+        }
+        if (method === "PUT") {
+          window.__saved = structuredClone(body);
+          if (window.__saveFails) {
+            const err = new Error("the model is not valid");
+            err.status = 400;
+            err.body = { error: "the model is not valid", findings: [
+              { code: "unknown-type", reason: "notation", classId: "c2", attribute: "shipTo",
+                message: 'Order.shipTo is typed "Adress", and this model has no class of that name.' },
+            ] };
+            throw err;
+          }
+          const saved = structuredClone(MODEL);
+          Object.assign(saved, body, { revision: MODEL.revision + 1, validation: { valid: true, findings: [] } });
+          // The server mints ids for anything that arrived with a local handle.
+          saved.classes = (body.classes || []).map((c, i) =>
+            ({ ...c, id: c.id && !c.id.startsWith("new-") ? c.id : `minted${i}` }));
+          return saved;
+        }
+        return {};
+      };
+
+      window.__mount = () => mountClassDiagram(view, { api, toast, id: "m1" });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

@@ -3981,3 +3981,148 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .do-trail-table .do-t-state { width: 1%; white-space: nowrap; font: 600 12px/1.5 system-ui, sans-serif; }
 .do-trail-table .do-t-by { width: 1%; white-space: nowrap; color: var(--text); }
 .do-trail-table .do-t-at { width: 1%; white-space: nowrap; color: var(--muted); font: 11.5px/1.6 ui-monospace, monospace; }
+
+/* ---- Information model: the UML class canvas -------------------------------
+   (ADR-draft-process-information-model, slice 2)
+
+   The diagram is the point of this screen, so it gets the room: a toolbar, the
+   canvas, a properties panel beside it, and the problems bar underneath — the
+   same arrangement the Modeler uses, for the same reason. A modeler moves between
+   drawing and correcting constantly, and a problem list behind a tab is a problem
+   list nobody reads. */
+.im-editor { display: flex; flex-direction: column; height: calc(100vh - var(--topbar-h, 96px) - 24px); min-height: 480px; }
+.im-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px 8px 0 0;
+  background: var(--bg); border-bottom: none;
+}
+.im-title { font-size: 14px; }
+.im-rev { font: 12px/1.5 ui-monospace, monospace; }
+.im-palette { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 8px; }
+.im-add, .im-connect {
+  font: 500 12px/1.5 system-ui, sans-serif; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  padding: 3px 9px; border-radius: 6px;
+}
+.im-add:hover, .im-connect:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.im-connect.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+.im-dirty { font: 11px/1.5 system-ui, sans-serif; color: var(--muted); font-style: italic; }
+
+.im-body { display: flex; flex: 1; min-height: 0; border: 1px solid var(--border); }
+.im-canvas { flex: 1; overflow: auto; background: var(--bg); min-width: 0; }
+.im-canvas.connecting { cursor: crosshair; }
+.im-side { width: 340px; flex: none; border-left: 1px solid var(--border); overflow: auto; background: var(--bg); }
+
+.im-svg { display: block; }
+.im-hint { fill: var(--muted); font: 13px/1.5 system-ui, sans-serif; }
+
+/* A class box. The three kinds are told apart by the colour of their header strip
+   rather than by shape, because shape is what the notation already uses. */
+.im-class { cursor: grab; }
+.im-class .im-box { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+.im-class .im-sep { stroke: var(--border); }
+.im-class .im-stereo { fill: var(--muted); font: 10px/1.4 system-ui, sans-serif; letter-spacing: .02em; }
+.im-class .im-cname { fill: var(--text); font: 600 13px/1.4 system-ui, sans-serif; }
+.im-class .im-attr { font: 12px/1.4 ui-monospace, monospace; }
+.im-class .im-attr-name { fill: var(--text); }
+.im-class .im-attr-type { fill: var(--muted); }
+.im-class .im-attr-mult { fill: var(--muted); }
+.im-class .im-attr.key .im-attr-name { font-weight: 700; }
+.im-class .im-literal { fill: var(--text); font: 12px/1.4 ui-monospace, monospace; }
+.im-class .im-empty { fill: var(--muted); font: italic 11.5px/1.4 system-ui, sans-serif; }
+.im-class.selected .im-box { stroke: var(--accent); stroke-width: 2; }
+.im-class.invalid .im-box { stroke: #d93025; stroke-dasharray: 4 3; }
+/* While a relationship is being drawn, a class the matrix would refuse fades: the
+   canvas offers only what the server would accept. */
+.im-class.unreachable { opacity: .35; }
+.im-class.businessObject .im-box { fill: color-mix(in srgb, var(--accent-soft) 60%, var(--bg)); }
+.im-class.valueType .im-box { fill: var(--bg); stroke-dasharray: 0; }
+.im-class.enumeration .im-box { fill: color-mix(in srgb, #b26a00 8%, var(--bg)); }
+
+.im-line { stroke: var(--text); stroke-width: 1.4; }
+.im-line.generalization { stroke-width: 1.2; }
+.im-line-hit { stroke: transparent; stroke-width: 12; cursor: pointer; }
+.im-mark { stroke: var(--text); stroke-width: 1.2; }
+.im-mark.filled { fill: var(--text); }
+.im-mark.open { fill: var(--bg); }
+.im-edge.selected .im-line { stroke: var(--accent); stroke-width: 2.2; }
+.im-edge.selected .im-mark { stroke: var(--accent); }
+.im-edge.selected .im-mark.filled { fill: var(--accent); }
+.im-edge-label { fill: var(--text); font: 600 11px/1.4 system-ui, sans-serif; text-anchor: middle; }
+.im-end-label { fill: var(--muted); font: 11px/1.4 ui-monospace, monospace; text-anchor: middle; }
+
+/* The properties panel. */
+.im-panel { padding: 12px 14px 20px; }
+.im-panel h3 { margin: 0 0 10px; font-size: 14px; }
+.im-panel h4 { margin: 0; font-size: 12.5px; }
+.im-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 0 8px; }
+.im-panel-head:first-child { margin-top: 0; }
+.im-field { display: block; margin-bottom: 10px; }
+.im-field > span { display: block; font: 600 11px/1.6 system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.im-field input, .im-field select, .im-field textarea {
+  width: 100%; box-sizing: border-box; font: 13px/1.5 system-ui, sans-serif;
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px;
+  background: var(--bg); color: var(--text);
+}
+.im-field textarea { resize: vertical; }
+/* The sentence that tells a modeler which kind to pick. It is the most consequential
+   choice in this metamodel and a three-word palette makes it by accident. */
+.im-meaning { margin: -4px 0 12px; font: 12px/1.5 system-ui, sans-serif; color: var(--muted); }
+.im-reading { margin: 0 0 12px; font: 13px/1.5 system-ui, sans-serif; }
+.im-hint-text { margin: 10px 0 0; font: 12px/1.55 system-ui, sans-serif; color: var(--muted); }
+.im-hint-text code { font-size: 11.5px; }
+
+table.im-attrs { width: 100%; border-collapse: collapse; font-size: 12px; }
+.im-attrs th { text-align: left; font: 600 10px/1.6 system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 2px 4px; }
+.im-attrs td { padding: 2px 4px; vertical-align: middle; }
+.im-attrs input[type="text"], .im-attrs input:not([type]), .im-attrs select {
+  width: 100%; box-sizing: border-box; font: 12px/1.4 system-ui, sans-serif;
+  border: 1px solid var(--border); border-radius: 5px; padding: 3px 5px;
+  background: var(--bg); color: var(--text);
+}
+.im-attrs .im-key-cell { text-align: center; width: 24px; }
+.im-end { border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px 2px; margin-bottom: 10px; }
+.im-end legend { font: 600 11px/1.5 system-ui, sans-serif; color: var(--muted); padding: 0 4px; }
+.im-note { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; font: 12px/1.55 system-ui, sans-serif; color: var(--muted); }
+.im-note ul { margin: 6px 0 0; padding-left: 18px; }
+.im-note li { margin-bottom: 6px; }
+.im-schema { max-height: 320px; overflow: auto; font: 11.5px/1.5 ui-monospace, monospace; background: var(--accent-soft); border-radius: 6px; padding: 8px 10px; }
+.im-loss { font: 12px/1.55 system-ui, sans-serif; color: var(--muted); margin-bottom: 8px; }
+.im-loss b { color: var(--text); }
+
+/* The problems bar. The tag is the distinction the whole validation rests on: "not
+   authored" is a limit of this build, "invalid" is a modeling mistake, and a
+   modeler acts on them differently. */
+.im-problems {
+  border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px;
+  padding: 8px 10px; max-height: 132px; overflow: auto; background: var(--bg);
+}
+.im-ok { font: 12px/1.6 system-ui, sans-serif; color: var(--muted); }
+.im-problem-head { font: 600 11px/1.6 system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+button.im-problem { display: block; width: 100%; text-align: left; border: 0; background: none; cursor: pointer; }
+.im-problem {
+  font: 12px/1.6 system-ui, sans-serif; color: var(--text);
+  padding: 3px 6px; border-radius: 5px; margin-bottom: 2px;
+}
+button.im-problem:hover { background: var(--accent-soft); }
+.im-problem-tag {
+  display: inline-block; font: 600 10px/1.5 system-ui, sans-serif; text-transform: uppercase;
+  letter-spacing: .04em; border-radius: 4px; padding: 0 5px; margin-right: 6px;
+}
+.im-problem.notation .im-problem-tag { background: #d93025; color: #fff; }
+.im-problem.out-of-subset .im-problem-tag { background: var(--muted); color: var(--bg); }
+.im-panel-problems { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.im-panel-problems .im-problem { padding-left: 0; }
+
+/* Data › Instances: the same subject one altitude down. */
+.im-group-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-bottom: 1px solid var(--border);
+}
+.im-resolved, .im-unresolved {
+  font: 600 10px/1.5 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em;
+  border-radius: 4px; padding: 1px 6px;
+}
+.im-resolved { color: #0a7c5a; border: 1px solid color-mix(in srgb, #0a7c5a 35%, transparent); }
+.im-unresolved { color: var(--muted); border: 1px solid var(--border); }
+.im-group-head .muted { margin-left: auto; font-size: 12px; }

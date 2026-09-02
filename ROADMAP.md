@@ -121,6 +121,31 @@ The control-flow basics most real models use.
   Problems panel can check data flow against it; then the instance **object diagram**,
   and **data stores** bound to a class and a Worker (the cross-process channel BPMN
   never specified).
+- 🚧 **The process information model** (ADR-draft-process-information-model): the
+  answer to the one thing BPMN structurally cannot say. A `<dataObject>` is scoped to
+  one process definition and its `itemSubjectRef` points at a type the specification
+  deliberately leaves opaque, so two processes that both handle an order share a
+  five-letter string and nothing else. **Slice 2 landed**: a **UML class-diagram
+  subset** owned by a process application (ADR-0128, inheriting its sharing scope
+  like a Panorama model), with its own `api/infomodel` service and sidecar store.
+  A class carries typed attributes with multiplicities, and — the part BPMN has no
+  equivalent for — a **business key**, the fact that makes `Order#ORD-1` the same
+  order in three processes. Three stereotypes (business object, value type,
+  enumeration) drive a **relationship matrix served to the browser rather than
+  duplicated in it**, so the canvas refuses mid-drag exactly what the server refuses
+  on write, in the server's own words; refusals distinguish *out of subset* (UML
+  allows it, this build does not) from *the notation says no*. Whole-model validation
+  runs on every write and a model that does not validate is not stored, so a deploy
+  resolving a type against it never meets a half-model. A **JSON Schema projection**
+  (draft 2020-12) derives the runtime contract per class and **reports what it
+  dropped** — a JSON document is a tree and a class model is a graph, so composition
+  becomes containment and associations are named as loss. The UI is a new top-level
+  **Data** area: *Model* is the class canvas (drag, connect, a properties panel, a
+  problems bar), *Instances* the same subject one altitude down — every data object
+  the running instances carry, grouped by declared type, marking which of those types
+  is actually modeled. Next: **slice 3**, resolving `itemSubjectRef` against the model
+  at deploy time with data-flow findings in the Problems panel (ADR-0026); then the
+  instance object diagram, and data stores bound to a class and a Worker.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🚧 **Conformance tests against a curated BPMN model set** — the
   [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN

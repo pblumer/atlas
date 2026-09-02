@@ -540,3 +540,111 @@ func TestInstanceDataObjectsAccrualTrail(t *testing.T) {
 		t.Errorf("order.value = %#v, want all three members present", order.Value)
 	}
 }
+
+// TestDataObjectsAcrossInstances covers the landscape read from the data's side:
+// every running instance's data objects in one list, grouped by the type the model
+// declared. It is the first step toward "which processes touch an Order", and the
+// filter is what makes it useful before resolution and business keys land.
+func TestDataObjectsAcrossInstances(t *testing.T) {
+	ts := newTestServer(t)
+
+	// Two instances of a model carrying a typed 'order', and one of a model whose
+	// objects are untyped — so the filter has something to exclude.
+	readDataObjectRows(t, ts, dataObjectLineageBPMN)
+	readDataObjectRows(t, ts, dataObjectBPMN)
+
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/data-objects", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list data objects: status=%d body=%s", code, body)
+	}
+	var all []struct {
+		InstanceKey  uint64 `json:"instanceKey"`
+		ProcessID    string `json:"processId"`
+		Name         string `json:"name"`
+		ItemType     string `json:"itemType"`
+		IsCollection bool   `json:"isCollection"`
+		State        string `json:"state"`
+		Kind         string `json:"kind"`
+	}
+	if err := json.Unmarshal(body, &all); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	// order + the two of the untyped model.
+	if len(all) != 3 {
+		t.Fatalf("got %d rows, want 3: %s", len(all), body)
+	}
+	var order *struct {
+		InstanceKey  uint64 `json:"instanceKey"`
+		ProcessID    string `json:"processId"`
+		Name         string `json:"name"`
+		ItemType     string `json:"itemType"`
+		IsCollection bool   `json:"isCollection"`
+		State        string `json:"state"`
+		Kind         string `json:"kind"`
+	}
+	for i := range all {
+		if all[i].ItemType == "Order" {
+			order = &all[i]
+		}
+	}
+	if order == nil {
+		t.Fatalf("no row carries the declared class: %s", body)
+	}
+	if order.Name != "order" || order.State != "approved" || order.Kind != "number" {
+		t.Errorf("row = %+v, want the written order", *order)
+	}
+	if order.ProcessID != "withlineage" || order.InstanceKey == 0 {
+		t.Errorf("row does not locate its instance: %+v", *order)
+	}
+
+	// The filter is on the declared type, which is what the BPMN model wrote in
+	// itemSubjectRef — the string the information model will later resolve.
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/data-objects?class=Order", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("filtered: status=%d body=%s", code, body)
+	}
+	var filtered []struct {
+		ItemType string `json:"itemType"`
+	}
+	if err := json.Unmarshal(body, &filtered); err != nil {
+		t.Fatalf("decode filtered: %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].ItemType != "Order" {
+		t.Errorf("filtered = %+v, want only the Order row", filtered)
+	}
+
+	// A class nothing declares is an empty list, not an error.
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/data-objects?class=Invoice", "", "")
+	if code != http.StatusOK || string(bytes.TrimSpace(body)) != "[]" {
+		t.Errorf("unknown class: status=%d body=%s, want 200 []", code, body)
+	}
+}
+
+// TestDataObjectsAcrossInstancesSkipsFinished pins the boundary the sweep draws: it
+// walks running instances only. A finished instance's data is retained and readable
+// through its own endpoint; sweeping history would turn a listing into a scan of
+// everything Atlas has ever run.
+func TestDataObjectsAcrossInstancesSkipsFinished(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", dataObjectSelfCompletingBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var deploy struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &deploy); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), "{}", "application/json"); code != http.StatusOK {
+		t.Fatalf("create instance: status=%d body=%s", code, b)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/data-objects", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
+	if got := string(bytes.TrimSpace(body)); got != "[]" {
+		t.Errorf("body = %s, want [] — the instance finished", got)
+	}
+}

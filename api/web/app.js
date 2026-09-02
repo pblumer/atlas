@@ -467,6 +467,7 @@ const APPS = [
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "panorama", name: "Panorama", route: "#/panorama/landscape", on: true, role: "modeler" },
+  { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
 ];
 
 // Secondary (in-app) navigation.
@@ -501,6 +502,15 @@ const TOPNAV = {
   panorama: [
     { name: "Landscape", route: "#/panorama/landscape", role: "modeler" },
     { name: "Models", route: "#/panorama", role: "modeler" },
+  ],
+  // The two altitudes of process data, and the reason the UML class diagram was the
+  // right notation: Model is the type level — what an Order *is*, shared across
+  // processes — and Instances is the instance level, the actual objects running
+  // processes carry. UML draws those as two different diagrams, and Atlas already
+  // splits design time from run time the same way.
+  data: [
+    { name: "Model", route: "#/data", role: "modeler" },
+    { name: "Instances", route: "#/data/instances", role: "operator" },
   ],
 };
 
@@ -6784,6 +6794,242 @@ function viewComingSoon(appId) {
     </div>`;
 }
 
+// ---------- Data ----------
+// The information model is the answer to what BPMN leaves open. A <dataObject> is
+// scoped to one process definition, and its itemSubjectRef points at a type the
+// specification deliberately does not describe — so two processes that both handle
+// an order share a five-letter string and nothing else. These views author the
+// missing half: a UML class-diagram subset, owned by a process application, that
+// itemSubjectRef resolves against (ADR-draft-process-information-model).
+//
+// Why a class diagram and not an entity-relationship one: an ERD's vocabulary is
+// storage — entities, columns, foreign keys — and where a datum is persisted is the
+// data store's question, settled per store. A class diagram says what an Order *is*
+// without saying where it lives. It also brings the split this area's two tabs are:
+// UML already distinguishes the class diagram (types) from the object diagram
+// (actual instances), which is exactly Atlas's design-time/run-time line.
+async function viewInfoModels() {
+  view.innerHTML = `<p class="muted">Loading information models…</p>`;
+
+  let models, applications;
+  try {
+    [models, applications] = await Promise.all([
+      api("GET", "/api/v1/infomodel/models"),
+      api("GET", "/api/v1/applications"),
+    ]);
+  } catch (e) {
+    view.innerHTML = `<div class="card empty"><h1>Data</h1><p>${esc(e.message)}</p></div>`;
+    return;
+  }
+
+  const byApplication = new Map(applications.map((app) => [app.id, app]));
+  const writable = applications.filter((app) => !app.protected && roleRank(app.myRole) >= 2);
+  const canEdit = (m) => {
+    const app = byApplication.get(m.applicationId);
+    return !!app && !app.protected && roleRank(app.myRole) >= 2;
+  };
+
+  const row = (m) => {
+    const app = byApplication.get(m.applicationId);
+    const actions = [];
+    if (canEdit(m)) actions.push(
+      { label: "Rename", icon: "✎", act: "rename-im", data: { id: m.id } },
+      { sep: true },
+      { label: "Delete", icon: "🗑", act: "delete-im", data: { id: m.id }, danger: true },
+    );
+    return `<tr data-name="${esc(`${m.name} ${app ? app.name : ""}`.toLowerCase())}">
+      <td><div class="artifact-name"><span class="chip">UML</span>
+        <a href="#/data/m/${encodeURIComponent(m.id)}"><b>${esc(m.name)}</b></a></div>
+        ${m.documentation ? `<div class="muted" style="font-size:12px; padding-left:54px">${esc(m.documentation)}</div>` : ""}</td>
+      <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}` : `<span class="muted">Missing application</span>`}</td>
+      <td class="muted">${m.classes} ${m.classes === 1 ? "class" : "classes"}</td>
+      <td class="muted">${m.associations}</td>
+      <td class="muted">r${m.revision}</td>
+      <td class="muted" data-sort="${m.updatedAt || 0}">${esc(fmtTime(m.updatedAt))}</td>
+      <td class="row-actions">${actions.length ? dropdown("⋯", "icon-btn", actions) : ""}</td>
+    </tr>`;
+  };
+
+  view.innerHTML = `<div id="im-root">
+    <div class="between">
+      <div>
+        <h1>Information model</h1>
+        <p class="muted" style="margin:0">What the data in your processes <i>is</i> — classes, their attributes and
+          their business keys — as a UML class diagram shared across every process in an application.</p>
+      </div>
+      ${writable.length ? `<button class="btn" data-act="new-im">Create new</button>` : ""}
+    </div>
+    ${applications.length ? "" : `<div class="card empty" style="margin-top:16px">
+      <h2>Create an application first</h2>
+      <p>An information model belongs to a Process Application and inherits its sharing permissions — which is
+         what lets the processes in that application share one vocabulary for their data.</p>
+      <a class="btn ghost" href="#/modeler">Open Modeler</a>
+    </div>`}
+    <div class="card" style="padding:0; margin-top:16px">
+      <table data-dt-key="info-models">
+        <thead><tr><th>Model</th><th>Application</th><th>Classes</th><th>Associations</th><th>Revision</th><th>Last changed</th><th></th></tr></thead>
+        <tbody>${models.map(row).join("") || `<tr><td colspan="7" class="empty">${writable.length
+          ? "No information model yet. Create one, then draw the business objects your processes move — an Order, a Customer, a Claim."
+          : "No information model is visible to you."}</td></tr>`}</tbody>
+      </table>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2 style="margin-top:0">Why this exists</h2>
+      <p class="muted" style="margin-bottom:8px">BPMN scopes a data object to one process definition, and its
+        <code>itemSubjectRef</code> points at a type the specification deliberately leaves opaque. So a model can say
+        that <code>order</code> is of type <code>Order</code>, and nothing anywhere says what an <code>Order</code> is
+        — or that the <code>Order</code> in another process is the same one.</p>
+      <p class="muted" style="margin:0">A class here fills that slot: a name, typed attributes, and a
+        <b>business key</b> — the part BPMN has no equivalent for, and the part that makes
+        <code>Order#ORD-1</code> the same order in three processes.</p>
+    </div>
+  </div>`;
+
+  const root = document.getElementById("im-root");
+  const chooseApplication = () => {
+    if (!writable.length) return null;
+    if (writable.length === 1) return writable[0];
+    const choices = writable.map((app, i) => `${i + 1}) ${app.name}`).join("\n");
+    const answer = window.prompt(`Store the information model in which application?\n\n${choices}\n\nEnter a number:`, "1");
+    if (answer == null) return null;
+    const selected = writable[Number(answer) - 1];
+    if (!selected) toast("No such application", "err");
+    return selected || null;
+  };
+
+  root.addEventListener("click", async (e) => {
+    const btn = e.target.closest('[data-act="new-im"]');
+    if (!btn) return;
+    const app = chooseApplication();
+    if (!app) return;
+    const name = window.prompt("Information model name:", `${app.name} data`);
+    if (name == null || !name.trim()) return;
+    try {
+      const created = await api("POST", "/api/v1/infomodel/models", { applicationId: app.id, name: name.trim() });
+      toast(`${name.trim()} created`, "ok");
+      location.hash = `#/data/m/${encodeURIComponent(created.id)}`;
+    } catch (err) { toast(err.message, "err"); }
+  });
+
+  onMenuAction(root, async (act, button) => {
+    const id = button.dataset.id;
+    const model = models.find((m) => m.id === id);
+    if (!model) return;
+    if (act === "rename-im") {
+      const name = window.prompt("Model name:", model.name);
+      if (name == null || !name.trim()) return;
+      await api("PUT", `/api/v1/infomodel/models/${encodeURIComponent(id)}`, { name: name.trim() });
+      toast("Renamed", "ok");
+      return route();
+    }
+    if (act === "delete-im") {
+      if (!window.confirm(`Delete "${model.name}"? The classes and associations in it go with it.`)) return;
+      await api("DELETE", `/api/v1/infomodel/models/${encodeURIComponent(id)}`);
+      toast("Deleted", "ok");
+      return route();
+    }
+  });
+  enhanceViewTables();
+}
+
+// viewDataInstances is the same subject one altitude down: not what an Order *is*,
+// but which orders are out there right now. UML draws that as an object diagram —
+// instances of the classes next door — and this is its list form, which is what an
+// operator scans. It groups by the type the BPMN model declared in itemSubjectRef,
+// because that string is what the information model will resolve against; joining a
+// resolved class, and correlating two instances by business key, are the next slices.
+async function viewDataInstances() {
+  view.innerHTML = `<p class="muted">Loading data objects…</p>`;
+  let rows, models;
+  try {
+    [rows, models] = await Promise.all([
+      api("GET", "/api/v1/data-objects"),
+      api("GET", "/api/v1/infomodel/models").catch(() => []),
+    ]);
+  } catch (e) {
+    view.innerHTML = `<div class="card empty"><h1>Data</h1><p>${esc(e.message)}</p></div>`;
+    return;
+  }
+
+  // A declared type that no class in any information model matches is the gap this
+  // area exists to close, so it is marked rather than left to look the same as one
+  // that resolves. The join is by name because that is all itemSubjectRef carries.
+  const classNames = new Set();
+  await Promise.all(models.map(async (m) => {
+    try {
+      const full = await api("GET", `/api/v1/infomodel/models/${encodeURIComponent(m.id)}`);
+      for (const c of full.classes || []) classNames.add(c.name);
+    } catch { /* a model we cannot read simply contributes no names */ }
+  }));
+
+  const groups = new Map();
+  for (const r of rows) {
+    const key = r.itemType || "";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  }
+  const fmtVal = (r) => {
+    if (r.kind === "null" || r.value == null) return `<span class="muted"><i>unset</i></span>`;
+    if (r.kind === "json") return `<code>${esc(JSON.stringify(r.value))}</code>`;
+    return `<code>${esc(String(r.value))}</code>`;
+  };
+
+  const groupBlock = ([type, items]) => {
+    const resolved = type && classNames.has(type);
+    const head = type
+      ? `<span class="do-class">${esc(type)}</span>${resolved
+        ? `<span class="im-resolved" title="A class of this name is modeled in an information model">modeled</span>`
+        : `<span class="im-unresolved" title="No class of this name exists in any information model you can see. Model it so the type means something across processes.">not modeled</span>`}`
+      : `<span class="do-class none">untyped</span><span class="im-unresolved"
+           title="This data object declares no itemSubjectRef, so nothing says what kind of thing it is.">no declared type</span>`;
+    return `<div class="card" style="padding:0; margin-top:16px">
+      <div class="im-group-head">${head}<span class="muted">${items.length}
+        ${items.length === 1 ? "object" : "objects"} in ${new Set(items.map((i) => i.instanceKey)).size}
+        ${new Set(items.map((i) => i.instanceKey)).size === 1 ? "instance" : "instances"}</span></div>
+      <table>
+        <thead><tr><th>Object</th><th>State</th><th>Value</th><th>Process</th><th>Instance</th></tr></thead>
+        <tbody>${items.map((r) => `<tr>
+          <td><b>${esc(r.name)}</b>${r.isCollection ? ` <span class="do-coll">list</span>` : ""}</td>
+          <td>${r.state ? `<span class="do-state">${esc(r.state)}</span>` : `<span class="muted">—</span>`}</td>
+          <td>${fmtVal(r)}</td>
+          <td class="muted">${esc(r.processId || "—")}</td>
+          <td><a href="#/operations/i/${r.instanceKey}" title="Open this instance's Data tab">${r.instanceKey}</a></td>
+        </tr>`).join("")}</tbody>
+      </table>
+    </div>`;
+  };
+
+  const ordered = [...groups.entries()].sort((a, b) => (a[0] || "\uffff").localeCompare(b[0] || "\uffff"));
+  view.innerHTML = `<div>
+    <div class="between">
+      <div>
+        <h1>Data objects in flight</h1>
+        <p class="muted" style="margin:0">Every data object the running instances are carrying, grouped by the
+          type their model declares. ${models.length ? "" : "Nothing is modeled yet — the types below are just strings."}</p>
+      </div>
+      <a class="btn neutral" href="#/data">Model →</a>
+    </div>
+    ${rows.length ? ordered.map(groupBlock).join("") : `<div class="card empty" style="margin-top:16px">
+      <h2>No data objects in flight</h2>
+      <p>Running instances that carry BPMN data objects show up here. Draw a data object on a process,
+         give an activity a data association to write it, and start an instance.</p>
+      <a class="btn ghost" href="#/operations">Open Operations</a>
+    </div>`}
+    ${rows.length ? `<p class="muted" style="margin-top:16px; font-size:12px">Running instances only —
+      a finished instance keeps its data, readable in its own replay. Grouping is by the declared
+      <code>itemSubjectRef</code>; resolving that name to a modeled class happens at deploy time in a
+      following slice.</p>` : ""}
+  </div>`;
+  enhanceViewTables();
+}
+
+// viewInfoModel opens one model on the class canvas, which lives in its own module
+// so the shell stays small.
+async function viewInfoModel(id) {
+  const mod = await import("./infomodel-editor.js");
+  await mod.mountClassDiagram(view, { api, toast, id });
+}
+
 // Panorama keeps the Open Exchange XML canonical. The library owns documents;
 // its diagram-js viewer is a read-only projection and therefore cannot discard
 // unsupported standard content when a model is opened (ADR-0189).
@@ -7334,6 +7580,9 @@ function routeTitle(path) {
     [/^#\/operations\/c\//, "Collaboration · Operations"],
     [/^#\/operations\/p\//, "Live view · Operations"],
     [/^#\/operations$/, "Instances · Operations"],
+    [/^#\/data\/instances$/, "Instances · Data"],
+    [/^#\/data\/m\//, "Class diagram · Data"],
+    [/^#\/data$/, "Model · Data"],
     [/^#\/panorama\/landscape$/, "Landscape · Panorama"],
     [/^#\/panorama\/models\//, "Architecture view · Panorama"],
     [/^#\/panorama$/, "Models · Panorama"],
@@ -7357,6 +7606,7 @@ async function route() {
   else if (path.startsWith("#/tasks")) appId = "tasks";
   else if (path.startsWith("#/operations")) appId = "operations";
   else if (path.startsWith("#/panorama")) appId = "panorama";
+  else if (path.startsWith("#/data")) appId = "data";
 
   // Gate the whole app behind login when enforcement is on and no session is
   // active. Auth off (the default) skips this entirely.
@@ -7421,6 +7671,10 @@ async function route() {
     if (path === "#/panorama") return await viewPanoramaModels();
     const pm = path.match(/^#\/panorama\/models\/(.+)$/);
     if (pm) return await viewPanoramaModel(decodeURIComponent(pm[1]));
+    if (path === "#/data") return await viewInfoModels();
+    if (path === "#/data/instances") return await viewDataInstances();
+    const imm = path.match(/^#\/data\/m\/(.+)$/);
+    if (imm) return await viewInfoModel(decodeURIComponent(imm[1]));
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);
@@ -7438,7 +7692,7 @@ async function route() {
     // token walks the diagram in activation order (ADR-0046).
     const im = path.match(/^#\/operations\/i\/(\d+)$/);
     if (im) return await viewInstanceReplay(Number(im[1]));
-    if (appId !== "console" && appId !== "modeler" && appId !== "tasks" && appId !== "panorama") return viewComingSoon(appId);
+    if (appId !== "console" && appId !== "modeler" && appId !== "tasks" && appId !== "panorama" && appId !== "data") return viewComingSoon(appId);
     // Unknown route → dashboard.
     location.hash = "#/console";
   } catch (e) {

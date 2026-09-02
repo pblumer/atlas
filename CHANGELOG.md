@@ -14,6 +14,45 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Atlas can now say what the data in a process actually *is*.** A new top-level
+  **Data** area holds a **process information model**: a UML class-diagram subset,
+  owned by a process application and shared by every process in it
+  ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md),
+  slice 2). A class has typed attributes with multiplicities, documentation, and a
+  **business key** — the part BPMN has no equivalent for, and the fact that makes
+  `Order#ORD-1` the same order in three processes. Three stereotypes carry the
+  meaning: a **business object** is something you can point at and identify, a
+  **value type** is a structured value with no existence of its own, an
+  **enumeration** is a closed set of literals.
+
+  This exists because BPMN structurally cannot say it. A `<dataObject>` is scoped to
+  one process definition, and its `itemSubjectRef` points at a type the specification
+  deliberately leaves opaque — "some other schema language". Atlas has parsed that
+  attribute all along and had nothing to resolve it against. Now it does.
+
+  **The rules are served, not duplicated.** Which relationships may run between which
+  kinds of class is one table, sent to the browser: the canvas refuses a line while it
+  is being dragged with the same matrix the server refuses it on write, and in the
+  server's words. A refusal says which of two things it is — *out of subset* (UML
+  allows it, this build does not author it) or *the notation says no* (an enumeration
+  is not something a relationship can point at) — because a modeler acts on those
+  differently. A model that does not validate is refused with its findings rather than
+  stored, so nothing downstream ever meets a half-model.
+
+  **The JSON Schema projection** derives the contract a *value* of a class is checked
+  against, and states what it could not carry. A JSON document is a tree and a class
+  model is a graph: composition — a whole that owns parts that die with it — becomes
+  containment, and a plain association between two things that exist separately does
+  not. It says so rather than quietly emitting a schema that describes less than you
+  think.
+
+  **Data › Instances** is the same subject one altitude down — every data object the
+  running instances carry, grouped by the type their model declares, marking which of
+  those types is actually modeled and which is still just a string. Next: resolving
+  `itemSubjectRef` against the model at deploy time, so a task that writes
+  `order.amount` into a class with no such attribute is a finding in the Problems
+  panel rather than a surprise at runtime.
+
 - **A process instance now shows the data it carries, and where each value came
   from.** The Operations replay gained a **Data** tab beside Variables and Decisions:
   every BPMN data object the instance holds, with the class the model declared it to
