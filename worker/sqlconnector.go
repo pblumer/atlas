@@ -31,11 +31,11 @@ import (
 // The DSN comes from the environment and not from a flag because argv is readable by
 // anyone who can list processes — and unlike every other connector's endpoint, a DSN
 // *is* the credential (ADR-0173).
-func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Registry, []string, error) {
+func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Registry, []string, *sqldb.MockDatabase, error) {
 	prefix := "ATLAS_" + envFold(p.Name) + "_"
 	mock, err := sqlMockFromEnv(env, p)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	names := splitAndTrim(env(prefix + "CONNECTORS"))
 	if len(names) == 0 {
@@ -45,7 +45,7 @@ func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Regist
 		// configured a database yet starts one of these, and failing here would be a
 		// backoff loop that never converges (exitNothingToServe exists for exactly
 		// that). A *named* connector missing its DSN, below, is still an error.
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	reg := sqldb.NewRegistry()
 	for _, name := range names {
@@ -60,7 +60,7 @@ func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Regist
 		}
 		dsn := env(key + "DSN")
 		if dsn == "" {
-			return nil, nil, fmt.Errorf("worker: %s connector %q has no connection string: set %sDSN", p.Name, name, key)
+			return nil, nil, nil, fmt.Errorf("worker: %s connector %q has no connection string: set %sDSN", p.Name, name, key)
 		}
 		// sqldb.Open connects lazily and caps the pool. A database that is merely
 		// down therefore does not stop a worker from starting — a worker must survive
@@ -74,11 +74,11 @@ func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Regist
 		// first job rather than being silently ignored.
 		client, err := sqldb.Open(p, dsn)
 		if err != nil {
-			return nil, nil, fmt.Errorf("worker: %s connector %q has an unusable connection string: %w", p.Name, name, err)
+			return nil, nil, nil, fmt.Errorf("worker: %s connector %q has an unusable connection string: %w", p.Name, name, err)
 		}
 		reg.Register(name, client)
 	}
-	return reg, names, nil
+	return reg, names, mock, nil
 }
 
 // ProbeSQL opens one database and checks that it answers. It is what the Console's

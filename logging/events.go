@@ -217,6 +217,12 @@ var (
 	// exits, so failing on an optional file is a restart loop rather than a message.
 	// Every statement then fails naming itself, which points at the missing seed.
 	SQLMockSeedUnusable = newEvent("sql_mock.seed_unusable")
+	// SQLMockReportFailed is a mock SQL worker that could not deliver its journal to
+	// the Atlas whose Console shows it. A warning, never a job failure, for the reason
+	// ADMockReportFailed is one: the statement it describes has already been answered
+	// and the job has already settled, so what is lost is one refresh of a view that
+	// the next statement sends again.
+	SQLMockReportFailed = newEvent("sql_mock.report_failed")
 	// WorkerHistoryFailed is the job-history exporter reporting that an append did not
 	// reach its clio connector, or that its buffer is dropping entries. Both are
 	// warnings rather than errors on purpose: the history is telemetry, and the engine
