@@ -1758,6 +1758,10 @@ async function viewConsoleConnectors() {
   // A secret's value is write-only, so the one thing the list can still say about it
   // is what it is *for* — which connector resolves this reference, and therefore what
   // shape the value has to have. Without that a rotation is done blind (ADR-0155).
+  // The key line names the *vault master key* — ADR-0069's keyId, a fingerprint of the
+  // one active key that seals every secret — not a per-secret key. The same value on
+  // every row is therefore the healthy state; a row that differs was sealed under a key
+  // that has since been rotated and no longer opens, which is why the line is shown.
   const secretRow = (c) => {
     const users = (connectors || []).filter((k) => k.credentialsRef === c.name);
     const usedBy = users.length
@@ -1766,7 +1770,7 @@ async function viewConsoleConnectors() {
     return `<tr data-name="${esc(c.name)}">
       <td><span class="chip">${esc(c.name)}</span>
         <div class="muted" style="font-size:12px; margin-top:3px">used by ${usedBy}</div>
-        <div class="muted" style="font-size:12px; margin-top:3px">key <code>${esc(c.keyId)}</code> · updated ${esc(fmtTime(c.updatedAt))}</div></td>
+        <div class="muted" style="font-size:12px; margin-top:3px" title="Fingerprint of the vault master key this secret is sealed under. One key seals them all, so it reads the same on every secret until the key is rotated.">sealed under vault key <code>${esc(c.keyId)}</code> · updated ${esc(fmtTime(c.updatedAt))}</div></td>
       <td style="text-align:right; white-space:nowrap">
         <button class="btn ghost" data-sact="set" title="Set or rotate this secret’s value">Set value</button>
         <button class="btn ghost danger" data-sact="delete" title="Delete this secret from the vault">Delete</button>
