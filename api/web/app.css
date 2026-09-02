@@ -3133,6 +3133,25 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .admock-ops { margin-top: 12px; }
 .admock-ops > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 
+/* ---------- Mock database journal (ADR-draft-sql-mock-journal) ---------- */
+/* The mock directory's sibling, and deliberately flatter: there is no tree here
+   because this mockup holds no state — what it has is a sequence, and a sequence
+   reads best as rows. */
+.sqlmock-table { width: 100%; margin-top: 4px; }
+/* Scoped to the table so it outranks .admock-attrs td, which sets padding: 2px 0 and
+   would otherwise run the sequence number straight into the statement ("1SELECT …"). */
+.sqlmock-table .sqlmock-seq {
+  width: 1%; padding: 2px 14px 2px 0; text-align: right;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.sqlmock-stmt { white-space: pre-wrap; overflow-wrap: anywhere; }
+.sqlmock-bound { margin-top: 2px; font-size: 12px; }
+/* A statement nobody seeded is the entry an operator came here for: it is what they
+   paste into the prepared answers. So it is coloured, not merely listed. */
+.sqlmock-failed .sqlmock-stmt { color: var(--err, #b3261e); }
+.sqlmock-detail { margin-top: 2px; font-size: 12px; color: var(--err, #b3261e); overflow-wrap: anywhere; }
+.sqlmock-table tr + tr > td, .sqlmock-table tr + tr > th { padding-top: 8px; }
+
 /* ---------- Secret shape hints (ADR-0155) ---------- */
 /* A vault secret is a name and an opaque string, so the form has to say what the
    string is for: which connector resolves it and what shape that connector needs. */

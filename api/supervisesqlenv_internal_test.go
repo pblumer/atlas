@@ -507,3 +507,46 @@ func TestWithTheMockupOffASQLWorkerWithNoDSNIsStillLeftOut(t *testing.T) {
 		t.Errorf("ATLAS_MSSQL_CONNECTORS = %q, want the secretless worker left out", got)
 	}
 }
+
+// Where the worker reports its journal, handed over at spawn — and only while the
+// mockup is on. A journal view fed by a worker talking to a real database would be the
+// worst possible thing for that screen to be: it would show real statements against
+// real data under a heading that says "mockup".
+func TestTheJournalViewURLIsHandedOverOnlyWhileMockedOn(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.superviseURL = "https://atlas.example.com"
+
+	srv.do(func() { _ = srv.settings.saveSQLMock(sqlMockSetting{Enabled: true, Seed: sqlMockSeedJSON}) })
+	env := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))
+	if got := env[sqlMockViewURLEnv]; got != "https://atlas.example.com/api/v1/sql/mock-journal" {
+		t.Errorf("%s = %q, want this server's journal endpoint", sqlMockViewURLEnv, got)
+	}
+
+	srv.do(func() { _ = srv.settings.saveSQLMock(sqlMockSetting{Enabled: false}) })
+	if got := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))[sqlMockViewURLEnv]; got != "" {
+		t.Errorf("%s = %q with the mockup off — a worker on a real database must report nothing", sqlMockViewURLEnv, got)
+	}
+}
+
+// A server that does not know its own address hands over no endpoint rather than a
+// broken one: a worker retrying against a URL that cannot resolve would log a warning
+// per statement for the life of the run.
+func TestNoSuperviseURLMeansNoJournalReporting(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.superviseURL = ""
+	srv.do(func() { _ = srv.settings.saveSQLMock(sqlMockSetting{Enabled: true, Seed: sqlMockSeedJSON}) })
+
+	if got := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))[sqlMockViewURLEnv]; got != "" {
+		t.Errorf("%s = %q, want nothing when this server has no address to be reported to", sqlMockViewURLEnv, got)
+	}
+}
+
+// The engine renders the variable and the worker reads it, from two packages that do
+// not import each other — deliberately, because reaching into the worker for one string
+// would link three database drivers into a package that never opens a database
+// (ADR-0173). So the two spellings are held together here instead.
+func TestTheJournalViewURLVariableIsSpelledTheSameOnBothSides(t *testing.T) {
+	if sqlMockViewURLEnv != worker.SQLMockViewURLEnv {
+		t.Errorf("the engine renders %q and the worker reads %q", sqlMockViewURLEnv, worker.SQLMockViewURLEnv)
+	}
+}
