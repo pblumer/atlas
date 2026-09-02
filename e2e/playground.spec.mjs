@@ -630,3 +630,139 @@ test("the overlay shades the diagram by one measure at a time", async ({ page })
   await expect(page.locator('[data-container-id="score"] .token-badge')).toHaveText("3m");
   expect(page.__errors).toEqual([]);
 });
+
+test("a results row opens that case on the diagram", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-batch").click();
+  await expect(page.locator("#pg-results")).toBeVisible();
+  // The run's own picture first: every element counted together.
+  await expect(page.locator('[data-container-id="review"] .token-badge')).toHaveText("3");
+
+  await page.locator(".pg-cases tbody tr").first().click();
+
+  // It reads the case rather than driving it — Step's controls act on the whole
+  // sandbox, and offering them over a finished run would invite stepping it.
+  const read = (await calls(page)).find((c) => c.method === "GET" && /\/cases\/11$/.test(c.url));
+  expect(read).toBeTruthy();
+
+  // The diagram now shows that case's path, numbered in the order it went through:
+  // the step number is what makes this a replay rather than a second heat map.
+  await expect(page.locator('[data-container-id="review"] .token-badge')).toHaveText("2");
+  await expect(page.locator('[data-container-id="done"] .token-badge')).toHaveText("4");
+  await expect(page.locator(".pg-heat-5")).toHaveCount(0);
+
+  // The strip names what is on screen instead of offering measures that are not.
+  await expect(page.locator("#pg-overlay")).toContainText("case 1");
+  await expect(page.locator("#pg-overlay")).toContainText("4 steps");
+  await expect(page.locator('#pg-overlay button[data-overlay="runs"]')).toHaveCount(0);
+  // And the row stays marked, so the number in the strip and the row agree.
+  await expect(page.locator(".pg-cases tbody tr").first()).toHaveClass(/pg-open/);
+
+  // The case's own detail sits above the report rather than instead of it: the
+  // reader came from the run and should not lose it to look at one case.
+  await expect(page.locator("#pg-panel")).toContainText("Case 1");
+  await expect(page.locator("#pg-panel")).toContainText("start → review → score → done");
+  await expect(page.locator("#pg-panel")).toContainText("Outcomes");
+
+  await page.locator("#pg-case-close").click();
+  await expect(page.locator('[data-container-id="review"] .token-badge')).toHaveText("3");
+  await expect(page.locator("#pg-panel")).not.toContainText("Case 1");
+  expect(page.__errors).toEqual([]);
+});
+
+test("an unfinished case is drawn standing where it stopped", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-batch").click();
+  // The third row is the one parked behind an incident.
+  await page.locator(".pg-cases tbody tr").nth(2).click();
+
+  await expect(page.locator("#pg-overlay")).toContainText("case 3");
+  await expect(page.locator("#pg-overlay")).toContainText("2 steps");
+  // Where it stands now is live, not merely visited — that is what somebody opens a
+  // stuck case to see.
+  await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
+  await expect(page.locator('.djs-element[data-element-id="start"].atlas-visited')).toHaveCount(1);
+  await expect(page.locator('.djs-element[data-element-id="done"].atlas-visited')).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the timing draws the stream it describes, before the run", async ({ page }) => {
+  await switchToBatch(page);
+
+  // The default dataset is a list of two, arriving all at once: one slice tall, which
+  // is what "all at once" looks like.
+  await expect(page.locator(".pg-spark")).toBeVisible();
+  await expect(page.locator(".pg-spark-note")).toHaveText("2 cases at once");
+  const first = (await calls(page)).filter((c) => /\/arrivals$/.test(c.url));
+  expect(first).toHaveLength(1);
+  expect(first[0].body).toEqual({ count: 2, arrival: { mode: "allAtOnce" } });
+
+  // Typing a count redraws it without a render: the box being typed in keeps the
+  // caret, and only the number somebody stopped on is fetched.
+  await page.locator("#pg-cases").fill('[{"a":1},{"a":2},{"a":3}]');
+  await expect(page.locator(".pg-spark-note")).toHaveText("3 cases at once");
+  await expect(page.locator("#pg-cases")).toHaveValue('[{"a":1},{"a":2},{"a":3}]');
+
+  // Changing the timing redraws it, and the count and the calendar go with it: the
+  // shape depends on all three, so all three are in the request.
+  await page.locator("#pg-arrival").selectOption("poisson");
+  await expect(page.locator(".pg-spark-line")).toBeVisible();
+  // A stream that is spread over time says how far, and how crowded its worst slice
+  // got: a shape without a scale is a picture nobody can act on.
+  await expect(page.locator(".pg-spark-note")).toHaveText("3 cases over 9h, at most 3 in a slice");
+  const poisson = (await calls(page)).filter((c) => /\/arrivals$/.test(c.url));
+  expect(poisson[poisson.length - 1].body.arrival).toEqual({ mode: "poisson", perHour: 10 });
+
+  // A slice carries its own count, so the shape can be read exactly rather than
+  // estimated off a height.
+  await expect(page.locator(".pg-spark-hit title").first()).toHaveText(/2026-03-05 08:00 · \d+ case/);
+
+  // One after another has no schedule ahead of the run, and says so rather than
+  // drawing a flat line that would read as one.
+  await page.locator("#pg-arrival").selectOption("sequential");
+  await expect(page.locator(".pg-spark")).toHaveCount(0);
+  await expect(page.locator("#pg-setup")).toContainText("no schedule ahead of the run");
+
+  // A dataset the browser cannot count has no profile to draw either: a CSV is
+  // parsed on the server, so its size is not known here.
+  await page.locator("#pg-arrival").selectOption("allAtOnce");
+  await expect(page.locator(".pg-spark")).toBeVisible();
+  await page.locator('#pg-setup button[data-source="csv"]').click();
+  await expect(page.locator(".pg-spark")).toHaveCount(0);
+
+  // And a described dataset is counted from its own count box.
+  await page.locator('#pg-setup button[data-source="generated"]').click();
+  await expect(page.locator(".pg-spark")).toBeVisible();
+  const generated = (await calls(page)).filter((c) => /\/arrivals$/.test(c.url));
+  expect(generated[generated.length - 1].body.count).toBe(300);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the report's numbers carry their own magnitude", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-batch").click();
+  await expect(page.locator(".pg-facts").first()).toBeVisible();
+
+  // The four duration tiles sit on one scale, so the slowest fills its rule and the
+  // fastest shows its third of it. The numbers stay in text: nothing here is read
+  // off a length alone.
+  const fills = page.locator(".pg-facts .pg-track i");
+  await expect(fills).toHaveCount(4);
+  await expect(fills.nth(0)).toHaveAttribute("style", "width:33.3%");
+  await expect(fills.nth(3)).toHaveAttribute("style", "width:100.0%");
+
+  // Waiting is scaled to the worst element in the table; utilisation to a full
+  // hundred, because the question there is how full a pool was rather than which of
+  // them was fullest.
+  const waiting = page.locator(".pg-bottlenecks td.pg-meter");
+  await expect(waiting.first()).toContainText("3h");
+  await expect(waiting.first().locator("i")).toHaveAttribute("style", "width:100.0%");
+  await expect(waiting.nth(1).locator("i")).toHaveAttribute("style", "width:0.0%");
+  await expect(page.locator(".pg-pools td.pg-meter i")).toHaveAttribute("style", "width:100.0%");
+
+  // And every finished case's duration against the slowest on the page, so the long
+  // one is found by looking rather than by reading fifty numbers.
+  await expect(page.locator(".pg-cases td.pg-meter")).toHaveCount(2);
+  await expect(page.locator(".pg-cases td.pg-meter i").first()).toHaveAttribute("style", "width:100.0%");
+  expect(page.__errors).toEqual([]);
+});
