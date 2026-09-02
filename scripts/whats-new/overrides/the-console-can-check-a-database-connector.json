@@ -1,0 +1,36 @@
+{
+  "tags": [
+    "Console",
+    "Databases",
+    "Workers"
+  ],
+  "title": {
+    "en": "Check a database connection before a process needs it",
+    "de": "Eine Datenbankverbindung prüfen, bevor ein Prozess sie braucht"
+  },
+  "summary": {
+    "en": "A database connector is configured with a single connection string, and that string is sealed away the moment you save it — so a typo in it was invisible from then on, and the first thing to notice was a task that stopped and waited. The connector form now has a Test connection button for SQL Server, MariaDB and PostgreSQL, next to the one mail already had. It works on what you have just typed, before anything is stored, and it works afterwards on a connector that used to run and no longer does — which is the case that actually brings people to that dialog. The answer says what it proved rather than just OK: it names the database that answered and reminds you that connecting is not the same as being allowed to read the tables your task names. That distinction is worth the extra sentence, because reading OK as “the task will work” is how the next surprise arrives as an incident instead of as a message.",
+    "de": "Ein Datenbank-Worker wird mit einer einzigen Verbindungszeichenfolge eingerichtet, und die wird beim Speichern weggeschlossen — ein Tippfehler darin war ab da unsichtbar, und das Erste, was ihn bemerkte, war eine Aufgabe, die stehen blieb. Das Formular hat jetzt auch für SQL Server, MariaDB und PostgreSQL einen Knopf „Test connection\", so wie ihn Mail schon hatte. Er prüft, was Sie gerade getippt haben, bevor etwas gespeichert ist — und er prüft später einen Worker, der einmal lief und jetzt nicht mehr, was der Fall ist, der Menschen überhaupt in diesen Dialog führt. Die Antwort sagt, was sie belegt hat, statt nur „OK\": Sie nennt die Datenbank, die geantwortet hat, und erinnert daran, dass eine Verbindung noch keine Leseberechtigung auf die Tabellen ist, die Ihre Aufgabe nennt. Dieser Satz lohnt sich, denn „OK\" als „die Aufgabe wird laufen\" zu lesen ist der Weg, auf dem die nächste Überraschung als Incident ankommt statt als Meldung."
+  },
+  "tutorial": {
+    "en": [
+      "Go to Console › Connectors and add a connector of kind SQL Server (or open an existing one with Edit).",
+      "Paste the connection string into Connection string — for an existing connector it is already sealed, so leave the credential reference as it is.",
+      "Press Test connection. Nothing is saved by pressing it.",
+      "Read the answer: it names the database and the login that answered, never the password, and says plainly that no statement was run."
+    ],
+    "de": [
+      "Gehen Sie zu Console › Connectors und legen Sie einen Connector der Art SQL Server an (oder öffnen Sie einen bestehenden mit Edit).",
+      "Fügen Sie die Verbindungszeichenfolge unter Connection string ein — bei einem bestehenden Connector ist sie bereits versiegelt, lassen Sie die Referenz einfach stehen.",
+      "Drücken Sie „Test connection\". Durch das Drücken wird nichts gespeichert.",
+      "Lesen Sie die Antwort: Sie nennt Datenbank und Login, die geantwortet haben, nie das Passwort — und sagt deutlich, dass keine Anweisung ausgeführt wurde."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Connectors",
+      "de": "Connectors öffnen"
+    },
+    "route": "#/console/connectors"
+  }
+}

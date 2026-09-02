@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Microsoft SQL Server: Eintritt aus der HR-Datenbank melden (ADR-0173).
+
+  Der Prozess, der den Datenbank-Worker erklärt. Drei Dinge sind an einem SQL-Task
+  anders als an jedem anderen Worker-Typ, und alle drei stehen hier im Modell:
+
+    1. Die *Anweisung ist literal*. Sie hat bewusst keinen fx-Schalter — eine aus
+       Prozessdaten zusammengesetzte Anweisung wäre eine Injection, die keinen
+       Anführungszeichenfehler mehr bräuchte, sondern schlicht täte, was das Feld
+       verspricht. Werte kommen ausschliesslich als *gebundene Parameter* hinein.
+    2. Die Parameter stehen deshalb in einer eigenen Prozessvariablen, die ein
+       Script-Task davor baut. Eine Liste bindet der Reihe nach (@p1, @p2, …),
+       ein Objekt bindet über die Namen (@id, @aktiv). Namensbindung kann *nur*
+       SQL Server; MariaDB und PostgreSQL lehnen ein Objekt ab, statt es in eine
+       Reihenfolge zu bringen, die niemand geschrieben hat.
+    3. Es gibt keinen In-Process-Fallback. Ohne laufenden Worker parkt der Task —
+       das ist Absicht (die Verbindungszeichenfolge ist die Zugangsdatei selbst und
+       soll die Engine nie erreichen).
+
+    Start (kuerzel)
+     -> [script]        Suchparameter bauen        -> suchParams = [kuerzel]
+     -> [mssql query-one] Person in HR suchen      -> person = {id, mail, abteilung} | null
+     -> <Person gefunden?>  nein                   -> Ende „nicht in HR"
+     -> [script]        Vermerk-Parameter bauen    -> vermerkParams = {id, aktiv}
+     -> [mssql execute] Eintritt vermerken         -> vermerkt = Anzahl geänderter Zeilen
+     -> Ende „vermerkt"
+
+  Wie sich das ohne Datenbank ausprobieren lässt, steht in der Dokumentation des
+  Prozesses selbst — die zeigt der Modeler an, dieser Kommentar hier nicht.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_mssql_eintrittsmeldung"
+                  targetNamespace="http://atlas/examples">
+
+  <bpmn:process id="mssql-eintrittsmeldung" name="Eintrittsmeldung (MS SQL)" isExecutable="true">
+    <bpmn:documentation>Meldet den Eintritt einer Person, die im HR-System bereits angelegt ist:
+schlägt sie über ihr Kürzel nach und setzt sie danach aktiv.
+
+Startvariablen: kuerzel (String, z. B. "abo").
+Ergebnisvariablen: person (Objekt oder null), vermerkt (Anzahl geänderter Zeilen).
+
+Der Worker heisst hier "hr-db". Das ist ein *Name*, keine Adresse: unter diesem Namen
+hält der Worker die Verbindungszeichenfolge — in der Konsole unter Organisation &gt;
+Workers hinterlegt und in den Vault versiegelt, oder bei einem selbst gestarteten
+Worker in dessen Umgebung als ATLAS_MSSQL_HR_DB_DSN. Die Engine hält sie nie.
+
+Ausprobieren ohne Datenbank: Das Modell bleibt unverändert, es ändert sich nur, welcher
+Worker die Jobs abholt.
+
+    ATLAS_MSSQL_CONNECTORS=hr-db ATLAS_MSSQL_MOCK=1 \
+    ATLAS_MSSQL_MOCK_SEED=hr-seed.json atlas worker --connector mssql
+
+Der Worker beantwortet die Anweisungen dann aus hinterlegten Antworten in seinem
+Arbeitsspeicher. Eine Anweisung ohne hinterlegte Antwort scheitert und nennt sich
+selbst samt gebundener Werte — sie liefert keine leere Trefferliste, denn „nichts
+gefunden" ist eine fachliche Aussage und keine, die ein Mockup erfinden darf. Eine
+passende Startdatei steht im Handbuch unter „Testen &amp; Simulieren".</bpmn:documentation>
+
+    <bpmn:startEvent id="start" name="Eintritt gemeldet">
+      <bpmn:documentation>Startet mit dem Personalkürzel. Mehr braucht der Prozess nicht: alles
+Weitere steht in der HR-Datenbank.</bpmn:documentation>
+    </bpmn:startEvent>
+
+    <bpmn:scriptTask id="baue_suchparameter" name="Suchparameter bauen">
+      <bpmn:documentation>Baut die Parameterliste für die Suche. Ein Script-Task und nicht das
+Anweisungsfeld, weil genau das der Punkt ist: In die Anweisung kommt kein Prozesswert,
+er kommt als *gebundener* Parameter daneben.
+
+Eine Liste bindet der Reihe nach — das erste Element wird @p1. Für einen einzigen
+Parameter sieht das umständlich aus; es ist dieselbe Form, die bei fünf Parametern
+noch trägt, und dieselbe, die MariaDB und PostgreSQL verlangen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="= [kuerzel]" resultVariable="suchParams"/>
+      </bpmn:extensionElements>
+    </bpmn:scriptTask>
+
+    <bpmn:serviceTask id="suche_person" name="Person in HR suchen">
+      <bpmn:documentation>query-one, nicht query: Erwartet wird genau eine Zeile.
+
+Findet die Anweisung keine, ist das Ergebnis null — und *nicht* eine leere Liste, was
+das Gatter danach unterscheiden muss. Findet sie zwei, scheitert die Aufgabe, statt
+die erste zu nehmen: „die Zeile zu dieser Person", die zweimal passt, ist eine falsche
+Annahme und kein Ergebnis. Genau deshalb steht hier query-one und nicht query.
+
+maxRows steht bewusst nicht dabei — es gilt nur für query, wo es ein vergessenes WHERE
+abfängt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:mssqlConnector connector="hr-db" operation="query-one"
+                              statement="SELECT id, mail, abteilung FROM personen WHERE kuerzel = @p1"
+                              parametersVariable="suchParams"
+                              resultVariable="person"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="person_da" name="Person gefunden?" default="f_nein">
+      <bpmn:documentation>Die Verzweigung, die query-one erzwingt. Ohne sie liefe der Prozess mit
+person = null weiter und der UPDATE danach würde null Zeilen ändern — erfolgreich, und
+falsch. Ein Prozess, der auf ein Suchergebnis baut, muss das leere Ergebnis benennen.</bpmn:documentation>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:endEvent id="ende_unbekannt" name="Nicht in HR">
+      <bpmn:documentation>Kein Fehler, sondern ein Ausgang: Wer im HR-System nicht steht, dessen
+Eintritt kann dieser Prozess nicht melden. Das gehört ins Modell und nicht in einen
+Incident.</bpmn:documentation>
+    </bpmn:endEvent>
+
+    <bpmn:scriptTask id="baue_vermerkparameter" name="Vermerk-Parameter bauen">
+      <bpmn:documentation>Diesmal ein Objekt statt einer Liste: Die Schlüssel binden über die Namen
+in der Anweisung (@id, @aktiv), unabhängig von ihrer Reihenfolge.
+
+Das kann nur SQL Server. MariaDB und PostgreSQL binden ausschliesslich über die
+Position und lehnen ein Objekt ab, statt es zu einer Reihenfolge zu verflachen, die
+der Autor nirgends geschrieben hat — Go iteriert über Maps in zufälliger Reihenfolge.
+Ein Modell ist zwischen den drei Produkten deshalb nicht portierbar, und das ist der
+Grund, warum jedes Produkt ein eigener Worker-Typ ist statt eines Auswahlfelds.
+
+person.id kommt aus der Zeile davor: Die Datenbank vergibt den Schlüssel, der Prozess
+denkt ihn sich nicht aus.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="= {id: person.id, aktiv: true}" resultVariable="vermerkParams"/>
+      </bpmn:extensionElements>
+    </bpmn:scriptTask>
+
+    <bpmn:serviceTask id="vermerke_eintritt" name="Eintritt vermerken">
+      <bpmn:documentation>execute schreibt und liefert die Anzahl geänderter Zeilen zurück.
+
+Ein UPDATE mit WHERE id = @id ist auch dann richtig, wenn der Job doppelt zugestellt
+wird — die Zustellung ist at-least-once, und der zweite Lauf setzt dasselbe Feld auf
+denselben Wert. Ein INSERT wäre es nicht; der bräuchte einen Unique-Key, an dem der
+zweite Versuch scheitert (und dann eine Fehlerbehandlung, die dieses Scheitern als
+„schon passiert" liest).
+
+vermerkt ist danach 1. Ist es 0, hat die Zeile zwischen Suche und Update jemand
+anderes verändert — was ein Prozess wissen will, und der Grund, warum die Anzahl
+überhaupt in einer Variablen landet statt verworfen zu werden.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:mssqlConnector connector="hr-db" operation="execute"
+                              statement="UPDATE personen SET aktiv = @aktiv WHERE id = @id"
+                              parametersVariable="vermerkParams"
+                              resultVariable="vermerkt"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="ende" name="Eintritt vermerkt"/>
+
+    <bpmn:sequenceFlow id="f_start_suchparam" sourceRef="start" targetRef="baue_suchparameter"/>
+    <bpmn:sequenceFlow id="f_suchparam_suche" sourceRef="baue_suchparameter" targetRef="suche_person"/>
+    <bpmn:sequenceFlow id="f_suche_gw" sourceRef="suche_person" targetRef="person_da"/>
+    <bpmn:sequenceFlow id="f_ja" name="ja" sourceRef="person_da" targetRef="baue_vermerkparameter">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"
+                                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">= person != null</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_nein" name="nein" sourceRef="person_da" targetRef="ende_unbekannt"/>
+    <bpmn:sequenceFlow id="f_vermerkparam_update" sourceRef="baue_vermerkparameter" targetRef="vermerke_eintritt"/>
+    <bpmn:sequenceFlow id="f_update_ende" sourceRef="vermerke_eintritt" targetRef="ende"/>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="mssql-eintrittsmeldung">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="140" y="204" width="76" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_baue_suchparameter" bpmnElement="baue_suchparameter">
+        <dc:Bounds x="240" y="140" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_suche_person" bpmnElement="suche_person">
+        <dc:Bounds x="390" y="140" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_person_da" bpmnElement="person_da" isMarkerVisible="true">
+        <dc:Bounds x="540" y="155" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="516" y="118" width="98" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_unbekannt" bpmnElement="ende_unbekannt">
+        <dc:Bounds x="547" y="302" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="528" y="344" width="74" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_baue_vermerkparameter" bpmnElement="baue_vermerkparameter">
+        <dc:Bounds x="640" y="140" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_vermerke_eintritt" bpmnElement="vermerke_eintritt">
+        <dc:Bounds x="790" y="140" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende" bpmnElement="ende">
+        <dc:Bounds x="940" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="918" y="204" width="80" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_suchparam" bpmnElement="f_start_suchparam">
+        <di:waypoint x="196" y="180" /><di:waypoint x="240" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_suchparam_suche" bpmnElement="f_suchparam_suche">
+        <di:waypoint x="340" y="180" /><di:waypoint x="390" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_suche_gw" bpmnElement="f_suche_gw">
+        <di:waypoint x="490" y="180" /><di:waypoint x="540" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_ja" bpmnElement="f_ja">
+        <di:waypoint x="590" y="180" /><di:waypoint x="640" y="180" />
+        <bpmndi:BPMNLabel><dc:Bounds x="605" y="158" width="20" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_nein" bpmnElement="f_nein">
+        <di:waypoint x="565" y="205" /><di:waypoint x="565" y="302" />
+        <bpmndi:BPMNLabel><dc:Bounds x="573" y="238" width="30" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_vermerkparam_update" bpmnElement="f_vermerkparam_update">
+        <di:waypoint x="740" y="180" /><di:waypoint x="790" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_update_ende" bpmnElement="f_update_ende">
+        <di:waypoint x="890" y="180" /><di:waypoint x="940" y="180" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

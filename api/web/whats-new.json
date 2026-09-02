@@ -2,6 +2,96 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "a-database-task-can-be-tried-without-a-database",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Try a database task without a database",
+        "de": "Einen Datenbank-Task ausprobieren, ohne eine Datenbank"
+      },
+      "summary": {
+        "en": "A process that reads a database was the one kind you could not try out. The database it reads is the HR system or the ERP — which is exactly why it is interesting, and exactly why nobody wants a half-finished model pointed at it. Now a worker can answer SQL statements from a small file of prepared answers in its own memory instead. Nothing in your model changes: the same worker name, the same statement, the same parameters — only which worker picks the jobs up. So the model that runs through in the mockup is the model that later runs in production, and getting there is an environment variable rather than an edit. The prepared answers can also make a statement fail on purpose, which is how you try the case a real database hands you sooner or later: the same record inserted twice. And a statement you did not prepare an answer for does not quietly come back empty — it fails and tells you the statement and the values it was given, so you can paste them straight into the file. That refusal is the point: no rows is a real business answer, and a mockup that invents one would teach your process something untrue in the way that is hardest to notice.",
+        "de": "Ein Prozess, der aus einer Datenbank liest, war die eine Sorte, die sich nicht ausprobieren liess. Die Datenbank, aus der er liest, ist das HR- oder das ERP-System — genau deshalb ist sie interessant, und genau deshalb will niemand ein halbfertiges Modell darauf loslassen. Jetzt kann ein Worker SQL-Anweisungen stattdessen aus einer kleinen Datei mit vorbereiteten Antworten in seinem Arbeitsspeicher beantworten. Am Modell ändert sich dabei nichts: derselbe Worker-Name, dieselbe Anweisung, dieselben Parameter — nur wer die Jobs abholt, ist ein anderer. Das Modell, das im Mockup durchläuft, ist also dasselbe, das später produktiv läuft, und der Weg dorthin ist eine Umgebungsvariable und keine Änderung. Eine vorbereitete Antwort darf auch absichtlich scheitern — so probieren Sie den Fall aus, den eine echte Datenbank früher oder später liefert: derselbe Datensatz zweimal eingefügt. Und eine Anweisung, für die Sie nichts vorbereitet haben, kommt nicht still leer zurück: Sie scheitert und nennt Ihnen Anweisung und Werte, sodass Sie beides direkt in die Datei übernehmen können. Genau diese Verweigerung ist der Sinn der Sache — „keine Treffer\" ist eine echte fachliche Antwort, und ein Mockup, das sie erfindet, schiebt Ihrem Prozess eine Unwahrheit unter, und zwar in der Richtung, die am schwersten auffällt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "Databases",
+        "Testing"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the handbook, chapter Test & simulate, section “Trying a database without a database” — it carries the seed file to copy.",
+          "Save that file, then start a worker with ATLAS_MSSQL_CONNECTORS=hr-db, ATLAS_MSSQL_MOCK=1 and ATLAS_MSSQL_MOCK_SEED pointing at it.",
+          "Deploy examples/mssql-eintrittsmeldung.bpmn and start an instance with kuerzel set to whatever your seed answers for.",
+          "Watch it under Operations › Workers: the mssql worker is there, and its log warns that no database is being written.",
+          "Now start one with a kuerzel your seed does not answer for, and read the incident — it names the statement and the values, ready to paste into the seed."
+        ],
+        "de": [
+          "Öffnen Sie das Handbuch, Kapitel Testen & Simulieren, Abschnitt „Eine Datenbank ausprobieren, ohne eine Datenbank\" — dort steht die Startdatei zum Kopieren.",
+          "Speichern Sie die Datei und starten Sie einen Worker mit ATLAS_MSSQL_CONNECTORS=hr-db, ATLAS_MSSQL_MOCK=1 und ATLAS_MSSQL_MOCK_SEED auf diese Datei.",
+          "Deployen Sie examples/mssql-eintrittsmeldung.bpmn und starten Sie eine Instanz mit einem kuerzel, für das Ihre Startdatei eine Antwort hat.",
+          "Schauen Sie unter Betrieb › Workers zu: Dort läuft der mssql-Worker, und sein Log warnt, dass keine Datenbank geschrieben wird.",
+          "Starten Sie dann eine mit einem kuerzel, für das nichts hinterlegt ist, und lesen Sie den Incident — er nennt Anweisung und Werte, fertig zum Übernehmen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/operations/workers"
+      }
+    },
+    {
+      "id": "the-console-can-check-a-database-connector",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Check a database connection before a process needs it",
+        "de": "Eine Datenbankverbindung prüfen, bevor ein Prozess sie braucht"
+      },
+      "summary": {
+        "en": "A database connector is configured with a single connection string, and that string is sealed away the moment you save it — so a typo in it was invisible from then on, and the first thing to notice was a task that stopped and waited. The connector form now has a Test connection button for SQL Server, MariaDB and PostgreSQL, next to the one mail already had. It works on what you have just typed, before anything is stored, and it works afterwards on a connector that used to run and no longer does — which is the case that actually brings people to that dialog. The answer says what it proved rather than just OK: it names the database that answered and reminds you that connecting is not the same as being allowed to read the tables your task names. That distinction is worth the extra sentence, because reading OK as “the task will work” is how the next surprise arrives as an incident instead of as a message.",
+        "de": "Ein Datenbank-Worker wird mit einer einzigen Verbindungszeichenfolge eingerichtet, und die wird beim Speichern weggeschlossen — ein Tippfehler darin war ab da unsichtbar, und das Erste, was ihn bemerkte, war eine Aufgabe, die stehen blieb. Das Formular hat jetzt auch für SQL Server, MariaDB und PostgreSQL einen Knopf „Test connection\", so wie ihn Mail schon hatte. Er prüft, was Sie gerade getippt haben, bevor etwas gespeichert ist — und er prüft später einen Worker, der einmal lief und jetzt nicht mehr, was der Fall ist, der Menschen überhaupt in diesen Dialog führt. Die Antwort sagt, was sie belegt hat, statt nur „OK\": Sie nennt die Datenbank, die geantwortet hat, und erinnert daran, dass eine Verbindung noch keine Leseberechtigung auf die Tabellen ist, die Ihre Aufgabe nennt. Dieser Satz lohnt sich, denn „OK\" als „die Aufgabe wird laufen\" zu lesen ist der Weg, auf dem die nächste Überraschung als Incident ankommt statt als Meldung."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Console",
+        "Databases",
+        "Workers"
+      ],
+      "tutorial": {
+        "en": [
+          "Go to Console › Connectors and add a connector of kind SQL Server (or open an existing one with Edit).",
+          "Paste the connection string into Connection string — for an existing connector it is already sealed, so leave the credential reference as it is.",
+          "Press Test connection. Nothing is saved by pressing it.",
+          "Read the answer: it names the database and the login that answered, never the password, and says plainly that no statement was run."
+        ],
+        "de": [
+          "Gehen Sie zu Console › Connectors und legen Sie einen Connector der Art SQL Server an (oder öffnen Sie einen bestehenden mit Edit).",
+          "Fügen Sie die Verbindungszeichenfolge unter Connection string ein — bei einem bestehenden Connector ist sie bereits versiegelt, lassen Sie die Referenz einfach stehen.",
+          "Drücken Sie „Test connection\". Durch das Drücken wird nichts gespeichert.",
+          "Lesen Sie die Antwort: Sie nennt Datenbank und Login, die geantwortet haben, nie das Passwort — und sagt deutlich, dass keine Anweisung ausgeführt wurde."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Connectors",
+          "de": "Connectors öffnen"
+        },
+        "route": "#/console/connectors"
+      }
+    },
+    {
       "id": "a-jira-issue-can-start-a-process",
       "version": "Unreleased",
       "date": null,
@@ -277,50 +367,6 @@
       "tags": [
         "Connectors",
         "Workers"
-      ]
-    },
-    {
-      "id": "jira-runs-on-a-worker-by-default",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Jira work now has a worker of its own",
-        "de": "Jira-Arbeit hat jetzt einen eigenen Worker"
-      },
-      "summary": {
-        "en": "Jira tasks used to run inside the engine, which meant that under Operations → Workers — the page whose whole subject is who is doing the work — a healthy Jira connector showed nothing at all. It only became visible when something went wrong. Atlas now starts a Jira worker for you, with its address and login handed over at startup, so there is nothing to configure: it appears alongside the mail and Remedy workers, with a log you can read and a restart button. Note this changes on upgrade — the work leaves the engine at the next start, and the Jira site has to be reachable from the worker. Running it inside the engine is still available if you want it back.",
-        "de": "Jira-Aufgaben liefen bisher in der Engine. Unter Operations → Workers — der Seite, deren ganzes Thema ist, wer die Arbeit macht — war ein funktionierender Jira-Konnektor deshalb überhaupt nicht zu sehen; sichtbar wurde er erst, wenn etwas schiefging. Atlas startet jetzt selbst einen Jira-Worker und übergibt ihm Adresse und Anmeldung beim Start, es ist also nichts einzurichten: Er steht neben den Mail- und Remedy-Workern, mit Log und Neustart-Knopf. Beachten Sie, dass sich das beim Update ändert — die Arbeit verlässt die Engine beim nächsten Start, und die Jira-Site muss vom Worker aus erreichbar sein. Der Betrieb in der Engine bleibt als Rückweg verfügbar."
-      },
-      "link": {
-        "label": "ADR-0218",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0218-jira-default-offload.md"
-      },
-      "tags": [
-        "Workers",
-        "Connectors"
-      ]
-    },
-    {
-      "id": "new-atlas-mark",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Atlas has a new mark",
-        "de": "Atlas hat eine neue Marke"
-      },
-      "summary": {
-        "en": "The little square beside the Atlas name — in the top bar, the app drawer, on the sign-in screen, in the handbook and on public forms — is now a white peak carrying a cross on black, and the browser tab icon changes with it. Nothing you have set is affected: if your organisation uploaded its own logo under Organization → Appearance, that is still what everyone sees, and removing it now brings back the new mark instead of the old A.",
-        "de": "Das kleine Quadrat neben dem Atlas-Namen — in der Topbar, in der App-Schublade, auf dem Anmeldebildschirm, im Handbuch und auf öffentlichen Formularen — zeigt jetzt einen weissen Berg mit Kreuz auf Schwarz, und das Symbol im Browser-Tab wechselt mit. An Ihren Einstellungen ändert das nichts: Hat Ihre Organisation unter „Organization → Appearance“ ein eigenes Logo hochgeladen, sehen weiterhin alle dieses; wird es entfernt, erscheint neu die neue Marke statt des alten A."
-      },
-      "link": {
-        "label": "ADR-0148",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0148-org-wide-brand-logo.md"
-      },
-      "tags": [
-        "Console",
-        "Organization"
       ]
     }
   ]

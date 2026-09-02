@@ -1,0 +1,38 @@
+{
+  "tags": [
+    "Workers",
+    "Databases",
+    "Testing"
+  ],
+  "title": {
+    "en": "Try a database task without a database",
+    "de": "Einen Datenbank-Task ausprobieren, ohne eine Datenbank"
+  },
+  "summary": {
+    "en": "A process that reads a database was the one kind you could not try out. The database it reads is the HR system or the ERP — which is exactly why it is interesting, and exactly why nobody wants a half-finished model pointed at it. Now a worker can answer SQL statements from a small file of prepared answers in its own memory instead. Nothing in your model changes: the same worker name, the same statement, the same parameters — only which worker picks the jobs up. So the model that runs through in the mockup is the model that later runs in production, and getting there is an environment variable rather than an edit. The prepared answers can also make a statement fail on purpose, which is how you try the case a real database hands you sooner or later: the same record inserted twice. And a statement you did not prepare an answer for does not quietly come back empty — it fails and tells you the statement and the values it was given, so you can paste them straight into the file. That refusal is the point: no rows is a real business answer, and a mockup that invents one would teach your process something untrue in the way that is hardest to notice.",
+    "de": "Ein Prozess, der aus einer Datenbank liest, war die eine Sorte, die sich nicht ausprobieren liess. Die Datenbank, aus der er liest, ist das HR- oder das ERP-System — genau deshalb ist sie interessant, und genau deshalb will niemand ein halbfertiges Modell darauf loslassen. Jetzt kann ein Worker SQL-Anweisungen stattdessen aus einer kleinen Datei mit vorbereiteten Antworten in seinem Arbeitsspeicher beantworten. Am Modell ändert sich dabei nichts: derselbe Worker-Name, dieselbe Anweisung, dieselben Parameter — nur wer die Jobs abholt, ist ein anderer. Das Modell, das im Mockup durchläuft, ist also dasselbe, das später produktiv läuft, und der Weg dorthin ist eine Umgebungsvariable und keine Änderung. Eine vorbereitete Antwort darf auch absichtlich scheitern — so probieren Sie den Fall aus, den eine echte Datenbank früher oder später liefert: derselbe Datensatz zweimal eingefügt. Und eine Anweisung, für die Sie nichts vorbereitet haben, kommt nicht still leer zurück: Sie scheitert und nennt Ihnen Anweisung und Werte, sodass Sie beides direkt in die Datei übernehmen können. Genau diese Verweigerung ist der Sinn der Sache — „keine Treffer\" ist eine echte fachliche Antwort, und ein Mockup, das sie erfindet, schiebt Ihrem Prozess eine Unwahrheit unter, und zwar in der Richtung, die am schwersten auffällt."
+  },
+  "tutorial": {
+    "en": [
+      "Open the handbook, chapter Test & simulate, section “Trying a database without a database” — it carries the seed file to copy.",
+      "Save that file, then start a worker with ATLAS_MSSQL_CONNECTORS=hr-db, ATLAS_MSSQL_MOCK=1 and ATLAS_MSSQL_MOCK_SEED pointing at it.",
+      "Deploy examples/mssql-eintrittsmeldung.bpmn and start an instance with kuerzel set to whatever your seed answers for.",
+      "Watch it under Operations › Workers: the mssql worker is there, and its log warns that no database is being written.",
+      "Now start one with a kuerzel your seed does not answer for, and read the incident — it names the statement and the values, ready to paste into the seed."
+    ],
+    "de": [
+      "Öffnen Sie das Handbuch, Kapitel Testen & Simulieren, Abschnitt „Eine Datenbank ausprobieren, ohne eine Datenbank\" — dort steht die Startdatei zum Kopieren.",
+      "Speichern Sie die Datei und starten Sie einen Worker mit ATLAS_MSSQL_CONNECTORS=hr-db, ATLAS_MSSQL_MOCK=1 und ATLAS_MSSQL_MOCK_SEED auf diese Datei.",
+      "Deployen Sie examples/mssql-eintrittsmeldung.bpmn und starten Sie eine Instanz mit einem kuerzel, für das Ihre Startdatei eine Antwort hat.",
+      "Schauen Sie unter Betrieb › Workers zu: Dort läuft der mssql-Worker, und sein Log warnt, dass keine Datenbank geschrieben wird.",
+      "Starten Sie dann eine mit einem kuerzel, für das nichts hinterlegt ist, und lesen Sie den Incident — er nennt Anweisung und Werte, fertig zum Übernehmen."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Worker öffnen"
+    },
+    "route": "#/operations/workers"
+  }
+}
