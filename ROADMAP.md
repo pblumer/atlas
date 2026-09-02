@@ -891,7 +891,10 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   ([ADR-0196](docs/adr/0196-authenticated-mcp-transport.md));
   the internal service token of
   [ADR-0049](docs/adr/0049-internal-service-auth-for-mcp.md) stays as what a
-  supervised worker authenticates with.
+  supervised worker authenticates with. The roster now also says **who is signed in
+  right now** — `online` / `idle` / `offline` per account, admin-only, read from the
+  live sessions and stored nowhere, so it is presence and never an attendance history
+  ([ADR-draft-user-presence](docs/adr/draft-user-presence.md)).
 - ✅ **Engine-internal encrypted secret vault**
   ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md),
   [ADR-0070](docs/adr/0070-vault-on-by-default-with-generated-key.md)): closes

@@ -1013,6 +1013,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Authenticated user", tObject())}},
 		{"POST", "/api/v1/auth/logout", s.handleLogout, apiOp{
 			summary: "Log out the current session", tag: "Auth", role: roleAny, resp: jsonBody("Logout result", tObject())}},
+		{"POST", "/api/v1/auth/presence", s.handlePresenceBeacon, apiOp{
+			summary: "Report that the caller's own session is still open, and with active=true that somebody is using it (ADR-draft-user-presence)", tag: "Auth", role: roleAny,
+			req:  jsonBody("Activity", schemaObj(map[string]any{"active": tBool()})),
+			resp: jsonBody("Accepted", tObject())}},
 		{"GET", "/api/v1/auth/providers", s.handleAuthProviders, apiOp{
 			summary: "List the identity providers this server offers besides the password form — empty unless an operator configured one (ADR-0210)", tag: "Auth", role: roleAny,
 			resp: jsonBody("Configured identity providers", tArray())}},
@@ -1023,7 +1027,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"GET", "/api/v1/users", s.handleListUsers, apiOp{
-			summary: "List user accounts", tag: "Users", role: RoleAdmin, resp: jsonBody("Users", tArray())}},
+			summary: "List user accounts, each with whether somebody is signed in as it right now (ADR-draft-user-presence)", tag: "Users", role: RoleAdmin, resp: jsonBody("Users", tArray())}},
+		{"GET", "/api/v1/users/presence", s.handleUserPresence, apiOp{
+			summary: "Who is signed in right now: one entry per account holding a live session, online / idle / offline (ADR-draft-user-presence)", tag: "Users", role: RoleAdmin,
+			resp: jsonBody("Presence", tArray())}},
 		{"GET", "/api/v1/users/assignable", s.handleListAssignableUsers, apiOp{
 			summary: "List users a task can be assigned to", tag: "Users", role: roleAny, resp: jsonBody("Assignable users", tArray())}},
 		{"GET", "/api/v1/principals", s.handleListPrincipals, apiOp{

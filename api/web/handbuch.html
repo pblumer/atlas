@@ -2673,6 +2673,32 @@ atlas worker --connector mssql</code></pre>
         a worker is shared with the team once instead of person by person. A membership change takes effect at
         the member's next sign-in.</p>
 
+      <h3 data-l="de">Wer gerade angemeldet ist</h3><h3 data-l="en">Who is signed in right now</h3>
+      <p data-l="de">Die Benutzerliste hat neben <b>Status</b> – darf sich anmelden – eine Spalte <b>Presence</b>:
+        Ist gerade jemand da. <b>Online</b> heisst, in den letzten fünf Minuten hat diese Person etwas getan;
+        <b>idle</b>, dass ihre Sitzung offen, aber unberührt ist; <b>offline</b>, dass für das Konto kein Browser
+        mehr meldet – auch dann, wenn seine Sitzung technisch noch Stunden gültig wäre, denn ein zugeklappter
+        Laptop meldet sich nicht ab. Der Browser meldet dafür einmal pro Minute zweierlei getrennt: dass der Tab
+        offen ist, und ob ihn jemand angefasst hat. Ohne diese Trennung wäre jeder Tab hinter einem anderen Fenster
+        für immer «online», denn die Konsole fragt von sich aus nach.</p>
+      <p data-l="en">Beside <b>Status</b> – may this account sign in – the user list carries a <b>Presence</b>
+        column: is anybody there. <b>Online</b> means this person did something in the last five minutes;
+        <b>idle</b> that their session is open but untouched; <b>offline</b> that no browser is reporting for the
+        account – including when its session would technically be valid for hours yet, because a laptop that is
+        closed does not log out. The browser reports two separate things once a minute for this: that the tab is
+        open, and whether anybody touched it. Without that separation every tab parked behind another window would
+        read "online" forever, because the Console polls on its own.</p>
+      <p data-l="de">Gespeichert wird nichts davon. Die Anwesenheit wird aus den laufenden Sitzungen gelesen und
+        aus nichts sonst: kein Datensatz, kein Ereignis, nichts in der Sicherung, und nach einem Neustart zeigt sie
+        niemanden – nach einem Neustart ist auch niemand angemeldet. Sie ist bewusst grob (drei Zustände, nie
+        welche Seite oder welche Aktion) und nur für <code>admin</code> sichtbar. Eine Anwesenheitshistorie ist es
+        ausdrücklich nicht; wer sich wann angemeldet hat, steht im <a href="/#/console/audit">Audit-Log</a>.</p>
+      <p data-l="en">None of it is stored. Presence is read from the live sessions and from nothing else: no
+        record, no event, nothing in a backup, and after a restart it shows nobody – after a restart nobody is
+        signed in either. It is deliberately coarse (three states, never which page or which action) and visible
+        to <code>admin</code> only. It is explicitly not an attendance history; who signed in when is in the
+        <a href="/#/console/audit">audit log</a>.</p>
+
       <h3 data-l="de">Anmelden mit einem Identitätsanbieter</h3><h3 data-l="en">Signing in with an identity provider</h3>
       <p data-l="de">Optional, und aus, solange niemand einen Anbieter konfiguriert. Ist einer eingerichtet, trägt
         die Anmeldemaske zusätzlich eine Schaltfläche <b>«Sign in with …»</b>: Die Person authentisiert sich dort,
