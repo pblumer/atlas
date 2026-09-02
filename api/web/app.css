@@ -559,7 +559,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    name), and it is the one part a reader can reconstruct from the canvas. */
 .editor-bar > .crumbs { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .editor-bar > .btn { flex: none; }
-/* The overflow menu at the end of the bar (ADR-draft-modeler-bar-hierarchy). It borrows
+/* The overflow menu at the end of the bar (ADR-0229). It borrows
    the .dropdown-menu look but not app.js's delegated machinery — see wireBarMenu — so it
    is placed here rather than by placeMenu's viewport coordinates. The bar sits in a
    position:fixed .editor with nothing clipping it, so absolute is enough. */
@@ -2581,7 +2581,7 @@ tr[hidden] { display: none; }
 .var-row[draggable="true"] { cursor: grab; }
 .var-row[draggable="true"]:active { cursor: grabbing; }
 /* Token simulation and Variables are rows in the editor bar's overflow menu now
-   (ADR-draft-modeler-bar-hierarchy). A menu row says "on" with a check at its end — the
+   (ADR-0229). A menu row says "on" with a check at its end — the
    solid accent fill these two used to take is how a *button* reads as held down, and on
    a menu row it reads as the row under the pointer instead. */
 .dropdown-menu button.active { color: var(--accent); }

@@ -7,7 +7,7 @@
 import { test, expect } from "@playwright/test";
 
 // The Modeler's bar carries Save and Deploy; everything else lives behind the "…" menu
-// (ADR-draft-modeler-bar-hierarchy). Open it before reaching for one of those controls.
+// (ADR-0229). Open it before reaching for one of those controls.
 const openBarMenu = async (page) => {
   await page.locator("#bar-more").click();
   await expect(page.locator("#bar-menu")).toBeVisible();

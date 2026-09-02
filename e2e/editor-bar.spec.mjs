@@ -4,7 +4,7 @@
 // Auto-layout, Save, Export XML, Documentation, Deploy — so shipping a diagram to a
 // server looked exactly like re-flowing its boxes, and on a narrower window `flex-wrap`
 // dropped a few of them into a second row mid-group. It now carries Save and Deploy,
-// with the rest behind a "…" menu (ADR-draft-modeler-bar-hierarchy).
+// with the rest behind a "…" menu (ADR-0229).
 //
 // What is worth guarding is not the arrangement for its own sake but what a rearrangement
 // quietly breaks: that every control still exists and is reachable, that each kept the id
@@ -119,7 +119,7 @@ test("simulation is a mode you can leave without going back to the menu", async 
   await expect(page.locator(".editor")).toHaveClass(/sim-active/);
 
   // The mode hides the modeling palette, so its own bar has to carry the way out —
-  // otherwise the only exit is a toggle behind the menu (ADR-draft-modeler-bar-hierarchy).
+  // otherwise the only exit is a toggle behind the menu (ADR-0229).
   await page.locator("#sim-exit").click();
   await expect(page.locator("#sim-bar")).toBeHidden();
   await expect(page.locator(".editor")).not.toHaveClass(/sim-active/);

@@ -6,7 +6,7 @@
 import { test, expect } from "@playwright/test";
 
 // Documentation lives behind the bar's "…" menu now, with Save and Deploy the only
-// controls still on the bar itself (ADR-draft-modeler-bar-hierarchy). Every reach for it
+// controls still on the bar itself (ADR-0229). Every reach for it
 // goes through the menu, including the second press that toggles the panel shut.
 const docExport = async (page) => {
   await page.locator("#bar-more").click();

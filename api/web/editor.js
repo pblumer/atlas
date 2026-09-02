@@ -488,7 +488,7 @@ function editorCrumbs(project, current) {
 }
 
 // The editor bar carries two things the author acts on constantly — Save and Deploy —
-// and one menu for everything else (ADR-draft-modeler-bar-hierarchy). It used to carry
+// and one menu for everything else (ADR-0229). It used to carry
 // seven buttons in one weight, which said that re-flowing the diagram and shipping it to
 // a server were the same size of act, and on a narrower window `flex-wrap` dropped a few
 // of them into a second row mid-group. Deploy is the only filled button, because it is

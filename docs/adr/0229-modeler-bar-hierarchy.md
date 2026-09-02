@@ -1,4 +1,4 @@
-# ADR-DRAFT: The Modeler's editor bar carries two acts and a menu
+# ADR-0229: The Modeler's editor bar carries two acts and a menu
 
 - **Status:** Accepted
 - **Date:** 2026-09-02

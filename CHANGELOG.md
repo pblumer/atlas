@@ -405,7 +405,7 @@ _Changed_ / _Removed_ for each version.
   Auto-layout, Save, Export XML, Documentation, Deploy — and every one of them was the
   same white button. That said they were the same size of decision, which they never
   were: Auto-layout nudges boxes, Deploy puts a definition on a server and cannot be
-  taken back ([ADR-draft-modeler-bar-hierarchy](docs/adr/draft-modeler-bar-hierarchy.md)).
+  taken back ([ADR-0229](docs/adr/0229-modeler-bar-hierarchy.md)).
 
   The bar now carries **Save** and **Deploy**, with Deploy the only filled button because
   it is the only act there that leaves the browser. The other five moved into a **…**

@@ -282,6 +282,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0226](0226-start-events-are-triggers.md) | A start event is a trigger, and the one that fires is the one that starts | Proposed |
 | [0227](0227-jira-read-bounds-and-progress.md) | A Jira read is bounded and moves forward | Proposed |
 | [0228](0228-user-presence.md) | User presence in the Console | Proposed |
+| [0229](0229-modeler-bar-hierarchy.md) | The Modeler's editor bar carries two acts and a menu | Accepted |
 
 ## Status values
 
