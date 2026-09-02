@@ -2,6 +2,51 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "see-who-is-signed-in-right-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See who is signed in right now",
+        "de": "Sehen, wer gerade angemeldet ist"
+      },
+      "summary": {
+        "en": "The user list under Organization now has a Presence column. Online means somebody did something in the last five minutes, idle means a session is open but untouched, offline means no browser is reporting for that account. The list could only tell you whether an account was enabled before — the same answer for the person reading the screen and for the one who left in March. The two states nobody gets right by accident are the last two: the Console polls by itself, so a tab parked behind another window would look busy forever, and a session outlives the laptop that was closed on it by up to twelve hours. So your browser reports two separate things once a minute — that the tab is open, and whether anybody actually touched it. Nothing is stored: presence is read from the live sessions and nothing else, there is no record, no event, nothing in a backup and no way to ask about yesterday, and after a restart it shows nobody, because after a restart nobody is signed in. Three states, never which page or which action, and only administrators see it.",
+        "de": "Die Benutzerliste unter Organization hat jetzt eine Spalte «Presence». Online heisst, jemand hat in den letzten fünf Minuten etwas getan; idle, dass eine Sitzung offen ist, aber unberührt; offline, dass für dieses Konto kein Browser mehr meldet. Bisher konnte die Liste nur sagen, ob ein Konto aktiviert ist — dieselbe Antwort für die Person, die gerade auf den Bildschirm schaut, wie für die, die im März gegangen ist. Die beiden letzten Zustände bekommt man nicht nebenbei richtig: Die Konsole fragt von sich aus nach, ein Tab hinter einem anderen Fenster sähe also ewig beschäftigt aus, und eine Sitzung überlebt den zugeklappten Laptop um bis zu zwölf Stunden. Deshalb meldet Ihr Browser einmal pro Minute zweierlei getrennt — dass der Tab offen ist, und ob ihn jemand angefasst hat. Gespeichert wird nichts: Die Anwesenheit wird aus den laufenden Sitzungen gelesen und aus nichts sonst, es gibt keinen Datensatz, kein Ereignis, nichts in der Sicherung und keine Möglichkeit, nach gestern zu fragen; nach einem Neustart zeigt sie niemanden, denn nach einem Neustart ist niemand angemeldet. Drei Zustände, nie welche Seite oder welche Aktion, und sehen tun es nur Administratorinnen."
+      },
+      "link": {
+        "label": "ADR-draft-user-presence",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/draft-user-presence.md"
+      },
+      "tags": [
+        "Organization",
+        "Security"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Console › Organization. The Users card is admin-only, and so is the Presence column.",
+          "Your own row says online: you are reading this page, which is somebody doing something.",
+          "Leave the tab open and do nothing else for five minutes. Your row turns idle — the page keeps polling, but polling is not you.",
+          "Close a browser somebody else is signed in with. Within five minutes their row turns offline, even though their session has hours left on it.",
+          "Hover a pill for the detail: when the account was last used, or when its browser last reported."
+        ],
+        "de": [
+          "Console › Organization öffnen. Die Karte «Users» ist Administratorinnen vorbehalten, die Spalte «Presence» ebenso.",
+          "Die eigene Zeile steht auf online: Sie lesen gerade diese Seite, und das ist jemand, der etwas tut.",
+          "Den Tab offen lassen und fünf Minuten nichts tun. Die Zeile wechselt auf idle — die Seite fragt weiter nach, aber Nachfragen sind nicht Sie.",
+          "Einen Browser schliessen, in dem jemand anderes angemeldet ist. Innert fünf Minuten steht die Zeile auf offline, obwohl die Sitzung noch Stunden gültig wäre.",
+          "Mit der Maus über ein Pill fahren: Dort steht, wann das Konto zuletzt benutzt wurde beziehungsweise wann sein Browser zuletzt gemeldet hat."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Organization",
+          "de": "Organisation öffnen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
       "id": "an-inbound-event-watch-has-an-hourly-budget",
       "version": "Unreleased",
       "date": null,
@@ -352,49 +397,6 @@
         "Connectors",
         "Modeler"
       ]
-    },
-    {
-      "id": "see-the-mock-active-directory",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See the mock Active Directory",
-        "de": "Das simulierte Active Directory ansehen"
-      },
-      "summary": {
-        "en": "Mockup mode lets an Active Directory process run without a domain controller, but until now the directory it wrote to was invisible: the account a joiner created could only be found by reading the worker's log, and the starting entries on the Active Directory card — the template every forest begins from, never written back — were the natural place to look for it and never had it. Operations › Mock directory now shows the directory itself: one card per worker, one tree per LDAP URL, every entry with its attributes, and underneath it the list of operations the mockup performed. It refreshes while you click through a process. Nothing about it is permanent — restarting the worker empties its forests and they start from the seed again — and no password is ever shown, because the mockup stores none.",
-        "de": "Im Mockup-Modus läuft ein Active-Directory-Prozess ohne Domain Controller — nur war das Verzeichnis, in das er schrieb, bisher unsichtbar: Das Konto, das ein Joiner angelegt hat, ließ sich nur im Log des Workers finden, und der Startbestand auf der Karte «Active Directory» — die Vorlage, aus der jedes Verzeichnis beginnt und die nie zurückgeschrieben wird — war der naheliegende Ort, an dem es nie stand. Betrieb › Mock directory zeigt jetzt das Verzeichnis selbst: pro Worker eine Karte, pro LDAP-URL ein Baum, zu jedem Eintrag seine Attribute und darunter die ausgeführten Operationen. Die Ansicht aktualisiert sich, während Sie einen Prozess durchklicken. Dauerhaft ist nichts davon — ein Neustart des Workers leert seine Verzeichnisse, und sie beginnen wieder beim Startbestand — und ein Passwort erscheint nie, weil das Mockup keines speichert."
-      },
-      "link": {
-        "label": "ADR-0213",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0213-ad-mock-directory-in-the-console.md"
-      },
-      "tags": [
-        "Operations",
-        "Workers"
-      ],
-      "tutorial": {
-        "en": [
-          "Organization › Workers → the Active Directory card → switch on “Serve Active Directory tasks against a mockup” and save. The AD worker restarts.",
-          "Optionally paste or upload starting entries (LDIF or DSML) on the same card — a leaver needs an account to disable.",
-          "Run a process with an Active Directory task, or start one from Tasks › Start.",
-          "Open Operations › Mock directory: the worker's forests are there, with the entry the task just created."
-        ],
-        "de": [
-          "Organisation › Workers → Karte «Active Directory» → «Serve Active Directory tasks against a mockup» einschalten und speichern. Der AD-Worker startet neu.",
-          "Optional auf derselben Karte einen Startbestand einfügen oder hochladen (LDIF oder DSML) — ein Leaver braucht ein Konto, das er deaktivieren kann.",
-          "Einen Prozess mit einer Active-Directory-Aufgabe starten, etwa über Aufgaben › Start.",
-          "Betrieb › Mock directory öffnen: Dort stehen die Verzeichnisse des Workers, mit dem Eintrag, den die Aufgabe gerade angelegt hat."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Mock directory",
-          "de": "Mock directory öffnen"
-        },
-        "route": "#/operations/ad-mock"
-      }
     }
   ]
 }

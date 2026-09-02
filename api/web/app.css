@@ -310,8 +310,11 @@ textarea::placeholder {
 .pill.ok { background: #e7f6ec; color: var(--ok); }
 .pill.err { background: #fdecea; color: var(--danger); }
 .pill.warn { background: #fdf3e2; color: #b26b00; }
+/* Nobody is there: the quietest pill there is, because "offline" is the resting
+   state of most of a user list and must not read as a warning (presence.go). */
+.pill.off { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
-.pill.err .dot, .pill.warn .dot { background: currentColor; }
+.pill.err .dot, .pill.warn .dot, .pill.off .dot { background: currentColor; }
 /* A pill can be the link to what it counts — the incident flag in the Operations
    lists opens the version (or instance) it is about (ADR-0150). */
 /* Deployed, but something in the model will not resolve at runtime (ADR-0158). */

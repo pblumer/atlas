@@ -152,6 +152,56 @@ async function logout() {
   route();
 }
 
+// ---------- Presence (ADR-draft-user-presence) ----------
+// The browser tells the server two different things, and keeping them apart is the
+// whole feature. The beacon itself says "this tab is still open"; its `active` flag
+// says "somebody is using it". So the interval keeps running when the tab moves to
+// the background — a window behind another one is still signed in — while the flag
+// is only ever set by a real pointer, key, scroll or touch. That is what lets the
+// Organization page tell somebody at their desk from a tab left open overnight from
+// a laptop that was closed.
+//
+// Nothing here reports what the person is doing: no route, no click target, no
+// count. One boolean per minute, and the server keeps neither it nor a history of
+// it (presence.go).
+const PRESENCE_INTERVAL = 60000;
+let presenceTimer = null;
+let presenceWired = false;
+let presenceActive = false;
+
+const noteActivity = () => { presenceActive = true; };
+
+async function sendPresence() {
+  const active = presenceActive;
+  presenceActive = false;
+  try { await api("POST", "/api/v1/auth/presence", { active }); }
+  catch { /* one missed heartbeat; the next one carries the same story */ }
+}
+
+// startPresence begins reporting, once, for a signed-in session. With enforcement
+// off there is no session to be present in, so it does nothing at all.
+function startPresence() {
+  if (presenceTimer || !AUTH.enabled || !AUTH.user) return;
+  if (!presenceWired) {
+    for (const ev of ["pointerdown", "keydown", "wheel", "touchstart"]) {
+      window.addEventListener(ev, noteActivity, { passive: true, capture: true });
+    }
+    // Coming back to the tab is itself somebody doing something.
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) noteActivity(); });
+    presenceWired = true;
+  }
+  presenceActive = true; // opening the app is an act
+  sendPresence();
+  presenceTimer = setInterval(sendPresence, PRESENCE_INTERVAL);
+}
+
+// stopPresence silences the tab: on the login screen there is nobody to be present.
+function stopPresence() {
+  if (!presenceTimer) return;
+  clearInterval(presenceTimer);
+  presenceTimer = null;
+}
+
 // viewLogin is the sign-in screen shown whenever enforcement is on and no session
 // is active. A successful login re-reads auth and drops the user on the Console.
 function viewLogin() {
@@ -1935,6 +1985,37 @@ async function viewConsoleOrg() {
   }
 
   const me = AUTH.user;
+
+  // Presence (ADR-draft-user-presence). The Status column says whether the account
+  // may be used; this one says whether anybody is using it this minute. It is shown
+  // only when login is enforced — with enforcement off there are no sessions, so
+  // every row would read "offline" and mean nothing by it.
+  const showPresence = AUTH.enabled;
+  const ago = (unix) => {
+    if (!unix) return "unknown";
+    const secs = Math.max(0, Math.round(Date.now() / 1000 - unix));
+    if (secs < 60) return "a moment ago";
+    if (secs < 3600) return `${Math.round(secs / 60)} min ago`;
+    if (secs < 86400) return `${Math.round(secs / 3600)} h ago`;
+    return fmtTime(unix);
+  };
+  // Three states, and the title says what each one is actually claiming — including
+  // the one that is easy to over-read: a session whose browser stopped reporting is
+  // offline, not signed in, even though the session itself has not expired yet.
+  const presencePill = (p) => {
+    const state = (p && p.state) || "offline";
+    if (state === "online") {
+      return `<span class="pill ok" title="Signed in and using Atlas — last action ${esc(ago(p.lastActiveAt))}"><span class="dot"></span>online</span>`;
+    }
+    if (state === "idle") {
+      return `<span class="pill warn" title="Signed in, but nothing done since ${esc(ago(p.lastActiveAt))}"><span class="dot"></span>idle</span>`;
+    }
+    const closed = p && p.sessions
+      ? `Last signed in, but the browser stopped reporting ${ago(p.lastSeenAt)}`
+      : "Not signed in";
+    return `<span class="pill off" title="${esc(closed)}"><span class="dot"></span>offline</span>`;
+  };
+
   const roleChips = (roles) => (roles || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
   const statusPill = (u) => u.disabled
     ? `<span class="pill warn"><span class="dot"></span>disabled</span>`
@@ -1945,6 +2026,7 @@ async function viewConsoleOrg() {
       <td>${esc(u.displayName || "—")}${u.email ? `<div class="muted" style="font-size:12px">${esc(u.email)}</div>` : ""}</td>
       <td>${roleChips(u.roles)}</td>
       <td>${statusPill(u)}</td>
+      ${showPresence ? `<td class="presence-cell">${presencePill(u.presence)}</td>` : ""}
       <td style="text-align:right; white-space:nowrap">
         <button class="btn ghost" data-act="edit" title="Edit this user’s details and roles">Edit</button>
         <button class="btn ghost" data-act="password" title="Set a new password for this user">Password</button>
@@ -1964,12 +2046,16 @@ async function viewConsoleOrg() {
           Every route names the role that reaches it: <span class="chip">admin</span> for this page and the
           rest of the instance's configuration, <span class="chip">modeler</span> to deploy and to author,
           <span class="chip">operator</span> to run what is deployed, <span class="chip">user</span> for a
-          person's own task list.</p>
+          person's own task list.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
+          administrators see it: <b>online</b> means somebody did something in the last five minutes,
+          <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
+          It is read from the live sessions and never stored — a restart shows nobody.` : ""}</p>
         <div id="user-form-slot" style="padding:0 18px"></div>
         <table data-dt-key="users">
-          <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th>${
+            showPresence ? "<th>Presence</th>" : ""}<th></th></tr></thead>
           <tbody id="user-rows">${(users || []).map(userRow).join("")
-            || `<tr><td colspan="5" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
+            || `<tr><td colspan="${showPresence ? 6 : 5}" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
         </table>
       </div>`;
 
@@ -2050,6 +2136,7 @@ async function viewConsoleOrg() {
   wireSSO(groups);
 
   if (denied) return;
+  wireOrgPresence(showPresence, presencePill);
   const reload = () => viewConsoleOrg();
   const slot = document.getElementById("user-form-slot");
   document.getElementById("new-user").addEventListener("click", () => {
@@ -2099,6 +2186,36 @@ async function viewConsoleOrg() {
       case "rmmember": removeGroupMember(btn.dataset.gid, btn.dataset.uid, reload); break;
     }
   });
+}
+
+// Presence goes stale while the page sits open, so it repaints itself. The cells
+// only — never the page — because an administrator half-way through a user form
+// should not have it wiped from under them every half minute (ADR-draft-user-presence).
+//
+// Half the beacon's own interval, so a change is on screen inside a minute, and one
+// tiny admin-only read either way.
+const ORG_PRESENCE_INTERVAL = 30000;
+let orgPresenceTimer = null;
+
+function wireOrgPresence(showPresence, presencePill) {
+  if (orgPresenceTimer) { clearInterval(orgPresenceTimer); orgPresenceTimer = null; }
+  if (!showPresence) return;
+  const stop = () => { clearInterval(orgPresenceTimer); orgPresenceTimer = null; };
+  const paint = async () => {
+    const rows = document.getElementById("user-rows");
+    // The view was replaced by another one that sets no cleanup of its own; stop
+    // rather than poll on behalf of a page nobody is looking at.
+    if (!rows || !rows.isConnected) return stop();
+    let live;
+    try { live = await api("GET", "/api/v1/users/presence"); } catch { return; }
+    const byId = new Map((live || []).map((p) => [p.userId, p]));
+    for (const cell of rows.querySelectorAll("td.presence-cell")) {
+      const row = cell.closest("tr");
+      if (row) cell.innerHTML = presencePill(byId.get(row.dataset.id));
+    }
+  };
+  orgPresenceTimer = setInterval(paint, ORG_PRESENCE_INTERVAL);
+  window.__atlasCleanup = stop;
 }
 
 // ---------- Single sign-on (ADR-0210) ----------
@@ -7806,10 +7923,12 @@ async function route() {
     document.getElementById("topnav").innerHTML = "";
     paintApps(); // nobody is signed in, so nobody holds a role: the drawer says so too
     syncIncidentBadge(""); // the login screen has no nav to badge, and must not poll
+    stopPresence(); // and nobody to be present: a logged-out tab reports nothing
     updateAccount();
     return viewLogin();
   }
 
+  startPresence(); // signed in, so this tab is somebody being here (presence.go)
   setChrome(appId, path);
   setTitle(routeTitle(path));
   updateAccount();

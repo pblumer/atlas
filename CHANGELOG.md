@@ -14,6 +14,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **See who is signed in right now.** The user list under Organization gains a
+  **Presence** column: *online* for somebody who did something in the last five minutes,
+  *idle* for a session that is open but untouched, *offline* for an account no browser is
+  reporting for. Until now the list could only say whether an account was *enabled* — the
+  same answer for the person reading the screen this second and for the one who left in
+  March ([ADR-draft-user-presence](docs/adr/draft-user-presence.md)).
+
+  The distinction that makes it worth having is between the last two states, and neither
+  falls out of "when did a request last arrive". The Console polls on its own, so a tab
+  parked behind another window would look busy forever; and a session outlives the laptop
+  that was closed on it by up to twelve hours. So the browser reports two separate things
+  once a minute — that the tab is still open, and whether anybody actually touched it —
+  and the column reads both, asking the first question first: a session that has stopped
+  reporting is *offline* whatever it was doing five minutes ago.
+
+  **Nothing is stored.** Presence is read from the live sessions and from nothing else: no
+  record, no event, nothing in a backup, and no way to ask it about yesterday. A restart
+  shows nobody, which is not a gap — after a restart nobody *is* signed in. It is
+  deliberately coarse (three states, never which page or which action), administrators
+  only, the same reach as the user list it annotates. The column refreshes itself every
+  thirty seconds without reloading the page, so a half-typed user form survives it.
+
 - **An inbound event watch has an hourly budget.** A watch reads a foreign system and
   publishes what it finds; every event can start a process, and that process can write
   back to the system the watch reads. When it writes something the watch's own query

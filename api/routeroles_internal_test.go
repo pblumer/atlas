@@ -106,6 +106,10 @@ var wantAdminRoutes = []string{
 
 	// Who exists, what they may do, and the record of what they did.
 	"GET /api/v1/users",
+	// Who is signed in this minute. Same list, same reach: presence says where a
+	// person is, and only the people who administer accounts see it
+	// (ADR-draft-user-presence).
+	"GET /api/v1/users/presence",
 	"POST /api/v1/users",
 	"GET /api/v1/users/{id}",
 	"PATCH /api/v1/users/{id}",
