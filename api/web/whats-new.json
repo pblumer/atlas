@@ -2,6 +2,28 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "an-example-where-a-jira-ticket-starts-the-process",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An example where a Jira ticket starts the process",
+        "de": "Ein Beispiel, in dem ein Jira-Ticket den Prozess startet"
+      },
+      "summary": {
+        "en": "The Jira demo folder gained its other direction. Until now Atlas wrote to Jira; here a new ticket starts an Atlas process — no form, no button. The process comments on the ticket to confirm it arrived, looks up the account of whoever reported it, and assigns the ticket to them. Everything it needs (issue key, project, summary, reporter) comes from the ticket itself. The README walks through the event watch in the Console, what the process receives, and the three things that look like a defect and are not — including why it takes about two minutes.",
+        "de": "Der Jira-Beispielordner hat jetzt auch die Gegenrichtung. Bisher schrieb Atlas nach Jira; hier startet ein neues Ticket einen Atlas-Prozess — ohne Formular, ohne Knopfdruck. Der Prozess quittiert den Eingang im Ticket, schlägt das Konto des Melders nach und weist ihm das Ticket zu. Alles, was er dafür braucht (Vorgangsschlüssel, Projekt, Titel, Melder), kommt aus dem Ticket selbst. Das README führt durch die Ereignisüberwachung in der Console, zeigt, was der Prozess bekommt, und nennt die drei Dinge, die wie ein Defekt aussehen und keiner sind — darunter, warum es etwa zwei Minuten dauert."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Connectors"
+      ]
+    },
+    {
       "id": "the-database-mockup-is-a-switch-in-the-console",
       "version": "Unreleased",
       "date": null,
@@ -342,51 +364,6 @@
         "Security",
         "Operations"
       ]
-    },
-    {
-      "id": "the-active-directory-worker-type-can-search",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Active Directory: look an account or a group up first",
-        "de": "Active Directory: Konto oder Gruppe zuerst nachschlagen"
-      },
-      "summary": {
-        "en": "A new operation, Find entry (search), asks the directory whether an account or a group is there — and hands back its full name in the tree, ready for the next step to use. That is what a membership change was missing: you can only put somebody into a group once you know the group exists and where it sits. Finding nothing is an answer, not an error: the step completes and a gateway takes the other path.",
-        "de": "Ein neuer Vorgang, Eintrag suchen, fragt das Verzeichnis, ob es ein Konto oder eine Gruppe gibt — und liefert deren vollständigen Namen im Verzeichnisbaum gleich mit, verwendbar im nächsten Schritt. Genau das fehlte einer Gruppenzuweisung: jemanden in eine Gruppe aufzunehmen geht erst, wenn feststeht, dass es die Gruppe gibt und wo sie liegt. Nichts gefunden ist dabei eine Antwort und kein Fehler: der Schritt wird abgeschlossen, und ein Gateway nimmt den anderen Weg."
-      },
-      "link": {
-        "label": "ADR-0166",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0166-active-directory-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the Modeler and put a service task on the canvas.",
-          "In Implement, choose the Active Directory Connector, then Operation → Find entry (search).",
-          "Set the Base DN to where you want to look (e.g. ou=groups,dc=example,dc=com), the Scope, and a Filter such as (&(objectClass=group)(cn=Vertrieb)).",
-          "Name a Result variable, e.g. gruppe.",
-          "Branch on =gruppe.found with an exclusive gateway, and give the next task's Target DN the value =gruppe.dn."
-        ],
-        "de": [
-          "Modeler öffnen und einen Service-Task auf die Fläche ziehen.",
-          "Unter Implement den Active Directory Connector wählen, dann Operation → Find entry (search).",
-          "Base DN setzen, wo gesucht werden soll (z.B. ou=groups,dc=example,dc=com), dazu Scope und einen Filter wie (&(objectClass=group)(cn=Vertrieb)).",
-          "Eine Result variable vergeben, z.B. gruppe.",
-          "Mit einem exklusiven Gateway auf =gruppe.found verzweigen und dem nächsten Task als Target DN den Wert =gruppe.dn geben."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }

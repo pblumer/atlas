@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ticket-Eingang (Jira)
+
+  Der Gegenrichtung-Prozess zum Zugangsantrag: dort schreibt Atlas nach Jira,
+  hier hoert Atlas auf Jira. Ein neuer Vorgang startet diese Instanz, sie
+  quittiert den Eingang im Vorgang selbst und weist ihn dem Melder zu.
+
+  Start (Nachricht "jira.ticket.created" — kommt aus einer Ereignis-
+         ueberwachung unter Console -> Connectors -> Events, ADR-0214)
+   -> Service-Task "Eingang quittieren"   (add-comment)
+   -> Service-Task "Melder nachschlagen"  (search-users -> konten)
+   -> (X) Gateway  "Konto gefunden?"      (default -> kein Konto)
+        [gefunden]   -> Service-Task "Ticket zuweisen"    (assign-issue)
+        [kein Konto] -> Service-Task "Zuweisung offen"    (add-comment)
+   -> (X) Join
+   -> Ende "Eingang bearbeitet"
+
+  Es gibt kein Startformular. Die Variablen kommen aus dem Ereignis: die
+  Ueberwachung setzt issueKey, issueId, projectKey, issueType, summary, status,
+  reporter, created, updated, eventType und issue (den ganzen Vorgang) auf der
+  gestarteten Instanz. Das Modell nennt seine Quelle nicht — es nennt nur den
+  Nachrichtennamen, und welche Ueberwachung ihn veroeffentlicht, ist eine
+  Betriebs- und keine Modellfrage (ADR-0075/0214).
+
+  reporter ist der *Anzeigename* des Melders, nicht seine accountId. Genau
+  deshalb steht hier search-users (ADR-0223) dazwischen: Jira uebergibt einen
+  Vorgang an eine accountId, der Prozess kennt einen Namen.
+
+  Warum die Demo dem Melder zuweist: Er ist die einzige Person, die das Ereignis
+  selbst nennt. In einem echten Prozess stuende dort die Person vom Dienst — der
+  Suchbegriff waere dann eine Prozessvariable oder eine DMN-Entscheidung, die
+  Mechanik bliebe dieselbe.
+
+  Die Falle im Gateway: count(null) ist in FEEL *1*, nicht 0 — ein einzelner
+  Wert zaehlt als einelementige Liste. count(konten) > 0 ist hier trotzdem
+  richtig, weil search-users immer eine Liste schreibt, auch eine leere. Waere
+  konten nicht gesetzt, naehme die Bedingung den Zweig "gefunden" und der
+  naechste Task zoege eine accountId aus null.
+
+  Voraussetzung: ein Konnektor namens "jira" unter Console -> Connectors, mit
+  einer Ereignisueberwachung darauf. Siehe README.md.
+
+  BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=200, Nebenzweig bei y=340.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_jira_ticket_eingang" targetNamespace="http://atlas/examples">
+
+  <message id="msg_ticket_created" name="jira.ticket.created"/>
+
+  <process id="proc_jira_ticket_eingang" name="Ticket-Eingang (Jira)" isExecutable="true">
+    <documentation>Wird von einem neuen Jira-Vorgang gestartet: quittiert den Eingang als Kommentar, schlaegt das Konto des Melders nach und weist ihm den Vorgang zu. Die Startvariablen kommen aus der Ereignisueberwachung, nicht aus einem Formular; der Konnektor heisst "jira".</documentation>
+
+    <startEvent id="start" name="Ticket angelegt">
+      <documentation>Nachrichten-Start. Der Name der Nachricht ist die ganze Kopplung zwischen diesem Modell und der Ueberwachung, die es speist: er muss exakt dem Message name unter Console -> Connectors -> Events entsprechen. Stimmt er nicht, laeuft beides fehlerfrei und trifft sich nie — der Modeler schreibt deshalb unter den Namen, welche Ueberwachung ihn veroeffentlicht.</documentation>
+      <outgoing>f_start_quittieren</outgoing>
+      <messageEventDefinition messageRef="msg_ticket_created"/>
+    </startEvent>
+
+    <serviceTask id="quittieren" name="Eingang quittieren">
+      <documentation>Jira-Konnektor, add-comment. Der erste Schritt schreibt zurueck in den Vorgang, der die Instanz gestartet hat: das ist zugleich die Quittung fuer den Melder und der Beweis, dass die Ueberwachung laeuft. processInstanceKey bindet als String, deshalb darf er direkt in die Verkettung — eine Zahl an einen String zu haengen ergaebe in FEEL null, und zwar fuer den *ganzen* Ausdruck.</documentation>
+      <extensionElements>
+        <atlas:jiraConnector connector="jira" operation="add-comment"
+          issueKey="=issueKey"
+          comment="=&quot;Atlas hat den Vorgang aufgenommen: &quot; + summary + &quot;\n\nProzessinstanz &quot; + processInstanceKey"/>
+      </extensionElements>
+      <incoming>f_start_quittieren</incoming>
+      <outgoing>f_quittieren_nachschlagen</outgoing>
+    </serviceTask>
+
+    <serviceTask id="nachschlagen" name="Melder nachschlagen">
+      <documentation>Jira-Konnektor, search-users (ADR-0223). Der Suchbegriff ist der Anzeigename aus dem Ereignis; das Projekt schraenkt auf die Konten ein, denen dieses Projekt ueberhaupt zugewiesen werden kann — ein Konto, das es zwar gibt, dem Jira aber keinen Vorgang uebergibt, waere sonst genau der Wert, an dem der naechste Task scheitert. Ein leeres Ergebnis ist kein Beweis, dass niemand passt: dasselbe leere Array kommt zurueck, wenn dem Konto des Workers die globale Berechtigung "Benutzer und Gruppen durchsuchen" fehlt.</documentation>
+      <extensionElements>
+        <atlas:jiraConnector connector="jira" operation="search-users"
+          query="=reporter"
+          project="=projectKey"
+          maxResults="5"
+          resultVariable="konten"/>
+      </extensionElements>
+      <incoming>f_quittieren_nachschlagen</incoming>
+      <outgoing>f_nachschlagen_gw</outgoing>
+    </serviceTask>
+
+    <exclusiveGateway id="gefunden" name="Konto gefunden?" default="f_kein_konto">
+      <documentation>Default ist der Zweig ohne Zuweisung: Findet die Suche niemanden, soll der Vorgang unzugewiesen bleiben und ein Mensch entscheiden — nicht irgendein Konto bekommen.</documentation>
+      <incoming>f_nachschlagen_gw</incoming>
+      <outgoing>f_gefunden</outgoing>
+      <outgoing>f_kein_konto</outgoing>
+    </exclusiveGateway>
+
+    <serviceTask id="zuweisen" name="Ticket zuweisen">
+      <documentation>Jira-Konnektor, assign-issue. konten ist eine JSON-Liste, und FEEL-Listen sind 1-basiert: der erste Treffer ist konten[1], nicht konten[0] — konten[0] waere null. Was hier hingehoert, ist die accountId (Jira Cloud) bzw. der Benutzername (Data Center); welches von beidem, entscheidet der Konnektor an seinem eigenen Credential, nicht das Modell. Diese Operation gibt nichts zurueck (204), deshalb hat sie keine resultVariable — der Compiler wuerde eine auch abweisen.</documentation>
+      <extensionElements>
+        <atlas:jiraConnector connector="jira" operation="assign-issue"
+          issueKey="=issueKey"
+          assignee="=konten[1].accountId"/>
+      </extensionElements>
+      <incoming>f_gefunden</incoming>
+      <outgoing>f_zuweisen_join</outgoing>
+    </serviceTask>
+
+    <serviceTask id="offen" name="Zuweisung offen">
+      <documentation>Jira-Konnektor, add-comment. Der Vorgang bleibt unzugewiesen und sagt im Vorgang selbst, warum — das ist die Stelle, an der ein Mensch merkt, dass der Anzeigename nicht aufloesbar war oder dem Worker die Berechtigung fehlt.</documentation>
+      <extensionElements>
+        <atlas:jiraConnector connector="jira" operation="add-comment"
+          issueKey="=issueKey"
+          comment="=&quot;Kein zuweisbares Konto zu &quot; + reporter + &quot; gefunden — der Vorgang bleibt unzugewiesen.&quot;"/>
+      </extensionElements>
+      <incoming>f_kein_konto</incoming>
+      <outgoing>f_offen_join</outgoing>
+    </serviceTask>
+
+    <exclusiveGateway id="join">
+      <incoming>f_zuweisen_join</incoming>
+      <incoming>f_offen_join</incoming>
+      <outgoing>f_join_ende</outgoing>
+    </exclusiveGateway>
+
+    <endEvent id="ende" name="Eingang bearbeitet">
+      <incoming>f_join_ende</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_quittieren" sourceRef="start" targetRef="quittieren"/>
+    <sequenceFlow id="f_quittieren_nachschlagen" sourceRef="quittieren" targetRef="nachschlagen"/>
+    <sequenceFlow id="f_nachschlagen_gw" sourceRef="nachschlagen" targetRef="gefunden"/>
+    <sequenceFlow id="f_gefunden" name="gefunden" sourceRef="gefunden" targetRef="zuweisen">
+      <conditionExpression>= count(konten) &gt; 0</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_kein_konto" name="kein Konto" sourceRef="gefunden" targetRef="offen"/>
+    <sequenceFlow id="f_zuweisen_join" sourceRef="zuweisen" targetRef="join"/>
+    <sequenceFlow id="f_offen_join" sourceRef="offen" targetRef="join"/>
+    <sequenceFlow id="f_join_ende" sourceRef="join" targetRef="ende"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_jira_ticket_eingang">
+    <bpmndi:BPMNPlane id="BPMNPlane_jira_ticket_eingang" bpmnElement="proc_jira_ticket_eingang">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="152" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="128" y="225" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="quittieren_di" bpmnElement="quittieren">
+        <omgdc:Bounds x="240" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="nachschlagen_di" bpmnElement="nachschlagen">
+        <omgdc:Bounds x="400" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gefunden_di" bpmnElement="gefunden" isMarkerVisible="true">
+        <omgdc:Bounds x="560" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="542" y="142" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="zuweisen_di" bpmnElement="zuweisen">
+        <omgdc:Bounds x="670" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="offen_di" bpmnElement="offen">
+        <omgdc:Bounds x="670" y="300" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="join_di" bpmnElement="join" isMarkerVisible="true">
+        <omgdc:Bounds x="830" y="175" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="940" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="916" y="225" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f_start_quittieren_di" bpmnElement="f_start_quittieren">
+        <omgdi:waypoint x="188" y="200"/><omgdi:waypoint x="240" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_quittieren_nachschlagen_di" bpmnElement="f_quittieren_nachschlagen">
+        <omgdi:waypoint x="340" y="200"/><omgdi:waypoint x="400" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_nachschlagen_gw_di" bpmnElement="f_nachschlagen_gw">
+        <omgdi:waypoint x="500" y="200"/><omgdi:waypoint x="560" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gefunden_di" bpmnElement="f_gefunden">
+        <omgdi:waypoint x="610" y="200"/><omgdi:waypoint x="670" y="200"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="614" y="176" width="52" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_kein_konto_di" bpmnElement="f_kein_konto">
+        <omgdi:waypoint x="585" y="225"/><omgdi:waypoint x="585" y="340"/><omgdi:waypoint x="670" y="340"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="595" y="250" width="60" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_zuweisen_join_di" bpmnElement="f_zuweisen_join">
+        <omgdi:waypoint x="770" y="200"/><omgdi:waypoint x="830" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_offen_join_di" bpmnElement="f_offen_join">
+        <omgdi:waypoint x="770" y="340"/><omgdi:waypoint x="855" y="340"/><omgdi:waypoint x="855" y="225"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_join_ende_di" bpmnElement="f_join_ende">
+        <omgdi:waypoint x="880" y="200"/><omgdi:waypoint x="940" y="200"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

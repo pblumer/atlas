@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An example where a Jira ticket starts the process.** `examples/jira-ticket-eingang/`
+  is the Zugangsantrag's other direction: instead of Atlas writing to Jira, Jira starts
+  Atlas. A message start event waits on `jira.ticket.created`, an event watch under
+  Console → Connectors → Events publishes every issue its JQL finds under that name, and
+  the instance begins with no form at all — `issueKey`, `projectKey`, `summary`,
+  `reporter` and the whole issue arrive from the event. It then walks the chain the
+  account lookup exists for: `reporter` is a display *name*, Jira assigns to an
+  `accountId`, so `search-users` sits between them and `assign-issue` after, reading
+  `=konten[1].accountId`. The gateway's default is the branch **without** an assignment,
+  because an empty result means three different things Jira does not distinguish. The
+  examples index gained a row for it and for `jira-zugangsantrag/`, which had none.
+
 - **The database mockup is a switch in the Console.** [ADR-0221](docs/adr/0221-sql-mock-mode.md)
   shipped mockup mode as environment variables on a worker, and named a Console switch as
   the follow-up. This is it: **Workers → Databases** has a checkbox and a field for the
