@@ -278,17 +278,160 @@ function askConnector({ api, connector, intro, extraLabel }) {
 // connectorUsageHTML says what a connector is *for*, read off the deployed models
 // rather than remembered: the processes whose tasks resolve through it, and how many
 // instances are running on them. It is what makes Delete a decision rather than a
-// click (ADR-0163) — and it is the same list the server refuses the delete with, so
+// click (ADR-0163) — and it is the same set the server refuses the delete with, so
 // the row and the refusal cannot tell different stories.
+//
+// It is a *count*, with the list one click behind it in openConnectorUsage. Inline,
+// the list was the row: a mail worker twenty-one deployed definitions reference drew
+// fourteen wrapped lines of links, and the endpoint, the status pill and the actions
+// beside them were pushed apart by it — on the one row where something is actually
+// wrong, that is the row you cannot read. The numbers are what a scan needs; which
+// processes is what a decision needs, and a decision has a click to spare.
 export function connectorUsageHTML(usedBy) {
   if (!usedBy || !usedBy.length) {
     return `<div class="muted conn-usage">Referenced by no deployed process</div>`;
   }
-  const live = usedBy.reduce((n, u) => n + (u.activeInstances || 0), 0);
-  const links = usedBy.map((u) =>
-    `<a href="#/operations/p/${esc(String(u.processDefKey))}" title="${esc((u.elements || []).join(", "))}">${esc(u.name || u.processId)} v${esc(String(u.version))}</a>`).join(", ");
-  return `<div class="conn-usage">Used by ${links}${
-    live ? ` &middot; <b>${live}</b> running instance${live === 1 ? "" : "s"}` : ""}</div>`;
+  const { defs, procs, live } = usageCounts(usedBy);
+  // Definitions and processes are different numbers and mean different things: a model
+  // deployed five times is five definitions of one process, and saying "used by 21
+  // processes" for eight of them would overstate the blast radius. They collapse into
+  // one phrase only when they agree.
+  const head = procs === defs
+    ? `Used by <b>${defs}</b> deployed process${defs === 1 ? "" : "es"}`
+    : `Used by <b>${procs}</b> process${procs === 1 ? "" : "es"} &middot; <b>${defs}</b> deployed versions`;
+  const running = live
+    ? ` &middot; <b>${live}</b> running instance${live === 1 ? "" : "s"}`
+    : "";
+  return `<div class="conn-usage"><button type="button" class="conn-usage-btn" data-usage
+    title="Which deployed processes resolve through this worker — and what deleting it would park">${head}${running}<span class="conn-usage-more" aria-hidden="true">&rsaquo;</span></button></div>`;
+}
+
+// usageCounts reduces the raw list to the three numbers the row has room for: how many
+// deployed definitions resolve through the connector, how many distinct processes those
+// are, and how many instances are running on them.
+function usageCounts(usedBy) {
+  return {
+    defs: usedBy.length,
+    procs: new Set(usedBy.map((u) => u.processId || u.name || String(u.processDefKey))).size,
+    live: usedBy.reduce((n, u) => n + (u.activeInstances || 0), 0),
+  };
+}
+
+// groupUsage collapses the definitions into one entry per process, newest version
+// first. The server sends one row per deployed definition in definition-key order —
+// which for a model redeployed all afternoon is the same name repeated with a rising
+// version, and reading that list is counting. Grouped, the answer to "does anything
+// still run on it" is the group's own line.
+//
+// Group order stays the server's (first appearance); only the versions inside a group
+// are reversed, so the current one leads.
+function groupUsage(usedBy) {
+  const groups = [];
+  const byKey = new Map();
+  for (const u of usedBy) {
+    const key = u.processId || u.name || String(u.processDefKey);
+    let g = byKey.get(key);
+    if (!g) {
+      g = { key, name: u.name || u.processId || key, processId: u.processId || "", versions: [], live: 0 };
+      byKey.set(key, g);
+      groups.push(g);
+    }
+    g.versions.push(u);
+    g.live += u.activeInstances || 0;
+  }
+  for (const g of groups) g.versions.sort((a, b) => (b.version || 0) - (a.version || 0));
+  return groups;
+}
+
+// openConnectorUsage opens the list the row's count stands for: every deployed process
+// that resolves through this connector, grouped by process, each version linking to its
+// Operations page and carrying the elements whose tasks resolve through it and the
+// instances running on it right now.
+//
+// It reads what is already on the record — the same usedBy the row counted and the same
+// set the delete refusal names — so it opens instantly and cannot disagree with either.
+// Returns the overlay so a caller (or a test) can close it.
+export function openConnectorUsage({ connector }) {
+  const c = connector || {};
+  const usedBy = c.usedBy || [];
+  const groups = groupUsage(usedBy);
+  const { defs, procs, live } = usageCounts(usedBy);
+  // A filter earns its line only once scanning stops being enough. Below that it is one
+  // more thing to look past on the way to a list you can already see all of.
+  const filtered = groups.length > 6;
+
+  const verHTML = (u) => `<a class="usage-ver" href="#/operations/p/${esc(String(u.processDefKey))}"
+      title="Open this version in Operations">
+      <span class="usage-ver-v">v${esc(String(u.version))}</span>
+      <span class="usage-el">${(u.elements || []).length ? esc((u.elements || []).join(", ")) : "—"}</span>
+      ${u.activeInstances ? `<span class="pill ok usage-live">${u.activeInstances} running</span>` : ""}
+    </a>`;
+  const groupHTML = (g) => `<div class="usage-group" data-usage-text="${esc(
+      `${g.name} ${g.processId} ${g.versions.map((u) => "v" + u.version + " " + (u.elements || []).join(" ")).join(" ")}`.toLowerCase())}">
+      <div class="usage-group-head">
+        <b>${esc(g.name)}</b>
+        ${g.processId && g.processId !== g.name ? `<span class="chip">${esc(g.processId)}</span>` : ""}
+        <span class="muted small">${g.versions.length} deployed version${g.versions.length === 1 ? "" : "s"}${
+          g.live ? ` &middot; ${g.live} running` : ""}</span>
+      </div>
+      ${g.versions.map(verHTML).join("")}
+    </div>`;
+
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal usage-modal" role="dialog" aria-modal="true" aria-labelledby="usage-title">
+      <div class="modal-head">
+        <h2 id="usage-title">Used by &middot; ${esc(c.name || "")}</h2>
+        <button type="button" class="icon-btn" data-usage-x aria-label="Close" title="Close">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted usage-intro">${procs === defs
+          ? `<b>${defs}</b> deployed process${defs === 1 ? "" : "es"}`
+          : `<b>${procs}</b> process${procs === 1 ? "" : "es"} in <b>${defs}</b> deployed versions`} resolve
+          through this worker${live ? `, with <b>${live}</b> instance${live === 1 ? "" : "s"} running on them` : ""}.
+          Each version links to its Operations page and names the tasks that resolve here.</p>
+        ${filtered ? `<input type="text" class="usage-filter" data-usage-filter placeholder="Filter processes…" autocomplete="off" spellcheck="false"/>` : ""}
+        <div data-usage-list>${groups.map(groupHTML).join("")}</div>
+        <p class="usage-empty" data-usage-none hidden>No process matches that.</p>
+      </div>
+      <div class="modal-foot">
+        <span class="muted small">Deleting this worker parks these tasks with
+          &ldquo;no connector registered as ${esc(c.name || "")}&rdquo; until one of the same name
+          and kind exists again.</span>
+        <button type="button" class="btn" data-usage-done title="Close this dialog">Done</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+  ov.querySelector("[data-usage-x]").addEventListener("click", close);
+  ov.querySelector("[data-usage-done]").addEventListener("click", close);
+  // A version link navigates the console underneath; leaving the dialog standing over
+  // the page it just moved to would be a dialog about a worker you can no longer see.
+  for (const a of ov.querySelectorAll(".usage-ver")) a.addEventListener("click", close);
+
+  const filter = ov.querySelector("[data-usage-filter]");
+  if (filter) {
+    const none = ov.querySelector("[data-usage-none]");
+    filter.addEventListener("input", () => {
+      const q = filter.value.trim().toLowerCase();
+      let shown = 0;
+      for (const g of ov.querySelectorAll(".usage-group")) {
+        const hit = !q || (g.dataset.usageText || "").includes(q);
+        g.hidden = !hit;
+        if (hit) shown++;
+      }
+      none.hidden = shown > 0;
+    });
+    filter.focus();
+  } else {
+    ov.querySelector("[data-usage-done]").focus();
+  }
+  return ov;
 }
 
 // deleteConnectorFlow asks, then deletes — and when the server refuses because deployed

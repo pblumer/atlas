@@ -68,10 +68,32 @@ test("legacy connector route canonicalizes to Workers", async ({ page }) => {
   expect(page.__errors).toEqual([]);
 });
 
+test("a worker's actions live behind the row's ⋯ menu", async ({ page }) => {
+  await goto(page, "#/console/workers");
+  const row = page.locator("#connector-rows tr").first();
+  // Nothing but the menu trigger is drawn on the row: the seven buttons that used to
+  // stand there are what made the table unreadable.
+  await expect(row.locator("td.row-actions .dropdown-toggle")).toHaveCount(1);
+  await expect(row.locator("td.row-actions .dropdown-menu")).toBeHidden();
+
+  await row.locator("td.row-actions .dropdown-toggle").click();
+  const menu = row.locator("td.row-actions .dropdown-menu");
+  await expect(menu).toBeVisible();
+  // A clio worker's own actions lead, then the ones every worker has.
+  await expect(menu).toContainText("Provision access");
+  await expect(menu).toContainText("Events");
+  await expect(menu).toContainText("Edit");
+  await expect(menu).toContainText("Share");
+  await expect(menu).toContainText("Disable");
+  await expect(menu).toContainText("Delete");
+  expect(page.__errors).toEqual([]);
+});
+
 test("editing a configured worker stays on Workers", async ({ page }) => {
   await goto(page, "#/console/workers");
   await expect(page.locator("#connector-rows")).toContainText("enabled");
-  await page.click('#connector-rows button[data-cact="toggle"]');
+  await page.click("#connector-rows .dropdown-toggle");
+  await page.click('#connector-rows .dropdown-menu button[data-act="toggle"]');
   await expect(page.locator("#connector-rows")).toContainText("disabled");
   await expect(page.locator("#view h1")).toHaveText("Workers");
   expect(page.__errors).toEqual([]);
