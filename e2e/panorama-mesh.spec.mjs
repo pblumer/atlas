@@ -551,19 +551,45 @@ test("selecting or filtering brings a name back", async ({ page }) => {
 
 // Size carries rank as well as kind: at a few hundred nodes the eye sorts by size
 // before it reads anything, so an application has to be unmistakably the largest.
+// mesh-body is the node's own circle: a group can also hold a provenance ring and a
+// severity badge, and either would answer with the wrong radius.
+const radiusOf = async (page, id) => Number(
+  await page.locator(`[data-node-id="${id}"] .mesh-body`).getAttribute("r"));
+
 test("kinds are told apart by size, not only by colour", async ({ page }) => {
   installMock(page);
   await page.goto("/index.html#/panorama/landscape");
 
-  // mesh-body is the node's own circle: a group can also hold a provenance ring
-  // and a severity badge, and either would answer with the wrong radius.
-  const radius = async (id) => Number(
-    await page.locator(`[data-node-id="${id}"] .mesh-body`).getAttribute("r"));
-  const application = await radius("application:a1");
-  const process = await radius("process:1");
-  const worker = await radius("worker:c1");
-  expect(application).toBeGreaterThan(process * 1.5);
+  const application = await radiusOf(page, "application:a1");
+  const process = await radiusOf(page, "process:1");
+  const worker = await radiusOf(page, "worker:c1");
+  expect(application).toBeGreaterThan(process);
   expect(process).toBeGreaterThan(worker);
+});
+
+// Size says two things at once — what kind of thing this is, and how much of the
+// landscape hangs off it. The second is what makes a hub findable in a picture with
+// four hundred circles in it, where the eye sorts by size before it reads anything.
+// (That the two never overwrite each other is arithmetic, checked exhaustively in
+// panorama-size.spec.mjs; this is the claim that the drawing actually uses it.)
+test("a well-connected node is drawn larger than a lonely one of its kind", async ({ page }) => {
+  installMock(page, {
+    nodes: [
+      { id: "process:hub", kind: "process", name: "Hub", provenance: "derived", processId: "hub", version: 1 },
+      { id: "process:leaf", kind: "process", name: "Leaf", provenance: "derived", processId: "leaf", version: 1 },
+      ...Array.from({ length: 6 }, (_, i) => ({
+        id: `worker:w${i}`, kind: "worker", name: `w${i}`, provenance: "derived", workerType: "mail",
+      })),
+    ],
+    edges: Array.from({ length: 6 }, (_, i) => (
+      { from: "process:hub", to: `worker:w${i}`, kind: "uses" })),
+    restricted: 0, clustered: false,
+  });
+  await page.goto("/index.html#/panorama/landscape");
+
+  const hub = await radiusOf(page, "process:hub");
+  const leaf = await radiusOf(page, "process:leaf");
+  expect(hub).toBeGreaterThan(leaf);
 });
 
 // The separation pass exists because repulsion alone is a soft force a spring can
@@ -656,4 +682,195 @@ test("no two nodes overlap, however many there are", async ({ page }) => {
     // Not merely non-negative: there is room for a name between any two of them.
     expect(worst).toBeGreaterThan(30);
   }
+});
+
+// Picking a bubble up and putting it somewhere.
+//
+// The layout answers "where does this graph want to sit", which is the right first
+// answer and never the last one: the person reading it knows things the simulation
+// does not, and until now had no way to say so. These check the three things that
+// make the gesture worth having — the node goes where it is dropped, the graph
+// rearranges itself around it, and what was placed by hand survives the next thing
+// that repaints the picture.
+
+// screenAt reads a node's rendered centre in page coordinates, which is what a drag
+// is expressed in — the transform is in world units and the two differ by whatever
+// the current viewBox is.
+async function screenAt(page, id) {
+  const box = await page.locator(`[data-node-id="${id}"] .mesh-body`).boundingBox();
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+// worldAt reads the settled coordinates the layout is actually working in.
+async function worldAt(page, id) {
+  return page.evaluate((nodeId) => {
+    const g = document.querySelector(`[data-node-id="${nodeId}"]`);
+    const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform"));
+    return { x: +m[1], y: +m[2] };
+  }, id);
+}
+
+// dragBy picks a node up and puts it down dx/dy away. hover() rather than a raw
+// mouse.move, because it scrolls the node into view first: a press at coordinates
+// below the fold is a gesture the browser never sees, and the test would be
+// reporting on the scroll position rather than on the drag.
+async function dragBy(page, id, dx, dy) {
+  const target = page.locator(`[data-node-id="${id}"] .mesh-body`);
+  await target.hover();
+  const box = await target.boundingBox();
+  const stage = await page.locator("#mesh-surface").boundingBox();
+  const view = page.viewportSize();
+  const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const within = (value, low, high) => Math.min(Math.max(value, low), high);
+  const to = {
+    x: within(from.x + dx, stage.x + 40, Math.min(stage.x + stage.width, view.width) - 40),
+    y: within(from.y + dy, stage.y + 40, Math.min(stage.y + stage.height, view.height) - 40),
+  };
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 12 });
+  await page.mouse.up();
+  return { from, to };
+}
+
+test("a node goes where it is dropped, and the graph settles around it", async ({ page }) => {
+  installMock(page, meshOf(12));
+  await page.goto("/index.html#/panorama/landscape");
+  await page.locator(".mesh-node").first().waitFor();
+
+  const others = await page.evaluate(() => Object.fromEntries(
+    [...document.querySelectorAll(".mesh-node")].map((g) => [g.dataset.nodeId, g.getAttribute("transform")])));
+
+  const { to } = await dragBy(page, "process:3", 120, -70);
+  const landed = await screenAt(page, "process:3");
+  // Where it was put, not where the layout wanted it: within a couple of pixels of
+  // the pointer, which is all the rounding in the transform allows for.
+  expect(Math.abs(landed.x - to.x)).toBeLessThan(6);
+  expect(Math.abs(landed.y - to.y)).toBeLessThan(6);
+
+  // And it says so. A node that is not where the layout put it is a fact about the
+  // picture; hiding it would make the arrangement look like the simulation's answer.
+  await expect(page.locator('[data-node-id="process:3"]')).toHaveClass(/mesh-pinned/);
+
+  // The rest of the landscape moved out of the way rather than staying put and
+  // being overlapped — which is the difference between dragging a node and dragging
+  // a sticker across a picture of one.
+  const moved = await page.evaluate((before) => [...document.querySelectorAll(".mesh-node")]
+    .filter((g) => g.dataset.nodeId !== "process:3" && g.getAttribute("transform") !== before[g.dataset.nodeId])
+    .length, others);
+  expect(moved).toBeGreaterThan(0);
+
+  // Still no two circles through each other, which is the guarantee the whole
+  // picture rests on and the one a drag could most easily break.
+  const worst = await page.evaluate(() => {
+    const at = [...document.querySelectorAll(".mesh-node")].map((g) => {
+      const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform"));
+      return { x: +m[1], y: +m[2], r: +g.querySelector(".mesh-body").getAttribute("r") };
+    });
+    let gap = Infinity;
+    for (let i = 0; i < at.length; i++) for (let j = i + 1; j < at.length; j++) {
+      gap = Math.min(gap, Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y) - at[i].r - at[j].r);
+    }
+    return gap;
+  });
+  expect(worst).toBeGreaterThan(0);
+
+  // Dragging is not selecting. A gesture that also selected whatever it started on
+  // would make the picture impossible to arrange without changing the answer beside it.
+  await expect(page.locator(".mesh-panel-empty")).toBeVisible();
+});
+
+test("what you placed by hand survives a repaint", async ({ page }) => {
+  installMock(page, meshOf(12));
+  await page.goto("/index.html#/panorama/landscape");
+  await page.locator(".mesh-node").first().waitFor();
+
+  await dragBy(page, "process:5", -110, 90);
+  const dropped = await worldAt(page, "process:5");
+
+  // Anything that re-lays-out the graph. A depth change is the cheapest of them and
+  // has nothing to do with where things sit, which is the point: an arrangement that
+  // only survived until the next unrelated click would not be worth making.
+  await page.selectOption("#mesh-depth", "1");
+  await expect(page.locator('[data-node-id="process:5"]')).toHaveClass(/mesh-pinned/);
+  const after = await worldAt(page, "process:5");
+  expect(Math.hypot(after.x - dropped.x, after.y - dropped.y)).toBeLessThan(1);
+
+  // A filter is a temporary question, and asking one must not cost the arrangement.
+  await page.fill("#mesh-search", "Process 5");
+  await expect(page.locator(".mesh-node")).toHaveCount(1);
+  await page.fill("#mesh-search", "");
+  await expect(page.locator(".mesh-node")).toHaveCount(13);
+  await expect(page.locator('[data-node-id="process:5"]')).toHaveClass(/mesh-pinned/);
+});
+
+test("release puts everything back where the layout wants it", async ({ page }) => {
+  installMock(page, meshOf(12));
+  await page.goto("/index.html#/panorama/landscape");
+  await page.locator(".mesh-node").first().waitFor();
+
+  const release = page.locator("#mesh-release");
+  await expect(release).toBeDisabled();
+  const original = await worldAt(page, "process:7");
+
+  await dragBy(page, "process:7", 140, 60);
+  await expect(release).toBeEnabled();
+
+  await release.click();
+  await expect(release).toBeDisabled();
+  await expect(page.locator('[data-node-id="process:7"]')).not.toHaveClass(/mesh-pinned/);
+  // Back where it started: the layout is deterministic, so releasing everything
+  // reproduces the picture the graph opened with rather than some third arrangement.
+  const back = await worldAt(page, "process:7");
+  expect(Math.hypot(back.x - original.x, back.y - original.y)).toBeLessThan(1);
+});
+
+test("double-clicking one node releases only that one", async ({ page }) => {
+  installMock(page, meshOf(12));
+  await page.goto("/index.html#/panorama/landscape");
+  await page.locator(".mesh-node").first().waitFor();
+
+  await dragBy(page, "process:2", 100, 40);
+  await expect(page.locator('[data-node-id="process:2"]')).toHaveClass(/mesh-pinned/);
+  await dragBy(page, "process:9", -90, -60);
+  await expect(page.locator('[data-node-id="process:9"]')).toHaveClass(/mesh-pinned/);
+  const kept = await worldAt(page, "process:9");
+
+  await page.locator('[data-node-id="process:2"] .mesh-body').dblclick();
+  await expect(page.locator('[data-node-id="process:2"]')).not.toHaveClass(/mesh-pinned/);
+  await expect(page.locator('[data-node-id="process:9"]')).toHaveClass(/mesh-pinned/);
+  await expect(page.locator("#mesh-release")).toBeEnabled();
+
+  const still = await worldAt(page, "process:9");
+  expect(Math.hypot(still.x - kept.x, still.y - kept.y)).toBeLessThan(1);
+});
+
+// Arranging without a mouse. Everything this view *says* is already reachable from
+// the keyboard — focusing a node lifts its neighbours, Enter selects it — so this is
+// a convenience rather than information. But a convenience only some people can have
+// is not one.
+test("a focused node can be moved with the arrow keys", async ({ page }) => {
+  installMock(page, meshOf(12));
+  await page.goto("/index.html#/panorama/landscape");
+  await page.locator(".mesh-node").first().waitFor();
+
+  const node = page.locator('[data-node-id="process:4"]');
+  await node.focus();
+  const before = await worldAt(page, "process:4");
+
+  await page.keyboard.press("ArrowRight");
+  const stepped = await worldAt(page, "process:4");
+  expect(stepped.x).toBeGreaterThan(before.x);
+  expect(Math.abs(stepped.y - before.y)).toBeLessThan(1);
+  await expect(node).toHaveClass(/mesh-pinned/);
+
+  // Shift is the coarse step: crossing a large landscape a pixel at a time is not a
+  // keyboard equivalent of a drag.
+  const fine = stepped.x - before.x;
+  await page.keyboard.press("Shift+ArrowRight");
+  const coarse = (await worldAt(page, "process:4")).x - stepped.x;
+  expect(coarse).toBeGreaterThan(fine * 2);
+
+  // And it is the same arrangement a drag makes, so Release puts it back.
+  await page.locator("#mesh-release").click();
+  await expect(node).not.toHaveClass(/mesh-pinned/);
 });

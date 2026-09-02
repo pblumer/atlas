@@ -18,21 +18,51 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
 // is called in the legend. Restricted and unresolved are deliberately distinct —
 // "you may not see it" and "it is not deployed" are different findings, and a
 // picture that renders them alike answers the wrong question.
+//
 // Radii carry rank as well as kind. At a few hundred nodes the eye sorts by size
 // before it reads anything, so an application has to be unmistakably the largest
 // thing on screen and a leaf unmistakably the smallest — otherwise every node
 // competes for attention and the picture reads as one texture.
+//
+// `r` is the floor of a kind's band and `grow` is how far connectivity may carry a
+// node up it (see radiusFor). The bands are deliberately closed: the top of one is
+// below the floor of the next, so a much-used worker is drawn larger than a lonely
+// one and still smaller than any process. Size therefore says two things at once
+// without either overwriting the other — what kind of thing this is, and how much
+// of the landscape hangs off it.
 const KIND = {
-  application: { r: 30, fill: "var(--accent-soft)", stroke: "var(--accent)", label: "Application" },
-  process: { r: 17, fill: "var(--surface)", stroke: "var(--border-strong)", label: "Process" },
+  application: { r: 30, grow: 12, fill: "var(--accent-soft)", stroke: "var(--accent)", label: "Application" },
+  process: { r: 17, grow: 5, fill: "var(--surface)", stroke: "var(--border-strong)", label: "Process" },
   // --ok is a fixed green rather than a shade of the configurable accent, so its
   // soft companion is a literal here too. There is no --ok-soft at :root, and
   // defining one would change the one other rule that already asks for it.
-  worker: { r: 12, fill: "#e8f5ec", stroke: "var(--ok)", label: "Worker" },
-  decision: { r: 12, fill: "var(--accent-soft)", stroke: "var(--accent-hover)", label: "Decision" },
-  restricted: { r: 11, fill: "var(--bg)", stroke: "var(--muted)", label: "Restricted — outside your access", dashed: true },
-  unresolved: { r: 11, fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
+  worker: { r: 12, grow: 3.5, fill: "#e8f5ec", stroke: "var(--ok)", label: "Worker" },
+  decision: { r: 12, grow: 3.5, fill: "var(--accent-soft)", stroke: "var(--accent-hover)", label: "Decision" },
+  restricted: { r: 11, grow: 3, fill: "var(--bg)", stroke: "var(--muted)", label: "Restricted — outside your access", dashed: true },
+  unresolved: { r: 11, grow: 3, fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
 };
+
+// DEGREE_FULL is the number of dependencies at which a node is drawn at the top of
+// its band. It is a fixed reference rather than the busiest node in this particular
+// graph, and that is the point: normalising against the graph would make the same
+// node change size when a filter removes something else, so its size would describe
+// the current screen rather than the node. Twelve is where the curve below flattens
+// — past it, "very connected" is the whole of the answer and the exact count is
+// what the panel is for.
+const DEGREE_FULL = 12;
+
+// radiusFor draws a node at its kind's floor plus however far its connectivity
+// carries it up the kind's band.
+//
+// Logarithmic, because the difference between one dependency and four is the one
+// worth seeing: it is the difference between a leaf and a small hub. Between forty
+// and fifty there is nothing left to say that the size could carry, and a linear
+// scale would spend the whole band saying it.
+export function radiusFor(node, degree) {
+  const style = KIND[node.kind] || KIND.process;
+  const reach = Math.log2(1 + Math.max(0, degree || 0)) / Math.log2(1 + DEGREE_FULL);
+  return style.r + (style.grow || 0) * Math.min(1, reach);
+}
 
 // PROVENANCE describes how a node is known (ADR-0211 §2). It is rendered on every
 // node, always: a picture that mixed what Atlas found with what somebody declared,
@@ -149,6 +179,14 @@ const NODE_ROOM = 34;
 // space stops being empty and starts being the thing that makes names readable.
 const WORLD_FILL = 0.28;
 
+// radiusOf is the radius a node is actually drawn at. renderGraph sizes every node
+// once, from its connectivity, and everything downstream — the world budget, the
+// separation pass, the circle itself — asks here rather than re-deriving it, so
+// they cannot disagree about how big a node is.
+function radiusOf(node) {
+  return node.r ?? (KIND[node.kind] || KIND.process).r;
+}
+
 // worldFor sizes the space the graph is laid out in, from the graph rather than
 // from the viewport.
 //
@@ -166,7 +204,9 @@ const WORLD_FILL = 0.28;
 function worldFor(nodes, frame) {
   let cells = 0;
   for (const n of nodes) {
-    const cell = 2 * ((KIND[n.kind] || KIND.process).r + NODE_ROOM);
+    // The node's own radius, not its kind's floor: connectivity has already sized
+    // it, and a world budgeted from the floor would be too small for the hubs.
+    const cell = 2 * (radiusOf(n) + NODE_ROOM);
     cells += cell * cell;
   }
   const aspect = Math.max(frame.width, 1) / Math.max(frame.height, 1);
@@ -193,9 +233,12 @@ function separate(nodes, radii, gap, rounds = 24) {
         if (d < 0.01) { dx = 0.1; dy = 0.1; d = 0.1414; }
         const room = radii[i] + radii[j] + gap;
         if (d >= room) continue;
-        const push = (room - d) / 2;
-        a.x += (dx / d) * push; a.y += (dy / d) * push;
-        b.x -= (dx / d) * push; b.y -= (dy / d) * push;
+        // A node somebody is holding does not move: the other one gets out of its
+        // way instead. Splitting the push evenly would slide a held node out from
+        // under the pointer, which is the one thing a drag must never do.
+        const [pushA, pushB] = share(room - d, a.held, b.held);
+        a.x += (dx / d) * pushA; a.y += (dy / d) * pushA;
+        b.x -= (dx / d) * pushB; b.y -= (dy / d) * pushB;
         moved = true;
       }
     }
@@ -203,47 +246,49 @@ function separate(nodes, radii, gap, rounds = 24) {
   }
 }
 
-// layout settles the graph with repulsion between every pair, springs along edges,
-// and a pull toward the centre. Returns the elapsed milliseconds so the caller can
-// report what the budget actually costs on this machine.
-function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
-  const started = performance.now();
-  const random = mulberry32(0x5EED);
-  const index = new Map(nodes.map((n, i) => [n.id, i]));
-  const cx = width / 2, cy = height / 2;
-  // The frame is usually wider than it is tall. Both the initial scatter and the
-  // centring pull are shaped by that ratio, so the settled graph is the shape of the
-  // space it has to live in.
-  const aspect = Math.max(width, 1) / Math.max(height, 1);
-  const pullX = 1 / aspect, pullY = aspect;
+// share splits an overlap between two nodes, giving the whole of it to whichever
+// one is free to move. Both held is a standoff: neither moves, and the arrangement
+// somebody placed by hand is left exactly as they placed it.
+function share(overlap, aHeld, bHeld) {
+  if (aHeld && bHeld) return [0, 0];
+  if (aHeld) return [0, overlap];
+  if (bHeld) return [overlap, 0];
+  return [overlap / 2, overlap / 2];
+}
 
-  for (const n of nodes) {
-    // Seeded scatter on an ellipse, so nothing starts coincident (which would make
-    // the repulsion term divide by zero and fling nodes to infinity).
-    const angle = random() * Math.PI * 2;
-    const radius = 0.15 + random() * 0.85;
-    n.x = cx + Math.cos(angle) * radius * width * 0.42;
-    n.y = cy + Math.sin(angle) * radius * height * 0.42;
-    n.vx = 0; n.vy = 0;
-  }
-
-  const links = edges
-    .map((e) => [index.get(e.from), index.get(e.to)])
-    .filter(([a, b]) => a !== undefined && b !== undefined);
-
-  // Repulsion scales with the graph so density stays roughly constant instead of
-  // rising with node count — the "Klüngel" a fixed constant produces, where fifty
-  // nodes are comfortable and three hundred are one dark blob.
-  // Both scale with the world: a graph settled at a fixed spring length inside a
-  // world sized for its content is a knot in the middle of an empty field, and
-  // enlarging that knot is not the same as spreading it out.
+// forcesFor derives the constants the simulation runs on from the world it runs in.
+//
+// Everything scales with the world rather than being a fixed number, because a
+// graph settled at a fixed spring length inside a world sized for its content is a
+// knot in the middle of an empty field — and enlarging the knot is not the same as
+// spreading it out. Repulsion also scales with the node count so density stays
+// roughly constant instead of rising with it: the "Klüngel" a fixed constant
+// produces, where fifty nodes are comfortable and three hundred are one dark blob.
+function forcesFor(nodes, width, height) {
   const reach = Math.min(width, height);
-  const repulsion = 5200 * Math.max(1, Math.sqrt(nodes.length / 40)) * Math.max(1, reach / 720);
-  const spring = 0.012, damping = 0.85;
-  const rest = Math.max(130, reach * 0.16);
-  // Every node's own footprint, so the separation pass below knows what "touching"
-  // means for this pair rather than assuming one radius for all of them.
-  const radii = nodes.map((n) => (KIND[n.kind] || KIND.process).r);
+  // The frame is usually wider than it is tall. Both the initial scatter and the
+  // centring pull are shaped by that ratio, so the settled graph is the shape of
+  // the space it has to live in.
+  const aspect = Math.max(width, 1) / Math.max(height, 1);
+  return {
+    cx: width / 2, cy: height / 2,
+    pullX: 1 / aspect, pullY: aspect,
+    repulsion: 5200 * Math.max(1, Math.sqrt(nodes.length / 40)) * Math.max(1, reach / 720),
+    spring: 0.012,
+    damping: 0.85,
+    rest: Math.max(130, reach * 0.16),
+  };
+}
+
+// settle runs the simulation over nodes that already have positions, for as many
+// steps as it is given. It is the whole of the physics, and it is a function of its
+// own so that a drag can run a few steps of exactly the same thing the initial
+// layout runs two hundred of — a graph that settled one way while being dragged and
+// another way on the next paint would be two layouts wearing one name.
+//
+// A node marked `held` is not simulated: its position is whatever put it there, and
+// everything else arranges itself around it.
+function settle(nodes, links, radii, force, iterations) {
   for (let step = 0; step < iterations; step++) {
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
@@ -251,9 +296,9 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
         let dx = a.x - b.x, dy = a.y - b.y;
         let d2 = dx * dx + dy * dy;
         if (d2 < 0.01) { dx = 0.1; dy = 0.1; d2 = 0.02; }
-        const force = repulsion / d2;
+        const magnitude = force.repulsion / d2;
         const d = Math.sqrt(d2);
-        const fx = (dx / d) * force, fy = (dy / d) * force;
+        const fx = (dx / d) * magnitude, fy = (dy / d) * magnitude;
         a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
 
         // Separation. Repulsion alone is a soft force that a spring can overpower,
@@ -263,9 +308,9 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
         // in the same pass because that pass already visits every pair.
         const room = radii[i] + radii[j] + NODE_ROOM;
         if (d < room) {
-          const push = (room - d) * 0.5;
-          a.x += (dx / d) * push; a.y += (dy / d) * push;
-          b.x -= (dx / d) * push; b.y -= (dy / d) * push;
+          const [pushA, pushB] = share((room - d) * 0.5, a.held, b.held);
+          a.x += (dx / d) * pushA; a.y += (dy / d) * pushA;
+          b.x -= (dx / d) * pushB; b.y -= (dy / d) * pushB;
         }
       }
     }
@@ -273,27 +318,112 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
       const a = nodes[ai], b = nodes[bi];
       const dx = b.x - a.x, dy = b.y - a.y;
       const d = Math.hypot(dx, dy) || 0.01;
-      const force = (d - rest) * spring;
-      const fx = (dx / d) * force, fy = (dy / d) * force;
+      const magnitude = (d - force.rest) * force.spring;
+      const fx = (dx / d) * magnitude, fy = (dy / d) * magnitude;
       a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
     }
     for (const n of nodes) {
+      // A held node keeps its place and its stillness: carrying velocity through a
+      // drag would make it spring away the moment it was let go.
+      if (n.held) { n.vx = 0; n.vy = 0; continue; }
       // The pull toward the centre is anisotropic, weaker along the wider axis, so
       // the graph settles into the shape of the frame instead of into a disc. A disc
       // in a wide viewport is what produced the empty bands on either side: the
       // content was never the shape of the space it had.
-      n.vx += (cx - n.x) * 0.0012 * pullX;
-      n.vy += (cy - n.y) * 0.0012 * pullY;
-      n.vx *= damping; n.vy *= damping;
+      n.vx += (force.cx - n.x) * 0.0012 * force.pullX;
+      n.vy += (force.cy - n.y) * 0.0012 * force.pullY;
+      n.vx *= force.damping; n.vy *= force.damping;
       n.x += n.vx; n.y += n.vy;
     }
   }
-  fitToFrame(nodes, width, height);
+}
+
+// linksAmong resolves edges to index pairs, dropping any whose ends are not on
+// screen — a filtered graph carries edges to nodes it no longer contains.
+function linksAmong(nodes, edges) {
+  const index = new Map(nodes.map((n, i) => [n.id, i]));
+  return edges
+    .map((e) => [index.get(e.from), index.get(e.to)])
+    .filter(([a, b]) => a !== undefined && b !== undefined);
+}
+
+// relax settles the graph a few steps from wherever it currently is, holding
+// whatever is held. This is what a drag calls on every frame: the node under the
+// pointer moves, its neighbours are pulled after it, and the rest of the landscape
+// gets out of the way — which is the whole of what makes a graph feel like it is
+// made of things rather than of pixels.
+//
+// Deliberately few steps. A drag is a continuous act, so each frame only has to
+// move the picture a little way toward its new equilibrium; running it to
+// convergence on every frame would be both slower and jumpier.
+export function relax(nodes, edges, { width, height, steps = 3 } = {}) {
+  if (!nodes.length) return nodes;
+  const radii = nodes.map(radiusOf);
+  settle(nodes, linksAmong(nodes, edges), radii, forcesFor(nodes, width, height), steps);
+  separate(nodes, radii, NODE_ROOM, 4);
+  return nodes;
+}
+
+// layout settles the graph with repulsion between every pair, springs along edges,
+// and a pull toward the centre. Returns the elapsed milliseconds so the caller can
+// report what the budget actually costs on this machine.
+//
+// `pinned` is the map of nodes somebody has dragged somewhere. It changes two
+// things, and both are consequences of one rule — a hand-placed node stays where it
+// was placed:
+//
+//   - Pinned nodes are held throughout, so the simulation arranges the rest of the
+//     landscape around them instead of pulling them back.
+//   - The fit is skipped while anything is pinned, because fitting rescales every
+//     position and would slide the pins off the spots they were dropped on. So the
+//     picture stops re-framing itself once you start arranging it by hand, which is
+//     the trade: your arrangement is worth more than the last few percent of margin.
+//
+// `from` is where the nodes already are, so a repaint continues the picture on
+// screen rather than re-deriving one around the pins. Without it, filtering after a
+// drag would keep the pinned nodes and re-scatter everything else — the arrangement
+// would survive and its context would not, which is the worse half of both.
+function layout(nodes, edges, { width, height, iterations = 220, pinned, from } = {}) {
+  const started = performance.now();
+  const random = mulberry32(0x5EED);
+  const force = forcesFor(nodes, width, height);
+  // Anchored by the pins that are actually on screen: a pin on something a filter
+  // removed must not stop the rest of the picture from being fitted.
+  const anchored = Boolean(pinned) && nodes.some((n) => pinned.has(n.id));
+
+  for (const n of nodes) {
+    const pin = pinned?.get(n.id);
+    const was = from?.get(n.id);
+    if (pin) {
+      // Clamped, because the world is sized from the graph and the frame's shape:
+      // a resize can make it smaller than it was when the pin was placed, and a pin
+      // outside the world would put the node somewhere the fitted view never shows.
+      n.x = Math.min(Math.max(pin.x, 0), width);
+      n.y = Math.min(Math.max(pin.y, 0), height);
+      n.held = true;
+    } else if (anchored && was) {
+      n.x = was.x; n.y = was.y;
+    } else {
+      // Seeded scatter on an ellipse, so nothing starts coincident (which would make
+      // the repulsion term divide by zero and fling nodes to infinity).
+      const angle = random() * Math.PI * 2;
+      const radius = 0.15 + random() * 0.85;
+      n.x = force.cx + Math.cos(angle) * radius * width * 0.42;
+      n.y = force.cy + Math.sin(angle) * radius * height * 0.42;
+    }
+    n.vx = 0; n.vy = 0;
+  }
+
+  // Every node's own footprint, so the separation pass knows what "touching" means
+  // for this pair rather than assuming one radius for all of them.
+  const radii = nodes.map(radiusOf);
+  settle(nodes, linksAmong(nodes, edges), radii, force, iterations);
+  if (!anchored) fitToFrame(nodes, width, height);
   // And once more where the circles are actually drawn. The fit scales positions
   // and leaves radii alone, so whatever the settle guaranteed is only true again
   // after this. Anything it moves outside the world is pulled back by the re-fit.
   separate(nodes, radii, NODE_ROOM);
-  fitToFrame(nodes, width, height);
+  if (!anchored) fitToFrame(nodes, width, height);
   return performance.now() - started;
 }
 
@@ -374,6 +504,27 @@ export function zoomView(view, factor, focus, base) {
 // shared application — which would make "what breaks if this goes down" name half
 // the landscape and mean nothing.
 const DEPENDENCY_EDGES = new Set(["calls", "uses"]);
+
+// degreesOf counts, for every node, how many dependency edges touch it.
+//
+// Containment is left out for the same reason impact analysis leaves it out: an
+// application does not depend on the processes it holds, and counting them would
+// make every application a hub by construction and say nothing. What is counted is
+// what would actually propagate — calls and uses — so the count means "how much
+// traffic runs through this", which is what makes a node worth noticing.
+//
+// Both ends of an edge are counted, and self-edges once, so a node that calls three
+// things and is called by two has degree five.
+export function degreesOf(graph) {
+  const degree = new Map(graph.nodes.map((n) => [n.id, 0]));
+  const bump = (id) => { if (degree.has(id)) degree.set(id, degree.get(id) + 1); };
+  for (const e of graph.edges) {
+    if (!DEPENDENCY_EDGES.has(e.kind)) continue;
+    bump(e.from);
+    if (e.to !== e.from) bump(e.to);
+  }
+  return degree;
+}
 
 // impactFrom answers ADR-0211 §6's question over the graph the viewer already has:
 // what breaks if this node goes down (direction "dependents", walking edges
@@ -597,38 +748,34 @@ function legendHTML(graph, layoutMs) {
   </div>`;
 }
 
-function renderGraph(graph, layoutMs, highlight, frame, selected) {
+function renderGraph(graph, layoutMs, frame, { pinned, from } = {}) {
+  // Sized before anything else asks how big they are: connectivity decides the
+  // radius, and the world budget, the separation pass and the circle all read it
+  // back off the node (see radiusOf) rather than working it out again.
+  const degree = degreesOf(graph);
+  const nodes = graph.nodes.map((n) => ({ ...n, r: radiusFor(n, degree.get(n.id)) }));
   // The graph is laid out in a world of its own size, not in the viewport. The
   // frame only decides that world's shape, so the opening view fills the window
   // without letterboxing.
-  const world = worldFor(graph.nodes, frame);
+  const world = worldFor(nodes, frame);
   const { width, height } = world;
-  const nodes = graph.nodes.map((n) => ({ ...n }));
-  const ms = layout(nodes, graph.edges, { width, height }) + layoutMs;
+  const ms = layout(nodes, graph.edges, { width, height, pinned, from }) + layoutMs;
   const at = new Map(nodes.map((n) => [n.id, n]));
 
   const edges = graph.edges.map((e) => {
     const a = at.get(e.from), b = at.get(e.to);
     if (!a || !b) return "";
     const dashed = e.kind === "contains";
-    const state = highlight
-      ? (highlight.has(e.from) && highlight.has(e.to) ? " mesh-in-impact" : " mesh-dimmed")
-      : "";
     return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}"
       x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"
       data-from="${esc(e.from)}" data-to="${esc(e.to)}"
-      class="mesh-edge${dashed ? " mesh-edge-contains" : ""}${state}"/>`;
+      class="mesh-edge${dashed ? " mesh-edge-contains" : ""}"/>`;
   }).join("");
 
   const circles = nodes.map((n) => {
     const style = KIND[n.kind] || KIND.process;
+    const r = radiusOf(n);
     const label = n.kind === "restricted" ? "" : esc(n.name || "");
-    // Selecting a node is what runs impact analysis, so the node itself is the
-    // control. The drilldown into Operations moved into the selection panel: a node
-    // cannot both navigate away and select, and selecting is the more frequent act.
-    const state = highlight
-      ? (highlight.has(n.id) ? " mesh-in-impact" : " mesh-dimmed")
-      : "";
     const prov = PROVENANCE[n.provenance] || PROVENANCE.derived;
     const sev = SEVERITY[n.severity] || SEVERITY.unknown;
     // Severity is drawn as a badge on the node's own outline rather than by
@@ -636,7 +783,7 @@ function renderGraph(graph, layoutMs, highlight, frame, selected) {
     // ADR-0189 §6 keeps those. The glyph is what makes the finding readable without
     // colour perception at all.
     const badge = sev.glyph
-      ? `<g class="mesh-badge" transform="translate(${(style.r * 0.72).toFixed(1)},${(-style.r * 0.72).toFixed(1)})">
+      ? `<g class="mesh-badge" transform="translate(${(r * 0.72).toFixed(1)},${(-r * 0.72).toFixed(1)})">
            <circle r="7" class="mesh-badge-dot"/>
            <text text-anchor="middle" dy="3.5" class="mesh-badge-glyph">${esc(sev.glyph)}</text>
          </g>`
@@ -645,17 +792,18 @@ function renderGraph(graph, layoutMs, highlight, frame, selected) {
     // decision, from the current magnification (see labelTier) — so zooming reveals
     // names with no re-render, and a selected, hovered or focused node keeps its own
     // whatever the zoom is.
-    const named = Boolean(label) || n.id === selected;
+    const named = Boolean(label);
     return `<g transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"
-      class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")} mesh-sev-${esc(n.severity || "unknown")}${named ? " mesh-named" : ""}${state}"
+      class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")} mesh-sev-${esc(n.severity || "unknown")}${named ? " mesh-named" : ""}${n.held ? " mesh-pinned" : ""}"
       data-node-id="${esc(n.id)}" data-severity="${esc(n.severity || "unknown")}"
       tabindex="0" role="button" aria-label="${esc(nodeTitle(n))}">
-      ${prov.ring ? `<circle r="${style.r + 4}" fill="none" stroke="${style.stroke}" stroke-width="1" opacity="0.55"/>` : ""}
-      <circle class="mesh-body" r="${style.r}" fill="${prov.ghost ? "none" : style.fill}" stroke="${sev.stroke || style.stroke}"
+      ${prov.ring ? `<circle r="${(r + 4).toFixed(1)}" fill="none" stroke="${style.stroke}" stroke-width="1" opacity="0.55"/>` : ""}
+      <circle class="mesh-body" r="${r.toFixed(1)}" fill="${prov.ghost ? "none" : style.fill}" stroke="${sev.stroke || style.stroke}"
         stroke-width="${sev.stroke ? 3 : 2}" ${style.dashed || prov.ghost ? 'stroke-dasharray="4 3"' : ""}/>
+      <circle class="mesh-pin" r="4" cx="${(-r * 0.72).toFixed(1)}" cy="${(r * 0.72).toFixed(1)}"/>
       ${n.children ? `<text class="mesh-count" text-anchor="middle" dy="4">${n.children}</text>` : ""}
       ${badge}
-      <text class="mesh-label" text-anchor="middle" dy="${style.r + 14}"><tspan class="mesh-label-ink">${label}</tspan></text>
+      <text class="mesh-label" text-anchor="middle" dy="${(r + 14).toFixed(1)}"><tspan class="mesh-label-ink">${label}</tspan></text>
       <title>${esc(nodeTitle(n))}</title></g>`;
   }).join("");
 
@@ -663,7 +811,7 @@ function renderGraph(graph, layoutMs, highlight, frame, selected) {
   // content inside. The world carries the frame's own aspect ratio, so with
   // preserveAspectRatio's default there is nothing to letterbox — the opening
   // picture is the entire landscape, filling the window.
-  return { ms, world, svg: `<svg class="mesh-canvas" viewBox="0 0 ${width} ${height}"
+  return { ms, world, nodes, svg: `<svg class="mesh-canvas" viewBox="0 0 ${width} ${height}"
     role="img" aria-label="Derived landscape mesh">
     <g class="mesh-edges">${edges}</g>${circles}</svg>` };
 }
@@ -754,6 +902,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
           <button id="mesh-zoom-in" type="button" title="Zoom in">+</button>
           <button id="mesh-zoom-out" type="button" title="Zoom out">−</button>
           <button id="mesh-zoom-fit" type="button" title="Fit the whole landscape">Fit</button>
+          <button id="mesh-release" type="button" disabled
+            title="Put every node you have dragged back where the layout puts it">Release</button>
         </div>
       </div>
       <aside class="mesh-side">
@@ -785,6 +935,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const zoomIn = document.getElementById("mesh-zoom-in");
   const zoomOut = document.getElementById("mesh-zoom-out");
   const zoomFit = document.getElementById("mesh-zoom-fit");
+  const release = document.getElementById("mesh-release");
   const legendSlot = document.getElementById("mesh-legend-slot");
   const count = document.getElementById("mesh-count");
   const panel = document.getElementById("mesh-panel-slot");
@@ -792,6 +943,23 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const depthSelect = document.getElementById("mesh-depth");
 
   let selected = null;
+  // pinned holds every node somebody has dragged, by id, at the world coordinates
+  // they dropped it on. It is the whole of the arrangement: the layout reads it on
+  // every paint, so a hand-placed node survives filtering, selecting and resizing —
+  // and clearing this map is all that "Release" has to do.
+  //
+  // It deliberately keeps entries for nodes a filter has hidden. A search is a
+  // temporary question, and losing your arrangement by asking one would make the
+  // arrangement not worth making.
+  const pinned = new Map();
+  // placed is the laid-out graph — the same node objects the SVG was rendered from,
+  // with live coordinates. A drag mutates these and writes the result straight into
+  // the DOM, so the picture follows the pointer without a re-render.
+  let placed = [];
+  let at = new Map();
+  let shown = graph;
+  let nodeEls = new Map();
+  let edgeEls = [];
   // frame is the drawing surface in its own units, taken from the element rather
   // than assumed, so the layout settles into the shape the viewer actually has.
   // frameView is the part of it currently on screen; null means fitted, which is where
@@ -839,35 +1007,92 @@ export async function mountPanoramaMesh(view, { api, toast }) {
 
   function paint() {
     const term = search.value.trim().toLowerCase();
-    const shown = filterGraph(graph, term);
+    shown = filterGraph(graph, term);
     // A selection that the filter removed is no longer selected: highlighting a node
     // that is not on screen would leave the panel describing something invisible.
     if (selected && !shown.nodes.some((n) => n.id === selected)) selected = null;
 
+    measure();
+    // Where everything currently is, so a repaint while something is pinned carries
+    // the picture on screen forward instead of settling a fresh one around the pins.
+    const from = new Map(placed.map((n) => [n.id, { x: n.x, y: n.y }]));
+    const painted = renderGraph(shown, 0, frame, { pinned, from });
+    const { ms, svg } = painted;
+    world = painted.world;
+    placed = painted.nodes;
+    at = new Map(placed.map((n) => [n.id, n]));
+    surface.innerHTML = shown.nodes.length
+      ? svg
+      : `<p class="mesh-empty-filter">Nothing matches “${esc(term)}”.</p>`;
+    index();
+    // The rendered SVG carries none of the hover highlight, so the record of what is
+    // lit has to be cleared with it — otherwise pointing back at the same node would
+    // be a no-op and the highlight would never come back.
+    lit = null;
+    applyView();
+    legendSlot.innerHTML = legendHTML(shown, ms);
+    count.textContent = term
+      ? `${shown.nodes.length} of ${graph.nodes.length} node(s)`
+      : `${graph.nodes.length} node(s), ${graph.edges.length} edge(s)`;
+    refresh();
+  }
+
+  // refresh answers the impact question about the current selection and shows the
+  // answer — the highlight on the picture, the counts beside it.
+  //
+  // It never re-lays-out, and that is the point. Selecting is the most frequent thing
+  // anybody does here, and running a two-hundred-iteration simulation to answer "what
+  // depends on this" was both slow at a few hundred nodes and wrong in kind: the
+  // answer is about the picture on screen, so the picture must not move while it is
+  // being given. The classes go on and come off exactly as the hover highlight's do.
+  function refresh() {
     const direction = dirSelect.value;
     const depth = depthSelect.value === "all" ? Infinity : Number(depthSelect.value);
     const result = selected ? impactFrom(shown, selected, { direction, depth }) : null;
     const highlight = result ? new Set(result.nodes) : null;
-
-    measure();
-    const painted = renderGraph(shown, 0, highlight, frame, selected);
-    const { ms, svg } = painted;
-    world = painted.world;
-    surface.innerHTML = shown.nodes.length
-      ? svg
-      : `<p class="mesh-empty-filter">Nothing matches “${esc(term)}”.</p>`;
-    applyView();
-    legendSlot.innerHTML = legendHTML(shown, ms);
+    for (const [id, g] of nodeEls) {
+      g.classList.toggle("mesh-in-impact", Boolean(highlight?.has(id)));
+      g.classList.toggle("mesh-dimmed", Boolean(highlight) && !highlight.has(id));
+    }
+    for (const line of edgeEls) {
+      const inside = Boolean(highlight?.has(line.dataset.from) && highlight.has(line.dataset.to));
+      line.classList.toggle("mesh-in-impact", inside);
+      line.classList.toggle("mesh-dimmed", Boolean(highlight) && !inside);
+    }
     panel.innerHTML = impactPanelHTML(
       shown.nodes.find((n) => n.id === selected) || null, result, direction, depth);
-    count.textContent = term
-      ? `${shown.nodes.length} of ${graph.nodes.length} node(s)`
-      : `${graph.nodes.length} node(s), ${graph.edges.length} edge(s)`;
+  }
+
+  // index caches the elements a drag writes to. Looking them up once per render and
+  // then writing coordinates straight onto them is what keeps a drag at frame rate:
+  // the alternative is re-rendering the whole SVG on every pointer move, which at a
+  // few hundred nodes is a slideshow.
+  function index() {
+    const svg = surface.querySelector("svg");
+    nodeEls = new Map();
+    edgeEls = [];
+    if (!svg) return;
+    for (const g of svg.querySelectorAll(".mesh-node")) nodeEls.set(g.dataset.nodeId, g);
+    edgeEls = [...svg.querySelectorAll(".mesh-edge")];
+  }
+
+  // applyPositions writes the live coordinates into the SVG that is already there.
+  function applyPositions() {
+    for (const [id, g] of nodeEls) {
+      const n = at.get(id);
+      if (n) g.setAttribute("transform", `translate(${n.x.toFixed(1)},${n.y.toFixed(1)})`);
+    }
+    for (const line of edgeEls) {
+      const a = at.get(line.dataset.from), b = at.get(line.dataset.to);
+      if (!a || !b) continue;
+      line.setAttribute("x1", a.x.toFixed(1)); line.setAttribute("y1", a.y.toFixed(1));
+      line.setAttribute("x2", b.x.toFixed(1)); line.setAttribute("y2", b.y.toFixed(1));
+    }
   }
 
   function select(id) {
     selected = selected === id ? null : id; // clicking the selection again clears it
-    paint();
+    refresh();
   }
 
   // Which bubble is connected to which, shown by pointing at one.
@@ -905,6 +1130,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     }
   }
   surface.addEventListener("pointerover", (event) => {
+    // While a node is being dragged the highlight belongs to the node in hand, not
+    // to whatever the pointer happens to sweep over on the way.
+    if (moving) return;
     const node = event.target.closest?.(".mesh-node");
     relate(node ? node.dataset.nodeId : null);
   });
@@ -912,6 +1140,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // Keyboard reaches the same answer: the relationships are part of what the view
   // says, not a reward for owning a mouse.
   surface.addEventListener("focusin", (event) => {
+    if (moving) return;
     const node = event.target.closest?.(".mesh-node");
     if (node) relate(node.dataset.nodeId);
   });
@@ -933,12 +1162,101 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     };
   }
 
-  // dragged suppresses the click that ends a pan. Panning and selecting share the
-  // same surface, and a drag that also selected whatever it started on would make
-  // the picture impossible to move without changing the answer beside it.
+  // Picking a bubble up and putting it somewhere.
+  //
+  // The layout answers "where does this graph want to sit", which is the right
+  // first answer and never the last one: the person reading it knows things the
+  // simulation does not — that these four belong together, that this hub should be
+  // out of the way — and until now had no way to say so. Dragging is how they say
+  // it, and the graph rearranging itself around the node in hand is what makes the
+  // answer legible: neighbours follow, everything else gets out of the way, and
+  // what was connected to what is visible in the motion rather than only in the
+  // lines.
+  //
+  // A dropped node stays dropped. The simulation here settles once rather than
+  // running continuously, so releasing a node back into it would put it straight
+  // back where it started and make the whole gesture pointless. It is pinned
+  // instead — marked on the node, undone per node by double-clicking it and
+  // wholesale by "Release", so it is never a state somebody is stuck in.
+  let moving = null;
+
+  // place puts a node at a point and keeps it inside the world, because the world is
+  // what the fitted view shows: a node moved past its edge would be invisible at the
+  // very view somebody would use to go looking for it.
+  function place(node, x, y) {
+    const r = node.r ?? 12;
+    node.x = Math.min(Math.max(x, r), world.width - r);
+    node.y = Math.min(Math.max(y, r), world.height - r);
+  }
+
+  // pin records where a node has been put, and marks it as put there.
+  function pin(id, node, element) {
+    node.held = true;
+    pinned.set(id, { x: node.x, y: node.y });
+    (element || nodeEls.get(id))?.classList.add("mesh-pinned");
+    updateRelease();
+  }
+
+  function beginDrag(id, event) {
+    const node = at.get(id);
+    const grabbed = node && pointToFrame(event);
+    if (!grabbed) return false;
+    // The grab offset, so the node does not jump its own centre onto the pointer.
+    moving = {
+      id, node, pointer: event.pointerId, shifted: false,
+      dx: node.x - grabbed.x, dy: node.y - grabbed.y,
+      from: { x: node.x, y: node.y },
+    };
+    node.held = true;
+    relate(id);
+    return true;
+  }
+
+  // nudge settles the graph a little way toward its new shape and writes the result
+  // into the SVG that is already on screen. One frame's worth per frame: a full
+  // settle on every pointer move would be slower and would make the picture jump
+  // rather than follow.
+  let nudging = 0;
+  function nudge() {
+    if (nudging) return;
+    nudging = requestAnimationFrame(() => {
+      nudging = 0;
+      if (!moving) return;
+      relax(placed, shown.edges, { width: world.width, height: world.height });
+      applyPositions();
+    });
+  }
+
+  function endDrag() {
+    if (!moving) return;
+    const { id, node, shifted } = moving;
+    moving = null;
+    if (!shifted) {
+      // A press that never moved is a click, not a drag: it leaves nothing pinned.
+      node.held = pinned.has(id);
+      return;
+    }
+    pin(id, node);
+    dragged = true; // the click that ends this drag must not also select
+  }
+
+  function updateRelease() {
+    release.disabled = pinned.size === 0;
+  }
+
+  // dragged suppresses the click that ends a pan or a drag. Panning, dragging and
+  // selecting share the same surface, and a gesture that also selected whatever it
+  // started on would make the picture impossible to move without changing the
+  // answer beside it.
   let panning = null, dragged = false;
   surface.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
+    // A node under the pointer is the thing being moved; the background is the view.
+    const node = event.target.closest?.("[data-node-id]");
+    if (node && beginDrag(node.getAttribute("data-node-id"), event)) {
+      dragged = false;
+      return;
+    }
     // Panning is only meaningful once something is off-screen. At the fitted frame
     // the whole landscape is already visible, so a drag there could only push it
     // out of view and reintroduce the empty space the fit exists to remove.
@@ -949,6 +1267,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     dragged = false;
   });
   surface.addEventListener("pointermove", (event) => {
+    if (moving && event.pointerId === moving.pointer) {
+      const point = pointToFrame(event);
+      if (!point) return;
+      const node = moving.node;
+      place(node, point.x + moving.dx, point.y + moving.dy);
+      if (Math.hypot(node.x - moving.from.x, node.y - moving.from.y) > 3) moving.shifted = true;
+      nudge();
+      return;
+    }
     if (!panning || event.pointerId !== panning.id) return;
     const svg = surface.querySelector("svg");
     const rect = svg?.getBoundingClientRect();
@@ -962,10 +1289,35 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     frameView = { ...panning.start, x: panning.start.x + moveX, y: panning.start.y + moveY };
     applyView();
   });
-  const endPan = () => { panning = null; };
-  surface.addEventListener("pointerup", endPan);
-  surface.addEventListener("pointercancel", endPan);
-  surface.addEventListener("pointerleave", endPan);
+  const endGesture = () => { endDrag(); panning = null; };
+  surface.addEventListener("pointerup", endGesture);
+  surface.addEventListener("pointercancel", endGesture);
+  surface.addEventListener("pointerleave", endGesture);
+
+  // Double-clicking a node you have placed puts that one back, without disturbing
+  // the rest of the arrangement.
+  surface.addEventListener("dblclick", (event) => {
+    const element = event.target.closest?.("[data-node-id]");
+    const id = element?.getAttribute("data-node-id");
+    if (!id || !pinned.has(id)) return;
+    pinned.delete(id);
+    const node = at.get(id);
+    if (node) node.held = false;
+    element.classList.remove("mesh-pinned");
+    updateRelease();
+    paint();
+  });
+
+  release.addEventListener("click", () => {
+    if (!pinned.size) return;
+    pinned.clear();
+    for (const n of placed) n.held = false;
+    // With nothing pinned the layout fits again, so the view goes back to the whole
+    // landscape rather than to whatever corner the arrangement had been read from.
+    frameView = null;
+    updateRelease();
+    paint();
+  });
 
   surface.addEventListener("wheel", (event) => {
     const focus = pointToFrame(event);
@@ -982,8 +1334,36 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     if (dragged) { dragged = false; return; }
     const node = event.target.closest("[data-node-id]");
     if (node) select(node.getAttribute("data-node-id"));
-    else selected = null, paint();
+    else select(null);
   });
+  // Arranging the landscape without a mouse. The arrangement is a convenience rather
+  // than information — every relationship this view carries is already reachable by
+  // focusing a node — but a convenience only some people can have is not one, and
+  // stepping a focused node is four lines of the same machinery a drag uses.
+  const ARROWS = {
+    ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+  };
+  surface.addEventListener("keydown", (event) => {
+    const step = ARROWS[event.key];
+    if (!step) return;
+    const element = event.target.closest?.("[data-node-id]");
+    const id = element?.getAttribute("data-node-id");
+    const node = id && at.get(id);
+    if (!node) return;
+    // Arrows scroll the page by default, which is the opposite of what somebody who
+    // has focused a node and pressed one is asking for.
+    event.preventDefault();
+    // A step is a share of the world rather than a fixed number of units, so it
+    // covers the same fraction of the picture whatever size the landscape is. Shift
+    // is the coarse one: crossing a large landscape a pixel at a time is not a
+    // keyboard equivalent of a drag, it is a punishment for not having a mouse.
+    const distance = Math.max(12, world.width * 0.02) * (event.shiftKey ? 5 : 1);
+    place(node, node.x + step[0] * distance, node.y + step[1] * distance);
+    pin(id, node, element);
+    relax(placed, shown.edges, { width: world.width, height: world.height });
+    applyPositions();
+  });
+
   surface.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     const node = event.target.closest("[data-node-id]");
@@ -991,8 +1371,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     event.preventDefault();
     select(node.getAttribute("data-node-id"));
   });
-  dirSelect.addEventListener("change", paint);
-  depthSelect.addEventListener("change", paint);
+  dirSelect.addEventListener("change", refresh);
+  depthSelect.addEventListener("change", refresh);
 
   // Re-laying out on every keystroke is the wrong trade at 400 nodes, where the
   // simulation costs a few hundred milliseconds. A short debounce keeps typing
