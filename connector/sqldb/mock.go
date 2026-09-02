@@ -132,9 +132,6 @@ func NewMockDatabase(p Product, answers ...MockAnswer) *MockDatabase {
 	return &MockDatabase{product: p, answers: append([]MockAnswer(nil), answers...)}
 }
 
-// Product returns the product this mock stands in for.
-func (m *MockDatabase) Product() Product { return m.product }
-
 // OpenMock wraps a mock database as a [Client] of its own product, with the same pool
 // policy a real one gets — so the mock exercises the limits rather than being the one
 // path that does not.
