@@ -276,6 +276,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0220](0220-checking-a-database-connector.md) | The Console may dial a database, and the engine still links no driver | Proposed |
 | [0221](0221-sql-mock-mode.md) | A database task runs against seeded answers, not against a SQL engine | Proposed |
 | [0222](0222-artifact-id-renames.md) | An artifact's id is its identity — renaming moves it, collisions are refused | Proposed |
+| [0223](0223-jira-account-lookup.md) | Jira account lookup | Proposed |
 
 ## Status values
 

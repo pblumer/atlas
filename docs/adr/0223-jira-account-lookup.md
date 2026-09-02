@@ -1,4 +1,4 @@
-# ADR-DRAFT: Jira account lookup
+# ADR-0223: Jira account lookup
 
 - **Status:** Proposed
 - **Date:** 2026-09-02

@@ -44,8 +44,8 @@
         "de": "Jira übergibt ein Ticket an eine Konto-Id — eine kryptische Zeichenfolge wie 5bbb13f8… —, während Ihr Prozess die Person an ihrer Mailadresse kennt. Der Jira-Konnektor hat dafür eine neue Operation „Search users\": Sie geben eine Adresse oder einen Namensteil an, und die passenden Konten landen in einer Prozessvariablen. Ein nachfolgendes „Assign issue\" nimmt dann =konten[1].accountId, und ein „Create issue\" kann denselben Wert als Assignee-Feld mitgeben. Nennen Sie zusätzlich ein Projekt, findet die Suche nur Konten, denen dieses Projekt überhaupt zugewiesen werden kann — dann scheitert das Zuweisen einen Schritt später nicht. Bisher musste ein Modell eine Id fest eintragen, die auf jeder Jira-Instanz und für jede Person eine andere ist."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0223",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0223-jira-account-lookup.md"
       },
       "tags": [
         "Connectors",

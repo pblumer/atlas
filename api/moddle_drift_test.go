@@ -243,7 +243,7 @@ var connectorAttrRe = regexp.MustCompile(`xml:"([a-zA-Z]+),attr"`)
 //
 // The list is the extensions whose attributes have since changed under this check
 // rather than every connector — widening it the rest of the way is worth doing on its
-// own. Jira joined it with the account search (ADR-draft-jira-account-lookup), which
+// own. Jira joined it with the account search (ADR-0223), which
 // added the `query` attribute: an operation that adds an attribute is exactly the change
 // this guards, so covering it is the guard for that change and not a drive-by.
 func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {

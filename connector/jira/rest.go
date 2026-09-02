@@ -377,7 +377,7 @@ func (c *HTTPClient) searchOffset(ctx context.Context, req Request) (any, error)
 
 // searchUsers looks accounts up by a fragment of a name or an address, and answers with
 // the accounts themselves. It is what makes assign-issue usable from a process
-// (ADR-draft-jira-account-lookup): Jira hands an issue to an accountId, a process knows a
+// (ADR-0223): Jira hands an issue to an accountId, a process knows a
 // person by their address, and this is the step between the two.
 //
 // Two things about it are decided by the product, and both follow from the credential

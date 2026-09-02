@@ -94,7 +94,7 @@ type Op struct {
 // why the generic REST connector (ADR-0067) remains the way to reach the rest.
 //
 // search-users is the one row that is not about an issue, and it earns its place as
-// assign-issue's missing argument (ADR-draft-jira-account-lookup): Jira hands an issue
+// assign-issue's missing argument (ADR-0223): Jira hands an issue
 // to an accountId, a process knows a person by name or address, and without a row for
 // the step between them a model had to hard-code an opaque id or call Jira twice through
 // two different connectors.

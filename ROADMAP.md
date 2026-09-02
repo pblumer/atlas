@@ -291,7 +291,7 @@ The control-flow basics most real models use.
   against an issue tracker — `create-issue`, `get-issue`, `update-issue`,
   `transition-issue`, `add-comment`, `assign-issue`, `search` (JQL) and `search-users`
   (the account lookup that produces what an assign takes,
-  [ADR-draft-jira-account-lookup](docs/adr/draft-jira-account-lookup.md)) — with every
+  [ADR-0223](docs/adr/0223-jira-account-lookup.md)) — with every
   authored value literal-or-FEEL, and what Jira returned written into a result variable
   for the five operations that return anything. The site URL and the credential bundle
   (`{email, apiToken}` for Jira Cloud, `{token}` for a Data Center personal access token)
