@@ -997,7 +997,17 @@ for the derived whole-instance mesh above them.
   uniformly healthy. No edge is derived to a target — a promotion is an act, not a
   stored relationship, and this server does not record which of its applications is
   running over there — so it sits beside the landscape rather than in it, which is
-  what it is.
+  what it is. The landscape is **exportable** as SVG or PNG, and by ADR-0211 §10
+  there is only one class of it: nothing on this picture was drawn and every node
+  carries a state, so every export is a live export and none of them is a safe
+  "structure only" variant. Redaction is inherited rather than re-applied — the file
+  is the picture the server already built for this principal, serialized in the
+  browser — and in exchange the artifact has to stand alone: the server's
+  observation time and the source instance, which landscape this is and how much of
+  it was drawn, what is hidden by the reader's access, and which states this build
+  cannot produce at all are all rendered *into* the image, beside the same key the
+  canvas uses. A file has no legend beside it, and an undated "all green" picture is
+  believed long after it stopped being true.
 - ✅ **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
   workers and job types, releases, local runtimes, and deployment targets. Preserve

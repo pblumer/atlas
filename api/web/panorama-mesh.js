@@ -14,6 +14,9 @@
 import {
   captureView, frameFor, pinsFor, readViews, removeView, saveView, writeViews,
 } from "./panorama-views.js";
+import {
+  exportName, exportStyles, rasterise, save, standaloneSVG, stampLines,
+} from "./panorama-export.js";
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -872,19 +875,76 @@ export function drillInto(graph, id, hops) {
   return around(graph, new Set([id]), hops);
 }
 
-function legendHTML(graph, layoutMs) {
+// legendEntries is the key to the picture: one swatch per thing the picture
+// actually contains, drawn by the same functions that drew it.
+//
+// It exists as data rather than as markup because the legend now has two readers.
+// Beside the canvas it is HTML in the page; inside an exported file it is SVG in
+// the artifact, where it matters more — the app has a legend one scroll away and a
+// file that travels has nothing at all, so a hexagon or an orange dot arrives
+// undefined. Two renderers over one list, for the same reason the swatch is drawn
+// by the node's own function: a second list would eventually explain a picture it
+// no longer matched.
+//
+// Only what is present is listed, in every group. A legend describing findings the
+// picture does not contain is a legend nobody reads twice.
+function legendEntries(graph) {
   const present = new Set(graph.nodes.map((n) => n.kind));
-  // The swatch is drawn by the same function the node is, so a legend cannot come to
-  // disagree with the picture it explains.
-  const swatches = Object.entries(KIND)
+  const entries = Object.entries(KIND)
     .filter(([kind]) => present.has(kind))
-    .map(([kind, style]) => `<span class="mesh-swatch">
-      <svg width="16" height="16" aria-hidden="true"><g transform="translate(8,8)">
-        ${bodyElement(style.shape, 6,
-          `fill="${style.fill}" stroke="${style.stroke}" stroke-width="2" ` +
-          (style.dashed ? 'stroke-dasharray="3 2"' : ""))}
-      </g></svg>${esc(style.label)}</span>`)
-    .join("");
+    .map(([, style]) => ({
+      group: "kind",
+      tone: "",
+      label: style.label,
+      mark: `<g transform="translate(8,8)">${bodyElement(style.shape, 6,
+        `fill="${style.fill}" stroke="${style.stroke}" stroke-width="2" ` +
+        (style.dashed ? 'stroke-dasharray="3 2"' : ""))}</g>`,
+    }));
+
+  const severityPresent = new Set(graph.nodes.map((n) => n.severity).filter(Boolean));
+  for (const key of ["critical", "attention", "ok", "unknown"]) {
+    if (!severityPresent.has(key)) continue;
+    entries.push({
+      group: "severity",
+      // The class the swatch's colour comes from, carried on its own rather than
+      // baked into a class list: the page wants it beside .mesh-swatch, and the
+      // export wants it without — an inline-flex rule means nothing on an SVG
+      // group and only invites the browser to interpret it.
+      tone: `mesh-sev-${key}`,
+      label: SEVERITY[key].label,
+      mark: `<circle cx="8" cy="8" r="6" fill="var(--surface)"
+        stroke="${SEVERITY[key].stroke || "var(--border-strong)"}" stroke-width="2"/>` +
+        (SEVERITY[key].glyph
+          ? `<text x="8" y="11.5" text-anchor="middle" class="mesh-sev-glyph">${esc(SEVERITY[key].glyph)}</text>`
+          : ""),
+    });
+  }
+
+  // Provenance only once a model has been overlaid: with none, everything is
+  // derived and three swatches saying so would be three swatches about nothing.
+  if (graph.modeled > 0 || graph.unmodeled > 0 || graph.outOfScope > 0) {
+    for (const key of ["derived", "both", "modeled"]) {
+      entries.push({
+        group: "provenance",
+        tone: "",
+        label: PROVENANCE[key].label,
+        mark: (PROVENANCE[key].ring
+          ? `<circle cx="8" cy="8" r="7" fill="none" stroke="var(--muted)" stroke-width="1" opacity="0.55"/>`
+          : "") +
+          `<circle cx="8" cy="8" r="5" fill="${PROVENANCE[key].ghost ? "none" : "var(--surface)"}"
+            stroke="var(--muted)" stroke-width="2"
+            ${PROVENANCE[key].ghost ? 'stroke-dasharray="3 2"' : ""}/>`,
+      });
+    }
+  }
+  return entries;
+}
+
+function legendHTML(graph, layoutMs) {
+  const swatch = (entry) => `<span class="mesh-swatch ${entry.tone}">
+    <svg width="16" height="16" aria-hidden="true">${entry.mark}</svg>${esc(entry.label)}</span>`;
+  const entries = legendEntries(graph);
+  const swatches = entries.filter((e) => e.group === "kind").map(swatch).join("");
 
   const notes = [];
   if (graph.restricted > 0) {
@@ -915,19 +975,8 @@ function legendHTML(graph, layoutMs) {
     }
   }
 
-  // Severity swatches list only the classes actually on screen, for the same reason
-  // the kind swatches do: a legend describing findings the picture does not contain
-  // is a legend nobody reads twice.
   const status = graph.status || {};
-  const severityPresent = new Set(graph.nodes.map((n) => n.severity).filter(Boolean));
-  const severity = ["critical", "attention", "ok", "unknown"]
-    .filter((key) => severityPresent.has(key))
-    .map((key) => `<span class="mesh-swatch mesh-sev-${key}">
-      <svg width="16" height="16" aria-hidden="true">
-        <circle cx="8" cy="8" r="6" fill="var(--surface)" stroke="${SEVERITY[key].stroke || "var(--border-strong)"}"
-          stroke-width="2"/>
-        ${SEVERITY[key].glyph ? `<text x="8" y="11.5" text-anchor="middle" class="mesh-sev-glyph">${esc(SEVERITY[key].glyph)}</text>` : ""}
-      </svg>${esc(SEVERITY[key].label)}</span>`).join("");
+  const severity = entries.filter((e) => e.group === "severity").map(swatch).join("");
 
   // What the picture cannot see is stated beside what it can. Without this an
   // instance nothing observes renders as uniformly well, and a green view that has
@@ -942,14 +991,7 @@ function legendHTML(graph, layoutMs) {
       bound, so a node reported as OK here is a floor rather than a verdict.</p>`);
   }
 
-  const provenanceKeys = compared ? ["derived", "both", "modeled"] : [];
-  const provenance = provenanceKeys.map((key) => `<span class="mesh-swatch">
-    <svg width="16" height="16" aria-hidden="true">
-      ${PROVENANCE[key].ring ? `<circle cx="8" cy="8" r="7" fill="none" stroke="var(--muted)" stroke-width="1" opacity="0.55"/>` : ""}
-      <circle cx="8" cy="8" r="5" fill="${PROVENANCE[key].ghost ? "none" : "var(--surface)"}"
-        stroke="var(--muted)" stroke-width="2"
-        ${PROVENANCE[key].ghost ? 'stroke-dasharray="3 2"' : ""}/>
-    </svg>${esc(PROVENANCE[key].label)}</span>`).join("");
+  const provenance = entries.filter((e) => e.group === "provenance").map(swatch).join("");
 
   return `<div class="mesh-legend">
     <div class="mesh-swatches">${swatches}</div>
@@ -1208,6 +1250,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
         placeholder="Filter by name, kind or process id…" aria-label="Filter the landscape"/>
       <button id="mesh-drill-out" type="button" class="mesh-drill-chip" hidden></button>
       <span id="mesh-count" class="muted"></span>
+      <!-- Beside the picture's own controls rather than in the side column: what is
+           exported is the picture, including whatever the search box and the
+           drilldown have done to it. -->
+      <span class="mesh-export" role="group" aria-label="Export this landscape">
+        <button id="mesh-export-svg" type="button"
+          title="Save this landscape as an SVG, stamped with when and where it was observed">Export SVG</button>
+        <button id="mesh-export-png" type="button"
+          title="Save this landscape as a PNG, stamped with when and where it was observed">PNG</button>
+      </span>
     </div>
     <div id="mesh-legend-slot"></div>
     <div class="mesh-body">
@@ -1278,6 +1329,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const viewForm = document.getElementById("mesh-view-save");
   const viewName = document.getElementById("mesh-view-name");
   const viewNote = document.getElementById("mesh-view-note");
+  const exportSvgBtn = document.getElementById("mesh-export-svg");
+  const exportPngBtn = document.getElementById("mesh-export-png");
 
   let selected = null;
   // drilled is the node the landscape has been reduced to, or null for all of it.
@@ -1806,6 +1859,88 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     event.preventDefault();
     drillOutOf();
   });
+
+  // Exporting the picture (ADR-0211 §10).
+
+  // exportMeta describes the artifact about to be written: when the server read
+  // this landscape, which instance it came from, and everything the picture is not
+  // showing.
+  //
+  // It is assembled from the payload and from this view's own state, because
+  // between them they are the only place the answer exists — and it is assembled at
+  // the moment of export rather than at load, since a filter or a drilldown is
+  // exactly what changes what the file contains.
+  function exportMeta() {
+    const term = search.value.trim();
+    const status = graph.status || {};
+    const scope = drilled
+      ? {
+          kind: "drill",
+          name: (graph.nodes.find((n) => n.id === drilled) || {}).name || drilled,
+          hops: depthSelect.value,
+        }
+      : term ? { kind: "filter", term } : { kind: "all" };
+    return {
+      // The server's reading, never this browser's clock: one dates the facts, the
+      // other dates the save, and an export exists to be read later.
+      observedAt: graph.observedAt,
+      source: location.host,
+      scope,
+      drawn: { nodes: shown.nodes.length },
+      total: graph.nodes.length,
+      // Landscape-level facts, taken from the payload rather than from the filtered
+      // picture: "hidden by your access" is true of the whole regardless of how much
+      // of it this file happens to show.
+      restricted: graph.restricted || 0,
+      clustered: Boolean(graph.clustered),
+      partial: Boolean(status.partial),
+      unavailable: (status.unavailable || []).map((u) => ({
+        ...u, label: STATE_TEXT[u.state] || u.state,
+      })),
+    };
+  }
+
+  async function exportPicture(kind) {
+    const canvas = surface.querySelector("svg");
+    if (!canvas) {
+      toast("There is nothing here to export.");
+      return;
+    }
+    const theme = getComputedStyle(document.documentElement);
+    const token = (name, fallback) => theme.getPropertyValue(name).trim() || fallback;
+    // The page's own surface colour rather than a fixed white: the accent and the
+    // neutrals are configurable per instance, and a file that ignored them would not
+    // look like the landscape it was taken from.
+    const background = token("--surface", "#ffffff");
+    try {
+      const built = standaloneSVG(canvas, {
+        stamp: stampLines(exportMeta()),
+        // The key travels with the picture. Beside the canvas it is one scroll away;
+        // in a file that has been pasted into a ticket there is nothing to scroll to,
+        // and a hexagon nobody can name is a shape rather than a worker.
+        legend: legendEntries(shown),
+        css: exportStyles(canvas.outerHTML),
+        // The whole world, not the window: the canvas's own viewBox is wherever the
+        // reader has zoomed to, and a file cropped to that would drop nodes without
+        // saying it had.
+        extent: `0 0 ${world.width} ${world.height}`,
+        background,
+        ink: token("--text", "#111111"),
+        muted: token("--muted", "#666666"),
+        rule: token("--border", "#dddddd"),
+      });
+      if (kind === "png") {
+        save(await rasterise(built, { background }), exportName("png"));
+      } else {
+        save(new Blob([built.svg], { type: "image/svg+xml;charset=utf-8" }), exportName("svg"));
+      }
+    } catch (e) {
+      toast("export failed: " + e.message, "err");
+    }
+  }
+
+  exportSvgBtn.addEventListener("click", () => exportPicture("svg"));
+  exportPngBtn.addEventListener("click", () => exportPicture("png"));
 
   // Saved views.
 

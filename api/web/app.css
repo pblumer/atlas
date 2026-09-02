@@ -3453,6 +3453,17 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .mesh-card { display: flex; flex-direction: column; gap: 12px; }
 .mesh-head { display: flex; align-items: baseline; gap: 12px; }
 .mesh-head h1 { margin: 0; }
+/* Export sits at the end of the head, pushed away from the search box: it acts on
+   the picture as a whole, and a button that saves a file should not be adjacent to
+   the one that narrows what would be in it. */
+.mesh-export { margin-left: auto; display: inline-flex; gap: 6px; }
+.mesh-export button {
+  height: 28px; padding: 0 10px; font-size: 13px; line-height: 1;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+  color: var(--text); cursor: pointer; white-space: nowrap;
+}
+.mesh-export button:hover { border-color: var(--border-strong); }
+.mesh-export button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mesh-legend {
   display: flex; flex-direction: column; gap: 8px;
   padding: 10px 12px; background: var(--bg);

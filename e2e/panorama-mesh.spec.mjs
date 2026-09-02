@@ -1554,3 +1554,90 @@ test("a landscape with a peer stops claiming it cannot see", async ({ page }) =>
   await expect(page.locator(".mesh-legend")).toContainText("Not watched here");
   await expect(page.locator(".mesh-legend")).toContainText("deployment target");
 });
+
+// Exporting the landscape (ADR-0211 §10). The file is the deliverable here, so the
+// test takes the download and reads it: it has to be the whole landscape, and it
+// has to carry the provenance the app shows beside the picture and a file cannot.
+test("exports the landscape as a stamped, self-contained SVG", async ({ page }) => {
+  installMock(page, {
+    ...graph,
+    observedAt: 1_700_000_000,
+    status: {
+      ok: 6, attention: 0, critical: 0, unknown: 1,
+      unavailable: [{ state: "stale", reason: "No deployment target is configured." }],
+    },
+  });
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  // Zoomed in first, on purpose: a file cropped to the reader's window would drop
+  // nodes and say nothing about it.
+  await page.locator("#mesh-zoom-in").click();
+  await page.locator("#mesh-zoom-in").click();
+  await expect(page.locator(".mesh-canvas")).toHaveClass(/mesh-zoomed/);
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#mesh-export-svg").click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^atlas-landscape-\d{8}-\d{4}\.svg$/);
+
+  const stream = await download.createReadStream();
+  const svg = await new Promise((resolve, reject) => {
+    let out = "";
+    stream.on("data", (chunk) => (out += chunk));
+    stream.on("end", () => resolve(out));
+    stream.on("error", reject);
+  });
+
+  // Every node in the payload, not the handful that were still in the window.
+  expect([...svg.matchAll(/class="mesh-node/g)]).toHaveLength(graph.nodes.length);
+  expect(svg).toContain("Billing");
+  // The canvas itself is unzoomed and names everything. Read off the element's own
+  // class list rather than off the file as a whole: the harvested stylesheet quotes
+  // both class names in the rules it carries, so a substring search would find them
+  // in a picture that is neither.
+  const canvasClasses = svg.match(/class="([^"]*mesh-canvas[^"]*)"/)[1];
+  expect(canvasClasses).not.toContain("mesh-zoomed");
+  expect(canvasClasses).toContain("mesh-names-all");
+
+  // The provenance §10 requires rendered into the artifact.
+  expect(svg).toContain("Atlas landscape — the whole landscape");
+  expect(svg).toContain("Observed 20");
+  expect(svg).toContain("Source ");
+  expect(svg).toContain("7 node(s) drawn");
+  // Including what the picture cannot show: the placeholder, and the state this
+  // build cannot produce at all. On screen these sit in the legend; the file has no
+  // legend beside it, so they travel inside it.
+  expect(svg).toContain("hidden by your access");
+  expect(svg).toContain("Not watched here");
+  expect(svg).toContain("No deployment target is configured.");
+});
+
+// A filtered export is a real landscape and not *the* landscape, and the only place
+// a later reader can learn that is the file itself.
+test("an export of a filtered landscape says it is filtered", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator("#mesh-search").fill("invoice");
+  await expect(page.locator("#mesh-count")).toContainText("match");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#mesh-export-svg").click(),
+  ]);
+  const stream = await download.createReadStream();
+  const svg = await new Promise((resolve) => {
+    let out = "";
+    stream.on("data", (chunk) => (out += chunk));
+    stream.on("end", () => resolve(out));
+  });
+
+  expect(svg).toContain("filtered by “invoice”");
+  expect(svg).toMatch(/\d of 7 node\(s\) drawn/);
+  // This payload carries no observation time, and the file says that rather than
+  // dating itself from the browser that saved it.
+  expect(svg).toContain("Observation time not reported by this server");
+});

@@ -12,7 +12,9 @@
   node can be drilled into, and a finding names the element the work is parked on;
   amended 2026-09-02 — §7 gives each kind its own outline; amended 2026-09-02 — the
   landscape draws deployment targets, so §4's unreachable and stale are producible
-  on it and what a payload declares unproducible is derived from what it drew)
+  on it and what a payload declares unproducible is derived from what it drew; amended
+  2026-09-02 — §10 gains the landscape's own export, which has only one class, and
+  the mesh payload carries the observation time that export has to render)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -601,6 +603,56 @@ Two export classes, and they are not interchangeable:
 The timestamp is not decoration. An undated "all green" picture circulates inside an
 organization long after it stopped being true, and is believed because it looks like
 evidence.
+
+> **Amendment (2026-09-02): the derived landscape has one export class, and the
+> artifact carries its own provenance.**
+> The two classes above were written for the drawn views, where the distinction is
+> real: an ArchiMate view exists because somebody placed elements on it, and a
+> picture of that structure discloses only what they authored. The derived landscape
+> has no such half. Its structure is *read off this server's resources* rather than
+> drawn, and every node on it carries an observation state — so there is no version
+> of this picture that is a model export, and offering a "structure only" variant
+> would only produce a landscape that hides what it knows. **Every export of the
+> mesh is a live export.**
+>
+> What that costs is nothing, because the redaction is *inherited rather than
+> re-applied*: what is written to the file is the picture the server already built
+> for this principal — scope-filtered, with §3's restricted placeholders where a
+> scope cut a path — serialized in the browser from the SVG on screen. There is no
+> export endpoint to authorize, no second walk over an unfiltered graph, and
+> therefore nothing that could disclose more than the screen it came from. That is
+> the argument §6's impact analysis already makes for running on the delivered
+> graph, applied to the artifact rather than to the answer.
+>
+> What §10 demands in exchange is that the file stand alone, and that is the whole
+> of the design:
+>
+> - **The observation time comes from the server**, on the mesh payload, and is
+>   rendered into the image. The browser's clock dates the *save*, not the reading,
+>   and the two are the same number only if nobody left the tab open. A payload
+>   without one says so in the artifact rather than substituting a plausible time —
+>   "old" and "unknown" are different, and only the second one is true there.
+> - **Everything the picture is not showing travels inside it**: which landscape
+>   this is (the whole of it, filtered by a term, drilled into a node), how many of
+>   its nodes were drawn, how many are hidden by the reader's access, whether it is
+>   collapsed over the size budget, whether counting parked work stopped at its
+>   bound, and which of §4's states this build cannot produce at all. Beside the
+>   canvas all of that is in the legend; a file pasted into a ticket has no beside.
+> - **The key travels too.** A hexagon nobody can name is a shape rather than a
+>   worker. It is drawn from the same list the on-screen legend renders, which is
+>   drawn by the functions that drew the nodes, so a third rendering cannot come to
+>   explain a picture it no longer matches.
+> - **The artifact is the whole landscape at full extent, not the viewport.** Pan and
+>   zoom are reading aids; a file cropped to where somebody had scrolled would drop
+>   nodes and say nothing about having dropped them.
+> - **It is inert and self-contained.** The theme's custom properties are resolved to
+>   literals so the file renders where nobody has Atlas's stylesheet; the styling is
+>   harvested from the live stylesheet rather than restated for exports, because a
+>   second copy would drift and a drifted export is wrong in a way only its recipient
+>   can see; and every script and event handler is stripped, because an exported file
+>   is opened by people who did not make it. The heartbeat is stilled — an animation
+>   rasterizes at whatever phase the encoder caught, and severity is carried by the
+>   ring, the badge and its glyph regardless.
 
 ### 11. Delivery position
 
