@@ -1080,8 +1080,38 @@ type xmlDefinitions struct {
 // hand-written model might use is not valid BPMN. The structureRef has no such
 // constraint, so the definition is what makes an arbitrary class name expressible.
 type xmlItemDefinition struct {
-	Id           string `xml:"id,attr"`
-	StructureRef string `xml:"structureRef,attr"`
+	Id           string              `xml:"id,attr"`
+	StructureRef string              `xml:"structureRef,attr"`
+	Properties   []xmlVendorProperty `xml:"extensionElements>property"`
+}
+
+// A vendor <property name="…" value="…"> inside an element's <extensionElements>.
+//
+// BPMN gives an <itemDefinition> no name of its own — a root element carries an id
+// and nothing else — so structureRef is the only place the specification offers for
+// the name of the thing being declared. A tool that does not use it has to invent
+// somewhere, and MID Innovator (bpanda) invents here: its itemDefinitions are a bare
+// GUID id with <bpanda:property name="Name" value="Incident"/> beside it. Reading
+// the property is what keeps such a model from reporting a GUID as the declared
+// type of every data object in it, against a class name nobody could then model.
+type xmlVendorProperty struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:"value,attr"`
+}
+
+// typeName is the class name an <itemDefinition> declares: its structureRef, and
+// when it declares none, a vendor property called "Name". Empty when the definition
+// names nothing at all, which leaves its id as the only handle there is.
+func (it xmlItemDefinition) typeName() string {
+	if it.StructureRef != "" {
+		return it.StructureRef
+	}
+	for _, p := range it.Properties {
+		if strings.EqualFold(p.Name, "Name") && p.Value != "" {
+			return p.Value
+		}
+	}
+	return ""
 }
 
 // A BPMN <interface> groups <operation>s (the WSDL-style service-interface model). Atlas
@@ -1123,8 +1153,9 @@ func buildDataStoreResolver(defs xmlDefinitions) func(ref, ownName string) strin
 }
 
 // buildItemTypeResolver maps a data object's itemSubjectRef onto the type name it
-// means: the referenced <itemDefinition>'s structureRef, its id when it declares
-// none, and — when the reference names no itemDefinition at all — the reference
+// means: the referenced <itemDefinition>'s structureRef, the name it carries in a
+// vendor property when it declares no structureRef, its id when it names itself
+// nowhere, and — when the reference names no itemDefinition at all — the reference
 // itself.
 //
 // That last case is not a fallback for broken models; it is the shorthand every
@@ -1142,8 +1173,8 @@ func buildItemTypeResolver(defs xmlDefinitions) func(string) string {
 		if it.Id == "" {
 			continue
 		}
-		if it.StructureRef != "" {
-			byID[it.Id] = it.StructureRef
+		if name := it.typeName(); name != "" {
+			byID[it.Id] = name
 			continue
 		}
 		byID[it.Id] = it.Id

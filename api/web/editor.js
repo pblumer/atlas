@@ -721,13 +721,33 @@ function unsupportedReason(bo) {
 // (ADR-draft-process-information-model).
 
 // itemTypeOf reads the declared type off a <dataObject>: the referenced
-// definition's structureRef, its id when it declares none. The compiler resolves
-// the same two ways round.
+// definition's structureRef, the name it carries in a vendor property when it has
+// no structureRef, its id when it names itself nowhere. The compiler resolves the
+// same ways round, so the panel and the Problems list never disagree about what a
+// data object is called.
 function itemTypeOf(dataObject) {
   const ref = dataObject && dataObject.itemSubjectRef;
   if (!ref) return "";
   if (typeof ref === "string") return ref; // a raw attribute, if a moddle ever keeps one
-  return ref.structureRef || ref.id || "";
+  return ref.structureRef || vendorTypeName(ref) || ref.id || "";
+}
+
+// vendorTypeName reads a type name out of an <itemDefinition>'s extension elements.
+// BPMN gives an itemDefinition no name of its own, so structureRef is the only place
+// the specification offers and a tool that does not use it puts the name in its own
+// namespace instead: MID Innovator writes <bpanda:property name="Name"
+// value="Incident"/> next to a GUID id. Without this, such a model shows a GUID
+// wherever it says Incident. An unknown namespace reaches the moddle as a generic
+// element, so the attributes are read off $attrs.
+function vendorTypeName(itemDefinition) {
+  const values = (itemDefinition.extensionElements || {}).values || [];
+  for (const v of values) {
+    const attrs = v.$attrs || {};
+    const key = attrs.name !== undefined ? attrs.name : v.name;
+    const value = attrs.value !== undefined ? attrs.value : v.value;
+    if (String(key || "").toLowerCase() === "name" && value) return String(value);
+  }
+  return "";
 }
 
 // itemDefinitionId is the reference handle for a type name. The name itself cannot

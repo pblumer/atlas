@@ -170,6 +170,17 @@ An unresolved reference is a **Problems-panel finding** (ADR-0026), never a depl
 failure and never a runtime error: a model that names a type the application has not
 modeled yet must still deploy and run, exactly as it does today.
 
+Reading the reference is itself three steps, because BPMN gives an `<itemDefinition>`
+no name of its own — a root element carries an id and nothing else, so `structureRef`
+is the only slot the specification offers for the name of the type being declared. A
+tool that does not use it has to invent somewhere: MID Innovator writes a bare GUID id
+with `<bpanda:property name="Name" value="Incident"/>` beside it. So the type is the
+`structureRef`, else a vendor property called `Name`, else the id — and, when the
+reference names no `<itemDefinition>` at all, the reference itself, which is the
+shorthand every hand-written model uses. Anything less reports a GUID as the declared
+type of every data object in an imported model, and then reports that GUID as a class
+nothing models, against a name nobody could have modeled.
+
 Resolution is what makes three things possible that are impossible now:
 
 - **Static data-flow validation.** *"`Approve` writes `order.amount`, but `Order` has

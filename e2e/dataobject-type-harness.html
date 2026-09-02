@@ -25,9 +25,16 @@
       const noop = () => {};
 
       // DO_order already declares a modelled type; DO_claim declares one nothing
-      // models, so the panel has to tell them apart.
+      // models, so the panel has to tell them apart. DO_incident is typed the way a
+      // MID Innovator export types one: a GUID reference to an itemDefinition that
+      // carries no structureRef and puts the name in its own namespace.
       const XML = `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_do" targetNamespace="http://atlas/bpmn">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bpanda="http://www.smartfacts.com" id="Definitions_do" targetNamespace="http://atlas/bpmn">
+  <bpmn:itemDefinition id="_853994e9-12f5-9cef-bf69-ca3e2b7cb6a8">
+    <bpmn:extensionElements>
+      <bpanda:property name="Name" value="Incident" id="property_ELNamedElement_Name"/>
+    </bpmn:extensionElements>
+  </bpmn:itemDefinition>
   <bpmn:process id="sales" name="Sales" isExecutable="true">
     <bpmn:dataObject id="DO_order" name="order" itemSubjectRef="Order"/>
     <bpmn:dataObjectReference id="Ref_order" name="order" dataObjectRef="DO_order"/>
@@ -35,6 +42,8 @@
     <bpmn:dataObjectReference id="Ref_claim" name="claim" dataObjectRef="DO_claim"/>
     <bpmn:dataObject id="DO_note" name="note"/>
     <bpmn:dataObjectReference id="Ref_note" name="note" dataObjectRef="DO_note"/>
+    <bpmn:dataObject id="DO_incident" name="incident" itemSubjectRef="_853994e9-12f5-9cef-bf69-ca3e2b7cb6a8"/>
+    <bpmn:dataObjectReference id="Ref_incident" name="incident" dataObjectRef="DO_incident"/>
     <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
     <bpmn:task id="Activity_1" name="Erfassen"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing></bpmn:task>
     <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
@@ -48,6 +57,7 @@
     <bpmndi:BPMNShape id="Ref_order_di" bpmnElement="Ref_order"><dc:Bounds x="272" y="250" width="36" height="50"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Ref_claim_di" bpmnElement="Ref_claim"><dc:Bounds x="352" y="250" width="36" height="50"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Ref_note_di" bpmnElement="Ref_note"><dc:Bounds x="432" y="250" width="36" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Ref_incident_di" bpmnElement="Ref_incident"><dc:Bounds x="512" y="250" width="36" height="50"/></bpmndi:BPMNShape>
     <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>

@@ -734,6 +734,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A type a modeling tool wrote in its own namespace read back as a GUID.** BPMN gives
+  an `<itemDefinition>` no name of its own — a root element carries an id and nothing
+  else — so `structureRef` is the only slot the specification offers for the name of the
+  type being declared ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md)).
+  A tool that does not use it has to invent somewhere, and MID Innovator does: its
+  itemDefinitions are a bare GUID id with `<bpanda:property name="Name" value="Incident"/>`
+  beside them. Atlas read the id, so every data object in such a model declared a type
+  called `_853994e9-12f5-9cef-bf69-ca3e2b7cb6a8` — shown that way in the properties panel
+  and in the Data tab, and then reported by the Problems panel as a class nothing models,
+  against a name nobody could have modeled it under.
+
+  The property is read now, by the compiler and by the Modeler alike, so the panel and
+  the Problems list say Incident and agree. `structureRef` still wins wherever both are
+  present, and a definition that names itself nowhere still falls back to its id, so no
+  model that worked reads differently.
+
 - **A Jira watch could get stuck on one window and hold the whole Console with it.** A
   jira watch resumes from a `created >=` / `updated >=` clause, held a safety lag behind
   the newest issue it saw so an issue Jira's index publishes late is still inside the

@@ -72,6 +72,18 @@ test("setting the type lands in the exported XML, on the data object itself", as
   expect(page.__errors).toEqual([]);
 });
 
+test("a type a tool wrote in its own namespace reads as the name, not the GUID", async ({ page }) => {
+  // BPMN gives an <itemDefinition> no name of its own, so structureRef is the only
+  // slot the specification offers — and MID Innovator does not use it: it writes a
+  // bare GUID id with <bpanda:property name="Name" value="Incident"/> beside it.
+  // Reading only the id showed that GUID as the declared type of every data object in
+  // an imported model. The compiler resolves it the same way, so the panel and the
+  // Problems list agree.
+  await selectDataObject(page, "Ref_incident");
+  await expect(page.locator("#f-itemtype")).toHaveValue("Incident");
+  expect(page.__errors).toEqual([]);
+});
+
 test("clearing the type removes the attribute rather than emptying it", async ({ page }) => {
   await selectDataObject(page, "Ref_claim");
   await page.locator("#f-itemtype").fill("");
