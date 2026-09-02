@@ -1463,3 +1463,94 @@ test("the legend shows the shapes it is explaining", async ({ page }) => {
   expect(shapes).toContain("rect");
   expect(shapes.filter((tag) => tag === "polygon").length).toBeGreaterThan(1);
 });
+
+// A peer that stopped answering, on the landscape.
+//
+// Until now this view contacted nothing, so it declared *unreachable* and *stale*
+// unproducible — which was true and useless: an operator scanning the landscape for
+// trouble could not see that a whole server had gone away. Deployment targets are
+// drawn now, and they are the only nodes here whose state comes from outside this
+// process.
+const peeredGraph = {
+  nodes: [
+    { id: "application:a1", kind: "application", name: "Billing", provenance: "derived",
+      state: "healthy", severity: "ok", reason: "No work is parked." },
+    { id: "target:t1", kind: "target", name: "Production", provenance: "derived",
+      state: "unreachable", severity: "attention",
+      reason: "This peer could not be reached." },
+    { id: "target:t2", kind: "target", name: "Staging", provenance: "derived",
+      state: "stale", severity: "attention",
+      reason: "Last answered 240s ago and the refresh failed, so this is history rather than status." },
+    { id: "target:t3", kind: "target", name: "Sandbox", provenance: "derived",
+      state: "healthy", severity: "ok", reason: "This peer answered and identified itself." },
+  ],
+  edges: [],
+  restricted: 0, clustered: false,
+  status: { ok: 2, attention: 2, critical: 0, unknown: 0, unavailable: [] },
+};
+
+test("a peer that stopped answering is on the landscape", async ({ page }) => {
+  installMock(page, peeredGraph);
+  await page.goto("/index.html#/panorama/landscape");
+
+  // Its own outline, so it is told from everything else without reading a word.
+  const outline = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => ({
+      tag: el.tagName.toLowerCase(),
+      corners: el.getAttribute("points")?.trim().split(/\s+/).length ?? 0,
+    }));
+  expect(await outline("target:t1")).toEqual({ tag: "polygon", corners: 5 });
+
+  // Both failures are *attention*, never critical: "I could not reach it" and "it is
+  // broken" are different findings, and a view that painted them alike loses its
+  // credibility on the first network fault.
+  await expect(page.locator('[data-node-id="target:t1"]')).toHaveClass(/mesh-sev-attention/);
+  await expect(page.locator('[data-node-id="target:t2"]')).toHaveClass(/mesh-sev-attention/);
+  await expect(page.locator('[data-node-id="target:t3"]')).toHaveClass(/mesh-sev-ok/);
+
+  // And they beat, so a server going away is noticed rather than looked for.
+  await expect(page.locator(".mesh-canvas")).toHaveClass(/mesh-beating/);
+  await expect(page.locator('[data-node-id="target:t1"] .mesh-beat')).toHaveCount(1);
+  await expect(page.locator('[data-node-id="target:t3"] .mesh-beat')).toHaveCount(0);
+
+  // The findings list tells the two apart in words, which is the half a colour
+  // cannot carry: nothing is known, versus something is known and may be wrong.
+  const findings = page.locator(".mesh-findings");
+  await expect(findings).toContainText("unreachable");
+  await expect(findings).toContainText("stale");
+  await expect(findings).toContainText("history rather than status");
+
+  // Never the peer's address. That is this operator's map of where their
+  // infrastructure lives, and a landscape is opened by anybody with modeler access.
+  const drawn = await page.locator("#mesh-root").innerHTML();
+  for (const leak of ["http://", "https://", ".test", "credential"]) {
+    expect(drawn.includes(leak), leak).toBe(false);
+  }
+});
+
+// The declaration is a property of the response, not of the build. A payload that
+// went on saying "unreachable cannot happen here" beside a target reporting exactly
+// that would be a contract nobody could rely on again.
+test("a landscape with a peer stops claiming it cannot see", async ({ page }) => {
+  installMock(page, peeredGraph);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-legend")).toBeVisible();
+  await expect(page.locator(".mesh-legend")).not.toContainText("Not watched here");
+
+  // And the other way round: a landscape with no peer says so, and says what would
+  // change it rather than only that it cannot.
+  installMock(page, {
+    ...peeredGraph,
+    nodes: peeredGraph.nodes.filter((n) => n.kind !== "target"),
+    status: {
+      ok: 1, attention: 0, critical: 0, unknown: 0,
+      unavailable: [
+        { state: "unreachable", reason: "No deployment target is drawn here. Configure a deployment target and this landscape reports it." },
+        { state: "stale", reason: "Only a peer's answer holds a freshness contract: configure a deployment target and this landscape reports it." },
+      ],
+    },
+  });
+  await page.reload();
+  await expect(page.locator(".mesh-legend")).toContainText("Not watched here");
+  await expect(page.locator(".mesh-legend")).toContainText("deployment target");
+});

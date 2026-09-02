@@ -923,9 +923,7 @@ to current Atlas resources without mixing runtime observations into the model.
 
 All six slices below have shipped, which is what this marker says and no more: the
 milestone's scope is done, not Panorama. What that scope deliberately left out is
-recorded in the slices themselves rather than as an open box here — chiefly that the
-derived mesh contacts no deployment target, so it declares *unreachable* and *stale*
-unproducible where the model overlay, which does ask peers, produces both. See
+recorded in the slices themselves rather than as an open box here. See
 [ADR-0189: Panorama architecture modeling and live operational overlays](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)
 for the drawn model, its bindings, and the observation projection, and
 [ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md)
@@ -988,13 +986,18 @@ for the derived whole-instance mesh above them.
   All three stages are complete. Stage **c** ships the mapping, the worst-of
   aggregation with attribution, and the two states this engine can already observe
   about itself without asking anything outside it — parked work on a process and a
-  worker that cannot serve work. **unreachable** and **stale** stay unavailable on
-  the mesh, and that is now a standing property rather than a wait: P4c made both
-  producible, but only by asking a source outside this process, and the mesh draws
-  no deployment targets so it contacts nothing. Every mesh payload therefore
-  declares those two with the reason, rather than letting an unwatched instance
-  render as uniformly healthy — while the observation document, which does ask
-  peers, declares nothing unavailable.
+  worker that cannot serve work. **unreachable** and **stale** were unavailable on
+  the mesh for as long as it contacted nothing; it draws **deployment targets** now,
+  asked off the run loop through the same cache and the same rules the observation
+  projection uses, so a peer that stops answering is a node on the landscape with a
+  finding on it rather than a gap nobody can see. What a payload declares
+  unproducible is therefore derived from what that response actually drew: a
+  landscape with no peer on it still declares both, and names the deployment target
+  that would change it, rather than letting an unwatched instance render as
+  uniformly healthy. No edge is derived to a target — a promotion is an act, not a
+  stored relationship, and this server does not record which of its applications is
+  running over there — so it sits beside the landscape rather than in it, which is
+  what it is.
 - ✅ **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
   workers and job types, releases, local runtimes, and deployment targets. Preserve
@@ -1046,7 +1049,10 @@ for the derived whole-instance mesh above them.
   therefore declares nothing unavailable; the landscape mesh still declares those
   two, because it draws no deployment targets and so contacts nothing. A peer that
   answers also identifies its runtime, so a model binding another node's
-  `atlas.runtimeId` observes it too; and
+  `atlas.runtimeId` observes it too. The landscape mesh reaches peers now as well:
+  it draws deployment targets, so those two states are producible there too, and
+  what the payload declares unproducible is derived from what each response actually
+  drew rather than fixed for the build; and
   **d)** observations on the ArchiMate canvas as borders and badges with a text
   legend, layer colors intact. Complete: an element's worst finding is drawn as a
   border *around* it and a badge beside it, never as a fill — a layer colour says
@@ -1059,8 +1065,9 @@ for the derived whole-instance mesh above them.
 - ✅ **P5 — Landscape intelligence:** compare desired and observed deployments
   over time and optionally query Prometheus/OpenSearch for historical context.
   Dependency/impact analysis and discovered-but-unmodeled resources move forward
-  into P2.5, which derives the edges they need. P4 also unblocks the two observation
-  states P2.5c declares unavailable (unreachable, stale). Panorama remains a
+  into P2.5, which derives the edges they need. P4 unblocked the two observation
+  states P2.5c had declared unavailable (unreachable, stale), and the landscape now
+  produces them itself by drawing deployment targets. Panorama remains a
   correlation surface, not a time-series or log database. Ships in stages:
   **a)** the drift journal — what has been seen to change, and when. Complete. The
   constraint above is the whole design: a store of samples is exactly what "not a

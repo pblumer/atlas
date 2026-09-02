@@ -36,6 +36,12 @@ const (
 	// restricted on purpose — "not here" and "not yours to see" are different
 	// findings, and an operator chasing a broken dependency needs to tell them apart.
 	KindUnresolved = "unresolved"
+	// KindTarget is a deployment target: a peer Atlas this server can promote to
+	// (ADR-0189 §6). It is the only kind on this landscape whose state comes from
+	// outside this process, and therefore the only one that can be *unreachable* or
+	// *stale* — every other node is read from local state while the request is being
+	// served, so it can neither fail to be contacted nor go out of date.
+	KindTarget = "target"
 )
 
 // Edge kinds.
@@ -181,6 +187,10 @@ type Landscape struct {
 	Processes    []Process
 	Workers      []Worker
 	Decisions    []Decision
+	// Targets are the peers this server can promote to, and what asking them
+	// produced. Filled in two halves: the collector names them on the run loop, and
+	// [ReachOut] supplies each one's state off it.
+	Targets []Target
 	// PartialStatus reports that the server stopped counting parked work before it
 	// had seen all of it. It travels with the landscape because only the collector
 	// knows it, and it must reach the payload: without it a process the scan never
@@ -293,6 +303,30 @@ type Node struct {
 	Children int `json:"children,omitempty"`
 }
 
+// Target is one deployment target and what this server currently knows of it.
+//
+// It carries no base URL and no credential reference: those are this operator's map
+// of where their infrastructure lives, and a landscape is opened by anybody with
+// modeler access. The name is disclosed to every caller, which is the same rule the
+// binding catalog already applies — a deployment target is org-wide infrastructure
+// with no sharing scope of its own.
+//
+// No edges are derived to it, and that absence is deliberate rather than pending. A
+// promotion is an act, not a stored relationship: this server does not record which
+// of its applications is running over there, so any line drawn from one to a target
+// would be an assertion nobody made. What it does know is that the peer exists and
+// whether it answers, and that is exactly what is drawn.
+type Target struct {
+	ID   string
+	Name string
+	// State is the observation state ReachOut resolved (ADR-0189 §6), and Reason the
+	// sentence behind it. Empty means the peer was never asked — which is not the
+	// same as unreachable, and is what a landscape derived while the loop was closing
+	// would carry.
+	State  string
+	Reason string
+}
+
 // Edge is one directed relationship between two nodes.
 type Edge struct {
 	From string `json:"from"`
@@ -330,6 +364,7 @@ func processNodeID(key uint64) string     { return fmt.Sprintf("%s:%d", KindProc
 func workerNodeID(id string) string       { return KindWorker + ":" + id }
 func decisionNodeID(id string) string     { return KindDecision + ":" + id }
 func restrictedNodeID(ordinal int) string { return fmt.Sprintf("%s:%d", KindRestricted, ordinal) }
+func targetNodeID(id string) string       { return KindTarget + ":" + id }
 
 // unresolvedNodeID names what is missing *and* what kind of thing it is. A BPMN
 // process id and a worker name can be the same string while being two entirely
@@ -534,6 +569,16 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		g.Nodes = append(g.Nodes, Node{
 			ID: id, Kind: KindUnresolved, Name: unresolved[id],
 			Provenance: ProvenanceDerived,
+		})
+	}
+
+	// The peers, last, and unconditionally: a target that was asked and did not
+	// answer is the finding this whole kind exists to carry, so dropping it for
+	// having no state would delete exactly the row somebody needs.
+	for _, t := range land.Targets {
+		g.Nodes = append(g.Nodes, Node{
+			ID: targetNodeID(t.ID), Kind: KindTarget, Name: t.Name,
+			Provenance: ProvenanceDerived, State: t.State, Reason: t.Reason,
 		})
 	}
 
