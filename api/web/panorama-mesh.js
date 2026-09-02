@@ -347,20 +347,59 @@ function linksAmong(nodes, edges) {
     .filter(([a, b]) => a !== undefined && b !== undefined);
 }
 
-// relax settles the graph a few steps from wherever it currently is, holding
-// whatever is held. This is what a drag calls on every frame: the node under the
-// pointer moves, its neighbours are pulled after it, and the rest of the landscape
-// gets out of the way — which is the whole of what makes a graph feel like it is
-// made of things rather than of pixels.
+// tethersFor records the edges that a drag will actually move, and how long each of
+// them is right now.
 //
-// Deliberately few steps. A drag is a continuous act, so each frame only has to
-// move the picture a little way toward its new equilibrium; running it to
-// convergence on every frame would be both slower and jumpier.
-export function relax(nodes, edges, { width, height, steps = 3 } = {}) {
-  if (!nodes.length) return nodes;
-  const radii = nodes.map(radiusOf);
-  settle(nodes, linksAmong(nodes, edges), radii, forcesFor(nodes, width, height), steps);
-  separate(nodes, radii, NODE_ROOM, 4);
+// Recording the *current* length rather than the layout's rest length is the whole
+// trick. A settled graph has been fitted since it was simulated, and the fit
+// rescales every distance — so its edges are not at the simulation's rest length,
+// and a spring aiming for that length would haul the neighbourhood inward the
+// moment somebody touched a node, without them having moved it anywhere. Aiming for
+// the length the edge has at the instant of the grab means nothing moves until the
+// node does, and then only in proportion to how far it went.
+//
+// Only edges touching a held node are recorded. Those are the ones whose geometry
+// is about to change; everything else must stay exactly where the reader last saw
+// it, and moves only if something ends up on top of it.
+function tethersFor(nodes, edges) {
+  const index = new Map(nodes.map((n, i) => [n.id, i]));
+  const out = [];
+  for (const e of edges) {
+    const a = index.get(e.from), b = index.get(e.to);
+    if (a === undefined || b === undefined) continue;
+    if (!nodes[a].held && !nodes[b].held) continue;
+    out.push([a, b, Math.hypot(nodes[a].x - nodes[b].x, nodes[a].y - nodes[b].y)]);
+  }
+  return out;
+}
+
+// follow moves the neighbours of whatever is being held, and gets everything else
+// out of the way. This is what a drag calls on every frame.
+//
+// Deliberately local, and deliberately not the layout's own physics. Resuming the
+// full simulation from a settled picture reorganises the whole landscape the moment
+// a node is touched — the picture on screen has been fitted since it was simulated,
+// so it is not at the simulation's equilibrium and restarting it there is a second
+// layout wearing the first one's coordinates. What somebody dragging a node is
+// asking for is smaller and more useful than that: the things joined to it come
+// along, and whatever they run into moves aside.
+function follow(nodes, tethers, radii, { steps = 3 } = {}) {
+  for (let step = 0; step < steps; step++) {
+    for (const [ai, bi, rest] of tethers) {
+      const a = nodes[ai], b = nodes[bi];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.hypot(dx, dy) || 0.01;
+      // Toward the length the edge had when it was grabbed, a fraction at a time, so
+      // a neighbour trails the node it is joined to instead of being welded to it.
+      const [moveA, moveB] = share((d - rest) * 0.28, a.held, b.held);
+      a.x += (dx / d) * moveA; a.y += (dy / d) * moveA;
+      b.x -= (dx / d) * moveB; b.y -= (dy / d) * moveB;
+    }
+    // Two rounds rather than one pass to convergence: a drag is continuous, so each
+    // frame only has to move the picture a little way toward being untangled, and
+    // the next frame carries on from there.
+    separate(nodes, radii, NODE_ROOM, 2);
+  }
   return nodes;
 }
 
@@ -644,17 +683,51 @@ function matches(node, term) {
   return hay.includes(term);
 }
 
-// filterGraph keeps the matching nodes and the edges whose both ends survived.
-// A search is the viewer's own choice, unlike a sharing scope, so a dropped edge
+// CONTEXT_HOPS is how far around a match the filter reaches for context.
+//
+// One, and it is not a placeholder for a setting. A filtered node on its own is a
+// circle in an empty field: it answers "does this exist" and nothing else, when the
+// question somebody types a name to ask is nearly always "and what is it attached
+// to". One hop answers that. Two would not answer it better — nearly everything in a
+// landscape hangs off some hub, and reaching through one drags most of the graph back
+// onto the screen, which is the filter failing to filter.
+const CONTEXT_HOPS = 1;
+
+// filterGraph keeps the matching nodes, the immediate neighbourhood around them, and
+// every edge between what is left.
+//
+// The neighbourhood is *context*, and it is marked as such rather than presented as a
+// result: `matched` names the nodes that actually matched the term, the drawing draws
+// the rest more faintly, and the header counts them separately. A search that
+// silently returned things which do not match the search would be a worse answer than
+// the empty field it is fixing.
+//
+// A search is the viewer's own choice, unlike a sharing scope, so what is left out
 // here is not a lie — but the header still reports how much is hidden, because a
 // filtered mesh looks exactly like a small one.
 function filterGraph(graph, term) {
   if (!term) return graph;
-  const nodes = graph.nodes.filter((n) => matches(n, term));
-  const keep = new Set(nodes.map((n) => n.id));
+  const matched = new Set(graph.nodes.filter((n) => matches(n, term)).map((n) => n.id));
+
+  const keep = new Set(matched);
+  let frontier = [...matched];
+  for (let hop = 0; hop < CONTEXT_HOPS && frontier.length; hop++) {
+    const reached = new Set(frontier);
+    const next = [];
+    for (const e of graph.edges) {
+      for (const [here, there] of [[e.from, e.to], [e.to, e.from]]) {
+        if (!reached.has(here) || keep.has(there)) continue;
+        keep.add(there);
+        next.push(there);
+      }
+    }
+    frontier = next;
+  }
+
   return {
     ...graph,
-    nodes,
+    matched,
+    nodes: graph.nodes.filter((n) => keep.has(n.id)),
     edges: graph.edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
   };
 }
@@ -793,10 +866,15 @@ function renderGraph(graph, layoutMs, frame, { pinned, from } = {}) {
     // names with no re-render, and a selected, hovered or focused node keeps its own
     // whatever the zoom is.
     const named = Boolean(label);
+    // Context, not a result: this node is on screen because something next to it
+    // matched. Drawn more faintly so the filter is still answering the question it
+    // was asked, and named all the same — context nobody can read is not context.
+    const context = graph.matched ? !graph.matched.has(n.id) : false;
     return `<g transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"
-      class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")} mesh-sev-${esc(n.severity || "unknown")}${named ? " mesh-named" : ""}${n.held ? " mesh-pinned" : ""}"
+      class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")} mesh-sev-${esc(n.severity || "unknown")}${named ? " mesh-named" : ""}${context ? " mesh-context" : ""}${n.held ? " mesh-pinned" : ""}"
       data-node-id="${esc(n.id)}" data-severity="${esc(n.severity || "unknown")}"
       tabindex="0" role="button" aria-label="${esc(nodeTitle(n))}">
+      <circle class="mesh-halo" r="${(r + 6).toFixed(1)}"/>
       ${prov.ring ? `<circle r="${(r + 4).toFixed(1)}" fill="none" stroke="${style.stroke}" stroke-width="1" opacity="0.55"/>` : ""}
       <circle class="mesh-body" r="${r.toFixed(1)}" fill="${prov.ghost ? "none" : style.fill}" stroke="${sev.stroke || style.stroke}"
         stroke-width="${sev.stroke ? 3 : 2}" ${style.dashed || prov.ghost ? 'stroke-dasharray="4 3"' : ""}/>
@@ -1031,8 +1109,13 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     lit = null;
     applyView();
     legendSlot.innerHTML = legendHTML(shown, ms);
+    // Matches and context counted apart. "5 of 101" over a picture where only one
+    // node matched the term would be the header agreeing with the drawing and both
+    // of them misreporting the search.
+    const context = shown.nodes.length - (shown.matched?.size ?? shown.nodes.length);
     count.textContent = term
-      ? `${shown.nodes.length} of ${graph.nodes.length} node(s)`
+      ? `${shown.matched?.size ?? 0} of ${graph.nodes.length} node(s) match` +
+        (context ? `, ${context} shown for context` : "")
       : `${graph.nodes.length} node(s), ${graph.edges.length} edge(s)`;
     refresh();
   }
@@ -1197,6 +1280,17 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     updateRelease();
   }
 
+  // grip is what a drag moves: the edges that will pull, at the lengths they had
+  // when it started, and every node's footprint. Taken once per gesture rather than
+  // per frame, so the geometry a drag is working against cannot drift under it.
+  function gripOn() {
+    return {
+      tethers: tethersFor(placed, shown.edges),
+      radii: placed.map((n) => n.r ?? 12),
+    };
+  }
+  let grip = null;
+
   function beginDrag(id, event) {
     const node = at.get(id);
     const grabbed = node && pointToFrame(event);
@@ -1208,6 +1302,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       from: { x: node.x, y: node.y },
     };
     node.held = true;
+    grip = gripOn();
     relate(id);
     return true;
   }
@@ -1221,22 +1316,33 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     if (nudging) return;
     nudging = requestAnimationFrame(() => {
       nudging = 0;
-      if (!moving) return;
-      relax(placed, shown.edges, { width: world.width, height: world.height });
+      // No early return when the drag has already ended: the last pointer move can
+      // land between two frames, and skipping that frame would leave the node drawn
+      // where it was a moment before it was dropped — pinned at one place and
+      // painted at another until something else repainted the view.
+      if (grip) follow(placed, grip.tethers, grip.radii);
       applyPositions();
     });
   }
 
   function endDrag() {
     if (!moving) return;
-    const { id, node, shifted } = moving;
+    const { id, node, shifted, pointer } = moving;
     moving = null;
+    try { surface.releasePointerCapture(pointer); } catch { /* never captured */ }
     if (!shifted) {
       // A press that never moved is a click, not a drag: it leaves nothing pinned.
       node.held = pinned.has(id);
+      grip = null;
       return;
     }
     pin(id, node);
+    // Drawn where it was dropped, now, rather than on whichever frame happens to run
+    // next. Everything downstream — the pin, the panel, the next repaint — agrees
+    // about where this node is, so the picture must not be the one thing that does not.
+    follow(placed, grip.tethers, grip.radii);
+    applyPositions();
+    grip = null;
     dragged = true; // the click that ends this drag must not also select
   }
 
@@ -1251,12 +1357,17 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   let panning = null, dragged = false;
   surface.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
+    // Whatever the last gesture suppressed, this one is a fresh question. Reset here
+    // rather than in the click handler: a gesture that ends outside the canvas never
+    // produces a click, and the flag would then swallow the next real one.
+    dragged = false;
     // A node under the pointer is the thing being moved; the background is the view.
     const node = event.target.closest?.("[data-node-id]");
-    if (node && beginDrag(node.getAttribute("data-node-id"), event)) {
-      dragged = false;
-      return;
-    }
+    // Not preventDefault() here, however tempting: cancelling pointerdown also
+    // cancels the compatibility mouse events behind it, and the click that selects a
+    // node is one of them. The browser's own gesture is held off by the stylesheet
+    // instead (the canvas takes no text selection) and by the move below.
+    if (node && beginDrag(node.getAttribute("data-node-id"), event)) return;
     // Panning is only meaningful once something is off-screen. At the fitted frame
     // the whole landscape is already visible, so a drag there could only push it
     // out of view and reintroduce the empty space the fit exists to remove.
@@ -1270,9 +1381,20 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     if (moving && event.pointerId === moving.pointer) {
       const point = pointToFrame(event);
       if (!point) return;
+      // Cancelling the *move* is safe where cancelling the press was not, and it is
+      // what stops a touch drag from being taken over by the page's own scrolling.
+      event.preventDefault();
       const node = moving.node;
       place(node, point.x + moving.dx, point.y + moving.dy);
-      if (Math.hypot(node.x - moving.from.x, node.y - moving.from.y) > 3) moving.shifted = true;
+      if (!moving.shifted && Math.hypot(node.x - moving.from.x, node.y - moving.from.y) > 3) {
+        moving.shifted = true;
+        // Captured only now that this is a drag rather than a press. Capturing on
+        // the press would retarget the compatibility mouse events behind it to the
+        // canvas, and the click that selects a node is one of them — so a press that
+        // never moved would stop selecting anything. From here on there is no click
+        // to protect: this gesture suppresses its own.
+        try { surface.setPointerCapture(event.pointerId); } catch { /* no capture, no harm */ }
+      }
       nudge();
       return;
     }
@@ -1292,7 +1414,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const endGesture = () => { endDrag(); panning = null; };
   surface.addEventListener("pointerup", endGesture);
   surface.addEventListener("pointercancel", endGesture);
-  surface.addEventListener("pointerleave", endGesture);
+  // Leaving the canvas ends a pan but not a drag: the pointer was captured for the
+  // drag, so it is still this gesture's, and dropping the node at the boundary is
+  // the one thing somebody dragging toward the edge is not asking for.
+  surface.addEventListener("pointerleave", () => { if (!moving) endGesture(); });
 
   // Double-clicking a node you have placed puts that one back, without disturbing
   // the rest of the arrangement.
@@ -1358,9 +1483,13 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // is the coarse one: crossing a large landscape a pixel at a time is not a
     // keyboard equivalent of a drag, it is a punishment for not having a mouse.
     const distance = Math.max(12, world.width * 0.02) * (event.shiftKey ? 5 : 1);
+    // Held first, so the edges this step will pull are the ones recorded; pinned
+    // after the move, so what is recorded is where the node ended up.
+    node.held = true;
+    const stepGrip = gripOn();
     place(node, node.x + step[0] * distance, node.y + step[1] * distance);
     pin(id, node, element);
-    relax(placed, shown.edges, { width: world.width, height: world.height });
+    follow(placed, stepGrip.tethers, stepGrip.radii);
     applyPositions();
   });
 

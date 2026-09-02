@@ -141,13 +141,14 @@ test("filters the landscape and says how much it is hiding", async ({ page }) =>
   await expect(page.locator(".mesh-node")).toHaveCount(7);
 
   await page.getByLabel("Filter the landscape").fill("invoice");
-  await expect(page.locator(".mesh-node")).toHaveCount(1);
-  await expect(page.locator("#mesh-count")).toContainText("1 of 7");
+  // One match, and the header says so — separately from the context around it.
+  await expect(page.locator(".mesh-node:not(.mesh-context)")).toHaveCount(1);
+  await expect(page.locator("#mesh-count")).toContainText("1 of 7 node(s) match");
   await expect(page.locator(".mesh-canvas")).toContainText("Invoice");
 
   // Filtering by kind is the other half: "what does this instance talk to".
   await page.getByLabel("Filter the landscape").fill("worker");
-  await expect(page.locator(".mesh-worker")).toHaveCount(1);
+  await expect(page.locator(".mesh-worker:not(.mesh-context)")).toHaveCount(1);
   await expect(page.locator(".mesh-canvas")).toContainText("ops-mail");
 
   await page.getByLabel("Filter the landscape").fill("nothing-matches-this");
@@ -156,6 +157,43 @@ test("filters the landscape and says how much it is hiding", async ({ page }) =>
   await page.getByLabel("Filter the landscape").fill("");
   await expect(page.locator(".mesh-node")).toHaveCount(7);
   await expect(page.locator("#mesh-count")).toContainText("7 node(s)");
+});
+
+// A match on its own is a circle in an empty field: it answers "does this exist" and
+// nothing else, when the question somebody types a name to ask is nearly always "and
+// what is it attached to". So the filter keeps one hop around every match — and says
+// which of what is on screen is a result and which is only there to explain it.
+test("a filtered node keeps the things it is attached to", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+
+  await page.getByLabel("Filter the landscape").fill("invoice");
+
+  // Invoice calls Dunning and a restricted node, uses the mail worker, and sits in
+  // Billing. All of them are on screen; none of them matched "invoice".
+  const match = page.locator('[data-node-id="process:1"]');
+  await expect(match).toHaveCount(1);
+  await expect(match).not.toHaveClass(/mesh-context/);
+  for (const id of ["process:2", "worker:c1", "application:a1", "restricted:1"]) {
+    await expect(page.locator(`[data-node-id="${id}"]`)).toHaveClass(/mesh-context/);
+  }
+  // And it stops at one hop: the decision only Dunning uses is two away.
+  await expect(page.locator('[data-node-id="decision:credit"]')).toHaveCount(0);
+
+  // The context is drawn as context rather than as a result — a search that
+  // presented non-matches as matches would be a worse answer than an empty field.
+  await expect(page.locator("#mesh-count")).toContainText("1 of 7 node(s) match");
+  await expect(page.locator("#mesh-count")).toContainText("4 shown for context");
+  const faded = await page.locator('[data-node-id="worker:c1"]').evaluate(
+    (el) => Number(getComputedStyle(el).opacity));
+  expect(faded).toBeGreaterThan(0);
+  expect(faded).toBeLessThan(1);
+
+  // The edges between what is left are drawn, so the attachment is visible and not
+  // merely implied by two circles being on the same screen.
+  const joined = await page.evaluate(() => [...document.querySelectorAll(".mesh-edge")]
+    .some((e) => e.dataset.from === "process:1" && e.dataset.to === "worker:c1"));
+  expect(joined).toBe(true);
 });
 
 // An unresolved node must say what kind of thing is missing: a missing deployment
@@ -230,7 +268,8 @@ test("filtering away the selection clears it", async ({ page }) => {
   await page.locator('[data-node-id="worker:c1"]').click();
   await expect(page.locator(".mesh-impact-count")).toBeVisible();
 
-  await page.getByLabel("Filter the landscape").fill("invoice");
+  // Nothing matching the worker, and it is not within a hop of what does.
+  await page.getByLabel("Filter the landscape").fill("dunning");
   await expect(page.locator(".mesh-panel-empty")).toBeVisible();
 });
 
@@ -368,8 +407,8 @@ test("filters the landscape by severity", async ({ page }) => {
   await page.goto("/index.html#/panorama/landscape");
 
   await page.locator("#mesh-search").fill("critical");
-  await expect(page.locator(".mesh-node")).toHaveCount(2);
-  await expect(page.locator('[data-node-id="process:1"]')).toHaveCount(0);
+  await expect(page.locator(".mesh-node:not(.mesh-context)")).toHaveCount(2);
+  await expect(page.locator('[data-node-id="process:1"]:not(.mesh-context)')).toHaveCount(0);
 });
 
 // The opening picture is the whole landscape, and it stays zoomable from there.
@@ -545,7 +584,7 @@ test("selecting or filtering brings a name back", async ({ page }) => {
   await expect(page.locator('[data-node-id="process:7"] .mesh-label-ink')).toHaveCSS("opacity", "1");
 
   await page.locator("#mesh-search").fill("Process 12");
-  await expect(page.locator(".mesh-node")).toHaveCount(1);
+  await expect(page.locator(".mesh-node:not(.mesh-context)")).toHaveCount(1);
   await expect(page.locator('[data-node-id="process:12"] .mesh-label-ink')).toHaveCSS("opacity", "1");
 });
 
@@ -647,6 +686,26 @@ test("pointing at a node shows what it is connected to", async ({ page }) => {
   // much use without knowing what it is.
   await expect(related.first().locator(".mesh-label-ink")).toHaveCSS("opacity", "1");
 
+  // And it is marked in colour, not only by being left un-faded: a ring in the
+  // accent says "these are the ones" where merely staying visible says "these are
+  // still here". The ring is outside the circle rather than a recolouring of it,
+  // because the body's own stroke is carrying the severity.
+  const ring = async (id) => page.locator(`[data-node-id="${id}"] .mesh-halo`)
+    .evaluate((el) => ({
+      opacity: Number(getComputedStyle(el).opacity),
+      width: parseFloat(getComputedStyle(el).strokeWidth),
+    }));
+  const neighbour = await related.first().getAttribute("data-node-id");
+  const lit = await ring(neighbour);
+  expect(lit.opacity).toBeGreaterThan(0.5);
+  expect(lit.width).toBeGreaterThan(1);
+  // The node being asked about is never in doubt: its ring is the stronger one.
+  expect((await ring("process:1")).width).toBeGreaterThan(lit.width);
+  // And an unrelated node has no ring at all.
+  expect((await ring("decision:credit")).opacity).toBe(0);
+  // The severity stroke on a related node survives being highlighted.
+  await expect(page.locator(`[data-node-id="${neighbour}"] .mesh-body`)).toBeVisible();
+
   // Unrelated ones fall back rather than disappearing: the question is "what does
   // this touch", not "what if the rest were gone".
   const dimmed = await page.evaluate(() => {
@@ -721,10 +780,15 @@ async function dragBy(page, id, dx, dy) {
   const stage = await page.locator("#mesh-surface").boundingBox();
   const view = page.viewportSize();
   const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  // Into the part of the stage that is actually on screen. hover() may have scrolled
+  // the stage so that its top is above the viewport, and a drop at a negative
+  // coordinate is a gesture the browser never sees.
   const within = (value, low, high) => Math.min(Math.max(value, low), high);
   const to = {
-    x: within(from.x + dx, stage.x + 40, Math.min(stage.x + stage.width, view.width) - 40),
-    y: within(from.y + dy, stage.y + 40, Math.min(stage.y + stage.height, view.height) - 40),
+    x: within(from.x + dx, Math.max(stage.x, 0) + 40,
+      Math.min(stage.x + stage.width, view.width) - 40),
+    y: within(from.y + dy, Math.max(stage.y, 0) + 40,
+      Math.min(stage.y + stage.height, view.height) - 40),
   };
   await page.mouse.down();
   await page.mouse.move(to.x, to.y, { steps: 12 });
@@ -779,6 +843,43 @@ test("a node goes where it is dropped, and the graph settles around it", async (
   await expect(page.locator(".mesh-panel-empty")).toBeVisible();
 });
 
+// A drag moves what it is joined to, and leaves the rest of the landscape exactly
+// where the reader last saw it.
+//
+// This is the property, not a nicety. Resuming the layout's own physics from the
+// picture on screen looks reasonable and is not: the picture has been fitted since
+// it was simulated, so it sits nowhere near the simulation's equilibrium, and
+// restarting it there reorganises the whole landscape the moment a node is touched.
+// The reader loses the arrangement they were reading in order to move one node in it.
+test("a drag moves the neighbourhood, not the landscape", async ({ page }) => {
+  installMock(page, meshOf(12));
+  await page.goto("/index.html#/panorama/landscape");
+  await page.locator(".mesh-node").first().waitFor();
+
+  const positions = () => page.evaluate(() => Object.fromEntries(
+    [...document.querySelectorAll(".mesh-node")].map((g) => {
+      const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform"));
+      return [g.dataset.nodeId, { x: +m[1], y: +m[2] }];
+    })));
+
+  const before = await positions();
+  await dragBy(page, "process:3", 130, -60);
+  const after = await positions();
+  const moved = (id) => Math.hypot(after[id].x - before[id].x, after[id].y - before[id].y);
+
+  // The node went where it was put, and the application it sits in came after it.
+  expect(moved("process:3")).toBeGreaterThan(60);
+  expect(moved("application:a1")).toBeGreaterThan(5);
+
+  // Everything else is untouched, except whatever was actually in the way. In this
+  // landscape the processes are joined to their application and to nothing else, so
+  // there is nothing to pull them along — only a collision could move one.
+  const others = Object.keys(before)
+    .filter((id) => id !== "process:3" && id !== "application:a1");
+  const still = others.filter((id) => moved(id) < 1);
+  expect(still.length).toBeGreaterThanOrEqual(others.length - 2);
+});
+
 test("what you placed by hand survives a repaint", async ({ page }) => {
   installMock(page, meshOf(12));
   await page.goto("/index.html#/panorama/landscape");
@@ -797,7 +898,7 @@ test("what you placed by hand survives a repaint", async ({ page }) => {
 
   // A filter is a temporary question, and asking one must not cost the arrangement.
   await page.fill("#mesh-search", "Process 5");
-  await expect(page.locator(".mesh-node")).toHaveCount(1);
+  await expect(page.locator(".mesh-node:not(.mesh-context)")).toHaveCount(1);
   await page.fill("#mesh-search", "");
   await expect(page.locator(".mesh-node")).toHaveCount(13);
   await expect(page.locator('[data-node-id="process:5"]')).toHaveClass(/mesh-pinned/);
