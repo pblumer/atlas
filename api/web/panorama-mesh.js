@@ -11,6 +11,10 @@
 // Beyond the server's size budget the payload arrives already collapsed to
 // applications and says so, which this view repeats rather than hides.
 
+import {
+  captureView, frameFor, pinsFor, readViews, removeView, saveView, writeViews,
+} from "./panorama-views.js";
+
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 
@@ -84,11 +88,20 @@ const PROVENANCE = {
 //     instance are unobserved, and drawing them as a problem makes the whole mesh a
 //     problem — which is how a status view teaches people to ignore it.
 const SEVERITY = {
-  critical: { glyph: "!", stroke: "var(--danger)", label: "Critical — it cannot do work" },
-  attention: { glyph: "•", stroke: "var(--warn)", label: "Attention — something inside it went wrong" },
+  critical: { glyph: "!", stroke: "var(--danger)", beats: true, label: "Critical — it cannot do work" },
+  attention: { glyph: "•", stroke: "var(--warn)", beats: true, label: "Attention — something inside it went wrong" },
   ok: { glyph: "", stroke: "", label: "OK — nothing is wrong here" },
   unknown: { glyph: "?", stroke: "", label: "Unwatched — nothing here observes it" },
 };
+
+// PULSE_BUDGET is how many beating nodes the view will animate at once.
+//
+// A landscape where three things are wrong should draw the eye to those three. One
+// where two hundred are wrong is not a picture of three problems, it is a picture of
+// an outage — and two hundred simultaneous animations say less than a still frame
+// does while costing a great deal more to paint. Past the budget the rings stay,
+// unmoving: the findings are still marked, they have simply stopped competing.
+const PULSE_BUDGET = 80;
 
 // STATE_TEXT names the observation state under a severity (ADR-0189 §6). The class
 // is a reading aid for a zoomed-out picture and never a replacement: an operator
@@ -874,6 +887,7 @@ function renderGraph(graph, layoutMs, frame, { pinned, from } = {}) {
       class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")} mesh-sev-${esc(n.severity || "unknown")}${named ? " mesh-named" : ""}${context ? " mesh-context" : ""}${n.held ? " mesh-pinned" : ""}"
       data-node-id="${esc(n.id)}" data-severity="${esc(n.severity || "unknown")}"
       tabindex="0" role="button" aria-label="${esc(nodeTitle(n))}">
+      ${sev.beats ? `<circle class="mesh-beat" r="${r.toFixed(1)}"/>` : ""}
       <circle class="mesh-halo" r="${(r + 6).toFixed(1)}"/>
       ${prov.ring ? `<circle r="${(r + 4).toFixed(1)}" fill="none" stroke="${style.stroke}" stroke-width="1" opacity="0.55"/>` : ""}
       <circle class="mesh-body" r="${r.toFixed(1)}" fill="${prov.ghost ? "none" : style.fill}" stroke="${sev.stroke || style.stroke}"
@@ -885,15 +899,76 @@ function renderGraph(graph, layoutMs, frame, { pinned, from } = {}) {
       <title>${esc(nodeTitle(n))}</title></g>`;
   }).join("");
 
+  // Beating is switched on for the whole canvas rather than per node, so the budget
+  // is one decision about this picture instead of a rule each node applies to itself.
+  const beating = nodes.filter((n) => (SEVERITY[n.severity] || {}).beats).length;
+
   // The viewBox starts as the whole world, because that is what fitToFrame put the
   // content inside. The world carries the frame's own aspect ratio, so with
   // preserveAspectRatio's default there is nothing to letterbox — the opening
   // picture is the entire landscape, filling the window.
-  return { ms, world, nodes, svg: `<svg class="mesh-canvas" viewBox="0 0 ${width} ${height}"
+  return { ms, world, nodes, svg: `<svg class="mesh-canvas${
+    beating && beating <= PULSE_BUDGET ? " mesh-beating" : ""}" viewBox="0 0 ${width} ${height}"
     role="img" aria-label="Derived landscape mesh">
     <g class="mesh-edges">${edges}</g>${circles}</svg>` };
 }
 
+
+// findingsHTML lists every node with something wrong with it, worst first.
+//
+// The picture already says which nodes those are, and on a landscape of four hundred
+// circles that is not the same as being able to read them: finding three red dots
+// means hunting, and hunting is what somebody does instead of noticing. The list is
+// the same findings as an index — the count, the state, and the sentence behind it —
+// and clicking one goes there.
+//
+// It counts incidents where there are incidents to count. An incident belongs to a
+// token and only a process has tokens, so a node without a count is a node that
+// cannot have one rather than a node with none: the two are different facts and the
+// list never renders them alike.
+function findingsHTML(graph) {
+  const found = graph.nodes
+    .filter((n) => (SEVERITY[n.severity] || {}).beats)
+    .sort((a, b) => (SEVERITY_ORDER[b.severity] - SEVERITY_ORDER[a.severity]) ||
+      ((b.incidents || 0) - (a.incidents || 0)) ||
+      String(a.name || a.id).localeCompare(String(b.name || b.id)));
+
+  const incidents = found.reduce((sum, n) => sum + (n.incidents || 0), 0);
+  // The list describes the picture, so a filtered picture gets a filtered list — and
+  // then has to say so. "Findings" over a landscape showing one node in seven would
+  // otherwise read as the findings, which is a claim about the six that are not
+  // there.
+  const scope = graph.matched ? " in the filtered landscape" : "";
+  if (!found.length) {
+    // Not "everything is fine": most nodes in a young landscape are unobserved, and
+    // an empty findings list over an unwatched instance would be a claim nobody made.
+    return `<div class="mesh-findings">
+      <div class="mesh-findings-head"><b>Findings${esc(scope)}</b></div>
+      <p class="mesh-note">Nothing here is reporting a problem. What is not watched is
+      listed in the legend — an empty list is not the same as everything being
+      well.</p></div>`;
+  }
+  return `<div class="mesh-findings">
+    <div class="mesh-findings-head">
+      <b>Findings${esc(scope)}</b>
+      <span class="muted">${found.length} node(s)${incidents ? `, ${incidents} incident(s)` : ""}</span>
+    </div>
+    <ul class="mesh-findings-list">${found.map((n) => `<li>
+      <button type="button" class="mesh-finding-go mesh-sev-${esc(n.severity)}"
+        data-finding="${esc(n.id)}">
+        <span class="mesh-finding-name">${esc(n.name || n.id)}</span>
+        <span class="mesh-finding-state">${esc(STATE_TEXT[n.state] || n.state || "")}${
+          n.incidents ? ` · ${n.incidents} incident(s)` : ""}</span>
+        ${n.reason ? `<span class="mesh-finding-why">${esc(n.reason)}</span>` : ""}
+      </button></li>`).join("")}</ul>
+  </div>`;
+}
+
+// SEVERITY_ORDER ranks the classes for the findings list. It is the same order the
+// server aggregates by (ADR-0211 §4) — unknown below ok, because a node nothing
+// observes is unobserved rather than well — and it is here only to sort a list the
+// server does not sort.
+const SEVERITY_ORDER = { critical: 3, attention: 2, ok: 1, unknown: 0 };
 
 // impactPanelHTML states the answer in words beside the picture. The counts are the
 // point — a highlighted subgraph tells you *which*, a count tells you *how many*,
@@ -1004,6 +1079,22 @@ export async function mountPanoramaMesh(view, { api, toast }) {
           </select>
         </div>
         <div id="mesh-panel-slot"></div>
+        <div id="mesh-findings-slot"></div>
+        <div class="mesh-views">
+          <div class="mesh-views-head">
+            <b>Saved views</b>
+            <!-- Said plainly rather than discovered later: these live in this
+                 browser, and are not shared and do not follow you to another one. -->
+            <span class="muted">this browser only</span>
+          </div>
+          <ul id="mesh-view-list" class="mesh-view-list"></ul>
+          <form id="mesh-view-save" class="mesh-view-save">
+            <input id="mesh-view-name" type="text" maxlength="60" autocomplete="off"
+              placeholder="Name this view…" aria-label="Name for the saved view"/>
+            <button type="submit">Save</button>
+          </form>
+          <p id="mesh-view-note" class="mesh-note" hidden></p>
+        </div>
       </aside>
     </div>
   </div>`;
@@ -1019,6 +1110,11 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const panel = document.getElementById("mesh-panel-slot");
   const dirSelect = document.getElementById("mesh-direction");
   const depthSelect = document.getElementById("mesh-depth");
+  const findingsSlot = document.getElementById("mesh-findings-slot");
+  const viewList = document.getElementById("mesh-view-list");
+  const viewForm = document.getElementById("mesh-view-save");
+  const viewName = document.getElementById("mesh-view-name");
+  const viewNote = document.getElementById("mesh-view-note");
 
   let selected = null;
   // pinned holds every node somebody has dragged, by id, at the world coordinates
@@ -1109,6 +1205,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     lit = null;
     applyView();
     legendSlot.innerHTML = legendHTML(shown, ms);
+    findingsSlot.innerHTML = findingsHTML(shown);
     // Matches and context counted apart. "5 of 101" over a picture where only one
     // node matched the term would be the header agreeing with the drawing and both
     // of them misreporting the search.
@@ -1461,6 +1558,150 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     if (node) select(node.getAttribute("data-node-id"));
     else select(null);
   });
+  // Saved views.
+  //
+  // Reading a landscape is not a single act: somebody watching one node filters down
+  // to it, zooms in, arranges what is around it — and a reload puts them back at the
+  // whole landscape with all of it to do again. A saved view is that setup with a
+  // name on it, and opening one is the only thing on this page that changes five
+  // controls at once, which is why it is a list of names rather than a URL to
+  // remember.
+  //
+  // What is saved is the whole question: the filter, the direction and depth, the
+  // node being watched, how far in the view is zoomed, and the arrangement. What is
+  // *not* saved is the graph — the landscape is derived and changes as things are
+  // deployed, so a view is a way of looking rather than a snapshot of what was there.
+  // Reached once and guarded: in a sandboxed frame or with site data blocked, even
+  // *touching* window.localStorage throws, and that must cost the landscape nothing
+  // more than its saved views.
+  const store = (() => { try { return window.localStorage; } catch { return null; } })();
+  let views = readViews(store);
+
+  function say(message) {
+    viewNote.textContent = message || "";
+    viewNote.hidden = !message;
+  }
+
+  function renderViews() {
+    viewList.innerHTML = views.length
+      ? views.map((v) => `<li>
+          <button type="button" class="mesh-view-open" data-view="${esc(v.id)}"
+            title="${esc(viewSummary(v))}">${esc(v.name)}</button>
+          <button type="button" class="mesh-view-drop" data-drop="${esc(v.id)}"
+            aria-label="Forget the view ${esc(v.name)}" title="Forget this view">×</button>
+        </li>`).join("")
+      : `<li class="mesh-view-empty muted">Set the landscape up the way you want to
+          find it, then name it here.</li>`;
+  }
+
+  // viewSummary says what a name stands for, so a list of names is still readable a
+  // month later. It describes what was saved rather than what would be shown now:
+  // the landscape may have moved on, and the view is the question, not the answer.
+  function viewSummary(v) {
+    const parts = [];
+    if (v.term) parts.push(`filter “${v.term}”`);
+    if (v.selected) parts.push(`watching ${v.selected}`);
+    if (v.zoom < 1) parts.push(`zoomed to ${Math.round(v.zoom * 100)}%`);
+    if (v.pins?.length) parts.push(`${v.pins.length} node(s) placed by hand`);
+    return parts.length ? parts.join(" · ") : "the whole landscape";
+  }
+
+  // openView puts the controls, the arrangement and the frame back.
+  //
+  // Twice through paint when there is an arrangement, and deliberately: the pins are
+  // stored as fractions of the world, and the world is sized from whatever the filter
+  // leaves on screen — so the first paint is what establishes the world the second
+  // one places them in. Opening a saved view is a rare, deliberate act; paying two
+  // layouts for it is cheaper than storing coordinates that mean somewhere else on a
+  // different screen.
+  function openView(v) {
+    search.value = v.term || "";
+    dirSelect.value = v.direction || "dependents";
+    depthSelect.value = v.depth ?? "2";
+    selected = null;
+    pinned.clear();
+    frameView = null;
+    paint();
+    if (v.pins?.length) {
+      for (const [id, at] of pinsFor(v, world)) pinned.set(id, at);
+      paint();
+    }
+    updateRelease();
+    // The selection last, and only if the node is still there. A landscape is
+    // derived: what a view was watching can have been undeployed since, and the
+    // panel must not describe something that is not on the screen.
+    if (v.selected && shown.nodes.some((n) => n.id === v.selected)) {
+      selected = v.selected;
+      refresh();
+    }
+    frameView = frameFor(v, world, (id) => at.get(id));
+    applyView();
+    say(v.selected && !selected
+      ? `Opened “${v.name}”. The node it was watching is no longer in this landscape.`
+      : "");
+  }
+
+  // Clicking a finding goes to it: selected, so the panel above explains it, and
+  // framed, so it is on screen rather than somewhere in a landscape of four hundred
+  // circles. Going *to* a finding is the whole reason the list is worth having.
+  findingsSlot.addEventListener("click", (event) => {
+    const id = event.target.closest?.("[data-finding]")?.getAttribute("data-finding");
+    const node = id && at.get(id);
+    if (!node) return;
+    selected = id;
+    refresh();
+    // Held at whatever magnification is already in use if the view is zoomed, so a
+    // reader working close in is not thrown back out; otherwise close enough to read
+    // the node and what is immediately around it.
+    const w = frameView ? frameView.w : world.width * 0.3;
+    const h = frameView ? frameView.h : world.height * 0.3;
+    frameView = { x: node.x - w / 2, y: node.y - h / 2, w, h };
+    applyView();
+  });
+
+  viewForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const captured = captureView({
+      name: viewName.value,
+      term: search.value.trim(),
+      direction: dirSelect.value,
+      depth: depthSelect.value,
+      selected,
+      frameView,
+      world,
+      pinned,
+    });
+    const outcome = saveView(views, captured);
+    if (outcome.error) { say(outcome.error); return; }
+    const replaced = views.length === outcome.views.length;
+    views = outcome.views;
+    renderViews();
+    viewName.value = "";
+    // A save the browser refused has to be said out loud. Storage can be full or off
+    // entirely, and a view that quietly evaporated is worse than one that was
+    // refused: the reader would find out by coming back for it.
+    say(writeViews(store, views)
+      ? `${replaced ? "Updated" : "Saved"} “${captured.name}”.`
+      : "This browser is not storing anything, so the view is here until you reload.");
+  });
+
+  viewList.addEventListener("click", (event) => {
+    const open = event.target.closest?.("[data-view]");
+    if (open) {
+      const v = views.find((entry) => entry.id === open.getAttribute("data-view"));
+      if (v) openView(v);
+      return;
+    }
+    const drop = event.target.closest?.("[data-drop]");
+    if (!drop) return;
+    views = removeView(views, drop.getAttribute("data-drop"));
+    renderViews();
+    writeViews(store, views);
+    say("");
+  });
+
+  renderViews();
+
   // Arranging the landscape without a mouse. The arrangement is a convenience rather
   // than information — every relationship this view carries is already reachable by
   // focusing a node — but a convenience only some people can have is not one, and

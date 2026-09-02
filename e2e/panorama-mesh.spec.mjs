@@ -331,7 +331,8 @@ const statusGraph = {
       severityFrom: "process:2" },
     { id: "process:1", kind: "process", name: "Invoice", provenance: "derived",
       application: "application:a1", processId: "invoice", version: 1,
-      state: "degraded", severity: "attention", reason: "3 token(s) are parked behind an unresolved incident." },
+      state: "degraded", severity: "attention", incidents: 3,
+      reason: "3 token(s) are parked behind an unresolved incident." },
     { id: "process:2", kind: "process", name: "Dunning", provenance: "derived",
       application: "application:a1", processId: "dunning", version: 1,
       state: "not-ready", severity: "critical", reason: "This worker cannot serve work: it is disabled." },
@@ -974,4 +975,238 @@ test("a focused node can be moved with the arrow keys", async ({ page }) => {
   // And it is the same arrangement a drag makes, so Release puts it back.
   await page.locator("#mesh-release").click();
   await expect(node).not.toHaveClass(/mesh-pinned/);
+});
+
+// Saved views. The complaint they answer: watching one node means filtering down to
+// it and zooming in, and a reload puts you back at the whole landscape with all of
+// it to do again.
+test("a saved view brings the whole setup back", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+  await page.locator(".mesh-node").first().waitFor();
+  await expect(page.locator(".mesh-view-empty")).toBeVisible();
+
+  // Set the landscape up: filter to one node, watch it, zoom in, place it by hand.
+  await page.fill("#mesh-search", "invoice");
+  await expect(page.locator("#mesh-count")).toContainText("1 of 7");
+  await page.locator('[data-node-id="process:1"]').click();
+  await expect(page.locator(".mesh-impact-count")).toBeVisible();
+  await page.locator("#mesh-zoom-in").click();
+  await page.locator("#mesh-zoom-in").click();
+  await dragBy(page, "process:1", 60, 40);
+  const framed = await page.locator(".mesh-canvas").getAttribute("viewBox");
+
+  await page.fill("#mesh-view-name", "Billing watch");
+  await page.locator("#mesh-view-save button").click();
+  await expect(page.locator("#mesh-view-note")).toContainText("Saved “Billing watch”");
+  await expect(page.locator(".mesh-view-open")).toHaveText("Billing watch");
+
+  // Everything back to where a reload leaves it.
+  await page.locator("#mesh-release").click();
+  await page.fill("#mesh-search", "");
+  await page.locator("#mesh-zoom-fit").click();
+  await expect(page.locator(".mesh-node")).toHaveCount(7);
+
+  await page.locator(".mesh-view-open").click();
+  await expect(page.locator("#mesh-count")).toContainText("1 of 7");
+  await expect(page.locator(".mesh-impact-count")).toBeVisible();
+  await expect(page.locator('[data-node-id="process:1"]')).toHaveClass(/mesh-pinned/);
+  // The same magnification, framed on the node it was watching.
+  const reopened = await page.locator(".mesh-canvas").getAttribute("viewBox");
+  expect(Number(reopened.split(" ")[2])).toBeCloseTo(Number(framed.split(" ")[2]), 0);
+});
+
+// A view is a way of looking, not a snapshot of what was there: the landscape is
+// derived and changes as things are deployed. So a view that was watching something
+// which has since gone must say so rather than describing a node that is not on
+// screen.
+test("a view whose node is gone opens and says so", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+
+  await page.locator('[data-node-id="worker:c1"]').click();
+  await page.fill("#mesh-view-name", "Mail worker");
+  await page.locator("#mesh-view-save button").click();
+
+  // The same view, against a landscape that no longer has that worker.
+  const smaller = { ...graph, nodes: graph.nodes.filter((n) => n.id !== "worker:c1"),
+    edges: graph.edges.filter((e) => e.from !== "worker:c1" && e.to !== "worker:c1") };
+  installMock(page, smaller);
+  await page.reload();
+  await page.locator(".mesh-node").first().waitFor();
+
+  // It survived the reload — that is the whole point of saving it.
+  await expect(page.locator(".mesh-view-open")).toHaveText("Mail worker");
+  await page.locator(".mesh-view-open").click();
+  await expect(page.locator("#mesh-view-note")).toContainText("no longer in this landscape");
+  await expect(page.locator(".mesh-panel-empty")).toBeVisible();
+});
+
+test("views can be renamed over and forgotten", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+  await page.locator(".mesh-node").first().waitFor();
+
+  await page.fill("#mesh-search", "invoice");
+  await page.fill("#mesh-view-name", "Billing watch");
+  await page.locator("#mesh-view-save button").click();
+
+  // Saving the same name again updates it in place rather than making a second entry.
+  await page.fill("#mesh-search", "dunning");
+  await page.fill("#mesh-view-name", "billing watch");
+  await page.locator("#mesh-view-save button").click();
+  await expect(page.locator("#mesh-view-note")).toContainText("Updated");
+  await expect(page.locator(".mesh-view-open")).toHaveCount(1);
+
+  await page.fill("#mesh-search", "");
+  await page.locator(".mesh-view-open").click();
+  await expect(page.locator("#mesh-search")).toHaveValue("dunning");
+
+  // An empty name is refused with a sentence, not by doing nothing.
+  await page.fill("#mesh-view-name", "   ");
+  await page.locator("#mesh-view-save button").click();
+  await expect(page.locator("#mesh-view-note")).toContainText("name");
+  await expect(page.locator(".mesh-view-open")).toHaveCount(1);
+
+  await page.locator(".mesh-view-drop").click();
+  await expect(page.locator(".mesh-view-empty")).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".mesh-view-empty")).toBeVisible();
+});
+
+// The findings list. The picture already marks which nodes have something wrong with
+// them, and on four hundred circles that is not the same as being able to read them:
+// finding three red dots means hunting, and hunting is what somebody does instead of
+// noticing.
+test("lists the findings beside the picture, worst first", async ({ page }) => {
+  installMock(page, statusGraph);
+  await page.goto("/index.html#/panorama/landscape");
+
+  const findings = page.locator(".mesh-finding-go");
+  await expect(findings).toHaveCount(3);
+
+  // Worst first, and within a class the one with more incidents behind it.
+  const names = await page.locator(".mesh-finding-name").allTextContents();
+  expect(names.slice(0, 2).sort()).toEqual(["Billing", "Dunning"]);
+  expect(names[2]).toBe("Invoice");
+
+  // Nothing well or unwatched is in the list: it is the findings, not the inventory.
+  expect(names).not.toContain("Credit score");
+
+  // The count is carried where there is one to carry. An incident belongs to a
+  // token and only a process has tokens, so a node without a count is one that
+  // cannot have one — never one reported as having none.
+  await expect(page.locator('[data-finding="process:1"]')).toContainText("3 incident(s)");
+  await expect(page.locator('[data-finding="process:1"]')).toContainText("degraded");
+  await expect(page.locator('[data-finding="decision:credit"]')).toHaveCount(0);
+  await expect(page.locator(".mesh-findings-head")).toContainText("3 node(s), 3 incident(s)");
+
+  // The sentence behind the finding is there: the class says what kind of trouble,
+  // only the reason says what to do about it.
+  await expect(page.locator('[data-finding="process:2"]'))
+    .toContainText("This worker cannot serve work");
+});
+
+// Going *to* a finding is the whole reason the list is worth having.
+test("clicking a finding selects it and puts it on screen", async ({ page }) => {
+  installMock(page, statusGraph);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).not.toHaveClass(/mesh-zoomed/);
+
+  await page.locator('[data-finding="process:1"]').click();
+
+  // Selected, so the panel above it explains the finding.
+  await expect(page.locator(".mesh-panel-head")).toContainText("Invoice");
+  await expect(page.locator('[data-node-id="process:1"]')).toHaveClass(/mesh-in-impact/);
+
+  // And framed on it, rather than left somewhere in the landscape.
+  await expect(page.locator(".mesh-canvas")).toHaveClass(/mesh-zoomed/);
+  const centred = await page.evaluate(() => {
+    const svg = document.querySelector(".mesh-canvas");
+    const [x, y, w, h] = svg.getAttribute("viewBox").split(" ").map(Number);
+    const g = document.querySelector('[data-node-id="process:1"]');
+    const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform"));
+    return { dx: Math.abs(x + w / 2 - +m[1]), dy: Math.abs(y + h / 2 - +m[2]) };
+  });
+  expect(centred.dx).toBeLessThan(1);
+  expect(centred.dy).toBeLessThan(1);
+});
+
+// An empty findings list is not a claim that everything is well: most nodes in a
+// young landscape are unobserved, and a status view that cannot go red is worse than
+// no status view.
+test("an empty findings list does not claim everything is fine", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+
+  await expect(page.locator(".mesh-finding-go")).toHaveCount(0);
+  await expect(page.locator(".mesh-findings")).toContainText("not the same as everything being well");
+});
+
+// The heartbeat. Motion is the one channel left once colour, size, shape and a glyph
+// are all carrying something — and it is the channel the eye finds without being
+// pointed at it, which is what a view somebody glances at needs.
+test("nodes with a finding beat, and the worse ones beat slower", async ({ page }) => {
+  installMock(page, statusGraph);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toHaveClass(/mesh-beating/);
+
+  const beat = (id) => page.locator(`[data-node-id="${id}"] .mesh-beat`).evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { name: style.animationName, seconds: parseFloat(style.animationDuration), stroke: style.stroke };
+  });
+
+  // The worse the state, the *less* pulse: a degraded process is still working and
+  // beats quickly and twice; one that cannot do work beats once, slowly and heavily.
+  const attention = await beat("process:1");
+  const critical = await beat("process:2");
+  expect(attention.name).toBe("mesh-beat-quick");
+  expect(critical.name).toBe("mesh-beat-slow");
+  expect(critical.seconds).toBeGreaterThan(attention.seconds * 2);
+
+  // Each keeps its own severity colour rather than both going red: "it is broken"
+  // and "something inside it went wrong" are the two findings this view exists to
+  // tell apart.
+  expect(critical.stroke).not.toBe(attention.stroke);
+
+  // Nothing well or unwatched beats at all — a landscape that pulsed everywhere
+  // would be saying nothing, loudly.
+  await expect(page.locator('[data-node-id="decision:credit"] .mesh-beat')).toHaveCount(0);
+});
+
+// A landscape where three things are wrong should draw the eye to those three. One
+// where two hundred are wrong is a picture of an outage, and two hundred animations
+// say less than a still frame while costing far more to paint.
+test("past its budget the beat stops rather than swamping the picture", async ({ page }) => {
+  const many = {
+    nodes: Array.from({ length: 90 }, (_, i) => ({
+      id: `process:${i}`, kind: "process", name: `Process ${i}`, provenance: "derived",
+      processId: `p${i}`, version: 1, state: "degraded", severity: "attention",
+      incidents: 1, reason: "1 token(s) are parked behind an unresolved incident.",
+    })),
+    edges: [], restricted: 0, clustered: false,
+  };
+  installMock(page, many);
+  await page.goto("/index.html#/panorama/landscape");
+
+  // The rings are still there, and still marking the findings — they have simply
+  // stopped competing for attention they no longer need to win.
+  await expect(page.locator(".mesh-canvas")).not.toHaveClass(/mesh-beating/);
+  const ring = await page.locator('[data-node-id="process:1"] .mesh-beat')
+    .evaluate((el) => ({ name: getComputedStyle(el).animationName, opacity: Number(getComputedStyle(el).opacity) }));
+  expect(ring.name).toBe("none");
+  expect(ring.opacity).toBeGreaterThan(0);
+});
+
+// A filtered picture gets a filtered list — and then has to say so. "Findings" over a
+// landscape showing one node in four would otherwise read as *the* findings, which is
+// a claim about the three that are not there.
+test("a filtered findings list says it is filtered", async ({ page }) => {
+  installMock(page, statusGraph);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-findings-head")).toContainText("3 node(s)");
+  await expect(page.locator(".mesh-findings-head")).not.toContainText("filtered");
+
+  await page.fill("#mesh-search", "dunning");
+  await expect(page.locator(".mesh-findings-head")).toContainText("in the filtered landscape");
 });

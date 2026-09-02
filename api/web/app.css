@@ -3535,6 +3535,50 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .mesh-node:hover, .mesh-node:focus-visible { transform-box: fill-box; }
 .mesh-node:hover .mesh-body, .mesh-node:focus-visible .mesh-body { stroke-width: 3; }
 .mesh-count { font-size: 12px; font-weight: 600; fill: var(--accent); }
+/* A heartbeat on the nodes that have a finding.
+   Motion is the one channel a landscape has left once colour, size, shape and a
+   glyph are all carrying something — and it is the channel the eye finds without
+   being pointed at it, which is exactly what a view somebody glances at needs.
+
+   The worse the state, the *less* pulse, which is the metaphor read honestly rather
+   than backwards: a process that is degraded is still working and beats quickly and
+   twice, like something under strain; one that cannot do work at all beats once,
+   slowly and heavily. A landscape of quick pulses is busy and coping; a landscape of
+   slow ones is in trouble. Each keeps its own severity colour (§4) instead of both
+   going red, because "it is broken" and "something inside it went wrong" are the two
+   findings this view exists to tell apart.
+
+   The ring is a circle of its own under the node, so the body's stroke goes on
+   carrying the severity and the fill goes on carrying the kind, and the beat is
+   added to the picture rather than taken out of it. */
+.mesh-beat { fill: none; stroke-width: 2.5; opacity: 0; pointer-events: none; }
+.mesh-sev-attention .mesh-beat { stroke: var(--warn); }
+.mesh-sev-critical .mesh-beat { stroke: var(--danger); }
+@keyframes mesh-beat-quick {
+  0% { transform: scale(1); opacity: 0.6; }
+  9% { transform: scale(1.5); opacity: 0; }
+  14% { transform: scale(1); opacity: 0.5; }
+  23% { transform: scale(1.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 0; }
+}
+@keyframes mesh-beat-slow {
+  0% { transform: scale(1); opacity: 0.75; }
+  18% { transform: scale(1.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 0; }
+}
+.mesh-beating .mesh-sev-attention .mesh-beat {
+  animation: mesh-beat-quick 1.15s ease-out infinite;
+}
+.mesh-beating .mesh-sev-critical .mesh-beat {
+  animation: mesh-beat-slow 3s ease-out infinite;
+}
+/* Past the budget, and for anybody who has asked their system for less movement, the
+   ring stays and stops moving. The finding is still marked; it has simply stopped
+   competing for attention it no longer needs to win. */
+.mesh-canvas:not(.mesh-beating) .mesh-beat { opacity: 0.35; }
+@media (prefers-reduced-motion: reduce) {
+  .mesh-beating .mesh-beat { animation: none; opacity: 0.35; }
+}
 /* Dragging a node. The cursor says the bubbles are things you can pick up before
    anybody tries, and the mark says which ones somebody already has: a node that is
    not where the layout put it is a fact about the picture, and hiding it would make
@@ -3586,6 +3630,75 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
 /* A truncated answer is a warning, not a footnote: the number above it is a floor. */
 .mesh-truncated { color: var(--warn); }
 .mesh-drill { font-size: 13px; }
+/* Findings: the same nodes the picture marks, as an index. On four hundred circles,
+   spotting three red dots is hunting, and hunting is what somebody does instead of
+   noticing — so the findings are also a list, worst first, and clicking one goes
+   there. */
+.mesh-findings { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.mesh-findings-head { display: flex; align-items: baseline; gap: 6px; justify-content: space-between; }
+.mesh-findings-head .muted { font-size: 11px; }
+.mesh-findings-list {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px;
+  /* Bounded, because the sidebar is not the page: a hundred findings must not push
+     the saved views off the bottom of a column somebody is trying to use. */
+  max-height: 220px; overflow-y: auto;
+}
+.mesh-finding-go {
+  display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left;
+  padding: 5px 8px; font: inherit; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); border-left-width: 3px; border-radius: 6px;
+  background: var(--surface); color: var(--text);
+}
+.mesh-finding-go:hover { border-color: var(--accent); }
+.mesh-finding-go.mesh-sev-critical { border-left-color: var(--danger); }
+.mesh-finding-go.mesh-sev-attention { border-left-color: var(--warn); }
+.mesh-finding-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mesh-finding-state { color: var(--muted); font-size: 11px; }
+/* The sentence behind the finding, clamped: an operator needs to see there is one
+   and read it on the node itself, and three lines of reason each would turn the list
+   back into the thing it replaced. */
+.mesh-finding-why {
+  color: var(--muted); font-size: 11px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.mesh-findings :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Saved views. A landscape somebody watches is a setup — a filter, a zoom, an
+   arrangement — and without this it has to be rebuilt on every visit. The list is
+   names because opening one changes five controls at once; a name is the only handle
+   small enough to keep in a column this narrow. */
+.mesh-views { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.mesh-views-head { display: flex; align-items: baseline; gap: 6px; justify-content: space-between; }
+.mesh-views-head .muted { font-size: 11px; }
+.mesh-view-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.mesh-view-list li { display: flex; gap: 4px; align-items: stretch; }
+.mesh-view-empty { color: var(--muted); font-size: 12px; padding: 2px 0; }
+.mesh-view-open {
+  flex: 1; min-width: 0; text-align: left; padding: 5px 8px; font: inherit; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+  color: var(--text); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mesh-view-open:hover { border-color: var(--accent); }
+.mesh-view-drop {
+  flex: none; width: 26px; padding: 0; font: inherit; font-size: 15px; line-height: 1;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+  color: var(--muted); cursor: pointer;
+}
+.mesh-view-drop:hover { color: var(--danger); border-color: var(--danger); }
+.mesh-view-save { display: flex; gap: 4px; }
+.mesh-view-save input {
+  flex: 1; min-width: 0; padding: 5px 8px; font: inherit; font-size: 13px;
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--surface); color: var(--text);
+}
+.mesh-view-save button {
+  flex: none; padding: 5px 10px; font: inherit; font-size: 13px;
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--bg); color: var(--text); cursor: pointer;
+}
+.mesh-view-save button:hover { border-color: var(--accent); }
+.mesh-views :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mesh-node:focus-visible .mesh-body { stroke: var(--accent); stroke-width: 3; }
 .mesh-in-impact .mesh-body { stroke-width: 3; }
 line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }

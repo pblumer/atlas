@@ -6,7 +6,9 @@
   by magnification rather than by node count; amended 2026-09-02 — §7 lets the
   reader arrange the landscape by hand, and sizes a node by its connectivity as well
   as by its kind; amended 2026-09-02 — a drag moves the neighbourhood rather than
-  the landscape, and a filter keeps one hop of context around every match)
+  the landscape, and a filter keeps one hop of context around every match; amended
+  2026-09-02 — §7 gains saved views, a findings list, and a heartbeat on the nodes
+  that have one, and §4's node carries its incident count)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -361,6 +363,63 @@ unaffected.
 > accent on each neighbour, outside the circle rather than a recolouring of it,
 > because the body's own stroke is carrying §4's severity and painting over a red
 > node to say "connected" would trade a finding for a hint.
+
+> **Amendment (2026-09-02, third): a landscape somebody comes back to.**
+> §7 has been about making one look at the landscape readable. These three are about
+> the second look, and the tenth.
+>
+> - **Views can be saved.** Watching one node means filtering to it, zooming in and
+>   arranging what is around it — and a reload puts all of that back to the whole
+>   landscape. A saved view is that setup with a name on it: the filter, the
+>   direction and depth, the node being watched, the magnification and the
+>   arrangement. It is stored in **this browser**, where every other piece of
+>   remembered UI state in Atlas lives, and the panel says so: these views are not
+>   shared and do not follow anybody to another machine. A stored resource with an
+>   owner, an access rule and a sharing scope is a decision about the product; this
+>   is a way of not re-zooming, and conflating the two would have shipped the first
+>   under cover of the second.
+>
+>   What is *not* saved is the graph. The landscape is derived and changes as things
+>   are deployed, so a view is a way of looking rather than a snapshot of what was
+>   there — which is why what it stores is fractions of the world rather than
+>   coordinates, and why a view watching a node is re-centred on wherever that node
+>   is *now*. A view whose node has since gone opens and says so, rather than framing
+>   the empty space where it used to be.
+>
+> - **The findings are a list as well as a picture.** The mesh marks every node with
+>   something wrong with it, and on four hundred circles that is not the same as being
+>   able to read them: finding three red dots means hunting, and hunting is what
+>   somebody does instead of noticing. The same findings are now an index beside the
+>   picture, worst first, each with its state, its incident count and the sentence
+>   behind it, and clicking one selects and frames it. An empty list says explicitly
+>   that it is not a claim that everything is well — most nodes in a young landscape
+>   are unobserved, and §4 has always required that distinction of the colours.
+>
+>   §4's node gains **Incidents**, the count the engine already holds against a
+>   definition. It is the number behind the reason rather than a second opinion about
+>   it: two degraded processes are not equally degraded, and the count says which to
+>   look at first. It rides only on a process — an incident belongs to a token and
+>   only a process has tokens — and is absent everywhere else, because "no incidents"
+>   and "cannot have incidents" are different facts. A collapsed application sums what
+>   is parked behind all of its children rather than reporting the worst one's number.
+>
+> - **A node with a finding beats.** Motion is the one channel left once colour, size,
+>   shape and a glyph are each carrying something, and it is the channel the eye finds
+>   without being pointed at it — which is what a view somebody glances at needs. The
+>   worse the state, the *less* pulse, which is the metaphor read honestly rather than
+>   backwards: a degraded process is still working and beats quickly and twice, like
+>   something under strain; one that cannot do work beats once, slowly and heavily. A
+>   landscape of quick pulses is busy and coping; a landscape of slow ones is in
+>   trouble.
+>
+>   Each class keeps its own colour instead of both going red, because "it is broken"
+>   and "something inside it went wrong" are the two findings this view exists to tell
+>   apart. The beat is a ring of its own under the node, so the body's stroke goes on
+>   carrying §4's severity and the fill goes on carrying the kind. And it is bounded:
+>   past eighty beating nodes, and for anybody whose system asks for less movement,
+>   the rings stay and stop moving. A landscape where two hundred things are wrong is
+>   a picture of an outage, and two hundred simultaneous animations say less than a
+>   still frame while costing far more to paint.
 
 ### 7. A stated size budget, and a server-side fallback
 

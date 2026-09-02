@@ -112,7 +112,7 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, error) {
 			Key: d.Key, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version,
 			ApplicationID: d.ProjectID,
 			CanView:       s.canViewArtifact(r, d.ProjectID, d.DeployedBy, projs),
-			State:         state, Reason: reason,
+			State:         state, Reason: reason, Incidents: parked[d.Key],
 		}
 		for _, ref := range d.cp.CallActivities() {
 			call := panorama.Call{ElementID: ref.ElementId, CalledProcessID: ref.CalledProcessId}
