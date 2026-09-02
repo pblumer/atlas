@@ -65,7 +65,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   a render, so the box being typed in keeps its caret; the report's **numbers carry
   their own magnitude**, with the four duration tiles on one scale, waiting scaled to
   the worst element, utilisation to a full hundred, and each case's duration to the
-  slowest on its page; and stopping a batch leaves what it did readable.
+  slowest on its page; the run is **broken down by the outcome each case reached**,
+  ordered by size, keeping the row of an end event nothing reached and marking it as
+  such — and offering each outcome *once*, which is the regression guard for a
+  registry scan that used to see an element's external label as a second copy of it;
+  and stopping a batch leaves what it did readable.
 
   And the **scenario half**: the checkboxes an author ticks become the expectations a
   build exits on, resolved against the run that happened rather than the dataset in

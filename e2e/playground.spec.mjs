@@ -95,10 +95,10 @@ test("a waiting task becomes a button, and completing it repaints the diagram", 
   await task.locator("button").click();
 
   await expect(page.locator(".pg-result")).toContainText("completed");
-  await expect(page.locator(".pg-result")).toContainText("start → review → score → done");
+  await expect(page.locator(".pg-result")).toContainText("start → review → score → decide → done");
   await expect(page.locator(".pg-vars")).toContainText("approved");
   // The whole path is drawn now, and nothing is live any more.
-  await expect(page.locator(".token-badge")).toHaveCount(4);
+  await expect(page.locator(".token-badge")).toHaveCount(5);
   await expect(page.locator(".atlas-active")).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });
@@ -208,10 +208,10 @@ test("the heat map shades elements and flows, and names what was never reached",
   // marked as never reached rather than merely left plain.
   await expect(page.locator('.djs-element[data-element-id="review"].pg-heat-5')).toHaveCount(1);
   await expect(page.locator('.djs-element[data-element-id="f1"].pg-heat-5')).toHaveCount(1);
-  await expect(page.locator('.djs-element[data-element-id="f3"].pg-heat-0')).toHaveCount(1);
-  // A sequence flow is named by its ends on the wire; the client resolved f3 from
-  // score → done against its own diagram.
-  await expect(page.locator(".pg-cold")).toContainText("score → done");
+  await expect(page.locator('.djs-element[data-element-id="f6"].pg-heat-0')).toHaveCount(1);
+  // A sequence flow is named by its ends on the wire; the client resolved f6 from
+  // decide → manual against its own diagram.
+  await expect(page.locator(".pg-cold")).toContainText("decide → manual");
 
   // "Off" takes the shading away again, leaving the diagram as it was.
   await page.locator('#pg-overlay button[data-overlay="off"]').click();
@@ -533,7 +533,11 @@ test("a per-case rule is written against the diagram and judged case by case", a
   const rule = page.locator(".pg-rule").first();
   await rule.locator('[data-rule="when"]').fill("betrag < 1000");
   // The end events come off the canvas, the way the pool rows do: an author asserts
-  // against the outcome they drew rather than one they retyped.
+  // against the outcome they drew rather than one they retyped. Each of them once:
+  // bpmn-js registers an event's external label as an element of its own carrying
+  // the same business object, so a naive scan of the registry offers every outcome
+  // twice — invisibly, because the second option looks exactly like the first.
+  await expect(rule.locator("[data-rule-end] option")).toHaveCount(4);
   await rule.locator("[data-rule-end]").selectOption("done");
   await expect(rule.locator('[data-rule="then"]')).toHaveValue('end = "done"');
   // And the box stays editable, because not every assertion is about an end event.
@@ -648,12 +652,12 @@ test("a results row opens that case on the diagram", async ({ page }) => {
   // The diagram now shows that case's path, numbered in the order it went through:
   // the step number is what makes this a replay rather than a second heat map.
   await expect(page.locator('[data-container-id="review"] .token-badge')).toHaveText("2");
-  await expect(page.locator('[data-container-id="done"] .token-badge')).toHaveText("4");
+  await expect(page.locator('[data-container-id="done"] .token-badge')).toHaveText("5");
   await expect(page.locator(".pg-heat-5")).toHaveCount(0);
 
   // The strip names what is on screen instead of offering measures that are not.
   await expect(page.locator("#pg-overlay")).toContainText("case 1");
-  await expect(page.locator("#pg-overlay")).toContainText("4 steps");
+  await expect(page.locator("#pg-overlay")).toContainText("5 steps");
   await expect(page.locator('#pg-overlay button[data-overlay="runs"]')).toHaveCount(0);
   // And the row stays marked, so the number in the strip and the row agree.
   await expect(page.locator(".pg-cases tbody tr").first()).toHaveClass(/pg-open/);
@@ -661,7 +665,7 @@ test("a results row opens that case on the diagram", async ({ page }) => {
   // The case's own detail sits above the report rather than instead of it: the
   // reader came from the run and should not lose it to look at one case.
   await expect(page.locator("#pg-panel")).toContainText("Case 1");
-  await expect(page.locator("#pg-panel")).toContainText("start → review → score → done");
+  await expect(page.locator("#pg-panel")).toContainText("start → review → score → decide → done");
   await expect(page.locator("#pg-panel")).toContainText("Outcomes");
 
   await page.locator("#pg-case-close").click();
@@ -764,5 +768,32 @@ test("the report's numbers carry their own magnitude", async ({ page }) => {
   // one is found by looking rather than by reading fifty numbers.
   await expect(page.locator(".pg-cases td.pg-meter")).toHaveCount(2);
   await expect(page.locator(".pg-cases td.pg-meter i").first()).toHaveAttribute("style", "width:100.0%");
+  expect(page.__errors).toEqual([]);
+});
+
+test("the run is broken down by the outcome each case reached", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-batch").click();
+  await expect(page.locator(".pg-ends")).toBeVisible();
+
+  // A row per end event the author drew, named as they named it, ordered by how
+  // many cases came out there — the question "482 of 500 finished" cannot answer.
+  const rows = page.locator(".pg-ends tbody tr");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0)).toContainText("Genehmigt");
+  await expect(rows.nth(0)).toContainText("67%");
+  await expect(rows.nth(1)).toContainText("Abgelehnt");
+  await expect(rows.nth(1)).toContainText("33%");
+
+  // The gauge is scaled to the end event this run reached most.
+  await expect(rows.nth(0).locator(".pg-track i")).toHaveAttribute("style", "width:100.0%");
+  await expect(rows.nth(1).locator(".pg-track i")).toHaveAttribute("style", "width:50.0%");
+
+  // The branch nobody took keeps its row rather than being left out: an outcome the
+  // data never produced is the finding, and a missing row would hide it.
+  await expect(rows.nth(2)).toContainText("Zur Handprüfung");
+  await expect(rows.nth(2)).toContainText("0%");
+  await expect(rows.nth(2)).toHaveClass(/pg-unreached/);
+  await expect(rows.nth(2).locator(".pg-track i")).toHaveAttribute("style", "width:0.0%");
   expect(page.__errors).toEqual([]);
 });

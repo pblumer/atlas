@@ -4177,6 +4177,15 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
    foot of their tiles however many lines the number above them wrapped to. */
 .pg-facts .pg-track { margin-top: auto; }
 
+/* Where the cases came out. The end event carries the name somebody drew, which is
+   a phrase rather than an id, so it wraps where the counts beside it do not. An end
+   event the run never reached keeps its row and says so by being recessive — the
+   branch nobody took is a finding, and a row that looked like the others would let
+   a zero pass for a number. */
+.pg-ends td { padding-bottom: 9px; }
+.pg-ends td:first-child { white-space: normal; width: 99%; }
+.pg-ends tr.pg-unreached td { color: var(--muted); }
+
 /* The paths the data never took, listed rather than only shaded: on a large
    diagram a cold branch is easier to read from a list than to find by colour. */
 .pg-cold { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 8px; }
