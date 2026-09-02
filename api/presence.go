@@ -12,7 +12,7 @@ import (
 
 // This file answers one question the Organization page could not: of the accounts
 // listed there, which have somebody at the other end right now
-// (ADR-draft-user-presence).
+// (ADR-0228).
 //
 // The roster already says whether an account may sign in. That is a property of
 // the record and says nothing about the person: an account that has been enabled
@@ -191,7 +191,7 @@ func (s *Server) handlePresenceBeacon(w http.ResponseWriter, r *http.Request) {
 // handleUserPresence lists who is signed in right now, one entry per account with
 // at least one live session, ordered by user id so a client can diff two reads.
 // Admin-only, like the roster it annotates: who is at their desk is not something
-// a colleague's task list needs to know (ADR-draft-user-presence).
+// a colleague's task list needs to know (ADR-0228).
 //
 // It reads the session map only — no store, no run loop — which is what makes it
 // cheap enough for the Console to re-read every half minute without reloading the

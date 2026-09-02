@@ -512,7 +512,7 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/auth/logout":   "auth flow is not an agent capability",
 	"GET /api/v1/auth/me":        "auth flow is not an agent capability",
 	"GET /api/v1/auth/providers": "what the login screen offers a browser; an agent holds a credential already",
-	// Presence (ADR-draft-user-presence). The beacon is a browser saying its own tab
+	// Presence (ADR-0228). The beacon is a browser saying its own tab
 	// is open, and an agent holds a token rather than a session, so there is nothing
 	// for it to stamp. Reading who is signed in is account administration, and where
 	// a colleague is sitting is the last thing an agent should be able to fan out.

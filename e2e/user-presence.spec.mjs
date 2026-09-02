@@ -1,4 +1,4 @@
-// Who is signed in, from the browser (ADR-draft-user-presence; the Users card in
+// Who is signed in, from the browser (ADR-0228; the Users card in
 // app.js, viewConsoleOrg, and the beacon in the app shell).
 //
 // Two halves only a real DOM proves. The page renders a presence column from what

@@ -281,6 +281,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0225](0225-inbound-watch-budget.md) | An inbound watch has an hourly budget | Proposed |
 | [0226](0226-start-events-are-triggers.md) | A start event is a trigger, and the one that fires is the one that starts | Proposed |
 | [0227](0227-jira-read-bounds-and-progress.md) | A Jira read is bounded and moves forward | Proposed |
+| [0228](0228-user-presence.md) | User presence in the Console | Proposed |
 
 ## Status values
 

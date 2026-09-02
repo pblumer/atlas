@@ -9,8 +9,8 @@
     "de": "Die Benutzerliste unter Organization hat jetzt eine Spalte «Presence». Online heisst, jemand hat in den letzten fünf Minuten etwas getan; idle, dass eine Sitzung offen ist, aber unberührt; offline, dass für dieses Konto kein Browser mehr meldet. Bisher konnte die Liste nur sagen, ob ein Konto aktiviert ist — dieselbe Antwort für die Person, die gerade auf den Bildschirm schaut, wie für die, die im März gegangen ist. Die beiden letzten Zustände bekommt man nicht nebenbei richtig: Die Konsole fragt von sich aus nach, ein Tab hinter einem anderen Fenster sähe also ewig beschäftigt aus, und eine Sitzung überlebt den zugeklappten Laptop um bis zu zwölf Stunden. Deshalb meldet Ihr Browser einmal pro Minute zweierlei getrennt — dass der Tab offen ist, und ob ihn jemand angefasst hat. Gespeichert wird nichts: Die Anwesenheit wird aus den laufenden Sitzungen gelesen und aus nichts sonst, es gibt keinen Datensatz, kein Ereignis, nichts in der Sicherung und keine Möglichkeit, nach gestern zu fragen; nach einem Neustart zeigt sie niemanden, denn nach einem Neustart ist niemand angemeldet. Drei Zustände, nie welche Seite oder welche Aktion, und sehen tun es nur Administratorinnen."
   },
   "link": {
-    "label": "ADR-draft-user-presence",
-    "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/draft-user-presence.md"
+    "label": "ADR-0228",
+    "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0228-user-presence.md"
   },
   "tutorial": {
     "en": [

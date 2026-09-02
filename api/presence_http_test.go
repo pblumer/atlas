@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Presence over the wire (ADR-draft-user-presence): what the Organization page
+// Presence over the wire (ADR-0228): what the Organization page
 // reads, who may read it, and what it says about somebody who has not logged in.
 
 // presenceOf decodes the presence list and returns the entry for a user id.

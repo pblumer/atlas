@@ -90,7 +90,7 @@ const defaultSessionTTL = 12 * time.Hour
 // remain a login-time snapshot.
 //
 // The two timestamps below are what an administrator sees as presence
-// (ADR-draft-user-presence). They answer different questions and are
+// (ADR-0228). They answer different questions and are
 // deliberately not one field: lastSeen says this session is still reaching the
 // server, which a background poll satisfies on its own, while lastActive says a
 // person did something. Only both together tell "at the keyboard" from "tab left

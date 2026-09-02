@@ -189,7 +189,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   instead of leaving a second one behind. Drives the real `mountFormEditor` — the actual
   vendored form-js properties panel — against a mock `api` that captures the save.
 
-- **`user-presence.spec.mjs`** ([ADR-draft-user-presence](../docs/adr/draft-user-presence.md)):
+- **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
   **who is signed in**, in the Users card under Organization. The column must render the
   three states from what the roster carries, and keep itself current *without* reloading
   the page — an administrator half-way through a user form must still have it, and what

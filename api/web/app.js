@@ -152,7 +152,7 @@ async function logout() {
   route();
 }
 
-// ---------- Presence (ADR-draft-user-presence) ----------
+// ---------- Presence (ADR-0228) ----------
 // The browser tells the server two different things, and keeping them apart is the
 // whole feature. The beacon itself says "this tab is still open"; its `active` flag
 // says "somebody is using it". So the interval keeps running when the tab moves to
@@ -1986,7 +1986,7 @@ async function viewConsoleOrg() {
 
   const me = AUTH.user;
 
-  // Presence (ADR-draft-user-presence). The Status column says whether the account
+  // Presence (ADR-0228). The Status column says whether the account
   // may be used; this one says whether anybody is using it this minute. It is shown
   // only when login is enforced — with enforcement off there are no sessions, so
   // every row would read "offline" and mean nothing by it.
@@ -2190,7 +2190,7 @@ async function viewConsoleOrg() {
 
 // Presence goes stale while the page sits open, so it repaints itself. The cells
 // only — never the page — because an administrator half-way through a user form
-// should not have it wiped from under them every half minute (ADR-draft-user-presence).
+// should not have it wiped from under them every half minute (ADR-0228).
 //
 // Half the beacon's own interval, so a change is on screen inside a minute, and one
 // tiny admin-only read either way.

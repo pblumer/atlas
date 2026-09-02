@@ -1,4 +1,4 @@
-# ADR-DRAFT: User presence in the Console
+# ADR-0228: User presence in the Console
 
 - **Status:** Proposed
 - **Date:** 2026-09-02

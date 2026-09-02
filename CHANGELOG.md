@@ -19,7 +19,7 @@ _Changed_ / _Removed_ for each version.
   *idle* for a session that is open but untouched, *offline* for an account no browser is
   reporting for. Until now the list could only say whether an account was *enabled* — the
   same answer for the person reading the screen this second and for the one who left in
-  March ([ADR-draft-user-presence](docs/adr/draft-user-presence.md)).
+  March ([ADR-0228](docs/adr/0228-user-presence.md)).
 
   The distinction that makes it worth having is between the last two states, and neither
   falls out of "when did a request last arrive". The Console polls on its own, so a tab
