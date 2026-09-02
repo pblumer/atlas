@@ -277,3 +277,70 @@ var errJiraTest = errJira("jira: search returned HTTP 500")
 type errJira string
 
 func (e errJira) Error() string { return string(e) }
+
+// A full page means the read stopped at the bridge's cap and not at the end of the
+// result set, so the cursor must land past the page rather than inside it. Held back by
+// the safety lag it lands *inside* the page it just read, and the next poll asks Jira
+// for the same issues again — a watch that re-reads and re-publishes one page every
+// tick and never reaches the issue behind it. That is not a slow watch, it is a
+// stopped one.
+func TestJiraSourceLeavesAFullPageBehind(t *testing.T) {
+	f := &fakeJiraClient{pages: [][]any{{
+		jiraIssue("10001", "OPS-1", jiraT1, jiraT1),
+		jiraIssue("10002", "OPS-2", jiraT2, jiraT2),
+	}}}
+	src := jiraSource{client: f, now: time.Now}
+
+	// limit 2 against a two-issue answer: the page is full.
+	_, cursor, err := src.Read(context.Background(), inboundSubscription{
+		JQL: "project = OPS", LastEventID: "2026/09/01 09:58",
+	}, 2)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if want := mustParseJira(t, jiraT2).UTC().Format(jiraCursorLayout); cursor != want {
+		t.Errorf("cursor = %q, want the newest issue's own minute (%q): the lag protects the tip, "+
+			"and behind a full page it only holds the cursor inside the page just read", cursor, want)
+	}
+}
+
+// The residual case a minute-granular cursor cannot express: a full page whose issues
+// all share the cursor field's minute, read from a cursor that is already that minute.
+// No cursor separates them — JQL compares to the minute — so time paging cannot drain
+// the page. The watch steps past the minute rather than re-reading it for ever: that
+// costs the issues in that one minute beyond the cap, where standing still costs every
+// issue after it.
+func TestJiraSourceStepsPastAMinuteAFullPageCannotLeave(t *testing.T) {
+	f := &fakeJiraClient{pages: [][]any{{
+		jiraIssue("10001", "OPS-1", jiraT1, jiraT1),
+		jiraIssue("10002", "OPS-2", jiraT1, jiraT1),
+	}}}
+	src := jiraSource{client: f, now: time.Now}
+	at := mustParseJira(t, jiraT1)
+
+	_, cursor, err := src.Read(context.Background(), inboundSubscription{
+		JQL: "project = OPS", LastEventID: at.UTC().Format(jiraCursorLayout),
+	}, 2)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if want := at.Add(time.Minute).UTC().Format(jiraCursorLayout); cursor != want {
+		t.Errorf("cursor = %q, want the next minute (%q): a page this one cannot drain must not be re-read for ever", cursor, want)
+	}
+}
+
+// A page that is not full is the tip, and the tip is what the lag is for: an issue the
+// search index publishes late is still inside the next window, and its own mark makes
+// the re-read free.
+func TestJiraSourceKeepsTheLagAtTheTip(t *testing.T) {
+	f := &fakeJiraClient{pages: [][]any{{jiraIssue("10001", "OPS-1", jiraT2, jiraT2)}}}
+	src := jiraSource{client: f, now: time.Now}
+
+	_, cursor, err := src.Read(context.Background(), inboundSubscription{JQL: "project = OPS"}, 25)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if want := mustParseJira(t, jiraT2).Add(-jiraDefaultLag).UTC().Format(jiraCursorLayout); cursor != want {
+		t.Errorf("cursor = %q, want the newest issue minus the lag (%q)", cursor, want)
+	}
+}

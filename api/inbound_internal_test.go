@@ -653,17 +653,18 @@ func TestValidateInboundWatchNormalizes(t *testing.T) {
 }
 
 // A watch with its own cadence is read when it has elapsed and skipped when it has not.
-// Without a cadence it is read on every tick, which is what every clio subscription did
-// before per-watch pacing existed and still does.
+// Without a cadence a clio watch is read on every tick, which is what every clio
+// subscription did before per-watch pacing existed and still does; the kind's default
+// for the sources that need one is TestInboundDueUsesTheKindsDefaultCadence.
 func TestInboundDueRespectsAWatchsOwnCadence(t *testing.T) {
 	now := time.Unix(1_000_000, 0)
-	if !inboundDue(inboundSubscription{}, now) {
+	if !inboundDue(connectorKindClio, inboundSubscription{}, now) {
 		t.Error("a watch with no cadence of its own was skipped")
 	}
-	if inboundDue(inboundSubscription{PollSeconds: 60, LastPolledAt: now.Unix() - 30}, now) {
+	if inboundDue(connectorKindClio, inboundSubscription{PollSeconds: 60, LastPolledAt: now.Unix() - 30}, now) {
 		t.Error("a watch was read 30s into its own 60s cadence")
 	}
-	if !inboundDue(inboundSubscription{PollSeconds: 60, LastPolledAt: now.Unix() - 60}, now) {
+	if !inboundDue(connectorKindClio, inboundSubscription{PollSeconds: 60, LastPolledAt: now.Unix() - 60}, now) {
 		t.Error("a watch was skipped after its cadence had elapsed")
 	}
 }

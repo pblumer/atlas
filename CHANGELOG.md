@@ -489,6 +489,54 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A Jira watch could get stuck on one window and hold the whole Console with it.** A
+  jira watch resumes from a `created >=` / `updated >=` clause, held a safety lag behind
+  the newest issue it saw so an issue Jira's index publishes late is still inside the
+  next window ([ADR-0214](docs/adr/0214-jira-inbound-issue-watch.md)). That is right at
+  the tip of a query. Behind a **full** page it inverted: a page that filled the bridge's
+  batch limit stopped at the limit and not at the end of the result set, and subtracting
+  the lag put the next cursor *inside the page just read*. The watch then re-read and
+  re-published the same page every tick and never reached the issue behind it — for
+  ever. A bulk import, or a bulk transition on an `updated` watch, is all it took: a few
+  hundred issues sharing one minute.
+
+  Nothing about it looked broken. The reads succeeded, the publishes were real work, and
+  the engine correctly discarded every one against its durable high-water mark — while
+  each round spent a Jira search, a run-loop batch and two fsyncs, and every Console
+  request that has to reach the run loop queued behind them. The lag now applies only to
+  a page that is not full; behind a full page the cursor lands on the newest issue's own
+  minute, which `>=` re-reads, so the read moves without skipping anything. A page whose
+  issues *all* share one minute — which no minute-granular cursor can page through —
+  steps past that minute and logs `inbound_watch.minute_overflowed` rather than re-reading
+  it for ever ([ADR-draft-jira-read-bounds-and-progress](docs/adr/draft-jira-read-bounds-and-progress.md)).
+
+- **A jira watch polled every two seconds instead of every minute.** ADR-0214 gives a
+  watch a `pollSeconds` of its own and a *kind's default* for one that states none —
+  60 seconds for Jira, because a site rate-limits per site and a two-second poll per
+  watch spends that budget on empty answers. The default was never implemented: a watch
+  created without an explicit cadence fell through to the bridge's own tick and was read
+  thirty times more often than intended, each time for a Jira search, a run-loop round
+  trip, and the record write below.
+
+- **Every watch rewrote its record on every tick.** The bridge recorded `lastPolledAt`
+  for each due subscription on each tick, and re-saved the resume cursor even when the
+  read had produced the one already stored. A design-time record is written with an
+  fsync of the file and one of its directory, on the run-loop goroutine — so a handful of
+  watches meant a continuous fsync stream on the single writer, in front of every request
+  that needs it. `lastPolledAt` is now written only for a watch whose cadence actually
+  reads it back, and a cursor only when it moved.
+
+- **An uncapped Jira search had no ceiling at all.** `maxResults="0"` means "read every
+  match", and the client paged until the site ran out, held every result in memory, and
+  handed the lot to the engine as one process variable to encode and fsync — so a JQL
+  that matched far more than its author believed was an out-of-memory in the server
+  rather than a failed task. The account search had a second edge: it answers with a bare
+  array, carrying no total and no page token, so a server that ignored `startAt` was read
+  for ever. An uncapped read now stops at 5000 results with an error naming the fix. It
+  fails the job — retry, then an incident — rather than truncating, because a model told
+  it read everything when it read the first 5000 is the worse outcome. A task that states
+  its own `maxResults` is untouched.
+
 - **A message start event ran the branches nobody triggered — and could feed itself
   forever.** A start event is a trigger, and BPMN instantiates at the one that fired.
   Atlas seeded a token at **every** root start event whatever created the instance, which
