@@ -12,6 +12,7 @@ import { installDevShortcut, markDevField } from "./dev-view.js";
 import { devLang } from "./dev-lang.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
+import { attachIdCheck } from "./idcheck.js";
 import { migrateInstanceFlow } from "./migrationdialog.js";
 // Which keys a form-js schema binds — the Developer View reads it to offer a linked
 // form's fields as variables, the incident's repair form reads it to know which keys a
@@ -624,7 +625,26 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     toast("could not open diagram: " + e.message, "err");
   }
 
-  const rerender = wireProperties(root, modeler, api, projectId, toast);
+  // identity.draftId is the draft this editing session addresses — the id the diagram
+  // was opened under, null for one that has never been saved. It is not the same thing
+  // as the process id on the canvas: the author can retype that, and the two only
+  // agree again once the save has moved the record (ADR-draft-artifact-id-renames).
+  // Save reads it to ask for a rename rather than a second draft; the Process ID field
+  // reads it to know which id is its own and therefore not a collision.
+  //
+  // fromDeployment marks the one session where Save legitimately lands on a draft that
+  // already exists: a deployed definition opened read-only and saved back as an
+  // editable draft is the same process, so the collision is the point rather than an
+  // accident — it is offered as an explicit overwrite instead of a flat refusal.
+  const identity = { draftId: draftId != null ? draftId : null, fromDeployment: draftId == null && key != null };
+  // ownId is the id this session may save onto without colliding with somebody else:
+  // the draft it opened, or — for a deployed definition being pulled back into a draft
+  // — that process's own id, where landing on the existing draft is the point and is
+  // confirmed rather than refused. Everything else is a foreign artifact.
+  const openedProcessId = ((draftKeyProcess(modeler) || {}).id || "");
+  identity.ownId = () => identity.draftId || (identity.fromDeployment ? openedProcessId : "") || "";
+
+  const rerender = wireProperties(root, modeler, api, projectId, toast, identity);
   const refreshBadges = makeImplementBadges(root, modeler);
   refreshBadges(); // reflect the initial tab for the diagram just imported
   const refreshPoolCaptions = makePoolProcessCaptions(modeler);
@@ -638,7 +658,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     refreshBadges();
     playground.setActive(activeTab(root) === "playground");
   });
-  wireActions(root, modeler, api, toast, projectId);
+  wireActions(root, modeler, api, toast, projectId, identity);
   wireEditorVars(root, modeler, api);
   wireProblems(root, modeler, api);
   wireResizer(root, modeler);
@@ -4004,6 +4024,18 @@ function definitionsOf(modeler) {
   try { return modeler.get("canvas").getRootElement().businessObject.$parent; } catch { return null; }
 }
 
+// draftKeyProcess returns the <bpmn:process> the draft is filed under. A draft's store
+// key is its process id (ADR-0021) and the server reads the *first* process in the
+// definitions (processIdentity), so for a single-process diagram that is the only one
+// and for a collaboration it is the first pool's: renaming that process renames the
+// draft, while renaming another pool's does not. Everything that treats the Process ID
+// field as an identity — the live availability check — asks this first.
+function draftKeyProcess(modeler) {
+  const defs = definitionsOf(modeler);
+  if (!defs || !defs.rootElements) return null;
+  return defs.rootElements.find((e) => /:Process$/.test((e && e.$type) || "")) || null;
+}
+
 // Messages are top-level <bpmn:message> declarations shared by reference: a throw
 // event and the catch events waiting for it must point at the SAME message (same
 // name and correlation key) to correlate. These helpers let the editor treat
@@ -4780,7 +4812,7 @@ function groupifyPanel(body, ctl) {
   }
 }
 
-function wireProperties(root, modeler, api, projectId, toast) {
+function wireProperties(root, modeler, api, projectId, toast, identity) {
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
   const nameEl = root.querySelector("#p-name");
@@ -4891,7 +4923,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       <h3>Process</h3>
       <label class="field"><span>Process name</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
       <label class="field"><span>Process ID</span><input type="text" id="f-procid" value="${esc(proc.id || "")}" placeholder="order-fulfillment"/></label>
-      <p class="muted" style="font-size:12px">Each pool deploys as its own process; the <b>Process ID</b> is that deployment's identity — instances group by it, and renaming it deploys a new process rather than a new version.</p>
+      <p class="muted" style="font-size:12px">Each pool deploys as its own process; the <b>Process ID</b> is that deployment's identity — instances group by it, and renaming it deploys a new process rather than a new version. The <i>first</i> pool's process id is also what this draft is stored under, so renaming that one moves the draft on the next Save.</p>
       ${documentationField(proc, "f-procdoc", "What this process achieves, who it serves, when it runs…")}
       <p class="muted" style="font-size:12px">Two descriptions, two subjects: the one above documents the <b>pool</b> (the participant), this one the <b>process</b> it executes. Every element inside takes its own.</p>
       ${startVarsHTML}`;
@@ -4906,6 +4938,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
       const v = (e.target.value || "").trim();
       if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast("invalid process id", "err"); } }
     });
+    // Only the pool whose process keys the draft is renaming the artifact; the others
+    // deploy under their own id and collide with nothing on disk.
+    if (identity && draftKeyProcess(modeler) === proc) {
+      attachIdCheck(body.querySelector("#f-procid"), {
+        api, kind: "drafts", noun: "draft", own: identity.ownId,
+      });
+    }
     wireDocumentation(body, modeler, element, bo);
     wireDocumentation(body, modeler, element, proc, "f-procdoc");
     if (activeTab(root) === "implement") wireStartVars(body, modeler, element, proc, savePreservingPanel);
@@ -4949,7 +4988,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <h3>Process</h3>
           <label class="field"><span>Name</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
           <label class="field"><span>Process ID</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
-          <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by. Renaming it and deploying creates a new process rather than a new version.</p>
+          <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by, and it is also what this draft is stored under &mdash; so <b>renaming it moves the draft</b> to the new id on the next Save rather than leaving a copy behind at the old one. An id another draft already holds is refused, never overwritten. Renaming it and deploying creates a new process rather than a new version.</p>
           ${documentationField(rootBo, "f-doc", "What this process achieves, who it serves, when it runs…")}
           <p class="muted" style="font-size:12px">The <b>Documentation</b> is the process's own description — the place for the summary a reader needs before following the diagram. Every element takes one too; select it to write its part.</p>
           <label class="field"><span>Version tag</span><input type="text" id="f-pver" value="${esc(rootBo.versionTag || "")}" placeholder="1.0.0"/></label>
@@ -4972,6 +5011,14 @@ function wireProperties(root, modeler, api, projectId, toast) {
           const v = (e.target.value || "").trim();
           if (v) { try { modeling.updateProperties(rootEl, { id: v }); } catch { toast("invalid process id", "err"); } }
         });
+        // The Process ID is the draft's filename on the server, so it is checked as it
+        // is typed: an id another draft already holds turns the field red here rather
+        // than coming back as a refused save (ADR-draft-artifact-id-renames).
+        if (identity && draftKeyProcess(modeler) === rootBo) {
+          attachIdCheck(body.querySelector("#f-pid"), {
+            api, kind: "drafts", noun: "draft", own: identity.ownId,
+          });
+        }
         body.querySelector("#f-pver").addEventListener("change", (e) => {
           const v = (e.target.value || "").trim();
           try { modeling.updateProperties(rootEl, { versionTag: v || undefined }); } catch { /* ignore */ }
@@ -6234,17 +6281,23 @@ function wireProperties(root, modeler, api, projectId, toast) {
             // edits survive the navigation.
             fcallpid.value = pid;
             saveCall();
-            const savePath = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+            const proj = projectId ? "&projectId=" + encodeURIComponent(projectId) : "";
+            const savePath = (from) => "/api/v1/drafts?from=" + encodeURIComponent(from) + proj;
             const { xml: callerXml } = await modeler.saveXML({ format: true });
-            await api("POST", savePath, callerXml, true);
+            // The caller is saved as itself, so a Process ID retyped in this session
+            // moves its draft here too rather than forking one.
+            const saved = await api("POST", savePath(identity.draftId || ""), callerXml, true);
+            identity.draftId = saved.processId;
             if (collab && collab.markSaved) collab.markSaved();
             // Scaffold the child only if no draft already holds that id — never clobber
-            // existing work; just open it in that case.
+            // existing work; just open it in that case. from="" makes that the server's
+            // rule rather than only this check's, so a draft created between the two
+            // refuses instead of being overwritten (ADR-draft-artifact-id-renames).
             const existing = await api("GET", "/api/v1/drafts").catch(() => []);
             if ((existing || []).some((d) => (d.processId || "") === pid)) {
               toast(`Opening existing draft “${pid}”`, "ok");
             } else {
-              await api("POST", savePath, calleeXML(pid, pid), true);
+              await api("POST", savePath(""), calleeXML(pid, pid), true);
               toast(`Created called process “${pid}”`, "ok");
             }
             location.hash = `#/modeler/draft/${encodeURIComponent(pid)}`;
@@ -6766,30 +6819,72 @@ function wireDeployJSONEditors(container) {
   }
 }
 
-function wireActions(root, modeler, api, toast, projectId) {
+function wireActions(root, modeler, api, toast, projectId, identity) {
   // Save persists the diagram as a draft (raw XML, no compile), keyed by process
   // id, so incomplete work survives and can be reopened from the Modeler home. A
   // projectId (set when the editor was opened from a project's "Create new") files
   // the draft into that project (ADR-0034).
+  //
+  // ?from= names the draft this session opened, so the server can tell a rename from a
+  // create: retyping the Process ID moves the record instead of leaving the old draft
+  // behind as a duplicate, and a save onto an id another draft already holds comes back
+  // 409 rather than overwriting it (ADR-draft-artifact-id-renames).
   const saveBtn = root.querySelector("#save");
-  saveBtn.addEventListener("click", async () => {
+
+  // saveDraft persists the diagram once. `retried` guards the one recovery below, so a
+  // repeated 409 stops rather than looping.
+  async function saveDraft(retried) {
     saveBtn.disabled = true;
     try {
       const { xml } = await modeler.saveXML({ format: true });
-      const path = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+      const path = "/api/v1/drafts?from=" + encodeURIComponent(identity.draftId || "") +
+        (projectId ? "&projectId=" + encodeURIComponent(projectId) : "");
       const d = await api("POST", path, xml, true);
       root.querySelector(".crumb-current").textContent = d.name || d.processId || "Draft";
       docTitle(`${d.name || d.processId || "Draft"} · Modeler`);
-      toast(`Saved draft “${d.name || d.processId}”`, "ok");
       // Draft is now persisted: clear the collab unsaved-work guard so a co-editor's
       // deferred change (held back to protect these edits) can sync in (ADR-0140).
       if (collab && collab.markSaved) collab.markSaved();
+      if (d.renamedFrom) {
+        // The draft moved. Everything keyed on the old id is stale — the route, the live
+        // session (ADR-0140), the project the crumbs resolved — so reopen it under the
+        // new id rather than patching each in place. What the server holds is what was
+        // just saved, so the reload costs nothing but the undo history.
+        toast(`Renamed draft “${d.renamedFrom}” → “${d.processId}”`, "ok");
+        identity.draftId = d.processId;
+        location.hash = "#/modeler/draft/" + encodeURIComponent(d.processId);
+        return;
+      }
+      toast(`Saved draft “${d.name || d.processId}”`, "ok");
+      if (identity.draftId !== d.processId) {
+        // First save of a new diagram: this session now addresses a stored draft, so the
+        // next save is a plain update and the URL points at it. replaceState rather than
+        // a navigation, so the canvas, its undo history and any live session stay put.
+        identity.draftId = d.processId;
+        identity.fromDeployment = false;
+        history.replaceState(null, "", "#/modeler/draft/" + encodeURIComponent(d.processId));
+      }
     } catch (e) {
+      // A 409 says another draft already holds this process id, and the save refused
+      // rather than overwriting it (ADR-draft-artifact-id-renames). Pulling a deployed
+      // definition back into an editable draft is the one case where landing on an
+      // existing draft is the point — it is the same process — so there the overwrite
+      // is offered by name. Everywhere else the id is the author's to change and the
+      // refusal stands.
+      const proc = draftKeyProcess(modeler);
+      if (e.status === 409 && identity.fromDeployment && !retried && proc && proc.id) {
+        if (window.confirm(`${e.message}\n\nThis diagram is the deployed “${proc.id}”. Overwrite that draft with it?`)) {
+          identity.draftId = proc.id; // the retry is then a plain update of that draft
+          await saveDraft(true);
+          return;
+        }
+      }
       toast("save failed: " + e.message, "err");
     } finally {
       saveBtn.disabled = false;
     }
-  });
+  }
+  saveBtn.addEventListener("click", () => saveDraft(false));
 
   // Auto-layout re-flows the diagram: the current model is sent to the server,
   // which discards its diagram interchange and regenerates a clean left-to-right

@@ -447,6 +447,14 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/documentation/{id}":                      "pruning published history is a human decision, not an agent action",
 	"POST /api/v1/processes/{processId}/documentation/prune": "retention over published history is a human decision, not an agent action",
 
+	// Artifact id availability (ADR-draft-artifact-id-renames): a keystroke-level
+	// probe that colours the Modeler's ID field while it is being typed. An agent
+	// does not type; it saves, and the save itself is the authority — it refuses a
+	// colliding id with a 409 that names what is in the way. Exposing the probe would
+	// only invite an agent to ask first and then race the answer.
+	"GET /api/v1/drafts/{id}/availability": "a live check for a field being typed; an agent learns the same thing from the save's 409",
+	"GET /api/v1/forms/{id}/availability":  "a live check for a field being typed; an agent learns the same thing from the save's 409",
+
 	// Secrets: credential storage; an agent must never read or write it.
 	"GET /api/v1/secrets":           "credential storage is not an agent capability",
 	"PUT /api/v1/secrets/{name}":    "credential storage is not an agent capability",

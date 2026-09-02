@@ -354,6 +354,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Renaming a saved diagram or form left a duplicate — or silently overwrote another
+  one.** A draft is stored under its process id and a form under the id a user task
+  binds to, but the save only ever saw the id in front of it, never which record the
+  author was editing. So retyping the Process ID and saving wrote a *second* draft and
+  left the first in place, and if something already held the new id, the save landed on
+  top of it: the artifact that was there was gone, with no warning and no question. The
+  form editor had a quieter version of the same defect — the Design pane's **ID** field
+  edited the schema and nothing else, so the chip in the toolbar went on showing the id
+  the form was really stored under, the panel showed the id the author had typed, and
+  the rename never happened (an export of that form then carried the typed id, so
+  re-importing it forked a copy). The save now names the record it is editing (`?from=`
+  for a draft, `"from"` for a form): a changed id **moves** the record, carrying its
+  application and its creator, and an id another artifact already holds is refused with
+  409 rather than overwritten. The Modeler checks the id as it is typed — the field
+  turns red and names what holds it — and the form editor's chip is now the schema's id
+  itself, dashed while a rename is unsaved, with Save asking first because a user task
+  still bound to the old id will find no form. The two places where landing on something
+  that already exists is the point rather than an accident — importing a `.bpmn`/`.form`
+  file over the artifact it came from, and pulling a deployed definition back into a
+  draft — now ask by name instead of doing it silently or refusing it
+  ([ADR-draft-artifact-id-renames](docs/adr/draft-artifact-id-renames.md)).
+
 - **A task's *out* section showed variables the neighbouring branch produced.** The
   replay's in/out card inferred what an element wrote by diffing the variables it saw on
   entry against the ones that stood when it finished — which on a parallel fork spans the
