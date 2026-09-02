@@ -3779,6 +3779,18 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .pg-results-scroll { overflow: auto; min-height: 0; }
 .pg-cases { min-width: 100%; }
 .pg-cases th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
+/* A row is a way into its own case, so it looks like one. The open row stays marked
+   while the diagram shows it: the number in the strip and the row under it have to
+   be visibly the same case. */
+.pg-cases tbody tr { cursor: pointer; }
+.pg-cases tbody tr.pg-open { background: var(--accent-soft); }
+.pg-cases tbody tr.pg-open td:first-child {
+  font-weight: 600; color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* While a case is on the diagram the strip names it instead of offering measures. */
+.pg-overlay b { font-weight: 600; }
 /* And so do the modelling affordances. The Playground *runs* the diagram — the
    sandbox compiled the model as it stood when it started, so a shape added here
    would not be in what is running, and the palette offering it is the panel

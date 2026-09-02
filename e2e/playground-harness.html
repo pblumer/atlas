@@ -190,7 +190,20 @@
         if (method === "POST" && /\/cases$/.test(url)) { phase = "parked"; return theCase(); }
         if (method === "GET" && /\/tasks$/.test(url)) return tasks();
         if (method === "GET" && /\/overlay$/.test(url)) return visits();
-        if (method === "GET" && /\/cases\/\d+$/.test(url)) return theCase();
+        if (method === "GET" && /\/cases\/\d+$/.test(url)) {
+          // A case read by key is one of the batch's rows: the third one is the
+          // parked one, so opening it shows a case that is still standing somewhere.
+          const key = url.match(/\/cases\/(\d+)$/)[1];
+          const row = CASES.find((c) => c.instanceKey === key);
+          if (row) {
+            return { instanceKey: key, state: row.state, incidents: row.incidents,
+              variables: row.variables,
+              path: row.state === "completed"
+                ? ["start", "review", "score", "done"]
+                : ["start", "review"] };
+          }
+          return theCase();
+        }
         if (method === "POST" && /\/tasks\/\d+\/complete$/.test(url)) { phase = "done"; return { completed: true }; }
         if (method === "POST" && /\/run$/.test(url)) {
           return { occurrences: 1, quiescent: true, simTime: "2026-03-05T08:01:00Z", paused: false };

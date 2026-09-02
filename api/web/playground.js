@@ -279,6 +279,12 @@ export function attachPlayground(root, { api, toast, modeler }) {
     run: null,       // the last run status
     report: null,
     results: null,   // one page of the results table: {total, offset, rows}
+    // One case from that table, opened to be read rather than driven. It is a field
+    // of its own rather than Step mode's: the two are different questions about the
+    // same sandbox, and leaving one behind in the other's view shows a case nobody
+    // asked for.
+    inspect: null,   // {index, key, end, durationMillis} — the row that was clicked
+    inspected: null, // what the server said about it
     heat: null,      // the heat map, once a run has produced one
     // Which measure shades the diagram, or "off". One at a time: see OVERLAYS.
     overlay: "off",
@@ -587,6 +593,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.verdict = null;
     state.comparison = null;
     state.results = null;
+    closeCase();
     if (state.source === "csv") {
       if (!state.csv) throw new Error("choose a CSV file, or take the dataset from the list or the generator");
       const form = new FormData();
@@ -620,6 +627,24 @@ export function attachPlayground(root, { api, toast, modeler }) {
 
   // readResults fetches one page. The rows are never held whole — a run of fifty
   // thousand is fifty thousand rows in the sandbox's store and one page in here.
+  // openCase reads one case of a finished batch, so the diagram shows the path *that
+  // case* took rather than what all of them did together.
+  //
+  // It reads rather than drives: the sandbox's Step controls act on the whole
+  // sandbox, and offering them here would invite stepping a run that is over.
+  async function openCase(row) {
+    state.inspect = { index: row.index, key: row.instanceKey, end: row.end, durationMillis: row.durationMillis };
+    state.inspected = await api("GET", path(`/cases/${encodeURIComponent(row.instanceKey)}`));
+    drawCanvas();
+  }
+
+  function closeCase() {
+    if (!state.inspect) return;
+    state.inspect = null;
+    state.inspected = null;
+    drawCanvas();
+  }
+
   async function readResults(offset) {
     state.results = await api("GET", path(`/results?offset=${Math.max(0, offset)}&limit=${resultsPageSize}`));
   }
@@ -731,6 +756,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.verdict = null;
     state.comparison = null;
     state.results = null;
+    closeCase();
     await refresh();
   }
 
@@ -841,8 +867,40 @@ export function attachPlayground(root, { api, toast, modeler }) {
       overlays = modeler.get("overlays");
       registry = modeler.get("elementRegistry");
     } catch { return; }
-    if (state.overlay !== "off" && state.heat) drawOverlay(canvas, overlays, registry);
+    if (state.inspect && state.inspected) drawCase(canvas, overlays, registry);
+    else if (state.overlay !== "off" && state.heat) drawOverlay(canvas, overlays, registry);
     else drawRun(canvas, overlays, registry);
+  }
+
+  // drawCase paints one case's own path: the elements it went through, numbered in
+  // the order it reached them.
+  //
+  // The number is what makes this a replay rather than a second coverage map. An
+  // element the case looped through carries every step it was, because "3, 7" is the
+  // loop — and a single count would hide the thing somebody opened the case to see.
+  function drawCase(canvas, overlays, registry) {
+    const steps = new Map();
+    (state.inspected.path || []).forEach((id, i) => {
+      if (!steps.has(id)) steps.set(id, []);
+      steps.get(id).push(i + 1);
+    });
+    const last = (state.inspected.path || [])[(state.inspected.path || []).length - 1];
+    const running = state.inspected.state !== "completed";
+    for (const [id, at] of steps) {
+      if (!registry.get(id)) continue;
+      // The last element of an unfinished case is where it stands now, not somewhere
+      // it has been: a parked case reads as stuck there, which is the point.
+      const marker = running && id === last ? "atlas-active" : "atlas-visited";
+      canvas.addMarker(id, marker);
+      drawn.markers.push([id, marker]);
+      try {
+        drawn.overlays.push(overlays.add(id, "pg-visits", {
+          position: { bottom: 4, right: 4 },
+          html: `<div class="token-badges"><div class="token-badge history"
+            title="step ${at.join(", ")} of this case">${at.join(", ")}</div></div>`,
+        }));
+      } catch { /* shape without graphics */ }
+    }
   }
 
   // drawRun paints a single case onto the diagram: every element a token has
@@ -946,8 +1004,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     </div>`;
   }
 
-  function resultHTML() {
-    const c = state.result;
+  function resultHTML(c) {
     if (!c) return `<p class="muted">No case yet. Press <b>+ Case</b> to start one.</p>`;
     const vars = Object.entries(c.variables || {})
       .map(([k, v]) => `<tr><td>${esc(k)}</td><td class="mono">${esc(v)}</td></tr>`).join("");
@@ -1314,10 +1371,22 @@ export function attachPlayground(root, { api, toast, modeler }) {
         left, then press <b>Run batch</b>.</p>`;
     }
     return `
+      ${inspectedCaseHTML()}
       ${runStatusHTML()}
       ${verdictHTML()}
       ${comparisonHTML()}
       ${reportHTML()}`;
+  }
+
+  // inspectedCaseHTML is the case a reader clicked, above the report rather than
+  // instead of it: they came here from the run, and going back to it should not cost
+  // them the numbers they were reading.
+  function inspectedCaseHTML() {
+    if (!state.inspect) return "";
+    return `
+      <div class="pg-sec"><b>Case ${state.inspect.index + 1}</b>
+        <span class="muted">of ${state.results ? state.results.total : 0}</span></div>
+      ${resultHTML(state.inspected)}`;
   }
 
   function runStatusHTML() {
@@ -1425,7 +1494,9 @@ export function attachPlayground(root, { api, toast, modeler }) {
           <table class="pg-table pg-cases">
             <thead><tr><th>case</th><th>outcome</th><th>duration</th><th>incidents</th>
               ${names.map((n) => `<th>${esc(n)}</th>`).join("")}</tr></thead>
-            <tbody>${rows.map((row) => `<tr${row.incidents || broke.has(row.index) ? ' class="pg-bad"' : ""}>
+            <tbody>${rows.map((row) => `<tr data-case="${esc(row.index)}" title="Show this case on the diagram"
+              class="${row.incidents || broke.has(row.index) ? "pg-bad " : ""}${
+                state.inspect && state.inspect.index === row.index ? "pg-open" : ""}">
               <td>${row.index + 1}${broke.has(row.index) ? ' <span title="This case broke a rule">&#10007;</span>' : ""}</td>
               <td class="mono">${esc(row.end || (row.state === "completed" ? "" : row.state))}</td>
               <td>${row.ended ? esc(fmtDur(row.durationMillis)) : "\u2014"}</td>
@@ -1519,8 +1590,9 @@ export function attachPlayground(root, { api, toast, modeler }) {
       ? "Nothing is deployed and no connector can be called — the sandbox has none."
       : batching
         ? running ? "Running the dataset. Stop leaves what it did readable."
-          : state.report ? "The report is in the panel; the overlay over the diagram shades it."
-            : "Give it a dataset and a timing profile, then run it."
+          : state.inspect ? "One case is on the diagram. Back to the run puts the whole run back."
+            : state.report ? "The report is in the panel; a results row puts one case on the diagram."
+              : "Give it a dataset and a timing profile, then run it."
         : state.tasks.length
           ? "A task is waiting for you: complete it in the panel."
           : "Step one occurrence at a time, or run the case to rest.";
@@ -1545,6 +1617,21 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // A legend rather than a colour alone, because a shade only means something
   // against a scale — "dark" says nothing until it says "dark is 322 cases".
   function overlayStripHTML() {
+    // While a case is open the canvas shows that case, not the run, so the measures
+    // are not offered: a button that says "Waiting" over a diagram drawing one case's
+    // path would be naming something that is not on screen.
+    if (state.inspect) {
+      const c = state.inspected || {};
+      const steps = (c.path || []).length;
+      return `
+        <span class="muted">Showing</span>
+        <b>case ${state.inspect.index + 1}</b>
+        <span class="muted">${esc(c.state || "")}${
+          state.inspect.end ? ` at ${esc(state.inspect.end)}` : ""} · ${steps} step${steps === 1 ? "" : "s"}${
+          state.inspect.durationMillis ? ` · ${esc(fmtDur(state.inspect.durationMillis))}` : ""}</span>
+        <span style="flex:1"></span>
+        <button id="pg-case-close">Back to the run</button>`;
+    }
     const key = state.overlay;
     const tab = (k, label, title) =>
       `<button data-overlay="${k}"${k === key ? ' class="active"' : ""} title="${esc(title)}">${esc(label)}</button>`;
@@ -1588,7 +1675,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
         outcomes, the durations, where the cases waited, and the run over simulated time.</p>`;
     }
     if (state.mode === "batch") return batchAnalysisHTML();
-    return `<div class="pg-sec"><b>Case</b></div>${resultHTML()}`;
+    return `<div class="pg-sec"><b>Case</b></div>${resultHTML(state.result)}`;
   }
 
   // ---- events ---------------------------------------------------------------
@@ -1621,6 +1708,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       // Each mode paints the canvas its own way, and the heat map belongs to the
       // batch: stepping through a case while the diagram is shaded by a previous
       // run would be two answers on one picture.
+      closeCase();
       if (state.mode !== "batch") state.overlay = "off";
       else if (state.overlay === "off" && state.heat) state.overlay = "runs";
       drawCanvas();
@@ -1687,6 +1775,18 @@ export function attachPlayground(root, { api, toast, modeler }) {
     }
     if (e.target.closest("#pg-keep-baseline")) {
       guard("keep the baseline", keepBaseline);
+      return;
+    }
+    if (e.target.closest("#pg-case-close")) {
+      closeCase();
+      render();
+      return;
+    }
+    const caseRow = e.target.closest("tr[data-case]");
+    if (caseRow) {
+      const row = ((state.results && state.results.rows) || [])
+        .find((r) => r.index === Number(caseRow.dataset.case));
+      if (row) guard("show the case", () => openCase(row));
       return;
     }
     const page = e.target.closest("#pg-page-prev, #pg-page-next");

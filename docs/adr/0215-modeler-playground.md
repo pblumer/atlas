@@ -286,6 +286,28 @@ endpoint. A request carrying both a list and a description is refused rather tha
 resolved — it states two different things about what is about to run, and picking
 one silently is how a run comes to mean something other than what was asked.
 
+### One case out of the run
+
+A results row opens the case it names: the diagram drops the run's aggregate and
+draws that one case's path instead. It is the last thing the analysis cannot do — a
+report says the p90 is twenty-nine hours, a rule says four cases broke it, and both
+of them leave the reader wanting the one case in front of them.
+
+The steps are **numbered in the order the case reached them**, and that number is the
+whole difference between this and a second heat map: an element a case looped through
+carries every step it was, because "3, 7" is the loop and a single count would hide
+exactly what somebody opened the case to see. An unfinished case is drawn standing
+where it stopped rather than merely visited there, which is what a stuck case is
+opened for.
+
+It **reads rather than drives**. Step mode's controls act on the whole sandbox, so
+offering them over a finished batch would invite stepping a run that is over; the
+case is a view, and the one control is the way back to the run. The strip over the
+canvas names what is on screen instead of offering measures that are not being
+drawn, and the case's detail sits *above* the report rather than instead of it — the
+reader came from the run, and going back to it should not cost them the numbers they
+were reading.
+
 ### From a screen somebody reads to a check something runs
 
 A report answers "how did that go?" and needs a person to judge it. Two things

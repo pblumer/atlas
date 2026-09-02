@@ -630,3 +630,58 @@ test("the overlay shades the diagram by one measure at a time", async ({ page })
   await expect(page.locator('[data-container-id="score"] .token-badge')).toHaveText("3m");
   expect(page.__errors).toEqual([]);
 });
+
+test("a results row opens that case on the diagram", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-batch").click();
+  await expect(page.locator("#pg-results")).toBeVisible();
+  // The run's own picture first: every element counted together.
+  await expect(page.locator('[data-container-id="review"] .token-badge')).toHaveText("3");
+
+  await page.locator(".pg-cases tbody tr").first().click();
+
+  // It reads the case rather than driving it — Step's controls act on the whole
+  // sandbox, and offering them over a finished run would invite stepping it.
+  const read = (await calls(page)).find((c) => c.method === "GET" && /\/cases\/11$/.test(c.url));
+  expect(read).toBeTruthy();
+
+  // The diagram now shows that case's path, numbered in the order it went through:
+  // the step number is what makes this a replay rather than a second heat map.
+  await expect(page.locator('[data-container-id="review"] .token-badge')).toHaveText("2");
+  await expect(page.locator('[data-container-id="done"] .token-badge')).toHaveText("4");
+  await expect(page.locator(".pg-heat-5")).toHaveCount(0);
+
+  // The strip names what is on screen instead of offering measures that are not.
+  await expect(page.locator("#pg-overlay")).toContainText("case 1");
+  await expect(page.locator("#pg-overlay")).toContainText("4 steps");
+  await expect(page.locator('#pg-overlay button[data-overlay="runs"]')).toHaveCount(0);
+  // And the row stays marked, so the number in the strip and the row agree.
+  await expect(page.locator(".pg-cases tbody tr").first()).toHaveClass(/pg-open/);
+
+  // The case's own detail sits above the report rather than instead of it: the
+  // reader came from the run and should not lose it to look at one case.
+  await expect(page.locator("#pg-panel")).toContainText("Case 1");
+  await expect(page.locator("#pg-panel")).toContainText("start → review → score → done");
+  await expect(page.locator("#pg-panel")).toContainText("Outcomes");
+
+  await page.locator("#pg-case-close").click();
+  await expect(page.locator('[data-container-id="review"] .token-badge')).toHaveText("3");
+  await expect(page.locator("#pg-panel")).not.toContainText("Case 1");
+  expect(page.__errors).toEqual([]);
+});
+
+test("an unfinished case is drawn standing where it stopped", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-batch").click();
+  // The third row is the one parked behind an incident.
+  await page.locator(".pg-cases tbody tr").nth(2).click();
+
+  await expect(page.locator("#pg-overlay")).toContainText("case 3");
+  await expect(page.locator("#pg-overlay")).toContainText("2 steps");
+  // Where it stands now is live, not merely visited — that is what somebody opens a
+  // stuck case to see.
+  await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
+  await expect(page.locator('.djs-element[data-element-id="start"].atlas-visited')).toHaveCount(1);
+  await expect(page.locator('.djs-element[data-element-id="done"].atlas-visited')).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
