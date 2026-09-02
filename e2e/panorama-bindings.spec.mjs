@@ -151,6 +151,10 @@ function installMock(page, { role = "owner", onPut, observing = true, drift = dr
     }
     if (path === `/api/v1/panorama/models/${modelId}/bindings/candidates`) {
       const key = new URL(request.url()).searchParams.get("key");
+      // One key answered as unsupported, to keep the panel's handling of that reply
+      // exercised. It is a fixture rather than a claim about this key: every kind a
+      // current server carries is resolvable, and `supported: false` is what an
+      // older one — or one whose catalog cannot reach a store — still sends.
       if (key === "atlas.runtimeId") return route.fulfill({ json: { key, supported: false, candidates: [] } });
       return route.fulfill({ json: { key, supported: true, candidates: [
         { id: "proj-abc", name: "Billing" }, { id: "proj-new", name: "Collections" },

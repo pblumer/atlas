@@ -85,9 +85,18 @@ func (s *Server) collectLocalFacts(r *http.Request) (panorama.Facts, []remoteTar
 		Runtimes:     map[string]panorama.Fact{},
 		Targets:      map[string]panorama.Fact{},
 		Releases:     map[string]panorama.Fact{},
-		// JobTypes stays absent. A job type is authored in a model rather than
-		// registered as a resource, so there is nothing on this server that observes
-		// one; an empty map would claim it looked.
+		// JobTypes stays absent, and the reason is no longer the one that used to be
+		// written here. It said a job type is not registered as a resource, which is
+		// untrue — the engine keeps a table of them, and the binding catalog beside
+		// this now resolves against it. What is missing is a decision, not a lookup:
+		// a job type is a *kind of work*, not a thing that can be well or unwell, and
+		// what an observation of one would assert is its own question. The engine can
+		// say how many are queued, whether it runs the kind itself and how many jobs
+		// of it are parked behind an incident — but "healthy" for a kind of work,
+		// where no worker having polled this run is not evidence that none exists
+		// (the worker registry does not survive a restart), is a mapping somebody has
+		// to choose. Until then the map is absent, which reports "not produced here"
+		// rather than "nothing is wrong".
 	}
 
 	// Processes, and the per-application totals they roll up into. The map holds
