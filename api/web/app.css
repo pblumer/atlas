@@ -402,6 +402,11 @@ textarea::placeholder {
 .ops-mig p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text); }
 .ops-mig-reason { margin-top: 6px !important; font-style: italic; }
 
+/* The status column holds a pill and, when the runtime could not build the client, the
+   reason under it. Sized for that message rather than left to a layout that split three
+   columns evenly — which put the status halfway across the row and stranded the actions
+   an inch of empty table away from it. */
+.conn-status-col { width: 220px; }
 /* Why a stored connector is not usable, under its status pill (ADR-0158). */
 .conn-problem {
   margin-top: 3px; max-width: 340px; color: var(--danger);
@@ -425,10 +430,22 @@ textarea::placeholder {
 .conn-enabled { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 12.5px; }
 .conn-enabled input { width: auto; margin: 0; }
 /* Which deployed processes resolve through a connector, under its row (ADR-0163) —
-   the line that turns Delete from a click into a decision. */
-.conn-usage { font-size: 12px; margin-top: 3px; line-height: 1.5; }
-.conn-usage a { color: var(--accent); text-decoration: none; }
-.conn-usage a:hover { text-decoration: underline; }
+   the line that turns Delete from a click into a decision. It is a count on a chip
+   rather than the list itself: spelled out, a worker twenty-one deployed definitions
+   reference drew fourteen wrapped lines of links, and the endpoint, the status and the
+   actions beside them were pushed apart by it. The list is one click behind it. */
+.conn-usage { font-size: 12px; margin-top: 5px; line-height: 1.5; }
+.conn-usage-btn {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
+  font: 12px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--muted); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 999px; padding: 1px 10px; cursor: pointer;
+}
+.conn-usage-btn b { color: var(--text); font-weight: 600; }
+.conn-usage-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.conn-usage-btn:hover b { color: var(--accent); }
+.conn-usage-more { font-size: 13px; opacity: .6; }
+
 a.pill { text-decoration: none; font-weight: 600; }
 a.pill:hover { filter: brightness(0.94); }
 tr.done { opacity: .72; } /* finished instances are de-emphasized vs running ones */
@@ -2548,6 +2565,30 @@ tr[hidden] { display: none; }
 .modal-body { overflow-y: auto; overflow-x: hidden; padding: 4px 16px 14px; }
 .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border); }
 
+/* The Used-by dialog behind that chip: every deployed process that resolves through one
+   worker, grouped by process — a model redeployed five times is one entry with five
+   versions rather than five entries that read as five different processes. */
+.modal.usage-modal { width: min(680px, 100%); }
+.usage-intro { margin: 8px 0 12px; font-size: 12.5px; line-height: 1.6; }
+.usage-filter { margin: 0 0 10px; }
+.usage-filter:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.usage-group { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 8px; }
+.usage-group-head {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 7px 10px; background: var(--bg);
+}
+.usage-group-head b { font-size: 13px; }
+.usage-ver {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 5px 10px; border-top: 1px solid var(--border); font-size: 13px;
+  color: var(--text); text-decoration: none;
+}
+.usage-ver:hover { background: var(--accent-soft); text-decoration: none; }
+.usage-ver-v { flex: 0 0 auto; font: 600 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); }
+.usage-el { font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); overflow-wrap: anywhere; }
+.usage-live { margin-left: auto; flex: 0 0 auto; }
+.usage-empty { color: var(--muted); margin: 14px 0; text-align: center; }
+
 /* The process's own start form, opened by Deploy & run (ADR-0028). Wider than a confirm
    dialog because it is a real form somebody laid out — a two-column layout squeezed into
    520px is a worse form than the Tasks app shows for the same schema. */
@@ -3609,9 +3650,53 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 }
 #pg-panel textarea:focus { outline: none; border-color: var(--accent); background: var(--surface); }
 #pg-body > p.muted { padding: 10px 8px; font-size: 12px; line-height: 1.5; }
-/* In the Playground the properties panel steps aside: the mode already owns a side
-   panel, and two of them leave the diagram — the thing being watched — a sliver. */
+/* The Playground lays the editor body out as a grid: setup on the left, the diagram
+   in the middle with the cases under it, the analysis on the right.
+
+   Three columns rather than one panel because the mode asks three questions at once
+   and they are not the same question — what the run will be, what it did, and which
+   case it was. Stacked into one 300 px column, as this began, a finished run pushed
+   the dataset off the screen, and changing one figure meant scrolling past everything
+   the last run produced.
+
+   A grid rather than nested elements: #canvas is shared with the Design and Implement
+   views and with bpmn-js, so it keeps its place in the DOM and is only *placed*
+   differently here. */
+.editor.pg-active .editor-body {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 330px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "setup canvas analysis"
+    "setup results analysis";
+}
+.editor.pg-active #pg-setup { grid-area: setup; border-left: 0; border-right: 1px solid var(--border); }
+.editor.pg-active #canvas { grid-area: canvas; height: auto; min-width: 0; min-height: 0; }
+.editor.pg-active #pg-results { grid-area: results; }
+.editor.pg-active #pg-panel { grid-area: analysis; }
+/* The properties panel steps aside: the mode already owns two side panels, and a
+   third would leave the diagram — the thing being watched — a sliver. */
 .editor.pg-active .props, .editor.pg-active #props-resizer { display: none; }
+/* Narrower windows give the columns back to the diagram before they give up a
+   column: two 250 px columns still read, a 700 px canvas with three panels does not. */
+@media (max-width: 1400px) {
+  .editor.pg-active .editor-body { grid-template-columns: 252px minmax(0, 1fr) 280px; }
+}
+
+/* The cases, under the diagram, because a table is the one shape a 300 px column
+   cannot hold. It is a band rather than a pane: tall enough to read a dozen rows,
+   never tall enough to take the diagram's place. */
+.pg-results {
+  display: flex; flex-direction: column; min-height: 0; max-height: 30vh;
+  border-top: 1px solid var(--border); background: var(--surface);
+}
+.pg-results-head {
+  display: flex; align-items: center; gap: 8px; flex: none;
+  padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px;
+}
+.pg-results-scroll { overflow: auto; min-height: 0; }
+.pg-cases { min-width: 100%; }
+.pg-cases th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
 /* And so do the modelling affordances. The Playground *runs* the diagram — the
    sandbox compiled the model as it stood when it started, so a shape added here
    would not be in what is running, and the palette offering it is the panel

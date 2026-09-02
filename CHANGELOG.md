@@ -263,6 +263,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The Workers list reads like a list again.** Console → Workers gave every configured
+  worker up to seven action buttons and spelled out every deployed process that resolves
+  through it, so a shared mail worker drew fourteen wrapped lines of links and the rows
+  were all different heights — the tallest being the ones something is wrong with
+  ([ADR-0163 amendment](docs/adr/0163-deleting-a-referenced-connector.md)). The actions
+  are now behind the row's **⋯** menu, where every other table in the console keeps
+  them, and the usage is a count — *Used by 8 processes · 21 deployed versions · 1
+  running instance* — that opens the list it stands for. That dialog groups a redeployed
+  model under one entry with its versions newest-first, links each version to its
+  Operations page beside the tasks that resolve through the worker, and filters past a
+  handful of processes. Nothing about the numbers changed: they are read off the same
+  `usedBy` the delete refusal names, so the row, the dialog and the refusal still cannot
+  tell different stories, and typing a process name in the column filter still finds the
+  workers it runs through. A worker with no endpoint of its own — a Gmail or Graph
+  mailbox, which authenticates as its sender — now names its provider there instead of
+  opening the line with a stray separator.
+
 - **Jira runs on a worker by default.** `DefaultOffloadedKinds` now includes `jira`, so a
   Jira task is leased by a supervised worker instead of served inside the engine
   ([ADR-0218](docs/adr/0218-jira-default-offload.md)). The engine
@@ -349,6 +366,20 @@ _Changed_ / _Removed_ for each version.
   ran before this keeps the old inference — a record cannot be back-filled with a fact it
   never carried — and says so on the section
   ([ADR-0219](docs/adr/0219-variable-write-attribution.md)).
+
+- **The Workers view hid a connector that was working and showed one that was broken.**
+  A job type the engine serves itself has nothing queued, nothing in flight and no
+  worker pulling it — none may — so the fold that keeps quiet built-ins out of the way
+  treated a healthy in-process connector as noise. It appeared when it failed and
+  vanished when it was fixed, on the page whose whole subject is who is doing the work.
+  The fold now hides what an installation does not *use* rather than what is momentarily
+  quiet: a type a deployed process references stays visible.
+  That leans on the Processes column, which was itself short. It was filled from service
+  and send tasks alone — "the only elements carrying a job type the model authored",
+  which is true of the string and false of the job. A connector task, a script task, a
+  business-rule task and a user task each create a job under a reserved type, so every
+  Jira, clio, Active Directory, script, DMN and user-task row said nothing about which
+  process was waiting on it. All five node types are counted now.
 
 - **A Jira search called an endpoint Jira Cloud has removed.** The `search`
   operation posted to `/rest/api/2/search` with `startAt` paging; Atlassian

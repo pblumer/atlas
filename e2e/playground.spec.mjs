@@ -36,11 +36,13 @@ test("the tab is a mode: it takes the bar and the panel, and gives back the canv
   // Off the tab, nothing of the Playground is on screen.
   await expect(page.locator("#pg-bar")).toBeHidden();
   await expect(page.locator("#pg-panel")).toBeHidden();
+  await expect(page.locator("#pg-setup")).toBeHidden();
   await expect(page.locator("#props")).toBeVisible();
 
   await page.locator('.etabs button[data-tab="playground"]').click();
   await expect(page.locator("#pg-bar")).toBeVisible();
   await expect(page.locator("#pg-panel")).toBeVisible();
+  await expect(page.locator("#pg-setup")).toBeVisible();
   // Two side panels would leave the diagram — the thing being watched — a sliver.
   await expect(page.locator("#props")).toBeHidden();
   // And nothing that offers to change the diagram: the Playground runs the model as
@@ -135,7 +137,7 @@ test("leaving the editor releases the sandbox", async ({ page }) => {
 // switchToBatch opens the sandbox and moves to the batch half of the panel.
 async function switchToBatch(page) {
   await startSandbox(page);
-  await page.locator('#pg-panel button[data-mode="batch"]').click();
+  await page.locator('#pg-setup button[data-mode="batch"]').click();
   await expect(page.locator("#pg-batch")).toBeVisible();
 }
 
@@ -218,14 +220,14 @@ test("the heat map shades elements and flows, and names what was never reached",
   await expect(page.locator('.djs-element[data-element-id="review"].pg-heat-5')).toHaveCount(1);
 
   // Stepping is a different question, so it is not answered on a shaded diagram.
-  await page.locator('#pg-panel button[data-mode="step"]').click();
+  await page.locator('#pg-setup button[data-mode="step"]').click();
   await expect(page.locator(".pg-heat-5")).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });
 
 test("a CSV dataset is uploaded as a file, not parsed in the browser", async ({ page }) => {
   await switchToBatch(page);
-  await page.locator('#pg-panel button[data-source="csv"]').click();
+  await page.locator('#pg-setup button[data-source="csv"]').click();
   await page.locator("#pg-csv").setInputFiles({
     name: "antraege.csv",
     mimeType: "text/csv",
@@ -279,8 +281,10 @@ test("a run is judged, and the verdict names what it missed", async ({ page }) =
   // The verdict is a badge first and a table second, and a failed check is marked.
   await expect(page.locator(".pg-verdict")).toHaveText("failed");
   await expect(page.locator(".pg-verdict")).toHaveClass(/bad/);
-  await expect(page.locator("tr.pg-bad")).toContainText("queue at clerks");
-  await expect(page.locator("tr.pg-bad")).toContainText("at most 5");
+  // Scoped to the verdict's own table: a case parked behind an incident is marked
+  // the same way down in the results strip.
+  await expect(page.locator(".pg-checks tr.pg-bad")).toContainText("queue at clerks");
+  await expect(page.locator(".pg-checks tr.pg-bad")).toContainText("at most 5");
   expect(page.__errors).toEqual([]);
 });
 
@@ -372,20 +376,20 @@ test("a failing run cannot be kept as the baseline", async ({ page }) => {
 
 test("a CSV run says why it cannot be saved as a scenario", async ({ page }) => {
   await switchToBatch(page);
-  await page.locator('#pg-panel button[data-source="csv"]').click();
+  await page.locator('#pg-setup button[data-source="csv"]').click();
   await page.locator("#pg-csv").setInputFiles({
     name: "rows.csv", mimeType: "text/csv", buffer: Buffer.from("kunde\nA\n"),
   });
   // No name box and no Save: the rows are on the server, parsed by the same code a
   // real import uses, and are not in the browser to store.
   await expect(page.locator("#pg-scenario-save")).toHaveCount(0);
-  await expect(page.locator("#pg-panel")).toContainText("cannot be saved as a scenario");
+  await expect(page.locator("#pg-setup")).toContainText("cannot be saved as a scenario");
   expect(page.__errors).toEqual([]);
 });
 
 test("a dataset is described rather than listed, and the description is what runs", async ({ page }) => {
   await switchToBatch(page);
-  await page.locator('#pg-panel button[data-source="generated"]').click();
+  await page.locator('#pg-setup button[data-source="generated"]').click();
 
   // It opens on the dataset everybody wants first: a few hundred cases with a
   // random amount. Nobody types three hundred of those, which is the whole point.
@@ -405,7 +409,7 @@ test("a dataset is described rather than listed, and the description is what run
   await page.locator("#pg-gen-preview").click();
   await expect(page.locator(".pg-preview th").first()).toHaveText("amount");
   await expect(page.locator(".pg-preview th").nth(1)).toHaveText("tier");
-  await expect(page.locator("#pg-panel")).toContainText("of 500");
+  await expect(page.locator("#pg-setup")).toContainText("of 500");
 
   await page.locator("#pg-batch").click();
   const started = (await calls(page)).find((c) => c.method === "POST" && /\/runs$/.test(c.url));
@@ -422,7 +426,7 @@ test("a dataset is described rather than listed, and the description is what run
 
 test("a described dataset is saved as a scenario, which an uploaded one cannot be", async ({ page }) => {
   await switchToBatch(page);
-  await page.locator('#pg-panel button[data-source="generated"]').click();
+  await page.locator('#pg-setup button[data-source="generated"]').click();
   await page.locator("#pg-scenario-name").fill("Three hundred applications");
   await page.locator("#pg-scenario-save").click();
 
@@ -438,7 +442,7 @@ test("a described dataset is saved as a scenario, which an uploaded one cannot b
 
 test("a field's kind decides which parameters it shows", async ({ page }) => {
   await switchToBatch(page);
-  await page.locator('#pg-panel button[data-source="generated"]').click();
+  await page.locator('#pg-setup button[data-source="generated"]').click();
   const field = page.locator(".pg-field").first();
 
   // A whole number is bounded; a sequence is not bounded at all, it is prefixed.
@@ -456,5 +460,65 @@ test("a field's kind decides which parameters it shows", async ({ page }) => {
   await page.locator("#pg-batch").click();
   const started = (await calls(page)).find((c) => c.method === "POST" && /\/runs$/.test(c.url));
   expect(started.body.generate.fields).toEqual([]);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the mode lays the editor out in three columns and a strip", async ({ page }) => {
+  await switchToBatch(page);
+  // What decides the run is on the left; what it did is on the right. Stacked in one
+  // column, a finished run pushed the dataset off the screen.
+  await expect(page.locator("#pg-setup")).toContainText("Dataset");
+  await expect(page.locator("#pg-setup")).toContainText("Timing");
+  await expect(page.locator("#pg-panel")).not.toContainText("Timing");
+  // Before anything has run the analysis column says so rather than sitting blank.
+  await expect(page.locator("#pg-panel")).toContainText("Nothing has run yet");
+  // And the strip is not there at all: an empty band under the diagram would be a
+  // promise the panel has not kept.
+  await expect(page.locator("#pg-results")).toBeHidden();
+
+  await page.locator("#pg-batch").click();
+  await expect(page.locator(".pg-facts").first()).toBeVisible();
+  await expect(page.locator("#pg-panel")).toContainText("Outcomes");
+  await expect(page.locator("#pg-setup")).toContainText("Dataset");
+
+  // The setup column is still readable with a report on screen — the whole point of
+  // splitting them.
+  await expect(page.locator("#pg-cases")).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});
+
+test("the cases are read a page at a time under the diagram", async ({ page }) => {
+  // A hundred and twenty of them: the strip has to page rather than hold the run.
+  await page.evaluate(() => window.__setCases(120));
+  await switchToBatch(page);
+  await page.locator("#pg-batch").click();
+  await expect(page.locator("#pg-results")).toBeVisible();
+
+  // A window, asked of the server — not the whole run built in the browser. That is
+  // what makes the fifty-thousandth case cost the same as the fiftieth.
+  const first = (await calls(page)).find((c) => c.method === "GET" && /\/results\?/.test(c.url));
+  expect(first.url).toContain("offset=0");
+  expect(first.url).toContain("limit=50");
+  await expect(page.locator(".pg-cases tbody tr")).toHaveCount(50);
+  await expect(page.locator(".pg-results-head")).toContainText("1–50 of 120 cases");
+  await expect(page.locator("#pg-page-prev")).toBeDisabled();
+  // A case parked behind an incident is marked, which is the row somebody is looking
+  // for in a table of a hundred.
+  await expect(page.locator(".pg-cases tr.pg-bad")).toHaveCount(16);
+
+  await page.locator("#pg-page-next").click();
+  await expect(page.locator(".pg-results-head")).toContainText("51–100 of 120 cases");
+  await expect(page.locator("#pg-page-prev")).toBeEnabled();
+
+  await page.locator("#pg-page-next").click();
+  await expect(page.locator(".pg-results-head")).toContainText("101–120 of 120 cases");
+  await expect(page.locator("#pg-page-next")).toBeDisabled();
+
+  await page.locator("#pg-page-prev").click();
+  await expect(page.locator(".pg-results-head")).toContainText("51–100 of 120 cases");
+
+  // The variables each case ran with are columns of their own, so a row can be read
+  // back against the dataset that produced it.
+  await expect(page.locator(".pg-cases th")).toContainText(["case", "outcome", "duration", "incidents", "amount", "kunde"]);
   expect(page.__errors).toEqual([]);
 });

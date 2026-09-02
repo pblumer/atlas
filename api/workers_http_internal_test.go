@@ -317,3 +317,77 @@ func TestRestartWorkerEndpoint(t *testing.T) {
 		t.Fatalf("restart an unknown worker = %d %s, want 404", code, body)
 	}
 }
+
+// The Processes column is what makes a row actionable — an engine with fifty job types
+// has fifty rows saying "nobody", and none of them means anything until you can see
+// which process is waiting on it. It used to be filled from service and send tasks
+// alone, on the reasoning that those are the only elements carrying a job type the model
+// authored. That is true of the string and false of the job: a connector task creates a
+// job under a reserved type, and so do script, business-rule and user tasks. So every
+// Jira, clio, AD, script and DMN row said nothing about who uses it.
+//
+// This deploys a process whose only job-creating element is a Jira connector task and
+// asks the view who uses io.atlas.jira.
+func TestWorkersViewNamesTheProcessesBehindAConnectorJobType(t *testing.T) {
+	srv := newServerWithOptions(t)
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", jiraUsersBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+
+	got := workers(t, srv)
+	for _, row := range got.Types {
+		if row.Type != compiler.JiraJobType {
+			continue
+		}
+		if len(row.Processes) != 1 {
+			t.Fatalf("processes for %s = %+v, want the one definition that uses it", row.Type, row.Processes)
+		}
+		if row.Processes[0].ProcessID != "jira-users" {
+			t.Errorf("process = %+v, want the deployed definition named", row.Processes[0])
+		}
+		return
+	}
+	t.Fatalf("no row for %s in %+v", compiler.JiraJobType, got.Types)
+}
+
+// A user task creates a job too, under the reserved user-task type, and the same gap
+// left its row unattributed — which matters more than most, because a user-task queue
+// is the one an operator reads as "people have work waiting".
+func TestWorkersViewNamesTheProcessesBehindTheUserTaskType(t *testing.T) {
+	srv := newServerWithOptions(t)
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", jiraUsersBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	got := workers(t, srv)
+	for _, row := range got.Types {
+		if row.Type != compiler.UserTaskJobType {
+			continue
+		}
+		if len(row.Processes) != 1 || row.Processes[0].ProcessID != "jira-users" {
+			t.Errorf("processes for %s = %+v, want the deployed definition named", row.Type, row.Processes)
+		}
+		return
+	}
+	t.Fatalf("no row for %s in %+v", compiler.UserTaskJobType, got.Types)
+}
+
+// jiraUsersBPMN has one connector task and one user task, so a single deploy exercises
+// both of the node types the users map used to walk past.
+const jiraUsersBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="jira-users" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:jiraConnector connector="acme" operation="create-issue" project="OPS"
+                             issueType="Task" summary="ein Titel" resultVariable="ticket"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="u" name="freigeben"/>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="u"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="u" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`

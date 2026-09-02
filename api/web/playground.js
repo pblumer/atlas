@@ -130,13 +130,37 @@ function barHTML() {
     <span class="sim-stats" id="pg-stats"></span>`;
 }
 
-// panelHTML is the side panel: the run's configuration before it starts, and what
-// it did afterwards.
+// The Playground takes three columns and a strip, because it is asking three
+// questions at once and they are not the same question.
+//
+// What the run *will* be — the dataset, the timing, the policy, what it has to show
+// — is decided before it starts and read back afterwards to see what produced a
+// number. What the run *did* is read while it happens and after. And the cases
+// themselves are a table, which is a shape neither column has room for. Stacked into
+// one 300 px panel, as this began, the report pushed the dataset off the screen the
+// moment a run finished, and going back to change one figure meant scrolling past
+// everything the last run produced.
+//
+// setupPanelHTML is the left column: everything that decides what runs.
+function setupPanelHTML() {
+  return `
+    <div class="vars-head"><b>Run setup</b></div>
+    <div class="vars-list" id="pg-setup-body"></div>`;
+}
+
+// panelHTML is the right column: what the run did.
 function panelHTML() {
   return `
-    <div class="vars-head"><b>Playground</b>
+    <div class="vars-head"><b>Analysis</b>
       <button class="icon-btn" id="pg-panel-close" title="Back to Design" aria-label="Back to Design">&#10005;</button></div>
     <div class="vars-list" id="pg-body"></div>`;
+}
+
+// resultsHTML is the strip under the canvas: the cases themselves, a page at a time.
+// It is under the diagram rather than in a column because it is a table — the one
+// shape a 300 px column cannot hold.
+function resultsHTML() {
+  return `<div id="pg-results-body"></div>`;
 }
 
 // attachPlayground wires the Playground tab into an open editor. It creates its
@@ -154,6 +178,22 @@ export function attachPlayground(root, { api, toast, modeler }) {
   bar.innerHTML = barHTML();
   editor.insertBefore(bar, body);
 
+  // Left of the canvas, so the reading order down the page is: what to run, what it
+  // ran on, what came out.
+  const setupPanel = document.createElement("aside");
+  setupPanel.className = "vars-panel";
+  setupPanel.id = "pg-setup";
+  setupPanel.hidden = true;
+  setupPanel.innerHTML = setupPanelHTML();
+  body.insertBefore(setupPanel, body.firstChild);
+
+  const results = document.createElement("section");
+  results.className = "pg-results";
+  results.id = "pg-results";
+  results.hidden = true;
+  results.innerHTML = resultsHTML();
+  body.insertBefore(results, root.querySelector("#props-resizer"));
+
   const panel = document.createElement("aside");
   panel.className = "vars-panel";
   panel.id = "pg-panel";
@@ -161,7 +201,18 @@ export function attachPlayground(root, { api, toast, modeler }) {
   panel.innerHTML = panelHTML();
   body.insertBefore(panel, root.querySelector("#props-resizer"));
 
-  const el = (id) => bar.querySelector("#" + id) || panel.querySelector("#" + id);
+  // The three pieces answer to the same handlers and the same lookups: they are one
+  // panel that happens to be laid out in three places.
+  const panes = [setupPanel, results, panel];
+  const el = (id) => {
+    const found = bar.querySelector("#" + id);
+    if (found) return found;
+    for (const p of panes) {
+      const hit = p.querySelector("#" + id);
+      if (hit) return hit;
+    }
+    return null;
+  };
   const state = {
     session: null,   // {id, processId, seed, stubLabel}
     mode: "step",    // which of the two ways of driving the sandbox is on screen
@@ -192,6 +243,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     arrivalN: 10,
     run: null,       // the last run status
     report: null,
+    results: null,   // one page of the results table: {total, offset, rows}
     heat: null,      // the heat map, once a run has produced one
     showHeat: false,
     polling: 0,
@@ -485,6 +537,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.showHeat = false;
     state.verdict = null;
     state.comparison = null;
+    state.results = null;
     if (state.source === "csv") {
       if (!state.csv) throw new Error("choose a CSV file, or take the dataset from the list or the generator");
       const form = new FormData();
@@ -509,6 +562,17 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // illustration of what one might look like.
   async function previewDataset() {
     state.genPreview = await api("POST", path("/generate?limit=8"), genBody());
+  }
+
+  // resultsPageSize is how many cases the strip shows at a time. A page is read by a
+  // person: enough to scroll, few enough that the fifty-thousandth case costs the
+  // same as the fiftieth.
+  const resultsPageSize = 50;
+
+  // readResults fetches one page. The rows are never held whole — a run of fifty
+  // thousand is fifty thousand rows in the sandbox's store and one page in here.
+  async function readResults(offset) {
+    state.results = await api("GET", path(`/results?offset=${Math.max(0, offset)}&limit=${resultsPageSize}`));
   }
 
   async function cancelBatch() {
@@ -560,6 +624,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       if (state.baseline) {
         state.comparison = await api("POST", path("/compare"), { baseline: state.baseline });
       }
+      await readResults(0);
       drawCanvas();
     } catch (e) {
       toast(`read the report: ${e.message}`, "err");
@@ -616,6 +681,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.heat = null;
     state.verdict = null;
     state.comparison = null;
+    state.results = null;
     await refresh();
   }
 
@@ -1043,7 +1109,9 @@ export function attachPlayground(root, { api, toast, modeler }) {
       <p class="muted">The first ${p.rows.length} of ${p.total} — these are the cases the run carries.</p>`;
   }
 
-  function batchHTML() {
+  // batchSetupHTML is what decides the run: the data, when it arrives, what it has
+  // to show, and the scenario all three are stored in.
+  function batchSetupHTML() {
     const modes = ARRIVALS.map((a) =>
       `<option value="${a.mode}"${a.mode === state.arrival ? " selected" : ""}>${esc(a.label)}</option>`).join("");
     const arrival = ARRIVALS.find((a) => a.mode === state.arrival);
@@ -1057,7 +1125,16 @@ export function attachPlayground(root, { api, toast, modeler }) {
                    <span class="muted">${esc(param)}</span>` : ""}
       </div>
       ${expectHTML()}
-      ${scenarioSaveHTML()}
+      ${scenarioSaveHTML()}`;
+  }
+
+  // batchAnalysisHTML is what the run did — read while it runs and after it stops.
+  function batchAnalysisHTML() {
+    if (!state.run) {
+      return `<p class="muted">Nothing has run yet. Set the dataset and the timing on the
+        left, then press <b>Run batch</b>.</p>`;
+    }
+    return `
       ${runStatusHTML()}
       ${verdictHTML()}
       ${comparisonHTML()}
@@ -1139,9 +1216,57 @@ export function attachPlayground(root, { api, toast, modeler }) {
         ${cold.length
           ? `<div class="pg-cold" id="pg-cold">${cold.map((c) => `<span class="mono">${esc(c)}</span>`).join("")}</div>`
           : `<p class="muted">The data exercised every element and every sequence flow.</p>`}` : ""}
-      <div class="pg-actions">
-        <button class="btn neutral small" id="pg-csv-out">&#8615; Results as CSV</button>
-      </div>`;
+`;
+  }
+
+  // resultsStripHTML is the run's own cases, a page at a time. A total says what a
+  // run cost and the heat map says where; only the rows say which case it was — the
+  // one that took eleven hours, the four that never finished.
+  function resultsStripHTML() {
+    // Read defensively: this renders whatever came back, and a page that is missing
+    // its rows must show an empty table rather than take the panel down with it.
+    const r = state.results || {};
+    const rows = Array.isArray(r.rows) ? r.rows : [];
+    const offset = r.offset || 0;
+    const total = r.total || 0;
+    const shown = rows.length;
+    const names = variableColumns(rows);
+    return `
+      <div class="pg-results-head">
+        <b>Results</b>
+        <span class="muted">${shown ? `${offset + 1}\u2013${offset + shown} of ${total} cases` : "no cases"}</span>
+        <span style="flex:1"></span>
+        <button class="btn neutral small" id="pg-page-prev"${offset > 0 ? "" : " disabled"}>Previous</button>
+        <button class="btn neutral small" id="pg-page-next"${offset + shown < total ? "" : " disabled"}>Next</button>
+        <button class="btn neutral small" id="pg-csv-out">&#8615; CSV</button>
+      </div>
+      ${shown ? `
+        <div class="pg-results-scroll">
+          <table class="pg-table pg-cases">
+            <thead><tr><th>case</th><th>outcome</th><th>duration</th><th>incidents</th>
+              ${names.map((n) => `<th>${esc(n)}</th>`).join("")}</tr></thead>
+            <tbody>${rows.map((row) => `<tr${row.incidents ? ' class="pg-bad"' : ""}>
+              <td>${row.index + 1}</td>
+              <td class="mono">${esc(row.end || (row.state === "completed" ? "" : row.state))}</td>
+              <td>${row.ended ? esc(fmtDur(row.durationMillis)) : "\u2014"}</td>
+              <td>${row.incidents || ""}</td>
+              ${names.map((n) => `<td class="mono">${esc((row.variables || {})[n] == null ? "" : row.variables[n])}</td>`).join("")}
+            </tr>`).join("")}</tbody>
+          </table>
+        </div>` : `<p class="muted">The run produced no rows to show.</p>`}`;
+  }
+
+  // variableColumns picks the columns the table shows, from the page in hand. A CSV
+  // has one header and so has this: choosing it from the rows on screen beats reading
+  // the whole table twice to find a name only the last page carries.
+  function variableColumns(rows) {
+    const seen = [];
+    for (const row of rows || []) {
+      for (const name of Object.keys(row.variables || {})) {
+        if (!seen.includes(name)) seen.push(name);
+      }
+    }
+    return seen.sort();
   }
 
   // timelineHTML draws the run over simulated time: bars for what arrived and what
@@ -1226,17 +1351,40 @@ export function attachPlayground(root, { api, toast, modeler }) {
       ? `simulated ${fmtWhen(state.simTime)} · tasks ${state.session.stubLabel} · seed ${state.session.seed}`
       : "";
 
-    const b = el("pg-body");
-    if (!open) { b.innerHTML = setupHTML(); return; }
-    b.innerHTML = modeTabsHTML() + (state.mode === "batch" ? batchHTML() : `
+    // The results strip is there only when there are results to put in it: an empty
+    // band under the diagram is a promise the panel has not kept.
+    results.hidden = !(batching && state.report);
+    el("pg-setup-body").innerHTML = setupColumnHTML();
+    el("pg-body").innerHTML = analysisColumnHTML();
+    if (!results.hidden) el("pg-results-body").innerHTML = resultsStripHTML();
+  }
+
+  // setupColumnHTML is the left column. Before a sandbox exists it is the whole
+  // preflight — the policy is fixed for a sandbox's life, so it is decided here or
+  // not at all.
+  function setupColumnHTML() {
+    if (!state.session) return setupHTML();
+    return modeTabsHTML() + (state.mode === "batch" ? batchSetupHTML() : stepSetupHTML());
+  }
+
+  function stepSetupHTML() {
+    return `
       <label class="field"><span>Start variables (JSON)</span>
         <textarea id="pg-startvars" rows="3" spellcheck="false">${esc(state.startVars)}</textarea></label>
       <div class="pg-sec"><b>Waiting for you</b> <span class="muted">${state.tasks.length}</span></div>
       ${state.tasks.length ? state.tasks.map(taskRowHTML).join("") : `<p class="muted">Nothing is waiting.</p>`}
       <label class="field"><span>Output variables (JSON)</span>
-        <textarea id="pg-outputs" rows="2" spellcheck="false">${esc(state.outputs)}</textarea></label>
-      <div class="pg-sec"><b>Case</b></div>
-      ${resultHTML()}`);
+        <textarea id="pg-outputs" rows="2" spellcheck="false">${esc(state.outputs)}</textarea></label>`;
+  }
+
+  // analysisColumnHTML is the right column: what came back, in both modes.
+  function analysisColumnHTML() {
+    if (!state.session) {
+      return `<p class="muted">Start the sandbox and what it does shows up here — the
+        outcomes, the durations, where the cases waited, and the run over simulated time.</p>`;
+    }
+    if (state.mode === "batch") return batchAnalysisHTML();
+    return `<div class="pg-sec"><b>Case</b></div>${resultHTML()}`;
   }
 
   // ---- events ---------------------------------------------------------------
@@ -1261,7 +1409,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     }
   });
 
-  panel.addEventListener("click", (e) => {
+  const onPaneClick = (e) => {
     // Closing the panel means leaving the mode, so it goes through the tab that
     // owns it — otherwise the tab bar would still say Playground with no panel.
     if (e.target.closest("#pg-panel-close")) {
@@ -1307,7 +1455,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       return;
     }
     if (e.target.closest("#pg-scenario-open")) {
-      const id = panel.querySelector("#pg-scenario-pick")?.value;
+      const id = el("pg-scenario-pick")?.value;
       if (id) guard("open the scenario", () => openScenario(id));
       return;
     }
@@ -1323,6 +1471,13 @@ export function attachPlayground(root, { api, toast, modeler }) {
       guard("keep the baseline", keepBaseline);
       return;
     }
+    const page = e.target.closest("#pg-page-prev, #pg-page-next");
+    if (page) {
+      const at = state.results ? state.results.offset : 0;
+      const to = page.id === "pg-page-prev" ? at - resultsPageSize : at + resultsPageSize;
+      guard("read the results", () => readResults(to));
+      return;
+    }
     if (e.target.closest("#pg-csv-out")) {
       // A plain same-origin navigation, so the session cookie authenticates it,
       // exactly as the Console's downloads do — and the file is streamed rather
@@ -1332,11 +1487,11 @@ export function attachPlayground(root, { api, toast, modeler }) {
     }
     const btn = e.target.closest("button[data-job]");
     if (btn) guard("complete task", () => complete(btn.dataset.job));
-  });
+  };
 
   // Keep what is typed in state, without re-rendering: a render would move the
   // caret to the end of whatever box has focus.
-  panel.addEventListener("input", (e) => {
+  const onPaneInput = (e) => {
     const t = e.target;
     if (t.id === "pg-startvars") state.startVars = t.value;
     if (t.id === "pg-outputs") state.outputs = t.value;
@@ -1358,9 +1513,9 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (t.dataset.seats != null) {
       state.pools[t.dataset.seats] = { ...state.pools[t.dataset.seats], seats: t.value };
     }
-  });
+  };
 
-  panel.addEventListener("change", (e) => {
+  const onPaneChange = (e) => {
     const t = e.target;
     if (t.id === "pg-hours") state.hours = t.checked;
     if (t.id === "pg-x-finish") state.expect.allFinish = t.checked;
@@ -1375,7 +1530,14 @@ export function attachPlayground(root, { api, toast, modeler }) {
       render();
     }
     if (t.dataset.gen === "onlyDate") state.gen.fields[Number(t.dataset.i)].onlyDate = t.checked;
-  });
+  };
+
+  // One panel in three places: the same handlers, bound to each of them.
+  for (const pane of panes) {
+    pane.addEventListener("click", onPaneClick);
+    pane.addEventListener("input", onPaneInput);
+    pane.addEventListener("change", onPaneChange);
+  }
 
   // A sandbox runs the diagram as it was when it started. Editing after that means
   // the canvas and the run no longer agree, so say so rather than quietly lying.
@@ -1388,6 +1550,8 @@ export function attachPlayground(root, { api, toast, modeler }) {
   function setActive(on) {
     bar.hidden = !on;
     panel.hidden = !on;
+    setupPanel.hidden = !on;
+    if (!on) results.hidden = true;
     editor.classList.toggle("pg-active", on);
     if (on) {
       render();
@@ -1414,6 +1578,8 @@ export function attachPlayground(root, { api, toast, modeler }) {
         api("DELETE", `/api/v1/playground/sessions/${encodeURIComponent(id)}`).catch(() => {});
       }
       bar.remove();
+      setupPanel.remove();
+      results.remove();
       panel.remove();
     },
   };
