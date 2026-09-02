@@ -15,11 +15,12 @@
     <div class="card" style="padding: 18px; max-width: 720px">
       <div id="usage-referenced"></div>
       <div id="usage-orphan"></div>
+      <div id="usage-many"></div>
       <button class="btn danger" id="del-referenced">Delete referenced</button>
       <button class="btn danger" id="del-orphan">Delete orphan</button>
     </div>
     <script type="module">
-      import { connectorUsageHTML, deleteConnectorFlow } from "/connectordialog.js";
+      import { connectorUsageHTML, openConnectorUsage, deleteConnectorFlow } from "/connectordialog.js";
 
       const REFERENCED = {
         id: "c1", name: "Patrick Blumer", kind: "mail",
@@ -29,9 +30,31 @@
         ],
       };
       const ORPHAN = { id: "c2", name: "unused", kind: "temis", usedBy: [] };
+      // A worker many models resolve through, one of them redeployed five times — the
+      // shape the inline list could not carry, and the one the operator page actually
+      // shows for a shared mail worker. Eleven deployed definitions of seven processes,
+      // so the count has to say both numbers, the dialog has to group the versions, and
+      // there are enough groups to earn the filter.
+      const MANY = {
+        id: "c3", name: "gmail_auth", kind: "mail",
+        usedBy: [
+          ...[1, 2, 3, 4, 5].map((v) => ({ processDefKey: 100 + v, processId: "info-mail", name: "Info Mail versenden", version: v, elements: ["Task_send"], activeInstances: v === 5 ? 1 : 0 })),
+          ...["Benutzer aufnehmen", "Benutzer offboarden", "Zugriffs-Review", "Marktleistung bestellen", "Simone Demo Prozess", "Mail via Google versenden"]
+            .map((name, i) => ({ processDefKey: 200 + i, processId: "p" + i, name, version: 1, elements: ["Task_notify"], activeInstances: 0 })),
+        ],
+      };
 
       document.getElementById("usage-referenced").innerHTML = connectorUsageHTML(REFERENCED.usedBy);
       document.getElementById("usage-orphan").innerHTML = connectorUsageHTML(ORPHAN.usedBy);
+      document.getElementById("usage-many").innerHTML = connectorUsageHTML(MANY.usedBy);
+
+      // The row's count is a button; the list it stands for is the dialog behind it.
+      // app.js wires that click on the connector table; here it is wired by hand, on
+      // the same markup connectorUsageHTML produces.
+      for (const [id, connector] of [["usage-referenced", REFERENCED], ["usage-many", MANY]]) {
+        document.getElementById(id).querySelector("[data-usage]")
+          .addEventListener("click", () => openConnectorUsage({ connector }));
+      }
 
       window.__deletes = [];   // every DELETE the flow issued, in order
       window.__result = null;  // what the flow resolved to

@@ -198,6 +198,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The Workers list reads like a list again.** Console → Workers gave every configured
+  worker up to seven action buttons and spelled out every deployed process that resolves
+  through it, so a shared mail worker drew fourteen wrapped lines of links and the rows
+  were all different heights — the tallest being the ones something is wrong with
+  ([ADR-0163 amendment](docs/adr/0163-deleting-a-referenced-connector.md)). The actions
+  are now behind the row's **⋯** menu, where every other table in the console keeps
+  them, and the usage is a count — *Used by 8 processes · 21 deployed versions · 1
+  running instance* — that opens the list it stands for. That dialog groups a redeployed
+  model under one entry with its versions newest-first, links each version to its
+  Operations page beside the tasks that resolve through the worker, and filters past a
+  handful of processes. Nothing about the numbers changed: they are read off the same
+  `usedBy` the delete refusal names, so the row, the dialog and the refusal still cannot
+  tell different stories, and typing a process name in the column filter still finds the
+  workers it runs through. A worker with no endpoint of its own — a Gmail or Graph
+  mailbox, which authenticates as its sender — now names its provider there instead of
+  opening the line with a stray separator.
+
 - **Jira runs on a worker by default.** `DefaultOffloadedKinds` now includes `jira`, so a
   Jira task is leased by a supervised worker instead of served inside the engine
   ([ADR-0218](docs/adr/0218-jira-default-offload.md)). The engine

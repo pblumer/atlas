@@ -16,7 +16,7 @@ import {
   incidentConnectorChip,
   repairFormFlow,
 } from "./incidents.js";
-import { editConnectorFlow, connectorShape, connectorCreateBody, connectorUsageHTML, deleteConnectorFlow } from "./connectordialog.js";
+import { editConnectorFlow, connectorShape, connectorCreateBody, connectorUsageHTML, openConnectorUsage, deleteConnectorFlow } from "./connectordialog.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
@@ -1594,46 +1594,80 @@ async function viewConsoleConnectors() {
       ? `<span class="pill vis" title="Shared with ${shared} other ${shared === 1 ? "principal" : "principals"}">shared · ${shared}</span>`
       : `<span class="pill vis" title="Only you (and administrators) can configure this">private</span>`;
   };
+  // connectorMenu is the row's actions, behind the ⋯ menu every other table in the
+  // console puts them behind (ADR-0163). Drawn on the row they were up to seven buttons
+  // wide — a wall of identical blue that made every worker look alike, pushed the two
+  // that matter (Test, Delete) to the far edge, and grew the table past the width of its
+  // card on a laptop. In the menu they cost no width and can be grouped by what they
+  // are: what this Worker Type can do, who may configure it, and the two that change or
+  // remove it.
+  const connectorMenu = (c) => {
+    const sc = connScope(c);
+    const items = [];
+    // Kind-specific first: these are the reasons an operator came to this row rather
+    // than to any other, and they exist on no other kind.
+    if (c.kind === "clio") items.push({ label: "Provision access…", icon: "🔑", act: "provision" });
+    if (c.kind === "clio" || c.kind === "jira") items.push({ label: "Events…", icon: "⇄", act: "subs" });
+    if (c.kind === "mail") items.push({ label: "Test…", icon: "✔", act: "test" });
+    if (items.length && (sc.editor || sc.owner)) items.push({ sep: true });
+    if (sc.editor) items.push({ label: "Edit…", icon: "✎", act: "edit" });
+    if (sc.owner) items.push({ label: "Share…", icon: "👤", act: "share" });
+    if (sc.editor) {
+      items.push({
+        label: c.enabled ? "Disable" : "Enable",
+        icon: c.enabled ? "⊘" : "▶",
+        act: "toggle",
+      });
+    }
+    if (sc.owner) items.push({ sep: true }, { label: "Delete…", icon: "🗑", act: "delete", danger: true });
+    return items;
+  };
+  // What this worker actually points at, in one line. A native mail provider (Gmail,
+  // Microsoft Graph) dials no endpoint at all — it authenticates as the sender — so the
+  // line names the provider where the endpoint would be, rather than opening with the
+  // stray separator of an empty one.
+  const connectorTarget = (c) => {
+    const where = c.endpoint || (c.kind === "mail" && c.provider ? c.provider : "");
+    const cred = c.credentialsRef ? `token: <code>${esc(c.credentialsRef)}</code>` : "no token";
+    return where ? `${esc(where)} · ${cred}` : cred;
+  };
+  // The Worker cell's text is what the table's column filter searches (table.js), and
+  // the usage list it used to spell out was most of that text — typing a process name
+  // found the workers it runs through. Collapsed to a count, that text is gone from the
+  // cell, so the cell states it: the same words, off the same records, where only the
+  // filter reads them.
+  const connectorFilterText = (c) => [
+    c.name, c.kind, c.provider, c.endpoint, c.credentialsRef,
+    ...(c.usedBy || []).map((u) => `${u.name || u.processId} v${u.version}`),
+  ].filter(Boolean).join(" ");
+  const statusCell = (c) => `<td class="conn-status-col">${!c.enabled
+      ? '<span class="pill warn"><span class="dot"></span>disabled</span>'
+      : c.problem
+        // Stored and enabled, but the runtime could not build its client — so its
+        // tasks park. Saying it here is the difference between finding out now and
+        // finding out from an incident that claims the connector does not exist
+        // (ADR-0155).
+        ? `<span class="pill err"><span class="dot"></span>not usable</span>
+           <div class="conn-problem" title="${esc(c.problem)}">${esc(c.problem)}</div>`
+        : '<span class="pill ok"><span class="dot"></span>enabled</span>'}</td>`;
   const managedRow = (c) => connScope(c).configurable
     ? `<tr data-id="${esc(c.id)}">
-      <td><span class="chip">${esc(c.name)}</span>
+      <td data-filter="${esc(connectorFilterText(c))}"><span class="chip">${esc(c.name)}</span>
         <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
         ${ownershipPill(c)}
-        <div class="muted" style="font-size:12px; margin-top:3px">${esc(c.endpoint)}${
-          c.credentialsRef ? ` · token: <code>${esc(c.credentialsRef)}</code>` : " · no token"}</div>
+        <div class="muted" style="font-size:12px; margin-top:3px">${connectorTarget(c)}</div>
         ${connectorUsageHTML(c.usedBy)}
         <div class="conn-share" id="share-${esc(c.id)}" hidden></div></td>
-      <td>${!c.enabled
-        ? '<span class="pill warn"><span class="dot"></span>disabled</span>'
-        : c.problem
-          // Stored and enabled, but the runtime could not build its client — so its
-          // tasks park. Saying it here is the difference between finding out now and
-          // finding out from an incident that claims the connector does not exist
-          // (ADR-0155).
-          ? `<span class="pill err"><span class="dot"></span>not usable</span>
-             <div class="conn-problem" title="${esc(c.problem)}">${esc(c.problem)}</div>`
-          : '<span class="pill ok"><span class="dot"></span>enabled</span>'}</td>
-      <td style="text-align:right; white-space:nowrap">
-        ${c.kind === "clio" ? '<button class="btn ghost" data-cact="provision" title="Mint a scoped clio key and store it as this connector\'s credential">Provision access</button>' : ""}${c.kind === "clio" || c.kind === "jira" ? '<button class="btn ghost" data-cact="subs" title="Manage inbound event watches for this connector">Events</button>' : ""}
-        ${c.kind === "mail" ? '<button class="btn ghost" data-cact="test" title="Check this connector — connect and authenticate, or send a test message">Test</button>' : ""}
-        ${connScope(c).owner ? '<button class="btn ghost" data-cact="share" title="Decide who else may configure this connector">Share</button>' : ""}
-        ${connScope(c).editor ? `<button class="btn ghost" data-cact="edit" title="Edit this connector’s settings">Edit</button>
-        <button class="btn ghost" data-cact="toggle" title="${c.enabled ? "Disable this connector (its tasks will park)" : "Enable this connector"}">${c.enabled ? "Disable" : "Enable"}</button>` : ""}
-        ${connScope(c).owner ? '<button class="btn ghost danger" data-cact="delete" title="Delete this connector">Delete</button>' : ""}
-      </td></tr>`
+      ${statusCell(c)}
+      <td class="row-actions">${dropdown("⋯", "icon-btn", connectorMenu(c))}</td></tr>`
     : `<tr data-id="${esc(c.id)}" class="conn-foreign">
-      <td><span class="chip">${esc(c.name)}</span>
+      <td data-filter="${esc(connectorFilterText(c))}"><span class="chip">${esc(c.name)}</span>
         <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
         ${ownershipPill(c)}
         <div class="muted" style="font-size:12px; margin-top:3px">Configured by somebody else.
         A model can still reference it by name — what it connects to is theirs to see.</div></td>
-      <td>${!c.enabled
-        ? '<span class="pill warn"><span class="dot"></span>disabled</span>'
-        : c.problem
-          ? `<span class="pill err"><span class="dot"></span>not usable</span>
-             <div class="conn-problem" title="${esc(c.problem)}">${esc(c.problem)}</div>`
-          : '<span class="pill ok"><span class="dot"></span>enabled</span>'}</td>
-      <td></td></tr>`;
+      ${statusCell(c)}
+      <td class="row-actions"></td></tr>`;
   const managedCard = `
     <div class="card" style="padding:0; margin-top:18px">
       <div class="between" style="padding:16px 18px 0">
@@ -1645,7 +1679,7 @@ async function viewConsoleConnectors() {
       <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>) at runtime — never stored here.</p>
       <div id="connector-form-slot" style="padding:0 18px"></div>
       <table data-dt-key="connectors">
-        <thead><tr><th>Connector</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Connector</th><th class="conn-status-col">Status</th><th></th></tr></thead>
         <tbody id="connector-rows">${connectors.map(managedRow).join("")
           || `<tr><td colspan="3" class="muted" style="padding:14px 18px">None configured. Business rule tasks marked <i>External (temis connector)</i> resolve by name to these.</td></tr>`}</tbody>
       </table>
@@ -3482,27 +3516,43 @@ function wireConnectorManagement(connectors) {
   const rows = document.getElementById("connector-rows");
   if (rows) {
     rows.addEventListener("click", async (e) => {
-      const btn = e.target.closest("button[data-cact]");
+      // Two things a row's cell can start: the usage count opens the list behind it,
+      // and every action now arrives from the row's ⋯ menu rather than from a button
+      // drawn on the row. The menu lives inside the <tr>, so which worker it belongs
+      // to is still read off the row.
+      const usage = e.target.closest("button[data-usage]");
+      const btn = usage || e.target.closest(".dropdown-menu button[data-act]");
       if (!btn) return;
-      const id = btn.closest("tr").dataset.id;
+      const row = btn.closest("tr");
+      if (!row) return;
+      const id = row.dataset.id;
       const c = (connectors || []).find((x) => x.id === id);
       if (!c) return;
+      if (usage) {
+        openConnectorUsage({ connector: c });
+        return;
+      }
+      const act = btn.dataset.act;
       try {
-        if (btn.dataset.cact === "subs") {
-          await toggleInboundSubs(btn.closest("tr"), id, c.kind);
+        if (act === "subs") {
+          await toggleInboundSubs(row, id, c.kind);
           return;
-        } else if (btn.dataset.cact === "share") {
+        } else if (act === "share") {
           await toggleConnectorShare(c, viewConsoleConnectors);
           return;
-        } else if (btn.dataset.cact === "provision") {
-          toggleProvisionClio(btn.closest("tr"), id, c.name);
+        } else if (act === "provision") {
+          toggleProvisionClio(row, id, c.name);
           return;
-        } else if (btn.dataset.cact === "test") {
+        } else if (act === "test") {
           // Empty recipient = stop at the door (connect, authenticate). A recipient
           // makes it a real send, which is the only thing that proves delivery.
           const to = window.prompt(
             `Test "${c.name}".\n\nSend a test message to which address?\nLeave empty to only check the connection and credential.`, "");
           if (to == null) return;
+          // The menu the button was in is already gone by now, so a disabled button is
+          // no longer the feedback it used to be: a mail check can take seconds, and
+          // without a word here nothing at all happens until the result lands.
+          toast(`Checking "${c.name}"…`);
           btn.disabled = true;
           try {
             const res = await api("POST", "/api/v1/connectors/test", {
@@ -3514,15 +3564,15 @@ function wireConnectorManagement(connectors) {
             toast("Check failed: " + err.message, "warn");
           } finally { btn.disabled = false; }
           return;
-        } else if (btn.dataset.cact === "toggle") {
+        } else if (act === "toggle") {
           await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { enabled: !c.enabled });
-        } else if (btn.dataset.cact === "edit") {
+        } else if (act === "edit") {
           // The same dialog an operator reaches from an incident (ADR-0160) — which is
           // where most connector edits start, and why it is worth more than the two
           // window.prompts that used to stand here: it knows which fields this kind
           // and provider actually use, and it can check the result before saving.
           if (!(await editConnectorFlow({ api, toast, connector: c }))) return;
-        } else if (btn.dataset.cact === "delete") {
+        } else if (act === "delete") {
           // The server refuses a delete that would park deployed models' tasks
           // (ADR-0163), so this asks only about what it can see and lets the refusal
           // carry the rest — the confirm names the processes instead of a bare count.

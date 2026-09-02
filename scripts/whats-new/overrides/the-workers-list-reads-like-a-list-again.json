@@ -1,0 +1,35 @@
+{
+  "tags": [
+    "Console",
+    "Workers"
+  ],
+  "title": {
+    "en": "The Workers list is readable again",
+    "de": "Die Worker-Liste ist wieder lesbar"
+  },
+  "summary": {
+    "en": "Every configured worker used to carry up to seven buttons and the full list of processes running through it, so a shared mail worker filled a dozen wrapped lines and no two rows were the same height — the tallest one always being the one with a problem. The actions now sit behind the row's ⋯ menu, and the processes are a count you can click: Used by 8 processes · 21 deployed versions · 1 running instance. Clicking it opens the list, grouped by process with the newest version first, each version linking to its Operations page and naming the tasks that run through this worker. Nothing was left out — it is the same list, and still the same one Atlas shows you when it refuses to delete a worker that is still in use. Searching the Worker column for a process name still finds the workers it runs through.",
+    "de": "Jeder konfigurierte Worker trug bisher bis zu sieben Knöpfe und die ganze Liste der Prozesse, die über ihn laufen. Ein gemeinsam genutzter Mail-Worker füllte damit ein Dutzend umbrochener Zeilen, und keine zwei Zeilen waren gleich hoch — die höchste war stets die mit einem Problem. Die Aktionen liegen jetzt hinter dem ⋯-Menü der Zeile, und aus den Prozessen ist eine anklickbare Zahl geworden: Used by 8 processes · 21 deployed versions · 1 running instance. Ein Klick öffnet die Liste, nach Prozess gruppiert und mit der neuesten Version zuoberst; jede Version verlinkt auf ihre Operations-Seite und nennt die Tasks, die über diesen Worker laufen. Weggelassen wurde nichts — es ist dieselbe Liste, und weiterhin dieselbe, die Atlas Ihnen zeigt, wenn es das Löschen eines noch benutzten Workers verweigert. Die Suche in der Spalte Worker findet über einen Prozessnamen weiterhin die Worker, über die er läuft."
+  },
+  "tutorial": {
+    "en": [
+      "Open Console › Workers and look at Configured workers — each row is now name, type, where it points, what uses it, and whether it works.",
+      "Click the ⋯ at the end of a row for its actions: Test, Edit, Share, Disable and Delete, plus the ones only that Worker Type has.",
+      "Click the Used by … chip to see which processes run through the worker, grouped by process with every deployed version under it.",
+      "From there, a version takes you to its Operations page — and the dialog says what deleting the worker would park."
+    ],
+    "de": [
+      "Öffnen Sie Console › Workers und sehen Sie sich Configured workers an — jede Zeile zeigt jetzt Name, Typ, Ziel, Verwendung und ob der Worker funktioniert.",
+      "Klicken Sie auf das ⋯ am Zeilenende für die Aktionen: Test, Edit, Share, Disable und Delete, dazu die, die es nur bei diesem Worker Type gibt.",
+      "Klicken Sie auf den Used-by-Chip, um zu sehen, welche Prozesse über den Worker laufen — nach Prozess gruppiert, mit allen deployten Versionen darunter.",
+      "Von dort führt eine Version auf ihre Operations-Seite — und der Dialog sagt Ihnen, was ein Löschen des Workers anhalten würde."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Workers öffnen"
+    },
+    "route": "#/console/workers"
+  }
+}
