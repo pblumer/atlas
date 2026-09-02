@@ -175,6 +175,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/playground/sessions/{id}/overlay":                  "per-element counts of an author's sandbox run",
 	"GET /api/v1/playground/sessions/{id}/heatmap":                  "element and flow counts of an author's sandbox run",
 	"POST /api/v1/playground/sessions/{id}/generate":                "previews the dataset an author is describing in their sandbox",
+	"POST /api/v1/playground/sessions/{id}/arrivals":                "previews the arrival stream an author is describing in their sandbox",
 	"POST /api/v1/playground/sessions/{id}/verdict":                 "judges an author's sandbox run against their expectations",
 	"POST /api/v1/playground/sessions/{id}/compare":                 "sets an author's sandbox run beside an earlier one",
 
@@ -484,6 +485,15 @@ var mcpOmittedRoutes = map[string]string{
 	// returns, which is where it is worth reading anyway, next to what it did.
 	"GET /api/v1/settings/ad-mock": "the AD mockup switch is a Console concern; its state shows in atlas_workers",
 	"PUT /api/v1/settings/ad-mock": "whether this instance writes to a real directory is an operator decision, not an agent action",
+
+	// The database mockup switch (ADR-0221), which is the AD one applied to the SQL
+	// worker types and omitted for the same two reasons. The write decides whether
+	// every SQL task on this instance reaches a real database — an operator's call
+	// about their data, and the one with the widest blast radius of any switch here.
+	// The state is not hidden from an agent either way: a mocked worker says so in the
+	// log atlas_workers returns, beside what it answered.
+	"GET /api/v1/settings/sql-mock": "the database mockup switch is a Console concern; its state shows in atlas_workers",
+	"PUT /api/v1/settings/sql-mock": "whether this instance writes to a real database is an operator decision, not an agent action",
 
 	// Self-service registration config (ADR-0126): a login-screen/admin concern,
 	// not an agent action.

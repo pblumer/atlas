@@ -527,7 +527,7 @@ function sqlWorkerTypeDesc(product, envPrefix, placeholder, binding) {
     `A query carries a row cap (1000 by default) and exceeding it fails the task rather than truncating, because a short result set is a wrong business answer and a process that branches on the row count would branch on it confidently. ` +
     `Configure each database below: the whole connection string is the credential, sealed into the vault. ` +
     `Worker-only \u2014 the engine never holds a database credential \u2014 so a SQL task needs a worker, which Atlas supervises for you. ` +
-    `A worker started with ATLAS_${envPrefix}_MOCK=1 answers this product's statements from seeded answers in its own memory, so a model that reads or writes a database runs end to end before anyone has a connection string.`;
+    `Or a mockup: the Databases switch on Console \u203a Workers makes every database worker answer from prepared answers in its own memory, and a worker you run yourself reads the same decision from ATLAS_${envPrefix}_MOCK — either way a model that reads or writes a database runs end to end before anyone has a connection string.`;
 }
 
 const CONNECTORS = [
@@ -1786,6 +1786,65 @@ async function viewConsoleConnectors() {
       </div>
     </div>`;
 
+  // The database mockup switch (ADR-0221). It sits beside the AD one
+  // because it answers the same question for the other kind of system nobody can
+  // safely try a half-finished process against — and because a worker answering from
+  // a seed looks, from everywhere else in Atlas, exactly like one talking to a
+  // database.
+  let sqlMock = null;
+  try {
+    sqlMock = await api("GET", "/api/v1/settings/sql-mock");
+  } catch (e) {
+    sqlMock = null; // an older server, or unreachable: leave the card out entirely
+  }
+  const sqlMockCard = !sqlMock ? "" : `
+    <div class="card" style="margin-top:18px">
+      <div class="between"><h2>Databases</h2>
+        <span class="pill ${sqlMock.enabled ? "warn" : "ok"}"><span class="dot"></span>${
+          sqlMock.enabled ? "mockup" : "real databases"}</span></div>
+      <p class="muted" style="margin:6px 0 12px">In <b>mockup mode</b> every SQL Server, MariaDB and
+      PostgreSQL worker answers statements from prepared answers in its own memory: no database is
+      touched, no connection string is needed, and nothing in a model changes. One switch covers all
+      three — simulating one product while really writing to another looks like a full mockup run,
+      which is the one thing it must never look like. Switching restarts the workers; Atlas keeps
+      running.</p>
+      <label style="display:flex; align-items:center; gap:10px; margin-bottom:10px">
+        <input type="checkbox" id="sqlmock-on" ${sqlMock.enabled ? "checked" : ""}>
+        <span>Answer database tasks from a mockup</span>
+      </label>
+      <div style="margin-bottom:10px">
+        <div class="muted" style="font-size:13px; margin-bottom:6px">Prepared answers — what each
+        statement returns. A statement with no answer here <b>fails</b> and names itself and the values
+        it was given, so you can paste them straight in; it never comes back as an empty result,
+        because "no rows" is a real business answer and a mockup that invents one would hand your
+        process a fact. An answer may also carry an <code>error</code>, which is how you try the case
+        a real database hands you sooner or later.</div>
+        <div class="between" style="gap:10px; flex-wrap:wrap">
+          <span id="sqlmock-seed-state" data-seed-name="${esc(sqlMock.seedName || "")}" style="font-size:13px">${
+            sqlMock.hasSeed
+              ? `<b>${esc(sqlMock.seedName || "Prepared answers")}</b> — ${
+                  sqlMock.seedAnswers ? `${sqlMock.seedAnswers} answer${sqlMock.seedAnswers === 1 ? "" : "s"}` : "? answers"}`
+              : `<span class="muted">No prepared answers — every statement will fail, naming itself.</span>`}</span>
+          <span style="white-space:nowrap">
+            <input type="file" id="sqlmock-seed-file" accept=".json,application/json,text/plain" style="display:none">
+            <button class="btn ghost" id="sqlmock-seed-pick" title="Read a seed file from this computer">Choose a file…</button>
+            <button class="btn ghost" id="sqlmock-seed-edit" title="Paste or edit the answers directly">Paste or edit</button>
+            <button class="btn ghost" id="sqlmock-seed-example" title="A small seed to try a lookup and an update against">Example</button>
+            <button class="btn ghost danger" id="sqlmock-seed-clear" title="Start from a mockup with no answers">Remove</button>
+          </span>
+        </div>
+        <textarea id="sqlmock-seed" rows="12" spellcheck="false" style="display:none; width:100%; margin-top:8px;
+                  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px">${esc(sqlMock.seed || "")}</textarea>
+      </div>
+      <div class="between">
+        <button class="btn" id="sqlmock-save">Save</button>
+        <span class="muted" id="sqlmock-note" style="font-size:13px">${
+          sqlMock.configured
+            ? "Decided here."
+            : "Not decided here yet — whatever the server was started with (ATLAS_MSSQL_MOCK and friends) applies."}</span>
+      </div>
+    </div>`;
+
   // Encrypted secret vault (ADR-0069): credentials a connector's token reference
   // resolves to, sealed at rest. Every op is admin-gated and the vault may be
   // unconfigured (no master key), so distinguish those states from a populated list.
@@ -1850,9 +1909,11 @@ async function viewConsoleConnectors() {
     </div>
     ${managedCard}
     ${adMockCard}
+    ${sqlMockCard}
     ${secretsCard}`;
   wireConnectorManagement(connectors);
   wireADMock();
+  wireSQLMock();
   wireSecretsManagement(secrets, secretsState, connectors);
 }
 
@@ -4033,6 +4094,131 @@ function wireADMock() {
       toast(enabled
         ? "Mockup on — the AD worker restarts and writes to no directory."
         : "Mockup off — the AD worker restarts and talks to the domain controller again.");
+      await viewConsoleConnectors();
+    } catch (e) {
+      if (note) note.textContent = e.message;
+      save.disabled = false;
+    }
+  });
+}
+
+// SQL_SEED_EXAMPLE is a seed small enough to read and complete enough to run a whole
+// process against: the lookup examples/mssql-eintrittsmeldung.bpmn makes, the update it
+// makes afterwards, and the answer for a person who is not there — which is the branch
+// most models get wrong and the one a mockup is most useful for.
+const SQL_SEED_EXAMPLE = JSON.stringify({
+  answers: [
+    {
+      statement: "SELECT id, mail, abteilung FROM personen WHERE kuerzel = @p1",
+      params: ["abo"],
+      columns: ["id", "mail", "abteilung"],
+      rows: [[7, "arno.boesch@example.com", "IT"]],
+    },
+    {
+      // No params: the fallback for every other kuerzel. Nobody found, which is a
+      // business answer and not a failure — the model's gateway is what reads it.
+      statement: "SELECT id, mail, abteilung FROM personen WHERE kuerzel = @p1",
+      columns: ["id", "mail", "abteilung"],
+      rows: [],
+    },
+    {
+      statement: "UPDATE personen SET aktiv = @aktiv WHERE id = @id",
+      named: { id: 7, aktiv: true },
+      affected: 1,
+    },
+    {
+      // What a redelivered job meets on a real database, available on demand here.
+      statement: "INSERT INTO personen (kuerzel, mail) VALUES (@p1, @p2)",
+      error: "Violation of UNIQUE KEY constraint 'UQ_personen_kuerzel'",
+    },
+  ],
+}, null, 2);
+
+// wireSQLMock binds the database mockup switch: one PUT, and the supervised SQL
+// workers are restarted holding the new setting. Writing it is admin-gated
+// server-side, so a non-admin gets the refusal as a message rather than as a control
+// that silently does nothing.
+//
+// The prepared answers are *content*, not a path, for the reason the AD seed is
+// (ADR-0202): the Console is org-wide, and a path typed here belongs to whichever host
+// happens to run the worker. A file chosen here is read in the browser and posted as
+// text, so what an operator picks is what Atlas stores.
+function wireSQLMock() {
+  const save = document.getElementById("sqlmock-save");
+  if (!save) return;
+  const note = document.getElementById("sqlmock-note");
+  const box = document.getElementById("sqlmock-seed");
+  const state = document.getElementById("sqlmock-seed-state");
+  const file = document.getElementById("sqlmock-seed-file");
+  // Seeded from what is stored, so an operator who only flips the switch and saves does
+  // not silently strip the name off a seed they never touched.
+  let seedName = (state && state.dataset.seedName) || "";
+
+  // describe reports what is loaded without claiming to have parsed it: the answer
+  // count comes back from the server, which is the only side that actually parses.
+  const describe = (text, name) => {
+    if (!state) return;
+    state.innerHTML = text.trim()
+      ? `<b>${esc(name || "Prepared answers")}</b> — <span class="muted">not saved yet</span>`
+      : `<span class="muted">No prepared answers — every statement will fail, naming itself.</span>`;
+  };
+
+  const pick = document.getElementById("sqlmock-seed-pick");
+  if (pick && file) {
+    pick.addEventListener("click", () => file.click());
+    file.addEventListener("change", async () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      try {
+        box.value = await f.text();
+        seedName = f.name;
+        describe(box.value, seedName);
+        if (note) note.textContent = "Read from " + f.name + " — press Save to hand it to the workers.";
+      } catch (e) {
+        if (note) note.textContent = "Could not read that file: " + e.message;
+      }
+      file.value = ""; // so picking the same file again still fires a change
+    });
+  }
+
+  const edit = document.getElementById("sqlmock-seed-edit");
+  if (edit) {
+    edit.addEventListener("click", () => {
+      box.style.display = box.style.display === "none" ? "block" : "none";
+      if (box.style.display === "block") box.focus();
+    });
+  }
+
+  const example = document.getElementById("sqlmock-seed-example");
+  if (example) {
+    example.addEventListener("click", () => {
+      box.value = SQL_SEED_EXAMPLE;
+      seedName = "example-answers.json";
+      box.style.display = "block";
+      describe(box.value, seedName);
+      if (note) note.textContent = "An example seed — press Save to hand it to the workers.";
+    });
+  }
+
+  const clear = document.getElementById("sqlmock-seed-clear");
+  if (clear) {
+    clear.addEventListener("click", () => {
+      box.value = "";
+      seedName = "";
+      describe("", "");
+      if (note) note.textContent = "Removed — press Save to start from a mockup with no answers.";
+    });
+  }
+
+  save.addEventListener("click", async () => {
+    const enabled = document.getElementById("sqlmock-on").checked;
+    const seed = box.value.trim();
+    save.disabled = true;
+    try {
+      await api("PUT", "/api/v1/settings/sql-mock", { enabled, seed, seedName });
+      toast(enabled
+        ? "Mockup on — the SQL workers restart and reach no database."
+        : "Mockup off — the SQL workers restart and talk to their databases again.");
       await viewConsoleConnectors();
     } catch (e) {
       if (note) note.textContent = e.message;

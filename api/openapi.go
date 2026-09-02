@@ -792,6 +792,10 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/playground/sessions/{id}/generate", s.playground.HandleGeneratePreview, apiOp{
 			summary: "Preview the first cases a Playground dataset description would produce", tag: "Playground", role: RoleModeler,
 			req: jsonBody("A dataset description", tObject()), resp: jsonBody("The first generated cases", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/arrivals", s.playground.HandleArrivalProfile, apiOp{
+			summary: "Preview the shape of a Playground arrival stream: how many cases land in each slice of the time it covers",
+			tag:     "Playground", role: RoleModeler,
+			req: jsonBody("A case count and an arrival profile", tObject()), resp: jsonBody("The stream's shape", tObject())}},
 		{"POST", "/api/v1/playground/sessions/{id}/runs/csv", s.playground.HandleStartRunFromCSV, apiOp{
 			summary: "Start a Playground batch over an uploaded CSV, one case per row", tag: "Playground", role: RoleModeler,
 			resp: jsonBody("Run status", tObject())}},
@@ -965,6 +969,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Turn the Active Directory mockup on or off. Admin-gated; the supervised AD worker is restarted holding the new setting, so no server restart is needed", tag: "Settings", role: RoleAdmin,
 			req:  jsonBody("ADMockRequest", tObject()),
 			resp: jsonBody("ADMock", tObject())}},
+		{"GET", "/api/v1/settings/sql-mock", s.handleGetSQLMock, apiOp{
+			summary: "The org-wide database mockup switch: whether SQL Server, MariaDB and PostgreSQL tasks are answered from seeded answers in the worker's memory instead of reaching a database, and the seed it starts from", tag: "Settings", role: roleAny,
+			resp: jsonBody("SQLMock", tObject())}},
+		{"PUT", "/api/v1/settings/sql-mock", s.handleSetSQLMock, apiOp{
+			summary: "Turn the database mockup on or off. Admin-gated; the supervised SQL workers are restarted holding the new setting, so no server restart is needed", tag: "Settings", role: RoleAdmin,
+			req:  jsonBody("SQLMockRequest", tObject()),
+			resp: jsonBody("SQLMock", tObject())}},
 		{"GET", "/api/v1/settings/registration", s.handleGetRegistration, apiOp{
 			summary: "Whether the login screen offers a self-service registration link, and its public URL (public; read before login) (ADR-0126)", tag: "System", role: roleAny,
 			resp: jsonBody("Registration config", schemaObj(map[string]any{

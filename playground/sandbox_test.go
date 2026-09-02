@@ -363,3 +363,28 @@ func equalStrings(a, b []string) bool {
 	}
 	return true
 }
+
+// One case read on its own shows its variables the way the results table does.
+// Reading the text field alone loses a boolean, which keeps its value elsewhere —
+// the results table was fixed for that and this path was not, so opening a case
+// from the table showed an empty column the table had just filled in.
+func TestOneCaseShowsEveryKindOfVariable(t *testing.T) {
+	sb := openSandbox(t, "sequence.bpmn", playground.StubSet{})
+	key := runOneCase(t, sb,
+		model.VariableValue{Name: "kunde", Kind: model.VarString, Text: "A"},
+		model.VariableValue{Name: "betrag", Kind: model.VarNumber, Text: "1200"},
+		model.VariableValue{Name: "express", Kind: model.VarBool, Bool: true},
+		model.VariableValue{Name: "notiz", Kind: model.VarNull},
+	)
+	c, err := sb.Case(key)
+	if err != nil {
+		t.Fatalf("case: %v", err)
+	}
+	for name, want := range map[string]string{
+		"kunde": "A", "betrag": "1200", "express": "true", "notiz": "null",
+	} {
+		if got := c.Variables[name]; got != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+	}
+}

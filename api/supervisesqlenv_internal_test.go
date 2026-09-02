@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -440,5 +441,110 @@ func TestASQLConnectorWhoseNameFoldsToNothingIsSkipped(t *testing.T) {
 	}
 	if len(env) != 0 {
 		t.Errorf("environment = %v, want nothing", env)
+	}
+}
+
+// The Console switch has to reach the worker, or it is a checkbox that does nothing.
+// Turning the mockup on renders the variable for every SQL product, plus the file
+// Atlas wrote the seed to — a path Atlas owns, because the Console is org-wide and a
+// path typed there belongs to whichever host happens to run the worker.
+func TestTheMockupSwitchReachesTheSupervisedSQLWorker(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.do(func() {
+		if err := srv.settings.saveSQLMock(sqlMockSetting{Enabled: true, Seed: sqlMockSeedJSON, SeedName: "hr.json"}); err != nil {
+			t.Fatalf("saveSQLMock: %v", err)
+		}
+	})
+
+	env := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))
+	if got := env["ATLAS_MSSQL_MOCK"]; got != "1" {
+		t.Errorf("ATLAS_MSSQL_MOCK = %q, want 1", got)
+	}
+	seed := env["ATLAS_MSSQL_MOCK_SEED"]
+	if seed == "" {
+		t.Fatalf("env = %v, want a seed file for the worker to read", env)
+	}
+	data, err := os.ReadFile(seed)
+	if err != nil {
+		t.Fatalf("the worker is pointed at %q, which it cannot read: %v", seed, err)
+	}
+	if string(data) != sqlMockSeedJSON {
+		t.Errorf("the seed file holds %q, want what the operator saved", data)
+	}
+	// Every product, not one: mocking SQL Server while really writing to PostgreSQL is
+	// the half-state a single switch exists to prevent.
+	for _, kind := range []string{connectorKindMariaDB, connectorKindPostgres} {
+		e := envOf(t, srv.sqlWorkerEnvByName(kind))
+		if got := e["ATLAS_"+strings.ToUpper(kind)+"_MOCK"]; got != "1" {
+			t.Errorf("%s: mock variable = %q, want the mockup on for it too", kind, got)
+		}
+	}
+}
+
+// A stored "off" says off, rather than saying nothing. A switch that reads off while
+// the worker still simulates would be lying to the person who flipped it.
+func TestAStoredOffTellsTheSQLWorkerToUseARealDatabase(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.do(func() { _ = srv.settings.saveSQLMock(sqlMockSetting{Enabled: false, Seed: sqlMockSeedJSON}) })
+
+	env := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))
+	if got := env["ATLAS_MSSQL_MOCK"]; got != "0" {
+		t.Errorf("ATLAS_MSSQL_MOCK = %q, want 0", got)
+	}
+	// And no seed: a worker reaching a real database has nothing to read one for, and
+	// the variable set alongside MOCK=0 is what the worker refuses to start on.
+	if got := env["ATLAS_MSSQL_MOCK_SEED"]; got != "" {
+		t.Errorf("ATLAS_MSSQL_MOCK_SEED = %q, want nothing handed to a worker that is not mocking", got)
+	}
+}
+
+// No stored record renders nothing at all, so a server started with ATLAS_MSSQL_MOCK
+// by hand keeps deciding for itself. That is what keeps an existing install working
+// exactly as it did until somebody touches the switch.
+func TestNoStoredSQLMockRecordLeavesTheHostEnvironmentAlone(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	for _, v := range srv.sqlWorkerEnvByName(connectorKindMSSQL) {
+		if strings.HasPrefix(v, "ATLAS_MSSQL_MOCK") {
+			t.Errorf("env carries %q with nothing stored; the host's own setting must still decide", v)
+		}
+	}
+}
+
+// The blocker that would have made the switch useless. A worker record with no
+// connection string is left out of CONNECTORS normally — a name the worker is told to
+// serve with no DSN behind it is exactly the misconfiguration it refuses to start on
+// (the test above). In mockup mode there is no DSN to have, so leaving the name out
+// would mean the mockup serves nothing a task can address.
+func TestInMockupModeASQLWorkerWithNoDSNIsStillServed(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	if err := srv.connectors.Save(connector{
+		ID: "1", Name: "hr-db", Kind: connectorKindMSSQL, Enabled: true, CreatedAt: 1,
+		// No CredentialsRef: nothing to resolve, which is the whole point.
+	}); err != nil {
+		t.Fatalf("connectors.Save: %v", err)
+	}
+	srv.do(func() { _ = srv.settings.saveSQLMock(sqlMockSetting{Enabled: true, Seed: sqlMockSeedJSON}) })
+
+	env := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))
+	if got := env["ATLAS_MSSQL_CONNECTORS"]; got != "hr-db" {
+		t.Errorf("ATLAS_MSSQL_CONNECTORS = %q, want hr-db — the mockup has no name to answer to otherwise", got)
+	}
+	if got := env["ATLAS_MSSQL_HR_DB_DSN"]; got != "" {
+		t.Errorf("a DSN was rendered in mockup mode: %q", got)
+	}
+}
+
+// And with the mockup off it stays out, unchanged.
+func TestWithTheMockupOffASQLWorkerWithNoDSNIsStillLeftOut(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	if err := srv.connectors.Save(connector{
+		ID: "1", Name: "hr-db", Kind: connectorKindMSSQL, Enabled: true, CreatedAt: 1,
+	}); err != nil {
+		t.Fatalf("connectors.Save: %v", err)
+	}
+	srv.do(func() { _ = srv.settings.saveSQLMock(sqlMockSetting{Enabled: false}) })
+
+	if got := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))["ATLAS_MSSQL_CONNECTORS"]; got != "" {
+		t.Errorf("ATLAS_MSSQL_CONNECTORS = %q, want the secretless worker left out", got)
 	}
 }

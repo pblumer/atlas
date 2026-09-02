@@ -2167,7 +2167,7 @@ function sqlServiceTaskKind(p) {
       { group: "Database" },
       {
         key: "connector", label: "Worker", datalist: p.id, placeholder: "hr-db",
-        hint: `The configured ${p.name} Worker this statement runs on, by the name it has under Workers in the Console. Its connection string is sealed into the vault there, or read by a worker you run yourself from its own environment (ATLAS_${p.envPrefix}_<NAME>_DSN) — either way the engine never holds a database credential (ADR-0173). A worker started with ATLAS_${p.envPrefix}_MOCK=1 answers this task from seeded answers in its own memory instead, so the model can be tried without a database (ADR-0221).`,
+        hint: `The configured ${p.name} Worker this statement runs on, by the name it has under Workers in the Console. Its connection string is sealed into the vault there, or read by a worker you run yourself from its own environment (ATLAS_${p.envPrefix}_<NAME>_DSN) — either way the engine never holds a database credential (ADR-0173). With the Databases mockup switched on (Console \u203a Workers, or ATLAS_${p.envPrefix}_MOCK on a worker you run yourself) the same task is answered from prepared answers in that worker's memory instead, so the model can be tried without a database (ADR-0221).`,
       },
       { group: "Statement" },
       {

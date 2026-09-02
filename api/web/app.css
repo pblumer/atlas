@@ -3919,6 +3919,18 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .pg-results-scroll { overflow: auto; min-height: 0; }
 .pg-cases { min-width: 100%; }
 .pg-cases th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
+/* A row is a way into its own case, so it looks like one. The open row stays marked
+   while the diagram shows it: the number in the strip and the row under it have to
+   be visibly the same case. */
+.pg-cases tbody tr { cursor: pointer; }
+.pg-cases tbody tr.pg-open { background: var(--accent-soft); }
+.pg-cases tbody tr.pg-open td:first-child {
+  font-weight: 600; color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* While a case is on the diagram the strip names it instead of offering measures. */
+.pg-overlay b { font-weight: 600; }
 /* And so do the modelling affordances. The Playground *runs* the diagram — the
    sandbox compiled the model as it stood when it started, so a shape added here
    would not be in what is running, and the palette offering it is the panel
@@ -4015,6 +4027,7 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .pg-facts > div {
   flex: 1 1 60px; padding: 6px 8px; border: 1px solid var(--border);
   border-radius: 6px; background: var(--bg); min-width: 0;
+  display: flex; flex-direction: column; gap: 4px;
 }
 .pg-facts b { display: block; font-size: 15px; color: var(--text); }
 .pg-facts b.bad { color: var(--danger); }
@@ -4044,7 +4057,39 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .pg-key-in { background: var(--accent); opacity: .35; }
 .pg-key-out { background: var(--ok); opacity: .45; }
 .pg-key-flight { background: var(--warn); }
-.pg-axis { display: flex; justify-content: space-between; margin: 0 8px 4px; font-size: 10.5px; color: var(--muted); }
+.pg-axis { display: flex; justify-content: space-between; gap: 6px; margin: 0 8px 4px; font-size: 10.5px; color: var(--muted); }
+
+/* The arrival stream before it runs: an area under a line, one hue, scaled to its
+   own fullest slice. It is drawn small on purpose — it sits between the timing
+   boxes and the expectations, and its job is to show the *shape* the numbers make
+   (a Poisson burst is not a takt) while the exact counts stay in the line under it
+   and in the per-slice tooltips. */
+.pg-spark { display: block; width: calc(100% - 16px); height: 34px; margin: 6px 8px 2px; }
+.pg-spark-fill { fill: var(--accent); opacity: .12; }
+.pg-spark-line { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.pg-spark-hit { fill: transparent; }
+.pg-spark-note { margin: 0 8px 6px; font-size: 11px; }
+
+/* A number with its own magnitude under it: a track along the foot of the cell or
+   the tile, filled to the value's share of the column's scale.
+   The empty part of the track is what makes it a gauge. Without it a full value
+   underlines itself and a small one reads as a stray mark; with it, one glance down
+   the column says which row is the big one. The number stays in text ink beside it,
+   so nothing here is carried by a length alone. */
+.pg-track {
+  display: block; height: 3px; margin-top: 4px; border-radius: 999px;
+  background: var(--border); overflow: hidden;
+}
+.pg-track i { display: block; height: 100%; border-radius: 999px; background: var(--accent); opacity: .55; }
+/* In a table the track is lifted out of the flow into a strip every row reserves,
+   so one number's gauge does not sit its own cell's text higher than the cells
+   beside it. */
+.pg-bottlenecks td, .pg-pools td, .pg-cases td { padding-bottom: 9px; }
+.pg-meter { position: relative; min-width: 52px; }
+.pg-meter .pg-track { position: absolute; left: 6px; right: 6px; bottom: 3px; margin: 0; }
+/* On a tile the gauges are compared with each other, so they sit on one line at the
+   foot of their tiles however many lines the number above them wrapped to. */
+.pg-facts .pg-track { margin-top: auto; }
 
 /* The paths the data never took, listed rather than only shaded: on a large
    diagram a cold branch is easier to read from a list than to find by colour. */

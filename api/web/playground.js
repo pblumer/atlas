@@ -276,9 +276,22 @@ export function attachPlayground(root, { api, toast, modeler }) {
     genPreview: null,
     arrival: "allAtOnce",
     arrivalN: 10,
+    // The shape of the arrival stream, drawn before the run. The server lays the
+    // arrivals out with the code the run uses, so the sparkline is the schedule
+    // rather than a picture of one; the key is the request it answers, so a redraw
+    // costs a call only when the timing itself changed.
+    profile: null,
+    profileKey: "",
+    profileError: "",
     run: null,       // the last run status
     report: null,
     results: null,   // one page of the results table: {total, offset, rows}
+    // One case from that table, opened to be read rather than driven. It is a field
+    // of its own rather than Step mode's: the two are different questions about the
+    // same sandbox, and leaving one behind in the other's view shows a case nobody
+    // asked for.
+    inspect: null,   // {index, key, end, durationMillis} — the row that was clicked
+    inspected: null, // what the server said about it
     heat: null,      // the heat map, once a run has produced one
     // Which measure shades the diagram, or "off". One at a time: see OVERLAYS.
     overlay: "off",
@@ -587,6 +600,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.verdict = null;
     state.comparison = null;
     state.results = null;
+    closeCase();
     if (state.source === "csv") {
       if (!state.csv) throw new Error("choose a CSV file, or take the dataset from the list or the generator");
       const form = new FormData();
@@ -613,6 +627,77 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.genPreview = await api("POST", path("/generate?limit=8"), genBody());
   }
 
+  // plannedCases is how many cases the run would carry, from whichever of the three
+  // sources is driving it. A CSV's size is not one of them: the file is parsed on
+  // the server, so the browser cannot count its rows without reading it twice.
+  function plannedCases() {
+    if (state.source === "generated") return Math.max(0, Math.round(Number(state.gen.count)) || 0);
+    if (state.source === "list") {
+      try {
+        const rows = JSON.parse(state.cases);
+        return Array.isArray(rows) ? rows.length : 0;
+      } catch { return 0; }
+    }
+    return 0;
+  }
+
+  // profileKey is the request the drawn profile answers: the count and the timing,
+  // and nothing else on the panel. Everything the shape depends on is in here, so a
+  // key that has not changed is a picture that does not need fetching again.
+  function profileKey() {
+    const count = plannedCases();
+    if (!state.session || state.mode !== "batch" || count < 1) return "";
+    return JSON.stringify({ count, arrival: arrivalBody() });
+  }
+
+  // refreshProfile fetches the shape of the stream the timing describes.
+  //
+  // It runs off the render rather than off each box, so every way of changing the
+  // timing — the mode, its parameter, the business-hours box, the size of the
+  // dataset — redraws it without a handler of its own. It is deliberately outside
+  // guard(): a preview is not something to disable the panel's buttons for, and a
+  // stream the planner refuses is shown where the numbers were typed rather than as
+  // a toast that outlives them.
+  async function refreshProfile() {
+    const key = profileKey();
+    if (key === state.profileKey) return;
+    state.profileKey = key;
+    state.profile = null;
+    state.profileError = "";
+    if (!key) { drawProfile(); return; }
+    try {
+      const out = await api("POST", path("/arrivals"), JSON.parse(key));
+      // A later change may have overtaken this answer. Only the current one is
+      // drawn: a sparkline of the timing somebody has already replaced is worse
+      // than none, because nothing on screen says it is stale.
+      if (key !== state.profileKey) return;
+      state.profile = out;
+    } catch (e) {
+      if (key !== state.profileKey) return;
+      state.profileError = e.message;
+    }
+    drawProfile();
+  }
+
+  // drawProfile repaints the sparkline and nothing else.
+  //
+  // The answer lands while somebody is still typing in the column beside it, and a
+  // full render would replace the box under their caret — and, worse, the button
+  // their click is halfway through. The picture owns one element; it redraws that.
+  function drawProfile() {
+    const slot = el("pg-profile");
+    if (slot) slot.innerHTML = arrivalProfileHTML();
+  }
+
+  // profileTimer debounces the boxes that feed the sparkline. A count is typed a
+  // digit at a time and "5", "50" and "500" are three different pictures; only the
+  // one somebody stopped on is worth fetching.
+  let profileTimer = 0;
+  function profileSoon() {
+    clearTimeout(profileTimer);
+    profileTimer = setTimeout(refreshProfile, 300);
+  }
+
   // resultsPageSize is how many cases the strip shows at a time. A page is read by a
   // person: enough to scroll, few enough that the fifty-thousandth case costs the
   // same as the fiftieth.
@@ -620,6 +705,24 @@ export function attachPlayground(root, { api, toast, modeler }) {
 
   // readResults fetches one page. The rows are never held whole — a run of fifty
   // thousand is fifty thousand rows in the sandbox's store and one page in here.
+  // openCase reads one case of a finished batch, so the diagram shows the path *that
+  // case* took rather than what all of them did together.
+  //
+  // It reads rather than drives: the sandbox's Step controls act on the whole
+  // sandbox, and offering them here would invite stepping a run that is over.
+  async function openCase(row) {
+    state.inspect = { index: row.index, key: row.instanceKey, end: row.end, durationMillis: row.durationMillis };
+    state.inspected = await api("GET", path(`/cases/${encodeURIComponent(row.instanceKey)}`));
+    drawCanvas();
+  }
+
+  function closeCase() {
+    if (!state.inspect) return;
+    state.inspect = null;
+    state.inspected = null;
+    drawCanvas();
+  }
+
   async function readResults(offset) {
     state.results = await api("GET", path(`/results?offset=${Math.max(0, offset)}&limit=${resultsPageSize}`));
   }
@@ -731,6 +834,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.verdict = null;
     state.comparison = null;
     state.results = null;
+    closeCase();
     await refresh();
   }
 
@@ -841,8 +945,40 @@ export function attachPlayground(root, { api, toast, modeler }) {
       overlays = modeler.get("overlays");
       registry = modeler.get("elementRegistry");
     } catch { return; }
-    if (state.overlay !== "off" && state.heat) drawOverlay(canvas, overlays, registry);
+    if (state.inspect && state.inspected) drawCase(canvas, overlays, registry);
+    else if (state.overlay !== "off" && state.heat) drawOverlay(canvas, overlays, registry);
     else drawRun(canvas, overlays, registry);
+  }
+
+  // drawCase paints one case's own path: the elements it went through, numbered in
+  // the order it reached them.
+  //
+  // The number is what makes this a replay rather than a second coverage map. An
+  // element the case looped through carries every step it was, because "3, 7" is the
+  // loop — and a single count would hide the thing somebody opened the case to see.
+  function drawCase(canvas, overlays, registry) {
+    const steps = new Map();
+    (state.inspected.path || []).forEach((id, i) => {
+      if (!steps.has(id)) steps.set(id, []);
+      steps.get(id).push(i + 1);
+    });
+    const last = (state.inspected.path || [])[(state.inspected.path || []).length - 1];
+    const running = state.inspected.state !== "completed";
+    for (const [id, at] of steps) {
+      if (!registry.get(id)) continue;
+      // The last element of an unfinished case is where it stands now, not somewhere
+      // it has been: a parked case reads as stuck there, which is the point.
+      const marker = running && id === last ? "atlas-active" : "atlas-visited";
+      canvas.addMarker(id, marker);
+      drawn.markers.push([id, marker]);
+      try {
+        drawn.overlays.push(overlays.add(id, "pg-visits", {
+          position: { bottom: 4, right: 4 },
+          html: `<div class="token-badges"><div class="token-badge history"
+            title="step ${at.join(", ")} of this case">${at.join(", ")}</div></div>`,
+        }));
+      } catch { /* shape without graphics */ }
+    }
   }
 
   // drawRun paints a single case onto the diagram: every element a token has
@@ -946,8 +1082,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     </div>`;
   }
 
-  function resultHTML() {
-    const c = state.result;
+  function resultHTML(c) {
     if (!c) return `<p class="muted">No case yet. Press <b>+ Case</b> to start one.</p>`;
     const vars = Object.entries(c.variables || {})
       .map(([k, v]) => `<tr><td>${esc(k)}</td><td class="mono">${esc(v)}</td></tr>`).join("");
@@ -1303,8 +1438,56 @@ export function attachPlayground(root, { api, toast, modeler }) {
         ${param ? `<input type="number" min="1" step="1" id="pg-arrival-n" value="${esc(state.arrivalN)}" />
                    <span class="muted">${esc(param)}</span>` : ""}
       </div>
+      <div id="pg-profile">${arrivalProfileHTML()}</div>
       ${expectHTML()}
       ${scenarioSaveHTML()}`;
+  }
+
+  // arrivalProfileHTML draws the stream the timing describes, before anything runs.
+  //
+  // The shape comes from the server because the server plans the run: one piece of
+  // code lays the arrivals out either way, so what is on screen is the schedule the
+  // cases will actually get rather than a browser's second guess at it. Which is the
+  // whole point of drawing it — a Poisson stream of three hundred is bursty in a way
+  // no wording of "a stream of 10 per hour" conveys, and the burst is what the pools
+  // downstream will feel.
+  function arrivalProfileHTML() {
+    if (state.profileError) return `<p class="pg-inc">${esc(state.profileError)}</p>`;
+    const p = state.profile;
+    if (!p) return "";
+    if (!p.scheduled) {
+      return `<p class="muted">One after another has no schedule ahead of the run: the next
+        case starts when the one before it finishes, so its shape is the run's own.</p>`;
+    }
+    const b = p.buckets || [];
+    if (b.length < 2) return "";
+    const W = 300, H = 34, peak = Math.max(1, p.peak);
+    // The line stops a hair short of the top edge: drawn flush against the frame the
+    // fullest slice reads as a border rather than as the measurement it is.
+    const x = (i) => (i * W) / (b.length - 1);
+    const y = (v) => H - (v / peak) * (H - 2);
+    const points = b.map((v, i) => `${x(i).toFixed(2)},${y(v).toFixed(2)}`).join(" ");
+    const startMs = Date.parse(p.start);
+    const slice = (p.spanMillis || 0) / b.length;
+    const bw = W / (b.length - 1);
+    // A band per slice carrying its own title: the tooltip is the browser's, which on
+    // a strip this size beats a crosshair widget nobody asked the panel to grow.
+    const hits = b.map((v, i) => {
+      const at = fmtWhen(`${new Date(startMs + i * slice).toISOString().slice(0, 19)}Z`);
+      return `<rect class="pg-spark-hit" x="${Math.max(0, x(i) - bw / 2).toFixed(2)}" y="0"
+        width="${bw.toFixed(2)}" height="${H}"><title>${esc(at)} · ${v} case${v === 1 ? "" : "s"}</title></rect>`;
+    }).join("");
+    return `
+      <svg class="pg-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
+        aria-label="${p.cases} cases arriving over ${esc(fmtDur(p.spanMillis))}, at most ${peak} in a slice">
+        <polygon class="pg-spark-fill" points="0,${H} ${points} ${W},${H}"/>
+        <polyline class="pg-spark-line" points="${points}"/>
+        <line class="pg-base" x1="0" y1="${H}" x2="${W}" y2="${H}"/>
+        ${hits}
+      </svg>
+      <div class="pg-axis"><span>${esc(fmtWhen(p.start))}</span><span>${esc(fmtWhen(p.end))}</span></div>
+      <p class="muted pg-spark-note">${p.cases} case${p.cases === 1 ? "" : "s"} ${
+        p.spanMillis ? `over ${esc(fmtDur(p.spanMillis))}, at most ${peak} in a slice` : "at once"}</p>`;
   }
 
   // batchAnalysisHTML is what the run did — read while it runs and after it stops.
@@ -1314,10 +1497,22 @@ export function attachPlayground(root, { api, toast, modeler }) {
         left, then press <b>Run batch</b>.</p>`;
     }
     return `
+      ${inspectedCaseHTML()}
       ${runStatusHTML()}
       ${verdictHTML()}
       ${comparisonHTML()}
       ${reportHTML()}`;
+  }
+
+  // inspectedCaseHTML is the case a reader clicked, above the report rather than
+  // instead of it: they came here from the run, and going back to it should not cost
+  // them the numbers they were reading.
+  function inspectedCaseHTML() {
+    if (!state.inspect) return "";
+    return `
+      <div class="pg-sec"><b>Case ${state.inspect.index + 1}</b>
+        <span class="muted">of ${state.results ? state.results.total : 0}</span></div>
+      ${resultHTML(state.inspected)}`;
   }
 
   function runStatusHTML() {
@@ -1346,6 +1541,36 @@ export function attachPlayground(root, { api, toast, modeler }) {
     ];
   }
 
+  // trackHTML is the gauge: a track filled to a value's share of the scale its
+  // column is read against.
+  //
+  // The empty part is drawn too, and that is the whole of why this is a function
+  // rather than a styled bar. A fill with no track behind it underlines its own
+  // number when it is full and reads as a stray mark when it is small; with the
+  // track, one glance down a column says which row is the big one.
+  function trackHTML(value, max) {
+    const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
+    return `<span class="pg-track"><i style="width:${pct.toFixed(1)}%"></i></span>`;
+  }
+
+  // meterHTML is a table cell whose number carries its own magnitude under it.
+  //
+  // Both, rather than either. The gauge answers the question a column of formatted
+  // durations is slowest at — which row is the big one — and the number beside it
+  // keeps the fact exact, so nothing here is read off a length alone.
+  function meterHTML(value, max, text, title) {
+    return `<td class="pg-meter"${title ? ` title="${esc(title)}"` : ""}>${esc(text)}
+      ${trackHTML(value, max)}</td>`;
+  }
+
+  // factBarHTML is one of the duration tiles with its own share of the slowest case
+  // under it. The four sit on one axis, so four lengths against one scale say what
+  // four numbers cannot: whether the median is near the fastest and the p90 out on
+  // its own, or the whole run is bunched together.
+  function factBarHTML(value, max, text, label) {
+    return `<div><b>${esc(text)}</b><span>${esc(label)}</span>${trackHTML(value, max)}</div>`;
+  }
+
   // reportHTML is the analysis: what came out, how long it took, where it waited,
   // and when. Every number here is a fold of the whole run rather than a sample.
   function reportHTML() {
@@ -1360,6 +1585,12 @@ export function attachPlayground(root, { api, toast, modeler }) {
       .sort((a, b) => (b.waitMillis - a.waitMillis) || (b.workMillis - a.workMillis))
       .slice(0, 8);
     const pools = Object.entries(rep.pools || {});
+    // A column of bars is scaled to its own largest value, so a length is read
+    // against the rows beside it and never against a run that is not on screen.
+    // Utilisation is the exception: it is scaled to a full hundred, because the
+    // question there is how full a pool was rather than which of them was fullest,
+    // and a bar that filled at the busiest would read as saturated at forty percent.
+    const maxWait = Math.max(0, ...bottlenecks.map((b) => b.waitMillis || 0));
     const cold = coldPaths();
     return `
       <div class="pg-sec"><b>Outcomes</b></div>
@@ -1370,24 +1601,26 @@ export function attachPlayground(root, { api, toast, modeler }) {
       </div>
       <div class="pg-sec"><b>Durations</b> <span class="muted">per case, simulated</span></div>
       <div class="pg-facts">
-        <div><b>${esc(fmtDur(d.minMillis))}</b><span>fastest</span></div>
-        <div><b>${esc(fmtDur(d.p50Millis))}</b><span>median</span></div>
-        <div><b>${esc(fmtDur(d.p90Millis))}</b><span>p90</span></div>
-        <div><b>${esc(fmtDur(d.maxMillis))}</b><span>slowest</span></div>
+        ${factBarHTML(d.minMillis, d.maxMillis, fmtDur(d.minMillis), "fastest")}
+        ${factBarHTML(d.p50Millis, d.maxMillis, fmtDur(d.p50Millis), "median")}
+        ${factBarHTML(d.p90Millis, d.maxMillis, fmtDur(d.p90Millis), "p90")}
+        ${factBarHTML(d.maxMillis, d.maxMillis, fmtDur(d.maxMillis), "slowest")}
       </div>
       ${bottlenecks.length ? `
         <div class="pg-sec"><b>Bottlenecks</b> <span class="muted">by total waiting</span></div>
         <table class="pg-table pg-bottlenecks"><thead><tr><th>element</th><th>runs</th><th>waiting</th><th>longest</th><th>work</th></tr></thead>
         <tbody>${bottlenecks.map((b) => `<tr>
           <td class="mono">${esc(b.id)}</td><td>${b.runs}</td>
-          <td>${esc(fmtDur(b.waitMillis))}</td><td>${esc(fmtDur(b.maxWaitMillis))}</td>
+          ${meterHTML(b.waitMillis, maxWait, fmtDur(b.waitMillis), "Total waiting, against the worst element here")}
+          <td>${esc(fmtDur(b.maxWaitMillis))}</td>
           <td>${esc(fmtDur(b.workMillis))}</td></tr>`).join("")}</tbody></table>` : ""}
       ${pools.length ? `
         <div class="pg-sec"><b>Pools</b></div>
         <table class="pg-table pg-pools"><thead><tr><th>pool</th><th>seats</th><th>used</th><th>served</th><th>longest queue</th></tr></thead>
         <tbody>${pools.map(([name, p]) => `<tr>
           <td class="mono">${esc(name)}</td><td>${p.capacity}</td>
-          <td>${p.utilisationPercent}%</td><td>${p.served}</td><td>${p.maxQueue}</td></tr>`).join("")}</tbody></table>` : ""}
+          ${meterHTML(p.utilisationPercent, 100, `${p.utilisationPercent}%`, "Share of its open time the pool was busy")}
+          <td>${p.served}</td><td>${p.maxQueue}</td></tr>`).join("")}</tbody></table>` : ""}
       ${timelineHTML(rep.timeline)}
       ${state.heat ? `
         <div class="pg-sec"><b>Coverage</b>
@@ -1411,6 +1644,11 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const shown = rows.length;
     const names = variableColumns(rows);
     const broke = violatingCases();
+    // The bars are scaled to the slowest case on this page rather than to the run's
+    // own slowest. A page is what a reader is comparing — which of these fifty took
+    // the longest — and a column scaled to a case on page nine would draw all fifty
+    // of them as short.
+    const slowest = Math.max(0, ...rows.map((r) => (r.ended ? r.durationMillis || 0 : 0)));
     return `
       <div class="pg-results-head">
         <b>Results</b>
@@ -1425,10 +1663,14 @@ export function attachPlayground(root, { api, toast, modeler }) {
           <table class="pg-table pg-cases">
             <thead><tr><th>case</th><th>outcome</th><th>duration</th><th>incidents</th>
               ${names.map((n) => `<th>${esc(n)}</th>`).join("")}</tr></thead>
-            <tbody>${rows.map((row) => `<tr${row.incidents || broke.has(row.index) ? ' class="pg-bad"' : ""}>
+            <tbody>${rows.map((row) => `<tr data-case="${esc(row.index)}" title="Show this case on the diagram"
+              class="${row.incidents || broke.has(row.index) ? "pg-bad " : ""}${
+                state.inspect && state.inspect.index === row.index ? "pg-open" : ""}">
               <td>${row.index + 1}${broke.has(row.index) ? ' <span title="This case broke a rule">&#10007;</span>' : ""}</td>
               <td class="mono">${esc(row.end || (row.state === "completed" ? "" : row.state))}</td>
-              <td>${row.ended ? esc(fmtDur(row.durationMillis)) : "\u2014"}</td>
+              ${row.ended
+                ? meterHTML(row.durationMillis, slowest, fmtDur(row.durationMillis), "Against the slowest case on this page")
+                : `<td>\u2014</td>`}
               <td>${row.incidents || ""}</td>
               ${names.map((n) => `<td class="mono">${esc((row.variables || {})[n] == null ? "" : row.variables[n])}</td>`).join("")}
             </tr>`).join("")}</tbody>
@@ -1519,8 +1761,9 @@ export function attachPlayground(root, { api, toast, modeler }) {
       ? "Nothing is deployed and no connector can be called — the sandbox has none."
       : batching
         ? running ? "Running the dataset. Stop leaves what it did readable."
-          : state.report ? "The report is in the panel; the overlay over the diagram shades it."
-            : "Give it a dataset and a timing profile, then run it."
+          : state.inspect ? "One case is on the diagram. Back to the run puts the whole run back."
+            : state.report ? "The report is in the panel; a results row puts one case on the diagram."
+              : "Give it a dataset and a timing profile, then run it."
         : state.tasks.length
           ? "A task is waiting for you: complete it in the panel."
           : "Step one occurrence at a time, or run the case to rest.";
@@ -1537,6 +1780,10 @@ export function attachPlayground(root, { api, toast, modeler }) {
     el("pg-body").innerHTML = analysisColumnHTML();
     if (!results.hidden) el("pg-results-body").innerHTML = resultsStripHTML();
     if (!overlayBar.hidden) el("pg-overlay-body").innerHTML = overlayStripHTML();
+    // The sparkline is fetched off the render rather than off each box that feeds
+    // it. It is a no-op unless the timing actually changed, and it re-renders once
+    // the answer lands.
+    refreshProfile();
   }
 
   // overlayStripHTML is the switcher and its legend: which of the run's four
@@ -1545,6 +1792,21 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // A legend rather than a colour alone, because a shade only means something
   // against a scale — "dark" says nothing until it says "dark is 322 cases".
   function overlayStripHTML() {
+    // While a case is open the canvas shows that case, not the run, so the measures
+    // are not offered: a button that says "Waiting" over a diagram drawing one case's
+    // path would be naming something that is not on screen.
+    if (state.inspect) {
+      const c = state.inspected || {};
+      const steps = (c.path || []).length;
+      return `
+        <span class="muted">Showing</span>
+        <b>case ${state.inspect.index + 1}</b>
+        <span class="muted">${esc(c.state || "")}${
+          state.inspect.end ? ` at ${esc(state.inspect.end)}` : ""} · ${steps} step${steps === 1 ? "" : "s"}${
+          state.inspect.durationMillis ? ` · ${esc(fmtDur(state.inspect.durationMillis))}` : ""}</span>
+        <span style="flex:1"></span>
+        <button id="pg-case-close">Back to the run</button>`;
+    }
     const key = state.overlay;
     const tab = (k, label, title) =>
       `<button data-overlay="${k}"${k === key ? ' class="active"' : ""} title="${esc(title)}">${esc(label)}</button>`;
@@ -1588,7 +1850,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
         outcomes, the durations, where the cases waited, and the run over simulated time.</p>`;
     }
     if (state.mode === "batch") return batchAnalysisHTML();
-    return `<div class="pg-sec"><b>Case</b></div>${resultHTML()}`;
+    return `<div class="pg-sec"><b>Case</b></div>${resultHTML(state.result)}`;
   }
 
   // ---- events ---------------------------------------------------------------
@@ -1621,6 +1883,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       // Each mode paints the canvas its own way, and the heat map belongs to the
       // batch: stepping through a case while the diagram is shaded by a previous
       // run would be two answers on one picture.
+      closeCase();
       if (state.mode !== "batch") state.overlay = "off";
       else if (state.overlay === "off" && state.heat) state.overlay = "runs";
       drawCanvas();
@@ -1689,6 +1952,18 @@ export function attachPlayground(root, { api, toast, modeler }) {
       guard("keep the baseline", keepBaseline);
       return;
     }
+    if (e.target.closest("#pg-case-close")) {
+      closeCase();
+      render();
+      return;
+    }
+    const caseRow = e.target.closest("tr[data-case]");
+    if (caseRow) {
+      const row = ((state.results && state.results.rows) || [])
+        .find((r) => r.index === Number(caseRow.dataset.case));
+      if (row) guard("show the case", () => openCase(row));
+      return;
+    }
     const page = e.target.closest("#pg-page-prev, #pg-page-next");
     if (page) {
       const at = state.results ? state.results.offset : 0;
@@ -1719,6 +1994,10 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (t.id === "pg-x-reach") state.expect.mustReach = t.value;
     if (t.id === "pg-scenario-name") state.scenarioName = t.value;
     if (t.id === "pg-gen-count") state.gen.count = t.value;
+    // Three of these boxes decide the arrival sparkline: how many cases there are
+    // and how fast they come. They redraw it on their own rather than through a
+    // render, which would take the caret out of the box being typed in.
+    if (t.id === "pg-arrival-n" || t.id === "pg-gen-count" || t.id === "pg-cases") profileSoon();
     if (t.dataset.rule) state.expect.rules[Number(t.dataset.i)][t.dataset.rule] = t.value;
     // A generated field's boxes are kept without re-rendering, like every other
     // box here: a render would move the caret to the end of the one being typed in.
@@ -1741,6 +2020,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (t.id === "pg-x-inc") state.expect.noIncidents = t.checked;
     if (t.id === "pg-scenario-pick") state.pickedScenario = t.value;
     if (t.id === "pg-arrival") { state.arrival = t.value; render(); }
+
     if (t.id === "pg-csv" && t.files && t.files[0]) { state.csv = t.files[0]; render(); }
     if (t.dataset.gen === "kind") {
       // The kind decides which parameters the row shows, so this one does redraw.

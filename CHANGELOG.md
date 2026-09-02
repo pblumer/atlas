@@ -26,6 +26,38 @@ _Changed_ / _Removed_ for each version.
   because an empty result means three different things Jira does not distinguish. The
   examples index gained a row for it and for `jira-zugangsantrag/`, which had none.
 
+- **The database mockup is a switch in the Console.** [ADR-0221](docs/adr/0221-sql-mock-mode.md)
+  shipped mockup mode as environment variables on a worker, and named a Console switch as
+  the follow-up. This is it: **Workers → Databases** has a checkbox and a field for the
+  prepared answers, and saving restarts the supervised SQL workers holding it. Atlas keeps
+  running, and no deployment change is involved — which was the whole complaint, because a
+  variable set once at start is the wrong ceremony for a thing you flip while trying a
+  process out.
+
+  Three rules come straight from the Active Directory switch it copies. A stored "off" and
+  no record at all are **different states**: without one, whatever the server was started
+  with keeps deciding, so an existing install works exactly as it did until somebody
+  touches the switch. The answers are **content, not a path** — the Console is org-wide and
+  a path typed there belongs to whichever host runs the worker, so Atlas stores the JSON
+  and writes the file itself, named by a digest of its own content so that replacing a seed
+  actually reaches the worker. And the seed is **parsed on save**, so a typo is refused at
+  the form with its own complaint rather than discovered as a mockup that quietly answers
+  nothing.
+
+  One switch covers all three products, as the AD one covers all directories: simulating
+  SQL Server while really writing to PostgreSQL would look like a full mockup run, which is
+  the one thing it must never look like.
+
+  Two rules that were right for a real database had to move, or the switch would have been
+  a checkbox with nothing behind it. A worker record with **no secret** is now handed to
+  the worker while the mockup is on — normally its name is withheld, because a name with no
+  DSN behind it is what a SQL worker refuses to start on, and in mockup mode that would
+  leave the mockup with no name a task can address. And **creating** a database worker no
+  longer demands a connection string while the mockup is on: that is a credential for a
+  database nobody will dial, and it is exactly the state an operator is in when they turn
+  the mockup on *because* they have no database. A connection string given anyway is still
+  sealed and kept, so turning the mockup off is not a re-typing exercise.
+
 - **A message start event says whether anything feeds it.** A model names a message and
   nothing else — what publishes it is an operational fact, so the same process can be
   started by a Jira watch, a clio subscription, a `POST /api/v1/messages` or another

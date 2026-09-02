@@ -1,0 +1,40 @@
+{
+  "tags": [
+    "Console",
+    "Databases",
+    "Testing"
+  ],
+  "title": {
+    "en": "Turn the database mockup on from the Console",
+    "de": "Den Datenbank-Mockup aus der Konsole einschalten"
+  },
+  "summary": {
+    "en": "Trying a process that reads a database used to mean editing a unit file and restarting the server. Now it is a checkbox: Workers, the Databases card, save. The SQL workers restart holding it and Atlas keeps running. The same card takes the prepared answers — choose a file, paste them, or press Example — and there is no path to type anywhere, because Atlas stores them and puts them where the worker will find them. They are checked as you save, so a typo comes back with the seed's own complaint instead of turning into a mockup that quietly answers nothing. One switch covers SQL Server, MariaDB and PostgreSQL together: simulating one while really writing to another would look like a full mockup run, and that is the one thing it must never look like. While it is on you can also add a database worker with no connection string at all — just the name your task states — which is exactly the situation you are in when you turn the mockup on because you have no database yet. Give a connection string anyway and it is still kept safe, so switching back is not a re-typing exercise.",
+    "de": "Einen Prozess auszuprobieren, der aus einer Datenbank liest, hiess bisher: Unit-Datei bearbeiten und Server neu starten. Jetzt ist es ein Häkchen — Workers, Karte Databases, speichern. Die SQL-Worker starten damit neu, Atlas läuft weiter. Dieselbe Karte nimmt die hinterlegten Antworten entgegen: Datei auswählen, einfügen oder Example drücken. Einen Pfad geben Sie nirgends an, denn Atlas speichert die Antworten und legt sie dem Worker hin. Beim Speichern werden sie geprüft, ein Tippfehler kommt also mit der Fehlermeldung des Seeds zurück, statt sich in einen Mockup zu verwandeln, der stillschweigend nichts beantwortet. Ein Schalter gilt für SQL Server, MariaDB und PostgreSQL gemeinsam: eines zu simulieren und gleichzeitig wirklich in ein anderes zu schreiben sähe aus wie ein vollständiger Mockup-Lauf, und genau danach darf es nie aussehen. Solange er an ist, können Sie ausserdem einen Datenbank-Worker ganz ohne Verbindungszeichenfolge anlegen — nur mit dem Namen, den Ihre Aufgabe nennt. Das ist genau die Lage, in der Sie sind, wenn Sie den Mockup einschalten, weil Sie noch keine Datenbank haben. Geben Sie doch eine an, bleibt sie sicher verwahrt, damit das Zurückschalten kein Neutippen ist."
+  },
+  "tutorial": {
+    "en": [
+      "Go to Console › Workers and find the Databases card, below Active Directory.",
+      "Tick “Answer database tasks from a mockup”, press Example to load a small seed, and Save.",
+      "Still on that page, add a worker of kind SQL Server named hr-db — leave the connection string empty; while the mockup is on it is not needed.",
+      "Deploy examples/mssql-eintrittsmeldung.bpmn and start an instance with kuerzel set to abo, which the example seed answers for.",
+      "Watch it in Operations: the row is in the person variable and the process ran through, with no database anywhere.",
+      "Now start one with a kuerzel the seed does not answer for and read the incident — it names the statement and the values, ready to paste into the answers."
+    ],
+    "de": [
+      "Gehen Sie zu Console › Workers und suchen Sie die Karte Databases, unterhalb von Active Directory.",
+      "Setzen Sie das Häkchen bei „Answer database tasks from a mockup\", drücken Sie Example für einen kleinen Seed und speichern Sie.",
+      "Legen Sie auf derselben Seite einen Worker der Art SQL Server namens hr-db an — die Verbindungszeichenfolge lassen Sie leer, solange der Mockup an ist braucht es keine.",
+      "Deployen Sie examples/mssql-eintrittsmeldung.bpmn und starten Sie eine Instanz mit kuerzel = abo, wofür der Beispiel-Seed eine Antwort hat.",
+      "Schauen Sie unter Betrieb zu: Die Zeile steht in der Variablen person, der Prozess ist durchgelaufen — ganz ohne Datenbank.",
+      "Starten Sie dann eine mit einem kuerzel, für das nichts hinterlegt ist, und lesen Sie den Incident: Er nennt Anweisung und Werte, fertig zum Übernehmen."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Worker öffnen"
+    },
+    "route": "#/console/workers"
+  }
+}
