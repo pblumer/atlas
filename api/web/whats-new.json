@@ -2,6 +2,28 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "an-example-where-a-jira-ticket-starts-the-process",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An example where a Jira ticket starts the process",
+        "de": "Ein Beispiel, in dem ein Jira-Ticket den Prozess startet"
+      },
+      "summary": {
+        "en": "The Jira demo folder gained its other direction. Until now Atlas wrote to Jira; here a new ticket starts an Atlas process — no form, no button. The process comments on the ticket to confirm it arrived, looks up the account of whoever reported it, and assigns the ticket to them. Everything it needs (issue key, project, summary, reporter) comes from the ticket itself. The README walks through the event watch in the Console, what the process receives, and the three things that look like a defect and are not — including why it takes about two minutes.",
+        "de": "Der Jira-Beispielordner hat jetzt auch die Gegenrichtung. Bisher schrieb Atlas nach Jira; hier startet ein neues Ticket einen Atlas-Prozess — ohne Formular, ohne Knopfdruck. Der Prozess quittiert den Eingang im Ticket, schlägt das Konto des Melders nach und weist ihm das Ticket zu. Alles, was er dafür braucht (Vorgangsschlüssel, Projekt, Titel, Melder), kommt aus dem Ticket selbst. Das README führt durch die Ereignisüberwachung in der Console, zeigt, was der Prozess bekommt, und nennt die drei Dinge, die wie ein Defekt aussehen und keiner sind — darunter, warum es etwa zwei Minuten dauert."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Connectors"
+      ]
+    },
+    {
       "id": "a-message-start-event-says-whether-anything-feeds-it",
       "version": "Unreleased",
       "date": null,
@@ -338,35 +360,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "sign-in-with-your-identity-provider",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Sign in with your identity provider",
-        "de": "Anmelden mit Ihrem Identitätsanbieter"
-      },
-      "summary": {
-        "en": "Atlas can now hand the sign-in to an OpenID Connect provider — Entra ID, Keycloak, Google, any compliant one. People press a button on the login screen, authenticate where they already do, and come back signed in; multi-factor and password rules become the provider's job, and an account that is closed there stops working here. A first sign-in creates an account linked to the provider's subject with the user role and nothing else, so a new person can see their own tasks and nothing more until an administrator says otherwise. Nothing changes unless you configure a provider: with no issuer set, Atlas makes no outbound connection and the local password stays the only way in. It stays available in any case, on purpose — a provider that is unreachable must not lock an administrator out of their own instance.",
-        "de": "Atlas kann die Anmeldung jetzt an einen OpenID-Connect-Anbieter übergeben — Entra ID, Keycloak, Google, jeden konformen. Die Person drückt auf der Anmeldemaske eine Schaltfläche, authentisiert sich dort, wo sie es ohnehin tut, und kommt angemeldet zurück; Zweitfaktor und Passwortregeln werden zur Sache des Anbieters, und ein dort geschlossenes Konto hört hier auf zu funktionieren. Die erste Anmeldung legt ein Konto an, verknüpft mit dem Subjekt des Anbieters, mit der Rolle «user» und sonst nichts — eine neue Person sieht ihre eigenen Aufgaben und bis auf Weiteres nichts anderes. Ohne konfigurierten Anbieter ändert sich gar nichts: Atlas baut dann keine ausgehende Verbindung auf, und das lokale Passwort bleibt der einzige Weg hinein. Es bleibt in jedem Fall erhalten, mit Absicht — ein nicht erreichbarer Anbieter darf keine Administratorin aus ihrer eigenen Installation aussperren."
-      },
-      "link": {
-        "label": "ADR-0210",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0210-federated-authentication.md"
-      },
-      "tags": [
-        "Security",
-        "Console"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organization öffnen"
-        },
-        "route": "#/console/org"
       }
     }
   ]
