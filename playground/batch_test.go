@@ -489,3 +489,42 @@ func TestAnInterruptedCaseLeavesItsPool(t *testing.T) {
 		t.Errorf("simulated end = %s, want %s — the timer, not the four-hour work", got, want)
 	}
 }
+
+// Every kind of start variable has to reach the results table as something a
+// reader can see. Reading only the text field lost two of them: a boolean keeps
+// its value elsewhere, so a dataset carrying an "express" flag showed an empty
+// column — the column was there, which reads as "no case had one" rather than as
+// a gap in the panel.
+func TestEveryKindOfVariableReachesTheResultsTable(t *testing.T) {
+	sb := openSandbox(t, "user-task.bpmn", playground.StubSet{
+		Human: &playground.Stub{Min: time.Minute, Max: time.Minute},
+	})
+	runPlan(t, sb, playground.Plan{Cases: [][]model.VariableValue{{
+		{Name: "kunde", Kind: model.VarString, Text: "A"},
+		{Name: "betrag", Kind: model.VarNumber, Text: "1200"},
+		{Name: "express", Kind: model.VarBool, Bool: true},
+		{Name: "eilig", Kind: model.VarBool, Bool: false},
+		{Name: "notiz", Kind: model.VarNull},
+		{Name: "adresse", Kind: model.VarJSON, Text: `{"ort":"Bern"}`},
+	}}})
+
+	page, _, err := sb.Cases(0, 1)
+	if err != nil {
+		t.Fatalf("cases: %v", err)
+	}
+	if len(page) != 1 {
+		t.Fatalf("page = %d rows, want the one case", len(page))
+	}
+	for name, want := range map[string]string{
+		"kunde":   "A",
+		"betrag":  "1200",
+		"express": "true",
+		"eilig":   "false",
+		"notiz":   "null",
+		"adresse": `{"ort":"Bern"}`,
+	} {
+		if got := page[0].Variables[name]; got != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+	}
+}
