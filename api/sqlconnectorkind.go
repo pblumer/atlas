@@ -190,6 +190,15 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 			if seed := s.settings.sqlSeedPath(m); seed != "" && m.Enabled {
 				env = append(env, prefix+"MOCK_SEED="+seed)
 			}
+			// And where to report the journal it ends up holding, so an operator can
+			// see what a run asked in Operations rather than reconstruct it from the
+			// worker's log (ADR-0224). Only while the mockup is on:
+			// a worker talking to a real database has nothing to show here, and a
+			// "mock database" view fed by a live one would be the worst possible thing
+			// for that screen to be.
+			if m.Enabled && s.superviseURL != "" {
+				env = append(env, sqlMockViewURLEnv+"="+strings.TrimRight(s.superviseURL, "/")+"/api/v1/sql/mock-journal")
+			}
 		}
 		// Databases an operator set on the host: inherited by the child already, so
 		// nothing is rendered for them — they are collected only so a store-based

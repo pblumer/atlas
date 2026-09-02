@@ -65,6 +65,7 @@ import (
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/soap"
+	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/temis"
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/dmn"
@@ -368,6 +369,11 @@ type Server struct {
 	// HTTP read serves the view) and is deliberately not durable — nothing it describes
 	// exists anywhere but in a worker's memory either.
 	adMockView *ad.MockView
+
+	// sqlMockView is what this server knows about the mockup runs its SQL workers have
+	// answered: the newest journal each reported. Memory, its own lock, off the run
+	// loop — runtime state, never engine state (ADR-0224).
+	sqlMockView *sqldb.MockJournalView
 
 	// sqlProbe checks a SQL connector's connection string, when the binary that built
 	// this server linked a database driver (WithSQLProbe). Nil is the ordinary state
@@ -1130,6 +1136,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// (ADR-0206), so this server never holds a mock
 		// directory of its own and is only ever the place the workers' reports land.
 		adMockView:          ad.NewMockView(0),
+		sqlMockView:         sqldb.NewMockJournalView(0),
 		jobWaiters:          newJobWaiters(),
 		drafts:              drafts,
 		forms:               forms,

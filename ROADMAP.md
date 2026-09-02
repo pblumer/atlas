@@ -1254,10 +1254,15 @@ dataset of up to 50 000 cases":
   `--keep-baseline` do the same against the stored baseline; `--file` runs one from a
   JSON file being reviewed in a pull request.
   [`cmd/atlas/playgroundrun.go`](cmd/atlas/playgroundrun.go).
-- 🔲 **Still open**: the click from a results row into the replay view. Saving a
-  scenario from a CSV-driven run stays impossible on purpose — its rows are parsed on
-  the server, so the browser has nothing to store — and the generator is the answer
-  to what that was wanted for.
+- ✅ **A results row opens its case**: the diagram drops the run's aggregate and
+  draws that one case's path, numbered in the order it went through — the step number
+  is what makes it a replay rather than a second heat map, and an element a case
+  looped through carries every step it was. An unfinished case is drawn standing
+  where it stopped. It reads rather than drives: Step's controls act on the whole
+  sandbox, and offering them over a finished run would invite stepping it.
+- ✅ **Nothing left open.** Saving a scenario from a CSV-driven run stays impossible
+  on purpose — its rows are parsed on the server, so the browser has nothing to store
+  — and the described dataset is the answer to what that was wanted for.
 
 **Version history** ([ADR-0031](docs/adr/0031-diagram-version-history.md)):
 - 🔲 A **Versions** control: explicit named checkpoints (immutable snapshots)

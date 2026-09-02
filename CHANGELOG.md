@@ -32,6 +32,34 @@ _Changed_ / _Removed_ for each version.
   the only shape: two processes can build one between them with no single model being
   wrong.
 
+- **See what a mockup run asked the database.** Operations → **Mock database** shows one
+  card per SQL worker in mockup mode: every statement it was asked, in order, with the
+  values the process bound — and the ones with **no prepared answer** in red, with the
+  reason. Those are the entries an operator comes for: reading one and pasting it into
+  the answers under Workers is how a seed gets built, and until now that meant scrolling
+  the worker's log past everything else it did
+  ([ADR-0224](docs/adr/0224-sql-mock-journal.md)).
+
+  The shape is the mock directory's ([ADR-0213](docs/adr/0213-ad-mock-directory-in-the-console.md)):
+  the worker snapshots its own journal and posts it, because a worker may sit in a
+  network the server cannot dial back into. It is bounded at the crossing, keeps the
+  newest when the bound bites, and is memory on both sides — gone on restart, in no event
+  and no backup. A report that cannot be delivered is logged and dropped, and the next
+  statement re-sends the whole journal, so a Console that was unreachable catches up by
+  itself.
+
+  **Two things differ from the directory view, and both are deliberate.** There is no
+  table to browse: this mockup answers statements and executes none, so an `INSERT` does
+  not change what a later `SELECT` returns — there is no "now" to draw, only the
+  sequence. And ADR-0213 could promise that no password travels, because the mock
+  directory stores none; **this one cannot**. A journal entry carries the values a
+  process bound, and a process under test binds whatever it binds — a password hash on
+  its way into a table is a bound parameter like any other, and nothing can tell it from
+  an id. So the read is admin-only, a worker is handed the report address only while the
+  mockup is on, and none of it is durable. Values render as JSON, because a string `"7"`
+  and the number `7` being distinguishable is frequently the answer to "why did that
+  lookup find nobody".
+
 - **An example where a Jira ticket starts the process.** `examples/jira-ticket-eingang/`
   is the Zugangsantrag's other direction: instead of Atlas writing to Jira, Jira starts
   Atlas. A message start event waits on `jira.ticket.created`, an event watch under
