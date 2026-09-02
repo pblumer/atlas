@@ -85,3 +85,62 @@ test("a write the log cannot attribute says unknown rather than borrowing a name
   await expect(trail.nth(1).locator(".do-t-by")).toHaveText("unknown");
   expect(page.__errors).toEqual([]);
 });
+
+// The Data tab's second reading: the same instance as an object diagram
+// (ADR-draft-process-information-model, slice 4). UML draws types and instances as
+// two diagrams, and that split is why a class diagram was the right notation for
+// Atlas at all — it falls on the design-time/run-time line the engine already has.
+test.describe("the object diagram", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.locator('#tab-data [data-dview="diagram"]').click();
+    await expect(page.locator(".og-svg")).toBeVisible();
+  });
+
+  test("each object is drawn with its class, its members and its business key", async ({ page }) => {
+    await expect(page.locator(".og-node")).toHaveCount(4);
+    const order = page.locator(".og-node", { has: page.locator("text=order : Order") });
+    // UML underlines an object's name, which is the notation's own way of saying
+    // "this is an instance, not a type" — the mark that tells the two apart.
+    await expect(order.locator(".og-label")).toHaveText("order : Order");
+    // The key is marked, because it is what makes this object *this* order and what
+    // another object's reference has to match to become a line.
+    await expect(order.locator(".og-attr-name.key")).toHaveText("⚿ id");
+    // A member the class declares and the value does not carry says so, rather than
+    // reading as an empty string.
+    await expect(order.locator(".og-absent")).toHaveText("not set");
+    await expect(order.locator(".og-state")).toHaveText("[freigegeben]");
+  });
+
+  test("the two kinds of line are told apart", async ({ page }) => {
+    // Containment: the part lives inside the whole's value, so the line is a fact
+    // read off that value and carries the composition diamond.
+    const composition = page.locator(".og-line.composition");
+    await expect(composition).toHaveCount(1);
+    await expect(composition).toHaveAttribute("marker-start", "url(#og-diamond)");
+    // A reference is an inference from two values agreeing on a business key, and
+    // is drawn without one.
+    const association = page.locator(".og-line.association");
+    await expect(association).toHaveCount(1);
+    await expect(association).not.toHaveAttribute("marker-start", /.*/);
+    await expect(page.locator(".og-line-label")).toHaveText(["lines", "customer"]);
+  });
+
+  test("a reference this instance cannot satisfy is stated, not dropped", async ({ page }) => {
+    // Not a fault: it is the edge of what one instance can see, and exactly the
+    // boundary a data store removes.
+    await expect(page.locator(".og-notes")).toContainText("order.agent");
+    await expect(page.locator(".og-notes")).toContainText("C-99");
+    await expect(page.locator(".og-notes")).toContainText("another instance or in a data store");
+  });
+
+  test("the reading is remembered, and switching back shows the list", async ({ page }) => {
+    await expect(page.locator('#tab-data [data-dview="diagram"]')).toHaveClass(/active/);
+    await page.locator('#tab-data [data-dview="list"]').click();
+    await expect(page.locator(".do-table")).toBeVisible();
+    await expect(page.locator(".og-svg")).toHaveCount(0);
+    // The preference is about how a person reads data, not about this instance.
+    const stored = await page.evaluate(() => localStorage.getItem("atlas.replay.datadiagram"));
+    expect(stored).toBe("0");
+    expect(page.__errors).toEqual([]);
+  });
+});

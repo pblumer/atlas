@@ -8683,6 +8683,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let curDecs = [];      // the evaluations the Decisions tab is currently showing (backs the hover popover)
   let dataObjects = [];  // this instance's BPMN data objects, with their state trail (ADR-0053)
   let openTrails = {};   // data-object name → whether its state trail is expanded
+  // The Data tab has two readings of one subject, which is UML's own split: the
+  // list is the type-free scan of what the instance holds, the object diagram the
+  // instance-level twin of the class diagram under Data › Model. The choice is
+  // remembered because it is about how a person reads data, not about this instance.
+  let dataView = localStorage.getItem("atlas.replay.datadiagram") === "1" ? "diagram" : "list";
+  let objectGraph = null; // the derived diagram, fetched on demand
   let varFilter = "";    // Variables-tab name filter (persists across scrubs)
   let curVarList = [];   // the variable set the Variables tab is currently showing
   // Keys (scope\u0000name) the selected element itself wrote, when the Output side is
@@ -9387,11 +9393,26 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // rather than clipped to the playhead: it is the datum's own biography, and reading
   // where a value came from is exactly the moment an operator wants to see past the
   // frame they are parked on.
+  // dataHead is the bar both readings share: the count, and the toggle between them.
+  function dataHead() {
+    return `<div class="vp-head">
+        <span class="vp-title">Data objects</span>
+        <span class="vp-count">${dataObjects.length} object${dataObjects.length === 1 ? "" : "s"}</span>
+        <span class="do-views" role="tablist">
+          <button type="button" data-dview="list"${dataView === "list" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}
+            title="What this instance holds, as a list">List</button>
+          <button type="button" data-dview="diagram"${dataView === "diagram" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}
+            title="The same data as objects, linked the way the information model says they relate">Diagram</button>
+        </span>
+      </div>`;
+  }
+
   function renderDataObjects() {
     if (!dataObjects.length) {
       dataEl.innerHTML = `<p class="ops-empty">This process declares no data objects. Draw a data object on the diagram and give an activity a data association, and the data it carries — its value, its state, and where each value came from — appears here.</p>`;
       return;
     }
+    if (dataView === "diagram") return renderObjectDiagram();
     // Who wrote a value, rendered per entry rather than per instance, because the three
     // reasons an entry can name nobody are genuinely different and the trail's own shape
     // tells them apart. The first entry is the seeding at instance creation — no element
@@ -9443,16 +9464,146 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <table class="do-trail-table"><tbody>${entries || `<tr><td class="muted">nothing recorded yet</td></tr>`}</tbody></table>
         </div></td></tr>`;
     }).join("");
-    dataEl.innerHTML = `<div class="vp-head">
-        <span class="vp-title">Data objects</span>
-        <span class="vp-count">${dataObjects.length} object${dataObjects.length === 1 ? "" : "s"}</span>
-      </div>
+    dataEl.innerHTML = dataHead() + `
       <div class="v-scroll">
         <table class="vt do-table">
           <thead><tr><th>Name</th><th>Class</th><th>State</th><th>Value</th><th>Written by</th><th>When</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`;
+  }
+
+  // renderObjectDiagram draws the instance's objects and the lines between them.
+  //
+  // The graph is *derived on the server* — nodes, lines, and what could not be
+  // resolved — because the rules for what relates to what are model semantics, and a
+  // second copy of them here is a second place for them to be wrong. This function
+  // is a renderer: it lays boxes out and draws lines, and knows nothing about
+  // compositions or business keys beyond the labels it is handed.
+  async function renderObjectDiagram() {
+    if (!objectGraph) {
+      dataEl.innerHTML = dataHead() + `<p class="ops-empty">Deriving the object diagram…</p>`;
+      try {
+        objectGraph = await api("GET", `/api/v1/instances/${key}/object-graph`);
+      } catch (e) {
+        dataEl.innerHTML = dataHead() + `<p class="ops-empty err">Could not derive the object diagram: ${esc(e.message)}</p>`;
+        return;
+      }
+      if (current !== viewer) return; // navigated away while it was derived
+    }
+    const g = objectGraph;
+    if (!g.nodes || !g.nodes.length) {
+      dataEl.innerHTML = dataHead() + `<p class="ops-empty">Nothing to draw yet — no data object carries a value.</p>`;
+      return;
+    }
+
+    // Roots across, their parts beneath them: the shape a person reads an object
+    // diagram in, and it needs no force simulation to arrive at.
+    const children = {};
+    for (const l of g.links || []) {
+      if (l.via === "containment") (children[l.from] = children[l.from] || []).push(l.to);
+    }
+    const nested = new Set(Object.values(children).flat());
+    const roots = g.nodes.filter((n) => !nested.has(n.id));
+    const W = 210, GAP_X = 60, GAP_Y = 40;
+    const pos = {};
+    let x = 20;
+    let maxBottom = 0;
+    const place = (node, left, top) => {
+      const h = 34 + Math.max(1, (node.attributes || []).length) * 18 + 10;
+      pos[node.id] = { x: left, y: top, w: W, h, node };
+      let bottom = top + h;
+      for (const childId of children[node.id] || []) {
+        const child = g.nodes.find((n) => n.id === childId);
+        if (!child || pos[childId]) continue;
+        bottom = place(child, left + 40, bottom + GAP_Y);
+      }
+      return bottom;
+    };
+    for (const r of roots) {
+      const bottom = place(r, x, 20);
+      maxBottom = Math.max(maxBottom, bottom);
+      x += W + GAP_X + 40;
+    }
+    // Anything the layout did not reach (a cycle of containment the server capped)
+    // still gets a place, so no object silently vanishes from a picture of the data.
+    for (const n of g.nodes) {
+      if (pos[n.id]) continue;
+      const bottom = place(n, x, 20);
+      maxBottom = Math.max(maxBottom, bottom);
+      x += W + GAP_X;
+    }
+
+    const width = Math.max(x + 20, 600);
+    const height = Math.max(maxBottom + 40, 260);
+    const box = (p) => {
+      const n = p.node;
+      const rows = (n.attributes || []).map((a, i) => {
+        const y = 34 + i * 18 + 13;
+        const val = a.absent
+          ? `<tspan class="og-absent">not set</tspan>`
+          : `<tspan class="og-val">${esc(a.value)}</tspan>`;
+        return `<text x="10" y="${y}" class="og-attr"><tspan class="og-attr-name${a.key ? " key" : ""}">${a.key ? "⚿ " : ""}${esc(a.name)}</tspan><tspan class="og-eq"> = </tspan>${val}</text>`;
+      }).join("");
+      const bare = !(n.attributes || []).length
+        ? `<text x="10" y="${34 + 13}" class="og-attr">${n.unset
+          ? `<tspan class="og-absent">unset</tspan>`
+          : `<tspan class="og-val">${esc(n.value || "")}</tspan>`}</text>`
+        : "";
+      const state = n.state ? `<text x="${W - 10}" y="15" class="og-state" text-anchor="end">[${esc(n.state)}]</text>` : "";
+      return `<g class="og-node${n.nested ? " nested" : ""}${n.unset ? " unset" : ""}" transform="translate(${p.x},${p.y})">
+        <rect width="${W}" height="${p.h}" rx="6" class="og-box"/>
+        <line x1="0" y1="34" x2="${W}" y2="34" class="og-sep"/>
+        <text x="10" y="15" class="og-label">${esc(n.label)}</text>
+        ${state}${rows}${bare}
+      </g>`;
+    };
+
+    // A line leaves the right edge of one box and enters the left edge of the other;
+    // a containment line drops out of the bottom, which is where the eye expects a
+    // part to hang.
+    const line = (l) => {
+      const a = pos[l.from], b = pos[l.to];
+      if (!a || !b) return "";
+      const down = l.via === "containment";
+      const x1 = down ? a.x + 20 : a.x + a.w;
+      const y1 = down ? a.y + a.h : a.y + a.h / 2;
+      const x2 = down ? b.x : b.x + (b.x < a.x ? b.w : 0);
+      const y2 = down ? b.y + b.h / 2 : b.y + b.h / 2;
+      const d = down ? `M${x1},${y1} L${x1},${y2} L${x2},${y2}` : `M${x1},${y1} L${x2},${y2}`;
+      const marker = l.kind === "composition" ? ` marker-start="url(#og-diamond)"` : "";
+      const mid = down ? { x: x1 + 8, y: (y1 + y2) / 2 } : { x: (x1 + x2) / 2, y: (y1 + y2) / 2 - 6 };
+      return `<path d="${d}" class="og-line ${esc(l.kind)}" fill="none"${marker}/>` +
+        (l.label ? `<text x="${mid.x}" y="${mid.y}" class="og-line-label">${esc(l.label)}</text>` : "");
+    };
+
+    // What the picture could not show, said rather than left out. An unresolved
+    // reference is not a fault — it is the edge of one instance: the object it names
+    // is in another instance, or in a store this instance does not reach.
+    const notes = [];
+    if (g.degraded) {
+      notes.push(`This application models no data yet, so these are the objects the instance holds without the
+        structure a model would give them — no classes, and no lines. Draw them under <b>Data › Model</b>.`);
+    }
+    if (g.truncated) {
+      notes.push(`The picture stops short: this instance carries more nested objects than a readable diagram holds.`);
+    }
+    for (const u of g.unresolved || []) {
+      notes.push(`<b>${esc(u.from)}.${esc(u.role)}</b> refers to the ${esc(u.class)} <code>${esc(u.value)}</code>,
+        which this instance does not carry — it lives in another instance or in a data store.`);
+    }
+
+    dataEl.innerHTML = dataHead() + `
+      <div class="og-scroll">
+        <svg class="og-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+          <defs><marker id="og-diamond" markerWidth="18" markerHeight="12" refX="16" refY="6"
+              orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+            <path d="M0,6 L8,1 L16,6 L8,11 Z" class="og-mark"/></marker></defs>
+          ${(g.links || []).map(line).join("")}
+          ${g.nodes.map((n) => box(pos[n.id])).join("")}
+        </svg>
+      </div>
+      ${notes.length ? `<div class="og-notes">${notes.map((n) => `<p>${n}</p>`).join("")}</div>` : ""}`;
   }
 
   // The trail toggles are inside a body that re-renders, so they are wired by
@@ -9464,6 +9615,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (!row) return;
     const name = row.dataset.do;
     openTrails[name] = !openTrails[name];
+    renderDataObjects();
+  });
+
+  // The Data tab's two readings, and the trail toggles inside the list, are wired by
+  // delegation on a body that re-renders.
+  dataEl.addEventListener("click", (e) => {
+    const view = e.target.closest("[data-dview]");
+    if (!view || !dataEl.contains(view)) return;
+    dataView = view.dataset.dview;
+    localStorage.setItem("atlas.replay.datadiagram", dataView === "diagram" ? "1" : "0");
     renderDataObjects();
   });
 
@@ -9973,6 +10134,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const sig = (list) => list.map((d) => `${d.name}:${d.state}:${(d.history || []).length}:${d.at}`).join(",");
     if (sig(next) === sig(dataObjects)) return;
     dataObjects = next;
+    objectGraph = null; // derived from these objects, so it is stale the moment they move
     renderDataObjects();
   }
 

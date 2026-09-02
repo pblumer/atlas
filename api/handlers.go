@@ -32,6 +32,7 @@ import (
 	"github.com/pblumer/atlas/state"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/infomodel"
 )
 
 // maxXMLBytes caps a deployment body. BPMN models are small; this is a sanity
@@ -2688,6 +2689,84 @@ func (s *Server) annotateDataObjects(key uint64, byName map[string]*dataObjectVi
 		// unresolved is in trail order, so the last write to touch a view is the one that
 		// left it in its current value — the write the row's summary names.
 		p.view.ProducedBy = id
+	}
+}
+
+// handleInstanceObjectGraph derives one instance's object diagram: its data objects
+// as UML object nodes, linked by the class model's associations resolved through
+// the objects' own values (ADR-draft-process-information-model, slice 4).
+//
+// UML draws types and instances as two different diagrams, and that distinction is
+// why a class diagram was the right notation for Atlas at all: it falls on the
+// design-time/run-time line the engine already has. The class diagram says what an
+// Order is; this says which orders are here and how they hang together.
+//
+// It is derived on the server rather than in the browser for the same reason the
+// authoring subset is served rather than duplicated: the rules for what relates to
+// what are model semantics, and a second copy of them in JavaScript is a second
+// place for them to be wrong. The browser gets nodes and lines to draw.
+func (s *Server) handleInstanceObjectGraph(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	var (
+		objects []infomodel.ObjectValue
+		vocab   *infomodel.Vocabulary
+		opErr   error
+	)
+	s.do(func() {
+		// The declared type of each object, which is what the graph resolves classes
+		// by — read off the definition exactly as the Data tab's list does.
+		declared := map[string]string{}
+		applicationID := ""
+		if pi, ok, err := s.store.ProcessInstance(key); err != nil {
+			opErr = err
+			return
+		} else if ok {
+			if d, found := s.deployments[pi.ProcessDefKey]; found && d.cp != nil {
+				applicationID = d.ProjectID
+				for _, do := range d.cp.DataObjects() {
+					declared[d.cp.Intern(do.Name)] = d.cp.Intern(do.ItemType)
+				}
+			}
+		}
+		if opErr = s.store.DataObjectsOfScope(key, func(v *model.DataObjectValue) error {
+			o := infomodel.ObjectValue{Name: v.Name, Class: declared[v.Name], State: v.State}
+			// Only a structured value has members to draw; a scalar rides along as the
+			// value itself, which the graph renders rather than trying to walk.
+			if v.Kind == model.VarJSON {
+				o.Value = json.RawMessage(v.Text)
+			} else if raw, err := json.Marshal(scalarOf(v)); err == nil && v.Kind != model.VarNull {
+				o.Value = raw
+			}
+			objects = append(objects, o)
+			return nil
+		}); opErr != nil {
+			return
+		}
+		vocab, opErr = s.infomodel.VocabularyOnLoop(applicationID)
+	})
+	if opErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read object graph: "+opErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, infomodel.ObjectGraph(objects, vocab))
+}
+
+// scalarOf is a non-JSON data-object value as a Go value, so it marshals back to
+// the canonical JSON the graph decodes. A number keeps its exact text.
+func scalarOf(v *model.DataObjectValue) any {
+	switch v.Kind {
+	case model.VarBool:
+		return v.Bool
+	case model.VarNumber:
+		return json.Number(v.Text)
+	case model.VarString:
+		return v.Text
+	default:
+		return nil
 	}
 }
 

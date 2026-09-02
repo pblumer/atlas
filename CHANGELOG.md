@@ -14,6 +14,35 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An instance's data, drawn as objects.** The Data tab in the Operations replay
+  now switches between a list and an **object diagram**
+  ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md),
+  slice 4): each data object as a UML object node — `order : Order`, its name
+  underlined the way the notation marks an instance — with the attributes its class
+  declares, in the class's own order, its business key marked, and a member the value
+  does not carry shown as *absent* rather than blank. "Not set" and "set to empty"
+  are different facts about a datum.
+
+  Two things become a line, and the diagram tells them apart because they are
+  different claims. A **part inside its whole's value** is read off the value itself
+  — a composition, drawn with the filled diamond. A **business key one object holds
+  for another** is an inference from two values agreeing, drawn dashed. This is what
+  the business key is *for*: without an identity there is nothing to match on and the
+  line simply cannot be drawn.
+
+  A reference that matches nothing in this instance is **stated rather than dropped**.
+  It is not a fault — it is the edge of what one instance can see: the Customer lives
+  in another instance, or in a data store. Saying so is what makes the picture
+  trustworthy, and it is exactly the boundary a worker-backed data store removes.
+
+  The graph is derived on the server (`GET /api/v1/instances/{key}/object-graph`, and
+  `atlas_instance_object_graph` over MCP) for the same reason the authoring subset is
+  served rather than duplicated: the rules for what relates to what are model
+  semantics, and a second copy of them in the browser is a second place for them to
+  be wrong. The browser gets nodes and lines to draw. An application that models
+  nothing still gets its objects drawn, and the graph says it is showing less than it
+  could rather than showing nothing.
+
 - **A data object's declared type now means something.** BPMN's `itemSubjectRef` —
   the slot where a data object says what kind of thing it is — resolves against the
   owning application's information model, at deploy and in the Modeler's Problems

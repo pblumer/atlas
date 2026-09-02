@@ -95,7 +95,33 @@
         if (url.includes("/runtime")) return { elements: [] };
         if (/\/instances\/\d+\/decisions$/.test(url)) return [];
         if (/\/instances\/\d+\/data-objects$/.test(url)) return DATA_OBJECTS;
+        if (/\/instances\/\d+\/object-graph$/.test(url)) return OBJECT_GRAPH;
         return {};
+      };
+
+      // The graph the server derives for the same instance: an order owning one line,
+      // referring to a customer that is here, and to one that is not.
+      const OBJECT_GRAPH = {
+        nodes: [
+          { id: "order", name: "order", label: "order : Order", class: "Order", state: "freigegeben",
+            key: "ORD-1", attributes: [
+              { name: "id", value: "ORD-1", key: true },
+              { name: "total", value: "100" },
+              { name: "shipTo", value: "", absent: true },
+            ] },
+          { id: "order.lines[0]", name: "lines", label: "order.lines[0] : OrderLine", class: "OrderLine",
+            nested: true, attributes: [{ name: "quantity", value: "2" }] },
+          { id: "buyer", name: "buyer", label: "buyer : Customer", class: "Customer", key: "C-7",
+            attributes: [{ name: "number", value: "C-7", key: true }] },
+          { id: "positionen", name: "positionen", label: "positionen", state: "", unset: true, attributes: [] },
+        ],
+        links: [
+          { from: "order", to: "order.lines[0]", kind: "composition", label: "lines", via: "containment" },
+          { from: "order", to: "buyer", kind: "association", label: "customer", via: "key" },
+        ],
+        unresolved: [{ from: "order", role: "agent", class: "Customer", value: "C-99" }],
+        degraded: false,
+        truncated: false,
       };
 
       window.__mount = () => mountInstanceReplay(view, { api, toast: noop, key: "281474976723211" });

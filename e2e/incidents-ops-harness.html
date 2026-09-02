@@ -180,6 +180,7 @@
         }
         if (/\/instances\/\d+\/decisions$/.test(url)) return [];
         if (/\/instances\/\d+\/data-objects$/.test(url)) return [];
+        if (/\/instances\/\d+\/object-graph$/.test(url)) return { nodes: [], links: [], unresolved: [] };
         return {};
       };
 

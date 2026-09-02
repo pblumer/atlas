@@ -227,7 +227,34 @@ func TestInformationModelToolsScenario(t *testing.T) {
 		t.Errorf("filtering by an unmodeled class = %s, want []", got)
 	}
 
-	// 8. And it can be removed.
+	// 8. The same instance, drawn as objects: the class diagram's run-time twin.
+	graphJSON := callOne(t, atlas, "atlas_instance_object_graph", map[string]any{"key": rows[0].InstanceKey})
+	var graph struct {
+		Nodes []struct {
+			ID    string `json:"id"`
+			Label string `json:"label"`
+			Class string `json:"class"`
+			State string `json:"state"`
+		} `json:"nodes"`
+		Degraded bool `json:"degraded"`
+	}
+	if err := json.Unmarshal([]byte(graphJSON), &graph); err != nil {
+		t.Fatalf("decode object graph: %v (%s)", err, graphJSON)
+	}
+	if len(graph.Nodes) != 1 {
+		t.Fatalf("object graph = %+v, want the one object the instance carries", graph.Nodes)
+	}
+	// The process was deployed outside any application, so nothing resolves its
+	// declared type — the graph says it is showing less than it could rather than
+	// inventing a class.
+	if !graph.Degraded || graph.Nodes[0].Class != "" || graph.Nodes[0].Label != "order" {
+		t.Errorf("node = %+v (degraded=%v)", graph.Nodes[0], graph.Degraded)
+	}
+	if graph.Nodes[0].State != "approved" {
+		t.Errorf("state = %q, want the data state the write advanced it to", graph.Nodes[0].State)
+	}
+
+	// 9. And it can be removed.
 	if out := callOne(t, atlas, "atlas_delete_information_model", map[string]any{"id": created.ID}); !strings.Contains(out, "deleted") {
 		t.Errorf("delete said %q", out)
 	}
@@ -252,6 +279,7 @@ func TestInformationModelToolArgumentErrors(t *testing.T) {
 		{"atlas_delete_information_model", map[string]any{}},
 		{"atlas_information_model_schema", map[string]any{}},
 		{"atlas_information_model_schema", map[string]any{"id": "x"}},
+		{"atlas_instance_object_graph", map[string]any{}},
 	} {
 		if _, isErr := callTolerant(t, atlas, tc.tool, tc.args); !isErr {
 			t.Errorf("%s(%v): want a tool error, got success", tc.tool, tc.args)

@@ -4126,3 +4126,63 @@ button.im-problem:hover { background: var(--accent-soft); }
 .im-resolved { color: #0a7c5a; border: 1px solid color-mix(in srgb, #0a7c5a 35%, transparent); }
 .im-unresolved { color: var(--muted); border: 1px solid var(--border); }
 .im-group-head .muted { margin-left: auto; font-size: 12px; }
+
+/* ---- The object diagram: the Data tab's second reading ---------------------
+   (ADR-draft-process-information-model, slice 4)
+
+   The class diagram under Data › Model says what an Order is; this says which
+   orders are here. UML draws those as two diagrams, and the shapes echo each
+   other on purpose — a header with the object's reading, a rule, then its
+   members — so a person moving between the two is looking at the same thing
+   twice rather than learning a second notation. */
+.do-views { display: inline-flex; gap: 2px; margin-left: auto; }
+.do-views button {
+  font: 500 11.5px/1.5 system-ui, sans-serif; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  padding: 2px 9px;
+}
+.do-views button:first-child { border-radius: 5px 0 0 5px; }
+.do-views button:last-child { border-radius: 0 5px 5px 0; border-left: none; }
+.do-views button:hover { color: var(--accent); border-color: var(--accent); }
+.do-views button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.og-scroll { overflow: auto; }
+.og-svg { display: block; }
+.og-node .og-box { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+.og-node .og-sep { stroke: var(--border); }
+/* A root object is a thing the instance carries; a nested one exists only inside
+   its whole. The weight says which is which without a legend. */
+.og-node .og-box { fill: color-mix(in srgb, var(--accent-soft) 55%, var(--bg)); }
+.og-node.nested .og-box { fill: var(--bg); }
+.og-node.unset .og-box { stroke-dasharray: 4 3; }
+/* UML underlines an object's name — that is the notation's way of saying "this is
+   an instance, not a type", and it is the one mark that tells the two diagrams
+   apart at a glance. */
+.og-node .og-label {
+  fill: var(--text); font: 600 12px/1.4 system-ui, sans-serif;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.og-node .og-state {
+  fill: var(--text); font: 600 10px/1.4 system-ui, sans-serif;
+}
+.og-node .og-attr { font: 11.5px/1.4 ui-monospace, monospace; }
+.og-node .og-attr-name { fill: var(--muted); }
+.og-node .og-attr-name.key { fill: var(--text); font-weight: 700; }
+.og-node .og-eq { fill: var(--border); }
+.og-node .og-val { fill: var(--text); }
+.og-node .og-absent { fill: var(--muted); font-style: italic; }
+
+.og-line { stroke: var(--text); stroke-width: 1.3; }
+/* A key-resolved line is an inference from two values agreeing, not a fact read
+   out of one value — dashed, because the difference is worth seeing. */
+.og-line.association, .og-line.aggregation { stroke-dasharray: 5 3; }
+.og-mark { fill: var(--text); stroke: var(--text); stroke-width: 1.2; }
+.og-line-label { fill: var(--muted); font: 10.5px/1.4 ui-monospace, monospace; }
+
+.og-notes {
+  border-top: 1px solid var(--border); padding: 8px 12px;
+  font: 12px/1.6 system-ui, sans-serif; color: var(--muted);
+}
+.og-notes p { margin: 0 0 6px; }
+.og-notes p:last-child { margin-bottom: 0; }
+.og-notes b { color: var(--text); }

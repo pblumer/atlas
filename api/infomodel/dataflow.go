@@ -66,6 +66,10 @@ const (
 // resolves the same class once per association.
 type Vocabulary struct {
 	classes map[string]Class
+	// rels indexes each class's associations from its own side, so the object graph
+	// can ask "what does an Order relate to" without walking every model's
+	// association list per node.
+	rels map[string][]relation
 	// members holds each class's attributes with inherited ones first, so a
 	// specialization reads as "everything the general thing has, plus these".
 	members map[string][]Attribute
@@ -78,7 +82,10 @@ type Vocabulary struct {
 // NewVocabulary flattens the models of one application. A later model wins a name
 // clash, matching the order the store lists them in.
 func NewVocabulary(models []Model) *Vocabulary {
-	v := &Vocabulary{classes: map[string]Class{}, members: map[string][]Attribute{}, modeled: len(models) > 0}
+	v := &Vocabulary{
+		classes: map[string]Class{}, members: map[string][]Attribute{},
+		rels: map[string][]relation{}, modeled: len(models) > 0,
+	}
 	for _, m := range models {
 		for _, c := range m.Classes {
 			v.classes[c.Name] = c
@@ -88,8 +95,36 @@ func NewVocabulary(models []Model) *Vocabulary {
 		for _, c := range m.Classes {
 			v.members[c.Name] = flattenAttributes(m, c)
 		}
+		v.indexRelations(m)
 	}
 	return v
+}
+
+// indexRelations records both sides of every association. An end's role names the
+// member on the *opposite* class — the reading the class canvas and the JSON Schema
+// projection both use — so the To end's role is a member of the From class, and the
+// From end's role a member of the To class. A generalization is not a relation
+// between two objects and is skipped: it is a statement about the types.
+func (v *Vocabulary) indexRelations(m Model) {
+	for _, a := range m.Associations {
+		if a.Kind == KindGeneralization {
+			continue
+		}
+		from, okFrom := m.ClassByID(a.From.ClassID)
+		to, okTo := m.ClassByID(a.To.ClassID)
+		if !okFrom || !okTo {
+			continue
+		}
+		if a.To.Role != "" {
+			v.rels[from.Name] = append(v.rels[from.Name], relation{member: a.To.Role, target: to.Name, kind: a.Kind})
+		}
+		// The reverse side is a reference in both directions except containment: the
+		// parts of a composition live inside the whole, so the whole is not a member
+		// of a part.
+		if a.From.Role != "" && a.Kind != KindComposition {
+			v.rels[to.Name] = append(v.rels[to.Name], relation{member: a.From.Role, target: from.Name, kind: a.Kind})
+		}
+	}
 }
 
 // flattenAttributes walks a class's generalization chain, most general first, and

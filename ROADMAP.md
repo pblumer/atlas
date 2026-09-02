@@ -161,8 +161,23 @@ The control-flow basics most real models use.
   model carrying the shorthand `itemSubjectRef="Order"` lost its types on any round
   trip through the Modeler. Declarations are now repaired on import and written as
   proper `<itemDefinition>`s, which the compiler resolves through — so a class name
-  that is not a valid XML id (`Line item`) is expressible for the first time. Next:
-  the instance **object diagram**, and **data stores** bound to a class and a Worker.
+  that is not a valid XML id (`Line item`) is expressible for the first time.
+  **Slice 4 landed**: the instance **object diagram**, the run-time twin of the class
+  diagram and the reason UML was the right notation — the standard already draws
+  types and instances as two diagrams, which is exactly Atlas's design-time/run-time
+  line. `GET /api/v1/instances/{key}/object-graph` derives it server-side (the rules
+  for what relates to what are model semantics, so the browser gets nodes and lines
+  to draw rather than a second copy of the rules): each data object becomes a UML
+  object node with its class's attributes in the class's own order, its business key
+  marked, and a member the value does not carry shown as *absent* rather than blank.
+  Two things become a line, and they are different claims — a **part inside its
+  whole's value** (composition, read off the value) and a **business key one object
+  holds for another** (an inference from two values agreeing, drawn dashed). A
+  reference matching nothing here is **stated, not dropped**: it is the edge of what
+  one instance can see, and precisely the boundary slice 5 removes. An application
+  that models nothing still gets its objects drawn, and the graph says it is
+  degraded. Next: **data stores** bound to a class and a Worker, and the
+  cross-instance data index the business key exists for.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🚧 **Conformance tests against a curated BPMN model set** — the
   [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN

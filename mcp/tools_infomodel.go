@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -205,6 +206,24 @@ func infomodelTools() []Tool {
 				}
 				return asText(c.get("/api/v1/infomodel/models/" + url.PathEscape(id) +
 					"/schema?class=" + url.QueryEscape(class)))
+			},
+		},
+		{
+			Name: "atlas_instance_object_graph",
+			Description: "Derive one process instance's object diagram: its data objects as UML object " +
+				"nodes with their attributes and business keys, and the lines between them. Two things " +
+				"become a line — a part living inside a whole's value (composition), and one object " +
+				"holding another's business key. A reference matching nothing here is reported under " +
+				"unresolved rather than dropped: that is the edge of what one instance can see, not a " +
+				"fault. Where the owning application models nothing the graph says so (degraded) and " +
+				"still lists what the instance holds.",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) to draw."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/object-graph"))
 			},
 		},
 		{
