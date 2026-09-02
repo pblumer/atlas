@@ -3609,9 +3609,53 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 }
 #pg-panel textarea:focus { outline: none; border-color: var(--accent); background: var(--surface); }
 #pg-body > p.muted { padding: 10px 8px; font-size: 12px; line-height: 1.5; }
-/* In the Playground the properties panel steps aside: the mode already owns a side
-   panel, and two of them leave the diagram — the thing being watched — a sliver. */
+/* The Playground lays the editor body out as a grid: setup on the left, the diagram
+   in the middle with the cases under it, the analysis on the right.
+
+   Three columns rather than one panel because the mode asks three questions at once
+   and they are not the same question — what the run will be, what it did, and which
+   case it was. Stacked into one 300 px column, as this began, a finished run pushed
+   the dataset off the screen, and changing one figure meant scrolling past everything
+   the last run produced.
+
+   A grid rather than nested elements: #canvas is shared with the Design and Implement
+   views and with bpmn-js, so it keeps its place in the DOM and is only *placed*
+   differently here. */
+.editor.pg-active .editor-body {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 330px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "setup canvas analysis"
+    "setup results analysis";
+}
+.editor.pg-active #pg-setup { grid-area: setup; border-left: 0; border-right: 1px solid var(--border); }
+.editor.pg-active #canvas { grid-area: canvas; height: auto; min-width: 0; min-height: 0; }
+.editor.pg-active #pg-results { grid-area: results; }
+.editor.pg-active #pg-panel { grid-area: analysis; }
+/* The properties panel steps aside: the mode already owns two side panels, and a
+   third would leave the diagram — the thing being watched — a sliver. */
 .editor.pg-active .props, .editor.pg-active #props-resizer { display: none; }
+/* Narrower windows give the columns back to the diagram before they give up a
+   column: two 250 px columns still read, a 700 px canvas with three panels does not. */
+@media (max-width: 1400px) {
+  .editor.pg-active .editor-body { grid-template-columns: 252px minmax(0, 1fr) 280px; }
+}
+
+/* The cases, under the diagram, because a table is the one shape a 300 px column
+   cannot hold. It is a band rather than a pane: tall enough to read a dozen rows,
+   never tall enough to take the diagram's place. */
+.pg-results {
+  display: flex; flex-direction: column; min-height: 0; max-height: 30vh;
+  border-top: 1px solid var(--border); background: var(--surface);
+}
+.pg-results-head {
+  display: flex; align-items: center; gap: 8px; flex: none;
+  padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px;
+}
+.pg-results-scroll { overflow: auto; min-height: 0; }
+.pg-cases { min-width: 100%; }
+.pg-cases th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
 /* And so do the modelling affordances. The Playground *runs* the diagram — the
    sandbox compiled the model as it stood when it started, so a shape added here
    would not be in what is running, and the palette offering it is the panel
