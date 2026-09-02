@@ -15,6 +15,7 @@
 
 import { attachJSONEditor } from "./json-editor.js";
 import { installDevShortcut } from "./dev-view.js";
+import { makeIdCheck } from "./idcheck.js";
 
 const FORM_CSS = "vendor/form-js/form-playground.css";
 const VIEWER_CSS = "vendor/form-js/form-js.css";
@@ -94,6 +95,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
         </div>
         <input id="form-name" class="form-name-input" placeholder="Form name" spellcheck="false" />
         <span class="chip" id="form-id-chip"></span>
+        <span class="id-warn" id="form-id-warn" hidden></span>
         <div style="flex:1"></div>
         <span class="muted" id="form-status"></span>
         <button class="btn" id="form-save" title="Save this form">Save</button>
@@ -109,6 +111,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
 
   const nameInput = root.querySelector("#form-name");
   const idChip = root.querySelector("#form-id-chip");
+  const idWarn = root.querySelector("#form-id-warn");
   const statusEl = root.querySelector("#form-status");
   const container = root.querySelector("#form-playground");
 
@@ -133,8 +136,22 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
   } else {
     id = newFormId();
   }
+  // A form has ONE id, and it is the schema's: that is what the Design pane's ID field
+  // edits, what a user task's formId binds to, what an exported .form.json carries and
+  // what re-importing that file files it under. The store used to key a form
+  // independently of its schema, so editing the ID in the panel changed the document
+  // and nothing else — the chip above kept showing the id the form was really stored
+  // under, and the rename the author thought they had made never happened
+  // (ADR-0222). The stored id is the truth on open, so stamp it
+  // into the schema; from here the field IS the identity, and saving a changed one
+  // renames the form.
+  if (!schema || typeof schema !== "object") schema = blankSchema();
+  schema.id = id;
+  // savedId is what the server holds this form under — "" while it has never been
+  // saved. The id in the schema is what the *next* save will file it under; when the
+  // two differ, that save is a rename.
+  let savedId = isNew ? "" : id;
   nameInput.value = name;
-  idChip.textContent = id;
 
   // Point the back link at the owning project when the form belongs to one, so a form
   // opened from inside a project returns there rather than dumping the operator on the
@@ -196,6 +213,69 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
 
   const pretty = (s) => JSON.stringify(s, null, 2);
 
+  // ---- Identity ------------------------------------------------------------
+  // The form's id lives in the schema — the Design pane edits it under Form ▸ General
+  // ▸ ID — and it is the only id the form has: a user task's formId binds to it, the
+  // store files the form under it, and an exported .form.json carries it. So the chip
+  // in the bar mirrors it rather than showing a second, separate id, and says when the
+  // two have not been reconciled yet because the rename is still unsaved.
+
+  // currentId reads the id as it stands right now. The active pane holds edits that
+  // have not been committed into `schema` yet, so ask it first.
+  function currentId() {
+    try {
+      if (activeTab === "design" && panes.design.pg) {
+        const live = panes.design.pg.getSchema();
+        if (live && typeof live.id === "string") return live.id.trim();
+      } else if (activeTab === "editor" && panes.editor.editor) {
+        const live = JSON.parse(panes.editor.editor.getValue());
+        if (live && typeof live.id === "string") return live.id.trim();
+      }
+    } catch { /* mid-edit or invalid JSON — fall back to the committed schema */ }
+    return typeof schema.id === "string" ? schema.id.trim() : "";
+  }
+
+  const idCheck = makeIdCheck({
+    api, kind: "forms", noun: "form",
+    read: currentId,
+    own: () => savedId,
+    onState: (state, text) => {
+      idChip.classList.toggle("id-taken", state === "taken");
+      idWarn.textContent = text || "";
+      idWarn.hidden = !text;
+    },
+  });
+
+  // syncIdentity repaints the chip from the id the schema carries and re-checks it.
+  // An id that differs from the stored one is a rename waiting on Save, and the chip
+  // says so — the old surface silently kept showing the stored id while the panel
+  // showed the typed one, which is exactly the confusion this replaces.
+  function syncIdentity() {
+    const now = currentId();
+    idChip.textContent = now || "(no id)";
+    const pending = !!savedId && !!now && now !== savedId;
+    idChip.classList.toggle("id-pending", pending);
+    idChip.title = !now
+      ? "This form has no id. Set one in the Design pane under Form ▸ General ▸ ID."
+      : pending
+        ? `Saving renames this form from “${savedId}” to “${now}”. A user task still bound to “${savedId}” will find no form.`
+        : "This form's id — a user task's formId binds to it. Edit it in the Design pane under Form ▸ General ▸ ID.";
+    idCheck.check();
+  }
+  syncIdentity();
+
+  // The Design pane's properties panel is where the id is normally typed, so follow its
+  // edits live rather than waiting for a tab change. getEditor() only exists once the
+  // Playground has mounted its editor, which it does asynchronously, so this retries
+  // briefly and then gives up — the tab-change and save paths still resync.
+  let idWatchTimer = null;
+  (function followDesignEdits(tries = 0) {
+    let ed = null;
+    try { ed = panes.design.pg && panes.design.pg.getEditor(); } catch { /* not ready */ }
+    if (ed && typeof ed.on === "function") { ed.on("changed", syncIdentity); return; }
+    if (tries < 40) idWatchTimer = setTimeout(() => followDesignEdits(tries + 1), 50);
+  })();
+
   // commit pulls the outgoing pane's edits back into the shared schema, bumping
   // `rev` only when the value actually changed (so an unchanged round-trip does
   // not force sibling panes to discard their view state).
@@ -250,6 +330,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
     Object.keys(panes).forEach((k) =>
       panes[k].el.classList.toggle("active", k === tab));
     await load(tab);
+    syncIdentity(); // the raw Editor can retype the id too, not just the Design panel
   }
 
   root.querySelectorAll("#form-tabs button").forEach((b) =>
@@ -442,26 +523,60 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
   // ---- Save ----------------------------------------------------------------
   async function save() {
     commit(activeTab); // fold the active tab's edits into `schema` first
+    const nextId = (typeof schema.id === "string" ? schema.id.trim() : "") || savedId;
+    if (!nextId) {
+      toast("This form needs an id — set one in the Design pane under Form ▸ General ▸ ID", "err");
+      return;
+    }
+    if (schema.id !== nextId) {
+      // The id was cleared, so the stored one stands. Push it back through the panes so
+      // the panel shows what is actually being saved rather than a blank field — the
+      // document and the store agree by construction, always.
+      schema.id = nextId;
+      rev++;
+      schemaSource = null;
+      await load(activeTab);
+    }
+    // Renaming a form is not relabelling it: a user task binds to the id, so a task
+    // still pointing at the old one finds no form. That is worth a question, not a
+    // toast after the fact.
+    if (savedId && nextId !== savedId && !window.confirm(
+      `Rename this form from “${savedId}” to “${nextId}”?\n\n` +
+      `The form moves to the new id — no copy is left behind. Any user task whose Form ID ` +
+      `still says “${savedId}” will show no form until it is re-linked.`)) {
+      return;
+    }
     const btn = root.querySelector("#form-save");
     btn.disabled = true;
     statusEl.textContent = "Saving…";
     try {
       const body = {
-        id,
-        name: nameInput.value.trim() || id,
+        id: nextId,
+        name: nameInput.value.trim() || nextId,
         schema,
         projectId: project,
+        // What this save is editing. Empty on a form that has never been saved; a
+        // different id means rename this record rather than create a second one, and
+        // an id another form already holds comes back 409 instead of overwriting it
+        // (ADR-0222).
+        from: savedId,
       };
-      await api("POST", "/api/v1/forms", body);
+      const res = await api("POST", "/api/v1/forms", body);
       statusEl.textContent = "Saved";
-      toast("Form saved");
-      // A freshly created form becomes editable in place (so a second Save
-      // overwrites rather than creating a duplicate) without a reload.
-      if (isNew && location.hash.startsWith("#/modeler/form/new")) {
-        history.replaceState(null, "", "#/modeler/form/e/" + encodeURIComponent(id));
-      }
+      toast(res && res.renamedFrom
+        ? `Form renamed “${res.renamedFrom}” → “${nextId}”`
+        : "Form saved");
+      savedId = nextId;
+      syncIdentity();
+      // The URL always addresses the form as it is now stored: a freshly created form
+      // becomes editable in place (so a second Save updates rather than duplicating),
+      // and a renamed one stops pointing at an id that no longer exists.
+      history.replaceState(null, "", "#/modeler/form/e/" + encodeURIComponent(nextId));
     } catch (e) {
       statusEl.textContent = "";
+      // A refused collision is about the id, so re-run the check: the chip goes red and
+      // names what holds it, instead of leaving only a toast that fades.
+      if (e.status === 409) idCheck.now();
       toast("Save failed: " + e.message, "err");
     } finally {
       btn.disabled = false;
@@ -474,6 +589,8 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
   current = {
     destroy() {
       clearTimeout(reseedTimer);
+      clearTimeout(idWatchTimer);
+      idCheck.dispose();
       if (panes.design.pg) { try { panes.design.pg.destroy(); } catch { /* ignore */ } }
       if (panes.validate.viewer) { try { panes.validate.viewer.destroy(); } catch { /* ignore */ } }
       if (panes.validate.input) { try { panes.validate.input.destroy(); } catch { /* ignore */ } }

@@ -187,6 +187,34 @@ this would put a field on a structure every deployment builds; a flow travels na
 by the two elements it joins instead, which the only client there is — one holding
 the diagram — resolves against its own registry.
 
+### Three columns and a strip
+
+The mode began as one 300 px panel with everything stacked in it, and that panel
+answers three questions that are not the same question. What the run *will* be —
+the dataset, the timing, the policy, what it has to show — is decided before it
+starts and read back afterwards to see what produced a number. What the run *did*
+is watched while it happens. And the cases themselves are a table, which is a shape
+a narrow column cannot hold at all.
+
+Stacked, the third pushed out the first: a finished run filled the panel, and going
+back to change one figure meant scrolling past everything the last run produced. So
+the setup goes left, the analysis right, and the cases into a band under the diagram
+— where a table has width, and where it sits beside the thing it is a table of.
+
+The editor body becomes a grid for this rather than growing nested elements, because
+`#canvas` is shared with the Design and Implement views and with bpmn-js: it keeps
+its place in the DOM and is only *placed* differently. The same reasoning applies to
+what the mode takes away — the palette, the context pad and direct editing are hidden
+here as they are in the token simulation, because the sandbox compiled the model as
+it stood when it started and a shape added now would not be in what is running.
+
+The cases are read a page at a time from the endpoint that already pages them, so
+the strip costs the same on the fifty-thousandth case as on the fiftieth. Rendering
+them turned up a defect older than the strip: a case's variables were read from the
+text field alone, which a boolean does not use — so a dataset carrying a flag showed
+an empty column for it, in the table and in the streamed CSV alike. An empty column
+is worse than a missing one: it reads as "no case had one".
+
 ### A dataset described rather than listed
 
 There were two ways to put data into a run, and between them they left a hole at
@@ -248,6 +276,45 @@ optional and an omitted one is not checked; the two places where zero is itself 
 target ("no incidents at all", "this queue must never form") are a pointer and a map
 entry, because a zero value that silently asserts something is how an expectation
 fails a run nobody aimed it at.
+
+**A rule** is the expectation stated per case rather than per run, and it is the
+statement the bounds above cannot make. "The median is under four hours" is true of
+a run; "an application under 50 000 from a grade-A customer is approved" is true of
+a *case*, and a run that holds it nine times in ten is not nine tenths right — it is
+wrong for the tenth, and the run-wide numbers will not say which one.
+
+Both halves are FEEL, the language the diagram's own gateways are written in, so an
+author states the rule the way the model states the decision: a `when` that selects
+the cases and a `then` they have to show. The case's variables are the scope, as the
+run left them, plus `end` — the BPMN id of the last element it reached — and
+`durationSeconds`. Those two shadow a case variable of the same name deliberately:
+a rule is written against that vocabulary, and quietly reading the model's own `end`
+instead would make it mean something other than what it says.
+
+Three decisions in how it judges:
+
+- **A `when` that does not evaluate to true does not select the case.** That is the
+  reading a sequence-flow condition already gets, and it is why a rule naming a
+  variable no case carries selects nothing rather than failing everything. The
+  outcome reports the matched count, so a rule that selected nothing says so instead
+  of passing quietly.
+- **An unfinished case leaves the rule undecided**, counted but neither passed nor
+  failed. A rule about an outcome cannot be decided for a case that has no outcome;
+  failing it here would report one problem twice, under a name that does not describe
+  it, when the completion expectation already covers it.
+- **The offending cases are named, and bounded.** A count sends a reader looking; the
+  case numbers send them to the rows that did it, which the results strip marks. A
+  rule broken in fifty thousand cases would otherwise put fifty thousand indices in a
+  response nobody reads, so the sample is capped and says when it was cut.
+
+The rules are judged in a pass of their own rather than inside the report, because
+they cost what the report deliberately does not: the report reads each case's record,
+this reads its variables too. A run with no rules should not pay for that. Their
+outcomes then join the verdict as checks, so one thing decides whether a build goes
+red — a panel showing a passing verdict beside a broken rule would be two answers to
+one question. A check carries a mark saying it came from a rule, so a client can show
+the sentence and its breakdown once rather than twice in a column too narrow for
+either.
 
 **A comparison** answers what one report cannot however complete it is: did that
 change help? It carries the raw numbers and the direction that counts as good, so a

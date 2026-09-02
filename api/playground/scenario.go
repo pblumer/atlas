@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/playground"
 )
 
@@ -75,6 +76,19 @@ type expectReq struct {
 	MinVisits    map[string]int64 `json:"minVisits,omitempty"`
 	MaxVisits    map[string]int64 `json:"maxVisits,omitempty"`
 	MaxQueue     map[string]int   `json:"maxQueue,omitempty"`
+	// Rules are the expectations stated per case rather than per run.
+	Rules []ruleReq `json:"rules,omitempty"`
+}
+
+// ruleReq is one per-case rule: which cases it speaks about, and what they have
+// to show. Both halves are FEEL over the case's variables as the run left them,
+// with "end" bound to the BPMN id of the last element it reached and
+// "durationSeconds" to how long it took.
+type ruleReq struct {
+	Name string `json:"name,omitempty"`
+	// When selects the cases. Omitted means every case.
+	When string `json:"when,omitempty"`
+	Then string `json:"then"`
 }
 
 // millis turns a wire duration into a Go one. Zero stays zero, which every
@@ -123,13 +137,49 @@ func (e expectReq) toExpectations() playground.Expectations {
 		MinVisits:    e.MinVisits,
 		MaxVisits:    e.MaxVisits,
 		MaxQueue:     e.MaxQueue,
+		Rules:        rulesFrom(e.Rules),
 	}
+}
+
+// rulesFrom converts the wire rules. Nothing is validated here: a rule is refused
+// where it is compiled, which is the one place that knows what FEEL accepts.
+func rulesFrom(in []ruleReq) []playground.Rule {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]playground.Rule, 0, len(in))
+	for _, r := range in {
+		out = append(out, playground.Rule{Name: r.Name, When: r.When, Then: r.Then})
+	}
+	return out
 }
 
 // verdictResp is a run judged, in the shape a person reads and a CI job exits on.
 type verdictResp struct {
 	Passed bool        `json:"passed"`
 	Checks []checkResp `json:"checks"`
+	// Rules carries what each per-case rule did, beside the check that summarises
+	// it: the counts a panel shows as a breakdown, and the offending cases it marks
+	// in the results table.
+	Rules []ruleResp `json:"rules"`
+}
+
+type ruleResp struct {
+	Name string `json:"name"`
+	When string `json:"when,omitempty"`
+	Then string `json:"then"`
+	// Cases is how many the run had, Matched how many the rule spoke about, and the
+	// three after that split the matched ones.
+	Cases     int  `json:"cases"`
+	Matched   int  `json:"matched"`
+	Satisfied int  `json:"satisfied"`
+	Violated  int  `json:"violated"`
+	Undecided int  `json:"undecided"`
+	Passed    bool `json:"passed"`
+	// Examples are the offending cases by their position in the dataset, bounded;
+	// Truncated says the run had more than are listed.
+	Examples  []int `json:"examples"`
+	Truncated bool  `json:"truncated"`
 }
 
 type checkResp struct {
@@ -137,6 +187,10 @@ type checkResp struct {
 	Want   string `json:"want"`
 	Got    string `json:"got"`
 	Passed bool   `json:"passed"`
+	// Rule marks a check that came from a per-case rule. It decides the verdict like
+	// any other; a client that also shows the rule breakdown uses this to avoid
+	// saying the same thing twice, in a column too narrow to say it once.
+	Rule bool `json:"rule,omitempty"`
 }
 
 // HandleVerdict judges the run against the expectations in the body.
@@ -150,21 +204,63 @@ func (s *Service) HandleVerdict(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, maxBodyBytes, &req) {
 		return
 	}
-	var out verdictResp
-	s.run(w, r, func(sb *playground.Sandbox) error {
+	sess, ok := s.session(w, r)
+	if !ok {
+		return
+	}
+	exp := req.toExpectations()
+	var (
+		out     verdictResp
+		ruleErr error
+	)
+	// Not through the run helper: a rule that will not compile is the caller's
+	// mistake, and that helper answers 200 with whatever the closure left behind. The
+	// error is carried out of the session and answered as a 400 of its own.
+	if !s.ok(w, sess.With(func(sb *playground.Sandbox) error {
 		rep, err := sb.Report()
 		if err != nil {
 			return err
 		}
-		out = renderVerdict(req.toExpectations().Judge(rep))
+		outcomes, rerr := sb.JudgeRules(exp.Rules)
+		if rerr != nil {
+			ruleErr = rerr
+			return nil
+		}
+		out = renderVerdict(exp.Judge(rep, outcomes), outcomes)
 		return nil
-	}, &out)
+	})) {
+		return
+	}
+	if ruleErr != nil {
+		httpapi.Error(w, http.StatusBadRequest, ruleErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
-func renderVerdict(v playground.Verdict) verdictResp {
-	out := verdictResp{Passed: v.Passed, Checks: make([]checkResp, 0, len(v.Checks))}
+func renderVerdict(v playground.Verdict, rules []playground.RuleOutcome) verdictResp {
+	out := verdictResp{
+		Passed: v.Passed,
+		Checks: make([]checkResp, 0, len(v.Checks)),
+		Rules:  make([]ruleResp, 0, len(rules)),
+	}
 	for _, c := range v.Checks {
-		out.Checks = append(out.Checks, checkResp{Name: c.Name, Want: c.Want, Got: c.Got, Passed: c.Passed})
+		out.Checks = append(out.Checks, checkResp{
+			Name: c.Name, Want: c.Want, Got: c.Got, Passed: c.Passed, Rule: c.Rule,
+		})
+	}
+	for _, o := range rules {
+		r := ruleResp{
+			Name: o.Rule.Label(), When: o.Rule.When, Then: o.Rule.Then,
+			Cases: o.Cases, Matched: o.Matched, Satisfied: o.Satisfied,
+			Violated: o.Violated, Undecided: o.Undecided,
+			Passed: o.Passed(), Truncated: o.Truncated,
+			Examples: o.Examples,
+		}
+		if r.Examples == nil {
+			r.Examples = []int{}
+		}
+		out.Rules = append(out.Rules, r)
 	}
 	return out
 }

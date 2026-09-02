@@ -50,8 +50,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   through the `api()` helper, so the harness intercepts `fetch` to see it); a dataset
   is **described** rather than listed — a field's kind decides which parameters it
   shows, the preview is asked for before the run, and what travels is the twenty-line
-  description rather than five hundred rows built in the browser; and stopping a batch
-  leaves what it did readable.
+  description rather than five hundred rows built in the browser; the mode lays the
+  editor out in three columns and a strip, with the strip absent until there are cases
+  to put in it and the cases read a page at a time from the server rather than held in
+  the browser; and stopping a batch leaves what it did readable.
 
   And the **scenario half**: the checkboxes an author ticks become the expectations a
   build exits on, resolved against the run that happened rather than the dataset in
@@ -62,7 +64,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   beside the stored baseline with only what moved shown, and only where moving has a
   direction; a failing run cannot be kept as the baseline; a described dataset *is*
   saved as a scenario, which is what a CSV-driven run cannot do and what it says
-  instead. Drives the real `mountEditor` and `playground.js`
+  instead; and a **per-case rule** is written against the diagram (its end events are
+  offered off the canvas, the way the pool rows are), travels in the same body the
+  run-wide bounds do, comes back as a held/broke-it split rather than one number, and
+  marks the offending rows in the results strip. Drives the real `mountEditor` and `playground.js`
   against a mock Playground API.
 - **`gateways.spec.mjs`** (ADR-0096): the **exclusive** gateway pauses for a choice and routes
   down the picked branch (and **auto-decide** runs it hands-free); the **parallel** gateway
@@ -150,6 +155,27 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   difference *and say so* on the section rather than presenting it as the element's own
   work. Drives the real `mountInstanceReplay` against a mock `api` serving both shapes of
   timeline (`?legacy=1` for the unattributed one).
+
+- **`id-check.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
+  the **live id-availability check** on an artifact's ID field. A draft is stored under
+  its process id and a form under the id a user task binds to, so saving onto an id
+  something else already holds is refused — and a refusal at Save is too late, because
+  the author has typed the id and moved on. Drives the real `idcheck.js` against a mock
+  `api`: an id another draft holds turns the field red, names the holder and sets
+  `aria-invalid`; a collision the author may not see is reported without naming it; a
+  free id clears the mark; the artifact's own id is never *asked* about, so a panel that
+  re-renders on every selection does not pepper the server; and a burst of keystrokes
+  asks exactly one question.
+
+- **`form-identity.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
+  the **form editor's single identity**, on the state that reported the bug — a form
+  stored as `form-mtjs4` whose schema had drifted to `frm_jira_ticket_new`, so the
+  toolbar chip and the properties panel showed different ids and the rename had never
+  happened. Both must open on the stored id; retyping the panel's **ID** must move the
+  chip with it and mark the rename unsaved; and Save must ask before renaming (a user
+  task binds to that id) and send the record it is editing, so the save moves the form
+  instead of leaving a second one behind. Drives the real `mountFormEditor` — the actual
+  vendored form-js properties panel — against a mock `api` that captures the save.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 

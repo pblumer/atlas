@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"time"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -419,24 +421,53 @@ func (s *Sandbox) caseRow(index int, key uint64, incidents map[uint64]int) (Case
 		row.Duration = time.Duration(pi.CompletedAt - pi.CreatedAt)
 	}
 	if err := s.store.VariablesOfScope(key, func(v *model.VariableValue) error {
-		row.Variables[v.Name] = v.Text
+		row.Variables[v.Name] = variableText(v)
 		return nil
 	}); err != nil {
 		return CaseRow{}, false, fmt.Errorf("playground: read case variables: %w", err)
 	}
-	if cp != nil {
-		last := int32(-1)
-		if err := s.store.ElementStepHistory(key, func(_ int64, _ uint64, elementId int32) error {
-			last = elementId
-			return nil
-		}); err != nil {
-			return CaseRow{}, false, fmt.Errorf("playground: read case path: %w", err)
-		}
-		if last >= 0 {
-			row.End = cp.ElementBpmnId(last)
-		}
+	if row.End, err = s.lastElement(key, cp); err != nil {
+		return CaseRow{}, false, err
 	}
 	return row, true, nil
+}
+
+// lastElement is the BPMN id of the last element a case reached — its outcome,
+// read off the step history rather than guessed from its state. Empty for a case
+// that has reached nothing, or whose definition is not one this sandbox compiled.
+func (s *Sandbox) lastElement(key uint64, cp *compiler.CompiledProcess) (string, error) {
+	if cp == nil {
+		return "", nil
+	}
+	last := int32(-1)
+	if err := s.store.ElementStepHistory(key, func(_ int64, _ uint64, elementId int32) error {
+		last = elementId
+		return nil
+	}); err != nil {
+		return "", fmt.Errorf("playground: read case path: %w", err)
+	}
+	if last < 0 {
+		return "", nil
+	}
+	return cp.ElementBpmnId(last), nil
+}
+
+// variableText renders one of a case's variables for the results table and the CSV
+// that streams it.
+//
+// Reading Text alone loses two kinds. A boolean keeps its value in Bool and leaves
+// Text empty, so a dataset carrying an "express" flag reported an empty column for
+// it — in the table on screen and in the downloaded file alike, which is worse:
+// the column was there, so it read as "no case had one" rather than as a gap.
+func variableText(v *model.VariableValue) string {
+	switch v.Kind {
+	case model.VarBool:
+		return strconv.FormatBool(v.Bool)
+	case model.VarNull:
+		return "null"
+	default:
+		return v.Text
+	}
 }
 
 // Counts is how many cases have been created and how many have finished, read

@@ -1,7 +1,9 @@
-// End-to-end coverage for deleting a connector deployed models still reference
-// (ADR-0163). The server refuses that delete and answers with the processes in the
-// way; this proves the operator surface does something useful with the refusal
-// instead of showing a bare 409 — it asks again, with the list, and only then forces.
+// End-to-end coverage for what a connector's deployed use means on the operator page
+// (ADR-0163): the count the row carries, the list behind it, and deleting one the
+// models still reference. The server refuses that delete and answers with the
+// processes in the way; this proves the operator surface does something useful with
+// the refusal instead of showing a bare 409 — it asks again, with the list, and only
+// then forces.
 import { test, expect } from "@playwright/test";
 
 const open = async (page) => {
@@ -23,19 +25,73 @@ const answer = (page, decisions) => {
   });
 };
 
-test("names the processes that resolve through a connector, and the instances running on them", async ({ page }) => {
+test("the row counts what resolves through a connector, and the instances running on them", async ({ page }) => {
   await open(page);
-  const used = page.locator("#usage-referenced");
-  await expect(used).toContainText("Zahlung v3");
-  await expect(used).toContainText("Mahnung v1");
-  // The running count is the number that makes this a decision rather than a click.
-  await expect(used).toContainText("2 running instances");
-  // Each link goes to the process it names, and carries its elements for the hover.
-  await expect(used.locator('a[href="#/operations/p/7"]')).toHaveAttribute("title", "Task_pay");
-  await expect(used.locator('a[href="#/operations/p/9"]')).toHaveAttribute("title", "Task_remind, Task_escalate");
+  // The row itself is the count. Two definitions of two processes agree, so it says
+  // one number; the running total is what makes this a decision rather than a click.
+  await expect(page.locator("#usage-referenced")).toContainText("Used by 2 deployed processes");
+  await expect(page.locator("#usage-referenced")).toContainText("2 running instances");
 
-  // A connector nothing references says so plainly rather than showing an empty line.
+  // Definitions and processes are different numbers, and a worker eleven deployed
+  // definitions of seven processes reference has to say both rather than overstate
+  // the blast radius as eleven processes.
+  await expect(page.locator("#usage-many")).toContainText("Used by 7 processes");
+  await expect(page.locator("#usage-many")).toContainText("11 deployed versions");
+  await expect(page.locator("#usage-many")).toContainText("1 running instance");
+
+  // A connector nothing references says so plainly rather than showing an empty line —
+  // and offers nothing to open.
   await expect(page.locator("#usage-orphan")).toContainText("Referenced by no deployed process");
+  await expect(page.locator("#usage-orphan button")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the count opens the list it stands for", async ({ page }) => {
+  await open(page);
+  await page.locator("#usage-referenced [data-usage]").click();
+  const dialog = page.locator(".usage-modal");
+  await expect(dialog).toContainText("Used by · Patrick Blumer");
+  await expect(dialog).toContainText("Zahlung");
+  await expect(dialog).toContainText("Mahnung");
+  // Every version links to its own Operations page and names the elements whose tasks
+  // resolve through the connector — what the row used to spell out, where there is room.
+  await expect(dialog.locator('a[href="#/operations/p/7"]')).toContainText("v3");
+  await expect(dialog.locator('a[href="#/operations/p/7"]')).toContainText("Task_pay");
+  await expect(dialog.locator('a[href="#/operations/p/9"]')).toContainText("Task_remind, Task_escalate");
+  // The one process something is running on says so on its own row.
+  await expect(dialog.locator('a[href="#/operations/p/7"]')).toContainText("2 running");
+  // And it says what deleting the connector would do to them.
+  await expect(dialog).toContainText("no connector registered as Patrick Blumer");
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the list groups a redeployed process instead of repeating its name", async ({ page }) => {
+  await open(page);
+  await page.locator("#usage-many [data-usage]").click();
+  const dialog = page.locator(".usage-modal");
+  // Seven processes, seven groups — the five deployed versions of one of them are rows
+  // inside its group rather than five entries that read as five different processes.
+  await expect(dialog.locator(".usage-group")).toHaveCount(7);
+  const redeployed = dialog.locator(".usage-group").filter({ hasText: "Info Mail versenden" });
+  await expect(redeployed.locator(".usage-ver")).toHaveCount(5);
+  // Newest first: the version an operator is looking for is the one at the top.
+  await expect(redeployed.locator(".usage-ver").first()).toContainText("v5");
+  await expect(redeployed.locator(".usage-ver").first()).toContainText("1 running");
+
+  // Past a handful of processes the dialog is a list to search, not one to scan.
+  const filter = dialog.locator("[data-usage-filter]");
+  await filter.fill("offboard");
+  await expect(dialog.locator(".usage-group:visible")).toHaveCount(1);
+  await expect(dialog.locator(".usage-group:visible")).toContainText("Benutzer offboarden");
+  await filter.fill("nothing matches this");
+  await expect(dialog.locator(".usage-group:visible")).toHaveCount(0);
+  await expect(dialog.locator("[data-usage-none]")).toBeVisible();
+
+  await dialog.locator("[data-usage-done]").click();
+  await expect(dialog).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });
 

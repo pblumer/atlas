@@ -119,6 +119,17 @@
         { name: "cases completed", want: "at least 3", got: "3 of 3", passed: true },
         { name: "incidents", want: "at most 0", got: "0", passed: true },
         { name: "queue at clerks", want: "at most 5", got: "9", passed: false },
+      ], rules: [] };
+
+      // What the server answers once the panel sends per-case rules: one that held
+      // and one that did not, with the cases that broke it named.
+      const RULE_VERDICT = { passed: false, checks: VERDICT.checks, rules: [
+        { name: "small ones are approved", when: "betrag < 1000", then: 'end = "approved"',
+          cases: 3, matched: 2, satisfied: 2, violated: 0, undecided: 0, passed: true,
+          examples: [], truncated: false },
+        { name: 'betrag > 1000 → end = "approved"', when: "betrag > 1000", then: 'end = "approved"',
+          cases: 3, matched: 1, satisfied: 0, violated: 1, undecided: 0, passed: false,
+          examples: [2], truncated: false },
       ] };
       const COMPARISON = { deltas: [
         { name: "cases completed", unit: "count", before: 3, after: 3, better: false, worse: false },
@@ -150,6 +161,18 @@
             variables: { amount: "12400", decision: "approved" }, incidents: 0 }
         : { instanceKey: "5", state: "active", path: ["start", "review"],
             variables: { amount: "12400" }, incidents: 0 });
+
+      // The cases the report above summarises, as the results endpoint pages them: two
+      // that finished and one parked behind an incident. makeCases builds more of the
+      // same, so a test that is about paging can have enough rows to page.
+      const makeCases = (n) => Array.from({ length: n }, (_, i) => (i % 3 === 2
+        ? { index: i, instanceKey: String(11 + i), state: "active", started: "2026-03-05T08:00:00Z",
+            durationMillis: 0, incidents: 1, end: "", variables: { amount: "5000", kunde: "C" } }
+        : { index: i, instanceKey: String(11 + i), state: "completed", started: "2026-03-05T08:00:00Z",
+            ended: "2026-03-05T09:12:00Z", durationMillis: 4320000, incidents: 0,
+            end: i % 3 === 0 ? "approved" : "rejected",
+            variables: { amount: i % 3 === 0 ? "12400" : "90", kunde: i % 3 === 0 ? "A" : "B" } }));
+      let CASES = makeCases(3);
 
       const api = async (method, url, body) => {
         window.__calls.push({ method, url, body });
@@ -184,6 +207,16 @@
         if (method === "POST" && /\/runs$/.test(url)) { batch = { polls: 0, cancelled: false }; return runStatus(); }
         if (method === "GET" && /\/runs$/.test(url)) return runStatus();
         if (method === "GET" && /\/report$/.test(url)) return REPORT;
+        // One page of the results table. Three cases, so paging has something to page:
+        // the strip asks for a window and the server owns how many there are.
+        if (method === "GET" && /\/results\?/.test(url)) {
+          const q = new URL(url, location.origin).searchParams;
+          const at = Number(q.get("offset") || 0);
+          return {
+            total: CASES.length, offset: at,
+            rows: CASES.slice(at, at + Number(q.get("limit") || 100)),
+          };
+        }
         if (method === "GET" && /\/heatmap$/.test(url)) return HEATMAP;
         // The preview a described dataset asks for. The rows are derived from the
         // description so the spec can check that what was typed reached the server,
@@ -205,7 +238,11 @@
             }),
           };
         }
-        if (method === "POST" && /\/verdict$/.test(url)) return VERDICT;
+        // The rules half is answered only when the panel actually sent rules, so the
+        // specs that do not use them keep judging the run they always did.
+        if (method === "POST" && /\/verdict$/.test(url)) {
+          return body && body.rules && body.rules.length ? RULE_VERDICT : VERDICT;
+        }
         if (method === "POST" && /\/compare$/.test(url)) return COMPARISON;
         if (method === "GET" && /\/playground\/scenarios\?/.test(url)) return scenarios;
         if (method === "GET" && /\/playground\/scenarios\/[\w-]+$/.test(url)) return SCENARIO;
@@ -237,6 +274,15 @@
             headers: { "Content-Type": "application/json" } });
         }
         return realFetch(input, init);
+      };
+
+      // A test about paging needs more cases than the three the rest of the fixture
+      // is built around. The report is moved with them, so the numbers on screen and
+      // the rows under them keep telling the same story.
+      window.__setCases = (n) => {
+        CASES = makeCases(n);
+        REPORT.cases = n;
+        REPORT.completed = n - Math.floor(n / 3);
       };
 
       window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });

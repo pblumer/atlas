@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net/url"
 	"os"
@@ -231,4 +232,57 @@ func (s *Server) sqlConnectorProblem(kind, name string) (string, bool) {
 		return "", false
 	}
 	return "", false
+}
+
+// SQLProbe opens one database and reports whether it answers. It is the seam that
+// lets the Console check a database without the engine linking a database driver.
+//
+// [ADR-0173] keeps the drivers in `worker`, so `api` — which resolves SQL tasks and
+// never executes them — links none of them. A check therefore cannot call sql.Open
+// here; it is handed in by whoever assembles the binary, which for the single binary
+// (ADR-0011) is the same process that runs workers. An embedder who wires nothing gets
+// a check that says it cannot run, which is honest, rather than a connector reported
+// broken because a driver was absent.
+//
+// [ADR-0173]: https://github.com/pblumer/atlas/blob/main/docs/adr/0173-generic-sql-connector.md
+type SQLProbe func(ctx context.Context, product sqldb.Product, dsn string) error
+
+// WithSQLProbe gives this server a way to check a SQL connector's connection string
+// (ADR-0220). Pass worker.ProbeSQL, which opens the
+// product's driver and pings it.
+//
+// It is what makes the Console's check work for the SQL kinds. Without it the check
+// answers "this server cannot check a database connection", because that is the truth:
+// nothing in this package can dial one.
+func WithSQLProbe(p SQLProbe) Option { return func(s *Server) { s.sqlProbe = p } }
+
+// checkSQLConnector answers the Console's check for one of the SQL kinds.
+//
+// What is being dialled is the operator's own database with the operator's own
+// credential, at the moment they ask — not process work. The engine already holds this
+// connection string for a Console-managed connector (ADR-0188 decided that, so the
+// supervised worker can be handed it), so what is new here is only the dial, on a
+// click, from the process the operator is already talking to. ADR-0173's promise —
+// that no *model* and no external worker's credential passes through the engine — is
+// untouched.
+//
+// It returns the verdict the handler renders: whether it worked, and a sentence saying
+// what that did and did not prove.
+func (s *Server) checkSQLConnector(ctx context.Context, product sqldb.Product, dsn string) (bool, string) {
+	if s.sqlProbe == nil {
+		return false, "This server cannot check a database connection: it was built without a database driver. " +
+			"The connector still works on a worker that has one."
+	}
+	if err := s.sqlProbe(ctx, product, dsn); err != nil {
+		return false, err.Error()
+	}
+	// Say what was proved. A login that connects may still have no rights to the table
+	// a statement names, and an operator who reads "OK" as "the task will work" finds
+	// that out from an incident.
+	target := redactedSQLTarget(dsn)
+	if target == "" {
+		target = "the database"
+	}
+	return true, "Connected to " + target + " and authenticated. No statement was run, so this does not " +
+		"prove the login may read or write the tables a task names."
 }

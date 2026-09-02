@@ -38,6 +38,15 @@ type Expectations struct {
 	// MaxQueue bounds the longest queue a pool ever had — the capacity question
 	// stated as a target rather than read off a table.
 	MaxQueue map[string]int
+	// Rules are the expectations stated per case rather than per run. They are the
+	// statement the fields above cannot make: "the median is under four hours" is
+	// true of a run, "an application under 50 000 from a grade-A customer is
+	// approved" is true of a case, and a run that holds it nine times in ten is not
+	// nine tenths right.
+	//
+	// They are judged from the cases, not from the report, so [Judge] takes their
+	// outcomes rather than computing them: see [Sandbox.JudgeRules].
+	Rules []Rule
 }
 
 // Check is one expectation and what the run did about it. Want and Got are
@@ -48,6 +57,10 @@ type Check struct {
 	Want   string
 	Got    string
 	Passed bool
+	// Rule marks a check that came from a per-case rule rather than from a bound on
+	// the run. Both decide the verdict alike; a reader is shown them differently,
+	// because a rule's own breakdown says more than a check line has room for.
+	Rule bool
 }
 
 // Verdict is a run judged against its expectations. A verdict with no checks
@@ -64,14 +77,15 @@ type Verdict struct {
 //
 // Every expectation is evaluated even once one has failed: a run that misses three
 // targets should say so once, rather than over three runs.
-func (e Expectations) Judge(rep Report) Verdict {
+func (e Expectations) Judge(rep Report, rules []RuleOutcome) Verdict {
 	v := Verdict{Passed: true}
-	add := func(name, want, got string, ok bool) {
-		v.Checks = append(v.Checks, Check{Name: name, Want: want, Got: got, Passed: ok})
+	addKind := func(name, want, got string, ok, rule bool) {
+		v.Checks = append(v.Checks, Check{Name: name, Want: want, Got: got, Passed: ok, Rule: rule})
 		if !ok {
 			v.Passed = false
 		}
 	}
+	add := func(name, want, got string, ok bool) { addKind(name, want, got, ok, false) }
 
 	if e.MinCompleted > 0 {
 		add("cases completed", fmt.Sprintf("at least %d", e.MinCompleted),
@@ -122,6 +136,12 @@ func (e Expectations) Judge(rep Report) Verdict {
 		}
 		add("queue at "+name, fmt.Sprintf("at most %d", e.MaxQueue[name]),
 			got, ok && p.MaxQueue <= e.MaxQueue[name])
+	}
+	// The per-case rules last, in the order they were written: they read as
+	// sentences rather than as bounds, and a reader looking for a number should not
+	// have to step over them.
+	for _, o := range rules {
+		addKind(o.Rule.Label(), "every matching case", o.Got(), o.Passed(), true)
 	}
 	return v
 }

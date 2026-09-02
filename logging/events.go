@@ -206,6 +206,17 @@ var (
 	// for every AD task at once — which is what an optional field with a typo in it
 	// used to do (ADR-0202).
 	ADMockSeedUnusable = newEvent("ad_mock.seed_unusable")
+	// SQLMockEnabled is a SQL worker announcing that it answers database tasks from
+	// seeded answers in its own memory rather than from a database (ADR-0221).
+	// A warning for the same reason the AD one is: a mock worker is indistinguishable
+	// from a working one everywhere else, because it completes the jobs it answers.
+	SQLMockEnabled = newEvent("sql_mock.enabled")
+	// SQLMockSeedUnusable is a mock database that could not read the seed file it was
+	// pointed at, and started with no answers instead. A warning and not a refusal for
+	// the reason ADMockSeedUnusable is one: the supervisor restarts a child that
+	// exits, so failing on an optional file is a restart loop rather than a message.
+	// Every statement then fails naming itself, which points at the missing seed.
+	SQLMockSeedUnusable = newEvent("sql_mock.seed_unusable")
 	// WorkerHistoryFailed is the job-history exporter reporting that an append did not
 	// reach its clio connector, or that its buffer is dropping entries. Both are
 	// warnings rather than errors on purpose: the history is telemetry, and the engine

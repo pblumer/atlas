@@ -25,6 +25,71 @@ _Changed_ / _Removed_ for each version.
   Before this, a model could only hard-code an opaque per-site id or call Jira through the
   REST connector with a second copy of the credential.
 
+- **A database task can be tried without a database.** The SQL Worker Types — MS SQL
+  Server, MariaDB, PostgreSQL — were the only ones that could not be exercised at all
+  without the production dependency, and the database a process reads is the HR system
+  or the ERP, which is exactly the one nobody wants a model under development pointed
+  at. A worker started with `ATLAS_MSSQL_MOCK=1` (or `ATLAS_MARIADB_MOCK`,
+  `ATLAS_POSTGRES_MOCK`) now answers that product's statements from **seeded answers**
+  in its own memory, with no connection string
+  ([ADR-0221](docs/adr/0221-sql-mock-mode.md)). Nothing in the model
+  changes — the same worker name, the same statement, the same parameters; what differs
+  is which worker leases the jobs, so a model that runs through in mockup mode is the
+  model that later runs in production.
+
+  `ATLAS_MSSQL_MOCK_SEED` names a JSON file mapping statements to their rows or
+  affected count. An answer that names `params` or `named` applies only to that
+  binding and one that names neither is the statement's fallback, which is how a seed
+  says "person 42 exists and nobody else does" with no SQL engine behind it. An answer
+  may also seed a **failure**, because a unique-key violation on a redelivered create
+  is not an edge case in an identity process — it is what the delivery guarantee
+  routinely does, and now it can be triggered on purpose.
+
+  **It answers statements, it does not execute them,** and the one rule that makes it
+  worth trusting is the refusal: a statement nobody seeded **fails, naming itself and
+  its bound parameters**, and never comes back as an empty result set. "No rows" is a
+  business answer — the lookup found nobody — and a mockup that invents one hands the
+  process a fact in the direction hardest to notice, because the run looks like it
+  worked. What that costs is stated too: an `INSERT` does not change what a later
+  `SELECT` returns. Standing in for SQL Server with SQLite or a hand-written SQL subset
+  was rejected for the same reason from the other side — either would differ from the
+  real thing exactly where statements go wrong, and land the difference in production.
+
+  [`examples/mssql-eintrittsmeldung.bpmn`](examples/mssql-eintrittsmeldung.bpmn) is the
+  model to try it on: it looks a person up by their initials (`query-one`, which returns
+  `null` rather than an empty list and fails on a second match), branches on whether
+  they exist, and sets them active (`execute`, bound by name). Its documentation says
+  *why the statement is literal* — the `statement` field is the one connector value with
+  no `fx` toggle, because a statement assembled from process data would be an injection
+  that needs no quoting bug. The handbook's *Test & simulate* chapter gained the matching
+  section, and the worker-type table now says what a SQL task actually does.
+
+- **The Console can check a database connector.** `POST /api/v1/connectors/test`
+  covered mail and nothing else, and the gap hurt most for the kind whose *whole*
+  configuration is one opaque string sealed into the vault: a typo in it is invisible
+  from the moment it is saved, and the first thing to read it is a supervised worker
+  whose failure arrives as a parked task. The **Test connection** button now appears
+  for the three SQL kinds — against the string typed in the create form, and against
+  the vault reference of a saved connector, which is the case that matters because an
+  operator opens that dialog when something *stopped* working
+  ([ADR-0220](docs/adr/0220-checking-a-database-connector.md)).
+
+  The verdict says what it proved: *"Connected to `sa@db.example.com:1433/hr` and
+  authenticated. No statement was run, so this does not prove the login may read or
+  write the tables a task names."* Reading "OK" as "the task will work" is how the
+  next surprise arrives as an incident.
+
+  The engine still links no database driver: `api` declares the seam and `cmd/atlas`,
+  which links both, joins them. A server built without one answers "this server cannot
+  check a database connection", which is the truth rather than a connector reported
+  broken.
+
+- **A worker's database pool has limits.** `database/sql`'s defaults are an unlimited
+  number of open connections and connections kept until the process exits — the two a
+  database administrator would not have chosen. A worker now caps them, and recycles
+  connections so that the first job after a quiet night does not meet one a firewall or
+  a failover closed hours ago.
+
 - **A Jira issue can start a process.** A Jira connector now carries inbound event
   watches beside its outbound operations
   ([ADR-0214](docs/adr/0214-jira-inbound-issue-watch.md)): Console → Connectors →
@@ -209,6 +274,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The Workers list reads like a list again.** Console → Workers gave every configured
+  worker up to seven action buttons and spelled out every deployed process that resolves
+  through it, so a shared mail worker drew fourteen wrapped lines of links and the rows
+  were all different heights — the tallest being the ones something is wrong with
+  ([ADR-0163 amendment](docs/adr/0163-deleting-a-referenced-connector.md)). The actions
+  are now behind the row's **⋯** menu, where every other table in the console keeps
+  them, and the usage is a count — *Used by 8 processes · 21 deployed versions · 1
+  running instance* — that opens the list it stands for. That dialog groups a redeployed
+  model under one entry with its versions newest-first, links each version to its
+  Operations page beside the tasks that resolve through the worker, and filters past a
+  handful of processes. Nothing about the numbers changed: they are read off the same
+  `usedBy` the delete refusal names, so the row, the dialog and the refusal still cannot
+  tell different stories, and typing a process name in the column filter still finds the
+  workers it runs through. A worker with no endpoint of its own — a Gmail or Graph
+  mailbox, which authenticates as its sender — now names its provider there instead of
+  opening the line with a stray separator.
+
 - **Jira runs on a worker by default.** `DefaultOffloadedKinds` now includes `jira`, so a
   Jira task is leased by a supervised worker instead of served inside the engine
   ([ADR-0218](docs/adr/0218-jira-default-offload.md)). The engine
@@ -289,6 +371,28 @@ _Changed_ / _Removed_ for each version.
   the headers, the query parameters or the body was wrong. The incident message now
   carries an excerpt of that response: one line, collapsed and bounded, so a proxy's HTML
   error page cannot become the incident.
+
+- **Renaming a saved diagram or form left a duplicate — or silently overwrote another
+  one.** A draft is stored under its process id and a form under the id a user task
+  binds to, but the save only ever saw the id in front of it, never which record the
+  author was editing. So retyping the Process ID and saving wrote a *second* draft and
+  left the first in place, and if something already held the new id, the save landed on
+  top of it: the artifact that was there was gone, with no warning and no question. The
+  form editor had a quieter version of the same defect — the Design pane's **ID** field
+  edited the schema and nothing else, so the chip in the toolbar went on showing the id
+  the form was really stored under, the panel showed the id the author had typed, and
+  the rename never happened (an export of that form then carried the typed id, so
+  re-importing it forked a copy). The save now names the record it is editing (`?from=`
+  for a draft, `"from"` for a form): a changed id **moves** the record, carrying its
+  application and its creator, and an id another artifact already holds is refused with
+  409 rather than overwritten. The Modeler checks the id as it is typed — the field
+  turns red and names what holds it — and the form editor's chip is now the schema's id
+  itself, dashed while a rename is unsaved, with Save asking first because a user task
+  still bound to the old id will find no form. The two places where landing on something
+  that already exists is the point rather than an accident — importing a `.bpmn`/`.form`
+  file over the artifact it came from, and pulling a deployed definition back into a
+  draft — now ask by name instead of doing it silently or refusing it
+  ([ADR-0222](docs/adr/0222-artifact-id-renames.md)).
 
 - **A task's *out* section showed variables the neighbouring branch produced.** The
   replay's in/out card inferred what an element wrote by diffing the variables it saw on

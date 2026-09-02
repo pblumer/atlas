@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -144,6 +145,12 @@ func printVerdict(out io.Writer, v verdictBody) {
 		}
 		fmt.Fprintf(out, "%s %-28s want %-16s got %s\n", mark, c.Name, c.Want, c.Got)
 	}
+	for _, r := range v.Rules {
+		if r.Passed || len(r.Examples) == 0 {
+			continue
+		}
+		fmt.Fprintf(out, "     %s: %s\n", r.Name, offendingCases(r.Examples, r.Truncated))
+	}
 	if v.Passed {
 		fmt.Fprintln(out, "\nPASS")
 	} else {
@@ -175,6 +182,28 @@ func printComparison(out io.Writer, c comparisonBody) {
 		// one a build sees most often. It has to say so.
 		fmt.Fprintln(out, "   nothing moved")
 	}
+}
+
+// offendingCases lists the cases a rule broke on, by their place in the dataset and
+// numbered as the results table numbers them — from one, not from zero.
+//
+// Bounded: a rule broken in fifty thousand cases would otherwise put fifty thousand
+// numbers in a build log, and the first few are the ones somebody opens.
+func offendingCases(idx []int, truncated bool) string {
+	const show = 10
+	more := truncated
+	if len(idx) > show {
+		idx, more = idx[:show], true
+	}
+	parts := make([]string, 0, len(idx))
+	for _, i := range idx {
+		parts = append(parts, strconv.Itoa(i+1))
+	}
+	out := "cases " + strings.Join(parts, ", ")
+	if more {
+		out += ", and more"
+	}
+	return out
 }
 
 // renderMeasure turns a delta's raw number into the unit it was measured in. The
@@ -230,6 +259,15 @@ type verdictBody struct {
 		Got    string `json:"got"`
 		Passed bool   `json:"passed"`
 	} `json:"checks"`
+	// Rules carry what each per-case rule did, beside the check that summarises it.
+	// A build log needs the cases, not only the count: "2 broke it" sends somebody
+	// looking, "cases 3 and 7 broke it" sends them to the two rows that did.
+	Rules []struct {
+		Name      string `json:"name"`
+		Passed    bool   `json:"passed"`
+		Examples  []int  `json:"examples"`
+		Truncated bool   `json:"truncated"`
+	} `json:"rules"`
 }
 
 type comparisonBody struct {

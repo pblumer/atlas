@@ -2,6 +2,11 @@ package worker
 
 import (
 	"context"
+	"database/sql"
+	"database/sql/driver"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -161,5 +166,191 @@ func TestRunSQLJobReadsTheResolvedDetail(t *testing.T) {
 	// evidence the payload decoded: an undecodable one fails earlier and differently.
 	if err == nil || !strings.Contains(err.Error(), "hr-db") {
 		t.Errorf("err = %v, want an unresolved-connector error naming hr-db", err)
+	}
+}
+
+// Mock mode: the worker serves SQL tasks from its own memory. Two variables replace
+// the connection strings — the names it answers to, and the file of seeded answers —
+// so a model that reads a database runs end to end without one.
+func TestASQLWorkerInMockModeNeedsNoConnectionString(t *testing.T) {
+	seed := filepath.Join(t.TempDir(), "seed.json")
+	if err := os.WriteFile(seed, []byte(`{"answers":[
+	  {"statement":"SELECT id, mail FROM personen WHERE id = @p1","params":[42],"columns":["id","mail"],"rows":[[42,"arno@example.com"]]}
+	]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	built, err := BuiltinConnectors(envMap(map[string]string{
+		"ATLAS_MSSQL_CONNECTORS": "hr-db",
+		"ATLAS_MSSQL_MOCK":       "1",
+		"ATLAS_MSSQL_MOCK_SEED":  seed,
+	}), "mssql")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	h, ok := built.Handlers[compiler.MsSqlJobType]
+	if !ok {
+		t.Fatal("mock mode registered no SQL Server handler")
+	}
+	out, err := h.Run(context.Background(), Job{Connector: &ConnectorPayload{Kind: "mssql", Fields: map[string]any{
+		"connector": "hr-db", "product": "mssql", "operation": "query-one",
+		"statement": "SELECT id, mail FROM personen WHERE id = @p1",
+		"params":    []any{42}, "resultVariable": "person",
+	}}})
+	if err != nil {
+		t.Fatalf("a mock job failed: %v", err)
+	}
+	person, ok := out["person"].(map[string]any)
+	if !ok {
+		t.Fatalf("person = %#v, want the seeded row", out["person"])
+	}
+	if person["mail"] != "arno@example.com" {
+		t.Errorf("mail = %#v, want the seeded address", person["mail"])
+	}
+}
+
+// A seed named with mock mode off would be read into a database no job reaches. It is
+// almost certainly a half-finished mockup setup, and silence would leave the operator
+// believing they had one — the same refusal the AD mock makes.
+func TestASQLSeedWithoutMockModeIsRefused(t *testing.T) {
+	_, err := BuiltinConnectors(envMap(map[string]string{
+		"ATLAS_MSSQL_CONNECTORS": "hr-db",
+		"ATLAS_MSSQL_HR_DB_DSN":  "sqlserver://x",
+		"ATLAS_MSSQL_MOCK_SEED":  "/tmp/nope.json",
+	}), "mssql")
+	if err == nil || !strings.Contains(err.Error(), "ATLAS_MSSQL_MOCK") {
+		t.Fatalf("error = %v, want one naming ATLAS_MSSQL_MOCK", err)
+	}
+}
+
+// An unreadable seed starts an unseeded mock rather than taking the worker down. The
+// supervisor restarts a child that exits, so refusing here is a restart loop over an
+// optional file — the outage the AD mock's seed handling already learned. Every
+// statement then fails naming itself, which points at the missing seed rather than
+// hiding it.
+func TestAnUnreadableSQLSeedStartsAnUnseededMock(t *testing.T) {
+	built, err := BuiltinConnectors(envMap(map[string]string{
+		"ATLAS_MSSQL_CONNECTORS": "hr-db",
+		"ATLAS_MSSQL_MOCK":       "yes",
+		"ATLAS_MSSQL_MOCK_SEED":  filepath.Join(t.TempDir(), "absent.json"),
+	}), "mssql")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	h := built.Handlers[compiler.MsSqlJobType]
+	if h == nil {
+		t.Fatal("no handler was registered")
+	}
+	_, err = h.Run(context.Background(), Job{Connector: &ConnectorPayload{Kind: "mssql", Fields: map[string]any{
+		"connector": "hr-db", "product": "mssql", "operation": "query",
+		"statement": "SELECT 1", "resultVariable": "rows",
+	}}})
+	if err == nil || !strings.Contains(err.Error(), "nothing is seeded") {
+		t.Fatalf("error = %v, want the unseeded-statement refusal", err)
+	}
+}
+
+// A malformed seed is an operator's typo in a file they wrote, so it is reported with
+// the file named — not degraded into a mock that silently answers nothing.
+func TestAMalformedSQLSeedIsReported(t *testing.T) {
+	seed := filepath.Join(t.TempDir(), "seed.json")
+	if err := os.WriteFile(seed, []byte(`{"answers":[{"columns":["id"]}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := BuiltinConnectors(envMap(map[string]string{
+		"ATLAS_MSSQL_CONNECTORS": "hr-db",
+		"ATLAS_MSSQL_MOCK":       "1",
+		"ATLAS_MSSQL_MOCK_SEED":  seed,
+	}), "mssql")
+	if err == nil || !strings.Contains(err.Error(), "needs a statement") {
+		t.Fatalf("error = %v, want the seed's own complaint", err)
+	}
+}
+
+// Mock mode still answers only the names it was told to serve: a model naming a
+// database this worker does not hold gets the unresolved-connector error it would get
+// against a real one, rather than a mock inventing a database.
+func TestMockModeAnswersOnlyItsConfiguredNames(t *testing.T) {
+	built, err := BuiltinConnectors(envMap(map[string]string{
+		"ATLAS_MSSQL_CONNECTORS": "hr-db",
+		"ATLAS_MSSQL_MOCK":       "1",
+	}), "mssql")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	_, err = built.Handlers[compiler.MsSqlJobType].Run(context.Background(), Job{Connector: &ConnectorPayload{Kind: "mssql", Fields: map[string]any{
+		"connector": "other-db", "product": "mssql", "operation": "query",
+		"statement": "SELECT 1", "resultVariable": "rows",
+	}}})
+	if err == nil || !strings.Contains(err.Error(), "other-db") {
+		t.Fatalf("error = %v, want one naming the unconfigured database", err)
+	}
+}
+
+// Mock mode with nothing named parks like every other unconfigured kind: the model
+// names a database, so a mock with no names has nothing a task could address.
+func TestMockModeWithNoNamesParks(t *testing.T) {
+	built, err := BuiltinConnectors(envMap(map[string]string{"ATLAS_MSSQL_MOCK": "1"}), "mssql")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if len(built.Unconfigured) != 1 || built.Unconfigured[0] != "mssql" {
+		t.Errorf("Unconfigured = %v, want [mssql]", built.Unconfigured)
+	}
+}
+
+// probeDriver is a database/sql driver that only has to connect, which is all a
+// connection check asks of one. It stands in for the vendor drivers this package
+// blank-imports, so the check itself is testable without a database.
+type probeDriver struct{ err error }
+
+func (d probeDriver) Open(string) (driver.Conn, error) {
+	if d.err != nil {
+		return nil, d.err
+	}
+	return probeConn{}, nil
+}
+
+type probeConn struct{}
+
+func (probeConn) Prepare(string) (driver.Stmt, error) { return nil, errors.New("not used") }
+func (probeConn) Close() error                        { return nil }
+func (probeConn) Begin() (driver.Tx, error)           { return nil, errors.New("not used") }
+
+func init() {
+	sql.Register("atlasprobe", probeDriver{})
+	sql.Register("atlasprobedead", probeDriver{err: errors.New("dial tcp 10.0.0.9:1433: connect: connection refused")})
+}
+
+// A database that answers is what the Console's check reports as working. Nothing
+// else is claimed: the ping proves the address resolves, the port answers and the
+// login is accepted, and stops there.
+func TestProbeSQLReachesADatabase(t *testing.T) {
+	p := sqldb.Product{Name: "probe", Driver: "atlasprobe"}
+	if err := ProbeSQL(context.Background(), p, "server=db;database=hr"); err != nil {
+		t.Fatalf("ProbeSQL against a database that answers: %v", err)
+	}
+}
+
+// And one that does not answer comes back with the driver's own reason, because that
+// sentence is what the operator reads in the form — "failed" would send them looking
+// for which of the six things in a connection string is wrong.
+func TestProbeSQLReportsWhyItCannotConnect(t *testing.T) {
+	p := sqldb.Product{Name: "probe", Driver: "atlasprobedead"}
+	err := ProbeSQL(context.Background(), p, "server=db;database=hr")
+	if err == nil {
+		t.Fatal("ProbeSQL succeeded against a database that refuses connections")
+	}
+	if !strings.Contains(err.Error(), "connection refused") {
+		t.Errorf("error = %q, want the driver's own reason", err)
+	}
+}
+
+// A driver nobody registered is reported before anything is dialled — the case a
+// server built without the SQL drivers is in, which the check words as "this server
+// cannot check a database connection" rather than as a broken connector.
+func TestProbeSQLWithoutADriver(t *testing.T) {
+	err := ProbeSQL(context.Background(), sqldb.Product{Name: "probe", Driver: "no-such-driver"}, "whatever")
+	if err == nil {
+		t.Fatal("ProbeSQL succeeded with no driver registered")
 	}
 }

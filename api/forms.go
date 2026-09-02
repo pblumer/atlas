@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -35,12 +36,29 @@ func isJSONObject(raw json.RawMessage) bool {
 	return len(trimmed) > 0 && trimmed[0] == '{' && json.Valid(raw)
 }
 
+// saveFormResp is what a save answers with: the form's listing metadata plus, when
+// the save renamed one, the id it moved away from — the Modeler re-points its editing
+// session at the new id from that.
+type saveFormResp struct {
+	formMeta
+	RenamedFrom string `json:"renamedFrom,omitempty"`
+}
+
 // handleSaveForm creates or overwrites a form (ADR-0028). Body:
-// {"id": "...", "name": "...", "schema": {...}, "projectId": "..."}. The id is
-// required and the schema must be a JSON object (a form-js schema); saving the
-// same id overwrites, so this doubles as update. The store is schema-agnostic —
-// rendering the form is a UI concern — so it only checks the schema is valid
-// JSON, not that it is a well-formed form-js document.
+// {"id": "...", "name": "...", "schema": {...}, "projectId": "...", "from": "..."}.
+// The id is required and the schema must be a JSON object (a form-js schema); saving
+// the same id overwrites, so this doubles as update. The store is schema-agnostic —
+// rendering the form is a UI concern — so it only checks the schema is valid JSON,
+// not that it is a well-formed form-js document.
+//
+// A form's id is its identity: a user task binds to it, so renaming a form is not the
+// same act as creating one. "from" names the form this save is editing (empty for one
+// that has never been saved) and turns a changed id into a move: the record is written
+// under the new id and the one it came from is removed, and a save that would land on
+// an id another form already holds is refused with 409 rather than overwriting it
+// (ADR-0222). Omitting "from" keeps the plain upsert-by-id
+// behaviour every non-interactive writer wants — an import, a source-tree apply, the
+// MCP authoring tools.
 func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxFormBytes))
 	if err != nil {
@@ -52,6 +70,10 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 		Name      string          `json:"name"`
 		ProjectID string          `json:"projectId"`
 		Schema    json.RawMessage `json:"schema"`
+		// From is a pointer so an absent field ("I am not tracking identity") reads
+		// differently from an empty one ("this form is new"), the way ?from= does for
+		// drafts.
+		From *string `json:"from"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body")
@@ -70,6 +92,11 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = id
 	}
+	origin := ""
+	if payload.From != nil {
+		origin = strings.TrimSpace(*payload.From)
+	}
+	renaming := payload.From != nil && origin != id
 	rec := form{
 		ID:        id,
 		Name:      name,
@@ -92,6 +119,11 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "read form: "+getErr.Error())
 		return
 	}
+	if renaming && existed {
+		httpapi.Error(w, http.StatusConflict, fmt.Sprintf(
+			"another form already uses the id %q — pick a different id, or open that form to edit it", id))
+		return
+	}
 	if existed {
 		// Preserve the original creator on overwrite; it governs the form only while
 		// Ungrouped (ADR-0071).
@@ -100,7 +132,36 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 			httpapi.Error(w, code, msg)
 			return
 		}
-	} else {
+	}
+	// A rename moves the record: authorize the form it comes from (it is about to be
+	// deleted) and carry its creator over. An origin that is already gone is not an
+	// error — the save lands as a create rather than failing.
+	var (
+		from        form
+		fromExisted bool
+	)
+	if renaming && origin != "" {
+		s.do(func() { from, fromExisted, getErr = s.forms.Get(origin) })
+		if getErr != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "read form: "+getErr.Error())
+			return
+		}
+		if fromExisted {
+			if code, msg := s.authorizeArtifact(r, from.ProjectID, from.OwnerID, ScopeRoleEditor); code != 0 {
+				httpapi.Error(w, code, msg)
+				return
+			}
+			// A rename *deletes* the record it came from, so a platform-managed form
+			// (ADR-0122) is refused here — the write's own check only looks at the id
+			// being saved onto, which on a rename is a free one.
+			if from.ProjectID == systemProjectID {
+				httpapi.Error(w, http.StatusForbidden, "protected system form cannot be modified")
+				return
+			}
+			rec.OwnerID = from.OwnerID
+		}
+	}
+	if !existed && !fromExisted {
 		rec.OwnerID = s.artifactOwnerOnCreate(r)
 	}
 	if rec.ProjectID != "" {
@@ -112,25 +173,53 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 	var (
 		saveErr   error
 		protected bool
+		taken     bool
+		orphaned  bool
 	)
 	s.do(func() {
+		cur, ok, e := s.forms.Get(id)
+		switch {
 		// A form filed under the protected system project is platform-managed
 		// (ADR-0122): refuse overwriting it, for every caller.
-		if existing, ok, e := s.forms.Get(id); e == nil && ok && existing.ProjectID == systemProjectID {
+		case e == nil && ok && cur.ProjectID == systemProjectID:
 			protected = true
 			return
+		// The read above happened in an earlier turn, so a concurrent save could have
+		// claimed the id since. Losing that race must refuse, not overwrite.
+		case e == nil && ok && renaming:
+			taken = true
+			return
 		}
-		saveErr = s.forms.Save(rec)
+		if saveErr = s.forms.Save(rec); saveErr != nil {
+			return
+		}
+		// Save first, then drop the record the author renamed away from: the reverse
+		// order would lose the form if the write failed.
+		if renaming && fromExisted {
+			orphaned = s.forms.Delete(origin) != nil
+		}
 	})
 	switch {
 	case protected:
 		httpapi.Error(w, http.StatusForbidden, "protected system form cannot be modified")
 		return
+	case taken:
+		httpapi.Error(w, http.StatusConflict, fmt.Sprintf(
+			"another form already uses the id %q — pick a different id, or open that form to edit it", id))
+		return
 	case saveErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "save form: "+saveErr.Error())
 		return
+	case orphaned:
+		httpapi.Error(w, http.StatusInternalServerError, fmt.Sprintf(
+			"saved as %q, but the form it was renamed from (%q) could not be removed — delete it by hand", id, origin))
+		return
 	}
-	httpapi.JSON(w, http.StatusOK, metaOf(rec))
+	movedFrom := ""
+	if renaming && fromExisted {
+		movedFrom = origin
+	}
+	httpapi.JSON(w, http.StatusOK, saveFormResp{formMeta: metaOf(rec), RenamedFrom: movedFrom})
 }
 
 // handleListForms lists stored forms (metadata only), most recently saved first.

@@ -1,0 +1,15 @@
+{
+  "tags": ["Modeler"],
+  "title": {
+    "en": "Renaming a diagram or a form now renames it",
+    "de": "Ein Diagramm oder Formular umbenennen benennt es jetzt wirklich um"
+  },
+  "summary": {
+    "en": "A diagram is filed under its Process ID and a form under the ID a user task binds to — so changing that ID is renaming the artifact. It did not behave like one. Saving after a rename wrote a second copy and left the first behind, so the same diagram appeared twice in the Modeler; and if anything already held the new ID, the save landed on top of it and that artifact was gone, with no warning. Saving now moves the record instead of copying it — it keeps its application and its author — and an ID something else already holds is refused, never overwritten. The field checks while you type: an ID that is taken turns red and names what holds it. In the form editor the ID in the properties panel is now the form's real ID, not a second one that only looked like it: the chip in the toolbar shows it as you type, dashed until the rename is saved, and Save asks first, because a user task still pointing at the old ID will show no form.",
+    "de": "Ein Diagramm liegt unter seiner Prozess-ID, ein Formular unter der ID, an die eine User Task gebunden ist — diese ID zu ändern heißt also, das Artefakt umzubenennen. Genau das tat es nicht. Nach einer Umbenennung schrieb das Speichern eine zweite Kopie und ließ die erste stehen, sodass dasselbe Diagramm zweimal im Modeler auftauchte; und wenn die neue ID schon vergeben war, landete das Speichern darauf — das dortige Artefakt war weg, ohne Warnung. Speichern verschiebt den Datensatz jetzt, statt ihn zu kopieren (Anwendung und Ersteller bleiben erhalten), und eine ID, die etwas anderes bereits hält, wird abgelehnt statt überschrieben. Geprüft wird schon beim Tippen: eine vergebene ID färbt das Feld rot und nennt, wer sie hält. Im Formular-Editor ist die ID in den Eigenschaften jetzt die echte ID des Formulars und nicht mehr eine zweite, die nur so aussah: der Chip in der Leiste zeigt sie beim Tippen, gestrichelt solange die Umbenennung ungespeichert ist, und Speichern fragt vorher nach — denn eine User Task, die noch auf die alte ID zeigt, findet dann kein Formular mehr."
+  },
+  "try": {
+    "label": { "en": "Open the Modeler", "de": "Modeler öffnen" },
+    "route": "#/modeler"
+  }
+}

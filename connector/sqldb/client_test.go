@@ -234,3 +234,52 @@ func TestNormalizePassesScalarsThrough(t *testing.T) {
 		t.Errorf("normalize(nil) = %#v", got)
 	}
 }
+
+// A worker's pool is capped. database/sql's own defaults are "open as many
+// connections as you are asked for" and "keep every one of them forever", and both
+// are wrong against a database: the first lets one worker exhaust a SQL Server's
+// connection limit, and the second hands the first job after a quiet night a
+// connection a firewall or a failover closed hours ago.
+func TestOpenCapsThePool(t *testing.T) {
+	c, err := Open(fakeProduct, registerFake(t, &fakeResult{cols: []string{"n"}}))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+	if got := c.db.Stats().MaxOpenConnections; got != MaxOpenConns {
+		t.Errorf("MaxOpenConnections = %d, want %d — an uncapped pool is how one worker takes a database down", got, MaxOpenConns)
+	}
+}
+
+// And the cap is a real limit, not a recorded number: a job that arrives while every
+// connection is busy waits for one instead of opening a new one, and gives up on its
+// own deadline rather than queueing without end.
+func TestThePoolCapMakesAQueryWait(t *testing.T) {
+	c, err := Open(fakeProduct, registerFake(t, &fakeResult{cols: []string{"n"}}))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+
+	// Hold every connection the pool will ever hand out. Rows left open keep theirs.
+	for i := 0; i < MaxOpenConns; i++ {
+		rows, err := c.db.QueryContext(context.Background(), "SELECT 1")
+		if err != nil {
+			t.Fatalf("holding connection %d: %v", i, err)
+		}
+		t.Cleanup(func() { _ = rows.Close() })
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := c.db.QueryContext(ctx, "SELECT 1"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("a query past the cap returned %v, want a deadline — the pool handed out a %d+1st connection", err, MaxOpenConns)
+	}
+}
+
+// Open reports a driver nobody registered rather than returning a handle that fails
+// on the first job, so a worker refuses to start on it (see sqlRegistryFromEnv).
+func TestOpenReportsAnUnknownDriver(t *testing.T) {
+	if _, err := Open(Product{Name: "nope", Driver: "no-such-driver"}, "whatever"); err == nil {
+		t.Fatal("Open with an unregistered driver succeeded; a worker would start and fail every job")
+	}
+}

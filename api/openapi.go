@@ -383,9 +383,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Release a user task's claim", tag: "Tasks", role: RoleUser, resp: jsonBody("Task key", tObject())}},
 
 		{"POST", "/api/v1/drafts", s.handleSaveDraft, apiOp{
-			summary: "Save a diagram draft", tag: "Drafts", role: RoleModeler, req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},
+			summary: "Save a diagram draft, keyed by its process id. ?from=<draft id> names the draft being edited (empty for a never-saved diagram): a changed process id then renames the draft instead of leaving a second copy behind, and a save onto an id another draft already holds is refused with 409 (ADR-0222). Omit ?from= for the plain upsert-by-id an import or an agent wants", tag: "Drafts", role: RoleModeler, req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},
 		{"GET", "/api/v1/drafts", s.handleListDrafts, apiOp{
 			summary: "List diagram drafts", tag: "Drafts", role: RoleModeler, resp: jsonBody("Drafts", tArray())}},
+		{"GET", "/api/v1/drafts/{id}/availability", s.handleDraftIDAvailability, apiOp{
+			summary: "Report whether a process id is free to save a draft under — the live check behind the Modeler's Process ID field, so a collision shows while the id is typed rather than at Save", tag: "Drafts", role: RoleModeler, resp: jsonBody("Availability", tObject())}},
 		{"GET", "/api/v1/drafts/{id}/xml", s.handleDraftXML, apiOp{
 			summary: "Fetch a draft's BPMN XML", tag: "Drafts", role: RoleModeler, resp: xmlBody("BPMN 2.0 XML")}},
 		{"PATCH", "/api/v1/drafts/{id}", s.handleMoveDraft, apiOp{
@@ -433,9 +435,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/forms", s.handleSaveForm, apiOp{
-			summary: "Save a form definition", tag: "Forms", role: RoleModeler, req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},
+			summary: "Save a form definition. \"from\" names the form being edited (empty for a never-saved one): a changed id then renames the form instead of leaving a second copy behind, and a save onto an id another form already holds is refused with 409 (ADR-0222). Omit \"from\" for the plain upsert-by-id an import or an agent wants", tag: "Forms", role: RoleModeler, req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},
 		{"GET", "/api/v1/forms", s.handleListForms, apiOp{
 			summary: "List form definitions", tag: "Forms", role: roleAny, resp: jsonBody("Forms", tArray())}},
+		{"GET", "/api/v1/forms/{id}/availability", s.handleFormIDAvailability, apiOp{
+			summary: "Report whether a form id is free — the live check behind the form editor's ID field, so a collision shows while the id is typed rather than at Save", tag: "Forms", role: RoleModeler, resp: jsonBody("Availability", tObject())}},
 		{"GET", "/api/v1/forms/{id}", s.handleGetForm, apiOp{
 			summary: "Fetch a form definition", tag: "Forms", role: roleAny, resp: jsonBody("Form", tObject())}},
 		{"DELETE", "/api/v1/forms/{id}", s.handleDeleteForm, apiOp{
@@ -805,8 +809,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Download a Playground run's per-case results as CSV", tag: "Playground", role: RoleModeler,
 			resp: csvBody("Results as CSV")}},
 		{"POST", "/api/v1/playground/sessions/{id}/verdict", s.playground.HandleVerdict, apiOp{
-			summary: "Judge a Playground run against a set of expectations", tag: "Playground", role: RoleModeler,
-			req: jsonBody("Expectations", tObject()), resp: jsonBody("Verdict", tObject())}},
+			summary: "Judge a Playground run against a set of expectations, run-wide and per case", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Expectations, including per-case rules in FEEL", tObject()), resp: jsonBody("Verdict", tObject())}},
 		{"POST", "/api/v1/playground/sessions/{id}/compare", s.playground.HandleCompare, apiOp{
 			summary: "Set a Playground run beside an earlier run's report", tag: "Playground", role: RoleModeler,
 			req: jsonBody("A baseline report", tObject()), resp: jsonBody("Comparison", tObject())}},
@@ -877,7 +881,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Connector kind placements", schemaObj(map[string]any{"kinds": tArray()}))}},
 
 		{"POST", "/api/v1/connectors/test", s.handleTestConnector, apiOp{
-			summary: "Check a mail connector — connect and authenticate, or send a test message to ?to — without saving it", tag: "Connectors", role: RoleModeler,
+			summary: "Check a connector without saving it — a mail connector connects and authenticates (or sends a test message to \"to\"), a SQL connector dials its connection string", tag: "Connectors", role: RoleModeler,
 			req: jsonBody("Connector check", tObject()), resp: jsonBody("Check result", tObject())}},
 
 		{"GET", "/api/v1/mail/outbox", s.handleMailOutbox, apiOp{

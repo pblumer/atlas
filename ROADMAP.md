@@ -1152,6 +1152,13 @@ dataset of up to 50 000 cases":
   virtual clock — driven as a session (free-run, pause, step, resume, TTL, owned by
   the principal that opened it) rather than inside one request.
   [`playground/`](playground/), [`api/playground/`](api/playground/).
+- ✅ **Laid out as three columns and a strip**: what decides the run on the left,
+  what it did on the right, and the cases themselves in a band under the diagram —
+  read a page at a time from the paging endpoint, so the strip costs the same on the
+  fifty-thousandth case as on the fiftieth. The editor body is a grid for this, so
+  `#canvas` keeps its place in the DOM and is only placed differently; the palette
+  and context pad are hidden as they are in the token simulation, because the
+  sandbox runs the model as it stood when it started.
 - ✅ **Interactive play**: a third Modeler tab beside Design and Implement, with two
   ways of driving one sandbox. **Step**: start a case with start variables, step one
   occurrence at a time or run it to rest, jump the clock, and answer the jobs waiting
@@ -1196,14 +1203,23 @@ dataset of up to 50 000 cases":
   them, with work time beside it — the split is what makes it more than a
   restatement of the durations somebody typed in.
 - ✅ **Results as data**: the per-case rows are read a page at a time out of the
-  sandbox's own store (inputs, end event, outputs, duration, incidents) and
-  downloaded whole as streamed CSV. The expectation verdict and the click from a
-  case into the replay view are not there yet.
+  sandbox's own store (inputs, end event, outputs, duration, incidents), shown in
+  the strip under the diagram, and downloaded whole as streamed CSV. The click from
+  a case into the replay view is not there yet.
 - ✅ **Expectations and a verdict**: what a run has to show — completions, incidents,
   the three duration bounds, per-element visit bounds (coverage and outcome in one
   statement), and a queue bound per pool. A verdict is what a Playground somebody
   looks at cannot give: a number on a screen needs a reader to judge it.
   [`playground/expect.go`](playground/expect.go).
+- ✅ **Rules, judged case by case**: a `when` that selects cases and a `then` they
+  have to show, both in FEEL over the case's own variables plus the end event it
+  reached and how long it took. It is the statement a run-wide bound cannot make —
+  "an application under 50 000 from a grade-A customer is approved" is true of a
+  *case*, and a run that holds it nine times in ten is wrong for the tenth. The
+  offending cases are named and marked in the results table, the counts split into
+  held / broke it / unfinished, and the outcomes join the verdict as checks so one
+  thing decides whether a build goes red.
+  [`playground/rules.go`](playground/rules.go).
 - ✅ **Saved scenarios**: stored against the diagram as literally the three requests
   that make a run — open a session, start the batch, judge the report — so nothing
   has to be kept in step with the endpoints, because it *is* them. The seed the

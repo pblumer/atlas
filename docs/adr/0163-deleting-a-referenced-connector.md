@@ -167,6 +167,42 @@ and keeps its buttons visible, wrapping them instead, because that panel is resi
   the connector list a graveyard of records that are gone but not gone. "Deleted" should
   mean deleted.
 
+## Amendment (2026-09-02): the usage is a count, and the actions are a menu
+
+The row this record designed was right about *what* to say and wrong about how much of
+it to say on the row. The example it gives — "Used by Zahlung v3, Mahnung v1 · 2 running
+instances" — is two processes. A shared mail worker on a real instance is twenty-one
+deployed definitions of eight processes, and spelled out that is fourteen wrapped lines
+of links in one cell. The endpoint above them, the status pill beside them and the
+actions after them end up an inch apart, and the row that is hardest to read is the tall
+one — which is the row something is wrong with, because a worker nothing references is
+a two-line row.
+
+**The row carries the numbers; the list is one click behind them.** `connectorUsageHTML`
+now renders a chip — "Used by **8** processes · **21** deployed versions · **1** running
+instance" — and `openConnectorUsage` opens the list it stands for. Definitions and
+processes are counted separately and said separately, because they are different numbers
+and only agree when nothing was ever redeployed; "used by 21 processes" for eight of them
+would overstate the very blast radius this record exists to state honestly. The dialog
+groups by process and puts the newest version first, so a model redeployed all afternoon
+is one entry with a version list rather than eight entries that read as eight processes,
+and past a handful of them it filters. It reads the `usedBy` already on the record — the
+same set the row counted and the same set the refusal names — so it opens instantly and
+the three cannot disagree.
+
+What leaves the cell's *text* is put back where only the filter reads it: the Worker cell
+carries a `data-filter` naming those processes, so typing a process name in the column
+filter still finds the workers it runs through (`table.js`).
+
+**And the actions moved into the row's ⋯ menu**, which is where every other table in the
+console keeps them and where this record's own closing section was already heading. A
+configured worker offered up to seven buttons — Provision access, Events, Test, Share,
+Edit, Disable, Delete — a wall of identical blue that made every row look the same and
+put the table's min-content width back where the `.card:has(> table)` scroll rule below
+had to catch it. In the menu they cost no width, group by what they are, and the row is
+left saying what it *is*: name, type, who may configure it, where it points, what it is
+used by, and whether it works.
+
 ## Links
 
 - completes [ADR-0158](0158-a-connector-reference-that-explains-itself.md): that record
