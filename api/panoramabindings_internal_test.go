@@ -5,7 +5,22 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/jobtype"
 )
+
+// jobTypesFor builds the engine-wide job-type table a real server always has. The
+// catalog resolves atlas.jobType against it, so a fixture without one is not a
+// server with no job types — it is a server that cannot start.
+func jobTypesFor(t *testing.T, dir string) *jobtype.Registry {
+	t.Helper()
+	registry, err := jobtype.NewRegistry(filepath.Join(dir, "jobtypes"))
+	if err != nil {
+		t.Fatalf("jobtype.NewRegistry: %v", err)
+	}
+	return registry
+}
 
 // A store the catalog cannot read is a plain error, never a partial catalog. This
 // is the one place where a half-answer would be actively harmful: resolution reads
@@ -41,6 +56,7 @@ func TestCollectBindingCatalogReportsStoreFailures(t *testing.T) {
 		}
 		s.releases, s.connectors, s.targets, s.settings = releases, connectors, targets, settings
 		s.versions = map[string]int32{}
+		s.jobTypes = jobTypesFor(t, dir)
 		return s
 	}
 
@@ -103,6 +119,7 @@ func TestCollectBindingCatalogOmitsKindsWithNoSource(t *testing.T) {
 	}
 	s.releases, s.connectors, s.targets, s.settings = releases, connectors, targets, settings
 	s.versions = map[string]int32{}
+	s.jobTypes = jobTypesFor(t, dir)
 	identity, err := ensureNodeIdentity(settings)
 	if err != nil {
 		t.Fatalf("ensureNodeIdentity: %v", err)
@@ -112,8 +129,15 @@ func TestCollectBindingCatalogOmitsKindsWithNoSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collectBindingCatalog: %v", err)
 	}
-	if catalog.JobTypes != nil {
-		t.Error("JobTypes is present; a job type is authored in a model, not registered")
+	// Job types are present and hold the engine's reserved half even on a server
+	// where nothing has ever been deployed: those indices are compile-time constants
+	// every build reserves, so "this server knows io.atlas.dmn" is true before
+	// anything happens on it.
+	if len(catalog.JobTypes) == 0 {
+		t.Error("JobTypes is empty; the engine's reserved job types are known before any deployment")
+	}
+	if got, ok := catalog.JobTypes[compiler.DMNJobType]; !ok || got.Name != "Built-in job type" {
+		t.Errorf("JobTypes[%q] = %#v, want a resolvable built-in", compiler.DMNJobType, got)
 	}
 	// Runtimes became answerable with the node descriptor (ADR-0189 §6): this server
 	// knows one runtime for certain — itself. The map being present is what turns a

@@ -2010,7 +2010,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <tr><td><b>BMC Remedy</b></td><td data-l="de">Ticket/Incident im ITSM-System anlegen.</td><td data-l="en">Create a ticket/incident in the ITSM system.</td></tr>
           <tr><td><b>Jira</b></td><td data-l="de">Vorgang anlegen, lesen, ändern, weiterschalten, kommentieren, zuweisen, per JQL suchen — oder Konten suchen, um die accountId zu bekommen, die das Zuweisen braucht.</td><td data-l="en">Create, read, update, transition, comment on, assign, or search issues with JQL — or search accounts, to get the accountId assigning takes.</td></tr>
           <tr><td><b>Microsoft&nbsp;Entra&nbsp;ID</b></td><td data-l="de">Konten und Gruppen im Tenant anlegen, lizenzieren, deaktivieren, auflisten oder per Delta abgleichen.</td><td data-l="en">Create, license, disable, list or delta-sync accounts and groups in the tenant.</td></tr>
-          <tr><td><b data-l="de">SQL-Datenbanken</b><b data-l="en">SQL databases</b></td><td data-l="de">MS&nbsp;SQL, MariaDB und PostgreSQL abfragen (viele Zeilen, genau eine Zeile) und schreiben. Die Anweisung ist <b>immer literal</b> – sie hat bewusst keinen <code>fx</code>-Schalter, denn eine aus Prozessdaten zusammengesetzte Anweisung wäre eine Injection, die keinen Anführungszeichenfehler mehr bräuchte. Werte kommen ausschliesslich als <b>gebundene Parameter</b> hinein. Oder <b>Mockup</b>: derselbe Task läuft gegen hinterlegte Antworten im Arbeitsspeicher des Workers, ohne dass eine Datenbank angefasst wird (siehe <a href="#testen">Testen &amp; Simulieren</a>).</td><td data-l="en">Query (many rows, exactly one row) and write MS&nbsp;SQL, MariaDB and PostgreSQL. The statement is <b>always literal</b> – it deliberately has no <code>fx</code> toggle, because a statement assembled from process data would be an injection that needs no quoting bug to work. Values reach it only as <b>bound parameters</b>. Or <b>mockup</b>: the same task runs against seeded answers in the worker's memory, with no database touched (see <a href="#testen">Test &amp; simulate</a>).</td></tr>
+          <tr><td><b data-l="de">SQL-Datenbanken</b><b data-l="en">SQL databases</b></td><td data-l="de">MS&nbsp;SQL, MariaDB und PostgreSQL abfragen (viele Zeilen, genau eine Zeile) und schreiben. Die Anweisung ist <b>immer literal</b> – sie hat bewusst keinen <code>fx</code>-Schalter, denn eine aus Prozessdaten zusammengesetzte Anweisung wäre eine Injection, die keinen Anführungszeichenfehler mehr bräuchte. Werte kommen ausschliesslich als <b>gebundene Parameter</b> hinein. Oder <b>Mockup</b>: ein Schalter in der Konsole lässt denselben Task gegen hinterlegte Antworten im Arbeitsspeicher des Workers laufen, ohne dass eine Datenbank angefasst wird und ohne Verbindungszeichenfolge (siehe <a href="#testen">Testen &amp; Simulieren</a>).</td><td data-l="en">Query (many rows, exactly one row) and write MS&nbsp;SQL, MariaDB and PostgreSQL. The statement is <b>always literal</b> – it deliberately has no <code>fx</code> toggle, because a statement assembled from process data would be an injection that needs no quoting bug to work. Values reach it only as <b>bound parameters</b>. Or <b>mockup</b>: a switch in the Console runs the same task against seeded answers in the worker's memory, with no database touched and no connection string needed (see <a href="#testen">Test &amp; simulate</a>).</td></tr>
           <tr><td><b data-l="de">Web-Scraping</b><b data-l="en">Web scraping</b></td><td data-l="de">Eine Seite per CSS-Selektor auslesen oder einen RSS-/Atom-Feed als strukturierte Liste holen.</td><td data-l="en">Read a page by CSS selector, or pull an RSS/Atom feed as a structured list.</td></tr>
           <tr><td><b>CSV</b></td><td data-l="de">Eine CSV-Datei in eine Liste von Objekten verwandeln.</td><td data-l="en">Turn a CSV file into a list of objects.</td></tr>
           <tr><td><b data-l="de">Skript</b><b data-l="en">Script</b></td><td data-l="de">PowerShell, Python oder JavaScript ausführen – ausserhalb der Engine, in einem eigenen Prozess.</td><td data-l="en">Run PowerShell, Python or JavaScript – outside the engine, in a process of its own.</td></tr>
@@ -2340,24 +2340,60 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
       <p data-l="de">Bei Datenbanken ist es noch eine Spur unangenehmer als bei Active Directory. Die Datenbank,
         aus der ein Prozess liest, ist die HR- oder die ERP-Datenbank — genau deshalb ist sie interessant, und
         genau deshalb will niemand ein Modell im Entwurf darauf loslassen. Ein Worker, der SQL-Aufgaben bedient,
-        kann sie deshalb aus <b>hinterlegten Antworten</b> in seinem eigenen Arbeitsspeicher beantworten:</p>
+        kann sie deshalb aus <b>hinterlegten Antworten</b> in seinem eigenen Arbeitsspeicher beantworten.</p>
       <p data-l="en">A database is a shade more awkward than Active Directory. The database a process reads is
         the HR system or the ERP — which is exactly why it is interesting, and exactly why nobody wants a model
         under development pointed at it. So a worker that serves SQL tasks can answer them from
-        <b>seeded answers</b> in its own memory instead:</p>
+        <b>seeded answers</b> in its own memory instead.</p>
+      <p data-l="de">Eingeschaltet wird es in der Konsole: <a href="/#/console/workers">Workers</a> →
+        Karte <b>Databases</b> → <i>Answer database tasks from a mockup</i> → Speichern. Die SQL-Worker-Instanzen
+        starten daraufhin neu und kommen gemockt zurück; Atlas läuft dabei weiter. <b>Ein Schalter gilt für alle
+        drei Produkte</b> — SQL Server zu simulieren und gleichzeitig wirklich nach PostgreSQL zu schreiben sähe
+        aus wie ein vollständiger Mockup-Lauf, und genau danach darf es nie aussehen.</p>
+      <p data-l="en">You switch it on in the Console: <a href="/#/console/workers">Workers</a> → the
+        <b>Databases</b> card → <i>Answer database tasks from a mockup</i> → Save. The SQL worker instances
+        restart and come back mocked; Atlas keeps running. <b>One switch covers all three products</b> —
+        simulating SQL Server while really writing to PostgreSQL would look like a full mockup run, which is the
+        one thing it must never look like.</p>
+      <p data-l="de">Dieselbe Karte nimmt die <b>hinterlegten Antworten</b> entgegen: Datei auswählen, einfügen
+        oder <i>Example</i> drücken. <b>Einen Pfad gibst du nirgends an</b> — Atlas speichert die Antworten selbst
+        und legt sie dem Worker hin. Beim Speichern werden sie geprüft, und Atlas sagt dir, wie viele Antworten es
+        gelesen hat; ein Tippfehler wird also dort gemeldet, wo du gerade hinsiehst.</p>
+      <p data-l="en">The same card takes the <b>prepared answers</b>: choose a file, paste them, or press
+        <i>Example</i>. <b>There is no path to type</b> — Atlas stores the answers itself and puts them where the
+        worker will find them. They are checked when you save, and Atlas tells you how many it read, so a typo is
+        reported where you are looking.</p>
+      <p data-l="de">Solange der Mockup läuft, braucht ein Datenbank-Worker in der Konsole <b>keine
+        Verbindungszeichenfolge</b>: Du legst ihn nur mit einem Namen an — den Namen, den dein Task nennt — und er
+        wird bedient. Gibst du trotzdem eine an, bleibt sie im Vault liegen, damit das Ausschalten kein
+        Neutippen ist.</p>
+      <p data-l="en">While the mockup is on, a database worker in the Console needs <b>no connection string</b>:
+        create it with a name — the name your task states — and it is served. Give one anyway and it is still
+        sealed into the vault, so turning the mockup off is not a re-typing exercise.</p>
+      <p data-l="de">Einen Worker, den du selbst startest – etwa in einem anderen Netz – erreicht der Schalter
+        nicht. Der liest dieselbe Einstellung aus seiner eigenen Umgebung:</p>
+      <p data-l="en">A worker you start yourself – in another network, say – is not reached by the switch. It
+        reads the same setting from its own environment:</p>
       <pre><code>ATLAS_MSSQL_CONNECTORS=hr-db \
 ATLAS_MSSQL_MOCK=1 ATLAS_MSSQL_MOCK_SEED=/srv/atlas/hr-seed.json \
 atlas worker --connector mssql</code></pre>
-      <p data-l="de">Auch hier ändert sich <b>am Modell nichts</b>: derselbe Worker-Name, dieselbe Anweisung,
-        dieselben Parameter. Nur die Verbindungszeichenfolge entfällt — der Worker braucht keine.
-        <code>ATLAS_MSSQL_CONNECTORS</code> bleibt dagegen nötig, denn der Task nennt einen Worker beim Namen, und
+      <p data-l="de">Dort ist der Seed wieder ein Pfad, weil dieser Worker auf seinem eigenen Host läuft und
+        Atlas ihm nichts hinlegen kann. Findet er die Datei nicht, startet er mit einem Mockup <b>ohne
+        Antworten</b> und schreibt eine Warnung — er verweigert den Start nicht. Jede Anweisung scheitert dann und
+        nennt sich selbst, was auf den fehlenden Seed zeigt, statt ihn zu verbergen.
+        <code>ATLAS_MSSQL_CONNECTORS</code> bleibt hier nötig, denn der Task nennt einen Worker beim Namen, und
         ein Mockup ohne Namen hat nichts, was ein Task ansprechen könnte. Für MariaDB und PostgreSQL heißen die
         Variablen <code>ATLAS_MARIADB_MOCK</code> beziehungsweise <code>ATLAS_POSTGRES_MOCK</code>.</p>
-      <p data-l="en">Here too <b>nothing changes in the model</b>: the same worker name, the same statement, the
-        same parameters. Only the connection string falls away — this worker needs none.
-        <code>ATLAS_MSSQL_CONNECTORS</code> is still required, because a task names a worker and a mockup with no
-        names has nothing a task could address. For MariaDB and PostgreSQL the variables are
-        <code>ATLAS_MARIADB_MOCK</code> and <code>ATLAS_POSTGRES_MOCK</code>.</p>
+      <p data-l="en">There the seed is a path again, because that worker runs on its own host and Atlas has
+        nowhere to put it. If it cannot find the file it starts with a mockup that has <b>no answers</b> and logs
+        a warning – it does not refuse to start. Every statement then fails naming itself, which points at the
+        missing seed rather than hiding it. <code>ATLAS_MSSQL_CONNECTORS</code> is still required here, because a
+        task names a worker and a mockup with no names has nothing a task could address. For MariaDB and
+        PostgreSQL the variables are <code>ATLAS_MARIADB_MOCK</code> and <code>ATLAS_POSTGRES_MOCK</code>.</p>
+      <p data-l="de">Am Modell ändert sich in beiden Fällen <b>nichts</b>: derselbe Worker-Name, dieselbe
+        Anweisung, dieselben Parameter.</p>
+      <p data-l="en">In both cases <b>nothing changes in the model</b>: the same worker name, the same statement,
+        the same parameters.</p>
       <p data-l="de">Die Startdatei ordnet Anweisungen ihre Antworten zu. Eine Antwort, die <code>params</code>
         oder <code>named</code> nennt, gilt nur für genau diese Belegung; eine, die beides weglässt, ist die
         Auffangantwort derselben Anweisung. So lässt sich „Person 42 gibt es, alle anderen nicht" hinterlegen,

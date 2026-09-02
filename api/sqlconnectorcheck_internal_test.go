@@ -155,3 +155,34 @@ func TestAKindWithNoCheckIsNamed(t *testing.T) {
 		t.Errorf("error = %q, want it to name the kind that cannot be checked", res.Error)
 	}
 }
+
+// MariaDB's connection string is not a URL, so redactedSQLTarget can derive no label
+// from it — deliberately, because that function gives up rather than guessing at a
+// vendor's grammar. The verdict then has to say something true without a host in it,
+// rather than reading "Connected to  and authenticated."
+func TestACheckAgainstADSNWithNoDerivableLabelStillReads(t *testing.T) {
+	calls := &probeCalls{}
+	srv, _ := newValidateServer(t, WithSQLProbe(calls.probe))
+
+	code, res := postTest(t, srv,
+		`{"name":"hr-db","kind":"mariadb","connectionString":"atlas:pw@tcp(mariadb.example.com:3306)/hr"}`)
+	if code != http.StatusOK || !res.OK {
+		t.Fatalf("check: status=%d ok=%v detail=%q error=%q", code, res.OK, res.Detail, res.Error)
+	}
+	if calls.product != "mariadb" {
+		t.Errorf("probed product %q, want mariadb", calls.product)
+	}
+	if strings.Contains(res.Detail, "Connected to  ") || strings.Contains(res.Detail, "Connected to and") {
+		t.Errorf("detail = %q — the missing label left a hole in the sentence", res.Detail)
+	}
+	if !strings.Contains(res.Detail, "the database") {
+		t.Errorf("detail = %q, want it to stand in for the label it cannot derive", res.Detail)
+	}
+	// And it still says what it did not prove, which is the whole point of the sentence.
+	if !strings.Contains(res.Detail, "No statement was run") {
+		t.Errorf("detail = %q, want it to keep saying what was not proved", res.Detail)
+	}
+	if strings.Contains(res.Detail, "pw") {
+		t.Errorf("detail = %q leaks the password", res.Detail)
+	}
+}

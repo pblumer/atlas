@@ -87,6 +87,10 @@ var wantAdminRoutes = []string{
 	"PUT /api/v1/settings/logo",
 	"DELETE /api/v1/settings/logo",
 	"PUT /api/v1/settings/ad-mock",
+	// Turning the database mockup on makes every SQL task stop reaching a database, and
+	// turning it off makes them start again — the same authority the AD switch above
+	// carries, over the workers whose credential is the most valuable one Atlas holds.
+	"PUT /api/v1/settings/sql-mock",
 	"PUT /api/v1/settings/registration",
 	"DELETE /api/v1/settings/registration",
 
