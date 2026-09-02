@@ -44,6 +44,13 @@ const (
 	CodeSelfGeneralization       = "self-generalization"
 	CodeGeneralizationCycle      = "generalization-cycle"
 	CodeDuplicateAssociationID   = "duplicate-association-id"
+	CodeStoreMissingName         = "store-missing-name"
+	CodeDuplicateStoreName       = "duplicate-store-name"
+	CodeDuplicateStoreID         = "duplicate-store-id"
+	CodeStoreUnknownClass        = "store-unknown-class"
+	CodeStoreClassNotStorable    = "store-class-not-storable"
+	CodeStoreClassHasNoKey       = "store-class-has-no-key"
+	CodeStoreUnknownMode         = "store-unknown-mode"
 )
 
 // Finding is one thing wrong with a model, located precisely enough that the
@@ -52,10 +59,11 @@ type Finding struct {
 	Code    string `json:"code"`
 	Reason  string `json:"reason"`
 	Message string `json:"message"`
-	// Exactly one of ClassID / AssociationID identifies where the finding is;
-	// Attribute names the member within a class when the finding is about one.
+	// Exactly one of ClassID / AssociationID / StoreID identifies where the finding
+	// is; Attribute names the member within a class when the finding is about one.
 	ClassID       string `json:"classId,omitempty"`
 	AssociationID string `json:"associationId,omitempty"`
+	StoreID       string `json:"storeId,omitempty"`
 	Attribute     string `json:"attribute,omitempty"`
 }
 
@@ -104,6 +112,7 @@ func Validate(m Model) ValidationResult {
 		validateClass(&m.Classes[i], classByName, add)
 	}
 	validateAssociations(m, classByID, add)
+	validateStores(m, classByName, add)
 
 	sort.SliceStable(findings, func(a, b int) bool {
 		x, y := findings[a], findings[b]
@@ -112,6 +121,9 @@ func Validate(m Model) ValidationResult {
 		}
 		if x.AssociationID != y.AssociationID {
 			return x.AssociationID < y.AssociationID
+		}
+		if x.StoreID != y.StoreID {
+			return x.StoreID < y.StoreID
 		}
 		if x.Attribute != y.Attribute {
 			return x.Attribute < y.Attribute
@@ -333,4 +345,55 @@ func generalizationCycles(m Model, classByID map[string]*Class) []Finding {
 		}
 	}
 	return out
+}
+
+// validateStores checks what a store may be. Two of the rules are about the class it
+// holds, and both follow from what a store is *for*: a process reads from one by
+// naming which thing it wants, and the only thing that names one is a business key.
+func validateStores(m Model, classByName map[string]*Class, add func(Finding)) {
+	seenID := map[string]bool{}
+	seenName := map[string]bool{}
+	for _, st := range m.Stores {
+		if seenID[st.ID] {
+			add(Finding{Code: CodeDuplicateStoreID, Reason: RefusedByNotation, StoreID: st.ID,
+				Message: fmt.Sprintf("Two data stores share the id %q.", st.ID)})
+			continue
+		}
+		seenID[st.ID] = true
+
+		name := strings.TrimSpace(st.Name)
+		if name == "" {
+			add(Finding{Code: CodeStoreMissingName, Reason: RefusedByNotation, StoreID: st.ID,
+				Message: "A data store needs a name: it is what a process's <dataStore> refers to it by."})
+			continue
+		}
+		if seenName[name] {
+			add(Finding{Code: CodeDuplicateStoreName, Reason: RefusedByNotation, StoreID: st.ID,
+				Message: fmt.Sprintf("Two data stores are called %q. A process naming that store could not say which it meant.", name)})
+			continue
+		}
+		seenName[name] = true
+
+		if _, ok := StoreModeOf(st.Mode); !ok {
+			add(Finding{Code: CodeStoreUnknownMode, Reason: RefusedOutOfSubset, StoreID: st.ID,
+				Message: fmt.Sprintf("Atlas does not author %q data stores. This build reads from a store; writing through one is a transaction against something outside the engine and is not authored yet.", st.Mode)})
+		}
+
+		class, ok := classByName[st.Class]
+		if !ok {
+			add(Finding{Code: CodeStoreUnknownClass, Reason: RefusedByNotation, StoreID: st.ID,
+				Message: fmt.Sprintf("%s holds %q, and this model has no class of that name. A store keeps instances of something; say what.", name, st.Class)})
+			continue
+		}
+		if class.Stereotype != StereotypeBusinessObject {
+			kind, _ := stereotypeOf(class.Stereotype)
+			add(Finding{Code: CodeStoreClassNotStorable, Reason: RefusedByNotation, StoreID: st.ID,
+				Message: fmt.Sprintf("%s holds %s, which is a %s. Only a business object outlives the process that made it — the others are values, and a value is kept inside whatever holds it.", name, class.Name, strings.ToLower(kind.Label))})
+			continue
+		}
+		if len(class.Identity) == 0 {
+			add(Finding{Code: CodeStoreClassHasNoKey, Reason: RefusedByNotation, StoreID: st.ID,
+				Message: fmt.Sprintf("%s holds %s, which declares no business key. A process reads from a store by naming which thing it wants, and nothing here names one — give %s an identity.", name, class.Name, class.Name)})
+		}
+	}
 }

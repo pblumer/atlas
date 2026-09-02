@@ -631,3 +631,66 @@ func TestDataObjectItemSubjectRefResolvesThroughItemDefinition(t *testing.T) {
 		}
 	}
 }
+
+// dataStoreBPMN declares a store the BPMN way: a <dataStore> at definitions level
+// and a <dataStoreReference> inside the process that points at it. A second
+// reference carries only its own name, which is what a tool that draws the box
+// without declaring the root element produces.
+const dataStoreBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <dataStore id="Store_orders" name="Orders" isUnlimited="true"/>
+  <process id="p" isExecutable="true">
+    <dataStoreReference id="Ref_orders" name="order archive" dataStoreRef="Store_orders"/>
+    <dataStoreReference id="Ref_bare" name="Invoices"/>
+    <startEvent id="s"/><endEvent id="e"/><sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestDataStoreReferencesCompile pins that a process's data stores are compiled at
+// all — until now a <dataStoreReference> was parsed as nothing, so a model could
+// name where its data lives and Atlas would not read the sentence.
+//
+// The name is the *store's*, not the reference's: the reference is one view of the
+// store on one diagram and may be labelled for that diagram, while the store is the
+// thing every process means when it says Orders.
+func TestDataStoreReferencesCompile(t *testing.T) {
+	cp, err := compiler.Parse(1, 1, strings.NewReader(dataStoreBPMN))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	stores := cp.DataStores()
+	if len(stores) != 2 {
+		t.Fatalf("stores = %d, want 2: %+v", len(stores), stores)
+	}
+	byElement := map[string]string{}
+	for _, st := range stores {
+		byElement[cp.Intern(st.ElementId)] = cp.Intern(st.Name)
+	}
+	if got := byElement["Ref_orders"]; got != "Orders" {
+		t.Errorf("Ref_orders resolves to %q, want the store's own name Orders", got)
+	}
+	// A reference with no root element to resolve is its own name — the shorthand a
+	// drawing tool produces, and still a usable statement about where data lives.
+	if got := byElement["Ref_bare"]; got != "Invoices" {
+		t.Errorf("Ref_bare resolves to %q, want Invoices", got)
+	}
+}
+
+// TestDataStoreDeduplicatesByName covers the same store drawn twice on one diagram:
+// two boxes, one store, so the process names it once.
+func TestDataStoreDeduplicatesByName(t *testing.T) {
+	const twice = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <dataStore id="Store_orders" name="Orders"/>
+  <process id="p" isExecutable="true">
+    <dataStoreReference id="Ref_a" dataStoreRef="Store_orders"/>
+    <dataStoreReference id="Ref_b" dataStoreRef="Store_orders"/>
+    <startEvent id="s"/><endEvent id="e"/><sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+  </process>
+</definitions>`
+	cp, err := compiler.Parse(1, 1, strings.NewReader(twice))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := cp.DataStores(); len(got) != 1 || cp.Intern(got[0].Name) != "Orders" {
+		t.Errorf("stores = %+v, want one Orders", got)
+	}
+}

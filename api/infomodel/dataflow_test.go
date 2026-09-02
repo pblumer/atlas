@@ -339,3 +339,74 @@ func TestCheckDataFlowAnchorsToTheElement(t *testing.T) {
 		t.Errorf("Element = %q, want Approve_1 — the task carrying the write", found[0].Element)
 	}
 }
+
+// storeProcess builds a process that names one data store.
+func storeProcess(t *testing.T, storeName string) *compiler.CompiledProcess {
+	t.Helper()
+	b := compiler.NewBuilder(1, "sales", 1)
+	start := b.AddStartEvent()
+	end := b.AddEndEvent()
+	b.Connect(start, end)
+	b.AddDataStore(storeName, "Ref_store")
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
+}
+
+// TestCheckDataFlowResolvesDataStores covers the claim a process makes when it draws
+// a data store: that something outside it keeps this class. The store is declared
+// once for the application, so this is where the process's claim meets it.
+func TestCheckDataFlowResolvesDataStores(t *testing.T) {
+	m := orderModel()
+	m.Stores = []DataStore{{ID: "s1", Name: "Orders", Class: "Order", Worker: "clio-main", Mode: StoreModeRead}}
+	if res := Validate(m); !res.Valid {
+		t.Fatalf("fixture is invalid: %v", findingCodes(res))
+	}
+	vocab := NewVocabulary([]Model{m})
+
+	if ps := CheckDataFlow(storeProcess(t, "Orders"), vocab); len(ps) != 0 {
+		t.Errorf("a declared, wired store produced %+v", ps)
+	}
+
+	ps := CheckDataFlow(storeProcess(t, "Invoices"), vocab)
+	found := problemsByRule(ps)[RuleDataUnknownStore]
+	if len(found) != 1 {
+		t.Fatalf("an undeclared store produced %+v", ps)
+	}
+	if found[0].Severity != compiler.SeverityWarning {
+		t.Errorf("severity = %q, want warning — a store modelled later must not block a deploy", found[0].Severity)
+	}
+	if found[0].Element != "Ref_store" || !strings.Contains(found[0].Message, "Invoices") {
+		t.Errorf("finding = %+v, want it anchored and naming the store", found[0])
+	}
+}
+
+// TestCheckDataFlowStoreWithoutAWorker covers the second claim: a store may be
+// modelled before anybody wires it, and a deploy says so rather than letting the
+// first read find out.
+func TestCheckDataFlowStoreWithoutAWorker(t *testing.T) {
+	m := orderModel()
+	m.Stores = []DataStore{{ID: "s1", Name: "Orders", Class: "Order", Mode: StoreModeRead}}
+	if res := Validate(m); !res.Valid {
+		t.Fatalf("fixture is invalid: %v", findingCodes(res))
+	}
+	ps := CheckDataFlow(storeProcess(t, "Orders"), NewVocabulary([]Model{m}))
+	found := problemsByRule(ps)[RuleDataStoreUnbound]
+	if len(found) != 1 {
+		t.Fatalf("an unwired store produced %+v", ps)
+	}
+	if !strings.Contains(found[0].Message, "Order") {
+		t.Errorf("message %q does not name the class the store holds", found[0].Message)
+	}
+}
+
+// TestCheckDataFlowStoresNeedAVocabulary pins the same silence the type checks keep:
+// an application that models nothing is not told its stores are undeclared, because
+// there is nothing to declare them in yet.
+func TestCheckDataFlowStoresNeedAVocabulary(t *testing.T) {
+	if ps := CheckDataFlow(storeProcess(t, "Orders"), NewVocabulary(nil)); len(ps) != 0 {
+		t.Errorf("an unmodelled application produced %+v", ps)
+	}
+}

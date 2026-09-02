@@ -25,6 +25,8 @@ const BOX_W = 200;
 const HEAD_H = 34;
 const ROW_H = 20;
 const PAD = 10;
+// A store is one line about where a class is kept, so it is a band rather than a box.
+const STORE_H = 52;
 
 const el = (tag, attrs = {}, text) => {
   const node = document.createElementNS(SVG_NS, tag);
@@ -48,6 +50,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     return;
   }
 
+  doc.stores = doc.stores || [];
   const state = {
     model: doc,
     validation: doc.validation || { valid: true, findings: [] },
@@ -58,6 +61,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   };
 
   const stereotypeOf = (name) => subset.stereotypes.find((s) => s.stereotype === name) || subset.stereotypes[0];
+  const storeModeOf = (m) => (subset.storeModes || []).find((x) => x.mode === m) || (subset.storeModes || [])[0] || {};
   const kindOf = (name) => subset.associationKinds.find((k) => k.kind === name);
   const classById = (cid) => state.model.classes.find((c) => c.id === cid);
   const allowed = (from, to) => subset.matrix[`${from}>${to}`] || [];
@@ -99,6 +103,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   root.querySelector("#im-palette").innerHTML = subset.stereotypes.map((s) =>
     `<button type="button" class="im-add" data-stereotype="${esc(s.stereotype)}"
        title="${esc(s.meaning)}">+ ${esc(s.label)}</button>`).join("") +
+    `<button type="button" class="im-add store" data-add="store"
+       title="Where instances of a class outlive the process that made them. Declared once here and named by every process that reaches it — which is the thing BPMN's dataStoreReference gestures at and then says nothing about.">+ Data store</button>` +
     subset.associationKinds.map((k) =>
       `<button type="button" class="im-connect" data-kind="${esc(k.kind)}"
          title="${esc(k.rule)}">${esc(k.label)}</button>`).join("");
@@ -121,8 +127,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
 
   function renderCanvas() {
     const classes = state.model.classes;
-    const width = Math.max(900, ...classes.map((c) => c.x + BOX_W + 60));
-    const height = Math.max(520, ...classes.map((c) => c.y + boxH(c) + 60));
+    const stores = state.model.stores || [];
+    const width = Math.max(900, ...classes.map((c) => c.x + BOX_W + 60), ...stores.map((st) => st.x + BOX_W + 60));
+    const height = Math.max(520, ...classes.map((c) => c.y + boxH(c) + 60), ...stores.map((st) => st.y + STORE_H + 60));
 
     const svg = el("svg", { class: "im-svg", width, height, viewBox: `0 0 ${width} ${height}` });
     svg.appendChild(markerDefs());
@@ -135,8 +142,10 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     // Edges first so a box always covers a line rather than the other way round.
     const edgeLayer = el("g", {});
     for (const a of state.model.associations) drawAssociation(edgeLayer, a);
+    for (const st of stores) drawStoreLink(edgeLayer, st);
     svg.appendChild(edgeLayer);
     for (const c of classes) svg.appendChild(drawClass(c));
+    for (const st of stores) svg.appendChild(drawStore(st));
 
     canvasEl.innerHTML = "";
     canvasEl.appendChild(svg);
@@ -225,6 +234,43 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     layer.appendChild(g);
   }
 
+  // A data store is drawn as the notation draws a persistent thing: an open-ended
+  // cylinder, unmistakably not a class. It says what it holds and what keeps it,
+  // because those are the two facts a store *is*.
+  function drawStore(st) {
+    const selected = state.selected && state.selected.kind === "store" && state.selected.id === st.id;
+    const bad = state.validation.findings.some((f) => f.storeId === st.id);
+    const g = el("g", {
+      class: `im-store${selected ? " selected" : ""}${bad ? " invalid" : ""}${state.connecting ? " unreachable" : ""}`,
+      transform: `translate(${st.x},${st.y})`,
+    });
+    g.dataset.store = st.id;
+    g.dataset.name = st.name || "";
+    g.appendChild(el("path", {
+      class: "im-store-body",
+      d: `M0,10 A${BOX_W / 2},10 0 0 1 ${BOX_W},10 L${BOX_W},${STORE_H - 10}` +
+        ` A${BOX_W / 2},10 0 0 1 0,${STORE_H - 10} Z`,
+    }));
+    g.appendChild(el("path", { class: "im-store-lip", fill: "none", d: `M0,10 A${BOX_W / 2},10 0 0 0 ${BOX_W},10` }));
+    g.appendChild(el("text", { x: BOX_W / 2, y: 30, class: "im-store-name", "text-anchor": "middle" },
+      st.name || "unnamed"));
+    const holds = st.class ? `«${storeModeOf(st.mode).mode || "read"}» ${st.class}` : "holds nothing yet";
+    g.appendChild(el("text", { x: BOX_W / 2, y: 44, class: "im-store-sub", "text-anchor": "middle" }, holds));
+    return g;
+  }
+
+  // The line from a store to the class it holds. It is not an association — nothing
+  // in the model relates those two — so it is drawn as the annotation it is.
+  function drawStoreLink(layer, st) {
+    const target = state.model.classes.find((c) => c.name === st.class);
+    if (!target) return;
+    const from = { x: st.x + BOX_W / 2, y: st.y + STORE_H / 2 };
+    const p = border(target, from.x, from.y);
+    const g = el("g", { class: "im-store-link" });
+    g.appendChild(el("path", { class: "im-store-line", fill: "none", d: `M${from.x},${from.y} L${p.x},${p.y}` }));
+    layer.appendChild(g);
+  }
+
   function drawClass(c) {
     const kind = stereotypeOf(c.stereotype);
     const h = boxH(c);
@@ -294,6 +340,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         ${findings.length === 1 ? "problem" : "problems"}</div>` +
       findings.map((f) => `<button type="button" class="im-problem ${esc(f.reason)}"
           data-class="${esc(f.classId || "")}" data-assoc="${esc(f.associationId || "")}"
+          data-store="${esc(f.storeId || "")}"
           title="${f.reason === "out-of-subset"
             ? "Atlas does not author this. UML allows it; this build does not."
             : "This is not something the notation can mean."}">
@@ -302,9 +349,15 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   }
 
   // ---- the side panel ------------------------------------------------------
+  const storeById = (id) => (state.model.stores || []).find((s) => s.id === id);
+
   function renderSide() {
     if (state.schemaFor) return renderSchema();
     if (!state.selected) return renderNothingSelected();
+    if (state.selected.kind === "store") {
+      const st = storeById(state.selected.id);
+      return st ? renderStorePanel(st) : renderNothingSelected();
+    }
     if (state.selected.kind === "class") {
       const c = classById(state.selected.id);
       return c ? renderClassPanel(c) : renderNothingSelected();
@@ -395,6 +448,47 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       </div>`;
   }
 
+  // A store is two sentences: which class it keeps, and what keeps it. The panel is
+  // shaped to make both of them hard to leave unsaid.
+  function renderStorePanel(st) {
+    const findings = state.validation.findings.filter((f) => f.storeId === st.id);
+    // Only a business object with a business key can be kept: a process reads from a
+    // store by naming which thing it wants, and nothing else names one.
+    const storable = state.model.classes.filter(
+      (c) => c.stereotype === "businessObject" && (c.identity || []).length > 0);
+    const chosen = state.model.classes.find((c) => c.name === st.class);
+    const keyless = chosen && !storable.includes(chosen);
+    sideEl.innerHTML = `
+      <div class="im-panel">
+        <div class="im-panel-head"><h3>Data store</h3>
+          <button type="button" class="btn ghost small" data-act="del-store">Delete</button></div>
+        <label class="im-field"><span>Name</span>
+          <input id="im-s-name" value="${esc(st.name)}" placeholder="Orders"/></label>
+        <label class="im-field"><span>Holds</span>
+          <select id="im-s-class">
+            <option value=""${st.class ? "" : " selected"}>— choose a class —</option>
+            ${storable.map((c) => `<option value="${esc(c.name)}"${c.name === st.class ? " selected" : ""}>${esc(c.name)}</option>`).join("")}
+            ${chosen && keyless ? `<option value="${esc(st.class)}" selected>${esc(st.class)} — cannot be kept</option>` : ""}
+            ${st.class && !chosen ? `<option value="${esc(st.class)}" selected>${esc(st.class)} (unresolved)</option>` : ""}
+          </select></label>
+        <p class="im-meaning">Only a <b>business object with a business key</b> can be kept in a store: a process
+          reads from one by naming which thing it wants, and the key is the only thing that names one.</p>
+        <label class="im-field"><span>Backed by <span class="muted">(a Worker)</span></span>
+          <input id="im-s-worker" value="${esc(st.worker || "")}" placeholder="clio-main"/></label>
+        <p class="im-meaning">The configured Worker that keeps it — a clio event store, a database, a SharePoint
+          list. Leave it empty while the store is drawn but not yet wired; a deploy says so rather than refusing.</p>
+        <label class="im-field"><span>Mode</span>
+          <select id="im-s-mode">
+            ${(subset.storeModes || []).map((m) => `<option value="${esc(m.mode)}"${m.mode === st.mode ? " selected" : ""}>${esc(m.label)}</option>`).join("")}
+          </select></label>
+        <p class="im-meaning">${esc(storeModeOf(st.mode).meaning || "")}</p>
+        <label class="im-field"><span>Documentation</span>
+          <textarea id="im-s-doc" rows="3" placeholder="What is kept here, and for whom.">${esc(st.documentation || "")}</textarea></label>
+        ${findings.length ? `<div class="im-panel-problems">${findings.map((f) =>
+          `<div class="im-problem ${esc(f.reason)}">${esc(f.message)}</div>`).join("")}</div>` : ""}
+      </div>`;
+  }
+
   function renderAssociationPanel(a) {
     const from = classById(a.from.classId) || { name: "?", stereotype: "businessObject" };
     const to = classById(a.to.classId) || { name: "?", stereotype: "businessObject" };
@@ -444,6 +538,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // listener attached to the panel *container* survives its contents.
   const selectedClass = () =>
     state.selected && state.selected.kind === "class" ? classById(state.selected.id) : null;
+  const selectedStore = () =>
+    state.selected && state.selected.kind === "store" ? storeById(state.selected.id) : null;
   const selectedAssoc = () =>
     state.selected && state.selected.kind === "association"
       ? state.model.associations.find((x) => x.id === state.selected.id) : null;
@@ -461,6 +557,21 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       if (state.model.documentation === target.value) return;
       state.model.documentation = target.value;
       markDirty();
+      return;
+    }
+
+    const st = selectedStore();
+    if (st) {
+      const fields = { "im-s-name": "name", "im-s-class": "class", "im-s-worker": "worker",
+        "im-s-mode": "mode", "im-s-doc": "documentation" };
+      const field = fields[target.id];
+      if (!field || (st[field] || "") === target.value) return;
+      st[field] = target.value;
+      markDirty();
+      // The name and the class are on the drawing; the rest is not, so only those
+      // two are worth a redraw while somebody is still typing.
+      if (field === "name" || field === "class") renderCanvas();
+      if (field === "class") renderProblems();
       return;
     }
 
@@ -552,6 +663,15 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     const act = btn.dataset.act;
     if (act === "close-schema") { state.schemaFor = ""; renderSide(); return; }
 
+    const store = selectedStore();
+    if (store && act === "del-store") {
+      if (!window.confirm(`Delete the data store ${store.name}? The processes that name it will say so.`)) return;
+      state.model.stores = state.model.stores.filter((s) => s.id !== store.id);
+      state.selected = null;
+      markDirty(); render();
+      return;
+    }
+
     const c = selectedClass();
     if (c) {
       if (act === "add-attr") {
@@ -640,6 +760,19 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   }
 
   root.querySelector("#im-palette").addEventListener("click", (e) => {
+    if (e.target.closest('[data-add="store"]')) {
+      const spot = freeSpot();
+      const st = {
+        id: `new-${Math.random().toString(36).slice(2, 10)}`, name: "NewStore", class: "",
+        worker: "", mode: (subset.storeModes[0] || {}).mode || "read",
+        x: spot.x, y: spot.y + 240,
+      };
+      state.model.stores.push(st);
+      state.selected = { kind: "store", id: st.id };
+      state.connecting = null;
+      markDirty(); render();
+      return;
+    }
     const add = e.target.closest(".im-add");
     if (add) {
       const kind = stereotypeOf(add.dataset.stereotype);
@@ -669,6 +802,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   canvasEl.addEventListener("click", (e) => {
     const box = e.target.closest("[data-class]");
     const edge = e.target.closest("[data-assoc]");
+    const store = e.target.closest("[data-store]");
     if (state.connecting) {
       if (!box) { state.connecting = null; render(); return; }
       const cid = box.dataset.class;
@@ -700,6 +834,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       return;
     }
     if (box) state.selected = { kind: "class", id: box.dataset.class };
+    else if (store) state.selected = { kind: "store", id: store.dataset.store };
     else if (edge) state.selected = { kind: "association", id: edge.dataset.assoc };
     else state.selected = null;
     state.schemaFor = "";
@@ -735,9 +870,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   let drag = null;
   canvasEl.addEventListener("pointerdown", (e) => {
     if (state.connecting || e.button !== 0) return;
-    const box = e.target.closest("[data-class]");
-    if (!box) return;
-    const c = classById(box.dataset.class);
+    const shape = e.target.closest("[data-class]") || e.target.closest("[data-store]");
+    if (!shape) return;
+    const c = shape.dataset.class ? classById(shape.dataset.class) : storeById(shape.dataset.store);
     if (!c) return;
     const rect = canvasEl.querySelector("svg").getBoundingClientRect();
     drag = { c, dx: e.clientX - rect.left - c.x, dy: e.clientY - rect.top - c.y, moved: false };
@@ -769,6 +904,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     const p = e.target.closest(".im-problem");
     if (!p) return;
     if (p.dataset.class) state.selected = { kind: "class", id: p.dataset.class };
+    else if (p.dataset.store) state.selected = { kind: "store", id: p.dataset.store };
     else if (p.dataset.assoc) state.selected = { kind: "association", id: p.dataset.assoc };
     state.schemaFor = "";
     render();
@@ -787,6 +923,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       documentation: state.model.documentation || "",
       classes: state.model.classes,
       associations: state.model.associations,
+      stores: state.model.stores,
       revision: state.model.revision,
     };
     try {

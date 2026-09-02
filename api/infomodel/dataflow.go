@@ -58,6 +58,12 @@ const (
 	// RuleDataReadBeforeWrite marks a read no writer can precede — the parallel
 	// branch that reads what the other branch produces.
 	RuleDataReadBeforeWrite = "data.read-before-write"
+	// RuleDataUnknownStore marks a <dataStoreReference> naming a store the owning
+	// application's information model does not declare.
+	RuleDataUnknownStore = "data.unknown-store"
+	// RuleDataStoreUnbound marks a store that is modeled but has no Worker behind it,
+	// so nothing can actually reach what it holds.
+	RuleDataStoreUnbound = "data.store-unbound"
 )
 
 // Vocabulary is what an application's information models say, flattened for
@@ -70,6 +76,9 @@ type Vocabulary struct {
 	// can ask "what does an Order relate to" without walking every model's
 	// association list per node.
 	rels map[string][]relation
+	// stores indexes the application's data stores by name — what a process's
+	// <dataStore> resolves against.
+	stores map[string]DataStore
 	// members holds each class's attributes with inherited ones first, so a
 	// specialization reads as "everything the general thing has, plus these".
 	members map[string][]Attribute
@@ -84,7 +93,7 @@ type Vocabulary struct {
 func NewVocabulary(models []Model) *Vocabulary {
 	v := &Vocabulary{
 		classes: map[string]Class{}, members: map[string][]Attribute{},
-		rels: map[string][]relation{}, modeled: len(models) > 0,
+		rels: map[string][]relation{}, stores: map[string]DataStore{}, modeled: len(models) > 0,
 	}
 	for _, m := range models {
 		for _, c := range m.Classes {
@@ -96,6 +105,9 @@ func NewVocabulary(models []Model) *Vocabulary {
 			v.members[c.Name] = flattenAttributes(m, c)
 		}
 		v.indexRelations(m)
+		for _, st := range m.Stores {
+			v.stores[st.Name] = st
+		}
 	}
 	return v
 }
@@ -161,6 +173,15 @@ func flattenAttributes(m Model, c Class) []Attribute {
 // Modeled reports whether the application has any information model.
 func (v *Vocabulary) Modeled() bool { return v != nil && v.modeled }
 
+// Store resolves a data store by the name a process refers to it with.
+func (v *Vocabulary) Store(name string) (DataStore, bool) {
+	if v == nil {
+		return DataStore{}, false
+	}
+	st, ok := v.stores[name]
+	return st, ok
+}
+
 // Class resolves a declared type name.
 func (v *Vocabulary) Class(name string) (Class, bool) {
 	if v == nil {
@@ -194,6 +215,7 @@ func CheckDataFlow(cp *compiler.CompiledProcess, vocab *Vocabulary) []compiler.P
 	ps = append(ps, checkDeclaredTypes(cp, vocab)...)
 	ps = append(ps, checkMemberWrites(cp, vocab)...)
 	ps = append(ps, checkReadOrder(cp)...)
+	ps = append(ps, checkDataStores(cp, vocab)...)
 	sort.SliceStable(ps, func(a, b int) bool {
 		if ps[a].Element != ps[b].Element {
 			return ps[a].Element < ps[b].Element
@@ -401,4 +423,40 @@ func reachability(cp *compiler.CompiledProcess) []map[int32]bool {
 		out[start] = seen
 	}
 	return out
+}
+
+// checkDataStores resolves every <dataStoreReference> the process names against the
+// application's information model.
+//
+// A store is where a class's instances outlive the process that made them, and it is
+// declared once for an application rather than in each process that reaches it — so a
+// process naming one is making a claim about something outside itself, and this is
+// where that claim is checked. Both findings are warnings: a diagram is routinely
+// drawn before the store it names is modeled, and a store is routinely modeled before
+// somebody configures the Worker behind it. Those are different days' work.
+func checkDataStores(cp *compiler.CompiledProcess, vocab *Vocabulary) []compiler.Problem {
+	stores := cp.DataStores()
+	if len(stores) == 0 || !vocab.Modeled() {
+		return nil
+	}
+	var ps []compiler.Problem
+	for _, ref := range stores {
+		name := cp.Intern(ref.Name)
+		element := cp.Intern(ref.ElementId)
+		store, ok := vocab.Store(name)
+		if !ok {
+			ps = append(ps, compiler.Problem{
+				Element: element, Severity: compiler.SeverityWarning, Rule: RuleDataUnknownStore,
+				Message: fmt.Sprintf("This process reads from the data store %q, and this application declares no store of that name. Model it under Data — a store says which class it holds and which Worker keeps it, and until it exists nothing says what reading from it would mean.", name),
+			})
+			continue
+		}
+		if strings.TrimSpace(store.Worker) == "" {
+			ps = append(ps, compiler.Problem{
+				Element: element, Severity: compiler.SeverityWarning, Rule: RuleDataStoreUnbound,
+				Message: fmt.Sprintf("The data store %q holds %s but no Worker backs it yet, so nothing can reach what it keeps. Configure one under Workers and name it on the store.", name, store.Class),
+			})
+		}
+	}
+	return ps
 }

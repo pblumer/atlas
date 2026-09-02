@@ -190,8 +190,28 @@ The control-flow basics most real models use.
   partial answer read as a whole one is the worst thing an index can do. Data ›
   Instances groups by class and then by key — one datum, several instances — and the
   object diagram's "this customer is not in this instance" note now links straight
-  into it. Next: **slice 5b**, `<dataStoreReference>` parsed and bound to a class and
-  a Worker, read-only to start.
+  into it. **Slice 5b landed** — the *declarative* half of data stores. A
+  `<dataStoreReference>` is parsed for the first time (it compiled to nothing before,
+  so a model could say where its data lives and Atlas would not read the sentence),
+  resolved through its `<dataStore>` root element to the store's own name, and folded
+  per process the way data objects are. A **data store lives in the application's
+  information model**, beside the classes rather than inside one — a store is per
+  application, declared once and named by every process that reaches it, and keeping
+  it out of the classes is what leaves a class storage-agnostic: an Order is an Order
+  wherever it is kept, and only the store says where. It names the class it holds and
+  the Worker that keeps it, and the class must be a **business object with a business
+  key**, because a process reads from a store by naming which thing it wants and
+  nothing else names one. The class canvas draws it as a cylinder with an annotation
+  line to its class — not an association, because nothing in the model *relates* those
+  two. A deploy resolves it: a store the application does not declare, and a store no
+  Worker backs, are both warnings, because a diagram is drawn before the store is
+  modeled and a store is modeled before somebody wires it. Mode is `read`; writing
+  through a store is refused as *out of subset* and stated as such, since it is a
+  transaction against something outside the engine whose durability guarantee stops at
+  its own log. Next: the **runtime read** — the one remaining piece, and the one that
+  needs its own record (an activity reading a store must park on a job, which is
+  either a two-phase activation the engine does not have, or a connector kind that
+  delegates to the store's Worker).
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🚧 **Conformance tests against a curated BPMN model set** — the
   [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN

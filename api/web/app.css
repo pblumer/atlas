@@ -4230,3 +4230,26 @@ button.im-problem:hover { background: var(--accent-soft); }
   font: 600 10px/1.5 system-ui, sans-serif; color: var(--muted); text-transform: uppercase;
   letter-spacing: .04em; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px;
 }
+
+/* ---- Data stores on the class canvas ---------------------------------------
+   (ADR-draft-process-information-model, slice 5b)
+
+   A store is drawn the way the notation draws a persistent thing — an open-ended
+   cylinder — because the one mistake to prevent here is reading it as a class. A
+   class says what an Order is; a store says where Orders are kept, and only the
+   store is about storage at all. */
+.im-add.store { border-style: dashed; }
+.im-store { cursor: grab; }
+.im-store .im-store-body {
+  fill: color-mix(in srgb, #b26a00 10%, var(--bg));
+  stroke: var(--border); stroke-width: 1;
+}
+.im-store .im-store-lip { stroke: var(--border); stroke-width: 1; }
+.im-store .im-store-name { fill: var(--text); font: 600 13px/1.4 system-ui, sans-serif; }
+.im-store .im-store-sub { fill: var(--muted); font: 10.5px/1.4 ui-monospace, monospace; }
+.im-store.selected .im-store-body, .im-store.selected .im-store-lip { stroke: var(--accent); stroke-width: 2; }
+.im-store.invalid .im-store-body { stroke: #d93025; stroke-dasharray: 4 3; }
+.im-store.unreachable { opacity: .35; }
+/* The line from a store to the class it keeps is an annotation, not an
+   association — nothing in the model *relates* those two — so it is drawn as one. */
+.im-store-line { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; }

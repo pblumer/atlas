@@ -228,12 +228,50 @@ landscape.
 database, SharePoint). The model itself stays storage-agnostic; only the store's
 binding names a Worker, which is the seam ADR-0053 already anticipated.
 
+The store is declared **in the application's information model, beside the classes** —
+not inside the class it holds, and not in the diagram that names it. Beside, because an
+Order is an Order wherever it is kept: putting the binding on the class would make
+storage part of the type, which is exactly the collapse §1 rejected ERD for. Not in the
+diagram, because a store is the one thing in this record that is deliberately
+*process-crossing* — several processes name the same `Orders` store, and a per-diagram
+declaration would give each of them a private one. Per application, then, on the same
+scope as the classes (ADR-0128), declared once and named by every process that reaches
+it. The canvas draws it as a cylinder with a dashed **annotation** line to its class,
+not an association: an association is a statement about how two things in the model
+relate, and a store and its class do not relate — one *is kept in* the other.
+
+A store may only hold a **business object with a business key**. A process reads from a
+store by naming which thing it wants, and the key is the only thing in the subset that
+names one; a store over a class with no identity could be filled and never read again,
+so it is refused at authoring time rather than discovered at runtime. A value type has
+no existence of its own to keep, and an enumeration is a closed list, not a population.
+
+The mode is **read**. Writing through a store is refused as *out of subset*, and says
+so in those words, because a write is a transaction against something outside the
+engine: the engine's durability guarantee (I2) stops at its own log, and what it means
+for a store write to be part of a process's atomic step is a decision of its own, not a
+detail of this one.
+
 That is the cross-process channel BPMN never specified. Process A writes
 `Order#ORD-1` into the `Orders` store; process B reads it back by its business key.
 And once identity is a modeled fact, the question that motivated this record has an
 answer: **which instances, across which processes, touched this order** — a
 data-centric index over the instances, the mirror image of the process-centric views
 Atlas has today.
+
+What a deploy can settle, it settles: a store a process names that the application does
+not declare, and a declared store no Worker backs, are both **warnings** — never a
+refusal — for the reason an unresolved connector reference is one (ADR-0158). A diagram
+is routinely drawn before the store it names is modeled, and a store is modeled before
+somebody configures the Worker behind it; those are different days' work, and neither
+is a reason to reject a model.
+
+**Deferred to its own record: the runtime read.** Declaring the store is one half; an
+activity that actually reads from one is the other, and it is not a detail of this
+record. Such an activity has to park on a job the way a service task does, which is
+either a two-phase activation the engine does not have today, or a connector kind
+(ADR-0158) that delegates to the store's Worker — a choice about the engine's
+activation model, not about the vocabulary.
 
 ### 8. Delivery slices
 
@@ -249,8 +287,11 @@ surface.
 3. **Binding.** `itemSubjectRef` resolution at deploy, the Problems-panel data-flow
    findings, field-write checking.
 4. **The object diagram** on the instance.
-5. **Data stores** — parsing, class and Worker binding, and the cross-instance
-   data-centric index.
+5. **Identity, across processes** — split in two once the shape became clear.
+   *5a*: the cross-instance data-centric index, grouped by class and then by business
+   key. *5b*: `<dataStoreReference>` parsed, and the store declared in the application's
+   information model with its class and its Worker — the declarative half. The runtime
+   read follows in a record of its own (§7).
 
 ### Consequences
 

@@ -191,6 +191,7 @@ func ValidateModel(r io.Reader) ([]Problem, error) {
 	resolveEsc := buildEscalationResolver(defs)
 	resolveOp := buildOperationResolver(defs)
 	resolveItem := buildItemTypeResolver(defs)
+	resolveStore := buildDataStoreResolver(defs)
 	var ps []Problem
 	executable := 0
 	for _, proc := range defs.Processes {
@@ -200,7 +201,7 @@ func ValidateModel(r io.Reader) ([]Problem, error) {
 		// The key is irrelevant to a dry run — the compiled process is inspected and
 		// discarded, never registered — so a per-pool ordinal keeps it deterministic
 		// without touching the server's key counter.
-		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, docs)
+		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs)
 		executable++
 		if cerr != nil {
 			// A graph-level failure carries its element-anchored Problems; hand them

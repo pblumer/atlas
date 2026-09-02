@@ -14,6 +14,35 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Data stores: saying where a class is kept.** BPMN has a `<dataStoreReference>` —
+  the box on the diagram meaning "this outlives the process" — and says nothing about
+  what it holds or what keeps it. Atlas did not even parse it. It does now, and a
+  **data store is declared in the application's information model**
+  ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md),
+  slice 5b): once per application, named by every process that reaches it, with the
+  class it holds and the Worker that keeps it.
+
+  It sits *beside* the classes rather than inside one, and that is the point: an Order
+  is an Order wherever it is kept, so the class stays storage-agnostic and only the
+  store says where. The class canvas draws it as a cylinder with a dashed line to the
+  class it holds — an annotation, not an association, because nothing in the model
+  *relates* those two.
+
+  A store may only hold a **business object with a business key**. A process reads
+  from one by naming which thing it wants, and the key is the only thing that names
+  one — so a store over a class with no identity could be filled and never read, and
+  is refused. A value type has no existence of its own to keep.
+
+  A deploy resolves what a process claims: a store the application does not declare,
+  and a store no Worker backs, are both **warnings**. A diagram is routinely drawn
+  before the store it names is modeled, and a store is modeled before somebody
+  configures the Worker behind it — different days' work, and neither is a reason to
+  refuse a deploy.
+
+  The mode is **read**. Writing through a store is refused as out of subset and says
+  so: it is a transaction against something outside the engine, whose durability
+  guarantee stops at its own log, and that is a decision of its own.
+
 - **Which instances are carrying this order?** The question BPMN structurally cannot
   express now has an answer: **Data › Instances** groups every data object by the type
   its model declares and then by its **business key**, so one order appearing in three

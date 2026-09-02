@@ -75,6 +75,36 @@ const (
 	TypeDuration = "duration"
 )
 
+// What a process may do with a store. Read-only today: writing through a store is a
+// transaction against something outside the engine, which is a decision of its own
+// and gets its own record rather than being smuggled in as a second enum value.
+const (
+	StoreModeRead = "read"
+)
+
+// StoreMode is one authorable store mode, as the palette offers it.
+type StoreMode struct {
+	Mode    string `json:"mode"`
+	Label   string `json:"label"`
+	Meaning string `json:"meaning"`
+}
+
+var storeModes = []StoreMode{
+	{Mode: StoreModeRead, Label: "Read", Meaning: "A process may look something up in this store by its " +
+		"business key. Writing back is not authored yet: it is a transaction against something outside " +
+		"the engine, and the engine's durability guarantee stops at its own log."},
+}
+
+// StoreModeOf returns one mode, and whether it is in the subset at all.
+func StoreModeOf(m string) (StoreMode, bool) {
+	for _, o := range storeModes {
+		if o.Mode == m {
+			return o, true
+		}
+	}
+	return StoreMode{}, false
+}
+
 // Why something was refused. The distinction is the point: RefusedOutOfSubset is a
 // limit of this build and reads as "not yet"; RefusedByNotation is a fact about
 // what these things are and reads as "no".
@@ -314,6 +344,7 @@ type Subset struct {
 	AssociationKinds []AssociationKind    `json:"associationKinds"`
 	Primitives       []PrimitiveType      `json:"primitives"`
 	Multiplicities   []MultiplicityOption `json:"multiplicities"`
+	StoreModes       []StoreMode          `json:"storeModes"`
 	// Matrix is AllowAssociation precomputed for every stereotype pair, so the canvas
 	// can grey out a connection while it is being dragged without a round trip. Keyed
 	// "from>to".
@@ -346,6 +377,13 @@ var limits = []SubsetLimit{
 			"unenforceable.",
 	},
 	{
+		Area: "Writing through a data store",
+		Reason: "A store says where instances of a class are kept, and a process may read one by its " +
+			"business key. Writing back is a transaction against something outside the engine, whose " +
+			"durability guarantee stops at its own log — so it is a decision of its own rather than a " +
+			"second mode on this one.",
+	},
+	{
 		Area: "Storage detail — lengths, precision, nullability, keys, indexes",
 		Reason: "Deliberately absent. Where a datum lives is the data store's question and is " +
 			"settled per store; stating it here would turn a model of the business into a " +
@@ -368,6 +406,7 @@ func AuthoringSubset() Subset {
 		AssociationKinds: associationKinds,
 		Primitives:       primitives,
 		Multiplicities:   multiplicities,
+		StoreModes:       storeModes,
 		Matrix:           matrix,
 		Limits:           limits,
 	}

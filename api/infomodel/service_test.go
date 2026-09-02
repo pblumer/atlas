@@ -483,3 +483,71 @@ func TestServiceKeepsMintedIDsStable(t *testing.T) {
 		}
 	}
 }
+
+// TestServiceSavesDataStores covers the third collection the document carries: a
+// store arrives with a local handle like everything else, is minted an id, and is
+// refused when it says something the model cannot support.
+func TestServiceSavesDataStores(t *testing.T) {
+	fx := newFixture(t)
+	id := fx.create(t, "app-1", "Sales").ID
+
+	m := storeModel()
+	rec := fx.putModel(t, id, map[string]any{
+		"classes": m.Classes, "associations": m.Associations,
+		"stores": []DataStore{{ID: "new-store", Name: "Orders", Class: "Order",
+			Worker: "clio-main", Mode: StoreModeRead}},
+		"revision": 1,
+	}, http.StatusOK)
+	var got modelResponse
+	decodeResponse(t, rec, &got)
+	if len(got.Stores) != 1 || got.Stores[0].ID == "" || strings.HasPrefix(got.Stores[0].ID, "new-") {
+		t.Fatalf("stores = %+v, want one with a minted id", got.Stores)
+	}
+	if !got.Validation.Valid {
+		t.Errorf("a well-formed store came back with findings: %v", got.Validation.Findings)
+	}
+	// The listing counts it, so a library row says how much of the model is there.
+	listed := request(t, fx.service.HandleList, http.MethodGet, "/api/v1/infomodel/models", nil, http.StatusOK)
+	var list []Summary
+	decodeResponse(t, listed, &list)
+	if len(list) != 1 || list[0].Stores != 1 {
+		t.Errorf("listing = %+v, want one store counted", list)
+	}
+
+	// A store over a class that cannot be addressed by identity is refused with the
+	// finding, and nothing is written.
+	bad := fx.putModel(t, id, map[string]any{
+		"classes": m.Classes, "associations": m.Associations,
+		"stores": []DataStore{{Name: "Addresses", Class: "Address", Mode: StoreModeRead}},
+	}, http.StatusBadRequest)
+	var refusal struct {
+		Findings []Finding `json:"findings"`
+	}
+	decodeResponse(t, bad, &refusal)
+	if len(refusal.Findings) == 0 || refusal.Findings[0].Code != CodeStoreClassNotStorable {
+		t.Errorf("findings = %+v, want the unstorable class named", refusal.Findings)
+	}
+}
+
+// TestServiceReadsAnUnstatedStoreModeAsRead is for the caller that has no mode to
+// state — an agent writing through MCP, say, where read is the only thing on offer.
+// It gets a read store, not a refusal naming a mode it never chose.
+func TestServiceReadsAnUnstatedStoreModeAsRead(t *testing.T) {
+	fx := newFixture(t)
+	id := fx.create(t, "app-1", "Sales").ID
+
+	m := storeModel()
+	rec := fx.putModel(t, id, map[string]any{
+		"classes": m.Classes, "associations": m.Associations,
+		"stores":   []map[string]any{{"name": "Orders", "class": "Order", "worker": "clio-main"}},
+		"revision": 1,
+	}, http.StatusOK)
+	var got modelResponse
+	decodeResponse(t, rec, &got)
+	if len(got.Stores) != 1 || got.Stores[0].Mode != StoreModeRead {
+		t.Fatalf("stores = %+v, want one read store", got.Stores)
+	}
+	if !got.Validation.Valid {
+		t.Errorf("a store with no stated mode came back with findings: %v", got.Validation.Findings)
+	}
+}

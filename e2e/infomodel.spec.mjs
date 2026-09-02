@@ -152,6 +152,61 @@ test("the JSON Schema projection is shown as derived, and says what it dropped",
 test("the panel states that this is a subset, and what it does not author", async ({ page }) => {
   await page.locator(".im-svg").click({ position: { x: 700, y: 470 } });
   await expect(page.locator(".im-note")).toContainText("This is a subset of UML");
-  await expect(page.locator(".im-note li")).toHaveCount(2);
+  await expect(page.locator(".im-note li")).toHaveCount(3);
   await expect(page.locator(".im-note")).toContainText("Where a datum lives is the data store's question");
+});
+
+// Data stores on the class canvas (ADR-draft-process-information-model, slice 5b).
+// A store is where instances of a class outlive the process that made them — the
+// thing BPMN's <dataStoreReference> gestures at and then says nothing about. It is
+// declared once per application here, and named by every process that reaches it.
+test.describe("data stores", () => {
+  const store = (page) => page.locator('.im-store[data-name="Orders"]');
+
+  test("a store is drawn as a store, and says what it holds", async ({ page }) => {
+    await expect(store(page)).toBeVisible();
+    // Not a class box: the one mistake to prevent is reading it as one. A class says
+    // what an Order is; a store says where Orders are kept.
+    await expect(store(page).locator(".im-store-body")).toHaveCount(1);
+    await expect(store(page).locator(".im-store-name")).toHaveText("Orders");
+    await expect(store(page).locator(".im-store-sub")).toHaveText("«read» Order");
+    // The line to the class it keeps is an annotation, not an association.
+    await expect(page.locator(".im-store-line")).toHaveCount(1);
+  });
+
+  test("the panel offers only classes a store can keep", async ({ page }) => {
+    await store(page).click();
+    await expect(page.locator(".im-panel h3")).toHaveText("Data store");
+    // Only a business object with a business key: a process reads from a store by
+    // naming which thing it wants, and the key is the only thing that names one.
+    // Customer and Order have keys; Address is a value type and OrderStatus an
+    // enumeration, so neither is offered.
+    const options = await page.locator("#im-s-class option").evaluateAll((els) => els.map((e) => e.value));
+    expect(options).toEqual(["", "Customer", "Order"]);
+    await expect(page.locator("#im-s-worker")).toHaveValue("clio-main");
+    await expect(page.locator(".im-panel")).toContainText("business object with a business key");
+  });
+
+  test("adding a store puts it on the canvas and selects it", async ({ page }) => {
+    await page.locator('[data-add="store"]').click();
+    await expect(page.locator(".im-store")).toHaveCount(2);
+    await expect(page.locator(".im-panel h3")).toHaveText("Data store");
+    await page.locator("#im-s-name").fill("Invoices");
+    await expect(page.locator('.im-store[data-name="Invoices"]')).toBeVisible();
+    // A store with no class yet says so rather than claiming to hold something.
+    await expect(page.locator('.im-store[data-name="Invoices"] .im-store-sub')).toHaveText("holds nothing yet");
+
+    await page.locator("#im-save").click();
+    const saved = await page.evaluate(() => window.__saved);
+    const added = saved.stores.find((s) => s.name === "Invoices");
+    expect(added).toBeTruthy();
+    // Ids are the server's to issue, here as everywhere else.
+    expect(added.id.startsWith("new-")).toBe(true);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("the subset states that writing through a store is not authored", async ({ page }) => {
+    await page.locator(".im-svg").click({ position: { x: 700, y: 500 } });
+    await expect(page.locator(".im-note")).toContainText("Writing through a data store");
+  });
 });

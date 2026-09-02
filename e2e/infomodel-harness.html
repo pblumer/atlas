@@ -45,6 +45,9 @@
           { type: "number", label: "Number", jsonType: "number" },
           { type: "date", label: "Date", jsonType: "string", jsonFormat: "date" },
         ],
+        storeModes: [
+          { mode: "read", label: "Read", meaning: "A process may look something up in this store by its business key." },
+        ],
         multiplicities: [
           { multiplicity: "0..1", label: "Optional", required: false, collection: false },
           { multiplicity: "1", label: "Exactly one", required: true, collection: false },
@@ -64,6 +67,7 @@
         },
         limits: [
           { area: "Interfaces, operations and visibility", reason: "Behaviour belongs to the BPMN model beside it." },
+          { area: "Writing through a data store", reason: "A transaction against something outside the engine is a decision of its own." },
           { area: "Storage detail", reason: "Where a datum lives is the data store's question." },
         ],
       };
@@ -85,6 +89,9 @@
             attributes: [{ name: "city", type: "string", multiplicity: "1" }] },
           { id: "c4", name: "OrderStatus", stereotype: "enumeration", x: 40, y: 260,
             literals: ["draft", "approved"] },
+        ],
+        stores: [
+          { id: "st1", name: "Orders", class: "Order", worker: "clio-main", mode: "read", x: 40, y: 420 },
         ],
         associations: [
           { id: "a1", kind: "association", name: "places",

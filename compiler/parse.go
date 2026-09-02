@@ -188,7 +188,7 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), docs)
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs)
 }
 
 // Deployable is one executable process compiled from a model, plus the display
@@ -220,6 +220,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 	resolveEsc := buildEscalationResolver(defs)
 	resolveOp := buildOperationResolver(defs)
 	resolveItem := buildItemTypeResolver(defs)
+	resolveStore := buildDataStoreResolver(defs)
 	poolName := participantNames(defs)
 
 	var out []Deployable
@@ -227,7 +228,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		if len(proc.StartEvents) == 0 {
 			continue // black-box pool: nothing to run
 		}
-		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, docs)
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs)
 		if err != nil {
 			return nil, err
 		}
@@ -286,7 +287,7 @@ func parseNamed(key uint64, version int32, r io.Reader, processId string, gated 
 		if proc.Id != processId {
 			continue
 		}
-		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), docs)
+		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs)
 		if err == nil {
 			return cp, nil, nil
 		}
@@ -535,7 +536,7 @@ func buildEscalationResolver(defs xmlDefinitions) func(ownerId, escalationRef st
 // resolveError (shared across a collaboration's processes). docs is the model-wide
 // element-id → <bpmn:documentation> index (elementDocumentation), likewise shared: it is
 // keyed by BPMN element id, and this process only ever looks up its own.
-func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), resolveItemType func(string) string, docs map[string]string) (*CompiledProcess, error) {
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), resolveItemType func(string) string, resolveDataStore func(ref, ownName string) string, docs map[string]string) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
 	b.SetDocumentation(docs[proc.Id]) // the process's own prose; "" interns to -1 (ADR-0025)
 	// isExecutable defaults to true when the attribute is absent (BPMN convention;
@@ -644,6 +645,23 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		seededObj[name] = true
 		b.AddDataObject(name, resolveItemType(d.ItemSubjectRef), d.DataState.Name, d.IsCollection)
+	}
+
+	// Data stores: where this process says its data lives beyond one instance. Two
+	// references to one store are two views of it on the diagram, so the process
+	// names it once — the same folding the data objects above get, and for the same
+	// reason.
+	seenStore := make(map[string]bool, len(proc.DataStoreReferences))
+	for _, ref := range proc.DataStoreReferences {
+		name := resolveDataStore(ref.DataStoreRef, ref.Name)
+		if name == "" {
+			name = ref.Id
+		}
+		if seenStore[name] {
+			continue
+		}
+		seenStore[name] = true
+		b.AddDataStore(name, ref.Id)
 	}
 
 	// Wire data-output associations now that every activity node is registered
@@ -1042,6 +1060,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 type xmlDefinitions struct {
 	Processes       []xmlProcess        `xml:"process"`
 	ItemDefinitions []xmlItemDefinition `xml:"itemDefinition"`
+	DataStores      []xmlDataStore      `xml:"dataStore"`
 	Messages        []xmlMessage        `xml:"message"`
 	Signals         []xmlSignal         `xml:"signal"`
 	Errors          []xmlError          `xml:"error"`
@@ -1077,6 +1096,30 @@ type xmlInterface struct {
 type xmlOperation struct {
 	Id           string `xml:"id,attr"`
 	InMessageRef string `xml:"inMessageRef"`
+}
+
+// buildDataStoreResolver maps a <dataStoreReference>'s dataStoreRef onto the store's
+// own name. A reference naming no root element falls back to its own name, which is
+// the shorthand a tool that only draws the box produces and still a usable statement
+// about where data lives.
+func buildDataStoreResolver(defs xmlDefinitions) func(ref, ownName string) string {
+	byID := make(map[string]string, len(defs.DataStores))
+	for _, st := range defs.DataStores {
+		if st.Id == "" {
+			continue
+		}
+		name := st.Name
+		if name == "" {
+			name = st.Id
+		}
+		byID[st.Id] = name
+	}
+	return func(ref, ownName string) string {
+		if name, ok := byID[ref]; ok {
+			return name
+		}
+		return ownName
+	}
 }
 
 // buildItemTypeResolver maps a data object's itemSubjectRef onto the type name it
@@ -1193,6 +1236,7 @@ type xmlProcess struct {
 	xmlFlowContent // the process root's flow nodes and sequence flows
 
 	DataObjects          []xmlDataObject          `xml:"dataObject"`
+	DataStoreReferences  []xmlDataStoreReference  `xml:"dataStoreReference"`
 	DataObjectReferences []xmlDataObjectReference `xml:"dataObjectReference"`
 }
 
@@ -1518,6 +1562,23 @@ type xmlDataObject struct {
 	IsCollection   bool         `xml:"isCollection,attr"`
 	ItemSubjectRef string       `xml:"itemSubjectRef,attr"`
 	DataState      xmlDataState `xml:"dataState"`
+}
+
+// A BPMN <dataStore> is a root element: a place data outlives the processes that
+// touch it. Atlas reads its id, which is what a <dataStoreReference> points at, and
+// its name, which is what the application's information model declares the store by.
+type xmlDataStore struct {
+	Id   string `xml:"id,attr"`
+	Name string `xml:"name,attr"`
+}
+
+// A BPMN <dataStoreReference> is the store as one process draws it. It may carry a
+// name of its own for that diagram, but the store's name is the authoritative one —
+// every process that says "Orders" means the same store.
+type xmlDataStoreReference struct {
+	Id           string `xml:"id,attr"`
+	Name         string `xml:"name,attr"`
+	DataStoreRef string `xml:"dataStoreRef,attr"`
 }
 
 // xmlDataState is a BPMN data state (the [received]/[approved] label on a data

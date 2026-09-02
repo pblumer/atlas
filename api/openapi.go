@@ -574,7 +574,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Replace an information model's content. The whole document is sent; a model that does not validate is refused with its findings, and a stale revision is refused as a conflict", tag: "Information model", role: RoleModeler,
 			req: jsonBody("Information model content", schemaObj(map[string]any{
 				"name": tString(), "documentation": tString(), "classes": tArray(),
-				"associations": tArray(), "revision": tInteger(),
+				"associations": tArray(), "stores": tArray(), "revision": tInteger(),
 			})),
 			resp: jsonBody("Information model", tObject())}},
 		{"DELETE", "/api/v1/infomodel/models/{id}", s.infomodel.HandleDelete, apiOp{

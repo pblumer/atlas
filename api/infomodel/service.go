@@ -101,7 +101,7 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	model := Model{
 		ID: id, ApplicationID: payload.ApplicationID, Name: name,
 		Documentation: strings.TrimSpace(payload.Documentation), Revision: 1,
-		Classes: []Class{}, Associations: []Association{},
+		Classes: []Class{}, Associations: []Association{}, Stores: []DataStore{},
 		CreatedAt: now, CreatedBy: actor, UpdatedAt: now, UpdatedBy: actor,
 	}
 
@@ -191,6 +191,7 @@ type updateRequest struct {
 	Documentation *string        `json:"documentation"`
 	Classes       *[]Class       `json:"classes"`
 	Associations  *[]Association `json:"associations"`
+	Stores        *[]DataStore   `json:"stores"`
 	// Revision is the revision the editor read. A write against a stale one is
 	// refused rather than silently overwriting somebody's classes.
 	Revision int64 `json:"revision"`
@@ -259,12 +260,19 @@ func (s *Service) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 		if payload.Associations != nil {
 			next.Associations = *payload.Associations
 		}
+		if payload.Stores != nil {
+			next.Stores = *payload.Stores
+		}
 		if next.Classes == nil {
 			next.Classes = []Class{}
 		}
 		if next.Associations == nil {
 			next.Associations = []Association{}
 		}
+		if next.Stores == nil {
+			next.Stores = []DataStore{}
+		}
+		defaultStoreModes(&next)
 		if err := s.assignIDs(&next); err != nil {
 			opErr = err
 			return
@@ -311,6 +319,21 @@ func (s *Service) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 // minted ids are hex tokens, so the test is exact and needs no marker the client
 // could get wrong. Remapping here, rather than trusting the client to send ids back
 // unchanged, is what keeps every id on disk one this server issued.
+// defaultStoreModes reads an unstated store mode as the only mode there is.
+//
+// A client that never mentions a mode is not asking for something out of subset — it
+// has nothing to ask for yet, because read is all this build offers. Refusing such a
+// model would report a limit the author never approached, in a message with an empty
+// word in it. An explicit "write" still gets the out-of-subset refusal, and when
+// writing lands an unstated mode still means read, so nothing here has to change.
+func defaultStoreModes(m *Model) {
+	for i := range m.Stores {
+		if strings.TrimSpace(m.Stores[i].Mode) == "" {
+			m.Stores[i].Mode = StoreModeRead
+		}
+	}
+}
+
 func (s *Service) assignIDs(m *Model) error {
 	remap := map[string]string{}
 	for i := range m.Classes {
@@ -345,6 +368,17 @@ func (s *Service) assignIDs(m *Model) error {
 			return fmt.Errorf("mint association id: %w", err)
 		}
 		a.ID = id
+	}
+	for i := range m.Stores {
+		if id := strings.TrimSpace(m.Stores[i].ID); id != "" && token.IsHex(id) {
+			m.Stores[i].ID = id
+			continue
+		}
+		id, err := s.newID()
+		if err != nil {
+			return fmt.Errorf("mint data store id: %w", err)
+		}
+		m.Stores[i].ID = id
 	}
 	return nil
 }

@@ -31,10 +31,17 @@ type Model struct {
 	Revision     int64         `json:"revision"`
 	Classes      []Class       `json:"classes"`
 	Associations []Association `json:"associations"`
-	CreatedAt    int64         `json:"createdAt"`
-	CreatedBy    string        `json:"createdBy,omitempty"`
-	UpdatedAt    int64         `json:"updatedAt"`
-	UpdatedBy    string        `json:"updatedBy,omitempty"`
+	// Stores are where instances of a class live beyond one process instance — the
+	// cross-process channel BPMN gestures at with <dataStoreReference> and then says
+	// nothing about. They live in this document because a store is per application,
+	// declared once and named by every process that reaches it; and beside the
+	// classes rather than inside one, because a class stays storage-agnostic. Only
+	// the store says where its instances are kept.
+	Stores    []DataStore `json:"stores"`
+	CreatedAt int64       `json:"createdAt"`
+	CreatedBy string      `json:"createdBy,omitempty"`
+	UpdatedAt int64       `json:"updatedAt"`
+	UpdatedBy string      `json:"updatedBy,omitempty"`
 }
 
 // Class is one business object type — the thing a BPMN data object's
@@ -96,6 +103,33 @@ type End struct {
 	Multiplicity string `json:"multiplicity,omitempty"`
 }
 
+// DataStore is a place instances of one class outlive the process that made them.
+//
+// It is the one part of this model that is *not* storage-agnostic, and that is the
+// point of separating it from the classes: an Order is an Order wherever it is kept,
+// and the store is what says where. Everything about persistence lives here and
+// nowhere else in the document.
+type DataStore struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Documentation string `json:"documentation,omitempty"`
+	// Class is the class whose instances this store holds. It must be a business
+	// object with a business key: a store you cannot address something in by its
+	// identity is not a store a process can read from.
+	Class string `json:"class"`
+	// Worker is the configured Worker that backs it (ADR-0036/0203) — a clio event
+	// store, a database, a SharePoint list. Empty while the store is modeled but not
+	// yet wired to anything, which is a normal state and not an error: a store is
+	// routinely drawn before somebody configures the worker behind it.
+	Worker string `json:"worker,omitempty"`
+	// Mode is what a process may do with it. Read-only today; writing through a store
+	// is a decision of its own (transactionality against something outside the engine)
+	// and gets its own record.
+	Mode string  `json:"mode"`
+	X    float64 `json:"x"`
+	Y    float64 `json:"y"`
+}
+
 // Summary is the listing representation: everything a library row shows, without
 // the classes and associations a canvas needs.
 type Summary struct {
@@ -106,6 +140,7 @@ type Summary struct {
 	Revision      int64  `json:"revision"`
 	Classes       int    `json:"classes"`
 	Associations  int    `json:"associations"`
+	Stores        int    `json:"stores"`
 	CreatedAt     int64  `json:"createdAt"`
 	CreatedBy     string `json:"createdBy,omitempty"`
 	UpdatedAt     int64  `json:"updatedAt"`
@@ -116,7 +151,7 @@ func summarize(m Model) Summary {
 	return Summary{
 		ID: m.ID, ApplicationID: m.ApplicationID, Name: m.Name,
 		Documentation: m.Documentation, Revision: m.Revision,
-		Classes: len(m.Classes), Associations: len(m.Associations),
+		Classes: len(m.Classes), Associations: len(m.Associations), Stores: len(m.Stores),
 		CreatedAt: m.CreatedAt, CreatedBy: m.CreatedBy,
 		UpdatedAt: m.UpdatedAt, UpdatedBy: m.UpdatedBy,
 	}
