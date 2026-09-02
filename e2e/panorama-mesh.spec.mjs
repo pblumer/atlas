@@ -597,10 +597,17 @@ test("selecting or filtering brings a name back", async ({ page }) => {
 
 // Size carries rank as well as kind: at a few hundred nodes the eye sorts by size
 // before it reads anything, so an application has to be unmistakably the largest.
-// mesh-body is the node's own circle: a group can also hold a provenance ring and a
+// mesh-body is the node's own outline: a group can also hold a provenance ring and a
 // severity badge, and either would answer with the wrong radius.
+//
+// data-r rather than the `r` attribute, because a node's outline is a square, a
+// hexagon or a triangle as often as it is a circle — and because data-r is the
+// radius the *layout* reserved, which is what every claim about size and spacing on
+// this view is actually about. Reading `r` would answer null for every shape that is
+// not a circle, and `+null` is 0: the overlap tests below would have gone on passing
+// while measuring nothing.
 const radiusOf = async (page, id) => Number(
-  await page.locator(`[data-node-id="${id}"] .mesh-body`).getAttribute("r"));
+  await page.locator(`[data-node-id="${id}"] .mesh-body`).getAttribute("data-r"));
 
 test("kinds are told apart by size, not only by colour", async ({ page }) => {
   installMock(page);
@@ -649,7 +656,7 @@ test("nodes do not overlap each other", async ({ page }) => {
     const at = [...document.querySelectorAll(".mesh-node")].map((g) => {
       const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform"));
       const circle = g.querySelector(".mesh-body");
-      return { x: +m[1], y: +m[2], r: Number(circle.getAttribute("r")) };
+      return { x: +m[1], y: +m[2], r: Number(circle.getAttribute("data-r")) };
     });
     let worst = 0;
     for (let i = 0; i < at.length; i++) {
@@ -737,7 +744,7 @@ test("no two nodes overlap, however many there are", async ({ page }) => {
     const worst = await page.evaluate(() => {
       const at = [...document.querySelectorAll(".mesh-node")].map((g) => {
         const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform"));
-        return { x: +m[1], y: +m[2], r: +g.querySelector(".mesh-body").getAttribute("r") };
+        return { x: +m[1], y: +m[2], r: +g.querySelector(".mesh-body").getAttribute("data-r") };
       });
       let gap = Infinity;
       for (let i = 0; i < at.length; i++) for (let j = i + 1; j < at.length; j++) {
@@ -835,7 +842,7 @@ test("a node goes where it is dropped, and the graph settles around it", async (
   const worst = await page.evaluate(() => {
     const at = [...document.querySelectorAll(".mesh-node")].map((g) => {
       const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform"));
-      return { x: +m[1], y: +m[2], r: +g.querySelector(".mesh-body").getAttribute("r") };
+      return { x: +m[1], y: +m[2], r: +g.querySelector(".mesh-body").getAttribute("data-r") };
     });
     let gap = Infinity;
     for (let i = 0; i < at.length; i++) for (let j = i + 1; j < at.length; j++) {
@@ -1405,4 +1412,54 @@ test("an attention finding is drawn as one, not as a hint", async ({ page }) => 
   const quiet = await ring("decision:credit");
   expect(await ring("process:1")).toBeGreaterThan(quiet);
   expect(await ring("process:2")).toBeGreaterThan(quiet);
+});
+
+// Kinds are told apart by shape, which is the channel that survives what colour and
+// size do not: a printout, a projector, and a reader who does not separate the hues.
+test("each kind is drawn with its own outline", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+
+  const outline = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => el.tagName.toLowerCase());
+
+  // A rect for the process, polygons for the rest, a circle for the application.
+  expect(await outline("application:a1")).toBe("circle");
+  expect(await outline("process:1")).toBe("rect");
+  expect(await outline("worker:c1")).toBe("polygon");
+  expect(await outline("decision:credit")).toBe("polygon");
+
+  // The polygons are told apart by their corner count: three for the decision, six
+  // for the worker, four for the placeholder that stands for an unknown kind.
+  const corners = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => el.getAttribute("points").trim().split(/\s+/).length);
+  expect(await corners("decision:credit")).toBe(3);
+  expect(await corners("worker:c1")).toBe(6);
+  expect(await corners("restricted:1")).toBe(4);
+
+  // An unresolved process is drawn in the silhouette of the deployment that should
+  // have been there — the dashes say it is missing, the shape says what is.
+  expect(await outline("unresolved:process:archive")).toBe("rect");
+  await expect(page.locator('[data-node-id="unresolved:process:archive"] .mesh-body'))
+    .toHaveAttribute("stroke-dasharray", "4 3");
+});
+
+// The legend is drawn by the same function the nodes are, so it cannot come to
+// disagree with the picture it explains.
+test("the legend shows the shapes it is explaining", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+  await page.locator(".mesh-swatch").first().waitFor();
+
+  const shapes = await page.evaluate(() => [...document.querySelectorAll(".mesh-swatch svg")]
+    .map((svg) => {
+      const body = svg.querySelector(".mesh-body");
+      return body ? body.tagName.toLowerCase() : null;
+    })
+    .filter(Boolean));
+
+  // One swatch per kind on screen, and between them every outline the canvas uses.
+  expect(shapes).toContain("circle");
+  expect(shapes).toContain("rect");
+  expect(shapes.filter((tag) => tag === "polygon").length).toBeGreaterThan(1);
 });

@@ -9,7 +9,8 @@
   the landscape, and a filter keeps one hop of context around every match; amended
   2026-09-02 — §7 gains saved views, a findings list, and a heartbeat on the nodes
   that have one, and §4's node carries its incident count; amended 2026-09-02 — a
-  node can be drilled into, and a finding names the element the work is parked on)
+  node can be drilled into, and a finding names the element the work is parked on;
+  amended 2026-09-02 — §7 gives each kind its own outline)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -468,6 +469,35 @@ unaffected.
 >   The model overlay gets the same answer in one field — the worst site, on the
 >   observation's detail — so a panel that says "degraded" can say where without
 >   sending anybody to a second view.
+
+> **Amendment (2026-09-02, fifth): each kind gets its own outline.**
+> Colour on this view already carries the kind *and* ADR-0189 §7's layer meaning;
+> size already carries rank and connectivity. Form was the one channel left, and a
+> landscape of four hundred identical circles was spending it on nothing — so an
+> application is a circle, a process a rounded square, a decision a triangle, a
+> worker a hexagon.
+>
+> It is also the channel that survives what the others do not: a printout, a
+> projector, and a reader who does not separate the hues. §4 already required that
+> colour never be the only channel for *severity*; this extends the same discipline
+> to kind, which had been relying on colour and size alone.
+>
+> Every shape is **inscribed in the circle the layout reserved for it** — no vertex
+> further from the centre than the radius the simulation kept clear. That is what
+> makes the change free rather than a new source of overlap: the separation guarantee
+> is stated in circles, so a shape that never leaves its circle cannot break it. The
+> shapes come out slightly smaller than the circles they replace, which is the right
+> way round; the application stays the largest thing on screen.
+>
+> Two placeholders take the rule the other way. A **restricted** node stands for
+> something real whose kind we may never learn, so it takes the one shape that is not
+> any kind's — drawing it as a process would be a guess wearing the same clothes as a
+> fact. An **unresolved** one is drawn in the silhouette of the thing that is
+> *missing*: its id names the kind, the dashes already say it is not there, and the
+> shape says what should have been.
+>
+> The legend is rendered by the same function the nodes are, so it cannot come to
+> disagree with the picture it explains.
 
 ### 7. A stated size budget, and a server-side fallback
 
