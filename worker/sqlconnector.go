@@ -2,9 +2,11 @@ package worker
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"os"
+	"strings"
 
 	// The SQL drivers a worker can open, registered with database/sql by import.
 	// They live here rather than in connector/sqldb so that package stays free of
@@ -18,6 +20,7 @@ import (
 	_ "github.com/microsoft/go-mssqldb" // sqlserver — Microsoft SQL Server
 
 	"github.com/pblumer/atlas/connector/sqldb"
+	"github.com/pblumer/atlas/logging"
 )
 
 // sqlRegistryFromEnv builds the databases of one product this worker holds.
@@ -30,6 +33,10 @@ import (
 // *is* the credential (ADR-0173).
 func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Registry, []string, error) {
 	prefix := "ATLAS_" + envFold(p.Name) + "_"
+	mock, err := sqlMockFromEnv(env, p)
+	if err != nil {
+		return nil, nil, err
+	}
 	names := splitAndTrim(env(prefix + "CONNECTORS"))
 	if len(names) == 0 {
 		// Unconfigured, not misconfigured — a nil registry and no error, which the
@@ -43,12 +50,21 @@ func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Regist
 	reg := sqldb.NewRegistry()
 	for _, name := range names {
 		key := prefix + envFold(name) + "_"
+		if mock != nil {
+			// Mock mode: every configured name is the one in-memory database, so the
+			// journal is one list of what the process ran rather than one per name.
+			// A DSN set alongside it is deliberately ignored and not an error — the
+			// point of the switch is to run the same configuration against memory.
+			reg.Register(name, sqldb.OpenMock(p, mock))
+			continue
+		}
 		dsn := env(key + "DSN")
 		if dsn == "" {
 			return nil, nil, fmt.Errorf("worker: %s connector %q has no connection string: set %sDSN", p.Name, name, key)
 		}
-		// sql.Open connects lazily, so a database that is merely down does not stop a
-		// worker from starting — a worker must survive a database restart.
+		// sqldb.Open connects lazily and caps the pool. A database that is merely
+		// down therefore does not stop a worker from starting — a worker must survive
+		// a database restart.
 		//
 		// What it catches is driver-dependent and therefore best-effort: the SQL
 		// Server and MySQL drivers parse the DSN here and reject a malformed one,
@@ -56,13 +72,30 @@ func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Regist
 		// startup check actually makes is the narrower one that matters in practice —
 		// every configured name *has* a DSN — and a malformed one surfaces on the
 		// first job rather than being silently ignored.
-		db, err := sql.Open(p.Driver, dsn)
+		client, err := sqldb.Open(p, dsn)
 		if err != nil {
 			return nil, nil, fmt.Errorf("worker: %s connector %q has an unusable connection string: %w", p.Name, name, err)
 		}
-		reg.Register(name, sqldb.NewClient(db, p))
+		reg.Register(name, client)
 	}
 	return reg, names, nil
+}
+
+// ProbeSQL opens one database and checks that it answers. It is what the Console's
+// connector check calls, handed to the server as api.WithSQLProbe by whoever assembles
+// the binary.
+//
+// It lives here and not in the api package for the reason the blank imports above do:
+// this is where the drivers are, and the engine deliberately links none of them
+// (ADR-0173). The pool it opens is closed again immediately — a check is one
+// connection, not a registration.
+func ProbeSQL(ctx context.Context, p sqldb.Product, dsn string) error {
+	client, err := sqldb.Open(p, dsn)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+	return client.Ping(ctx)
 }
 
 // RunSQLJob executes a resolved SQL job through a registry the caller owns. It is
@@ -83,4 +116,77 @@ func RunSQLJob(ctx context.Context, j Job, reg *sqldb.Registry) (map[string]any,
 		return nil, fmt.Errorf("sqldb: cannot read the resolved detail: %w", err)
 	}
 	return sqldb.Run(ctx, task, reg)
+}
+
+// Mock mode, for the SQL products. It is the AD mockup switch (ADR-0181) applied to a
+// database: the worker answers SQL tasks from seeded answers in its own memory, so a
+// model that reads or writes a database runs end to end without one — and without the
+// database an identity process needs being the one nobody wants a test writing into.
+//
+// The switch is the worker's, never the model's. A mockup flag on the task would be a
+// model that behaves differently in test and production and would eventually be
+// deployed with the flag still set; here the model is byte-identical either way and
+// what differs is which worker leases its jobs.
+const (
+	// sqlMockEnvSuffix, after ATLAS_<PRODUCT>_, turns mock mode on for that product.
+	sqlMockEnvSuffix = "MOCK"
+	// sqlMockSeedEnvSuffix names the JSON file of seeded answers the mock starts with.
+	// Without it a mock knows nothing, and every statement fails naming itself.
+	sqlMockSeedEnvSuffix = "MOCK_SEED"
+)
+
+// sqlMockFromEnv decides whether this worker's tasks of product p reach a database or
+// a stand-in in its own memory. A nil database means the real thing.
+func sqlMockFromEnv(env func(string) string, p sqldb.Product) (*sqldb.MockDatabase, error) {
+	prefix := "ATLAS_" + envFold(p.Name) + "_"
+	mockVar, seedVar := prefix+sqlMockEnvSuffix, prefix+sqlMockSeedEnvSuffix
+	on, err := envBool(env, mockVar)
+	if err != nil {
+		return nil, err
+	}
+	seed := strings.TrimSpace(env(seedVar))
+	if !on {
+		if seed != "" {
+			// Read into a database nothing would ever reach. Almost certainly a
+			// half-finished mockup setup, and silence would leave the operator
+			// believing they had one.
+			return nil, fmt.Errorf("worker: %s names %s but %s is not set, so the seed would be read into a database no job reaches", seedVar, seed, mockVar)
+		}
+		return nil, nil
+	}
+	answers, err := sqlMockSeed(seedVar, seed)
+	if err != nil {
+		return nil, err
+	}
+	logging.Warn(logging.SQLMockEnabled,
+		"the "+p.Name+" connector is in mock mode: statements are answered from this worker's memory and reach no database",
+		slog.String("product", p.Name), slog.Int("seeded", len(answers)), slog.String("seed", seed))
+	return sqldb.NewMockDatabase(answers...), nil
+}
+
+// sqlMockSeed reads the seed file, if one was named.
+//
+// The two failures are told apart on purpose. A file that cannot be *read* starts an
+// unseeded mock and warns: the supervisor restarts a child that exits, so refusing
+// over an optional path is the restart loop ADR-0202 already paid for once, and every
+// statement then fails naming itself — which points at the missing seed rather than
+// hiding it. A file that *is* there and is malformed is refused, because that is a
+// typo in something the operator wrote and is fixed by being told, not by a mock that
+// silently answers nothing.
+func sqlMockSeed(seedVar, path string) ([]sqldb.MockAnswer, error) {
+	if path == "" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		logging.Warn(logging.SQLMockSeedUnusable,
+			"the SQL mockup seed could not be read; the mock database starts with no answers, so every statement will fail naming itself",
+			slog.String("seed", path), slog.String("error", err.Error()))
+		return nil, nil
+	}
+	answers, err := sqldb.ParseMockSeed(data)
+	if err != nil {
+		return nil, fmt.Errorf("worker: %s %s: %w", seedVar, path, err)
+	}
+	return answers, nil
 }

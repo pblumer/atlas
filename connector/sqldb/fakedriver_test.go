@@ -39,6 +39,10 @@ var (
 
 func init() { sql.Register("atlasfake", fakeDriver{}) }
 
+// fakeProduct is a product whose driver is the fake, for the tests that go through
+// Open — the path a worker takes — rather than wrapping a handle themselves.
+var fakeProduct = Product{Name: "fake", Driver: "atlasfake", JobType: "io.atlas.fake", Placeholder: "?"}
+
 // registerFake makes a DSN answer with r, and returns the DSN plus a cleanup.
 func registerFake(t *testing.T, r *fakeResult) string {
 	t.Helper()

@@ -14,6 +14,71 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A database task can be tried without a database.** The SQL Worker Types — MS SQL
+  Server, MariaDB, PostgreSQL — were the only ones that could not be exercised at all
+  without the production dependency, and the database a process reads is the HR system
+  or the ERP, which is exactly the one nobody wants a model under development pointed
+  at. A worker started with `ATLAS_MSSQL_MOCK=1` (or `ATLAS_MARIADB_MOCK`,
+  `ATLAS_POSTGRES_MOCK`) now answers that product's statements from **seeded answers**
+  in its own memory, with no connection string
+  ([ADR-draft-sql-mock-mode](docs/adr/draft-sql-mock-mode.md)). Nothing in the model
+  changes — the same worker name, the same statement, the same parameters; what differs
+  is which worker leases the jobs, so a model that runs through in mockup mode is the
+  model that later runs in production.
+
+  `ATLAS_MSSQL_MOCK_SEED` names a JSON file mapping statements to their rows or
+  affected count. An answer that names `params` or `named` applies only to that
+  binding and one that names neither is the statement's fallback, which is how a seed
+  says "person 42 exists and nobody else does" with no SQL engine behind it. An answer
+  may also seed a **failure**, because a unique-key violation on a redelivered create
+  is not an edge case in an identity process — it is what the delivery guarantee
+  routinely does, and now it can be triggered on purpose.
+
+  **It answers statements, it does not execute them,** and the one rule that makes it
+  worth trusting is the refusal: a statement nobody seeded **fails, naming itself and
+  its bound parameters**, and never comes back as an empty result set. "No rows" is a
+  business answer — the lookup found nobody — and a mockup that invents one hands the
+  process a fact in the direction hardest to notice, because the run looks like it
+  worked. What that costs is stated too: an `INSERT` does not change what a later
+  `SELECT` returns. Standing in for SQL Server with SQLite or a hand-written SQL subset
+  was rejected for the same reason from the other side — either would differ from the
+  real thing exactly where statements go wrong, and land the difference in production.
+
+  [`examples/mssql-eintrittsmeldung.bpmn`](examples/mssql-eintrittsmeldung.bpmn) is the
+  model to try it on: it looks a person up by their initials (`query-one`, which returns
+  `null` rather than an empty list and fails on a second match), branches on whether
+  they exist, and sets them active (`execute`, bound by name). Its documentation says
+  *why the statement is literal* — the `statement` field is the one connector value with
+  no `fx` toggle, because a statement assembled from process data would be an injection
+  that needs no quoting bug. The handbook's *Test & simulate* chapter gained the matching
+  section, and the worker-type table now says what a SQL task actually does.
+
+- **The Console can check a database connector.** `POST /api/v1/connectors/test`
+  covered mail and nothing else, and the gap hurt most for the kind whose *whole*
+  configuration is one opaque string sealed into the vault: a typo in it is invisible
+  from the moment it is saved, and the first thing to read it is a supervised worker
+  whose failure arrives as a parked task. The **Test connection** button now appears
+  for the three SQL kinds — against the string typed in the create form, and against
+  the vault reference of a saved connector, which is the case that matters because an
+  operator opens that dialog when something *stopped* working
+  ([ADR-draft-checking-a-database-connector](docs/adr/draft-checking-a-database-connector.md)).
+
+  The verdict says what it proved: *"Connected to `sa@db.example.com:1433/hr` and
+  authenticated. No statement was run, so this does not prove the login may read or
+  write the tables a task names."* Reading "OK" as "the task will work" is how the
+  next surprise arrives as an incident.
+
+  The engine still links no database driver: `api` declares the seam and `cmd/atlas`,
+  which links both, joins them. A server built without one answers "this server cannot
+  check a database connection", which is the truth rather than a connector reported
+  broken.
+
+- **A worker's database pool has limits.** `database/sql`'s defaults are an unlimited
+  number of open connections and connections kept until the process exits — the two a
+  database administrator would not have chosen. A worker now caps them, and recycles
+  connections so that the first job after a quiet night does not meet one a firewall or
+  a failover closed hours ago.
+
 - **A Jira issue can start a process.** A Jira connector now carries inbound event
   watches beside its outbound operations
   ([ADR-0214](docs/adr/0214-jira-inbound-issue-watch.md)): Console → Connectors →

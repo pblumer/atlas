@@ -1,0 +1,4 @@
+{
+  "hidden": true,
+  "_why": "Operational, with nothing for a reader to do: the limits apply to every SQL worker automatically and are not configurable from the Console. It belongs in the CHANGELOG, not in a feed of things to try."
+}

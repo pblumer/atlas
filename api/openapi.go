@@ -877,7 +877,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Connector kind placements", schemaObj(map[string]any{"kinds": tArray()}))}},
 
 		{"POST", "/api/v1/connectors/test", s.handleTestConnector, apiOp{
-			summary: "Check a mail connector — connect and authenticate, or send a test message to ?to — without saving it", tag: "Connectors", role: RoleModeler,
+			summary: "Check a connector without saving it — a mail connector connects and authenticates (or sends a test message to \"to\"), a SQL connector dials its connection string", tag: "Connectors", role: RoleModeler,
 			req: jsonBody("Connector check", tObject()), resp: jsonBody("Check result", tObject())}},
 
 		{"GET", "/api/v1/mail/outbox", s.handleMailOutbox, apiOp{

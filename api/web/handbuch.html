@@ -2010,7 +2010,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <tr><td><b>BMC Remedy</b></td><td data-l="de">Ticket/Incident im ITSM-System anlegen.</td><td data-l="en">Create a ticket/incident in the ITSM system.</td></tr>
           <tr><td><b>Jira</b></td><td data-l="de">Vorgang anlegen, lesen, ändern, weiterschalten, kommentieren, zuweisen oder per JQL suchen.</td><td data-l="en">Create, read, update, transition, comment on, assign, or search issues with JQL.</td></tr>
           <tr><td><b>Microsoft&nbsp;Entra&nbsp;ID</b></td><td data-l="de">Konten und Gruppen im Tenant anlegen, lizenzieren, deaktivieren, auflisten oder per Delta abgleichen.</td><td data-l="en">Create, license, disable, list or delta-sync accounts and groups in the tenant.</td></tr>
-          <tr><td><b data-l="de">SQL-Datenbanken</b><b data-l="en">SQL databases</b></td><td data-l="de">PostgreSQL, MariaDB und MS&nbsp;SQL abfragen und schreiben.</td><td data-l="en">Query and write PostgreSQL, MariaDB and MS&nbsp;SQL.</td></tr>
+          <tr><td><b data-l="de">SQL-Datenbanken</b><b data-l="en">SQL databases</b></td><td data-l="de">MS&nbsp;SQL, MariaDB und PostgreSQL abfragen (viele Zeilen, genau eine Zeile) und schreiben. Die Anweisung ist <b>immer literal</b> – sie hat bewusst keinen <code>fx</code>-Schalter, denn eine aus Prozessdaten zusammengesetzte Anweisung wäre eine Injection, die keinen Anführungszeichenfehler mehr bräuchte. Werte kommen ausschliesslich als <b>gebundene Parameter</b> hinein. Oder <b>Mockup</b>: derselbe Task läuft gegen hinterlegte Antworten im Arbeitsspeicher des Workers, ohne dass eine Datenbank angefasst wird (siehe <a href="#testen">Testen &amp; Simulieren</a>).</td><td data-l="en">Query (many rows, exactly one row) and write MS&nbsp;SQL, MariaDB and PostgreSQL. The statement is <b>always literal</b> – it deliberately has no <code>fx</code> toggle, because a statement assembled from process data would be an injection that needs no quoting bug to work. Values reach it only as <b>bound parameters</b>. Or <b>mockup</b>: the same task runs against seeded answers in the worker's memory, with no database touched (see <a href="#testen">Test &amp; simulate</a>).</td></tr>
           <tr><td><b data-l="de">Web-Scraping</b><b data-l="en">Web scraping</b></td><td data-l="de">Eine Seite per CSS-Selektor auslesen oder einen RSS-/Atom-Feed als strukturierte Liste holen.</td><td data-l="en">Read a page by CSS selector, or pull an RSS/Atom feed as a structured list.</td></tr>
           <tr><td><b>CSV</b></td><td data-l="de">Eine CSV-Datei in eine Liste von Objekten verwandeln.</td><td data-l="en">Turn a CSV file into a list of objects.</td></tr>
           <tr><td><b data-l="de">Skript</b><b data-l="en">Script</b></td><td data-l="de">PowerShell, Python oder JavaScript ausführen – ausserhalb der Engine, in einem eigenen Prozess.</td><td data-l="en">Run PowerShell, Python or JavaScript – outside the engine, in a process of its own.</td></tr>
@@ -2333,6 +2333,93 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
           it completes every task successfully. Two places give it away – the card in the Console and the warning
           in the worker's log. And the directory lives in the worker process: a restart starts over from the
           seed.</p>
+      </div>
+
+      <h3 data-l="de">Eine Datenbank ausprobieren, ohne eine Datenbank</h3>
+      <h3 data-l="en">Trying a database without a database</h3>
+      <p data-l="de">Bei Datenbanken ist es noch eine Spur unangenehmer als bei Active Directory. Die Datenbank,
+        aus der ein Prozess liest, ist die HR- oder die ERP-Datenbank — genau deshalb ist sie interessant, und
+        genau deshalb will niemand ein Modell im Entwurf darauf loslassen. Ein Worker, der SQL-Aufgaben bedient,
+        kann sie deshalb aus <b>hinterlegten Antworten</b> in seinem eigenen Arbeitsspeicher beantworten:</p>
+      <p data-l="en">A database is a shade more awkward than Active Directory. The database a process reads is
+        the HR system or the ERP — which is exactly why it is interesting, and exactly why nobody wants a model
+        under development pointed at it. So a worker that serves SQL tasks can answer them from
+        <b>seeded answers</b> in its own memory instead:</p>
+      <pre><code>ATLAS_MSSQL_CONNECTORS=hr-db \
+ATLAS_MSSQL_MOCK=1 ATLAS_MSSQL_MOCK_SEED=/srv/atlas/hr-seed.json \
+atlas worker --connector mssql</code></pre>
+      <p data-l="de">Auch hier ändert sich <b>am Modell nichts</b>: derselbe Worker-Name, dieselbe Anweisung,
+        dieselben Parameter. Nur die Verbindungszeichenfolge entfällt — der Worker braucht keine.
+        <code>ATLAS_MSSQL_CONNECTORS</code> bleibt dagegen nötig, denn der Task nennt einen Worker beim Namen, und
+        ein Mockup ohne Namen hat nichts, was ein Task ansprechen könnte. Für MariaDB und PostgreSQL heißen die
+        Variablen <code>ATLAS_MARIADB_MOCK</code> beziehungsweise <code>ATLAS_POSTGRES_MOCK</code>.</p>
+      <p data-l="en">Here too <b>nothing changes in the model</b>: the same worker name, the same statement, the
+        same parameters. Only the connection string falls away — this worker needs none.
+        <code>ATLAS_MSSQL_CONNECTORS</code> is still required, because a task names a worker and a mockup with no
+        names has nothing a task could address. For MariaDB and PostgreSQL the variables are
+        <code>ATLAS_MARIADB_MOCK</code> and <code>ATLAS_POSTGRES_MOCK</code>.</p>
+      <p data-l="de">Die Startdatei ordnet Anweisungen ihre Antworten zu. Eine Antwort, die <code>params</code>
+        oder <code>named</code> nennt, gilt nur für genau diese Belegung; eine, die beides weglässt, ist die
+        Auffangantwort derselben Anweisung. So lässt sich „Person 42 gibt es, alle anderen nicht" hinterlegen,
+        ganz ohne SQL-Engine dahinter:</p>
+      <p data-l="en">The seed file maps statements to their answers. An answer that names <code>params</code> or
+        <code>named</code> applies only to that binding; one that names neither is the same statement's fallback.
+        That is how a seed can say "person 42 exists and nobody else does", with no SQL engine behind it:</p>
+      <pre><code>{
+  "answers": [
+    { "statement": "SELECT id, mail FROM personen WHERE id = @p1",
+      "params": [42],
+      "columns": ["id", "mail"],
+      "rows": [[42, "arno@example.com"]] },
+
+    { "statement": "SELECT id, mail FROM personen WHERE id = @p1",
+      "columns": ["id", "mail"], "rows": [] },
+
+    { "statement": "UPDATE personen SET aktiv = 0 WHERE id = @id",
+      "named": { "id": 42 }, "affected": 1 },
+
+    { "statement": "INSERT INTO personen (mail) VALUES (@p1)",
+      "error": "Violation of UNIQUE KEY constraint 'UQ_personen_mail'" }
+  ]
+}</code></pre>
+      <p data-l="de">Groß-/Kleinschreibung und Zeilenumbrüche sind egal — sonst nichts: Eine andere Spaltenliste
+        ist eine andere Anweisung. Und eine Antwort darf <b>scheitern</b>. Das ist keine Spielerei: Ein doppelt
+        zugestellter Job, der ein zweites Mal einfügt, ist in einem Identity-Prozess kein Sonderfall, sondern der
+        Normalfall der Zustellgarantie — und im Mockup lässt er sich auslösen, wann immer man will.</p>
+      <p data-l="en">Case and line breaks do not matter — nothing else is forgiven: a different column list is a
+        different statement. And an answer may <b>fail</b>. That is not a curiosity: a redelivered job that
+        inserts a second time is not an edge case in an identity process, it is what the delivery guarantee
+        routinely does — and in the mockup you can trigger it whenever you like.</p>
+
+      <div class="note">
+        <span class="lbl" data-l="de">Was nicht hinterlegt ist, scheitert</span><span class="lbl" data-l="en">What is not seeded, fails</span>
+        <p data-l="de" style="margin:.3em 0 0">Eine Anweisung ohne hinterlegte Antwort liefert <b>keine leere
+          Trefferliste</b>, sondern lässt die Aufgabe scheitern — mit der Anweisung und den gebundenen Werten im
+          Fehlertext, sodass du sie direkt in die Startdatei übernehmen kannst. Das ist Absicht: „keine Treffer"
+          ist eine <i>fachliche</i> Antwort (die Suche hat niemanden gefunden), und ein Mockup, das sie erfindet,
+          schiebt dem Prozess eine Tatsache unter — in der Richtung, die am schwersten auffällt, weil der Lauf
+          aussieht, als hätte er funktioniert.</p>
+        <p data-l="en" style="margin:.3em 0 0">A statement with no seeded answer does <b>not</b> come back as an
+          empty result set: it fails the task, with the statement and the bound values in the error so you can
+          paste them straight into the seed. That is deliberate — "no rows" is a <i>business</i> answer (the
+          lookup found nobody), and a mockup that invents one hands the process a fact, in the direction that is
+          hardest to notice, because the run looks like it worked.</p>
+      </div>
+
+      <div class="note warn">
+        <span class="lbl" data-l="de">Es ist keine Datenbank</span><span class="lbl" data-l="en">It is not a database</span>
+        <p data-l="de" style="margin:.3em 0 0">Das Mockup <i>beantwortet</i> Anweisungen, es <i>führt sie nicht
+          aus</i>. Ein <code>INSERT</code> ändert also nicht, was ein späteres <code>SELECT</code> liefert — beide
+          sind hinterlegt. Das ist der Preis dafür, keine SQL-Engine zu sein, und der ist bewusst gewählt: Ein
+          Mockup mit SQLite oder einem selbstgebauten SQL-Dialekt wäre genau dort anders als der echte SQL Server,
+          wo Anweisungen schiefgehen — und der Unterschied fiele erst in der Produktion auf. Zum Ausprobieren
+          eines Prozesses taugt es, als Testdatenbank nicht.</p>
+        <p data-l="en" style="margin:.3em 0 0">The mockup <i>answers</i> statements, it does not <i>execute</i>
+          them. So an <code>INSERT</code> does not change what a later <code>SELECT</code> returns — both are
+          seeded. That is the price of not being a SQL engine, and it is deliberate: a mockup built on SQLite or
+          a hand-written SQL subset would differ from the real SQL Server exactly where statements go wrong, and
+          the difference would surface in production. It is good for trying a process out; it is not a test
+          database.</p>
       </div>
 
       <div class="note">

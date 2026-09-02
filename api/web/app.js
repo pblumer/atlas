@@ -1608,7 +1608,10 @@ async function viewConsoleConnectors() {
     // than to any other, and they exist on no other kind.
     if (c.kind === "clio") items.push({ label: "Provision access…", icon: "🔑", act: "provision" });
     if (c.kind === "clio" || c.kind === "jira") items.push({ label: "Events…", icon: "⇄", act: "subs" });
-    if (c.kind === "mail") items.push({ label: "Test…", icon: "✔", act: "test" });
+    // Every kind the check covers: mail connects and authenticates (or sends a test
+    // message), a SQL connector dials its connection string. connectorShape is the one
+    // place that knows, so the menu does not go stale the next kind that gains one.
+    if (connectorShape(c.kind, c.provider).test) items.push({ label: "Test…", icon: "✔", act: "test" });
     if (items.length && (sc.editor || sc.owner)) items.push({ sep: true });
     if (sc.editor) items.push({ label: "Edit…", icon: "✎", act: "edit" });
     if (sc.owner) items.push({ label: "Share…", icon: "👤", act: "share" });
@@ -3418,7 +3421,7 @@ function wireConnectorManagement(connectors) {
         <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password" placeholder="postgresql://postgres.abc:\u2026@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit" title="Add this connector">Add</button>
-        <button class="btn neutral mail-only" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
+        <button class="btn neutral conn-f-test" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
         <p class="conn-test-result" style="flex:1 1 100%;margin:0;font-size:12.5px" hidden></p>
         <p class="muted mail-only conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p></form>`;
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
@@ -3461,6 +3464,8 @@ function wireConnectorManagement(connectors) {
             inp.disabled = !sh.sql;
           });
         });
+        // The check covers mail and the SQL databases; the other kinds have none yet.
+        form.querySelector(".conn-f-test").style.display = sh.test ? "" : "none";
         senderIn.required = sh.sender;
         endpointField.style.display = sh.endpoint ? "" : "none";
         endpointIn.required = sh.endpoint;
@@ -3494,6 +3499,11 @@ function wireConnectorManagement(connectors) {
             endpoint: (f.get("endpoint") || "").trim(),
             sender: (f.get("sender") || "").trim(),
             credentialsRef: (f.get("credentialsRef") || "").trim(),
+            // A SQL connector's whole configuration is this string, so checking it
+            // before it is sealed is the only moment the operator can still fix it in
+            // the field they are looking at. The field is disabled for other kinds, so
+            // FormData carries nothing for them.
+            connectionString: (f.get("connectionString") || "").trim(),
           });
           testOut.className = "conn-test-result " + (res.ok ? "ok" : "err");
           testOut.textContent = (res.ok ? "✓ " : "✕ ") + (res.detail || (res.ok ? "Works." : "Failed."));
@@ -3545,13 +3555,18 @@ function wireConnectorManagement(connectors) {
           return;
         } else if (act === "test") {
           // Empty recipient = stop at the door (connect, authenticate). A recipient
-          // makes it a real send, which is the only thing that proves delivery.
-          const to = window.prompt(
-            `Test "${c.name}".\n\nSend a test message to which address?\nLeave empty to only check the connection and credential.`, "");
-          if (to == null) return;
+          // makes it a real send, which is the only thing that proves delivery. Only
+          // mail has that second half: a database check dials and stops, because the
+          // equivalent of "send one to see" would be running a statement.
+          let to = "";
+          if (c.kind === "mail") {
+            to = window.prompt(
+              `Test "${c.name}".\n\nSend a test message to which address?\nLeave empty to only check the connection and credential.`, "");
+            if (to == null) return;
+          }
           // The menu the button was in is already gone by now, so a disabled button is
-          // no longer the feedback it used to be: a mail check can take seconds, and
-          // without a word here nothing at all happens until the result lands.
+          // no longer the feedback it used to be: a check can take seconds, and without
+          // a word here nothing at all happens until the result lands.
           toast(`Checking "${c.name}"…`);
           btn.disabled = true;
           try {
