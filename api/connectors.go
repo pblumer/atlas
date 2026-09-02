@@ -563,6 +563,17 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, msg)
 		return
 	}
+	// And the one rule a pure validator cannot state, because it depends on a stored
+	// setting: whether a database needs a connection string at all. The read rides the
+	// run loop, which owns the settings store (I3).
+	if isSQLConnectorKind(p.Kind) {
+		var msg string
+		s.do(func() { msg = s.sqlCredentialProblemLocked(&p) })
+		if msg != "" {
+			httpapi.Error(w, http.StatusBadRequest, msg)
+			return
+		}
+	}
 	enabled := true
 	if p.Enabled != nil {
 		enabled = *p.Enabled

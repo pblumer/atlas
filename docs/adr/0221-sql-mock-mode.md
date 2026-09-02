@@ -1,6 +1,8 @@
 # ADR-0221: A database task runs against seeded answers, not against a SQL engine
 
-- **Status:** Proposed
+- **Status:** Proposed (amended 2026-09-02: the switch is in the Console — an org-wide
+  setting with the seed stored beside it, restarting the supervised SQL workers on save,
+  which is the follow-up the original record named as not built.)
 - **Date:** 2026-09-02
 - **Deciders:** Atlas maintainers
 
@@ -125,10 +127,8 @@ Stated plainly so it is not rediscovered as a surprise:
   Worker, so `ATLAS_<PRODUCT>_CONNECTORS` is still what a task resolves against — mock
   mode removes the DSN, not the name. A worker in mock mode with no names parks like
   any other unconfigured kind.
-- **The Console cannot switch it.** Unlike the AD mock, there is no settings toggle: the
-  supervised path inherits the host's environment, so an operator who sets
-  `ATLAS_MSSQL_MOCK=1` on the server gets it, and nothing else was built. A Console
-  switch is a follow-up, not a gap in this record.
+- **The Console can switch it** — see the amendment below. The original record shipped
+  the environment variables only, and named a Console switch as the follow-up.
 
 ### The seed file
 
@@ -175,6 +175,80 @@ that is a typo in something the operator wrote and is fixed by being told.
 - **Follow-ups / risks to watch:** a Console switch and a view of the journal, as the AD
   mock has (ADR-0213). Whether the whitespace-and-case-only matching rule stays right as
   people write longer statements.
+
+## Amendment (2026-09-02): the switch is in the Console
+
+The original record shipped `ATLAS_<PRODUCT>_MOCK` and nothing else, and said a Console
+switch was a follow-up. This is that follow-up, and it is
+[ADR-0193](0193-ad-mock-in-the-console.md) applied unchanged: the decision
+that the mockup belongs to the *operator* rather than to the model stands — this only
+moves where the operator reaches it, because a variable set once at start is the wrong
+ceremony for a thing you flip while trying a process out.
+
+**Console → Workers → Databases**: a checkbox and the prepared answers, stored as one
+org-wide setting. Saving restarts the supervised SQL workers holding it; Atlas keeps
+running.
+
+Three things follow from the AD switch and are taken over wholesale.
+
+- **Absence and a stored "off" are different states.** No record means nobody has decided
+  in the Console, so whatever the server was started with keeps deciding; a stored record
+  decides either way. That is what keeps an existing installation working exactly as it
+  did until somebody touches the switch — and it is why a switch reading "off" while the
+  worker still simulates is a state this cannot reach.
+- **The seed is content, not a path.** The Console is org-wide and a path typed there
+  belongs to whichever host happens to run the worker, which is the mistake
+  [ADR-0202](0202-atlas-manages-the-ad-mock-seed.md) already corrected once. Atlas stores
+  the JSON and writes the file the worker reads, named by a digest of its own content —
+  which is not caching: the supervisor restarts a child only when its rendered
+  environment differs, so a fixed filename would hand an unchanged `MOCK_SEED` to a
+  worker that then kept answering from yesterday's seed.
+- **The seed is parsed where somebody is looking.** `sqldb.ParseMockSeed` runs on save,
+  so a typo is refused at the form with the seed's own complaint. The worker parses it
+  again and degrades to an unseeded mock if it cannot, which stays right *there* — a
+  restart loop over an optional file is the outage ADR-0202 paid for — and is the wrong
+  answer *here*, where the person who can fix it is waiting.
+
+### One switch, three products
+
+As the AD switch covers every directory at once. Mocking SQL Server while really writing
+to PostgreSQL is a half-state whose whole risk is that it looks like a full mockup run,
+and one seed serves all three because a statement written with `@p1` and one written
+with `$1` are different statements and cannot collide.
+
+### What had to give way for it to work at all
+
+Two rules were correct for a real database and wrong for a mocked one, and a switch that
+did not move them would have been a checkbox with nothing behind it.
+
+- **A worker record with no secret was left out of `CONNECTORS`.** That is right
+  normally — a name the worker is told to serve with no DSN behind it is exactly the
+  misconfiguration it refuses to start on — and in mockup mode it means the mockup
+  serves no name a task can address. In mockup mode the name is rendered and the DSN is
+  not.
+- **Creating a database worker demanded a connection string.** Also right normally: it
+  is the whole configuration, so a record without one is almost always somebody who lost
+  the paste. In mockup mode it is a credential for a database nobody will dial — and it
+  is precisely the state an operator is in when they turn the mockup on *because* they
+  have no database. The demand now depends on the switch, which is why it moved out of
+  the static validator table and into a method that can read it. A connection string
+  given anyway is still sealed and kept: the mockup is a thing you turn off again.
+
+### Consequences of the amendment
+
+- **Positive:** trying a database process needs no deployment change and no restart —
+  the path from "I have a model" to "I have watched it run" no longer passes through a
+  unit file. The seed is validated where it is written and stored where the worker will
+  find it.
+- **Negative / trade-offs accepted:** the engine now stores a document that describes a
+  production schema (statements and column names, and whatever rows an operator pasted).
+  It is admin-only on read for that reason, like the AD seed. And there is one more place
+  the answer to "is this thing mocked?" can come from — the switch is the authority when
+  set, and the host environment when it is not, which is one indirection an operator has
+  to hold.
+- **Follow-ups / risks to watch:** the mock's journal — what a process actually asked —
+  is still only in the worker's log. The AD mockup grew a Console view for exactly that
+  ([ADR-0213](0213-ad-mock-directory-in-the-console.md)) and this will want one.
 
 ## Pros and cons of the options
 

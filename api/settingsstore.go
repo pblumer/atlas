@@ -80,6 +80,37 @@ type adMockSetting struct {
 	SeedEntries int `json:"seedEntries,omitempty"`
 }
 
+// sqlMockSetting is the org-wide database mockup switch (ADR-0221).
+// It is the AD switch with a seed of *answers* in place of a seed of entries, and it
+// obeys the same two rules.
+//
+// Absence and a stored "off" are different states. No file means the operator has not
+// decided here, so whatever ATLAS_MSSQL_MOCK the server was started with keeps
+// deciding; a stored record decides, either way. That is what keeps an existing
+// installation working exactly as it did until somebody touches the switch.
+//
+// And it is one switch for all three products, as the AD one is one switch for all
+// directories. Mocking SQL Server while really writing to PostgreSQL is a half-state
+// whose whole risk is that it looks like a full mockup run — and one seed serves all
+// three, because a statement written with @p1 and one written with $1 are different
+// statements and cannot collide.
+type sqlMockSetting struct {
+	// Enabled turns mockup mode on for every SQL worker this Atlas supervises.
+	Enabled bool `json:"enabled"`
+
+	// Seed is the answers the mock starts from, as the JSON document
+	// [sqldb.ParseMockSeed] reads. Atlas owns the file the worker reads it from: the
+	// Console is org-wide and a path typed there belongs to whichever host happens to
+	// run the worker, which is the mistake ADR-0202 already corrected for the AD seed.
+	Seed string `json:"seed,omitempty"`
+	// SeedName is the file an operator uploaded the seed from. Display only — it says
+	// which one is loaded, and never reaches the worker.
+	SeedName string `json:"seedName,omitempty"`
+	// SeedAnswers is what the seed parsed to when it was saved, so the Console can say
+	// "12 answers" rather than leaving the operator to trust a silent upload.
+	SeedAnswers int `json:"seedAnswers,omitempty"`
+}
+
 // settingsStore persists org-wide UI settings as JSON sidecar files, using the
 // same atomic-write + directory-fsync discipline as the other sidecar stores
 // (ADR-0019/0041). Each setting is a singleton — one instance-wide record, not a
@@ -91,6 +122,7 @@ type settingsStore struct {
 	file     string // theme.json
 	regFile  string // registration.json
 	adFile   string // admock.json
+	sqlFile  string // sqlmock.json
 	oidcFile string // oidcmapping.json
 	nodeFile string // node.json
 }
@@ -105,6 +137,7 @@ func newSettingsStore(dir string) (*settingsStore, error) {
 		file:     filepath.Join(dir, "theme.json"),
 		regFile:  filepath.Join(dir, "registration.json"),
 		adFile:   filepath.Join(dir, "admock.json"),
+		sqlFile:  filepath.Join(dir, "sqlmock.json"),
 		oidcFile: filepath.Join(dir, "oidcmapping.json"),
 		nodeFile: filepath.Join(dir, "node.json"),
 	}, nil
@@ -346,6 +379,85 @@ func (s *settingsStore) writeADSeed(a adMockSetting) error {
 		}
 		if err := os.Remove(old); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("settingsstore: remove stale ad mock seed: %w", err)
+		}
+	}
+	return sidecar.FsyncDir(s.dir)
+}
+
+// getSQLMock returns the stored database mockup switch and whether a record exists. A
+// missing file returns (zero, false, nil): nobody has decided in the Console, so the
+// server's own environment still decides.
+func (s *settingsStore) getSQLMock() (sqlMockSetting, bool, error) {
+	data, err := os.ReadFile(s.sqlFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return sqlMockSetting{}, false, nil
+		}
+		return sqlMockSetting{}, false, fmt.Errorf("settingsstore: read sql mock: %w", err)
+	}
+	var m sqlMockSetting
+	if err := json.Unmarshal(data, &m); err != nil {
+		return sqlMockSetting{}, false, fmt.Errorf("settingsstore: decode sql mock: %w", err)
+	}
+	return m, true, nil
+}
+
+// sqlSeedPrefix names the files a mock database's seeded answers are written to.
+const sqlSeedPrefix = "sqlmock-seed-"
+
+// sqlSeedPath is the file a supervised worker reads the seed from. It carries a digest
+// of the seed's own content for the reason adSeedPath does: the supervisor restarts a
+// child only when its rendered *environment* differs, so a fixed filename would hand an
+// unchanged ATLAS_<PRODUCT>_MOCK_SEED to a worker that then kept answering from
+// yesterday's seed after an operator replaced it. Naming the file by its content makes
+// the variable change exactly when the content does.
+//
+// Empty when the setting carries no seed: there is then nothing to point a worker at.
+// A mock with no answers is a legitimate state — it refuses every statement, naming
+// each one, which is how an operator discovers what to seed — but it is reached by
+// pointing at no file rather than at an empty one.
+func (s *settingsStore) sqlSeedPath(m sqlMockSetting) string {
+	if strings.TrimSpace(m.Seed) == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(m.Seed))
+	return filepath.Join(s.dir, sqlSeedPrefix+hex.EncodeToString(sum[:8])+".json")
+}
+
+// saveSQLMock writes the switch durably, overwriting any previous value. A stored
+// Enabled=false is a real value — the operator turning the mockup off — and not the
+// same as no record at all.
+//
+// The seed lands before the record, as the AD one does: the worker is restarted off the
+// back of this save, and a record naming a file that is not there yet is an outage.
+func (s *settingsStore) saveSQLMock(m sqlMockSetting) error {
+	if err := s.writeSQLSeed(m); err != nil {
+		return err
+	}
+	return sidecar.WriteJSON(s.dir, s.sqlFile, m)
+}
+
+// writeSQLSeed puts the seed on disk under its content-addressed name and removes any
+// seed file that is not the current one — including all of them when the operator
+// cleared the seed. A stale one is not merely untidy: a worker restarted with an older
+// environment would still find it and answer from a seed nobody asked for.
+func (s *settingsStore) writeSQLSeed(m sqlMockSetting) error {
+	want := s.sqlSeedPath(m)
+	if want != "" {
+		if err := sidecar.WriteFile(s.dir, want, []byte(m.Seed)); err != nil {
+			return err
+		}
+	}
+	olds, err := filepath.Glob(filepath.Join(s.dir, sqlSeedPrefix+"*"))
+	if err != nil {
+		return fmt.Errorf("settingsstore: list sql mock seeds: %w", err)
+	}
+	for _, old := range olds {
+		if old == want {
+			continue
+		}
+		if err := os.Remove(old); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("settingsstore: remove stale sql mock seed: %w", err)
 		}
 	}
 	return sidecar.FsyncDir(s.dir)
