@@ -508,7 +508,7 @@ _Changed_ / _Removed_ for each version.
   minute, which `>=` re-reads, so the read moves without skipping anything. A page whose
   issues *all* share one minute — which no minute-granular cursor can page through —
   steps past that minute and logs `inbound_watch.minute_overflowed` rather than re-reading
-  it for ever ([ADR-draft-jira-read-bounds-and-progress](docs/adr/draft-jira-read-bounds-and-progress.md)).
+  it for ever ([ADR-0227](docs/adr/0227-jira-read-bounds-and-progress.md)).
 
 - **A jira watch polled every two seconds instead of every minute.** ADR-0214 gives a
   watch a `pollSeconds` of its own and a *kind's default* for one that states none —

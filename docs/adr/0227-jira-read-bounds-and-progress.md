@@ -1,4 +1,4 @@
-# ADR-DRAFT: A Jira read is bounded and moves forward
+# ADR-0227: A Jira read is bounded and moves forward
 
 - **Status:** Proposed
 - **Date:** 2026-09-02
