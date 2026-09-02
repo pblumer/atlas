@@ -345,6 +345,12 @@ func (c *ProcessingContext) markConditionDirty(scopeKey uint64) {
 // value), so it allocates for its strings — data objects are runtime data, not
 // hot-path token movement (ADR-0053). The event is keyed by the owning scope.
 func (c *ProcessingContext) AppendDataObjectEvent(intent model.Intent, v model.DataObjectValue) {
+	// Stamped here for the same reason a variable's producer is (ADR-0219): one funnel
+	// no write path can forget, and a value read out of one object and written into
+	// another can never inherit the producer of the write it came from. The seeding at
+	// instance creation runs on the instance's own command, which names no element, so
+	// it correctly attributes to nobody.
+	v.ProducerKey = c.producer
 	c.appendEvent(v.ScopeKey, model.VTDataObject, intent, inflightValue{dataObject: v})
 }
 

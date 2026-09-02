@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas data-object type e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, for the
+         data object's Type field (ADR-draft-process-information-model, slice 3). The
+         field writes BPMN's itemSubjectRef, which is a *reference* attribute in the
+         moddle rather than a plain string — so the only way to know it survives is to
+         set it and read the exported XML back, which is what the deploy sends. The
+         mocked application has an information model with two classes, so the
+         suggestions and the "not modelled yet" note both have something to work on. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      // DO_order already declares a modelled type; DO_claim declares one nothing
+      // models, so the panel has to tell them apart. DO_incident is typed the way a
+      // MID Innovator export types one: a GUID reference to an itemDefinition that
+      // carries no structureRef and puts the name in its own namespace.
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bpanda="http://www.smartfacts.com" id="Definitions_do" targetNamespace="http://atlas/bpmn">
+  <bpmn:itemDefinition id="_853994e9-12f5-9cef-bf69-ca3e2b7cb6a8">
+    <bpmn:extensionElements>
+      <bpanda:property name="Name" value="Incident" id="property_ELNamedElement_Name"/>
+    </bpmn:extensionElements>
+  </bpmn:itemDefinition>
+  <bpmn:process id="sales" name="Sales" isExecutable="true">
+    <bpmn:dataObject id="DO_order" name="order" itemSubjectRef="Order"/>
+    <bpmn:dataObjectReference id="Ref_order" name="order" dataObjectRef="DO_order"/>
+    <bpmn:dataObject id="DO_claim" name="claim" itemSubjectRef="Claim"/>
+    <bpmn:dataObjectReference id="Ref_claim" name="claim" dataObjectRef="DO_claim"/>
+    <bpmn:dataObject id="DO_note" name="note"/>
+    <bpmn:dataObjectReference id="Ref_note" name="note" dataObjectRef="DO_note"/>
+    <bpmn:dataObject id="DO_incident" name="incident" itemSubjectRef="_853994e9-12f5-9cef-bf69-ca3e2b7cb6a8"/>
+    <bpmn:dataObjectReference id="Ref_incident" name="incident" dataObjectRef="DO_incident"/>
+    <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:task id="Activity_1" name="Erfassen"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing></bpmn:task>
+    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Activity_1"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Activity_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="sales">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_1_di" bpmnElement="Activity_1"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="420" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Ref_order_di" bpmnElement="Ref_order"><dc:Bounds x="272" y="250" width="36" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Ref_claim_di" bpmnElement="Ref_claim"><dc:Bounds x="352" y="250" width="36" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Ref_note_di" bpmnElement="Ref_note"><dc:Bounds x="432" y="250" width="36" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Ref_incident_di" bpmnElement="Ref_incident"><dc:Bounds x="512" y="250" width="36" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      window.__validated = [];
+      const api = async (method, url) => {
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/processes$/.test(url)) return [];
+        if (method === "GET" && /\/drafts$/.test(url)) return [];
+        if (method === "GET" && /\/decisions/.test(url)) return [];
+        if (method === "GET" && /\/infomodel\/models\?/.test(url)) return [{ id: "m1", name: "Sales data" }];
+        if (method === "GET" && /\/infomodel\/models\/m1$/.test(url)) {
+          return { id: "m1", classes: [{ id: "c1", name: "Order" }, { id: "c2", name: "Customer" }], associations: [] };
+        }
+        if (method === "POST" && /\/validate/.test(url)) {
+          window.__validated.push(url);
+          return { version: "test", problems: [] };
+        }
+        return {};
+      };
+
+      window.__mount = () => mountEditor(view, { api, toast: noop, key: 42, projectId: "app-1" });
+      window.__select = (id) =>
+        window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get(id));
+      window.__xml = async () => (await window.__atlasModeler.saveXML({ format: true })).xml;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

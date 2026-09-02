@@ -47,6 +47,7 @@ import (
 
 	"github.com/pblumer/atlas/api/collab"
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/infomodel"
 	"github.com/pblumer/atlas/api/panorama"
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/checkpoint"
@@ -246,7 +247,8 @@ type Server struct {
 	playgroundTTL, playgroundSweep time.Duration
 	// panorama is the application-owned ArchiMate model library (ADR-0189),
 	// isolated as a per-area service under ADR-0147.
-	panorama *panorama.Service
+	panorama  *panorama.Service
+	infomodel *infomodel.Service
 	// remoteNodes is what peer Atlas servers last said about themselves
 	// (ADR-0189 §6, P4c). It carries its own lock rather than living on the run
 	// loop, because it is written by goroutines waiting on the network and putting
@@ -1033,6 +1035,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	infomodelStore, err := infomodel.NewStore(filepath.Join(dataDir, "information-models"))
+	if err != nil {
+		return nil, err
+	}
 	releases, err := newReleaseStore(filepath.Join(dataDir, "releases"))
 	if err != nil {
 		return nil, err
@@ -1247,6 +1253,27 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.collectFacts,
 	).WithContextResolver(s.collectContext)
 	s.panoramaMesh = panorama.NewMesh(s.runLoop, s.collectLandscape, s.panorama.OverlaysOnLoop, meshMaxNodes)
+	// The information model reuses the same process-application scope, for the same
+	// reason Panorama does: a second ACL would be a second thing to get wrong. The
+	// resolver runs only inside the service's loop turn, so authorization and model
+	// persistence stay under one writer (ADR-0147, I3).
+	s.infomodel = infomodel.New(
+		s.runLoop,
+		infomodelStore,
+		func(r *http.Request, applicationID string) (infomodel.ApplicationAccess, error) {
+			app, ok, err := s.projects.Get(applicationID)
+			if err != nil || !ok {
+				return infomodel.ApplicationAccess{Exists: ok}, err
+			}
+			role := app.effectiveRole(httpapi.PrincipalFrom(r.Context()), s.authEnabled)
+			return infomodel.ApplicationAccess{
+				Exists: true, CanView: scopeRank(role) >= scopeRank(ScopeRoleViewer),
+				CanEdit: scopeRank(role) >= scopeRank(ScopeRoleEditor), Protected: app.Protected,
+			}, nil
+		},
+		token.New,
+		time.Now,
+	)
 	for _, opt := range opts {
 		opt(s)
 	}

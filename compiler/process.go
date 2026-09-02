@@ -1027,6 +1027,17 @@ type CompiledDataObject struct {
 	IsCollection bool
 }
 
+// CompiledDataStore is one BPMN data store a process names: a place instances of a
+// class outlive the process that made them. Name is the store's own name — the
+// <dataStore>'s where a <dataStoreReference> resolves to one, the reference's own
+// otherwise — because the reference is one view on a diagram while the store is the
+// thing every process means. ElementId is the reference's BPMN id, so a finding
+// about the store can be marked on the box that named it. Both are interned indices.
+type CompiledDataStore struct {
+	Name      int32
+	ElementId int32
+}
+
 // DataOutputAssociation is one compiled <dataOutputAssociation> on an activity: it
 // writes a value into a data object and advances that object's data state when the
 // activity completes (ADR-0058). DataObject is the interned target data-object
@@ -1119,6 +1130,7 @@ type CompiledProcess struct {
 	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
 	timerStarts        []TimerStartDetail
 	dataObjects        []CompiledDataObject
+	dataStores         []CompiledDataStore
 	dataOutAssocs      []DataOutputAssociation // shared: output associations grouped by activity node
 	dataInAssocs       []DataInputAssociation  // shared: input associations grouped by activity node
 	ioInputs           []IOMapping             // shared: zeebe:ioMapping inputs grouped by activity node
@@ -1710,6 +1722,14 @@ func (p *CompiledProcess) StartEvents() []int32 { return p.startEvents }
 // data seeded under each instance's scope at creation (ADR-0053). Empty for a
 // process that declares none. String fields are interned; resolve with Intern.
 func (p *CompiledProcess) DataObjects() []CompiledDataObject { return p.dataObjects }
+
+// DataStores returns the data stores this process names — where its data lives
+// beyond one instance (ADR-draft-process-information-model). Like a data object a
+// store is not a flow node: no token passes through it, so it carries no behavior
+// and adds nothing to the dispatch table. The engine does not read this table at
+// all; it exists so a deploy can resolve the store against the owning application's
+// information model and say whether the sentence the model wrote is true.
+func (p *CompiledProcess) DataStores() []CompiledDataStore { return p.dataStores }
 
 // DataOutputAssociations returns the data-output associations of activity node id,
 // as a slice into the shared array (no allocation). Empty for a node with none. The

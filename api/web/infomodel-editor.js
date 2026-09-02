@@ -1,0 +1,980 @@
+// The UML class canvas: the authoring surface for a process information model
+// (ADR-draft-process-information-model, slice 2).
+//
+// Two decisions shape everything here.
+//
+// **The subset is served, not carried.** Which class kinds exist, which
+// relationships may run between which of them, which multiplicities and primitive
+// types there are — all of it arrives from /api/v1/infomodel/subset. This file
+// keeps no copy. Two copies of a rule matrix is how you get a canvas that lets
+// somebody draw an arrow the server then rejects, and the refusal message the
+// server would have given is the one thing that teaches the notation.
+//
+// **The document is saved whole.** A canvas edits a graph — moving a box, retyping
+// an attribute, redrawing a line — and a patch language for that would be a second
+// way of saying everything the document already says. So the editor holds the model,
+// and Save sends it back against the revision it read.
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// Box geometry. A class is as wide as it needs to be and as tall as its members
+// make it, so the diagram's shape carries information rather than a grid does.
+const BOX_W = 200;
+const HEAD_H = 34;
+const ROW_H = 20;
+const PAD = 10;
+// A store is one line about where a class is kept, so it is a band rather than a box.
+const STORE_H = 52;
+
+const el = (tag, attrs = {}, text) => {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+  if (text != null) node.textContent = text;
+  return node;
+};
+
+export async function mountClassDiagram(root, { api, toast, id }) {
+  root.innerHTML = `<div class="card"><p class="muted">Loading class diagram…</p></div>`;
+
+  let doc, subset;
+  try {
+    [doc, subset] = await Promise.all([
+      api("GET", `/api/v1/infomodel/models/${encodeURIComponent(id)}`),
+      api("GET", "/api/v1/infomodel/subset"),
+    ]);
+  } catch (e) {
+    root.innerHTML = `<div class="card empty"><h1>Could not open this model</h1>
+      <p class="muted">${esc(e.message)}</p><a class="btn ghost" href="#/data">← Information model</a></div>`;
+    return;
+  }
+
+  doc.stores = doc.stores || [];
+  const state = {
+    model: doc,
+    validation: doc.validation || { valid: true, findings: [] },
+    selected: null,      // {kind: "class"|"association", id}
+    connecting: null,    // {kind, fromId} while a relationship is being drawn
+    dirty: false,
+    schemaFor: "",       // class whose JSON Schema projection is open
+  };
+
+  const stereotypeOf = (name) => subset.stereotypes.find((s) => s.stereotype === name) || subset.stereotypes[0];
+  const storeModeOf = (m) => (subset.storeModes || []).find((x) => x.mode === m) || (subset.storeModes || [])[0] || {};
+  const kindOf = (name) => subset.associationKinds.find((k) => k.kind === name);
+  const classById = (cid) => state.model.classes.find((c) => c.id === cid);
+  const allowed = (from, to) => subset.matrix[`${from}>${to}`] || [];
+
+  // A class is only as tall as its members; an enumeration lists literals where the
+  // others list attributes.
+  const rowsOf = (c) => (stereotypeOf(c.stereotype).hasAttributes ? c.attributes || [] : c.literals || []);
+  const boxH = (c) => HEAD_H + PAD + Math.max(1, rowsOf(c).length) * ROW_H + PAD / 2;
+
+  root.innerHTML = `
+    <div class="im-editor" id="im-editor">
+      <div class="im-bar">
+        <a class="btn neutral" href="#/data" title="Back to the information models">← Model</a>
+        <b class="im-title" id="im-name">${esc(state.model.name)}</b>
+        <span class="im-rev muted" id="im-rev">r${state.model.revision}</span>
+        <span class="im-palette" id="im-palette"></span>
+        <span style="flex:1"></span>
+        <span class="im-dirty" id="im-dirty" hidden>unsaved</span>
+        <button class="btn" id="im-save" disabled title="Save the diagram (Ctrl/⌘ + S)">Save</button>
+      </div>
+      <div class="im-body">
+        <div class="im-canvas" id="im-canvas"></div>
+        <div class="im-side" id="im-side"></div>
+      </div>
+      <div class="im-problems" id="im-problems"></div>
+    </div>`;
+
+  const canvasEl = root.querySelector("#im-canvas");
+  const sideEl = root.querySelector("#im-side");
+  const problemsEl = root.querySelector("#im-problems");
+  const saveBtn = root.querySelector("#im-save");
+  const dirtyEl = root.querySelector("#im-dirty");
+
+  // ---- palette -------------------------------------------------------------
+  // Each kind carries the sentence that tells a modeler which one to pick. The
+  // difference between a business object and a value type is the single most
+  // consequential choice in this metamodel, and a palette of three bare words is
+  // how it gets made by accident.
+  root.querySelector("#im-palette").innerHTML = subset.stereotypes.map((s) =>
+    `<button type="button" class="im-add" data-stereotype="${esc(s.stereotype)}"
+       title="${esc(s.meaning)}">+ ${esc(s.label)}</button>`).join("") +
+    `<button type="button" class="im-add store" data-add="store"
+       title="Where instances of a class outlive the process that made them. Declared once here and named by every process that reaches it — which is the thing BPMN's dataStoreReference gestures at and then says nothing about.">+ Data store</button>` +
+    subset.associationKinds.map((k) =>
+      `<button type="button" class="im-connect" data-kind="${esc(k.kind)}"
+         title="${esc(k.rule)}">${esc(k.label)}</button>`).join("");
+
+  function markDirty() {
+    state.dirty = true;
+    dirtyEl.hidden = false;
+    saveBtn.disabled = false;
+  }
+
+  // ---- rendering -----------------------------------------------------------
+  function render() {
+    renderCanvas();
+    renderSide();
+    renderProblems();
+    root.querySelectorAll(".im-connect").forEach((b) =>
+      b.classList.toggle("active", !!state.connecting && state.connecting.kind === b.dataset.kind));
+    canvasEl.classList.toggle("connecting", !!state.connecting);
+  }
+
+  function renderCanvas() {
+    const classes = state.model.classes;
+    const stores = state.model.stores || [];
+    const width = Math.max(900, ...classes.map((c) => c.x + BOX_W + 60), ...stores.map((st) => st.x + BOX_W + 60));
+    const height = Math.max(520, ...classes.map((c) => c.y + boxH(c) + 60), ...stores.map((st) => st.y + STORE_H + 60));
+
+    const svg = el("svg", { class: "im-svg", width, height, viewBox: `0 0 ${width} ${height}` });
+    svg.appendChild(markerDefs());
+
+    if (!classes.length) {
+      svg.appendChild(el("text", { x: 40, y: 60, class: "im-hint" },
+        "No classes yet. Add a business object — an Order, a Customer, a Claim — and give it a business key."));
+    }
+
+    // Edges first so a box always covers a line rather than the other way round.
+    const edgeLayer = el("g", {});
+    for (const a of state.model.associations) drawAssociation(edgeLayer, a);
+    for (const st of stores) drawStoreLink(edgeLayer, st);
+    svg.appendChild(edgeLayer);
+    for (const c of classes) svg.appendChild(drawClass(c));
+    for (const st of stores) svg.appendChild(drawStore(st));
+
+    canvasEl.innerHTML = "";
+    canvasEl.appendChild(svg);
+  }
+
+  // markerDefs holds the three line ends UML gives meaning to: a filled diamond for
+  // ownership, a hollow one for grouping, a hollow triangle for "is a kind of".
+  function markerDefs() {
+    const defs = el("defs", {});
+    const marker = (mid, path, cls, refX, w, h) => {
+      const m = el("marker", {
+        id: mid, markerWidth: w, markerHeight: h, refX, refY: h / 2,
+        orient: "auto-start-reverse", markerUnits: "userSpaceOnUse",
+      });
+      m.appendChild(el("path", { d: path, class: cls }));
+      return m;
+    };
+    defs.appendChild(marker("im-diamond-filled", "M0,6 L8,1 L16,6 L8,11 Z", "im-mark filled", 16, 18, 12));
+    defs.appendChild(marker("im-diamond-open", "M0,6 L8,1 L16,6 L8,11 Z", "im-mark open", 16, 18, 12));
+    defs.appendChild(marker("im-triangle", "M0,1 L14,7 L0,13 Z", "im-mark open", 14, 16, 14));
+    return defs;
+  }
+
+  // border clips a line from one box's centre to another's, so an edge touches the
+  // rectangle rather than disappearing under it.
+  function border(c, towardX, towardY) {
+    const cx = c.x + BOX_W / 2;
+    const cy = c.y + boxH(c) / 2;
+    const dx = towardX - cx;
+    const dy = towardY - cy;
+    if (!dx && !dy) return { x: cx, y: cy };
+    const hw = BOX_W / 2;
+    const hh = boxH(c) / 2;
+    const scale = Math.min(hw / Math.abs(dx || 1e-6), hh / Math.abs(dy || 1e-6));
+    return { x: cx + dx * scale, y: cy + dy * scale };
+  }
+
+  function drawAssociation(layer, a) {
+    const from = classById(a.from.classId);
+    const to = classById(a.to.classId);
+    if (!from || !to) return;
+    const g = el("g", { class: `im-edge${state.selected && state.selected.kind === "association" && state.selected.id === a.id ? " selected" : ""}` });
+    g.dataset.assoc = a.id;
+
+    let path, labelAt, fromAt, toAt;
+    if (from.id === to.id) {
+      // A class related to its own kind loops out of its right edge and back into
+      // its top — the shape UML uses, and the only one that stays readable.
+      const x = from.x + BOX_W;
+      const y = from.y + boxH(from) / 2;
+      const tx = from.x + BOX_W - 40;
+      const ty = from.y;
+      path = `M${x},${y} C${x + 70},${y} ${tx + 70},${ty - 60} ${tx},${ty}`;
+      labelAt = { x: x + 60, y: y - 34 };
+      fromAt = { x: x + 14, y: y - 6 };
+      toAt = { x: tx + 6, y: ty - 10 };
+    } else {
+      const p1 = border(from, to.x + BOX_W / 2, to.y + boxH(to) / 2);
+      const p2 = border(to, from.x + BOX_W / 2, from.y + boxH(from) / 2);
+      path = `M${p1.x},${p1.y} L${p2.x},${p2.y}`;
+      labelAt = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 - 6 };
+      fromAt = { x: p1.x + (p2.x - p1.x) * 0.16, y: p1.y + (p2.y - p1.y) * 0.16 - 6 };
+      toAt = { x: p1.x + (p2.x - p1.x) * 0.84, y: p1.y + (p2.y - p1.y) * 0.84 - 6 };
+    }
+
+    // The marker sits at the end the meaning belongs to: at the whole for a
+    // composition or an aggregation, at the general class for a generalization.
+    const line = el("path", { d: path, class: `im-line ${a.kind}`, fill: "none" });
+    if (a.kind === "composition") line.setAttribute("marker-start", "url(#im-diamond-filled)");
+    if (a.kind === "aggregation") line.setAttribute("marker-start", "url(#im-diamond-open)");
+    if (a.kind === "generalization") line.setAttribute("marker-end", "url(#im-triangle)");
+    g.appendChild(el("path", { d: path, class: "im-line-hit", fill: "none" }));
+    g.appendChild(line);
+
+    if (a.name) g.appendChild(el("text", { x: labelAt.x, y: labelAt.y, class: "im-edge-label" }, a.name));
+    // A generalization's ends carry no roles or multiplicities: "is a kind of" is
+    // not a counted relationship.
+    if (a.kind !== "generalization") {
+      const endLabel = (end, at) => {
+        const parts = [end.role, end.multiplicity].filter(Boolean).join(" ");
+        if (parts) g.appendChild(el("text", { x: at.x, y: at.y, class: "im-end-label" }, parts));
+      };
+      endLabel(a.from, fromAt);
+      endLabel(a.to, toAt);
+    }
+    layer.appendChild(g);
+  }
+
+  // A data store is drawn as the notation draws a persistent thing: an open-ended
+  // cylinder, unmistakably not a class. It says what it holds and what keeps it,
+  // because those are the two facts a store *is*.
+  function drawStore(st) {
+    const selected = state.selected && state.selected.kind === "store" && state.selected.id === st.id;
+    const bad = state.validation.findings.some((f) => f.storeId === st.id);
+    const g = el("g", {
+      class: `im-store${selected ? " selected" : ""}${bad ? " invalid" : ""}${state.connecting ? " unreachable" : ""}`,
+      transform: `translate(${st.x},${st.y})`,
+    });
+    g.dataset.store = st.id;
+    g.dataset.name = st.name || "";
+    g.appendChild(el("path", {
+      class: "im-store-body",
+      d: `M0,10 A${BOX_W / 2},10 0 0 1 ${BOX_W},10 L${BOX_W},${STORE_H - 10}` +
+        ` A${BOX_W / 2},10 0 0 1 0,${STORE_H - 10} Z`,
+    }));
+    g.appendChild(el("path", { class: "im-store-lip", fill: "none", d: `M0,10 A${BOX_W / 2},10 0 0 0 ${BOX_W},10` }));
+    g.appendChild(el("text", { x: BOX_W / 2, y: 30, class: "im-store-name", "text-anchor": "middle" },
+      st.name || "unnamed"));
+    const holds = st.class ? `«${storeModeOf(st.mode).mode || "read"}» ${st.class}` : "holds nothing yet";
+    g.appendChild(el("text", { x: BOX_W / 2, y: 44, class: "im-store-sub", "text-anchor": "middle" }, holds));
+    return g;
+  }
+
+  // The line from a store to the class it holds. It is not an association — nothing
+  // in the model relates those two — so it is drawn as the annotation it is.
+  function drawStoreLink(layer, st) {
+    const target = state.model.classes.find((c) => c.name === st.class);
+    if (!target) return;
+    const from = { x: st.x + BOX_W / 2, y: st.y + STORE_H / 2 };
+    const p = border(target, from.x, from.y);
+    const g = el("g", { class: "im-store-link" });
+    g.appendChild(el("path", { class: "im-store-line", fill: "none", d: `M${from.x},${from.y} L${p.x},${p.y}` }));
+    layer.appendChild(g);
+  }
+
+  function drawClass(c) {
+    const kind = stereotypeOf(c.stereotype);
+    const h = boxH(c);
+    const bad = state.validation.findings.some((f) => f.classId === c.id);
+    const selected = state.selected && state.selected.kind === "class" && state.selected.id === c.id;
+    const connectable = state.connecting
+      ? (state.connecting.fromId
+        ? allowed((classById(state.connecting.fromId) || {}).stereotype, c.stereotype).includes(state.connecting.kind)
+        : true)
+      : true;
+
+    const g = el("g", {
+      class: `im-class ${c.stereotype}${selected ? " selected" : ""}${bad ? " invalid" : ""}` +
+        `${state.connecting && !connectable ? " unreachable" : ""}`,
+      transform: `translate(${c.x},${c.y})`,
+    });
+    g.dataset.class = c.id;
+    // The name rides on the group as data so a test — and a future "find a class"
+    // box — can address one exactly, rather than by matching the text of a label
+    // that is a prefix of another class's.
+    g.dataset.name = c.name || "";
+
+    g.appendChild(el("rect", { x: 0, y: 0, width: BOX_W, height: h, rx: 6, class: "im-box" }));
+    g.appendChild(el("line", { x1: 0, y1: HEAD_H, x2: BOX_W, y2: HEAD_H, class: "im-sep" }));
+    // The stereotype rides above the name in guillemets, which is how UML says
+    // "this is what kind of classifier that is".
+    g.appendChild(el("text", { x: BOX_W / 2, y: 14, class: "im-stereo", "text-anchor": "middle" },
+      `«${kind.stereotype}»`));
+    g.appendChild(el("text", { x: BOX_W / 2, y: 28, class: "im-cname", "text-anchor": "middle" },
+      c.name || "unnamed"));
+
+    const rows = rowsOf(c);
+    if (!rows.length) {
+      g.appendChild(el("text", { x: PAD, y: HEAD_H + PAD + 12, class: "im-empty" },
+        kind.hasAttributes ? "no attributes yet" : "no literals yet"));
+    }
+    rows.forEach((row, i) => {
+      const y = HEAD_H + PAD + i * ROW_H + 13;
+      if (!kind.hasAttributes) {
+        g.appendChild(el("text", { x: PAD, y, class: "im-literal" }, row));
+        return;
+      }
+      const isKey = (c.identity || []).includes(row.name);
+      // The business key is marked on the box because it is the fact the whole model
+      // turns on: it is what makes Order#ORD-1 the same order in two processes.
+      const t = el("text", { x: PAD, y, class: `im-attr${isKey ? " key" : ""}` });
+      t.appendChild(el("tspan", { class: "im-attr-name" }, `${isKey ? "⚿ " : ""}${row.name}`));
+      t.appendChild(el("tspan", { class: "im-attr-type" }, `: ${row.type}`));
+      if (row.multiplicity && row.multiplicity !== "1") {
+        t.appendChild(el("tspan", { class: "im-attr-mult" }, ` [${row.multiplicity}]`));
+      }
+      g.appendChild(t);
+    });
+    return g;
+  }
+
+  // ---- problems ------------------------------------------------------------
+  // A finding says which of two things it is, and they are different answers: "this
+  // build does not author that" is a limit, "that is not a thing" is a mistake.
+  function renderProblems() {
+    const findings = state.validation.findings || [];
+    if (!findings.length) {
+      problemsEl.innerHTML = `<span class="im-ok">✓ The model is consistent.</span>`;
+      return;
+    }
+    problemsEl.innerHTML = `<div class="im-problem-head">${findings.length}
+        ${findings.length === 1 ? "problem" : "problems"}</div>` +
+      findings.map((f) => `<button type="button" class="im-problem ${esc(f.reason)}"
+          data-class="${esc(f.classId || "")}" data-assoc="${esc(f.associationId || "")}"
+          data-store="${esc(f.storeId || "")}"
+          title="${f.reason === "out-of-subset"
+            ? "Atlas does not author this. UML allows it; this build does not."
+            : "This is not something the notation can mean."}">
+          <span class="im-problem-tag">${f.reason === "out-of-subset" ? "not authored" : "invalid"}</span>
+          ${esc(f.message)}</button>`).join("");
+  }
+
+  // ---- the side panel ------------------------------------------------------
+  const storeById = (id) => (state.model.stores || []).find((s) => s.id === id);
+
+  function renderSide() {
+    if (state.schemaFor) return renderSchema();
+    if (!state.selected) return renderNothingSelected();
+    if (state.selected.kind === "store") {
+      const st = storeById(state.selected.id);
+      return st ? renderStorePanel(st) : renderNothingSelected();
+    }
+    if (state.selected.kind === "class") {
+      const c = classById(state.selected.id);
+      return c ? renderClassPanel(c) : renderNothingSelected();
+    }
+    const a = state.model.associations.find((x) => x.id === state.selected.id);
+    return a ? renderAssociationPanel(a) : renderNothingSelected();
+  }
+
+  function renderNothingSelected() {
+    sideEl.innerHTML = `
+      <div class="im-panel">
+        <h3>${esc(state.model.name)}</h3>
+        <p class="muted">${state.model.documentation
+          ? esc(state.model.documentation)
+          : "Select a class or a relationship to edit it, or add one from the toolbar."}</p>
+        <label class="im-field"><span>Documentation</span>
+          <textarea id="im-model-doc" rows="4"
+            placeholder="What this model covers — which part of the business these classes describe.">${esc(state.model.documentation || "")}</textarea></label>
+        <div class="im-note">
+          <b>This is a subset of UML.</b>
+          <ul>${subset.limits.map((l) => `<li><b>${esc(l.area)}.</b> ${esc(l.reason)}</li>`).join("")}</ul>
+        </div>
+      </div>`;
+  }
+
+  function renderClassPanel(c) {
+    const kind = stereotypeOf(c.stereotype);
+    const findings = state.validation.findings.filter((f) => f.classId === c.id);
+    const attrRows = (c.attributes || []).map((a, i) => `
+      <tr data-attr="${i}">
+        <td><input class="im-in" data-f="name" value="${esc(a.name)}" placeholder="name"/></td>
+        <td><select class="im-in" data-f="type">
+          ${subset.primitives.map((p) => `<option value="${esc(p.type)}"${p.type === a.type ? " selected" : ""}>${esc(p.label)}</option>`).join("")}
+          <optgroup label="Classes in this model">
+            ${state.model.classes.filter((x) => x.id !== c.id).map((x) =>
+              `<option value="${esc(x.name)}"${x.name === a.type ? " selected" : ""}>${esc(x.name)}</option>`).join("")}
+          </optgroup>
+          ${subset.primitives.some((p) => p.type === a.type) || state.model.classes.some((x) => x.name === a.type)
+            ? "" : `<option value="${esc(a.type)}" selected>${esc(a.type)} (unresolved)</option>`}
+        </select></td>
+        <td><select class="im-in" data-f="multiplicity">
+          ${subset.multiplicities.map((m) => `<option value="${esc(m.multiplicity)}"${m.multiplicity === a.multiplicity ? " selected" : ""}>${esc(m.multiplicity)}</option>`).join("")}
+        </select></td>
+        <td class="im-key-cell">${kind.hasIdentity
+          ? `<input type="checkbox" class="im-in" data-f="key" ${(c.identity || []).includes(a.name) ? "checked" : ""}
+               title="Part of the business key — what makes two of these the same one"/>`
+          : ""}</td>
+        <td><button type="button" class="icon-btn" data-act="del-attr" title="Remove">✕</button></td>
+      </tr>`).join("");
+
+    sideEl.innerHTML = `
+      <div class="im-panel">
+        <div class="im-panel-head"><h3>Class</h3>
+          <button type="button" class="btn ghost small" data-act="del-class">Delete</button></div>
+        <label class="im-field"><span>Name</span>
+          <input id="im-c-name" value="${esc(c.name)}" placeholder="Order"/></label>
+        <label class="im-field"><span>Kind</span>
+          <select id="im-c-stereo">
+            ${subset.stereotypes.map((s) => `<option value="${esc(s.stereotype)}"${s.stereotype === c.stereotype ? " selected" : ""}>${esc(s.label)}</option>`).join("")}
+          </select></label>
+        <p class="im-meaning">${esc(kind.meaning)}</p>
+        <label class="im-field"><span>Documentation</span>
+          <textarea id="im-c-doc" rows="3" placeholder="What this is, in the words the business uses.">${esc(c.documentation || "")}</textarea></label>
+
+        ${kind.hasAttributes ? `
+          <div class="im-panel-head"><h4>Attributes</h4>
+            <button type="button" class="btn ghost small" data-act="add-attr">+ Attribute</button></div>
+          <table class="im-attrs"><thead><tr>
+            <th>Name</th><th>Type</th><th>Card.</th><th title="Business key">⚿</th><th></th>
+          </tr></thead><tbody>${attrRows || `<tr><td colspan="5" class="muted">No attributes yet.</td></tr>`}</tbody></table>
+          ${kind.hasIdentity ? `<p class="im-hint-text"><b>The business key</b> is what makes two of these the
+            same one — <code>Order#ORD-1</code> in this process and in the next. It is the part BPMN has no
+            equivalent for, and what a data store and a cross-process lookup will resolve against.</p>` : ""}
+          <button type="button" class="btn ghost small" data-act="schema">View JSON Schema</button>
+        ` : `
+          <div class="im-panel-head"><h4>Literals</h4>
+            <button type="button" class="btn ghost small" data-act="add-literal">+ Literal</button></div>
+          <table class="im-attrs"><tbody>
+            ${(c.literals || []).map((lit, i) => `<tr data-lit="${i}">
+              <td><input class="im-in" data-f="literal" value="${esc(lit)}" placeholder="approved"/></td>
+              <td><button type="button" class="icon-btn" data-act="del-literal" title="Remove">✕</button></td>
+            </tr>`).join("") || `<tr><td class="muted">No literals yet.</td></tr>`}
+          </tbody></table>
+        `}
+
+        ${findings.length ? `<div class="im-panel-problems">${findings.map((f) =>
+          `<div class="im-problem ${esc(f.reason)}">${esc(f.message)}</div>`).join("")}</div>` : ""}
+      </div>`;
+  }
+
+  // A store is two sentences: which class it keeps, and what keeps it. The panel is
+  // shaped to make both of them hard to leave unsaid.
+  function renderStorePanel(st) {
+    const findings = state.validation.findings.filter((f) => f.storeId === st.id);
+    // Only a business object with a business key can be kept: a process reads from a
+    // store by naming which thing it wants, and nothing else names one.
+    const storable = state.model.classes.filter(
+      (c) => c.stereotype === "businessObject" && (c.identity || []).length > 0);
+    const chosen = state.model.classes.find((c) => c.name === st.class);
+    const keyless = chosen && !storable.includes(chosen);
+    sideEl.innerHTML = `
+      <div class="im-panel">
+        <div class="im-panel-head"><h3>Data store</h3>
+          <button type="button" class="btn ghost small" data-act="del-store">Delete</button></div>
+        <label class="im-field"><span>Name</span>
+          <input id="im-s-name" value="${esc(st.name)}" placeholder="Orders"/></label>
+        <label class="im-field"><span>Holds</span>
+          <select id="im-s-class">
+            <option value=""${st.class ? "" : " selected"}>— choose a class —</option>
+            ${storable.map((c) => `<option value="${esc(c.name)}"${c.name === st.class ? " selected" : ""}>${esc(c.name)}</option>`).join("")}
+            ${chosen && keyless ? `<option value="${esc(st.class)}" selected>${esc(st.class)} — cannot be kept</option>` : ""}
+            ${st.class && !chosen ? `<option value="${esc(st.class)}" selected>${esc(st.class)} (unresolved)</option>` : ""}
+          </select></label>
+        <p class="im-meaning">Only a <b>business object with a business key</b> can be kept in a store: a process
+          reads from one by naming which thing it wants, and the key is the only thing that names one.</p>
+        <label class="im-field"><span>Backed by <span class="muted">(a Worker)</span></span>
+          <input id="im-s-worker" value="${esc(st.worker || "")}" placeholder="clio-main"/></label>
+        <p class="im-meaning">The configured Worker that keeps it — a clio event store, a database, a SharePoint
+          list. Leave it empty while the store is drawn but not yet wired; a deploy says so rather than refusing.</p>
+        <label class="im-field"><span>Mode</span>
+          <select id="im-s-mode">
+            ${(subset.storeModes || []).map((m) => `<option value="${esc(m.mode)}"${m.mode === st.mode ? " selected" : ""}>${esc(m.label)}</option>`).join("")}
+          </select></label>
+        <p class="im-meaning">${esc(storeModeOf(st.mode).meaning || "")}</p>
+        <label class="im-field"><span>Documentation</span>
+          <textarea id="im-s-doc" rows="3" placeholder="What is kept here, and for whom.">${esc(st.documentation || "")}</textarea></label>
+        ${findings.length ? `<div class="im-panel-problems">${findings.map((f) =>
+          `<div class="im-problem ${esc(f.reason)}">${esc(f.message)}</div>`).join("")}</div>` : ""}
+      </div>`;
+  }
+
+  function renderAssociationPanel(a) {
+    const from = classById(a.from.classId) || { name: "?", stereotype: "businessObject" };
+    const to = classById(a.to.classId) || { name: "?", stereotype: "businessObject" };
+    const kind = kindOf(a.kind) || { label: a.kind, rule: "" };
+    const allow = allowed(from.stereotype, to.stereotype);
+    const findings = state.validation.findings.filter((f) => f.associationId === a.id);
+    const endFields = (side, end, otherName) => `
+      <fieldset class="im-end">
+        <legend>${esc(side === "from" ? from.name : to.name)}</legend>
+        <label class="im-field"><span>Role</span>
+          <input class="im-end-in" data-side="${side}" data-f="role" value="${esc(end.role || "")}"
+            placeholder="how ${esc(otherName)} refers to it"/></label>
+        <label class="im-field"><span>Multiplicity</span>
+          <select class="im-end-in" data-side="${side}" data-f="multiplicity">
+            <option value=""${end.multiplicity ? "" : " selected"}>unsaid</option>
+            ${subset.multiplicities.map((m) => `<option value="${esc(m.multiplicity)}"${m.multiplicity === end.multiplicity ? " selected" : ""}>${esc(m.multiplicity)} — ${esc(m.label)}</option>`).join("")}
+          </select></label>
+      </fieldset>`;
+
+    sideEl.innerHTML = `
+      <div class="im-panel">
+        <div class="im-panel-head"><h3>Relationship</h3>
+          <button type="button" class="btn ghost small" data-act="del-assoc">Delete</button></div>
+        <p class="im-reading"><b>${esc(from.name)}</b> → <b>${esc(to.name)}</b></p>
+        <label class="im-field"><span>Kind</span>
+          <select id="im-a-kind">
+            ${subset.associationKinds.map((k) => `<option value="${esc(k.kind)}"${k.kind === a.kind ? " selected" : ""}
+              ${allow.includes(k.kind) ? "" : " disabled"}>${esc(k.label)}${allow.includes(k.kind) ? "" : " — not between these"}</option>`).join("")}
+          </select></label>
+        <p class="im-meaning">${esc(kind.rule)}</p>
+        <label class="im-field"><span>Name</span>
+          <input id="im-a-name" value="${esc(a.name || "")}" placeholder="places"/></label>
+        ${a.kind === "generalization"
+          ? `<p class="im-hint-text">A generalization has no roles or multiplicities: “is a kind of” is not a
+             counted relationship. ${esc(to.name)} is the general class.</p>`
+          : endFields("from", a.from, to.name) + endFields("to", a.to, from.name)}
+        <button type="button" class="btn ghost small" data-act="flip">⇄ Reverse direction</button>
+        ${findings.length ? `<div class="im-panel-problems">${findings.map((f) =>
+          `<div class="im-problem ${esc(f.reason)}">${esc(f.message)}</div>`).join("")}</div>` : ""}
+      </div>`;
+
+  }
+
+  // The panel's controls are wired once, by delegation, and read the current
+  // selection out of state. Re-binding them on every render is how a single click
+  // ends up adding five attributes: the panel re-renders on every keystroke, and a
+  // listener attached to the panel *container* survives its contents.
+  const selectedClass = () =>
+    state.selected && state.selected.kind === "class" ? classById(state.selected.id) : null;
+  const selectedStore = () =>
+    state.selected && state.selected.kind === "store" ? storeById(state.selected.id) : null;
+  const selectedAssoc = () =>
+    state.selected && state.selected.kind === "association"
+      ? state.model.associations.find((x) => x.id === state.selected.id) : null;
+
+  // Every branch below asks whether anything actually changed before it redraws, and
+  // that guard is load-bearing rather than an optimization. The panel is wired for
+  // both input and change, so leaving a field fires a second, identical event — and
+  // redrawing rebuilds the SVG. If that rebuild lands between the press and the
+  // release of a click on another class, the node the press landed on is gone by the
+  // time the release happens, the browser synthesizes no click at all, and the class
+  // a person just clicked is silently not selected.
+  function onSideEdit(e) {
+    const target = e.target;
+    if (target.closest("#im-model-doc")) {
+      if (state.model.documentation === target.value) return;
+      state.model.documentation = target.value;
+      markDirty();
+      return;
+    }
+
+    const st = selectedStore();
+    if (st) {
+      const fields = { "im-s-name": "name", "im-s-class": "class", "im-s-worker": "worker",
+        "im-s-mode": "mode", "im-s-doc": "documentation" };
+      const field = fields[target.id];
+      if (!field || (st[field] || "") === target.value) return;
+      st[field] = target.value;
+      markDirty();
+      // The name and the class are on the drawing; the rest is not, so only those
+      // two are worth a redraw while somebody is still typing.
+      if (field === "name" || field === "class") renderCanvas();
+      if (field === "class") renderProblems();
+      return;
+    }
+
+    const c = selectedClass();
+    if (c) {
+      if (target.id === "im-c-name") {
+        if (c.name === target.value) return;
+        // Renaming a class retypes every attribute that referred to it by the old
+        // name, so a rename does not silently break the model it is part of.
+        const before = c.name;
+        for (const other of state.model.classes) {
+          for (const a of other.attributes || []) if (a.type === before) a.type = target.value;
+        }
+        c.name = target.value;
+        markDirty(); renderCanvas(); renderProblems();
+        return;
+      }
+      if (target.id === "im-c-stereo") {
+        if (c.stereotype === target.value) return;
+        c.stereotype = target.value;
+        // A kind that has no identity cannot keep one it was given.
+        if (!stereotypeOf(c.stereotype).hasIdentity) c.identity = [];
+        markDirty(); render();
+        return;
+      }
+      if (target.id === "im-c-doc") {
+        if ((c.documentation || "") === target.value) return;
+        c.documentation = target.value;
+        markDirty();
+        return;
+      }
+
+      const row = target.closest("[data-attr]");
+      if (row) {
+        const a = c.attributes[Number(row.dataset.attr)];
+        if (target.dataset.f === "key") {
+          c.identity = c.identity || [];
+          const at = c.identity.indexOf(a.name);
+          if (target.checked === at >= 0) return;
+          if (target.checked) c.identity.push(a.name);
+          else c.identity.splice(at, 1);
+        } else if (target.dataset.f === "name") {
+          if (a.name === target.value) return;
+          const idx = (c.identity || []).indexOf(a.name);
+          a.name = target.value;
+          if (idx >= 0) c.identity[idx] = a.name; // the key follows its attribute
+        } else {
+          if (a[target.dataset.f] === target.value) return;
+          a[target.dataset.f] = target.value;
+        }
+        markDirty(); renderCanvas();
+        return;
+      }
+      const lit = target.closest("[data-lit]");
+      if (lit) {
+        const i = Number(lit.dataset.lit);
+        if (c.literals[i] === target.value) return;
+        c.literals[i] = target.value;
+        markDirty(); renderCanvas();
+      }
+      return;
+    }
+
+    const a = selectedAssoc();
+    if (!a) return;
+    if (target.id === "im-a-kind") {
+      if (a.kind === target.value) return;
+      a.kind = target.value;
+      markDirty(); render();
+      return;
+    }
+    if (target.id === "im-a-name") {
+      if ((a.name || "") === target.value) return;
+      a.name = target.value;
+      markDirty(); renderCanvas();
+      return;
+    }
+    if (target.classList.contains("im-end-in")) {
+      const end = a[target.dataset.side];
+      if ((end[target.dataset.f] || "") === target.value) return;
+      end[target.dataset.f] = target.value;
+      markDirty(); renderCanvas();
+    }
+  }
+
+  function onSideClick(e) {
+    const btn = e.target.closest("[data-act]");
+    if (!btn || !sideEl.contains(btn)) return;
+    const act = btn.dataset.act;
+    if (act === "close-schema") { state.schemaFor = ""; renderSide(); return; }
+
+    const store = selectedStore();
+    if (store && act === "del-store") {
+      if (!window.confirm(`Delete the data store ${store.name}? The processes that name it will say so.`)) return;
+      state.model.stores = state.model.stores.filter((s) => s.id !== store.id);
+      state.selected = null;
+      markDirty(); render();
+      return;
+    }
+
+    const c = selectedClass();
+    if (c) {
+      if (act === "add-attr") {
+        c.attributes = c.attributes || [];
+        c.attributes.push({ name: `field${c.attributes.length + 1}`, type: "string", multiplicity: "1" });
+        markDirty(); render();
+      } else if (act === "del-attr") {
+        const i = Number(btn.closest("[data-attr]").dataset.attr);
+        const removed = c.attributes[i];
+        c.attributes.splice(i, 1);
+        c.identity = (c.identity || []).filter((k) => k !== removed.name);
+        markDirty(); render();
+      } else if (act === "add-literal") {
+        c.literals = c.literals || [];
+        c.literals.push(`value${c.literals.length + 1}`);
+        markDirty(); render();
+      } else if (act === "del-literal") {
+        c.literals.splice(Number(btn.closest("[data-lit]").dataset.lit), 1);
+        markDirty(); render();
+      } else if (act === "del-class") {
+        if (!window.confirm(`Delete ${c.name}? Relationships touching it go with it.`)) return;
+        state.model.classes = state.model.classes.filter((x) => x.id !== c.id);
+        state.model.associations = state.model.associations.filter(
+          (x) => x.from.classId !== c.id && x.to.classId !== c.id);
+        state.selected = null;
+        markDirty(); render();
+      } else if (act === "schema") {
+        state.schemaFor = c.name;
+        renderSide();
+      }
+      return;
+    }
+
+    const a = selectedAssoc();
+    if (!a) return;
+    if (act === "del-assoc") {
+      state.model.associations = state.model.associations.filter((x) => x.id !== a.id);
+      state.selected = null;
+      markDirty(); render();
+    } else if (act === "flip") {
+      const tmp = a.from; a.from = a.to; a.to = tmp;
+      markDirty(); render();
+    }
+  }
+
+  sideEl.addEventListener("input", onSideEdit);
+  sideEl.addEventListener("change", onSideEdit);
+  sideEl.addEventListener("click", onSideClick);
+
+  // renderSchema shows the derived contract beside the drawing. It is read-only and
+  // says what it dropped — a JSON document is a tree and a class model is a graph,
+  // so only composition survives as containment.
+  async function renderSchema() {
+    sideEl.innerHTML = `<div class="im-panel"><p class="muted">Projecting ${esc(state.schemaFor)}…</p></div>`;
+    let projection;
+    try {
+      projection = await api("GET",
+        `/api/v1/infomodel/models/${encodeURIComponent(id)}/schema?class=${encodeURIComponent(state.schemaFor)}`);
+    } catch (e) {
+      sideEl.innerHTML = `<div class="im-panel">
+        <div class="im-panel-head"><h3>JSON Schema</h3>
+          <button type="button" class="btn ghost small" data-act="close-schema">Close</button></div>
+        <p class="muted">${esc(e.message)}</p>
+        <p class="im-hint-text">A schema is derived from a saved model, so save the diagram — and fix anything the
+          problems bar lists — before projecting it.</p></div>`;
+      return;
+    }
+    sideEl.innerHTML = `<div class="im-panel">
+      <div class="im-panel-head"><h3>JSON Schema · ${esc(projection.class)}</h3>
+        <button type="button" class="btn ghost small" data-act="close-schema">Close</button></div>
+      <p class="im-hint-text">Derived, never edited. This is what a <i>value</i> of this class is checked against;
+        the diagram is what a person reads.</p>
+      <pre class="im-schema">${esc(JSON.stringify(projection.schema, null, 2))}</pre>
+      <h4>What the projection could not carry</h4>
+      ${projection.loss.map((n) => `<div class="im-loss"><b>${esc(n.area)}.</b> ${esc(n.reason)}</div>`).join("")}
+    </div>`;
+  }
+
+  // ---- interaction ---------------------------------------------------------
+  // Adding a class places it where there is room rather than on top of the last
+  // one: a palette that stacks boxes makes its own diagram unreadable.
+  function freeSpot() {
+    const cols = 4;
+    const n = state.model.classes.length;
+    return { x: 40 + (n % cols) * (BOX_W + 60), y: 40 + Math.floor(n / cols) * 200 };
+  }
+
+  root.querySelector("#im-palette").addEventListener("click", (e) => {
+    if (e.target.closest('[data-add="store"]')) {
+      const spot = freeSpot();
+      const st = {
+        id: `new-${Math.random().toString(36).slice(2, 10)}`, name: "NewStore", class: "",
+        worker: "", mode: (subset.storeModes[0] || {}).mode || "read",
+        x: spot.x, y: spot.y + 240,
+      };
+      state.model.stores.push(st);
+      state.selected = { kind: "store", id: st.id };
+      state.connecting = null;
+      markDirty(); render();
+      return;
+    }
+    const add = e.target.closest(".im-add");
+    if (add) {
+      const kind = stereotypeOf(add.dataset.stereotype);
+      const spot = freeSpot();
+      const c = {
+        id: "", name: `New${kind.label.replace(/\s/g, "")}`, stereotype: kind.stereotype,
+        attributes: kind.hasAttributes ? [] : undefined, literals: kind.hasAttributes ? undefined : [],
+        identity: [], x: spot.x, y: spot.y,
+      };
+      // A new class needs a local handle until the server mints its real id, because
+      // selection and association ends both address a class by id.
+      c.id = `new-${Math.random().toString(36).slice(2, 10)}`;
+      state.model.classes.push(c);
+      state.selected = { kind: "class", id: c.id };
+      state.connecting = null;
+      markDirty(); render();
+      return;
+    }
+    const connect = e.target.closest(".im-connect");
+    if (connect) {
+      state.connecting = state.connecting && state.connecting.kind === connect.dataset.kind
+        ? null : { kind: connect.dataset.kind, fromId: null };
+      render();
+    }
+  });
+
+  canvasEl.addEventListener("click", (e) => {
+    const box = e.target.closest("[data-class]");
+    const edge = e.target.closest("[data-assoc]");
+    const store = e.target.closest("[data-store]");
+    if (state.connecting) {
+      if (!box) { state.connecting = null; render(); return; }
+      const cid = box.dataset.class;
+      if (!state.connecting.fromId) {
+        state.connecting.fromId = cid;
+        render();
+        return;
+      }
+      const from = classById(state.connecting.fromId);
+      const to = classById(cid);
+      const kind = state.connecting.kind;
+      if (!allowed(from.stereotype, to.stereotype).includes(kind)) {
+        // The matrix the server enforces is the matrix that refuses here, and it
+        // refuses in the server's own words.
+        toast(refusalFor(kind, from, to), "err");
+        state.connecting = null;
+        render();
+        return;
+      }
+      const a = {
+        id: `new-${Math.random().toString(36).slice(2, 10)}`, kind, name: "",
+        from: { classId: from.id, role: "", multiplicity: kind === "generalization" ? "" : "1" },
+        to: { classId: to.id, role: "", multiplicity: kind === "generalization" ? "" : "0..*" },
+      };
+      state.model.associations.push(a);
+      state.selected = { kind: "association", id: a.id };
+      state.connecting = null;
+      markDirty(); render();
+      return;
+    }
+    if (box) state.selected = { kind: "class", id: box.dataset.class };
+    else if (store) state.selected = { kind: "store", id: store.dataset.store };
+    else if (edge) state.selected = { kind: "association", id: edge.dataset.assoc };
+    else state.selected = null;
+    state.schemaFor = "";
+    render();
+  });
+
+  // refusalFor turns a matrix miss into the sentence the server would have sent. It
+  // reads the served tables rather than restating a rule, so the two cannot drift.
+  function refusalFor(kind, from, to) {
+    const fk = stereotypeOf(from.stereotype);
+    const tk = stereotypeOf(to.stereotype);
+    if (fk.stereotype === "enumeration" || tk.stereotype === "enumeration") {
+      return "An enumeration is a closed set of values, not something a relationship can point at. " +
+        "Give one of these classes an attribute typed as the enumeration instead.";
+    }
+    if (kind === "generalization") {
+      return `A ${fk.label} cannot be a kind of a ${tk.label}. A specialization has to be usable everywhere ` +
+        "the thing it specializes is, so both ends must be the same kind of class.";
+    }
+    return `A ${fk.label} has no existence of its own, so it cannot be the whole that owns or groups parts. ` +
+      "Make it a business object, or draw the relationship the other way round.";
+  }
+
+  // Dragging a box is the only direct manipulation on the canvas; everything else
+  // is a selection. Layout is part of the document, so a move is a change to save.
+  //
+  // Deliberately without setPointerCapture. Capturing retargets the pointer stream
+  // to the captured element, and the click the browser synthesizes afterwards is
+  // aimed at the *common ancestor* of the down and up targets — which, once the SVG
+  // has captured, is the SVG. So capturing makes every click on a class land on the
+  // canvas background, and nothing is ever selected. Tracking the drag on the window
+  // instead leaves the click where it belongs.
+  let drag = null;
+  canvasEl.addEventListener("pointerdown", (e) => {
+    if (state.connecting || e.button !== 0) return;
+    const shape = e.target.closest("[data-class]") || e.target.closest("[data-store]");
+    if (!shape) return;
+    const c = shape.dataset.class ? classById(shape.dataset.class) : storeById(shape.dataset.store);
+    if (!c) return;
+    const rect = canvasEl.querySelector("svg").getBoundingClientRect();
+    drag = { c, dx: e.clientX - rect.left - c.x, dy: e.clientY - rect.top - c.y, moved: false };
+  });
+  const onMove = (e) => {
+    if (!drag) return;
+    const svg = canvasEl.querySelector("svg");
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const x = Math.max(0, Math.round(e.clientX - rect.left - drag.dx));
+    const y = Math.max(0, Math.round(e.clientY - rect.top - drag.dy));
+    // A press that has not travelled is a selection, not a move — otherwise the
+    // pixel of jitter between pressing and releasing marks the diagram unsaved.
+    if (Math.abs(x - drag.c.x) + Math.abs(y - drag.c.y) < 3 && !drag.moved) return;
+    drag.moved = true;
+    drag.c.x = x;
+    drag.c.y = y;
+    renderCanvas();
+  };
+  const endDrag = () => {
+    if (drag && drag.moved) markDirty();
+    drag = null;
+  };
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", endDrag);
+  window.addEventListener("pointercancel", endDrag);
+
+  problemsEl.addEventListener("click", (e) => {
+    const p = e.target.closest(".im-problem");
+    if (!p) return;
+    if (p.dataset.class) state.selected = { kind: "class", id: p.dataset.class };
+    else if (p.dataset.store) state.selected = { kind: "store", id: p.dataset.store };
+    else if (p.dataset.assoc) state.selected = { kind: "association", id: p.dataset.assoc };
+    state.schemaFor = "";
+    render();
+  });
+
+  // ---- saving --------------------------------------------------------------
+  const local = (v) => typeof v === "string" && v.startsWith("new-");
+
+  async function save() {
+    saveBtn.disabled = true;
+    // Local handles are sent as they are. The server mints the real ids and rewrites
+    // the association ends that pointed at a handle — which is why the canvas may
+    // name a box it has just drawn without minting anything itself.
+    const payload = {
+      name: state.model.name,
+      documentation: state.model.documentation || "",
+      classes: state.model.classes,
+      associations: state.model.associations,
+      stores: state.model.stores,
+      revision: state.model.revision,
+    };
+    try {
+      const saved = await api("PUT", `/api/v1/infomodel/models/${encodeURIComponent(id)}`, payload);
+      state.model = saved;
+      state.validation = saved.validation || { valid: true, findings: [] };
+      state.dirty = false;
+      dirtyEl.hidden = true;
+      root.querySelector("#im-rev").textContent = `r${saved.revision}`;
+      // Selection is by id, and every local handle has just been replaced.
+      if (state.selected && local(state.selected.id)) state.selected = null;
+      toast("Saved", "ok");
+      render();
+    } catch (e) {
+      saveBtn.disabled = false;
+      // A refused save carries the findings, so the problems bar shows exactly what
+      // the server objected to rather than one sentence standing in for a list.
+      const findings = e.body && e.body.findings;
+      if (findings && findings.length) {
+        state.validation = { valid: false, findings };
+        renderProblems();
+        toast("Not saved — the model is not consistent yet", "err");
+        return;
+      }
+      // A conflict is somebody else's work, not a mistake in this one: say what is
+      // at stake rather than only that the save failed.
+      if (e.status === 409) {
+        toast("Somebody else saved this model since you opened it. Reload to see their changes.", "err");
+        return;
+      }
+      toast(e.message, "err");
+    }
+  }
+
+  saveBtn.addEventListener("click", save);
+  const onKey = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      if (state.dirty) save();
+    }
+    if (e.key === "Escape" && state.connecting) { state.connecting = null; render(); }
+  };
+  document.addEventListener("keydown", onKey);
+  // The canvas listens on the window for the drag and on the document for the
+  // shortcut, so it has to let go of both when the router navigates away.
+  window.addEventListener("hashchange", () => {
+    document.removeEventListener("keydown", onKey);
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", endDrag);
+    window.removeEventListener("pointercancel", endDrag);
+  }, { once: true });
+
+  render();
+}

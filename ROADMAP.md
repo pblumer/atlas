@@ -104,9 +104,114 @@ The control-flow basics most real models use.
   steps, and writing a member into an unset object creates it. The **Modeler** now
   authors all of this (ADR-0053): a `DataObjectReference` panel (name, data state,
   collection) and an association panel (the FEEL value, the target member/variable),
-  with input associations defaulting their target on draw. Next: a lineage view
-  folding the `SourcePos` chain, item-definition schema validation, list-index path
-  targets, and worker-backed data stores.
+  with input associations defaulting their target on draw. **The Operations replay
+  now has a Data tab** (ADR-draft-process-information-model, slice 1): every data
+  object the instance carries, with its declared class (the `itemSubjectRef` BPMN
+  leaves opaque), its collection flag, its current data state and typed value — and,
+  expandable per object, the **state trail**: every durable write, the state it moved
+  the object into, and *which element made it*. That last fact is newly recorded —
+  `DataObjectValue` gained a `ProducerKey` stamped at the one point every data-object
+  write funnels through, the same answer variables got in
+  [ADR-0219](docs/adr/0219-variable-write-attribution.md), because a diff of two
+  snapshots credits both branches of a fork with both writes. It is an appended field,
+  so instances already on disk still read and simply report their writes as
+  unattributed. Next, per that record: the **information model** — a UML class-diagram
+  subset owned by a process application, giving `itemSubjectRef` something real to
+  resolve against, so a data object has a declared type across processes and the
+  Problems panel can check data flow against it; then the instance **object diagram**,
+  and **data stores** bound to a class and a Worker (the cross-process channel BPMN
+  never specified).
+- 🚧 **The process information model** (ADR-draft-process-information-model): the
+  answer to the one thing BPMN structurally cannot say. A `<dataObject>` is scoped to
+  one process definition and its `itemSubjectRef` points at a type the specification
+  deliberately leaves opaque, so two processes that both handle an order share a
+  five-letter string and nothing else. **Slice 2 landed**: a **UML class-diagram
+  subset** owned by a process application (ADR-0128, inheriting its sharing scope
+  like a Panorama model), with its own `api/infomodel` service and sidecar store.
+  A class carries typed attributes with multiplicities, and — the part BPMN has no
+  equivalent for — a **business key**, the fact that makes `Order#ORD-1` the same
+  order in three processes. Three stereotypes (business object, value type,
+  enumeration) drive a **relationship matrix served to the browser rather than
+  duplicated in it**, so the canvas refuses mid-drag exactly what the server refuses
+  on write, in the server's own words; refusals distinguish *out of subset* (UML
+  allows it, this build does not) from *the notation says no*. Whole-model validation
+  runs on every write and a model that does not validate is not stored, so a deploy
+  resolving a type against it never meets a half-model. A **JSON Schema projection**
+  (draft 2020-12) derives the runtime contract per class and **reports what it
+  dropped** — a JSON document is a tree and a class model is a graph, so composition
+  becomes containment and associations are named as loss. The UI is a new top-level
+  **Data** area: *Model* is the class canvas (drag, connect, a properties panel, a
+  problems bar), *Instances* the same subject one altitude down — every data object
+  the running instances carry, grouped by declared type, marking which of those types
+  is actually modeled. **Slice 3 landed**: the type slot now *resolves*. A data
+  object's `itemSubjectRef` is looked up in the owning application's information
+  model at deploy and in the Problems panel's dry run, and three checks follow from
+  it — a declared type nothing models, a write targeting a member the class has no
+  attribute for (ADR-0060's named follow-up, walked through dotted paths and refused
+  where it would cross a primitive or an enumeration), and ADR-0053's headline
+  example: *"reads `order`, and nothing upstream produces it"*. That last one needs
+  no vocabulary at all — it is reachability over the compiled graph, deliberately
+  conservative, so a loop whose writer precedes its reader is not flagged and an
+  activity reading what it will only write on completion is. Findings reach the
+  Modeler's Problems panel (which now names the application it is asking about) and
+  a deploy's warnings; **none of them refuses a deploy** — a model is routinely drawn
+  before the vocabulary it names exists. The Modeler gained the **Type** field the
+  slot needed, suggesting the application's modeled classes, and with it a fix for a
+  silent data-loss bug: `itemSubjectRef` is a *reference* in the bpmn moddle, so a
+  model carrying the shorthand `itemSubjectRef="Order"` lost its types on any round
+  trip through the Modeler. Declarations are now repaired on import and written as
+  proper `<itemDefinition>`s, which the compiler resolves through — so a class name
+  that is not a valid XML id (`Line item`) is expressible for the first time.
+  **Slice 4 landed**: the instance **object diagram**, the run-time twin of the class
+  diagram and the reason UML was the right notation — the standard already draws
+  types and instances as two diagrams, which is exactly Atlas's design-time/run-time
+  line. `GET /api/v1/instances/{key}/object-graph` derives it server-side (the rules
+  for what relates to what are model semantics, so the browser gets nodes and lines
+  to draw rather than a second copy of the rules): each data object becomes a UML
+  object node with its class's attributes in the class's own order, its business key
+  marked, and a member the value does not carry shown as *absent* rather than blank.
+  Two things become a line, and they are different claims — a **part inside its
+  whole's value** (composition, read off the value) and a **business key one object
+  holds for another** (an inference from two values agreeing, drawn dashed). A
+  reference matching nothing here is **stated, not dropped**: it is the edge of what
+  one instance can see, and precisely the boundary slice 5 removes. An application
+  that models nothing still gets its objects drawn, and the graph says it is
+  degraded. **Slice 5a landed**: the **data-centric index** — `GET /api/v1/data-objects`
+  now answers the question BPMN structurally cannot express, *which instances, across
+  which processes, are carrying this order*, filtered by class and by **business key**.
+  With `?history=true` it sweeps finished instances too, which costs a longer walk and
+  nothing on disk: a finished instance keeps its data objects until it is purged, and
+  retention is opt-in (ADR-0115). It is deliberately a **sweep and not a durable
+  index** — one would have to live in `applyToState`, know what a business key is (the
+  engine reads integer indices; the key lives in design-time state it must not read),
+  and be swept by a purge that deletes by instance-key prefix and could not reach it.
+  That is a decision of its own, worth taking when a sweep starts to hurt. The answer
+  says how many instances it examined and whether a bound stopped it, because a
+  partial answer read as a whole one is the worst thing an index can do. Data ›
+  Instances groups by class and then by key — one datum, several instances — and the
+  object diagram's "this customer is not in this instance" note now links straight
+  into it. **Slice 5b landed** — the *declarative* half of data stores. A
+  `<dataStoreReference>` is parsed for the first time (it compiled to nothing before,
+  so a model could say where its data lives and Atlas would not read the sentence),
+  resolved through its `<dataStore>` root element to the store's own name, and folded
+  per process the way data objects are. A **data store lives in the application's
+  information model**, beside the classes rather than inside one — a store is per
+  application, declared once and named by every process that reaches it, and keeping
+  it out of the classes is what leaves a class storage-agnostic: an Order is an Order
+  wherever it is kept, and only the store says where. It names the class it holds and
+  the Worker that keeps it, and the class must be a **business object with a business
+  key**, because a process reads from a store by naming which thing it wants and
+  nothing else names one. The class canvas draws it as a cylinder with an annotation
+  line to its class — not an association, because nothing in the model *relates* those
+  two. A deploy resolves it: a store the application does not declare, and a store no
+  Worker backs, are both warnings, because a diagram is drawn before the store is
+  modeled and a store is modeled before somebody wires it. Mode is `read`; writing
+  through a store is refused as *out of subset* and stated as such, since it is a
+  transaction against something outside the engine whose durability guarantee stops at
+  its own log. Next: the **runtime read** — the one remaining piece, and the one that
+  needs its own record (an activity reading a store must park on a job, which is
+  either a two-phase activation the engine does not have, or a connector kind that
+  delegates to the store's Worker).
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🚧 **Conformance tests against a curated BPMN model set** — the
   [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN

@@ -554,3 +554,94 @@ func TestDataOutputAssociationNestedAndOverwrite(t *testing.T) {
 		t.Fatalf("order = %+v, want VarJSON {\"customer\":{\"name\":\"Acme\"}}", got)
 	}
 }
+
+// TestDataObjectWriteAttribution is the attribution property for data objects: the
+// element instance whose processing wrote a value is recorded on the event, so the
+// console can say *who wrote this* rather than diffing two snapshots and blaming
+// both branches of a fork (the reasoning of ADR-0219, applied to data objects).
+//
+// The seeding at instance creation is attributed to nobody — no element ran — while
+// the association's write names the task that made it. Both survive replay, because
+// the producer is frozen into the event and never recomputed (I4/I6).
+func TestDataObjectWriteAttribution(t *testing.T) {
+	dir := t.TempDir()
+	cp := associationProcess(t)
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key, model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "42"})
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	scope := model.NewKey(1, 1)
+	// The snapshot history holds both writes in order: the seed, then the association.
+	var producers []uint64
+	if err := h1.store.DataObjectSnapshotHistory(scope, func(_ int64, _ uint64, v *model.DataObjectValue) error {
+		producers = append(producers, v.ProducerKey)
+		return nil
+	}); err != nil {
+		t.Fatalf("DataObjectSnapshotHistory: %v", err)
+	}
+	if len(producers) != 2 {
+		t.Fatalf("history has %d entries, want 2 (seed then association write)", len(producers))
+	}
+	if producers[0] != 0 {
+		t.Errorf("seed producer = %d, want 0 — no element wrote the seeded object", producers[0])
+	}
+	if producers[1] == 0 {
+		t.Fatal("association write is unattributed; want the task's element instance")
+	}
+	// The producer must resolve against the instance's retained element history — that
+	// is what the console joins it to in order to name an element on the diagram. A
+	// completed activity's live element instance is gone by now, so the retained facts,
+	// not the live state, are what attribution has to be true against.
+	found := false
+	if err := h1.store.ElementReplayHistory(scope, func(_ int64, _ uint64, v state.ElementReplayValue) error {
+		if v.ElementInstanceKey == producers[1] {
+			found = true
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("ElementReplayHistory: %v", err)
+	}
+	if !found {
+		t.Errorf("producer %d matches no element instance in the instance's history", producers[1])
+	}
+	live := readDataObject(t, h1.store, scope, "order")
+	if live == nil || live.ProducerKey != producers[1] {
+		t.Errorf("current value's producer = %+v, want %d", live, producers[1])
+	}
+	h1.close(t)
+
+	// Replay the same log into a fresh, empty store: attribution is a recorded fact.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+	if replayed := readDataObject(t, store2, scope, "order"); replayed == nil || replayed.ProducerKey != producers[1] {
+		t.Fatalf("replayed producer = %+v, want %d", replayed, producers[1])
+	}
+}

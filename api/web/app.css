@@ -4254,3 +4254,333 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .djs-connection.pg-heat-5 .djs-visual marker path { fill: #d93025 !important; stroke: #d93025 !important; }
 
 .token-badge.heat { background: var(--muted); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+
+/* ---- Data objects tab (ADR-draft-process-information-model) -----------------
+   The instance's data objects: what each datum is, what state it is in, what it
+   holds, and which element put it there. It reuses .vt so a data object and a
+   variable read alike in the same inspector — they are the same shape of thing,
+   and the columns a variable does not have (class, state, written by) are what
+   this tab exists to add. */
+.vt.do-table .c-name { width: 26%; }
+.vt.do-table .do-c-class, .vt.do-table .do-c-state, .vt.do-table .do-c-by { width: 1%; white-space: nowrap; }
+.vt.do-table .do-c-at { width: 1%; white-space: nowrap; color: var(--muted); font: 12px/1.5 ui-monospace, monospace; }
+
+.do-toggle {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0;
+  font: inherit; cursor: pointer; text-align: left; padding: 0; border: 0; background: none; color: inherit;
+}
+.do-toggle:hover .do-name { color: var(--accent); }
+.do-toggle .v-chev { color: var(--muted); flex: none; font-size: 10px; }
+.do-toggle:hover .v-chev { color: var(--accent); }
+
+/* The declared class is the model's word for what this datum *is* — the type slot BPMN
+   leaves opaque. It reads as a type, not as a value, so it is set apart like a tag. */
+.do-class {
+  font: 600 11px/1.5 system-ui, sans-serif; color: var(--accent);
+  border: 1px solid var(--accent-soft); border-radius: 5px; padding: 1px 6px; white-space: nowrap;
+}
+.do-class.none { color: var(--muted); border-color: var(--border); font-weight: 500; font-style: italic; }
+.do-coll {
+  font: 600 10px/1.5 system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+  border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 6px;
+}
+/* The data state is the per-datum lifecycle — the one thing a variable has no
+   equivalent for — so it carries the strongest mark in the row. */
+.do-state {
+  font: 600 11px/1.5 system-ui, sans-serif; color: var(--text);
+  background: var(--accent-soft); border-radius: 5px; padding: 2px 8px; white-space: nowrap;
+}
+.do-state.none { background: none; color: var(--muted); font-weight: 500; }
+.do-by { font: 12px/1.5 system-ui, sans-serif; color: var(--text); }
+.do-by.none { color: var(--muted); font-style: italic; }
+.vt.do-table .c-val.do-json { color: var(--accent); }
+
+/* The state trail: the object's own biography, opened under its row. Indented and
+   quieted so the table above stays the thing being scanned. */
+.vt .do-trail > td { padding: 0 12px 10px; background: var(--bg); }
+.vt .do-row.open { border-bottom: none; }
+.do-trail-box { border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.do-trail-h {
+  font: 11px/1.6 system-ui, sans-serif; color: var(--muted);
+  padding: 5px 10px; border-bottom: 1px solid var(--border); background: var(--panel, var(--bg));
+}
+.do-trail-h b { color: var(--text); font-weight: 600; }
+table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.do-trail-table td { padding: 5px 10px; vertical-align: top; border-bottom: 1px solid var(--border); }
+.do-trail-table tr:last-child td { border-bottom: none; }
+.do-trail-table .do-t-n { width: 1%; color: var(--muted); font: 11px/1.6 ui-monospace, monospace; }
+.do-trail-table .do-t-state { width: 1%; white-space: nowrap; font: 600 12px/1.5 system-ui, sans-serif; }
+.do-trail-table .do-t-by { width: 1%; white-space: nowrap; color: var(--text); }
+.do-trail-table .do-t-at { width: 1%; white-space: nowrap; color: var(--muted); font: 11.5px/1.6 ui-monospace, monospace; }
+
+/* ---- Information model: the UML class canvas -------------------------------
+   (ADR-draft-process-information-model, slice 2)
+
+   The diagram is the point of this screen, so it gets the room: a toolbar, the
+   canvas, a properties panel beside it, and the problems bar underneath — the
+   same arrangement the Modeler uses, for the same reason. A modeler moves between
+   drawing and correcting constantly, and a problem list behind a tab is a problem
+   list nobody reads. */
+.im-editor { display: flex; flex-direction: column; height: calc(100vh - var(--topbar-h, 96px) - 24px); min-height: 480px; }
+.im-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px 8px 0 0;
+  background: var(--bg); border-bottom: none;
+}
+.im-title { font-size: 14px; }
+.im-rev { font: 12px/1.5 ui-monospace, monospace; }
+.im-palette { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 8px; }
+.im-add, .im-connect {
+  font: 500 12px/1.5 system-ui, sans-serif; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  padding: 3px 9px; border-radius: 6px;
+}
+.im-add:hover, .im-connect:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.im-connect.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+.im-dirty { font: 11px/1.5 system-ui, sans-serif; color: var(--muted); font-style: italic; }
+
+.im-body { display: flex; flex: 1; min-height: 0; border: 1px solid var(--border); }
+.im-canvas { flex: 1; overflow: auto; background: var(--bg); min-width: 0; }
+.im-canvas.connecting { cursor: crosshair; }
+.im-side { width: 340px; flex: none; border-left: 1px solid var(--border); overflow: auto; background: var(--bg); }
+
+.im-svg { display: block; }
+.im-hint { fill: var(--muted); font: 13px/1.5 system-ui, sans-serif; }
+
+/* A class box. The three kinds are told apart by the colour of their header strip
+   rather than by shape, because shape is what the notation already uses. */
+.im-class { cursor: grab; }
+.im-class .im-box { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+.im-class .im-sep { stroke: var(--border); }
+.im-class .im-stereo { fill: var(--muted); font: 10px/1.4 system-ui, sans-serif; letter-spacing: .02em; }
+.im-class .im-cname { fill: var(--text); font: 600 13px/1.4 system-ui, sans-serif; }
+.im-class .im-attr { font: 12px/1.4 ui-monospace, monospace; }
+.im-class .im-attr-name { fill: var(--text); }
+.im-class .im-attr-type { fill: var(--muted); }
+.im-class .im-attr-mult { fill: var(--muted); }
+.im-class .im-attr.key .im-attr-name { font-weight: 700; }
+.im-class .im-literal { fill: var(--text); font: 12px/1.4 ui-monospace, monospace; }
+.im-class .im-empty { fill: var(--muted); font: italic 11.5px/1.4 system-ui, sans-serif; }
+.im-class.selected .im-box { stroke: var(--accent); stroke-width: 2; }
+.im-class.invalid .im-box { stroke: #d93025; stroke-dasharray: 4 3; }
+/* While a relationship is being drawn, a class the matrix would refuse fades: the
+   canvas offers only what the server would accept. */
+.im-class.unreachable { opacity: .35; }
+.im-class.businessObject .im-box { fill: color-mix(in srgb, var(--accent-soft) 60%, var(--bg)); }
+.im-class.valueType .im-box { fill: var(--bg); stroke-dasharray: 0; }
+.im-class.enumeration .im-box { fill: color-mix(in srgb, #b26a00 8%, var(--bg)); }
+
+.im-line { stroke: var(--text); stroke-width: 1.4; }
+.im-line.generalization { stroke-width: 1.2; }
+.im-line-hit { stroke: transparent; stroke-width: 12; cursor: pointer; }
+.im-mark { stroke: var(--text); stroke-width: 1.2; }
+.im-mark.filled { fill: var(--text); }
+.im-mark.open { fill: var(--bg); }
+.im-edge.selected .im-line { stroke: var(--accent); stroke-width: 2.2; }
+.im-edge.selected .im-mark { stroke: var(--accent); }
+.im-edge.selected .im-mark.filled { fill: var(--accent); }
+.im-edge-label { fill: var(--text); font: 600 11px/1.4 system-ui, sans-serif; text-anchor: middle; }
+.im-end-label { fill: var(--muted); font: 11px/1.4 ui-monospace, monospace; text-anchor: middle; }
+
+/* The properties panel. */
+.im-panel { padding: 12px 14px 20px; }
+.im-panel h3 { margin: 0 0 10px; font-size: 14px; }
+.im-panel h4 { margin: 0; font-size: 12.5px; }
+.im-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 0 8px; }
+.im-panel-head:first-child { margin-top: 0; }
+.im-field { display: block; margin-bottom: 10px; }
+.im-field > span { display: block; font: 600 11px/1.6 system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.im-field input, .im-field select, .im-field textarea {
+  width: 100%; box-sizing: border-box; font: 13px/1.5 system-ui, sans-serif;
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px;
+  background: var(--bg); color: var(--text);
+}
+.im-field textarea { resize: vertical; }
+/* The sentence that tells a modeler which kind to pick. It is the most consequential
+   choice in this metamodel and a three-word palette makes it by accident. */
+.im-meaning { margin: -4px 0 12px; font: 12px/1.5 system-ui, sans-serif; color: var(--muted); }
+.im-reading { margin: 0 0 12px; font: 13px/1.5 system-ui, sans-serif; }
+.im-hint-text { margin: 10px 0 0; font: 12px/1.55 system-ui, sans-serif; color: var(--muted); }
+.im-hint-text code { font-size: 11.5px; }
+
+table.im-attrs { width: 100%; border-collapse: collapse; font-size: 12px; }
+.im-attrs th { text-align: left; font: 600 10px/1.6 system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 2px 4px; }
+.im-attrs td { padding: 2px 4px; vertical-align: middle; }
+.im-attrs input[type="text"], .im-attrs input:not([type]), .im-attrs select {
+  width: 100%; box-sizing: border-box; font: 12px/1.4 system-ui, sans-serif;
+  border: 1px solid var(--border); border-radius: 5px; padding: 3px 5px;
+  background: var(--bg); color: var(--text);
+}
+.im-attrs .im-key-cell { text-align: center; width: 24px; }
+.im-end { border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px 2px; margin-bottom: 10px; }
+.im-end legend { font: 600 11px/1.5 system-ui, sans-serif; color: var(--muted); padding: 0 4px; }
+.im-note { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; font: 12px/1.55 system-ui, sans-serif; color: var(--muted); }
+.im-note ul { margin: 6px 0 0; padding-left: 18px; }
+.im-note li { margin-bottom: 6px; }
+.im-schema { max-height: 320px; overflow: auto; font: 11.5px/1.5 ui-monospace, monospace; background: var(--accent-soft); border-radius: 6px; padding: 8px 10px; }
+.im-loss { font: 12px/1.55 system-ui, sans-serif; color: var(--muted); margin-bottom: 8px; }
+.im-loss b { color: var(--text); }
+
+/* The problems bar. The tag is the distinction the whole validation rests on: "not
+   authored" is a limit of this build, "invalid" is a modeling mistake, and a
+   modeler acts on them differently. */
+.im-problems {
+  border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px;
+  padding: 8px 10px; max-height: 132px; overflow: auto; background: var(--bg);
+}
+.im-ok { font: 12px/1.6 system-ui, sans-serif; color: var(--muted); }
+.im-problem-head { font: 600 11px/1.6 system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+button.im-problem { display: block; width: 100%; text-align: left; border: 0; background: none; cursor: pointer; }
+.im-problem {
+  font: 12px/1.6 system-ui, sans-serif; color: var(--text);
+  padding: 3px 6px; border-radius: 5px; margin-bottom: 2px;
+}
+button.im-problem:hover { background: var(--accent-soft); }
+.im-problem-tag {
+  display: inline-block; font: 600 10px/1.5 system-ui, sans-serif; text-transform: uppercase;
+  letter-spacing: .04em; border-radius: 4px; padding: 0 5px; margin-right: 6px;
+}
+.im-problem.notation .im-problem-tag { background: #d93025; color: #fff; }
+.im-problem.out-of-subset .im-problem-tag { background: var(--muted); color: var(--bg); }
+.im-panel-problems { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.im-panel-problems .im-problem { padding-left: 0; }
+
+/* Data › Instances: the same subject one altitude down. */
+.im-group-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-bottom: 1px solid var(--border);
+}
+.im-resolved, .im-unresolved {
+  font: 600 10px/1.5 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em;
+  border-radius: 4px; padding: 1px 6px;
+}
+.im-resolved { color: #0a7c5a; border: 1px solid color-mix(in srgb, #0a7c5a 35%, transparent); }
+.im-unresolved { color: var(--muted); border: 1px solid var(--border); }
+.im-group-head .muted { margin-left: auto; font-size: 12px; }
+
+/* ---- The object diagram: the Data tab's second reading ---------------------
+   (ADR-draft-process-information-model, slice 4)
+
+   The class diagram under Data › Model says what an Order is; this says which
+   orders are here. UML draws those as two diagrams, and the shapes echo each
+   other on purpose — a header with the object's reading, a rule, then its
+   members — so a person moving between the two is looking at the same thing
+   twice rather than learning a second notation. */
+.do-views { display: inline-flex; gap: 2px; margin-left: auto; }
+.do-views button {
+  font: 500 11.5px/1.5 system-ui, sans-serif; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  padding: 2px 9px;
+}
+.do-views button:first-child { border-radius: 5px 0 0 5px; }
+.do-views button:last-child { border-radius: 0 5px 5px 0; border-left: none; }
+.do-views button:hover { color: var(--accent); border-color: var(--accent); }
+.do-views button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.og-scroll { overflow: auto; }
+.og-svg { display: block; }
+.og-node .og-box { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+.og-node .og-sep { stroke: var(--border); }
+/* A root object is a thing the instance carries; a nested one exists only inside
+   its whole. The weight says which is which without a legend. */
+.og-node .og-box { fill: color-mix(in srgb, var(--accent-soft) 55%, var(--bg)); }
+.og-node.nested .og-box { fill: var(--bg); }
+.og-node.unset .og-box { stroke-dasharray: 4 3; }
+/* UML underlines an object's name — that is the notation's way of saying "this is
+   an instance, not a type", and it is the one mark that tells the two diagrams
+   apart at a glance. */
+.og-node .og-label {
+  fill: var(--text); font: 600 12px/1.4 system-ui, sans-serif;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.og-node .og-state {
+  fill: var(--text); font: 600 10px/1.4 system-ui, sans-serif;
+}
+.og-node .og-attr { font: 11.5px/1.4 ui-monospace, monospace; }
+.og-node .og-attr-name { fill: var(--muted); }
+.og-node .og-attr-name.key { fill: var(--text); font-weight: 700; }
+.og-node .og-eq { fill: var(--border); }
+.og-node .og-val { fill: var(--text); }
+.og-node .og-absent { fill: var(--muted); font-style: italic; }
+
+.og-line { stroke: var(--text); stroke-width: 1.3; }
+/* A key-resolved line is an inference from two values agreeing, not a fact read
+   out of one value — dashed, because the difference is worth seeing. */
+.og-line.association, .og-line.aggregation { stroke-dasharray: 5 3; }
+.og-mark { fill: var(--text); stroke: var(--text); stroke-width: 1.2; }
+.og-line-label { fill: var(--muted); font: 10.5px/1.4 ui-monospace, monospace; }
+
+.og-notes {
+  border-top: 1px solid var(--border); padding: 8px 12px;
+  font: 12px/1.6 system-ui, sans-serif; color: var(--muted);
+}
+.og-notes p { margin: 0 0 6px; }
+.og-notes p:last-child { margin-bottom: 0; }
+.og-notes b { color: var(--text); }
+
+/* ---- Data › Instances: the data-centric index ------------------------------
+   (ADR-draft-process-information-model, slice 5a)
+
+   The question BPMN structurally cannot express — which instances, across which
+   processes, are carrying *this* order — so the layout leads with identity: the
+   class, then the business key, then the instances under it. */
+.di-filters {
+  display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;
+  margin-top: 16px; padding: 12px 14px;
+}
+.di-field { display: block; }
+.di-field > span {
+  display: block; font: 600 11px/1.6 system-ui, sans-serif; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.di-field input {
+  font: 13px/1.5 system-ui, sans-serif; border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 8px; background: var(--bg); color: var(--text); min-width: 180px;
+}
+.di-toggle { display: flex; align-items: center; gap: 6px; font: 13px/1.5 system-ui, sans-serif; padding-bottom: 5px; }
+.di-note { margin-top: 14px; font-size: 12px; }
+.di-note b { color: var(--text); }
+
+/* One business key, and the instances carrying it. This heading is the sentence
+   the whole information model exists to make sayable, so it reads as one. */
+.im-key-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent-soft) 40%, var(--bg));
+}
+.im-key {
+  font: 600 12.5px/1.5 ui-monospace, monospace; color: var(--text);
+}
+.im-key.none { font-weight: 500; font-style: italic; }
+.im-key-head .muted { font: 12px/1.5 system-ui, sans-serif; }
+.im-key-head .btn { margin-left: auto; }
+.im-groups > table { border-top: none; }
+.im-groups > .im-key-head:first-child { border-top: none; }
+/* A finished instance is still carrying its data — it is just not running. */
+.im-past {
+  font: 600 10px/1.5 system-ui, sans-serif; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .04em; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px;
+}
+
+/* ---- Data stores on the class canvas ---------------------------------------
+   (ADR-draft-process-information-model, slice 5b)
+
+   A store is drawn the way the notation draws a persistent thing — an open-ended
+   cylinder — because the one mistake to prevent here is reading it as a class. A
+   class says what an Order is; a store says where Orders are kept, and only the
+   store is about storage at all. */
+.im-add.store { border-style: dashed; }
+.im-store { cursor: grab; }
+.im-store .im-store-body {
+  fill: color-mix(in srgb, #b26a00 10%, var(--bg));
+  stroke: var(--border); stroke-width: 1;
+}
+.im-store .im-store-lip { stroke: var(--border); stroke-width: 1; }
+.im-store .im-store-name { fill: var(--text); font: 600 13px/1.4 system-ui, sans-serif; }
+.im-store .im-store-sub { fill: var(--muted); font: 10.5px/1.4 ui-monospace, monospace; }
+.im-store.selected .im-store-body, .im-store.selected .im-store-lip { stroke: var(--accent); stroke-width: 2; }
+.im-store.invalid .im-store-body { stroke: #d93025; stroke-dasharray: 4 3; }
+.im-store.unreachable { opacity: .35; }
+/* The line from a store to the class it keeps is an annotation, not an
+   association — nothing in the model *relates* those two — so it is drawn as one. */
+.im-store-line { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; }

@@ -627,12 +627,12 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   try {
     if (draftId != null) {
       const xml = await api("GET", `/api/v1/drafts/${encodeURIComponent(draftId)}/xml`);
-      await modeler.importXML(typeof xml === "string" ? xml : String(xml));
+      await modeler.importXML(repairItemDefinitions(typeof xml === "string" ? xml : String(xml)));
     } else if (key == null) {
       await modeler.importXML(blankXML());
     } else {
       const xml = await api("GET", `/api/v1/processes/${key}/xml`);
-      await modeler.importXML(typeof xml === "string" ? xml : String(xml));
+      await modeler.importXML(repairItemDefinitions(typeof xml === "string" ? xml : String(xml)));
     }
     modeler.get("canvas").zoom("fit-viewport");
     const pbo = rootProcess(modeler);
@@ -681,7 +681,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   wireBarMenu(root);
   wireActions(root, modeler, api, toast, projectId, identity);
   wireEditorVars(root, modeler, api);
-  wireProblems(root, modeler, api);
+  wireProblems(root, modeler, api, projectId);
   wireResizer(root, modeler);
   wireTokenSim(root, modeler);
 
@@ -712,6 +712,89 @@ function unsupportedReason(bo) {
   return null;
 }
 
+// A data object's declared type is BPMN's itemSubjectRef, and it is a *reference*
+// to an <itemDefinition> rather than a name — which the moddle enforces in the one
+// way that matters: a reference it cannot resolve is dropped on export. A model
+// carrying the shorthand `itemSubjectRef="Order"` with no matching <itemDefinition>
+// therefore loses its types the moment it is opened here and saved, silently. These
+// three functions are what keeps that from happening
+// (ADR-draft-process-information-model).
+
+// itemTypeOf reads the declared type off a <dataObject>: the referenced
+// definition's structureRef, the name it carries in a vendor property when it has
+// no structureRef, its id when it names itself nowhere. The compiler resolves the
+// same ways round, so the panel and the Problems list never disagree about what a
+// data object is called.
+function itemTypeOf(dataObject) {
+  const ref = dataObject && dataObject.itemSubjectRef;
+  if (!ref) return "";
+  if (typeof ref === "string") return ref; // a raw attribute, if a moddle ever keeps one
+  return ref.structureRef || vendorTypeName(ref) || ref.id || "";
+}
+
+// vendorTypeName reads a type name out of an <itemDefinition>'s extension elements.
+// BPMN gives an itemDefinition no name of its own, so structureRef is the only place
+// the specification offers and a tool that does not use it puts the name in its own
+// namespace instead: MID Innovator writes <bpanda:property name="Name"
+// value="Incident"/> next to a GUID id. Without this, such a model shows a GUID
+// wherever it says Incident. An unknown namespace reaches the moddle as a generic
+// element, so the attributes are read off $attrs.
+function vendorTypeName(itemDefinition) {
+  const values = (itemDefinition.extensionElements || {}).values || [];
+  for (const v of values) {
+    const attrs = v.$attrs || {};
+    const key = attrs.name !== undefined ? attrs.name : v.name;
+    const value = attrs.value !== undefined ? attrs.value : v.value;
+    if (String(key || "").toLowerCase() === "name" && value) return String(value);
+  }
+  return "";
+}
+
+// itemDefinitionId is the reference handle for a type name. The name itself cannot
+// be the id — an XML id may not contain a space, and a class may well be called
+// "Line item" — so the id is derived and the name travels in structureRef.
+function itemDefinitionId(name) {
+  return "ItemDefinition_" + name.replace(/[^A-Za-z0-9_-]/g, "_");
+}
+
+// ensureItemDefinition returns the <itemDefinition> for a type name, creating it at
+// definitions level if this model has none yet. Reused rather than duplicated, so
+// two data objects of the same type share one definition.
+function ensureItemDefinition(modeler, name) {
+  const defs = modeler.get("canvas").getRootElement().businessObject.$parent;
+  defs.rootElements = defs.rootElements || [];
+  const existing = defs.rootElements.find(
+    (el) => el.$type === "bpmn:ItemDefinition" && (el.structureRef || el.id) === name);
+  if (existing) return existing;
+  const created = modeler.get("moddle").create("bpmn:ItemDefinition", {
+    id: itemDefinitionId(name), structureRef: name,
+  });
+  created.$parent = defs;
+  defs.rootElements.push(created);
+  return created;
+}
+
+// repairItemDefinitions rewrites a model's XML *before* it is imported, declaring an
+// <itemDefinition> for every itemSubjectRef that names none. Without it the moddle
+// drops those references on import and the export loses them — so a diagram
+// authored by hand, by an agent, or by an older Atlas would quietly come back
+// untyped after somebody opened it. It is a repair rather than a rewrite: a model
+// that already declares its definitions passes through untouched.
+function repairItemDefinitions(xml) {
+  const refs = [...xml.matchAll(/itemSubjectRef="([^"]+)"/g)].map((m) => m[1]);
+  if (!refs.length) return xml;
+  const declared = new Set([...xml.matchAll(/<(?:\w+:)?itemDefinition\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
+  const missing = [...new Set(refs)].filter((r) => !declared.has(r));
+  if (!missing.length) return xml;
+  const open = xml.match(/<((?:\w+:)?definitions)\b[^>]*>/);
+  if (!open) return xml;
+  const prefix = open[1].includes(":") ? open[1].split(":")[0] + ":" : "";
+  const inserted = missing
+    .map((name) => `<${prefix}itemDefinition id="${name}" structureRef="${name}" />`)
+    .join("");
+  return xml.slice(0, open.index + open[0].length) + inserted + xml.slice(open.index + open[0].length);
+}
+
 // wireProblems drives the Problems panel (ADR-0026): the bottom bar becomes a
 // toggle that opens a filterable, element-linked list of the compiler's findings.
 // Validation is the real compiler run behind POST /api/v1/validate — never a
@@ -720,7 +803,15 @@ function unsupportedReason(bo) {
 // warnings included. It re-validates (debounced) as the diagram is edited, on
 // import, and on demand, so a modeling smell like a disconnected end event is
 // explained continuously rather than only at deploy time.
-function wireProblems(root, modeler, api) {
+//
+// applicationId is the process application the draft is filed under, and passing it
+// widens what the panel can say: a data object's declared type resolves against
+// *that* application's information model, so the panel reports a type nothing
+// models, a write targeting a member the class does not have, and a read no writer
+// precedes (ADR-draft-process-information-model). A draft filed nowhere has no
+// vocabulary to resolve against and gets the compiler's findings alone — the same
+// answer as before, rather than a quieter or a noisier one.
+function wireProblems(root, modeler, api, applicationId) {
   const bar = root.querySelector("#problems-bar");
   const listEl = root.querySelector("#prob-list");
   const countEl = root.querySelector("#prob-count");
@@ -844,7 +935,10 @@ function wireProblems(root, modeler, api) {
     try { ({ xml } = await modeler.saveXML({ format: true })); } catch { problems = unsupported; render(); return; }
     const mine = ++seq;
     let res;
-    try { res = await api("POST", "/api/v1/validate", xml, true); } catch { problems = unsupported; render(); return; }
+    const path = applicationId
+      ? `/api/v1/validate?applicationId=${encodeURIComponent(applicationId)}`
+      : "/api/v1/validate";
+    try { res = await api("POST", path, xml, true); } catch { problems = unsupported; render(); return; }
     if (mine !== seq) return; // a newer validate has superseded this one
     const server = Array.isArray(res.problems) ? res.problems : [];
     // Keep the compiler's authoritative findings and add a per-element warning for each
@@ -4919,6 +5013,25 @@ function groupifyPanel(body, ctl) {
 }
 
 function wireProperties(root, modeler, api, projectId, toast, identity) {
+  // The class names this application models, offered as suggestions for a data
+  // object's type (ADR-draft-process-information-model). It is a *suggestion* and
+  // not a closed list on purpose: a model is routinely drawn before the vocabulary
+  // it names exists, so typing a class that is not modeled yet has to stay possible
+  // — the Problems panel says so, and a deploy is never refused for it.
+  let modeledClasses = [];
+  if (projectId) {
+    (async () => {
+      try {
+        const models = await api("GET", `/api/v1/infomodel/models?applicationId=${encodeURIComponent(projectId)}`);
+        const names = new Set();
+        for (const m of models || []) {
+          const full = await api("GET", `/api/v1/infomodel/models/${encodeURIComponent(m.id)}`);
+          for (const c of (full && full.classes) || []) names.add(c.name);
+        }
+        modeledClasses = [...names].sort();
+      } catch { /* no vocabulary: the field stays a plain text input */ }
+    })();
+  }
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
   const nameEl = root.querySelector("#p-name");
@@ -5248,12 +5361,18 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           <select id="f-pointsto">${names.map((n) => `<option value="${esc(n.id)}" ${n.name === curName ? "selected" : ""}>${esc(n.name)}</option>`).join("")}</select></label>
           <p class="muted" style="font-size:12px">Point this box at an existing data object to show <b>the same object in several places</b> — one logical object, so you can put it next to each activity without long arrows across the diagram.</p>`;
       }
+      const itemType = itemTypeOf(bo.dataObjectRef);
+      const unresolved = itemType && modeledClasses.length && !modeledClasses.includes(itemType);
       html += `<h3>Data object</h3>
+        <label class="field"><span>Type <span class="muted">(optional)</span></span>
+          <input type="text" id="f-itemtype" list="f-itemtype-list" value="${esc(itemType)}" placeholder="Order"/></label>
+        <datalist id="f-itemtype-list">${modeledClasses.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
+        ${unresolved ? `<p class="muted" style="font-size:12px; color:#b26a00">No class called <b>${esc(itemType)}</b> is modelled in this application yet — the Problems panel lists it, and a deploy is not refused for it.</p>` : ""}
         <label class="field"><span>Data state</span>
           <input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/></label>
         <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>Collection (a list of items)</span></label>
         ${pointsTo}
-        <p class="muted" style="font-size:12px">A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
+        <p class="muted" style="font-size:12px">The <b>Type</b> is the class this datum is, from the application's information model under <b>Data</b> — BPMN's <code>itemSubjectRef</code>. It is what lets two processes agree that their <code>order</code> is the same kind of thing, and what a write to a member of this object is checked against. A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
     }
 
     // A data association is the arrow between an activity and a data object — it is
@@ -5748,6 +5867,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (!v) { show(element); return; } // empty is not a valid id → revert to the current one
         try { modeling.updateProperties(element, { id: v }); }
         catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+      });
+    }
+
+    // The type lives on the underlying <dataObject>, not on the reference — the same
+    // place the compiler reads it from, and the same reason the name is written
+    // through to it above: the reference is a view of the object, not the object.
+    const fitemtype = body.querySelector("#f-itemtype");
+    if (fitemtype && bo.dataObjectRef) {
+      fitemtype.addEventListener("change", (e) => {
+        const v = (e.target.value || "").trim();
+        try {
+          const def = v ? ensureItemDefinition(modeler, v) : undefined;
+          modeling.updateModdleProperties(element, bo.dataObjectRef, { itemSubjectRef: def });
+        } catch { /* stale */ }
+        show(element); // re-render so the "not modelled yet" note appears or clears
       });
     }
 
@@ -8637,10 +8771,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
             <button data-tab="details" class="active" title="Show this step’s details">Details</button>
             <button data-tab="variables" title="Show the process variables at this step">Variables</button>
             <button data-tab="decisions" title="Show the decisions evaluated at this step">Decisions</button>
+            <button data-tab="data" title="Show the data objects this instance carries, their state, and where each value came from">Data</button>
           </div>
           <div class="ops-tab-body" id="tab-details"></div>
           <div class="ops-tab-body" id="tab-variables" hidden></div>
           <div class="ops-tab-body" id="tab-decisions" hidden></div>
+          <div class="ops-tab-body" id="tab-data" hidden></div>
         </div>
       </div>
       <div class="var-modal-ov" id="var-modal-ov" hidden>
@@ -8738,6 +8874,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const detailEl = root.querySelector("#tab-details");
   const varsEl = root.querySelector("#tab-variables");
   const decEl = root.querySelector("#tab-decisions");
+  const dataEl = root.querySelector("#tab-data");
   const decPop = root.querySelector("#dec-pop");
   const speedSel = root.querySelector("#speed");
 
@@ -8769,6 +8906,14 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let incidents = [];    // this instance's unresolved incidents, from the runtime poll (ADR-0061/0151)
   let decisions = [];    // this instance's DMN decision evaluations (ADR-0066)
   let curDecs = [];      // the evaluations the Decisions tab is currently showing (backs the hover popover)
+  let dataObjects = [];  // this instance's BPMN data objects, with their state trail (ADR-0053)
+  let openTrails = {};   // data-object name → whether its state trail is expanded
+  // The Data tab has two readings of one subject, which is UML's own split: the
+  // list is the type-free scan of what the instance holds, the object diagram the
+  // instance-level twin of the class diagram under Data › Model. The choice is
+  // remembered because it is about how a person reads data, not about this instance.
+  let dataView = localStorage.getItem("atlas.replay.datadiagram") === "1" ? "diagram" : "list";
+  let objectGraph = null; // the derived diagram, fetched on demand
   let varFilter = "";    // Variables-tab name filter (persists across scrubs)
   let curVarList = [];   // the variable set the Variables tab is currently showing
   // Keys (scope\u0000name) the selected element itself wrote, when the Output side is
@@ -9437,7 +9582,282 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       </div>${body}`;
   }
 
-  function renderInspector() { renderDetail(); renderVars(); renderDecisions(); }
+  // doLabel names the element a data object's value came from the way the rest of the
+  // replay names elements: the modeler's own label where there is one, the BPMN id
+  // otherwise, and the raw id when the element is no longer on this diagram.
+  const doLabel = (elId) => {
+    if (!elId) return "";
+    const bo = (registry.get(elId) || {}).businessObject;
+    return (bo && (bo.name || bo.id)) || elId;
+  };
+
+  // doValueCell renders a data object's value the way the Variables tab renders a
+  // variable's: a structure is summarized rather than dumped, because a data object is
+  // variable-shaped by design (ADR-0053) and an operator scanning the two side by side
+  // should not have to learn two readings of the same thing.
+  const doValueCell = (d) => {
+    if (d.kind === "null" || d.value === null || d.value === undefined) {
+      return `<span class="c-val null" title="No value written yet — the object is declared and seeded, but no association has written it">unset</span>`;
+    }
+    if (d.kind === "json") {
+      const text = JSON.stringify(d.value);
+      const arr = Array.isArray(d.value);
+      return `<span class="c-val do-json" title="${esc(prettyJSON(text))}">${arr ? "[" : "{"}${esc(jsonSummary(text))}${arr ? "]" : "}"}</span>`;
+    }
+    const cls = d.kind === "boolean" ? "bool" : d.kind === "number" ? "num" : "str";
+    return `<span class="c-val ${cls}">${esc(String(d.value))}</span>`;
+  };
+
+  // renderDataObjects lists the data objects this instance carries: what each one is
+  // (its declared class), what lifecycle state it is in, what it holds, and — the part
+  // no variable view can answer — which element put that value there and when.
+  //
+  // Each row expands into the object's state trail, which is the reason data objects
+  // are event-sourced at all: [received] → [approved] is a sequence of durable facts,
+  // not a field that was overwritten. The trail is rendered from the whole history
+  // rather than clipped to the playhead: it is the datum's own biography, and reading
+  // where a value came from is exactly the moment an operator wants to see past the
+  // frame they are parked on.
+  // dataHead is the bar both readings share: the count, and the toggle between them.
+  function dataHead() {
+    return `<div class="vp-head">
+        <span class="vp-title">Data objects</span>
+        <span class="vp-count">${dataObjects.length} object${dataObjects.length === 1 ? "" : "s"}</span>
+        <span class="do-views" role="tablist">
+          <button type="button" data-dview="list"${dataView === "list" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}
+            title="What this instance holds, as a list">List</button>
+          <button type="button" data-dview="diagram"${dataView === "diagram" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}
+            title="The same data as objects, linked the way the information model says they relate">Diagram</button>
+        </span>
+      </div>`;
+  }
+
+  function renderDataObjects() {
+    if (!dataObjects.length) {
+      dataEl.innerHTML = `<p class="ops-empty">This process declares no data objects. Draw a data object on the diagram and give an activity a data association, and the data it carries — its value, its state, and where each value came from — appears here.</p>`;
+      return;
+    }
+    if (dataView === "diagram") return renderObjectDiagram();
+    // Who wrote a value, rendered per entry rather than per instance, because the three
+    // reasons an entry can name nobody are genuinely different and the trail's own shape
+    // tells them apart. The first entry is the seeding at instance creation — no element
+    // ran, and saying so is the true answer, not a gap. A later entry that names nobody
+    // is a gap: either this instance predates write attribution, or the element that
+    // wrote it is no longer on a deployed definition. Both are "we cannot say", and the
+    // one thing not to do is name an element that may be the wrong one.
+    const writtenBy = (h, i) => {
+      if (h.producedBy) return `<span class="do-by">${esc(doLabel(h.producedBy))}</span>`;
+      if (i === 0) return `<span class="do-by none" title="No element wrote this — it is the value the object was seeded with when the instance was created">seeded</span>`;
+      return `<span class="do-by none" title="This write cannot be attributed: the instance ran before Atlas recorded which element writes a data object, or the definition that element belonged to is gone">unknown</span>`;
+    };
+    const rows = dataObjects.map((d) => {
+      const open = !!openTrails[d.name];
+      const trail = d.history || [];
+      const cls = d.itemType
+        ? `<span class="do-class" title="The class this datum was declared to be (itemSubjectRef)">${esc(d.itemType)}</span>`
+        : `<span class="do-class none" title="The model declares no type for this object">untyped</span>`;
+      const coll = d.isCollection ? ` <span class="do-coll" title="Declared isCollection — this object holds a list">list</span>` : "";
+      const state = d.state
+        ? `<span class="do-state">${esc(d.state)}</span>`
+        : `<span class="do-state none" title="This object declares no data state">—</span>`;
+      // The row summarizes the object's most recent write, so it reads exactly as that
+      // write's row in the trail below does — one fact, told once.
+      const by = writtenBy({ producedBy: d.producedBy }, trail.length ? trail.length - 1 : 0);
+      const head = `<tr class="do-row${open ? " open" : ""}" data-do="${esc(d.name)}">
+        <td class="c-name">
+          <button type="button" class="do-toggle" aria-expanded="${open}" title="${open ? "Hide" : "Show"} the state trail of ${esc(d.name)}">
+            <span class="v-chev" aria-hidden="true">${open ? "▾" : "▸"}</span><span class="do-name">${esc(d.name)}</span>
+          </button>${coll}
+        </td>
+        <td class="do-c-class">${cls}</td>
+        <td class="do-c-state">${state}</td>
+        <td class="c-valcell">${doValueCell(d)}</td>
+        <td class="do-c-by">${by}</td>
+        <td class="do-c-at">${esc(fmtClock(d.at))}</td>
+      </tr>`;
+      if (!open) return head;
+      const entries = trail.map((h, i) => `<tr class="do-trail-row">
+          <td class="do-t-n">${i + 1}</td>
+          <td class="do-t-state">${h.state ? esc(h.state) : "—"}</td>
+          <td class="do-t-val">${doValueCell(h)}</td>
+          <td class="do-t-by">${writtenBy(h, i)}</td>
+          <td class="do-t-at">${esc(fmtClock(h.at))}</td>
+        </tr>`).join("");
+      return head + `<tr class="do-trail"><td colspan="6">
+        <div class="do-trail-box">
+          <div class="do-trail-h">State trail · every durable write to <b>${esc(d.name)}</b></div>
+          <table class="do-trail-table"><tbody>${entries || `<tr><td class="muted">nothing recorded yet</td></tr>`}</tbody></table>
+        </div></td></tr>`;
+    }).join("");
+    dataEl.innerHTML = dataHead() + `
+      <div class="v-scroll">
+        <table class="vt do-table">
+          <thead><tr><th>Name</th><th>Class</th><th>State</th><th>Value</th><th>Written by</th><th>When</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  // renderObjectDiagram draws the instance's objects and the lines between them.
+  //
+  // The graph is *derived on the server* — nodes, lines, and what could not be
+  // resolved — because the rules for what relates to what are model semantics, and a
+  // second copy of them here is a second place for them to be wrong. This function
+  // is a renderer: it lays boxes out and draws lines, and knows nothing about
+  // compositions or business keys beyond the labels it is handed.
+  async function renderObjectDiagram() {
+    if (!objectGraph) {
+      dataEl.innerHTML = dataHead() + `<p class="ops-empty">Deriving the object diagram…</p>`;
+      try {
+        objectGraph = await api("GET", `/api/v1/instances/${key}/object-graph`);
+      } catch (e) {
+        dataEl.innerHTML = dataHead() + `<p class="ops-empty err">Could not derive the object diagram: ${esc(e.message)}</p>`;
+        return;
+      }
+      if (current !== viewer) return; // navigated away while it was derived
+    }
+    const g = objectGraph;
+    if (!g.nodes || !g.nodes.length) {
+      dataEl.innerHTML = dataHead() + `<p class="ops-empty">Nothing to draw yet — no data object carries a value.</p>`;
+      return;
+    }
+
+    // Roots across, their parts beneath them: the shape a person reads an object
+    // diagram in, and it needs no force simulation to arrive at.
+    const children = {};
+    for (const l of g.links || []) {
+      if (l.via === "containment") (children[l.from] = children[l.from] || []).push(l.to);
+    }
+    const nested = new Set(Object.values(children).flat());
+    const roots = g.nodes.filter((n) => !nested.has(n.id));
+    const W = 210, GAP_X = 60, GAP_Y = 40;
+    const pos = {};
+    let x = 20;
+    let maxBottom = 0;
+    const place = (node, left, top) => {
+      const h = 34 + Math.max(1, (node.attributes || []).length) * 18 + 10;
+      pos[node.id] = { x: left, y: top, w: W, h, node };
+      let bottom = top + h;
+      for (const childId of children[node.id] || []) {
+        const child = g.nodes.find((n) => n.id === childId);
+        if (!child || pos[childId]) continue;
+        bottom = place(child, left + 40, bottom + GAP_Y);
+      }
+      return bottom;
+    };
+    for (const r of roots) {
+      const bottom = place(r, x, 20);
+      maxBottom = Math.max(maxBottom, bottom);
+      x += W + GAP_X + 40;
+    }
+    // Anything the layout did not reach (a cycle of containment the server capped)
+    // still gets a place, so no object silently vanishes from a picture of the data.
+    for (const n of g.nodes) {
+      if (pos[n.id]) continue;
+      const bottom = place(n, x, 20);
+      maxBottom = Math.max(maxBottom, bottom);
+      x += W + GAP_X;
+    }
+
+    const width = Math.max(x + 20, 600);
+    const height = Math.max(maxBottom + 40, 260);
+    const box = (p) => {
+      const n = p.node;
+      const rows = (n.attributes || []).map((a, i) => {
+        const y = 34 + i * 18 + 13;
+        const val = a.absent
+          ? `<tspan class="og-absent">not set</tspan>`
+          : `<tspan class="og-val">${esc(a.value)}</tspan>`;
+        return `<text x="10" y="${y}" class="og-attr"><tspan class="og-attr-name${a.key ? " key" : ""}">${a.key ? "⚿ " : ""}${esc(a.name)}</tspan><tspan class="og-eq"> = </tspan>${val}</text>`;
+      }).join("");
+      const bare = !(n.attributes || []).length
+        ? `<text x="10" y="${34 + 13}" class="og-attr">${n.unset
+          ? `<tspan class="og-absent">unset</tspan>`
+          : `<tspan class="og-val">${esc(n.value || "")}</tspan>`}</text>`
+        : "";
+      const state = n.state ? `<text x="${W - 10}" y="15" class="og-state" text-anchor="end">[${esc(n.state)}]</text>` : "";
+      return `<g class="og-node${n.nested ? " nested" : ""}${n.unset ? " unset" : ""}" transform="translate(${p.x},${p.y})">
+        <rect width="${W}" height="${p.h}" rx="6" class="og-box"/>
+        <line x1="0" y1="34" x2="${W}" y2="34" class="og-sep"/>
+        <text x="10" y="15" class="og-label">${esc(n.label)}</text>
+        ${state}${rows}${bare}
+      </g>`;
+    };
+
+    // A line leaves the right edge of one box and enters the left edge of the other;
+    // a containment line drops out of the bottom, which is where the eye expects a
+    // part to hang.
+    const line = (l) => {
+      const a = pos[l.from], b = pos[l.to];
+      if (!a || !b) return "";
+      const down = l.via === "containment";
+      const x1 = down ? a.x + 20 : a.x + a.w;
+      const y1 = down ? a.y + a.h : a.y + a.h / 2;
+      const x2 = down ? b.x : b.x + (b.x < a.x ? b.w : 0);
+      const y2 = down ? b.y + b.h / 2 : b.y + b.h / 2;
+      const d = down ? `M${x1},${y1} L${x1},${y2} L${x2},${y2}` : `M${x1},${y1} L${x2},${y2}`;
+      const marker = l.kind === "composition" ? ` marker-start="url(#og-diamond)"` : "";
+      const mid = down ? { x: x1 + 8, y: (y1 + y2) / 2 } : { x: (x1 + x2) / 2, y: (y1 + y2) / 2 - 6 };
+      return `<path d="${d}" class="og-line ${esc(l.kind)}" fill="none"${marker}/>` +
+        (l.label ? `<text x="${mid.x}" y="${mid.y}" class="og-line-label">${esc(l.label)}</text>` : "");
+    };
+
+    // What the picture could not show, said rather than left out. An unresolved
+    // reference is not a fault — it is the edge of one instance: the object it names
+    // is in another instance, or in a store this instance does not reach.
+    const notes = [];
+    if (g.degraded) {
+      notes.push(`This application models no data yet, so these are the objects the instance holds without the
+        structure a model would give them — no classes, and no lines. Draw them under <b>Data › Model</b>.`);
+    }
+    if (g.truncated) {
+      notes.push(`The picture stops short: this instance carries more nested objects than a readable diagram holds.`);
+    }
+    for (const u of g.unresolved || []) {
+      // The one place the picture admits its own edge — so it also says where to
+      // look. The data index answers exactly this across every instance.
+      const find = `#/data/instances?class=${encodeURIComponent(u.class)}&key=${encodeURIComponent(u.value)}&history=true`;
+      notes.push(`<b>${esc(u.from)}.${esc(u.role)}</b> refers to the ${esc(u.class)} <code>${esc(u.value)}</code>,
+        which this instance does not carry — it lives in another instance or in a data store.
+        <a href="${find}" title="Search every instance for this one">Find it →</a>`);
+    }
+
+    dataEl.innerHTML = dataHead() + `
+      <div class="og-scroll">
+        <svg class="og-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+          <defs><marker id="og-diamond" markerWidth="18" markerHeight="12" refX="16" refY="6"
+              orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+            <path d="M0,6 L8,1 L16,6 L8,11 Z" class="og-mark"/></marker></defs>
+          ${(g.links || []).map(line).join("")}
+          ${g.nodes.map((n) => box(pos[n.id])).join("")}
+        </svg>
+      </div>
+      ${notes.length ? `<div class="og-notes">${notes.map((n) => `<p>${n}</p>`).join("")}</div>` : ""}`;
+  }
+
+  // The trail toggles are inside a body that re-renders, so they are wired by
+  // delegation rather than re-bound on every render.
+  dataEl.addEventListener("click", (e) => {
+    const t = e.target.closest(".do-toggle");
+    if (!t || !dataEl.contains(t)) return;
+    const row = t.closest(".do-row");
+    if (!row) return;
+    const name = row.dataset.do;
+    openTrails[name] = !openTrails[name];
+    renderDataObjects();
+  });
+
+  // The Data tab's two readings, and the trail toggles inside the list, are wired by
+  // delegation on a body that re-renders.
+  dataEl.addEventListener("click", (e) => {
+    const view = e.target.closest("[data-dview]");
+    if (!view || !dataEl.contains(view)) return;
+    dataView = view.dataset.dview;
+    localStorage.setItem("atlas.replay.datadiagram", dataView === "diagram" ? "1" : "0");
+    renderDataObjects();
+  });
+
+  function renderInspector() { renderDetail(); renderVars(); renderDecisions(); renderDataObjects(); }
 
   function updateClock() {
     if (!frames.length) { clockEl.textContent = "no frames yet"; return; }
@@ -9924,6 +10344,27 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     applyMeta(next);
     await loadRuntime();
     await refreshDecisions();
+    await refreshDataObjects();
+  }
+
+  // refreshDataObjects pulls the instance's data objects and re-renders the tab when
+  // anything about them moved — a value, a data state, or a new entry in a trail. A
+  // data object changes without the step count changing (an association writes on an
+  // activity's completion), so it cannot ride on the timeline's "grew" check.
+  async function refreshDataObjects() {
+    let next;
+    try { next = await api("GET", `/api/v1/instances/${key}/data-objects`); }
+    catch { return; } // transient; keep what we have
+    if (current !== viewer) return;
+    // The endpoint answers an array; anything else is a surface that does not serve this
+    // route, and the tab shows its empty state rather than throwing inside the poll —
+    // this runs on the same tick as the timeline and runtime refreshes.
+    if (!Array.isArray(next)) next = [];
+    const sig = (list) => list.map((d) => `${d.name}:${d.state}:${(d.history || []).length}:${d.at}`).join(",");
+    if (sig(next) === sig(dataObjects)) return;
+    dataObjects = next;
+    objectGraph = null; // derived from these objects, so it is stale the moment they move
+    renderDataObjects();
   }
 
   // refreshDecisions pulls the instance's DMN evaluations and re-renders the tab
@@ -9963,6 +10404,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     detailEl.hidden = activeTab !== "details";
     varsEl.hidden = activeTab !== "variables";
     decEl.hidden = activeTab !== "decisions";
+    dataEl.hidden = activeTab !== "data";
   }));
   root.querySelector("#tg-end").addEventListener("change", (e) => { showEnd = e.target.checked; renderHistory(); });
   // The in/out card can cover whatever the modeler drew below a task, so it is the

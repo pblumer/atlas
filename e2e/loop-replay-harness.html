@@ -89,6 +89,8 @@
         // raw visit count here is 4 for three rounds — the number the badge must not show.
         if (url.includes("/runtime")) return { elements: [{ elementId: "Rechne_1", visits: 4, tokens: 0, incidents: 0 }] };
         if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        if (/\/instances\/\d+\/data-objects$/.test(url)) return [];
+        if (/\/instances\/\d+\/object-graph$/.test(url)) return { nodes: [], links: [], unresolved: [] };
         return {};
       };
 
