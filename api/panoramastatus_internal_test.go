@@ -169,3 +169,53 @@ func TestATruncatedMessageSaysItWasTruncated(t *testing.T) {
 		t.Error("a message exactly at the bound was marked as cut")
 	}
 }
+
+// TestJobTypeStatusAnswersOnlyWhatTheEngineCanSee is the mapping ADR-0189 §6 needed
+// and nobody had chosen, asserted at the place that chose it.
+//
+// The turn it makes is the whole design: a job type is a name for work, not a thing
+// that can be well or unwell, so the question becomes "is this kind of work getting
+// done here" — and the last row is the one that matters most. A fresh server has an
+// empty worker registry, and a mapping that read that as "nobody serves this" would
+// mark every worker-served kind broken on every restart, which is exactly what §4's
+// severity rules exist to prevent.
+func TestJobTypeStatusAnswersOnlyWhatTheEngineCanSee(t *testing.T) {
+	for name, tc := range map[string]struct {
+		taken, incidents int64
+		inProcess        bool
+		state            string
+		says             string
+	}{
+		"parked work is a finding": {
+			incidents: 3, state: panorama.StateDegraded, says: "3 job(s)",
+		},
+		"a finding outranks the engine serving it": {
+			incidents: 2, inProcess: true, taken: 90,
+			state: panorama.StateDegraded, says: "parked",
+		},
+		"the engine serving it is knowledge, not inference": {
+			inProcess: true, state: panorama.StateHealthy, says: "runs this job type itself",
+		},
+		"work demonstrably done is healthy": {
+			taken: 12, state: panorama.StateHealthy, says: "12 job(s)",
+		},
+		"nothing seen is unbound, not broken": {
+			state: panorama.StateUnbound, says: "emptied by a restart",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			state, reason := jobTypeStatus(tc.taken, tc.incidents, tc.inProcess)
+			if state != tc.state {
+				t.Errorf("state = %q, want %q", state, tc.state)
+			}
+			if !strings.Contains(reason, tc.says) {
+				t.Errorf("reason = %q, want it to mention %q", reason, tc.says)
+			}
+		})
+	}
+
+	// That the unbound case is neutral rather than a fourth level of badness is
+	// pinned where the mapping lives (TestSeverityMapsEachStateThroughOneTable in the
+	// panorama package), so it is not restated here through an export that would
+	// exist only for this test.
+}

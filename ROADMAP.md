@@ -915,11 +915,17 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   Secrets panel over the CRUD endpoints.
 - 🔲 Later: a polished "workbench" experience on top.
 
-## Milestone P — Panorama architecture & live landscape 🔲
+## Milestone P — Panorama architecture & live landscape ✅
 
 A parallel track alongside Milestone S: turn Panorama from a placeholder into a
 standards-based architecture workspace that relates declared ArchiMate 3.2 models
-to current Atlas resources without mixing runtime observations into the model. See
+to current Atlas resources without mixing runtime observations into the model.
+
+All six slices below have shipped, which is what this marker says and no more: the
+milestone's scope is done, not Panorama. What that scope deliberately left out is
+recorded in the slices themselves rather than as an open box here — chiefly that the
+derived mesh contacts no deployment target, so it declares *unreachable* and *stale*
+unproducible where the model overlay, which does ask peers, produces both. See
 [ADR-0189: Panorama architecture modeling and live operational overlays](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)
 for the drawn model, its bindings, and the observation projection, and
 [ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md)

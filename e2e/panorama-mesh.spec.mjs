@@ -1356,3 +1356,53 @@ test("a finding with nowhere to point does not invent a place", async ({ page })
   await expect(page.locator(".mesh-finding")).toContainText("This worker cannot serve work");
   await expect(page.locator(".mesh-finding .mesh-sites")).toHaveCount(0);
 });
+
+// Attention has to look like a finding, not like a hint.
+//
+// It used to be drawn as a pale wash inside a thin ochre outline while critical was
+// a solid disc — so the two classes differed in *form* as well as in colour, and the
+// form was doing most of the work. A tinted outline beside a filled badge does not
+// read as "less urgent", it reads as "not really a finding".
+test("an attention finding is drawn as one, not as a hint", async ({ page }) => {
+  installMock(page, statusGraph);
+  await page.goto("/index.html#/panorama/landscape");
+
+  const badge = (id) => page.locator(`[data-node-id="${id}"] .mesh-badge-dot`)
+    .evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { fill: style.fill, stroke: style.stroke };
+    });
+
+  // Both classes are a filled badge in their own colour — the fill is the colour,
+  // not a wash of it, so neither is a ring around nothing.
+  const attention = await badge("process:1");
+  const critical = await badge("process:2");
+  expect(attention.fill).toBe(attention.stroke);
+  expect(critical.fill).toBe(critical.stroke);
+  // And they are still two different findings: "it is broken" and "something inside
+  // it went wrong" are what this view exists to tell apart.
+  expect(attention.fill).not.toBe(critical.fill);
+
+  // The glyph on each is legible against the badge it sits on, which is why they do
+  // not share one: white on the red, near-black on the amber.
+  const ink = (id) => page.locator(`[data-node-id="${id}"] .mesh-badge-glyph`)
+    .evaluate((el) => getComputedStyle(el).fill);
+  expect(await ink("process:1")).not.toBe(await ink("process:2"));
+
+  // Colour is never the only channel (ADR-0211 §4): each class keeps its own glyph,
+  // so the picture is readable without separating red from amber.
+  const glyphs = await page.evaluate(() => ({
+    attention: document.querySelector('[data-node-id="process:1"] .mesh-badge-glyph').textContent,
+    critical: document.querySelector('[data-node-id="process:2"] .mesh-badge-glyph').textContent,
+  }));
+  expect(glyphs.attention).not.toBe(glyphs.critical);
+
+  // Weight is the third channel: a node with a finding wears a heavier ring than one
+  // without, which survives being small, being zoomed out, and being looked at by
+  // somebody who does not separate the two hues at all.
+  const ring = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => parseFloat(getComputedStyle(el).strokeWidth));
+  const quiet = await ring("decision:credit");
+  expect(await ring("process:1")).toBeGreaterThan(quiet);
+  expect(await ring("process:2")).toBeGreaterThan(quiet);
+});
