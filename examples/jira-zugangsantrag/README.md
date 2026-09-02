@@ -1,13 +1,14 @@
 # Jira-Demo: Zugangsantrag 🎫
 
 Zwei Prozesse, die den Jira-Worker-Typ ([ADR-0201](../../docs/adr/0201-jira-connector.md))
-an einer echten Jira zeigen. **Work in progress** — der Verbindungstest steht, der
-Zugangsantrag mit Freigabe fehlt noch.
+an einer echten Jira zeigen — der ausgehende Weg. Die Gegenrichtung, in der ein neues
+Ticket einen Prozess *startet*, steht daneben in
+[`jira-ticket-eingang/`](../jira-ticket-eingang/).
 
 | Datei | Zweck |
 |---|---|
 | `jira-verbindungstest.bpmn` | Drei Elemente: legt einen Vorgang an, schreibt die Antwort in `ticket`. Zuerst starten. |
-| `jira-zugangsantrag.bpmn` | *(noch nicht geschrieben)* Antrag → Vorgang anlegen → Freigabe → Transition bzw. Ablehnungskommentar. |
+| `jira-zugangsantrag.bpmn` | Antrag → Vorgang anlegen → Freigabe → Transition bzw. Ablehnungskommentar. |
 
 ## Voraussetzung: eine Instanz, die den Worker-Typ kennt
 
