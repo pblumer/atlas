@@ -5,7 +5,8 @@
   the graph out in a world of its own size rather than in the viewport, and names
   by magnification rather than by node count; amended 2026-09-02 — §7 lets the
   reader arrange the landscape by hand, and sizes a node by its connectivity as well
-  as by its kind)
+  as by its kind; amended 2026-09-02 — a drag moves the neighbourhood rather than
+  the landscape, and a filter keeps one hop of context around every match)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -324,6 +325,42 @@ unaffected.
 > must not move while the answer is being given — and re-running a two-hundred-
 > iteration simulation to toggle two classes was costing a few hundred milliseconds
 > per click at the top of the budget.
+
+> **Amendment (2026-09-02, second): a drag is local, and a filter keeps its
+> context.**
+> Three corrections to the two changes above, each of them a defect the first
+> version shipped rather than a new idea.
+>
+> - **A drag moves the neighbourhood, not the landscape.** Dragging re-ran the
+>   layout's own physics from the picture on screen. That looks reasonable and is
+>   not: the picture has been *fitted* since it was simulated, and the fit rescales
+>   every distance — so it sits nowhere near the simulation's equilibrium, and
+>   restarting it there reorganises the whole landscape the moment a node is touched.
+>   The reader lost the arrangement they were reading in order to move one node in
+>   it. A drag now pulls only the edges that touch what is held, toward the lengths
+>   those edges had at the instant of the grab, and resolves whatever the movement
+>   ran into. Nothing else moves at all.
+> - **The gesture belongs to the graph, not to the browser.** Three things went to
+>   the browser instead: the canvas selected its own labels under a drag, a touch
+>   drag was taken for a page scroll, and a drag that crossed the canvas edge dropped
+>   the node at the boundary. Selection is off on the canvas, a node takes no
+>   `touch-action`, and the pointer is captured — but only once the gesture is a
+>   drag rather than a press, because capturing on the press retargets the
+>   compatibility mouse events behind it and the click that *selects* a node is one
+>   of them. For the same reason the press is never `preventDefault`ed.
+> - **A filter keeps one hop of context.** A match on its own is a circle in an empty
+>   field: it answers "does this exist" and nothing else, when the question somebody
+>   types a name to ask is nearly always "and what is it attached to". The filter now
+>   keeps the immediate neighbourhood around every match — one hop, because nearly
+>   everything hangs off some hub and reaching through one drags most of the graph
+>   back onto the screen. Context is marked as context, drawn more faintly and counted
+>   separately in the header: a search that presented things which do not match the
+>   search as matches would be a worse answer than the empty field it is fixing.
+>
+> Adjacency on hover (the 2026-09-01 amendment) also gained colour: a ring in the
+> accent on each neighbour, outside the circle rather than a recolouring of it,
+> because the body's own stroke is carrying §4's severity and painting over a red
+> node to say "connected" would trade a finding for a hint.
 
 ### 7. A stated size budget, and a server-side fallback
 
