@@ -57,6 +57,22 @@ export function connectorCreateBody(form) {
 // endpoint plus an optional token reference.
 //
 // `credRef` is "required", "optional", or "none"; `endpoint` and `sender` are booleans.
+// One connection-string example per database product, because the three share this
+// form and share nothing else about a DSN. SQL Server takes a sqlserver:// URL,
+// PostgreSQL a postgres:// one, and MariaDB a form that is not a URL at all — the
+// MySQL driver's own `user:pass@tcp(host:port)/db`. The example is the only thing on
+// screen that says which is expected, so showing one product's to another is showing
+// the operator the wrong syntax and leaving the driver to reject it later, in a
+// sentence that names none of the six parts a connection string has.
+//
+// The hosts are example.com and the password is obviously a placeholder: an example
+// nobody could paste unchanged is an example nobody pastes half-changed.
+const SQL_DSN_EXAMPLES = {
+  mssql: "sqlserver://atlas:PASSWORT@sql.example.com:1433?database=hr",
+  mariadb: "atlas:PASSWORT@tcp(mariadb.example.com:3306)/hr?parseTime=true",
+  postgres: "postgres://atlas:PASSWORT@db.example.com:5432/hr?sslmode=require",
+};
+
 export function connectorShape(kind, provider) {
   const mail = kind === "mail";
   const preview = mail && provider === "preview";
@@ -81,6 +97,10 @@ export function connectorShape(kind, provider) {
   return {
     mail,
     sql,
+    // The example for this product's connection string, empty for a kind that has
+    // none. Both the create form and the edit dialog read it from here, so the two
+    // cannot disagree about what a SQL Server DSN looks like.
+    dsnPlaceholder: SQL_DSN_EXAMPLES[kind] || "",
     // Which kinds can be checked without saving. A mail connector connects and
     // authenticates; a SQL connector dials its connection string. The rest have no
     // check yet, and the server says so by name rather than silently doing nothing.
@@ -114,7 +134,7 @@ export function connectorShape(kind, provider) {
       ? "jira_acme (vault {email, apiToken} or {token})"
       : remedy
       ? "remedy_creds (vault {username,password})"
-      : (sql ? "postgres_pb_pw (a vault key holding the whole connection string)"
+      : (sql ? kind + "_hr_dsn (a vault key holding the whole connection string)"
         : (entra ? "entra_blumer (vault {tenantId, clientId, clientSecret})"
           : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token")))),
     hint: ad

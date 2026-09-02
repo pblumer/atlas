@@ -37,7 +37,7 @@
     </form>
     <pre id="out"></pre>
     <script type="module">
-      import { connectorCreateBody } from "/connectordialog.js";
+      import { connectorCreateBody, connectorShape } from "/connectordialog.js";
 
       const form = document.getElementById("f");
       const out = document.getElementById("out");
@@ -55,6 +55,11 @@
         out.textContent = JSON.stringify(body);
         return body;
       };
+      // The shape drives what the form *shows*: which fields appear, and the example
+      // in each. A database's connection string has no syntax in common across the
+      // three products, so the example is the only thing on screen that says which
+      // one is expected.
+      window.shape = (kind, provider) => connectorShape(kind, provider);
       window.__ready = true;
     </script>
   </body>

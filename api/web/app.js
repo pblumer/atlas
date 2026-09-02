@@ -521,7 +521,7 @@ const CONNECTORS = [
     refs: "ADR-0036 · ADR-0041", status: "active", statusLabel: "configurable",
   },
   {
-    id: "http-rest", name: "HTTP REST", kind: "REST API",
+    id: "rest", name: "HTTP REST", kind: "REST API",
     desc: "Calls a model-authored REST endpoint from a service task off the processor loop — method, URL, headers, query parameters, and basic/bearer/apiKey auth (secrets resolved server-side) — writing the JSON response into a result variable. Authored on a service task with the REST Outbound Worker Type.",
     refs: "ADR-0036 · ADR-0041 · ADR-0067", status: "active", statusLabel: "embedded",
   },
@@ -549,6 +549,26 @@ const CONNECTORS = [
     id: "ad", name: "Active Directory", kind: "Directory",
     desc: "Creates a user, group or contact, sets a password, enables or disables an account, moves or deletes an entry, manages group membership and reads a DirSync delta \u2014 on a worker, off the processor loop. Configure each directory below: its LDAP URL and a vault bundle holding the service account. A model then names the connector and says nothing else about the directory. Tasks written before this that carry their own url and bindDN keep working.",
     refs: "ADR-0166 \u00b7 ADR-0181", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "entra", name: "Entra ID", kind: "Cloud directory",
+    desc: "Creates, licenses, disables, lists or delta-syncs accounts and groups in a Microsoft Entra ID tenant via the Graph API \u2014 on a worker, off the processor loop. A Graph collection arrives page by page and the worker follows the pages itself, so a list operation writes a whole list into a result variable rather than a continuation token. Configure each tenant below: its {tenantId, clientId, clientSecret} bundle lives in the vault and never enters a model. Worker-only, so the tenant credential never reaches the engine.",
+    refs: "ADR-0172", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "mssql", name: "SQL Server", kind: "Database",
+    desc: "Runs one statement against a Microsoft SQL Server database \u2014 query for many rows, query one for a single row, execute for an insert, update or delete \u2014 on a worker, off the processor loop. The statement is literal by construction: it is the one connector field with no fx toggle, because a statement assembled from process data would be an injection that needs no quoting bug. Values reach it as bound parameters, and SQL Server is the one product of the three that also binds them by name (@id). Configure each database below: the whole connection string is the credential, sealed into the vault. Worker-only \u2014 the engine never holds a database credential \u2014 so a SQL task needs a worker, which Atlas supervises for you.",
+    refs: "ADR-0173 \u00b7 ADR-0188", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "mariadb", name: "MariaDB", kind: "Database",
+    desc: "The same statement, query and execute operations against a MariaDB or MySQL database, on a worker. Parameters bind positionally (?) and an object-shaped parameters variable is refused rather than flattened into an order nobody wrote \u2014 which is why the three database products are three Worker Types and not one with a dialect field. The whole connection string is the credential and is sealed into the vault. Worker-only.",
+    refs: "ADR-0173 \u00b7 ADR-0188", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "postgres", name: "PostgreSQL", kind: "Database",
+    desc: "The same statement, query and execute operations against a PostgreSQL database, on a worker. Parameters bind positionally ($1). A query carries a row cap (1000 by default) and exceeding it fails the task rather than truncating, because a short result set is a wrong business answer and a process that branches on the row count would branch on it confidently. The whole connection string is the credential and is sealed into the vault. Worker-only.",
+    refs: "ADR-0173 \u00b7 ADR-0188", status: "active", statusLabel: "configured below",
   },
 ];
 
@@ -3461,7 +3481,7 @@ function wireConnectorManagement(connectors) {
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
-        <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password" placeholder="postgresql://postgres.abc:\u2026@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require"/></label>
+        <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit" title="Add this connector">Add</button>
         <button class="btn neutral conn-f-test" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
@@ -3500,6 +3520,11 @@ function wireConnectorManagement(connectors) {
         // manager fills in whether or not anyone can see it. Disabling it takes it out
         // of the FormData entirely, and clearing it means switching kinds cannot carry
         // a DSN typed for a previous one into the next create.
+        // The example follows the product. It is the only thing on screen that says
+        // which of the three connection-string syntaxes is expected, and they have
+        // none in common — a MariaDB DSN is not even a URL.
+        const connStrIn = form.querySelector('[name="connectionString"]');
+        if (connStrIn) connStrIn.placeholder = sh.dsnPlaceholder;
         form.querySelectorAll(".sql-only").forEach((el) => {
           el.style.display = sh.sql ? "" : "none";
           el.querySelectorAll("input").forEach((inp) => {
