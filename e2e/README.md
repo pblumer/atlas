@@ -58,7 +58,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   no value for, and leaving a zero alone except where zero means "never reached"; a
   **results row opens its case** on the diagram, numbered in the order it went through
   and standing where an unfinished one stopped, with the strip naming it and the way
-  back putting the run back; and stopping a batch leaves what it did readable.
+  back putting the run back; the **timing draws the stream it describes** before the
+  run — from the server, so the picture is the planner's own arithmetic — redrawing on
+  the count, the mode and the calendar alike, saying so rather than drawing a line for
+  a sequential plan or a CSV whose size the browser does not know, and doing it without
+  a render, so the box being typed in keeps its caret; the report's **numbers carry
+  their own magnitude**, with the four duration tiles on one scale, waiting scaled to
+  the worst element, utilisation to a full hundred, and each case's duration to the
+  slowest on its page; and stopping a batch leaves what it did readable.
 
   And the **scenario half**: the checkboxes an author ticks become the expectations a
   build exits on, resolved against the run that happened rather than the dataset in

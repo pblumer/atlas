@@ -126,7 +126,7 @@ func (s *Sandbox) StartPlan(p Plan) error {
 	if err := p.Arrival.Calendar.validate("the arrival calendar"); err != nil {
 		return err
 	}
-	at, err := s.arrivalTimes(p)
+	at, err := s.arrivalTimes(len(p.Cases), p.Arrival)
 	if err != nil {
 		return err
 	}
@@ -152,10 +152,9 @@ func (s *Sandbox) Arrivals() []time.Time {
 // arrivalTimes lays the plan out on the clock. Every mode but sequential is
 // computed here, up front and from the seed, so the stream is part of the run's
 // reproducible input rather than something the run improvises.
-func (s *Sandbox) arrivalTimes(p Plan) ([]int64, error) {
+func (s *Sandbox) arrivalTimes(n int, a Arrival) ([]int64, error) {
 	start := s.clock.Now()
-	n := len(p.Cases)
-	switch p.Arrival.Mode {
+	switch a.Mode {
 	case ArrivalSequential:
 		return nil, nil
 	case ArrivalAllAtOnce:
@@ -165,30 +164,30 @@ func (s *Sandbox) arrivalTimes(p Plan) ([]int64, error) {
 		}
 		return at, nil
 	case ArrivalEvery:
-		if p.Arrival.Interval <= 0 {
+		if a.Interval <= 0 {
 			return nil, errors.New("playground: a fixed takt needs a positive interval")
 		}
 		at := make([]int64, n)
 		t := start
 		for i := range at {
 			var ok bool
-			if t, ok = p.Arrival.opensAfter(t); !ok {
+			if t, ok = a.opensAfter(t); !ok {
 				return nil, fmt.Errorf("playground: the arrival calendar does not open within %d days", calendarSearchDays)
 			}
 			at[i] = t
-			t += int64(p.Arrival.Interval)
+			t += int64(a.Interval)
 		}
 		return at, nil
 	case ArrivalPoisson:
-		if p.Arrival.PerHour <= 0 {
+		if a.PerHour <= 0 {
 			return nil, errors.New("playground: a Poisson stream needs a positive rate")
 		}
-		mean := float64(time.Hour) / p.Arrival.PerHour
+		mean := float64(time.Hour) / a.PerHour
 		at := make([]int64, n)
 		t := start
 		for i := range at {
 			var ok bool
-			if t, ok = p.Arrival.opensAfter(t); !ok {
+			if t, ok = a.opensAfter(t); !ok {
 				return nil, fmt.Errorf("playground: the arrival calendar does not open within %d days", calendarSearchDays)
 			}
 			at[i] = t
@@ -199,7 +198,7 @@ func (s *Sandbox) arrivalTimes(p Plan) ([]int64, error) {
 		}
 		return at, nil
 	default:
-		return nil, fmt.Errorf("playground: unknown arrival mode %d", p.Arrival.Mode)
+		return nil, fmt.Errorf("playground: unknown arrival mode %d", a.Mode)
 	}
 }
 

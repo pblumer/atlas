@@ -792,6 +792,10 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/playground/sessions/{id}/generate", s.playground.HandleGeneratePreview, apiOp{
 			summary: "Preview the first cases a Playground dataset description would produce", tag: "Playground", role: RoleModeler,
 			req: jsonBody("A dataset description", tObject()), resp: jsonBody("The first generated cases", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/arrivals", s.playground.HandleArrivalProfile, apiOp{
+			summary: "Preview the shape of a Playground arrival stream: how many cases land in each slice of the time it covers",
+			tag:     "Playground", role: RoleModeler,
+			req: jsonBody("A case count and an arrival profile", tObject()), resp: jsonBody("The stream's shape", tObject())}},
 		{"POST", "/api/v1/playground/sessions/{id}/runs/csv", s.playground.HandleStartRunFromCSV, apiOp{
 			summary: "Start a Playground batch over an uploaded CSV, one case per row", tag: "Playground", role: RoleModeler,
 			resp: jsonBody("Run status", tObject())}},

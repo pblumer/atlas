@@ -233,6 +233,26 @@
           };
         }
         if (method === "GET" && /\/heatmap$/.test(url)) return HEATMAP;
+        // The shape of the arrival stream. The server plans it, so the mock derives
+        // the buckets from what was asked rather than returning a fixed picture: a
+        // sparkline that ignored the mode would prove nothing about the wiring.
+        if (method === "POST" && /\/arrivals$/.test(url)) {
+          const mode = (body.arrival || {}).mode || "allAtOnce";
+          if (mode === "sequential") return { scheduled: false, cases: body.count, peak: 0, spanMillis: 0 };
+          // Everything at once has no span to spread over: one slice tall, start and
+          // end the same instant — which is what the planner reports for it too.
+          if (mode === "allAtOnce") {
+            return { scheduled: true, cases: body.count, start: "2026-03-05T08:00:00Z",
+              end: "2026-03-05T08:00:00Z", spanMillis: 0, peak: body.count,
+              buckets: Array.from({ length: 12 }, (_, i) => (i === 0 ? body.count : 0)) };
+          }
+          const buckets = Array.from({ length: 12 }, (_, i) => Math.round(body.count / 12) + (i === 5 ? 3 : 0));
+          return {
+            scheduled: true, cases: body.count,
+            start: "2026-03-05T08:00:00Z", end: "2026-03-05T17:00:00Z",
+            spanMillis: 32400000, peak: Math.max(...buckets), buckets,
+          };
+        }
         // The preview a described dataset asks for. The rows are derived from the
         // description so the spec can check that what was typed reached the server,
         // which is the only half of the generator the browser owns.

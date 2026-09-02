@@ -276,6 +276,13 @@ export function attachPlayground(root, { api, toast, modeler }) {
     genPreview: null,
     arrival: "allAtOnce",
     arrivalN: 10,
+    // The shape of the arrival stream, drawn before the run. The server lays the
+    // arrivals out with the code the run uses, so the sparkline is the schedule
+    // rather than a picture of one; the key is the request it answers, so a redraw
+    // costs a call only when the timing itself changed.
+    profile: null,
+    profileKey: "",
+    profileError: "",
     run: null,       // the last run status
     report: null,
     results: null,   // one page of the results table: {total, offset, rows}
@@ -618,6 +625,77 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // illustration of what one might look like.
   async function previewDataset() {
     state.genPreview = await api("POST", path("/generate?limit=8"), genBody());
+  }
+
+  // plannedCases is how many cases the run would carry, from whichever of the three
+  // sources is driving it. A CSV's size is not one of them: the file is parsed on
+  // the server, so the browser cannot count its rows without reading it twice.
+  function plannedCases() {
+    if (state.source === "generated") return Math.max(0, Math.round(Number(state.gen.count)) || 0);
+    if (state.source === "list") {
+      try {
+        const rows = JSON.parse(state.cases);
+        return Array.isArray(rows) ? rows.length : 0;
+      } catch { return 0; }
+    }
+    return 0;
+  }
+
+  // profileKey is the request the drawn profile answers: the count and the timing,
+  // and nothing else on the panel. Everything the shape depends on is in here, so a
+  // key that has not changed is a picture that does not need fetching again.
+  function profileKey() {
+    const count = plannedCases();
+    if (!state.session || state.mode !== "batch" || count < 1) return "";
+    return JSON.stringify({ count, arrival: arrivalBody() });
+  }
+
+  // refreshProfile fetches the shape of the stream the timing describes.
+  //
+  // It runs off the render rather than off each box, so every way of changing the
+  // timing — the mode, its parameter, the business-hours box, the size of the
+  // dataset — redraws it without a handler of its own. It is deliberately outside
+  // guard(): a preview is not something to disable the panel's buttons for, and a
+  // stream the planner refuses is shown where the numbers were typed rather than as
+  // a toast that outlives them.
+  async function refreshProfile() {
+    const key = profileKey();
+    if (key === state.profileKey) return;
+    state.profileKey = key;
+    state.profile = null;
+    state.profileError = "";
+    if (!key) { drawProfile(); return; }
+    try {
+      const out = await api("POST", path("/arrivals"), JSON.parse(key));
+      // A later change may have overtaken this answer. Only the current one is
+      // drawn: a sparkline of the timing somebody has already replaced is worse
+      // than none, because nothing on screen says it is stale.
+      if (key !== state.profileKey) return;
+      state.profile = out;
+    } catch (e) {
+      if (key !== state.profileKey) return;
+      state.profileError = e.message;
+    }
+    drawProfile();
+  }
+
+  // drawProfile repaints the sparkline and nothing else.
+  //
+  // The answer lands while somebody is still typing in the column beside it, and a
+  // full render would replace the box under their caret — and, worse, the button
+  // their click is halfway through. The picture owns one element; it redraws that.
+  function drawProfile() {
+    const slot = el("pg-profile");
+    if (slot) slot.innerHTML = arrivalProfileHTML();
+  }
+
+  // profileTimer debounces the boxes that feed the sparkline. A count is typed a
+  // digit at a time and "5", "50" and "500" are three different pictures; only the
+  // one somebody stopped on is worth fetching.
+  let profileTimer = 0;
+  function profileSoon() {
+    clearTimeout(profileTimer);
+    profileTimer = setTimeout(refreshProfile, 300);
   }
 
   // resultsPageSize is how many cases the strip shows at a time. A page is read by a
@@ -1360,8 +1438,56 @@ export function attachPlayground(root, { api, toast, modeler }) {
         ${param ? `<input type="number" min="1" step="1" id="pg-arrival-n" value="${esc(state.arrivalN)}" />
                    <span class="muted">${esc(param)}</span>` : ""}
       </div>
+      <div id="pg-profile">${arrivalProfileHTML()}</div>
       ${expectHTML()}
       ${scenarioSaveHTML()}`;
+  }
+
+  // arrivalProfileHTML draws the stream the timing describes, before anything runs.
+  //
+  // The shape comes from the server because the server plans the run: one piece of
+  // code lays the arrivals out either way, so what is on screen is the schedule the
+  // cases will actually get rather than a browser's second guess at it. Which is the
+  // whole point of drawing it — a Poisson stream of three hundred is bursty in a way
+  // no wording of "a stream of 10 per hour" conveys, and the burst is what the pools
+  // downstream will feel.
+  function arrivalProfileHTML() {
+    if (state.profileError) return `<p class="pg-inc">${esc(state.profileError)}</p>`;
+    const p = state.profile;
+    if (!p) return "";
+    if (!p.scheduled) {
+      return `<p class="muted">One after another has no schedule ahead of the run: the next
+        case starts when the one before it finishes, so its shape is the run's own.</p>`;
+    }
+    const b = p.buckets || [];
+    if (b.length < 2) return "";
+    const W = 300, H = 34, peak = Math.max(1, p.peak);
+    // The line stops a hair short of the top edge: drawn flush against the frame the
+    // fullest slice reads as a border rather than as the measurement it is.
+    const x = (i) => (i * W) / (b.length - 1);
+    const y = (v) => H - (v / peak) * (H - 2);
+    const points = b.map((v, i) => `${x(i).toFixed(2)},${y(v).toFixed(2)}`).join(" ");
+    const startMs = Date.parse(p.start);
+    const slice = (p.spanMillis || 0) / b.length;
+    const bw = W / (b.length - 1);
+    // A band per slice carrying its own title: the tooltip is the browser's, which on
+    // a strip this size beats a crosshair widget nobody asked the panel to grow.
+    const hits = b.map((v, i) => {
+      const at = fmtWhen(`${new Date(startMs + i * slice).toISOString().slice(0, 19)}Z`);
+      return `<rect class="pg-spark-hit" x="${Math.max(0, x(i) - bw / 2).toFixed(2)}" y="0"
+        width="${bw.toFixed(2)}" height="${H}"><title>${esc(at)} · ${v} case${v === 1 ? "" : "s"}</title></rect>`;
+    }).join("");
+    return `
+      <svg class="pg-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
+        aria-label="${p.cases} cases arriving over ${esc(fmtDur(p.spanMillis))}, at most ${peak} in a slice">
+        <polygon class="pg-spark-fill" points="0,${H} ${points} ${W},${H}"/>
+        <polyline class="pg-spark-line" points="${points}"/>
+        <line class="pg-base" x1="0" y1="${H}" x2="${W}" y2="${H}"/>
+        ${hits}
+      </svg>
+      <div class="pg-axis"><span>${esc(fmtWhen(p.start))}</span><span>${esc(fmtWhen(p.end))}</span></div>
+      <p class="muted pg-spark-note">${p.cases} case${p.cases === 1 ? "" : "s"} ${
+        p.spanMillis ? `over ${esc(fmtDur(p.spanMillis))}, at most ${peak} in a slice` : "at once"}</p>`;
   }
 
   // batchAnalysisHTML is what the run did — read while it runs and after it stops.
@@ -1415,6 +1541,36 @@ export function attachPlayground(root, { api, toast, modeler }) {
     ];
   }
 
+  // trackHTML is the gauge: a track filled to a value's share of the scale its
+  // column is read against.
+  //
+  // The empty part is drawn too, and that is the whole of why this is a function
+  // rather than a styled bar. A fill with no track behind it underlines its own
+  // number when it is full and reads as a stray mark when it is small; with the
+  // track, one glance down a column says which row is the big one.
+  function trackHTML(value, max) {
+    const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
+    return `<span class="pg-track"><i style="width:${pct.toFixed(1)}%"></i></span>`;
+  }
+
+  // meterHTML is a table cell whose number carries its own magnitude under it.
+  //
+  // Both, rather than either. The gauge answers the question a column of formatted
+  // durations is slowest at — which row is the big one — and the number beside it
+  // keeps the fact exact, so nothing here is read off a length alone.
+  function meterHTML(value, max, text, title) {
+    return `<td class="pg-meter"${title ? ` title="${esc(title)}"` : ""}>${esc(text)}
+      ${trackHTML(value, max)}</td>`;
+  }
+
+  // factBarHTML is one of the duration tiles with its own share of the slowest case
+  // under it. The four sit on one axis, so four lengths against one scale say what
+  // four numbers cannot: whether the median is near the fastest and the p90 out on
+  // its own, or the whole run is bunched together.
+  function factBarHTML(value, max, text, label) {
+    return `<div><b>${esc(text)}</b><span>${esc(label)}</span>${trackHTML(value, max)}</div>`;
+  }
+
   // reportHTML is the analysis: what came out, how long it took, where it waited,
   // and when. Every number here is a fold of the whole run rather than a sample.
   function reportHTML() {
@@ -1429,6 +1585,12 @@ export function attachPlayground(root, { api, toast, modeler }) {
       .sort((a, b) => (b.waitMillis - a.waitMillis) || (b.workMillis - a.workMillis))
       .slice(0, 8);
     const pools = Object.entries(rep.pools || {});
+    // A column of bars is scaled to its own largest value, so a length is read
+    // against the rows beside it and never against a run that is not on screen.
+    // Utilisation is the exception: it is scaled to a full hundred, because the
+    // question there is how full a pool was rather than which of them was fullest,
+    // and a bar that filled at the busiest would read as saturated at forty percent.
+    const maxWait = Math.max(0, ...bottlenecks.map((b) => b.waitMillis || 0));
     const cold = coldPaths();
     return `
       <div class="pg-sec"><b>Outcomes</b></div>
@@ -1439,24 +1601,26 @@ export function attachPlayground(root, { api, toast, modeler }) {
       </div>
       <div class="pg-sec"><b>Durations</b> <span class="muted">per case, simulated</span></div>
       <div class="pg-facts">
-        <div><b>${esc(fmtDur(d.minMillis))}</b><span>fastest</span></div>
-        <div><b>${esc(fmtDur(d.p50Millis))}</b><span>median</span></div>
-        <div><b>${esc(fmtDur(d.p90Millis))}</b><span>p90</span></div>
-        <div><b>${esc(fmtDur(d.maxMillis))}</b><span>slowest</span></div>
+        ${factBarHTML(d.minMillis, d.maxMillis, fmtDur(d.minMillis), "fastest")}
+        ${factBarHTML(d.p50Millis, d.maxMillis, fmtDur(d.p50Millis), "median")}
+        ${factBarHTML(d.p90Millis, d.maxMillis, fmtDur(d.p90Millis), "p90")}
+        ${factBarHTML(d.maxMillis, d.maxMillis, fmtDur(d.maxMillis), "slowest")}
       </div>
       ${bottlenecks.length ? `
         <div class="pg-sec"><b>Bottlenecks</b> <span class="muted">by total waiting</span></div>
         <table class="pg-table pg-bottlenecks"><thead><tr><th>element</th><th>runs</th><th>waiting</th><th>longest</th><th>work</th></tr></thead>
         <tbody>${bottlenecks.map((b) => `<tr>
           <td class="mono">${esc(b.id)}</td><td>${b.runs}</td>
-          <td>${esc(fmtDur(b.waitMillis))}</td><td>${esc(fmtDur(b.maxWaitMillis))}</td>
+          ${meterHTML(b.waitMillis, maxWait, fmtDur(b.waitMillis), "Total waiting, against the worst element here")}
+          <td>${esc(fmtDur(b.maxWaitMillis))}</td>
           <td>${esc(fmtDur(b.workMillis))}</td></tr>`).join("")}</tbody></table>` : ""}
       ${pools.length ? `
         <div class="pg-sec"><b>Pools</b></div>
         <table class="pg-table pg-pools"><thead><tr><th>pool</th><th>seats</th><th>used</th><th>served</th><th>longest queue</th></tr></thead>
         <tbody>${pools.map(([name, p]) => `<tr>
           <td class="mono">${esc(name)}</td><td>${p.capacity}</td>
-          <td>${p.utilisationPercent}%</td><td>${p.served}</td><td>${p.maxQueue}</td></tr>`).join("")}</tbody></table>` : ""}
+          ${meterHTML(p.utilisationPercent, 100, `${p.utilisationPercent}%`, "Share of its open time the pool was busy")}
+          <td>${p.served}</td><td>${p.maxQueue}</td></tr>`).join("")}</tbody></table>` : ""}
       ${timelineHTML(rep.timeline)}
       ${state.heat ? `
         <div class="pg-sec"><b>Coverage</b>
@@ -1480,6 +1644,11 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const shown = rows.length;
     const names = variableColumns(rows);
     const broke = violatingCases();
+    // The bars are scaled to the slowest case on this page rather than to the run's
+    // own slowest. A page is what a reader is comparing — which of these fifty took
+    // the longest — and a column scaled to a case on page nine would draw all fifty
+    // of them as short.
+    const slowest = Math.max(0, ...rows.map((r) => (r.ended ? r.durationMillis || 0 : 0)));
     return `
       <div class="pg-results-head">
         <b>Results</b>
@@ -1499,7 +1668,9 @@ export function attachPlayground(root, { api, toast, modeler }) {
                 state.inspect && state.inspect.index === row.index ? "pg-open" : ""}">
               <td>${row.index + 1}${broke.has(row.index) ? ' <span title="This case broke a rule">&#10007;</span>' : ""}</td>
               <td class="mono">${esc(row.end || (row.state === "completed" ? "" : row.state))}</td>
-              <td>${row.ended ? esc(fmtDur(row.durationMillis)) : "\u2014"}</td>
+              ${row.ended
+                ? meterHTML(row.durationMillis, slowest, fmtDur(row.durationMillis), "Against the slowest case on this page")
+                : `<td>\u2014</td>`}
               <td>${row.incidents || ""}</td>
               ${names.map((n) => `<td class="mono">${esc((row.variables || {})[n] == null ? "" : row.variables[n])}</td>`).join("")}
             </tr>`).join("")}</tbody>
@@ -1609,6 +1780,10 @@ export function attachPlayground(root, { api, toast, modeler }) {
     el("pg-body").innerHTML = analysisColumnHTML();
     if (!results.hidden) el("pg-results-body").innerHTML = resultsStripHTML();
     if (!overlayBar.hidden) el("pg-overlay-body").innerHTML = overlayStripHTML();
+    // The sparkline is fetched off the render rather than off each box that feeds
+    // it. It is a no-op unless the timing actually changed, and it re-renders once
+    // the answer lands.
+    refreshProfile();
   }
 
   // overlayStripHTML is the switcher and its legend: which of the run's four
@@ -1819,6 +1994,10 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (t.id === "pg-x-reach") state.expect.mustReach = t.value;
     if (t.id === "pg-scenario-name") state.scenarioName = t.value;
     if (t.id === "pg-gen-count") state.gen.count = t.value;
+    // Three of these boxes decide the arrival sparkline: how many cases there are
+    // and how fast they come. They redraw it on their own rather than through a
+    // render, which would take the caret out of the box being typed in.
+    if (t.id === "pg-arrival-n" || t.id === "pg-gen-count" || t.id === "pg-cases") profileSoon();
     if (t.dataset.rule) state.expect.rules[Number(t.dataset.i)][t.dataset.rule] = t.value;
     // A generated field's boxes are kept without re-rendering, like every other
     // box here: a render would move the caret to the end of the one being typed in.
@@ -1841,6 +2020,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (t.id === "pg-x-inc") state.expect.noIncidents = t.checked;
     if (t.id === "pg-scenario-pick") state.pickedScenario = t.value;
     if (t.id === "pg-arrival") { state.arrival = t.value; render(); }
+
     if (t.id === "pg-csv" && t.files && t.files[0]) { state.csv = t.files[0]; render(); }
     if (t.dataset.gen === "kind") {
       // The kind decides which parameters the row shows, so this one does redraw.
