@@ -2928,7 +2928,7 @@ const SERVICE_TASK_KINDS = [
       {
         key: "query", label: "Search term", placeholder: "=antragsteller.mail", fx: true,
         showIf: (v) => v.operation === "search-users",
-        hint: "A fragment of the account's display name or address — Jira matches it as a substring. On Jira Cloud it searches both; on Data Center it matches the username. Usually a FEEL expression (fx) naming what the process already knows about the person, e.g. =antragsteller.mail.",
+        hint: "A fragment of the account's display name or address — Jira matches it as a substring. On Jira Cloud it searches both; on Data Center it matches the username. Usually a FEEL expression (fx) naming what the process already knows about the person, e.g. =antragsteller.mail. If it finds nobody, that is not necessarily \"no such person\": Jira answers a caller it does not recognise, or one without the global \"Browse users and groups\" permission, by seeing nobody rather than by refusing — and on Cloud an address matches only as far as that account's profile visibility allows, so the display name is the term to fall back to.",
       },
       {
         key: "maxResults", label: "Maximum results", placeholder: "50",

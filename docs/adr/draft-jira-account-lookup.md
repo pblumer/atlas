@@ -92,14 +92,22 @@ Chosen option: **"a row: `search-users`"**.
   A picker's answer is frozen at modelling time; this one is right when the person changes
   teams, and it is auditable as a task like any other.
 - **Negative / trade-offs accepted:** the worker's Atlassian account needs the global
-  *Browse users and groups* permission, or the search answers 403. That is a permission an
-  operator grants once, and it is the same account that already reads and writes issues.
-- **Negative:** `emailAddress` is often absent from what Cloud returns, depending on each
-  account's profile visibility. Searching *by* an address still works — Jira matches it
-  server-side — but a model cannot rely on reading one back out.
+  *Browse users and groups* permission. That is a permission an operator grants once, and
+  it is the same account that already reads and writes issues.
+- **Negative: an empty result is not proof that nobody matched.** Three different facts
+  reach a process as the same empty array. The term genuinely matched no account; or the
+  caller is one Jira does not recognise, or has not granted *Browse users and groups*,
+  which it answers by seeing nobody rather than by refusing; or the address it searched by
+  is hidden by that account's profile visibility, which is what Cloud matches
+  `emailAddress` subject to. The middle one is not hypothetical: a Cloud site answered an
+  unauthenticated user search with `200 []` while answering the same credential on
+  `/myself` with a 401, so a wrong credential arrives as "nobody by that name". The
+  connector cannot tell the three apart — Jira does not — so the Modeler's hint says so at
+  the field, and names the display name as the term to fall back to.
 - **Negative:** a search that matches several people returns several, and the model decides
   which. `[1]` is the honest default and the wrong answer for an ambiguous term; a model
-  that cares should search inside a project, or match on an address rather than a name.
+  that cares should search inside a project, or use a term specific enough to be one
+  person.
 - **Follow-ups / risks to watch:** an `assignee` on `create-issue` as a first-class field
   (today it goes through the extra-fields map, which means the model writes the
   `{accountId: …}` object itself, and the Cloud/Data Center difference is the author's

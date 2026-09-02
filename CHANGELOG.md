@@ -283,6 +283,13 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A rejected REST call says what the far side objected to.** A non-2xx response from a
+  REST connector task reported only `returned HTTP 400`, and threw away the body the
+  server had already sent to explain it — leaving an operator to guess which of the URL,
+  the headers, the query parameters or the body was wrong. The incident message now
+  carries an excerpt of that response: one line, collapsed and bounded, so a proxy's HTML
+  error page cannot become the incident.
+
 - **A task's *out* section showed variables the neighbouring branch produced.** The
   replay's in/out card inferred what an element wrote by diffing the variables it saw on
   entry against the ones that stood when it finished — which on a parallel fork spans the

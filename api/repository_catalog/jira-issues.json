@@ -43,7 +43,7 @@
       { "label": "JQL (search)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:jql" },
         "description": "The query, written exactly as in Jira's own search box. It must restrict what it matches: Jira Cloud refuses an unbounded query, so one that only sorts is answered with an HTTP 400 rather than with every issue." },
       { "label": "Search term (search users)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:query" },
-        "description": "A fragment of the account's display name or address, matched as a substring. Jira Cloud searches both; Data Center matches the username. The connector picks the right parameter from its own credential." },
+        "description": "A fragment of the account's display name or address, matched as a substring. Jira Cloud searches both; Data Center matches the username. The connector picks the right parameter from its own credential. An empty result is not necessarily \"no such person\": a caller Jira does not recognise, or one without the global Browse users and groups permission, is answered by seeing nobody rather than by refusing, and on Cloud an address matches only as far as that account's profile visibility allows." },
       { "label": "Maximum results (search/search users)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:maxResults" },
         "description": "Caps what may reach the result variable; the connector pages up to it. Empty uses 50, 0 reads every match." },
       { "label": "Result variable (create/read/comment/search/search users)", "type": "String", "value": "ticket", "binding": { "type": "property", "name": "atlas:resultVariable" },

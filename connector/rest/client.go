@@ -31,6 +31,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
@@ -123,9 +124,44 @@ func (c *HTTPClient) Do(ctx context.Context, r Request) (Response, error) {
 		return Response{}, fmt.Errorf("rest: read response from %s %s: %w", r.Method, r.URL, err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return Response{}, fmt.Errorf("rest: %s %s returned HTTP %d", r.Method, r.URL, resp.StatusCode)
+		return Response{}, fmt.Errorf("rest: %s %s returned HTTP %d%s", r.Method, r.URL, resp.StatusCode, describeError(raw))
 	}
 	return Response{Status: resp.StatusCode, Body: decodeBody(raw)}, nil
+}
+
+// errorExcerptRunes bounds how much of a rejected call's response body reaches the
+// incident message. Long enough for an API's error envelope, short enough that a proxy's
+// HTML page does not become the incident.
+const errorExcerptRunes = 500
+
+// describeError renders what the far side said about a rejection, ready to append to the
+// status. It returns "" for an empty body, so a rejection with nothing to add ends at the
+// status rather than at a dangling separator.
+//
+// The status alone names the class of fault and never the fault. "returned HTTP 400" sent
+// an operator looking through a task's URL, its headers, its query parameters and its
+// body for which part the far side objected to — while the answer was in the response all
+// along ("The query parameter 'query' is required"). This connector cannot parse a vendor
+// error envelope the way the Jira one can, because it talks to every API rather than to
+// one; quoting the body is what it can do instead, and it is enough.
+//
+// The excerpt is one line: strings.Fields collapses the newlines and indentation an HTML
+// error page arrives with, which would otherwise turn an incident message into a
+// transcript. Truncation is by rune, so a cut never lands inside a UTF-8 sequence.
+//
+// What this means for what an incident carries: a response body reaches an operator's
+// eyes. That is the same exposure the Jira connector already accepts for the same reason,
+// and an API that answers a rejection by echoing a credential back has a problem this
+// message only reveals.
+func describeError(raw []byte) string {
+	text := strings.Join(strings.Fields(string(raw)), " ")
+	if text == "" {
+		return ""
+	}
+	if runes := []rune(text); len(runes) > errorExcerptRunes {
+		text = string(runes[:errorExcerptRunes]) + "…"
+	}
+	return ": " + text
 }
 
 // withQuery appends the connector's query parameters to the endpoint URL,
