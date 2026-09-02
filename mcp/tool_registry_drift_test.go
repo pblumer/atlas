@@ -213,8 +213,14 @@ var mcpOmittedRoutes = map[string]string{
 	// job's own result and atlas_workers' log, both of which say it in the terms the
 	// model is written in; a forest dump is an operator's picture, and an admin-gated
 	// one (ADR-0213).
-	"POST /api/v1/ad/mock-directory":    "worker reporting the mock forest it holds, not an agent action",
-	"GET /api/v1/ad/mock-directory":     "an operator's view of a mocked directory; an agent reads what a job did from the job",
+	"POST /api/v1/ad/mock-directory": "worker reporting the mock forest it holds, not an agent action",
+	"GET /api/v1/ad/mock-directory":  "an operator's view of a mocked directory; an agent reads what a job did from the job",
+
+	// The mock database's journal, omitted for the same two reasons as the directory
+	// above it — and the read for a third: it carries the values a process bound, which
+	// is the widest thing this surface could hand out on a hunch.
+	"POST /api/v1/sql/mock-journal":     "worker reporting the mockup run it answered, not an agent action",
+	"GET /api/v1/sql/mock-journal":      "an operator's view of a mockup run; an agent reads what a job did from the job",
 	"POST /api/v1/workers/{id}/restart": "restarts an operating-system process; an operator action, deliberately not an agent one",
 	"GET /api/v1/checkpoints":           "admin recovery-checkpoint status, not an agent action",
 	"POST /api/v1/checkpoints":          "admin on-demand checkpoint/compaction, not an agent action",

@@ -61,6 +61,10 @@ var wantAdminRoutes = []string{
 	// list — no more public than the seed file they started from, which is admin-only
 	// for the same reason (ADR-0202).
 	"GET /api/v1/ad/mock-directory",
+	// And what a mock SQL worker was asked. Invented answers, but the *values a
+	// process bound* travel with them, and nothing can tell a password on its way into
+	// a table from an id — a stronger reason than the directory's, for the same gate.
+	"GET /api/v1/sql/mock-journal",
 
 	// Credentials, in every shape Atlas has one.
 	"POST /api/v1/targets",

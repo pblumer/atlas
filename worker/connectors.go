@@ -230,7 +230,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			if !ok {
 				return Connectors{}, sqldb.UnknownProduct(kind)
 			}
-			reg, names, err := sqlRegistryFromEnv(env, p)
+			reg, names, mock, err := sqlRegistryFromEnv(env, p)
 			if err != nil {
 				return Connectors{}, err
 			}
@@ -242,8 +242,29 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				continue
 			}
 			built.Names = append(built.Names, names...)
+			// A mock journal is memory, and until now it was memory nobody could look
+			// at: the operator is in the Console and the run is in here. The reporter
+			// closes that gap by posting what this worker was asked to the Atlas that
+			// shows it. nil when the mockup is off or no address was given, which
+			// changes nothing else.
+			var reporter *sqlMockReporter
+			if mock != nil {
+				reporter = newSQLMockReporter(env, mock)
+				// Once at startup, so the view can say "the mockup is on, 12 answers
+				// seeded, nothing asked yet" instead of showing an empty page to
+				// somebody who has just switched it on. Off this goroutine: a worker
+				// must start whether or not its server is answering yet — and a
+				// supervised one is started *by* that server, so it retries while the
+				// listener comes up rather than giving the view up for lost.
+				go reporter.reportAtStartup(context.Background())
+			}
 			built.Handlers[p.JobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
-				return RunSQLJob(ctx, j, reg)
+				out, err := RunSQLJob(ctx, j, reg)
+				// Reported either way. A statement the mock refused is precisely the
+				// entry an operator goes looking for: it is how they learn what to
+				// seed.
+				reporter.report(ctx)
+				return out, err
 			})
 		default:
 			return Connectors{}, fmt.Errorf("worker: --connector names a kind this worker does not implement: %q (have: %s)",

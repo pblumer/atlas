@@ -2010,7 +2010,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <tr><td><b>BMC Remedy</b></td><td data-l="de">Ticket/Incident im ITSM-System anlegen.</td><td data-l="en">Create a ticket/incident in the ITSM system.</td></tr>
           <tr><td><b>Jira</b></td><td data-l="de">Vorgang anlegen, lesen, ändern, weiterschalten, kommentieren, zuweisen, per JQL suchen — oder Konten suchen, um die accountId zu bekommen, die das Zuweisen braucht.</td><td data-l="en">Create, read, update, transition, comment on, assign, or search issues with JQL — or search accounts, to get the accountId assigning takes.</td></tr>
           <tr><td><b>Microsoft&nbsp;Entra&nbsp;ID</b></td><td data-l="de">Konten und Gruppen im Tenant anlegen, lizenzieren, deaktivieren, auflisten oder per Delta abgleichen.</td><td data-l="en">Create, license, disable, list or delta-sync accounts and groups in the tenant.</td></tr>
-          <tr><td><b data-l="de">SQL-Datenbanken</b><b data-l="en">SQL databases</b></td><td data-l="de">MS&nbsp;SQL, MariaDB und PostgreSQL abfragen (viele Zeilen, genau eine Zeile) und schreiben. Die Anweisung ist <b>immer literal</b> – sie hat bewusst keinen <code>fx</code>-Schalter, denn eine aus Prozessdaten zusammengesetzte Anweisung wäre eine Injection, die keinen Anführungszeichenfehler mehr bräuchte. Werte kommen ausschliesslich als <b>gebundene Parameter</b> hinein. Oder <b>Mockup</b>: ein Schalter in der Konsole lässt denselben Task gegen hinterlegte Antworten im Arbeitsspeicher des Workers laufen, ohne dass eine Datenbank angefasst wird und ohne Verbindungszeichenfolge (siehe <a href="#testen">Testen &amp; Simulieren</a>).</td><td data-l="en">Query (many rows, exactly one row) and write MS&nbsp;SQL, MariaDB and PostgreSQL. The statement is <b>always literal</b> – it deliberately has no <code>fx</code> toggle, because a statement assembled from process data would be an injection that needs no quoting bug to work. Values reach it only as <b>bound parameters</b>. Or <b>mockup</b>: a switch in the Console runs the same task against seeded answers in the worker's memory, with no database touched and no connection string needed (see <a href="#testen">Test &amp; simulate</a>).</td></tr>
+          <tr><td><b data-l="de">SQL-Datenbanken</b><b data-l="en">SQL databases</b></td><td data-l="de">MS&nbsp;SQL, MariaDB und PostgreSQL abfragen (viele Zeilen, genau eine Zeile) und schreiben. Die Anweisung ist <b>immer literal</b> – sie hat bewusst keinen <code>fx</code>-Schalter, denn eine aus Prozessdaten zusammengesetzte Anweisung wäre eine Injection, die keinen Anführungszeichenfehler mehr bräuchte. Werte kommen ausschliesslich als <b>gebundene Parameter</b> hinein. Oder <b>Mockup</b>: ein Schalter in der Konsole lässt denselben Task gegen hinterlegte Antworten im Arbeitsspeicher des Workers laufen, ohne dass eine Datenbank angefasst wird und ohne Verbindungszeichenfolge; was ein Lauf gefragt hat, steht unter <a href="/#/operations/sql-mock">Betrieb &rsaquo; Mock database</a> (siehe <a href="#testen">Testen &amp; Simulieren</a>).</td><td data-l="en">Query (many rows, exactly one row) and write MS&nbsp;SQL, MariaDB and PostgreSQL. The statement is <b>always literal</b> – it deliberately has no <code>fx</code> toggle, because a statement assembled from process data would be an injection that needs no quoting bug to work. Values reach it only as <b>bound parameters</b>. Or <b>mockup</b>: a switch in the Console runs the same task against seeded answers in the worker's memory, with no database touched and no connection string needed (see <a href="#testen">Test &amp; simulate</a>).</td></tr>
           <tr><td><b data-l="de">Web-Scraping</b><b data-l="en">Web scraping</b></td><td data-l="de">Eine Seite per CSS-Selektor auslesen oder einen RSS-/Atom-Feed als strukturierte Liste holen.</td><td data-l="en">Read a page by CSS selector, or pull an RSS/Atom feed as a structured list.</td></tr>
           <tr><td><b>CSV</b></td><td data-l="de">Eine CSV-Datei in eine Liste von Objekten verwandeln.</td><td data-l="en">Turn a CSV file into a list of objects.</td></tr>
           <tr><td><b data-l="de">Skript</b><b data-l="en">Script</b></td><td data-l="de">PowerShell, Python oder JavaScript ausführen – ausserhalb der Engine, in einem eigenen Prozess.</td><td data-l="en">Run PowerShell, Python or JavaScript – outside the engine, in a process of its own.</td></tr>
@@ -2439,6 +2439,39 @@ atlas worker --connector mssql</code></pre>
         different statement. And an answer may <b>fail</b>. That is not a curiosity: a redelivered job that
         inserts a second time is not an edge case in an identity process, it is what the delivery guarantee
         routinely does — and in the mockup you can trigger it whenever you like.</p>
+
+      <p data-l="de"><b>Was ein Lauf getan hat</b>, steht unter
+        <a href="/#/operations/sql-mock">Betrieb &rsaquo; Mock database</a>: pro Worker eine Karte,
+        darunter jede Anweisung in ihrer Reihenfolge samt der Werte, die der Prozess gebunden hat.
+        Rot sind die ohne hinterlegte Antwort — genau die, die du in die Startdatei übernimmst. Damit
+        schliesst sich die Schleife in der Konsole: Prozess starten, lesen was er gefragt hat, die
+        fehlende Anweisung hinterlegen, nochmal starten.</p>
+      <p data-l="en"><b>What a run did</b> is under
+        <a href="/#/operations/sql-mock">Operations &rsaquo; Mock database</a>: one card per worker,
+        every statement in order with the values the process bound. The red ones had no prepared
+        answer — exactly the ones you paste into the seed. That closes the loop inside the Console:
+        start the process, read what it asked, add the statement it could not answer, start it again.</p>
+      <p data-l="de"><b>Nicht</b> zu verwechseln mit den <i>hinterlegten Antworten</i> auf der Karte
+        unter Organisation &rsaquo; Workers: die sind die Vorlage, aus der der Worker startet, und
+        werden nie zurückgeschrieben. Und es gibt dort <b>keine Tabelle zum Blättern</b> — dieses
+        Mockup beantwortet Anweisungen und führt keine aus, ein <code>INSERT</code> ändert also
+        nicht, was ein späteres <code>SELECT</code> liefert. Beides ist flüchtig: der Worker-Neustart
+        leert sein Journal, der Atlas-Neustart die Ansicht.</p>
+      <p data-l="en">Do <b>not</b> confuse it with the <i>prepared answers</i> on the card under
+        Organization &rsaquo; Workers: those are the template the worker starts from and are never
+        written back. And there is <b>no table to browse</b> there — this mockup answers statements
+        and executes none, so an <code>INSERT</code> does not change what a later <code>SELECT</code>
+        returns. Both are ephemeral: restarting the worker empties its journal, restarting Atlas
+        empties the view.</p>
+      <p class="muted" style="font-size:13px" data-l="de">Die Ansicht ist <b>Administratoren
+        vorbehalten</b>, und aus einem strengeren Grund als das Mock-Verzeichnis: Sie zeigt die
+        <i>gebundenen Werte</i>, und ein Prozess bindet, was er bindet — ein Passwort-Hash auf dem Weg
+        in eine Tabelle ist ein gebundener Parameter wie jeder andere, und nichts kann ihn von einer
+        Id unterscheiden.</p>
+      <p class="muted" style="font-size:13px" data-l="en">The view is <b>admin-only</b>, and for a
+        stronger reason than the mock directory: it shows the <i>bound values</i>, and a process binds
+        whatever it binds — a password hash on its way into a table is a bound parameter like any
+        other, and nothing can tell it from an id.</p>
 
       <div class="note">
         <span class="lbl" data-l="de">Was nicht hinterlegt ist, scheitert</span><span class="lbl" data-l="en">What is not seeded, fails</span>

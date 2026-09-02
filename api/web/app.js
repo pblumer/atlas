@@ -491,6 +491,7 @@ const TOPNAV = {
     { name: "Workers", route: "#/operations/workers", role: "operator" },
     { name: "Outbox", route: "#/operations/outbox", role: "operator" },
     { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
+    { name: "Mock database", route: "#/operations/sql-mock", role: "admin" },
     { name: "Decisions", route: "#/operations/decisions", role: "operator" },
     { name: "Call activities", route: "#/operations/call-activities", role: "any" },
   ],
@@ -6048,6 +6049,152 @@ async function viewADMockDirectory() {
   window.__atlasCleanup = () => clearInterval(timer);
 }
 
+// viewSQLMockJournal is the Operations "Mock database" view: what the SQL workers in
+// mockup mode were actually asked (ADR-draft-sql-mock-journal).
+//
+// It is the mock directory's sibling with one difference that decides its whole shape.
+// That view answers "what is in the directory now" — state, so it draws a tree. This
+// mock holds no state at all: it answers statements and executes nothing, so an INSERT
+// changes nothing a later SELECT would see. There is no "now" to draw. What there is,
+// is the sequence — and the sequence is the answer to the question a mockup run is made
+// to ask: what did my process do?
+//
+// The refusals are the entries that matter most. A statement nobody seeded fails and
+// names itself and its values, and that is how an operator builds the seed: read it
+// here, paste it into the card under Workers.
+async function viewSQLMockJournal() {
+  const gen = navGen;
+  view.innerHTML = `
+    <div class="between">
+      <h1>Mock database</h1>
+      <span class="row" style="gap:12px; align-items:center">
+        <label class="field inline" style="margin:0"><input type="checkbox" id="sqlmock-follow" checked> Auto-refresh</label>
+        <button class="btn neutral" id="sqlmock-refresh" title="Reload what the workers have reported">Refresh</button>
+      </span>
+    </div>
+    <p class="muted">Every statement the SQL workers in <b>mockup mode</b> have been asked, newest
+    last. Nothing here reached a database. A statement shown in red had <b>no prepared answer</b> —
+    it failed, and it names itself and the values it was given so you can paste it into the
+    <b>Databases</b> card under Organization &rsaquo; Workers. There is no table to browse: this
+    mockup answers statements and executes none, so an <code>INSERT</code> does not change what a
+    later <code>SELECT</code> returns. A worker restart empties its journal.</p>
+    <div id="sqlmock-list"><p class="empty">Loading…</p></div>`;
+  const list = document.getElementById("sqlmock-list");
+  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+
+  // A bound value, as it goes to the driver. Rendered as JSON so a string "7" and the
+  // number 7 are distinguishable — which is the whole question when a lookup found
+  // nobody, and the reason this view carries the values at all.
+  const val = (v) => `<code>${esc(JSON.stringify(v))}</code>`;
+  const boundList = (st) => {
+    const named = st.named || null;
+    if (named && Object.keys(named).length) {
+      return Object.keys(named).sort().map((k) => `${esc(k)} = ${val(named[k])}`).join(", ");
+    }
+    const params = st.params || [];
+    if (!params.length) return "";
+    // Numbered the way the statement addresses them, so the reader can line the value
+    // up with the placeholder rather than counting commas.
+    return params.map((p, i) => `<span class="muted">${i + 1}</span> ${val(p)}`).join(", ");
+  };
+
+  const renderStatement = (st) => {
+    const bound = boundList(st);
+    return `<tr class="${st.failed ? "sqlmock-failed" : ""}">
+      <td class="sqlmock-seq muted">${esc(st.seq || "")}</td>
+      <td>
+        <code class="sqlmock-stmt">${esc(st.statement || "")}</code>
+        ${bound ? `<div class="muted sqlmock-bound">${bound}</div>` : ""}
+        ${st.failed && st.detail ? `<div class="sqlmock-detail">${esc(st.detail)}</div>` : ""}
+      </td>
+    </tr>`;
+  };
+
+  const renderWorker = (w) => {
+    const sts = w.statements || [];
+    const failed = sts.filter((s) => s.failed).length;
+    return `<div class="card sqlmock-worker" data-worker="${esc(w.worker || "?")}">
+      <details class="sqlmock-card" data-k="card" open>
+        <summary>
+          <span class="admock-card-head">
+            <h2>${esc(w.worker || "?")}</h2>
+            <span class="muted">${w.seeded || 0} prepared answer${(w.seeded || 0) === 1 ? "" : "s"} ·
+            ${w.held || 0} statement${(w.held || 0) === 1 ? "" : "s"} asked${
+              failed ? ` · <b>${failed}</b> with no answer` : ""}</span>
+          </span>
+          <span class="admock-card-state">
+            <span class="pill warn"><span class="dot"></span>mockup</span>
+            <span class="muted" style="margin-left:8px">reported ${esc(fmtNano(w.at))}</span>
+          </span>
+        </summary>
+        ${w.truncated ? `<p class="muted">Showing the newest ${sts.length} of ${w.held} — a run this
+          long is past what this view carries.</p>` : ""}
+        ${sts.length
+          ? `<table class="admock-attrs sqlmock-table"><tbody>${sts.map(renderStatement).join("")}</tbody></table>`
+          : `<p class="empty">Nothing asked yet. This worker is in mockup mode and has served no
+             database task since it started.</p>`}
+      </details>
+    </div>`;
+  };
+
+  // Which cards the reader has put away, addressed by worker rather than by position —
+  // a refresh must not reopen what somebody closed.
+  const keyOf = (d) => {
+    const w = d.closest("[data-worker]");
+    return `${w ? w.dataset.worker : ""}|${d.dataset.k || ""}`;
+  };
+  const foldState = () => {
+    const state = new Map();
+    for (const d of list.querySelectorAll("details")) state.set(keyOf(d), d.open);
+    return state;
+  };
+  const refold = (state) => {
+    for (const d of list.querySelectorAll("details")) {
+      const was = state.get(keyOf(d));
+      if (was !== undefined) d.open = was;
+    }
+  };
+
+  // The last payload rendered. A poll that brings nothing new leaves the DOM alone: the
+  // view refreshes every few seconds, and rebuilding an identical table would cost the
+  // reader their scroll position for no news at all.
+  let rendered = null;
+  const load = async () => {
+    let data;
+    try {
+      data = await api("GET", "/api/v1/sql/mock-journal");
+    } catch (e) {
+      rendered = null; // re-render once it answers again, whatever it says
+      list.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+      return;
+    }
+    const fresh = JSON.stringify(data);
+    if (fresh === rendered) return;
+    const folds = foldState();
+    rendered = fresh;
+    const workers = (data && data.workers) || [];
+    if (!workers.length) {
+      list.innerHTML = `<div class="card"><p class="empty">No worker has reported a mockup run.
+        Switch <b>Answer database tasks from a mockup</b> on under Organization &rsaquo; Workers;
+        the worker restarts and reports itself, and every database task it then serves shows up
+        here.</p></div>`;
+      return;
+    }
+    list.innerHTML = workers.map(renderWorker).join("");
+    refold(folds);
+  };
+
+  await load();
+  if (superseded(gen)) return;
+  document.getElementById("sqlmock-refresh").addEventListener("click", load);
+  const follow = document.getElementById("sqlmock-follow");
+  // Five seconds, like the mock directory: a mockup run is something you watch while
+  // clicking through a process, and the read is a small in-memory list on a server that
+  // is not the engine's run loop.
+  const timer = setInterval(() => { if (follow.checked) load(); }, 5000);
+  window.__atlasCleanup = () => clearInterval(timer);
+}
+
 // viewDecisionDetail lists every evaluation of one decision — its "instances" —
 // newest first, each showing the exact inputs it saw, the outputs it produced, and
 // (expandable) the temis trace of which rules fired (ADR-0066). This is the
@@ -7703,6 +7850,7 @@ async function route() {
     if (path === "#/operations/workers") return await viewWorkers();
     if (path === "#/operations/outbox") return await viewMailOutbox();
     if (path === "#/operations/ad-mock") return await viewADMockDirectory();
+    if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/operations/call-activities") return await viewCallActivities();
     if (path === "#/panorama/landscape") return await viewPanoramaLandscape();
