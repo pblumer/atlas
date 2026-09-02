@@ -308,6 +308,35 @@ drawn, and the case's detail sits *above* the report rather than instead of it �
 reader came from the run, and going back to it should not cost them the numbers they
 were reading.
 
+### Where the cases came out
+
+"482 of 500 finished" is not the question a run is asked. The question is how many
+were approved and how many were rejected, and the report could not answer it: the
+per-case results name the end event each case stopped at, but they are read a page
+at a time, so a fold over five hundred of them was something a reader had to do by
+scrolling. The breakdown is one row per end event, over the whole run — the same
+token counts the heat map is drawn from, folded rather than sampled.
+
+Two decisions in it. **An end event nothing reached keeps its row**, marked as
+unreached rather than dropped: an outcome the data never produced is the finding,
+and a missing row hides it exactly where somebody is looking for it. And **a diagram
+with a single end event gets no table at all** — its one row would repeat the line
+above it, and a lone bar at a hundred percent is not a comparison.
+
+The share is of the outcomes reached, not of the cases, and the section header names
+that total so the denominator is on screen. It can differ from the case count in
+both directions: cases that never came out anywhere leave it short, and these are
+token counts, so a case with a parallel branch ends twice and leaves it long. Both
+are worth showing, and both would otherwise be read off the percentages as an error.
+
+Writing it uncovered a bug in the code that reads the diagram. **bpmn-js registers an
+element's external label as an element of its own, carrying the same business
+object** — so every event and gateway is in the element registry twice. The rule
+editor's "ends at…" picker had been offering each outcome twice since it was built,
+invisibly, because the second option looks exactly like the first. In a breakdown the
+same scan would have counted every outcome twice and halved every share. One helper
+now reads the registry for both, and skips labels.
+
 ### The shape of the numbers, not only the numbers
 
 Two places in the panel a number alone was the wrong answer.

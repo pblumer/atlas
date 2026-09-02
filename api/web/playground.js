@@ -338,19 +338,31 @@ export function attachPlayground(root, { api, toast, modeler }) {
     }
   }
 
-  // tasksInDiagram lists the elements a pool can be put on, straight off the
-  // canvas: the author configures capacity against the tasks they drew, not
-  // against a list they have to type out again.
-  function tasksInDiagram() {
+  // drawnElements lists what the author drew, of one kind, straight off the canvas —
+  // so the panel configures and reports against the diagram rather than against a
+  // list somebody has to retype from it.
+  //
+  // A label is skipped. bpmn-js registers an element's *external* label as an
+  // element of its own carrying the same business object, so anything that has one —
+  // an event, a gateway — is in the registry twice. That is invisible in a picker,
+  // where the second option looks like the first, and wrong in a breakdown, where an
+  // outcome would be counted twice and every share halved.
+  function drawnElements(wanted) {
     let registry;
     try { registry = modeler.get("elementRegistry"); } catch { return []; }
     const out = [];
     registry.forEach((e) => {
       const bo = e.businessObject;
-      if (!bo || !TASK_TYPES.has(bo.$type) || !bo.id) return;
+      if (e.labelTarget || !bo || !bo.id || !wanted(bo.$type)) return;
       out.push({ id: bo.id, name: bo.name || bo.id });
     });
     return out;
+  }
+
+  // tasksInDiagram lists the elements a pool can be put on: the author configures
+  // capacity against the tasks they drew.
+  function tasksInDiagram() {
+    return drawnElements((type) => TASK_TYPES.has(type));
   }
 
   // stubPolicy is the whole run configuration in the shape the open endpoint
@@ -1210,18 +1222,11 @@ export function attachPlayground(root, { api, toast, modeler }) {
       </div>`;
   }
 
-  // endEventsInDiagram lists the outcomes the author drew, so a rule is written
-  // against the diagram rather than against a list of ids retyped from it.
+  // endEventsInDiagram lists the outcomes the author drew, so a rule is written —
+  // and a run broken down — against the diagram rather than against a list of ids
+  // retyped from it.
   function endEventsInDiagram() {
-    let registry;
-    try { registry = modeler.get("elementRegistry"); } catch { return []; }
-    const out = [];
-    registry.forEach((e) => {
-      const bo = e.businessObject;
-      if (!bo || bo.$type !== "bpmn:EndEvent" || !bo.id) return;
-      out.push({ id: bo.id, name: bo.name || bo.id });
-    });
-    return out;
+    return drawnElements((type) => type === "bpmn:EndEvent");
   }
 
   // scenarioSaveHTML is how a run becomes repeatable by somebody who is not here.
@@ -1571,6 +1576,42 @@ export function attachPlayground(root, { api, toast, modeler }) {
     return `<div><b>${esc(text)}</b><span>${esc(label)}</span>${trackHTML(value, max)}</div>`;
   }
 
+  // outcomesHTML is where the cases came out, one row per end event.
+  //
+  // It is the question a run is actually asked — how many were approved, how many
+  // were rejected — and the one "482 of 500 finished" cannot answer. The counts are
+  // the run's own token counts, folded over every case rather than over the page of
+  // results on screen, and the names come off the canvas, so the rows read like the
+  // diagram somebody drew. An end event nothing reached keeps its row at zero: a
+  // branch the data never took is the finding, and a missing row would hide it.
+  //
+  // A diagram with a single end event gets no table. Its one row would say what the
+  // line above it already said, and a lone bar at a hundred percent is not a
+  // comparison.
+  function outcomesHTML(rep) {
+    const ends = endEventsInDiagram();
+    if (ends.length < 2) return "";
+    const visits = rep.visits || {};
+    const rows = ends.map((e) => ({ ...e, count: Number(visits[e.id]) || 0 }))
+      .sort((a, b) => b.count - a.count);
+    const max = Math.max(0, ...rows.map((r) => r.count));
+    // The total names the share column's denominator, and says how many cases never
+    // came out anywhere. It can also exceed the case count, because these are token
+    // counts and a case with a parallel branch ends twice — which is worth showing
+    // rather than hiding, since it is the thing somebody would otherwise misread the
+    // percentages by.
+    const total = rows.reduce((n, r) => n + r.count, 0);
+    return `
+      <div class="pg-sec"><b>Ends</b>
+        <span class="muted">${total} of ${rep.cases} cases reached one</span></div>
+      <table class="pg-table pg-ends"><thead><tr><th>outcome</th><th>reached</th><th>share</th></tr></thead>
+      <tbody>${rows.map((r) => `<tr${r.count ? "" : ' class="pg-unreached"'}>
+        <td title="${esc(r.id)}">${esc(r.name)}</td>
+        ${meterHTML(r.count, max, String(r.count), "Against the end event this run reached most")}
+        <td>${total ? Math.round((100 * r.count) / total) : 0}%</td>
+      </tr>`).join("")}</tbody></table>`;
+  }
+
   // reportHTML is the analysis: what came out, how long it took, where it waited,
   // and when. Every number here is a fold of the whole run rather than a sample.
   function reportHTML() {
@@ -1599,6 +1640,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
         <div><b class="${rep.incidents ? "bad" : ""}">${rep.incidents}</b><span>incidents</span></div>
         <div><b>${rep.maxInFlight}</b><span>peak in flight</span></div>
       </div>
+      ${outcomesHTML(rep)}
       <div class="pg-sec"><b>Durations</b> <span class="muted">per case, simulated</span></div>
       <div class="pg-facts">
         ${factBarHTML(d.minMillis, d.maxMillis, fmtDur(d.minMillis), "fastest")}
