@@ -482,7 +482,7 @@ func (s *Server) jobTypeUsers() map[int32][]typeUser {
 		if d.cp == nil {
 			continue
 		}
-		for _, jobType := range serviceTaskJobTypes(d.cp) {
+		for _, jobType := range jobCreatingTypes(d.cp) {
 			byID, ok := newest[jobType]
 			if !ok {
 				byID = map[string]typeUser{}
@@ -509,21 +509,46 @@ func (s *Server) jobTypeUsers() map[int32][]typeUser {
 	return out
 }
 
-// serviceTaskJobTypes is the set of engine-wide job types a compiled process creates
-// jobs of from its service and send tasks — the only elements carrying a job type the
-// model authored (ADR-0157).
-func serviceTaskJobTypes(cp *compiler.CompiledProcess) []int32 {
+// jobCreatingTypes is the set of engine-wide job types a compiled process creates jobs
+// of — every element that puts one on a queue, not only the ones whose type a model
+// wrote out by hand.
+//
+// It used to be service and send tasks alone, on the reasoning that those are "the only
+// elements carrying a job type the model authored" (ADR-0157). That is true of the
+// *string* and false of the job: a connector task, a script task, a business rule task
+// and a user task each carry a reserved type instead of an authored one, and each
+// creates a job under it. So the Workers view's Processes column — the thing that is
+// supposed to make a row actionable, since "an engine with fifty job types has fifty
+// rows saying nobody, and none of them means anything until you can see which process
+// is waiting on it" — was empty for exactly the rows an operator asks about. Every Jira,
+// clio, AD, script and DMN row said nothing about who uses it.
+//
+// A reserved detail's JobType is already the engine-wide index and needs no resolution:
+// the reserved range is engine-wide by construction, which is the whole reason it is
+// reserved. Only a service task's authored type is interned per process, which is why
+// that one alone goes through GlobalJobType.
+func jobCreatingTypes(cp *compiler.CompiledProcess) []int32 {
 	var out []int32
 	seen := map[int32]bool{}
-	for id := range int32(cp.NodeCount()) {
-		n := cp.Node(id)
-		if n.Type != compiler.TypeServiceTask && n.Type != compiler.TypeSendTask {
-			continue
-		}
-		jobType := cp.ServiceTask(n.Detail).GlobalJobType()
+	add := func(jobType int32) {
 		if !seen[jobType] {
 			seen[jobType] = true
 			out = append(out, jobType)
+		}
+	}
+	for id := range int32(cp.NodeCount()) {
+		n := cp.Node(id)
+		switch n.Type {
+		case compiler.TypeServiceTask, compiler.TypeSendTask:
+			add(cp.ServiceTask(n.Detail).GlobalJobType())
+		case compiler.TypeConnectorTask:
+			add(cp.ConnectorTask(n.Detail).JobType)
+		case compiler.TypeScriptJobTask:
+			add(cp.ScriptJobTask(n.Detail).JobType)
+		case compiler.TypeBusinessRuleTask:
+			add(cp.BusinessRuleTask(n.Detail).JobType)
+		case compiler.TypeUserTask:
+			add(cp.UserTask(n.Detail).JobType)
 		}
 	}
 	return out
