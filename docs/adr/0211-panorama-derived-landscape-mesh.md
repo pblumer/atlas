@@ -8,7 +8,8 @@
   as by its kind; amended 2026-09-02 — a drag moves the neighbourhood rather than
   the landscape, and a filter keeps one hop of context around every match; amended
   2026-09-02 — §7 gains saved views, a findings list, and a heartbeat on the nodes
-  that have one, and §4's node carries its incident count)
+  that have one, and §4's node carries its incident count; amended 2026-09-02 — a
+  node can be drilled into, and a finding names the element the work is parked on)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -420,6 +421,53 @@ unaffected.
 >   the rings stay and stop moving. A landscape where two hundred things are wrong is
 >   a picture of an outage, and two hundred simultaneous animations say less than a
 >   still frame while costing far more to paint.
+
+> **Amendment (2026-09-02, fourth): going into a node, and saying where it broke.**
+> Two more, and they are the same act at two altitudes: getting from "something is
+> wrong in this landscape" to "this task, this message".
+>
+> - **A node can be drilled into.** Double-clicking one reduces the landscape to it
+>   and whatever is within the depth already on screen. The complaint it answers is
+>   the one every large graph has: you find the thing you came for and it is still
+>   sitting in four hundred circles of everything else. It is the *same cut* a search
+>   makes — one walk, one idea of what a neighbour is — because two implementations
+>   of "and its neighbours" would eventually disagree, and the difference would show
+>   up as a picture that answers a slightly different question depending on how you
+>   reached it. Direction is not consulted: "what is this attached to" includes the
+>   application it sits in and the worker it calls alike.
+>
+>   A drilldown and the search box are two ways of asking the same kind of question,
+>   so only one is ever in force — entering one clears the other. Two narrowings
+>   compounding invisibly is how a picture ends up showing something nobody asked for
+>   and nobody can undo. The way out is stated in the header beside the picture it
+>   describes, and on Escape.
+>
+>   The double-click had a previous job — releasing one hand-placed node — and it
+>   moved into the panel beside the node it is about. A gesture is something you have
+>   to be told; a button on the thing itself is something you can see.
+>
+> - **A finding names the element the work is parked on.** "Three tokens are parked"
+>   says there is a problem. "Three on the service task `charge-card`, and the last
+>   one said 502 Bad Gateway" says where to go, and it costs the same read: the engine
+>   already knows which element each incident is stuck on, because that is how it
+>   resolves one. §4's node therefore carries **sites** beside its count — element id,
+>   BPMN type, how many, and the message.
+>
+>   Four rules keep it honest. The element is named by its id and type rather than by
+>   a label, because only user tasks carry a title in a compiled process and an
+>   identifier that is sometimes there is worse than one that is always there — and
+>   because it is what Operations shows, so the two name the same thing the same way.
+>   The message is the first one seen at that element, not a summary of several:
+>   inventing a combined sentence would be writing a message nobody produced. The list
+>   is the worst few and stops there, because a landscape view is where somebody
+>   decides *which* process to open, not where they triage eleven broken tasks. And a
+>   collapsed application keeps the summed count but drops the sites: an element id
+>   without the process it belongs to is not something anybody can act on, and a list
+>   of them from six processes reads as one broken diagram.
+>
+>   The model overlay gets the same answer in one field — the worst site, on the
+>   observation's detail — so a panel that says "degraded" can say where without
+>   sending anybody to a second view.
 
 ### 7. A stated size budget, and a server-side fallback
 

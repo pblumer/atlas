@@ -427,3 +427,58 @@ func TestCollapsedApplicationSumsTheIncidentsBehindIt(t *testing.T) {
 		t.Errorf("Incidents = %d, want 21 — the sum of what all six hold", got)
 	}
 }
+
+// TestIncidentSitesRideOnlyOnTheProcessThatCanPointAtThem. Where work is parked is
+// only actionable with the process it is parked in: an element id from six collapsed
+// processes reads as one broken diagram, and the reader cannot tell which. So a
+// collapsed application keeps the summed count — the part that survives losing the
+// context — and drops the sites rather than pooling them.
+func TestIncidentSitesRideOnlyOnTheProcessThatCanPointAtThem(t *testing.T) {
+	parked := withStatus(proc(1, "invoice", "Invoice", "a1"), StateDegraded, "parked")
+	parked.Incidents = 3
+	parked.Sites = []IncidentSite{
+		{ElementID: "charge-card", ElementType: "ServiceTask", Count: 2, Message: "502 Bad Gateway"},
+		{ElementID: "notify", ElementType: "SendTask", Count: 1},
+	}
+	second := withStatus(proc(2, "dunning", "Dunning", "a1"), StateDegraded, "parked")
+	second.Incidents = 4
+	second.Sites = []IncidentSite{{ElementID: "chase", ElementType: "ServiceTask", Count: 4}}
+	land := Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{parked, second},
+	}
+
+	whole := DeriveGraph(land, Options{})
+	node := nodeByID(t, whole, "process:1")
+	if len(node.Sites) != 2 || node.Sites[0].ElementID != "charge-card" {
+		t.Fatalf("Sites = %#v, want the two the process carries, in order", node.Sites)
+	}
+	if node.Sites[0].Message != "502 Bad Gateway" {
+		t.Errorf("the message did not survive: %q", node.Sites[0].Message)
+	}
+	if got := nodeByID(t, whole, "application:a1").Sites; got != nil {
+		t.Errorf("an application carries Sites = %#v; only a process has tokens", got)
+	}
+
+	collapsed := DeriveGraph(land, Options{MaxNodes: 1})
+	if !collapsed.Clustered {
+		t.Fatal("Clustered = false; this half of the test is about the collapsed shape")
+	}
+	app := nodeByID(t, collapsed, "application:a1")
+	if app.Incidents != 7 {
+		t.Errorf("Incidents = %d, want 7 — the sum of what both hold", app.Incidents)
+	}
+	if app.Sites != nil {
+		t.Errorf("a collapsed application pooled its children's sites: %#v", app.Sites)
+	}
+
+	// And the field is absent from the wire when there is nothing to point at, so a
+	// node that cannot have sites and one that has none arrive the same way.
+	encoded, err := json.Marshal(nodeByID(t, whole, "application:a1"))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(encoded), "sites") {
+		t.Errorf("a node with no sites still names the field: %s", encoded)
+	}
+}

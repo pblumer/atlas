@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/pblumer/atlas/api/panorama"
 	"github.com/pblumer/atlas/model"
@@ -43,8 +44,11 @@ const maxStatusIncidentScan = 2000
 // operator stop believing the color.
 //
 // Runs on the run-loop goroutine, via its caller.
-func (s *Server) incidentsByDefinition() (map[uint64]int, bool, error) {
-	out := map[uint64]int{}
+func (s *Server) incidentsByDefinition() (map[uint64]incidentTally, bool, error) {
+	out := map[uint64]incidentTally{}
+	// sites accumulates by definition and then by element, so several incidents on
+	// one task are one entry with a count rather than one entry each.
+	sites := map[uint64]map[string]*panorama.IncidentSite{}
 	scanned, partial := 0, false
 	err := unlessTruncated(s.store.Incidents(func(_ uint64, v *model.IncidentValue) error {
 		if scanned++; scanned > maxStatusIncidentScan {
@@ -60,13 +64,105 @@ func (s *Server) incidentsByDefinition() (map[uint64]int, bool, error) {
 			// attribute it to, and guessing would be worse than dropping it.
 			return nil
 		}
-		out[pi.ProcessDefKey]++
+		tally := out[pi.ProcessDefKey]
+		tally.Count++
+		out[pi.ProcessDefKey] = tally
+		s.recordIncidentSite(sites, pi.ProcessDefKey, v)
 		return nil
 	}))
 	if err != nil {
 		return nil, false, err
 	}
+	for key, byElement := range sites {
+		tally := out[key]
+		tally.Sites = rankIncidentSites(byElement)
+		out[key] = tally
+	}
 	return out, partial, nil
+}
+
+// incidentTally is what one definition's unresolved incidents amount to: how many
+// there are, and where in its diagram they are parked.
+type incidentTally struct {
+	Count int
+	Sites []panorama.IncidentSite
+}
+
+// maxIncidentSites bounds how many elements one process reports. A process with
+// eleven broken tasks is not eleven findings somebody triages from a landscape
+// view; it is one finding — "this process is in trouble" — and Operations is where
+// the whole list belongs. The bound is on the answer, not on the scan, so the
+// counts above it stay right.
+const maxIncidentSites = 5
+
+// maxIncidentMessage bounds one message. A connector can return a page of HTML as
+// its error, and a panel is not where somebody reads that.
+const maxIncidentMessage = 240
+
+// recordIncidentSite attributes one incident to the element it is parked on.
+//
+// The element index in an incident is compiled-graph local, so it means nothing
+// without the definition that produced it — which is why this resolves through the
+// deployment rather than carrying the number outward. A definition this server no
+// longer holds contributes to the count and to no site: the incident is real, and
+// where it sits is something we can no longer name.
+func (s *Server) recordIncidentSite(sites map[uint64]map[string]*panorama.IncidentSite,
+	key uint64, v *model.IncidentValue) {
+	d, ok := s.deployments[key]
+	if !ok || d.cp == nil {
+		return
+	}
+	id := d.cp.ElementBpmnId(v.ElementId)
+	if id == "" {
+		return
+	}
+	byElement := sites[key]
+	if byElement == nil {
+		byElement = map[string]*panorama.IncidentSite{}
+		sites[key] = byElement
+	}
+	site := byElement[id]
+	if site == nil {
+		site = &panorama.IncidentSite{
+			ElementID:   id,
+			ElementType: d.cp.Node(v.ElementId).Type.String(),
+			Message:     truncateMessage(v.Message),
+		}
+		byElement[id] = site
+	}
+	site.Count++
+}
+
+// rankIncidentSites orders the worst first and cuts to the bound.
+//
+// Deterministic past the count, by element id, because two reads of an unchanged
+// server must produce the same document — a list that reshuffled itself would make
+// the drift journal record changes that never happened.
+func rankIncidentSites(byElement map[string]*panorama.IncidentSite) []panorama.IncidentSite {
+	ranked := make([]panorama.IncidentSite, 0, len(byElement))
+	for _, site := range byElement {
+		ranked = append(ranked, *site)
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		if ranked[i].Count != ranked[j].Count {
+			return ranked[i].Count > ranked[j].Count
+		}
+		return ranked[i].ElementID < ranked[j].ElementID
+	})
+	if len(ranked) > maxIncidentSites {
+		ranked = ranked[:maxIncidentSites]
+	}
+	return ranked
+}
+
+// truncateMessage cuts a message to the bound, marking that it was cut. A silently
+// shortened error reads as a complete one, and somebody would search for a string
+// that does not exist.
+func truncateMessage(message string) string {
+	if len(message) <= maxIncidentMessage {
+		return message
+	}
+	return message[:maxIncidentMessage] + "…"
 }
 
 // processStatus turns a definition's parked-work count into an observation.

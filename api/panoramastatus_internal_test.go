@@ -99,3 +99,73 @@ func TestWorkerHoldingsReflectsWhatWorkersReported(t *testing.T) {
 		t.Fatalf("a worker holding nothing = %v/%v, want polled with nothing held", held, polled)
 	}
 }
+
+// TestIncidentSitesRankTheWorstFirstAndStopThere. A landscape view is where somebody
+// decides *which* process to open, not where they triage eleven broken tasks — so
+// the list is the worst few and Operations holds the rest. Ordering past the count
+// is by element id because two reads of an unchanged server have to produce the same
+// document: a list that reshuffled itself would make the drift journal record
+// changes that never happened.
+func TestIncidentSitesRankTheWorstFirstAndStopThere(t *testing.T) {
+	byElement := map[string]*panorama.IncidentSite{}
+	// Seven elements, so the bound bites, with two sharing a count to pin the tie.
+	for _, seed := range []struct {
+		id    string
+		count int
+	}{
+		{"a-task", 2}, {"b-task", 9}, {"c-task", 2}, {"d-task", 7},
+		{"e-task", 1}, {"f-task", 5}, {"g-task", 4},
+	} {
+		byElement[seed.id] = &panorama.IncidentSite{ElementID: seed.id, Count: seed.count}
+	}
+
+	ranked := rankIncidentSites(byElement)
+
+	if len(ranked) != maxIncidentSites {
+		t.Fatalf("ranked %d site(s), want the bound of %d", len(ranked), maxIncidentSites)
+	}
+	var got []string
+	for _, site := range ranked {
+		got = append(got, site.ElementID)
+	}
+	want := []string{"b-task", "d-task", "f-task", "g-task", "a-task"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ranked = %v, want %v — worst first, then by element id", got, want)
+		}
+	}
+	// The tie is broken by id, so the same map produces the same list every time.
+	for i := 0; i < 20; i++ {
+		again := rankIncidentSites(byElement)
+		if again[len(again)-1].ElementID != "a-task" {
+			t.Fatalf("run %d ended on %q; the order is not deterministic", i, again[len(again)-1].ElementID)
+		}
+	}
+}
+
+// TestATruncatedMessageSaysItWasTruncated. A connector can return a page of HTML as
+// its error and a panel is not where somebody reads that — but a silently shortened
+// message reads as a complete one, and then somebody searches their logs for a
+// string that does not exist.
+func TestATruncatedMessageSaysItWasTruncated(t *testing.T) {
+	short := "502 Bad Gateway"
+	if got := truncateMessage(short); got != short {
+		t.Errorf("truncateMessage(%q) = %q, want it untouched", short, got)
+	}
+
+	long := strings.Repeat("x", maxIncidentMessage+50)
+	got := truncateMessage(long)
+	if len([]rune(got)) != maxIncidentMessage+1 {
+		t.Errorf("truncated length = %d rune(s), want the bound plus the mark", len([]rune(got)))
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Errorf("truncateMessage did not mark the cut: %q", got[len(got)-10:])
+	}
+
+	// Exactly at the bound is not truncated: the mark means "there is more", and
+	// there is not.
+	exact := strings.Repeat("y", maxIncidentMessage)
+	if got := truncateMessage(exact); got != exact {
+		t.Error("a message exactly at the bound was marked as cut")
+	}
+}
