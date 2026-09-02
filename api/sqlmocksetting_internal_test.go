@@ -2,11 +2,16 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 const sqlMockSeedJSON = `{"answers":[
@@ -300,5 +305,117 @@ func TestTheSeedShapesTheConsoleOffersAreAccepted(t *testing.T) {
 	}
 	if !strings.Contains(string(resp), `"seedAnswers":4`) {
 		t.Errorf("response = %s, want all four answers counted", resp)
+	}
+}
+
+// The seed's content is admin-only; everything else about the switch is not. What the
+// switch is set to answers a question every operator watching a database task has — did
+// that row really get written? — so hiding it would be the wrong secrecy. The seed is a
+// different matter: it is shaped like the answers a production query returns.
+func TestOnlyAnAdminReadsTheSeedBack(t *testing.T) {
+	// With auth off the server is open by definition (single-user mode), so the
+	// distinction under test only exists with it on.
+	srv, _ := newValidateServer(t, WithAuth())
+	srv.do(func() {
+		_ = srv.settings.saveSQLMock(sqlMockSetting{
+			Enabled: true, Seed: sqlMockSeedJSON, SeedName: "hr.json", SeedAnswers: 2,
+		})
+	})
+
+	// The handler is called directly with a principal in context: what is under test is
+	// the field it keeps back, not the middleware that established who is asking.
+	get := func(roles ...string) string {
+		t.Helper()
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/settings/sql-mock", nil)
+		r = r.WithContext(httpapi.WithPrincipal(r.Context(),
+			&httpapi.Principal{UserID: "u1", Username: "ben", Roles: roles}))
+		rec := httptest.NewRecorder()
+		srv.handleGetSQLMock(rec, r)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET: status=%d body=%s — reading the switch must stay open", rec.Code, rec.Body)
+		}
+		return rec.Body.String()
+	}
+
+	signedIn := get("user")
+	if strings.Contains(signedIn, "personen") {
+		t.Errorf("the seed's statements were returned to a caller who is not an admin: %s", signedIn)
+	}
+	// But enough of it to say there is one, and what it is called.
+	for _, want := range []string{`"enabled":true`, `"hasSeed":true`, "hr.json", `"seedAnswers":2`} {
+		if !strings.Contains(signedIn, want) {
+			t.Errorf("the response was %s, want it to still carry %s", signedIn, want)
+		}
+	}
+	if admin := get(RoleAdmin); !strings.Contains(admin, "personen") {
+		t.Errorf("an admin was not given the seed: %s", admin)
+	}
+}
+
+// A stored record that cannot be decoded is reported rather than silently treated as
+// "nobody decided" — the difference matters, because the second would hand the worker
+// whatever the host environment says while the Console showed a switch nobody set.
+func TestAnUnreadableSQLMockRecordIsAnError(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.do(func() {
+		if err := os.WriteFile(srv.settings.sqlFile, []byte("{not json"), 0o600); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	})
+	var err error
+	srv.do(func() { _, _, err = srv.settings.getSQLMock() })
+	if err == nil {
+		t.Fatal("a corrupt switch record decoded cleanly")
+	}
+
+	code, resp := serveInternal(t, srv, http.MethodGet, "/api/v1/settings/sql-mock", "", "")
+	if code != http.StatusInternalServerError {
+		t.Errorf("GET status = %d (%s), want the read failure reported", code, resp)
+	}
+	// And the supervised worker is handed nothing rather than a guess, so the host's
+	// own setting keeps deciding while somebody fixes the file.
+	for _, v := range srv.sqlWorkerEnvByName(connectorKindMSSQL) {
+		if strings.HasPrefix(v, "ATLAS_MSSQL_MOCK") {
+			t.Errorf("env carries %q off an unreadable record", v)
+		}
+	}
+}
+
+// A body that is not JSON is a bad request, not a 500 — and saying which is the
+// difference between "fix your request" and "the server is broken".
+func TestASQLMockBodyThatIsNotJSONIsRefused(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	code, resp := serveInternal(t, srv, http.MethodPut, "/api/v1/settings/sql-mock", "{not json", "application/json")
+	if code != http.StatusBadRequest || !strings.Contains(string(resp), "invalid JSON body") {
+		t.Fatalf("status = %d (%s), want a 400 naming the body", code, resp)
+	}
+}
+
+// A seed past the limit says so, rather than being truncated into something that then
+// fails to parse — the failure mode a LimitReader would have given, and a maddening one
+// to debug because the text that comes back is valid JSON that is simply not yours.
+func TestASeedLargerThanTheLimitIsRefusedRatherThanTruncated(t *testing.T) {
+	srv, _ := newValidateServer(t)
+
+	var big strings.Builder
+	big.WriteString(`{"answers":[`)
+	for i := 0; big.Len() < maxSQLMockBytes+(1<<12); i++ {
+		if i > 0 {
+			big.WriteString(",")
+		}
+		fmt.Fprintf(&big, `{"statement":"SELECT %d FROM personen WHERE id = @p1","columns":["n"],"rows":[[%d]]}`, i, i)
+	}
+	big.WriteString(`]}`)
+	body, _ := json.Marshal(map[string]any{"enabled": true, "seed": big.String()})
+
+	code, resp := serveInternal(t, srv, http.MethodPut, "/api/v1/settings/sql-mock", string(body), "application/json")
+	if code != http.StatusBadRequest {
+		t.Fatalf("status = %d (%s), want an oversized seed refused", code, resp)
+	}
+	// Nothing was stored, so the switch still reads as undecided.
+	var stored bool
+	srv.do(func() { _, stored, _ = srv.settings.getSQLMock() })
+	if stored {
+		t.Error("an oversized seed still wrote the switch")
 	}
 }
