@@ -3283,6 +3283,32 @@ async function createDmnRef(projectId, reload) {
   await reload();
 }
 
+// saveOrConfirmOverwrite runs a save that refuses to land on an id something else
+// already holds, and turns that refusal into a question rather than a dead end.
+//
+// `save(from)` is called twice at most: first with "" — "this is new, so refuse a
+// collision" — and, if the author confirms the replacement, with null, which omits the
+// parameter entirely and gets the plain overwrite-by-id every non-interactive writer
+// uses. Omitting it is what lets the retry work without the caller having to know the
+// id inside the file: the server reads it from the document either way.
+//
+// Importing a file whose id already exists is not by itself a mistake — it is usually a
+// corrected export of the same artifact. What it must never be is silent, which is what
+// it was: you picked a file and the draft or form you already had was gone
+// (ADR-draft-artifact-id-renames).
+// Declining the replacement returns null — not an error, since keeping what was there
+// is a perfectly good outcome — so the caller reports it as a cancellation rather than
+// a failure.
+async function saveOrConfirmOverwrite(save, question) {
+  try {
+    return await save("");
+  } catch (e) {
+    if (e.status !== 409) throw e;
+    if (!window.confirm(`${e.message}\n\n${question}`)) return null;
+    return await save(null);
+  }
+}
+
 // importArtifact imports a BPMN diagram, DMN model, or form from an uploaded file and
 // files it into the given project ("" = ungrouped). The kind is detected from the
 // extension and, for an ambiguous .xml, from the root element's namespace: a BPMN
@@ -3305,7 +3331,16 @@ async function importArtifact(projectId, reload) {
       if (!Array.isArray(schema.components)) throw new Error("not a form-js form (no components array)");
       const id = (typeof schema.id === "string" && schema.id.trim()) || ("form-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
       const name = (typeof schema.name === "string" && schema.name.trim()) || base || id;
-      await api("POST", "/api/v1/forms", { id, name, schema, projectId });
+      // "from" empty says this is a new form, so an id something already holds comes
+      // back 409 instead of quietly replacing that form
+      // (ADR-draft-artifact-id-renames). Importing a file over a form you already have
+      // is a real intent — a corrected export of the same form — so it is offered by
+      // name rather than refused; it is just never the default.
+      const savedForm = await saveOrConfirmOverwrite(
+        (from) => api("POST", "/api/v1/forms",
+          from === null ? { id, name, schema, projectId } : { id, name, schema, projectId, from }),
+        `A form with the id “${id}” already exists. Replace it with this file?`);
+      if (!savedForm) { toast(`Import cancelled — the form “${id}” you already had was kept`); return; }
       toast(`Imported form “${name}”`, "ok");
       await reload();
       return;
@@ -3326,8 +3361,16 @@ async function importArtifact(projectId, reload) {
     // BPMN-DI is optional in the standard, so a file may carry no layout at all; the
     // backend lays one out on the way in and says so, and the author is told rather than
     // left to assume the arrangement in front of them is the one their file described.
-    const path = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
-    const d = await api("POST", path, text, true);
+    const draftPath = (from) => {
+      const q = [];
+      if (from !== null) q.push("from=" + encodeURIComponent(from));
+      if (projectId) q.push("projectId=" + encodeURIComponent(projectId));
+      return "/api/v1/drafts" + (q.length ? "?" + q.join("&") : "");
+    };
+    const d = await saveOrConfirmOverwrite(
+      (from) => api("POST", draftPath(from), text, true),
+      "A draft with this diagram's process id already exists. Replace it with this file?");
+    if (!d) { toast("Import cancelled — the draft you already had was kept"); return; }
     toast(d.layoutGenerated
       ? `Imported diagram “${d.name || d.processId}” — the file carried no layout, so one was generated`
       : `Imported diagram “${d.name || d.processId}”`, "ok");

@@ -4165,6 +4165,11 @@ type draftResp struct {
 	// did not have one, and what they are about to edit is Atlas's arrangement, not
 	// theirs.
 	LayoutGenerated bool `json:"layoutGenerated,omitempty"`
+	// RenamedFrom is the process id this save moved the draft away from, set only
+	// when the save actually renamed one (?from= named an existing draft under a
+	// different id). The Modeler reads it to re-point its editing session — and its
+	// live-collaboration session — at the draft's new id.
+	RenamedFrom string `json:"renamedFrom,omitempty"`
 }
 
 // handleSaveDraft persists a diagram as a draft: the BPMN XML is stored without being
@@ -4173,6 +4178,15 @@ type draftResp struct {
 // previous draft rather than creating a version. An optional ?projectId= query files
 // the draft into that project (ADR-0034); it must name an existing project, else the
 // save is rejected.
+//
+// Because the key is the process id, renaming the process *is* renaming the artifact.
+// An optional ?from= names the draft this save is editing — empty for a diagram that
+// has never been saved — and is what makes the rename a move rather than a second
+// draft: the record is written under the new id and the one it came from is removed,
+// and a save that would land on an id another draft already holds is refused with 409
+// instead of silently overwriting that draft (ADR-draft-artifact-id-renames). A caller
+// that omits ?from= keeps the plain upsert-by-id behaviour, which is what an import, a
+// source-tree apply and the MCP authoring tools want.
 //
 // A model that carries no diagram interchange is laid out on the way in (ADR-0124).
 // BPMN-DI is optional in the standard, and a semantic-only file is exactly what a
@@ -4199,6 +4213,11 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	projectID := r.URL.Query().Get("projectId")
 	hasProjectParam := r.URL.Query().Has("projectId")
+	// origin is the draft this save continues; renaming is true once the author has
+	// changed the process id under it (or is saving a brand-new diagram, where origin
+	// is empty). Both cases are the same rule: the id being saved onto must be free.
+	origin := strings.TrimSpace(r.URL.Query().Get("from"))
+	renaming := r.URL.Query().Has("from") && origin != pid
 
 	// Scope gate (ADR-0071): overwriting a draft needs editor on its current
 	// project, and filing into a project needs editor on that target.
@@ -4212,17 +4231,71 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "read draft: "+getErr.Error())
 		return
 	}
+	if renaming && existed {
+		httpapi.Error(w, http.StatusConflict, fmt.Sprintf(
+			"another draft already uses the process id %q — pick a different id, or open that draft to edit it", pid))
+		return
+	}
 	if existed {
 		if code, msg := s.authorizeArtifact(r, existing.ProjectID, existing.OwnerID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
 			return
 		}
 	}
-	destProjectID := existing.ProjectID
+	// A rename carries the record rather than copying it, so the draft it comes from
+	// is authorized here (it is about to be deleted) and its project and creator are
+	// carried over — renaming a draft inside an application must not drop it into
+	// Ungrouped. An origin that is already gone (a co-editor deleted it) is not an
+	// error: the save still lands, as a create.
+	var (
+		from        draft
+		fromExisted bool
+	)
+	if renaming && origin != "" {
+		s.do(func() { from, fromExisted, getErr = s.drafts.Get(origin) })
+		if getErr != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "read draft: "+getErr.Error())
+			return
+		}
+		if fromExisted {
+			if code, msg := s.authorizeArtifact(r, from.ProjectID, from.OwnerID, ScopeRoleEditor); code != 0 {
+				httpapi.Error(w, code, msg)
+				return
+			}
+			// A rename *deletes* the record it came from, so a draft inside a protected
+			// system project (ADR-0122) is refused here rather than at the write, where
+			// only the destination's project is checked.
+			var protectedOrigin bool
+			if from.ProjectID != "" {
+				s.do(func() {
+					if proj, ok, e := s.projects.Get(from.ProjectID); e != nil {
+						getErr = e
+					} else if ok && proj.Protected {
+						protectedOrigin = true
+					}
+				})
+				if getErr != nil {
+					httpapi.Error(w, http.StatusInternalServerError, "read project: "+getErr.Error())
+					return
+				}
+			}
+			if protectedOrigin {
+				httpapi.Error(w, http.StatusForbidden, "protected system project cannot be modified")
+				return
+			}
+		}
+	}
+	// base is the record this save continues: the draft under this id, or, on a
+	// rename, the one being renamed. Neither exists for a genuinely new draft.
+	base, continuing := existing, existed
+	if renaming && fromExisted {
+		base, continuing = from, true
+	}
+	destProjectID := base.ProjectID
 	if hasProjectParam {
 		destProjectID = projectID
 	}
-	if destProjectID != "" && (hasProjectParam || !existed) {
+	if destProjectID != "" && (hasProjectParam || !continuing) {
 		if code, msg := s.authorizeTargetProject(r, destProjectID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
 			return
@@ -4231,15 +4304,23 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 
 	// Preserve the original creator on overwrite; stamp the signed-in user on a new
 	// draft, so an Ungrouped draft is their personal space (ADR-0071).
-	ownerID := existing.OwnerID
-	if !existed {
+	ownerID := base.OwnerID
+	if !continuing {
 		ownerID = s.artifactOwnerOnCreate(r)
+	}
+	// movedFrom is the id this save renames the draft away from, echoed back so the
+	// Modeler knows its editing session now addresses a different draft.
+	movedFrom := ""
+	if renaming && fromExisted {
+		movedFrom = origin
 	}
 	stored, laidOut := layout.EnsureReport(body)
 	rec := draft{ProcessID: pid, Name: name, ProjectID: destProjectID, OwnerID: ownerID, SavedAt: time.Now().Unix(), XML: string(stored)}
 	var (
 		saveErr, projErr error
 		protectedProject bool
+		taken            bool
+		orphaned         bool
 	)
 	s.do(func() {
 		// Backstop the scope check for protected system projects (ADR-0122), which
@@ -4255,19 +4336,45 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		saveErr = s.drafts.Save(rec)
+		// Re-check the target inside the writer's turn: the read above happened in an
+		// earlier turn, so a concurrent save could have claimed the id since. Losing
+		// the race must refuse, not overwrite.
+		if renaming {
+			if _, ok, e := s.drafts.Get(pid); e != nil {
+				projErr = e
+				return
+			} else if ok {
+				taken = true
+				return
+			}
+		}
+		if saveErr = s.drafts.Save(rec); saveErr != nil {
+			return
+		}
+		// Save first, then drop the record the author renamed away from: the reverse
+		// order would lose the diagram if the write failed. A failure here leaves the
+		// old draft behind, which is reported rather than passed off as a clean save.
+		if renaming && fromExisted {
+			orphaned = s.drafts.Delete(origin) != nil
+		}
 	})
 	switch {
 	case projErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read project: "+projErr.Error())
 	case protectedProject:
 		httpapi.Error(w, http.StatusForbidden, "protected system project cannot be modified")
+	case taken:
+		httpapi.Error(w, http.StatusConflict, fmt.Sprintf(
+			"another draft already uses the process id %q — pick a different id, or open that draft to edit it", pid))
 	case saveErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "save draft: "+saveErr.Error())
+	case orphaned:
+		httpapi.Error(w, http.StatusInternalServerError, fmt.Sprintf(
+			"saved as %q, but the draft it was renamed from (%q) could not be removed — delete it by hand", pid, origin))
 	default:
 		httpapi.JSON(w, http.StatusOK, draftResp{
 			ProcessID: pid, Name: name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt,
-			LayoutGenerated: laidOut,
+			RenamedFrom: movedFrom, LayoutGenerated: laidOut,
 		})
 	}
 }

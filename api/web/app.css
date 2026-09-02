@@ -284,6 +284,21 @@ textarea::placeholder {
 .stat span { font-size: 12px; color: var(--muted); }
 .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 .chip { display: inline-block; font: 12px/1.6 ui-monospace, monospace; padding: 1px 7px; border-radius: 5px; background: var(--bg); border: 1px solid var(--border); white-space: nowrap; }
+
+/* Artifact id availability (ADR-draft-artifact-id-renames). A draft is stored under its
+   process id and a form under its own id, so those fields are the artifact's identity:
+   an id another artifact already holds is refused at Save, and the field says so while
+   it is being typed rather than after. `.id-taken` is that collision; `.id-pending` is
+   a form id retyped but not yet saved — the rename is real once Save runs. */
+.field input.id-taken,
+.field input[type="text"].id-taken,
+.chip.id-taken { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
+.field input.id-taken:focus,
+.field input[type="text"].id-taken:focus { border-color: var(--danger); box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.18); }
+.chip.id-pending { border-style: dashed; border-color: var(--accent); }
+.id-check { margin: 4px 0 10px; font-size: 12px; color: var(--danger); }
+/* The form editor's collision note sits in the toolbar beside the id chip. */
+.id-warn { font-size: 12px; color: var(--danger); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46ch; }
 .pill.ok { background: #e7f6ec; color: var(--ok); }
 .pill.err { background: #fdecea; color: var(--danger); }
 .pill.warn { background: #fdf3e2; color: #b26b00; }

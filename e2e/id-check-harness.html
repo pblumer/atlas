@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas id-availability e2e harness</title>
+    <!-- Drives the real api/web/idcheck.js against a mock `api`. An artifact's id is
+         its store key, so an id another artifact already holds is refused at Save; this
+         is the check that says so while the id is being typed, and what it colours red
+         is what the test asserts. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <label class="field"><span>Process ID</span><input type="text" id="pid" value="" /></label>
+    <script type="module">
+      import { attachIdCheck } from "/idcheck.js";
+
+      // Every id is free except "order-fulfillment", which a draft named "Bestellung"
+      // holds, and "hidden-one", held by something the caller may not see (so the probe
+      // reports the collision without naming it — ADR-0071).
+      const probes = [];
+      window.__probes = probes;
+      const api = async (method, url) => {
+        const id = decodeURIComponent(url.split("/").slice(-2)[0]);
+        probes.push(id);
+        if (id === "order-fulfillment") return { id, available: false, usedBy: "Bestellung" };
+        if (id === "hidden-one") return { id, available: false };
+        return { id, available: true };
+      };
+
+      const input = document.getElementById("pid");
+      // own() is the id the draft is stored under: never a collision with itself.
+      window.__own = "my-own-draft";
+      window.__handle = attachIdCheck(input, {
+        api, kind: "drafts", noun: "draft", own: () => window.__own,
+      });
+      window.__type = (v) => {
+        input.value = v;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+      window.__note = () => {
+        const n = document.querySelector(".id-check");
+        return { text: n ? n.textContent : "", hidden: n ? n.hidden : true };
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>
