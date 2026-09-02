@@ -187,6 +187,34 @@ this would put a field on a structure every deployment builds; a flow travels na
 by the two elements it joins instead, which the only client there is — one holding
 the diagram — resolves against its own registry.
 
+### Three columns and a strip
+
+The mode began as one 300 px panel with everything stacked in it, and that panel
+answers three questions that are not the same question. What the run *will* be —
+the dataset, the timing, the policy, what it has to show — is decided before it
+starts and read back afterwards to see what produced a number. What the run *did*
+is watched while it happens. And the cases themselves are a table, which is a shape
+a narrow column cannot hold at all.
+
+Stacked, the third pushed out the first: a finished run filled the panel, and going
+back to change one figure meant scrolling past everything the last run produced. So
+the setup goes left, the analysis right, and the cases into a band under the diagram
+— where a table has width, and where it sits beside the thing it is a table of.
+
+The editor body becomes a grid for this rather than growing nested elements, because
+`#canvas` is shared with the Design and Implement views and with bpmn-js: it keeps
+its place in the DOM and is only *placed* differently. The same reasoning applies to
+what the mode takes away — the palette, the context pad and direct editing are hidden
+here as they are in the token simulation, because the sandbox compiled the model as
+it stood when it started and a shape added now would not be in what is running.
+
+The cases are read a page at a time from the endpoint that already pages them, so
+the strip costs the same on the fifty-thousandth case as on the fiftieth. Rendering
+them turned up a defect older than the strip: a case's variables were read from the
+text field alone, which a boolean does not use — so a dataset carrying a flag showed
+an empty column for it, in the table and in the streamed CSV alike. An empty column
+is worse than a missing one: it reads as "no case had one".
+
 ### A dataset described rather than listed
 
 There were two ways to put data into a run, and between them they left a hole at

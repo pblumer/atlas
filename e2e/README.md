@@ -50,8 +50,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   through the `api()` helper, so the harness intercepts `fetch` to see it); a dataset
   is **described** rather than listed — a field's kind decides which parameters it
   shows, the preview is asked for before the run, and what travels is the twenty-line
-  description rather than five hundred rows built in the browser; and stopping a batch
-  leaves what it did readable.
+  description rather than five hundred rows built in the browser; the mode lays the
+  editor out in three columns and a strip, with the strip absent until there are cases
+  to put in it and the cases read a page at a time from the server rather than held in
+  the browser; and stopping a batch leaves what it did readable.
 
   And the **scenario half**: the checkboxes an author ticks become the expectations a
   build exits on, resolved against the run that happened rather than the dataset in
