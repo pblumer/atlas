@@ -6,6 +6,7 @@ import (
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/panorama"
+	"github.com/pblumer/atlas/compiler"
 )
 
 // collectBindingCatalog gathers the Atlas resources a Panorama document's bindings
@@ -30,9 +31,31 @@ func (s *Server) collectBindingCatalog(r *http.Request) (panorama.Catalog, error
 		Targets:      map[string]panorama.ResourceRef{},
 		Releases:     map[string]panorama.ResourceRef{},
 		Runtimes:     map[string]panorama.ResourceRef{},
-		// JobTypes is deliberately absent: a job type is authored in a model rather
-		// than registered as a resource, so nothing here can be looked up. Supplying
-		// an empty map would turn "not built yet" into "no such resource".
+		JobTypes:     map[string]panorama.ResourceRef{},
+	}
+
+	// Job types are the last kind this catalog could not answer, and the reason it
+	// gave was wrong: a job type *is* registered here. The engine keeps an
+	// engine-wide table of them (ADR-0007), because a job's index on disk has to
+	// mean the same thing to every definition — so "does this server know that job
+	// type" is a lookup, and it has been all along. The Workers view has listed the
+	// whole table for as long as it has existed.
+	//
+	// The whole table, reserved and model-authored alike, which is the same set that
+	// view shows. A type nothing currently uses is still one the engine knows: an
+	// index is never recycled, and whether anything is *doing* that work is a
+	// question for an observation rather than for resolution. With the map present, a
+	// binding to a type this engine has never seen is *missing* — which is a real
+	// finding, and one a model can act on — instead of unsupported.
+	//
+	// Every caller may see them. A job type is engine-wide infrastructure with no
+	// sharing scope of its own, like a deployment target; and here resolution
+	// discloses nothing new even in principle, because a job type's id is its name —
+	// the caller already has it, in their own document.
+	for _, e := range s.jobTypes.All() {
+		catalog.JobTypes[e.Name] = panorama.ResourceRef{
+			ID: e.Name, Name: jobTypeDisplayName(e.Index), CanView: true,
+		}
 	}
 
 	// Runtimes are the Atlas nodes a model may bind to. This server knows exactly
@@ -110,6 +133,22 @@ func (s *Server) collectBindingCatalog(r *http.Request) (panorama.Catalog, error
 		catalog.Targets[t.ID] = panorama.ResourceRef{ID: t.ID, Name: t.Name, CanView: true}
 	}
 	return catalog, nil
+}
+
+// jobTypeDisplayName says what sort of job type this is, rather than repeating the
+// id back at the reader.
+//
+// A job type's id *is* its name, so a panel that showed the name beside the id would
+// print one string twice and tell nobody anything. What a reader gains instead is
+// where the type comes from: one Atlas ships with, or one somebody wrote into a
+// model. It is the same distinction the Workers view draws, from the same boundary —
+// the reserved count rather than the dynamic floor, because a legacy assignment sits
+// between the two and is model-authored, not built in.
+func jobTypeDisplayName(index int32) string {
+	if index < compiler.ReservedJobTypeCount() {
+		return "Built-in job type"
+	}
+	return "Model-authored job type"
 }
 
 // releaseDisplayName names a release the way a person would: the application it

@@ -463,3 +463,106 @@ func TestPanoramaDeploymentTargetBindingResolvesWithoutItsURL(t *testing.T) {
 		}
 	}
 }
+
+// TestPanoramaJobTypeBindingResolvesAgainstTheEngineTable is the last kind the
+// catalog could not answer.
+//
+// The reason it gave was wrong rather than merely provisional: it said a job type is
+// authored in a model rather than registered as a resource, and the engine has kept
+// an engine-wide table of them since ADR-0007 — because a job's index on disk has to
+// mean the same thing to every definition. So "does this server know that job type"
+// was always a lookup, and the Workers view has listed the whole table for as long as
+// it has existed.
+//
+// The consequence is the assertion below: an unknown job type now comes back
+// *missing*, which is a claim about this server and a real finding, instead of
+// *unsupported*, which was an admission about the resolver.
+func TestPanoramaJobTypeBindingResolvesAgainstTheEngineTable(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/applications", `{"name":"Billing"}`, "application/json")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create application status = %d, body = %s", code, body)
+	}
+	var appRec struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &appRec); err != nil {
+		t.Fatalf("decode application: %v", err)
+	}
+
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/panorama/models", mustJSON(t, map[string]any{
+		"applicationId": appRec.ID, "name": "Job types", "xml": jobTypeBoundArchiMate(),
+	}), "application/json")
+	if code != http.StatusCreated {
+		t.Fatalf("create model status = %d, body = %s", code, body)
+	}
+	var model struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &model); err != nil {
+		t.Fatalf("decode model: %v", err)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/panorama/models/"+model.ID+"/bindings", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("bindings status = %d, body = %s", code, body)
+	}
+	var res bindingResolution
+	if err := json.Unmarshal(body, &res); err != nil {
+		t.Fatalf("decode bindings: %v (%s)", err, body)
+	}
+
+	got := map[string]bindingValue{}
+	for _, binding := range res.Bindings {
+		for _, value := range binding.Values {
+			got[value.Value] = value
+		}
+	}
+
+	// A job type Atlas ships with resolves on any server, before anything is
+	// deployed on it: those indices are compile-time constants every build reserves.
+	known := got["io.atlas.dmn"]
+	if known.Status != "resolved" {
+		t.Errorf("io.atlas.dmn = %q, want resolved", known.Status)
+	}
+	// Named by what it is rather than by repeating the id: a job type's id *is* its
+	// name, and a panel printing one string twice tells nobody anything.
+	if known.Name != "Built-in job type" {
+		t.Errorf("io.atlas.dmn name = %q, want it to say what sort of job type this is", known.Name)
+	}
+
+	// And one nothing here has ever seen. Missing rather than unsupported — the
+	// resolver looked, so this is a fact about the server and something a model can
+	// act on, not an admission that the question was never asked.
+	unknown := got["nobody.serves.this"]
+	if unknown.Status != "missing" {
+		t.Errorf("an unknown job type = %q, want missing", unknown.Status)
+	}
+	if res.Unresolved != 1 {
+		t.Errorf("unresolved = %d, want exactly the unknown one", res.Unresolved)
+	}
+}
+
+// jobTypeBoundArchiMate is one Application Service bound to two job types — one the
+// engine reserves, one nothing has ever registered.
+func jobTypeBoundArchiMate() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" identifier="id-model">
+  <name xml:lang="en">Job types</name>
+  <elements>
+    <element identifier="id-svc" xsi:type="ApplicationService">
+      <name xml:lang="en">Decisioning</name>
+      <properties>
+        <property propertyDefinitionRef="propid-jobtype"><value xml:lang="en">io.atlas.dmn</value></property>
+        <property propertyDefinitionRef="propid-jobtype"><value xml:lang="en">nobody.serves.this</value></property>
+      </properties>
+    </element>
+  </elements>
+  <propertyDefinitions>
+    <propertyDefinition identifier="propid-jobtype" type="string">
+      <name xml:lang="en">atlas.jobType</name>
+    </propertyDefinition>
+  </propertyDefinitions>
+</model>`
+}

@@ -989,17 +989,28 @@ for the derived whole-instance mesh above them.
   declares those two with the reason, rather than letting an unwatched instance
   render as uniformly healthy — while the observation document, which does ask
   peers, declares nothing unavailable.
-- 🚧 **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
+- ✅ **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
   workers and job types, releases, local runtimes, and deployment targets. Preserve
   the distinction between an ArchiMate Application Component and an Atlas process
   application, including many-to-many mappings. The `atlas.*` key contract,
   extraction, validation, a writer that edits the document in place rather than
   reserialising it, per-principal resolution, the three HTTP routes and the binding
-  panel in the model viewer are complete, and a runtime id now resolves against
-  this server's own node descriptor (P4a). One kind still resolves as
-  **unsupported** rather than missing, because there is nothing to look it up in:
-  a job type is authored in a model rather than registered as a resource.
+  panel in the model viewer are complete; a runtime id resolves against this
+  server's own node descriptor (P4a); and a job type resolves against the
+  engine-wide job-type table (ADR-0007). That last one closed a gap whose stated
+  reason was wrong rather than provisional: this line used to say a job type is
+  authored in a model rather than registered as a resource, and the engine has kept
+  a table of them since a job's index on disk had to mean the same thing to every
+  definition — the Workers view has listed the whole table for as long as it has
+  existed. So every binding kind now resolves, and an id nothing here has is
+  **missing**, which is a finding a model can act on, rather than **unsupported**,
+  which was an admission that the resolver never looked. The *observation* of a job
+  type is a separate question and deliberately still unanswered: a job type is a
+  kind of work rather than a thing that can be well or unwell, and what "healthy"
+  would mean for one — where no worker having polled this run is not evidence that
+  none exists — is a mapping nobody has chosen. The observation document therefore
+  reports "nothing on this server observes atlas.jobType", which is true.
 - ✅ **P4 — Live Panorama:** add a stable, authenticated Atlas node descriptor and
   a separate observation projection for readiness, health, version, deployments,
   instances, jobs, and incidents. Resolve remote target status server-side with
