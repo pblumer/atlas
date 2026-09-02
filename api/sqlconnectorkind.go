@@ -53,18 +53,39 @@ func isSQLConnectorKind(kind string) bool {
 	return ok
 }
 
-// validateSQLConnector checks a database a Console operator is adding. The connection
-// string lives in the vault under the credentialsRef — never in the record, and never
-// in a model. The create handler accepts the string itself and seals it, so what
-// reaches here is already a reference either way; the mail-only fields do not apply,
-// and the endpoint is a derived, redacted label rather than something an operator
-// authors (see redactedSQLTarget).
+// validateSQLConnector normalizes a database a Console operator is adding. The
+// connection string lives in the vault under the credentialsRef — never in the record,
+// and never in a model. The create handler accepts the string itself and seals it, so
+// what reaches here is already a reference either way; the mail-only fields do not
+// apply, and the endpoint is a derived, redacted label rather than something an
+// operator authors (see redactedSQLTarget).
+//
+// Whether a credential is *required* is not decided here, because it depends on
+// something a table of pure validators cannot see: see [Server.sqlCredentialProblem].
 func validateSQLConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
-	if p.CredentialsRef == "" {
-		return "a SQL connector requires a connectionString to seal, or a credentialsRef naming one already in the vault"
-	}
 	return ""
+}
+
+// sqlCredentialProblem is the other half of validateSQLConnector: whether this database
+// needs a connection string at all.
+//
+// Normally it does, and the demand is worth making — the connection string is a SQL
+// worker's whole configuration, so a record without one is almost always somebody who
+// lost the paste, and saying so at the form beats a task parking later. In mockup mode
+// there is no database to reach, so the demand would be asking for a credential to
+// something nobody will dial — and that is precisely the state an operator is in when
+// they turn the mockup on *because* they have no database yet.
+//
+// It is a method rather than another entry in the validator table because the answer
+// depends on a stored setting, and the table holds pure functions of the request. It
+// reads the settings store, so it runs on the run-loop goroutine (I3): the create
+// handler calls it inside its own s.do.
+func (s *Server) sqlCredentialProblemLocked(p *createConnectorParams) string {
+	if p.CredentialsRef != "" || s.sqlMockEnabledLocked() {
+		return ""
+	}
+	return "a SQL connector requires a connectionString to seal, or a credentialsRef naming one already in the vault"
 }
 
 // sqlDSNRef is the vault key a connector's connection string is sealed under when the
@@ -130,6 +151,9 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 	var env []string
 	var names []string
 	var fromStore bool // a store database contributed a name; only then must CONNECTORS be rendered
+	// Mockup mode changes one thing about everything below: there is no DSN to resolve,
+	// so a record without one is a database this worker can still serve.
+	mock := false
 	seen := map[string]bool{}
 	addName := func(n string) {
 		if n = strings.TrimSpace(n); n != "" && !seen[n] {
@@ -138,6 +162,35 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 		}
 	}
 	s.do(func() {
+		// The Console's mockup switch, when an operator has decided there. No stored
+		// record renders nothing, so a server started with ATLAS_<PRODUCT>_MOCK by hand
+		// keeps deciding for itself; a stored one decides either way, because a switch
+		// that reads off while the worker still simulates would be lying to the person
+		// who flipped it. One switch covers all three products: mocking SQL Server
+		// while really writing to PostgreSQL is a half-state whose whole risk is that
+		// it looks like a full mockup run (ADR-0221).
+		if m, stored, err := s.settings.getSQLMock(); err != nil {
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the database mockup switch for a supervised SQL worker",
+				slog.String("product", p.Name), slog.String("error", err.Error()))
+		} else if stored {
+			mock = m.Enabled
+			env = append(env, prefix+"MOCK="+boolEnv(m.Enabled))
+			// The seed is a file Atlas wrote and Atlas names, not one an operator
+			// pointed at: the Console is org-wide, and a path typed there belongs to
+			// whichever host happens to run the worker (ADR-0202). Its name carries a
+			// digest of the seed's content, which is what makes replacing a seed
+			// actually reach the worker — refresh() restarts a child when its rendered
+			// environment differs, and a fixed name would render the same string for
+			// new content.
+			//
+			// Only while the mockup is on: the worker refuses to start on a seed named
+			// with the switch off, because a seed read into a database no job reaches is
+			// a half-finished setup, and silence would leave the operator believing they
+			// had one.
+			if seed := s.settings.sqlSeedPath(m); seed != "" && m.Enabled {
+				env = append(env, prefix+"MOCK_SEED="+seed)
+			}
+		}
 		// Databases an operator set on the host: inherited by the child already, so
 		// nothing is rendered for them — they are collected only so a store-based
 		// render below does not drop them from the CONNECTORS list.
@@ -173,6 +226,16 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 			if strings.TrimSpace(os.Getenv(key+"DSN")) != "" {
 				// The operator set this one on the host; leave it alone and let the
 				// child inherit it, but keep the name in CONNECTORS.
+				addName(c.Name)
+				fromStore = true
+				continue
+			}
+			if mock {
+				// In mockup mode there is no DSN to have, and the worker needs none: it
+				// answers from seeded answers in its own memory. What it does still need
+				// is the *name*, because that is what a task states — so a record with
+				// no secret, which is exactly the state an operator is in when they have
+				// no database to point at, is served here and left out below.
 				addName(c.Name)
 				fromStore = true
 				continue
