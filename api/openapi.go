@@ -805,8 +805,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Download a Playground run's per-case results as CSV", tag: "Playground", role: RoleModeler,
 			resp: csvBody("Results as CSV")}},
 		{"POST", "/api/v1/playground/sessions/{id}/verdict", s.playground.HandleVerdict, apiOp{
-			summary: "Judge a Playground run against a set of expectations", tag: "Playground", role: RoleModeler,
-			req: jsonBody("Expectations", tObject()), resp: jsonBody("Verdict", tObject())}},
+			summary: "Judge a Playground run against a set of expectations, run-wide and per case", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Expectations, including per-case rules in FEEL", tObject()), resp: jsonBody("Verdict", tObject())}},
 		{"POST", "/api/v1/playground/sessions/{id}/compare", s.playground.HandleCompare, apiOp{
 			summary: "Set a Playground run beside an earlier run's report", tag: "Playground", role: RoleModeler,
 			req: jsonBody("A baseline report", tObject()), resp: jsonBody("Comparison", tObject())}},

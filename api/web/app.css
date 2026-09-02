@@ -3642,6 +3642,37 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
   .editor.pg-active .editor-body { grid-template-columns: 252px minmax(0, 1fr) 280px; }
 }
 
+/* A per-case rule is two lines — which cases, and what they have to show — because
+   both halves are expressions and neither fits beside the other in a column this
+   narrow. The end-event picker sits with the "then" half: it writes the assertion
+   rather than being it. */
+.pg-rule { margin: 6px 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.pg-rule:last-of-type { border-bottom: 0; }
+.pg-rule-head { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.pg-rule-head > .muted { flex: none; width: 30px; font-size: 11px; }
+.pg-rule-head input, .pg-rule-head select {
+  font: 12px/1.4 inherit; padding: 4px 6px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--bg); color: var(--text); min-width: 0; flex: 1;
+}
+.pg-rule-head input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.pg-rule-head select { flex: 0 0 92px; }
+.pg-rule-head input:focus, .pg-rule-head select:focus {
+  outline: none; border-color: var(--accent); background: var(--surface);
+}
+.pg-rule-head .icon-btn { flex: none; }
+
+/* How a rule went: the split a single check line cannot carry, and the cases that
+   broke it. A count sends somebody looking; case numbers send them to the rows. */
+.pg-rule-result {
+  margin: 6px 8px; padding: 6px 8px; border-radius: 6px;
+  background: var(--bg); font-size: 12px;
+}
+.pg-rule-result.bad { background: var(--danger-soft); }
+.pg-rule-name { font-weight: 600; word-break: break-word; }
+.pg-rule-split { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 3px; }
+.pg-rule-split .bad { color: var(--danger); }
+.pg-rule-cases { margin-top: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+
 /* The cases, under the diagram, because a table is the one shape a 300 px column
    cannot hold. It is a band rather than a pane: tall enough to read a dozen rows,
    never tall enough to take the diagram's place. */
