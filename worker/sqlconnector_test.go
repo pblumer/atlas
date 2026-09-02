@@ -2,6 +2,9 @@ package worker
 
 import (
 	"context"
+	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -292,5 +295,62 @@ func TestMockModeWithNoNamesParks(t *testing.T) {
 	}
 	if len(built.Unconfigured) != 1 || built.Unconfigured[0] != "mssql" {
 		t.Errorf("Unconfigured = %v, want [mssql]", built.Unconfigured)
+	}
+}
+
+// probeDriver is a database/sql driver that only has to connect, which is all a
+// connection check asks of one. It stands in for the vendor drivers this package
+// blank-imports, so the check itself is testable without a database.
+type probeDriver struct{ err error }
+
+func (d probeDriver) Open(string) (driver.Conn, error) {
+	if d.err != nil {
+		return nil, d.err
+	}
+	return probeConn{}, nil
+}
+
+type probeConn struct{}
+
+func (probeConn) Prepare(string) (driver.Stmt, error) { return nil, errors.New("not used") }
+func (probeConn) Close() error                        { return nil }
+func (probeConn) Begin() (driver.Tx, error)           { return nil, errors.New("not used") }
+
+func init() {
+	sql.Register("atlasprobe", probeDriver{})
+	sql.Register("atlasprobedead", probeDriver{err: errors.New("dial tcp 10.0.0.9:1433: connect: connection refused")})
+}
+
+// A database that answers is what the Console's check reports as working. Nothing
+// else is claimed: the ping proves the address resolves, the port answers and the
+// login is accepted, and stops there.
+func TestProbeSQLReachesADatabase(t *testing.T) {
+	p := sqldb.Product{Name: "probe", Driver: "atlasprobe"}
+	if err := ProbeSQL(context.Background(), p, "server=db;database=hr"); err != nil {
+		t.Fatalf("ProbeSQL against a database that answers: %v", err)
+	}
+}
+
+// And one that does not answer comes back with the driver's own reason, because that
+// sentence is what the operator reads in the form — "failed" would send them looking
+// for which of the six things in a connection string is wrong.
+func TestProbeSQLReportsWhyItCannotConnect(t *testing.T) {
+	p := sqldb.Product{Name: "probe", Driver: "atlasprobedead"}
+	err := ProbeSQL(context.Background(), p, "server=db;database=hr")
+	if err == nil {
+		t.Fatal("ProbeSQL succeeded against a database that refuses connections")
+	}
+	if !strings.Contains(err.Error(), "connection refused") {
+		t.Errorf("error = %q, want the driver's own reason", err)
+	}
+}
+
+// A driver nobody registered is reported before anything is dialled — the case a
+// server built without the SQL drivers is in, which the check words as "this server
+// cannot check a database connection" rather than as a broken connector.
+func TestProbeSQLWithoutADriver(t *testing.T) {
+	err := ProbeSQL(context.Background(), sqldb.Product{Name: "probe", Driver: "no-such-driver"}, "whatever")
+	if err == nil {
+		t.Fatal("ProbeSQL succeeded with no driver registered")
 	}
 }
