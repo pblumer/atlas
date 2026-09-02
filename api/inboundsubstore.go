@@ -59,6 +59,27 @@ type inboundSubscription struct {
 	// PollSeconds a cadence rather than a wish, and like LastEventID it is
 	// best-effort: losing it re-reads, which the marks make harmless.
 	LastPolledAt int64 `json:"lastPolledAt,omitempty"`
+
+	// The fields below are the loop guard (ADR-draft-inbound-watch-budget). A watch can
+	// feed itself — a process started by an event writes to the system the watch reads,
+	// the watch matches what it wrote — and nothing downstream can tell that apart from
+	// a busy morning, because every instance is well-formed and every task succeeds.
+	// Only the rate can, so the ceiling lives on the watch.
+
+	// MaxPerHour caps how many events this watch may publish per hour; 0 means
+	// defaultInboundPerHour. Crossing it switches the watch off rather than throttling
+	// it: a runaway that is merely slowed is still a runaway, and a watch that stopped
+	// is a state an operator can see and decide about.
+	MaxPerHour int `json:"maxPerHour,omitempty"`
+	// WindowStart is when the current budget window opened, in unix seconds, and
+	// PublishedInWindow how many events have been published into it. Both are durable
+	// so a restart does not hand a looping watch a fresh budget.
+	WindowStart       int64 `json:"windowStart,omitempty"`
+	PublishedInWindow int   `json:"publishedInWindow,omitempty"`
+	// DisabledReason says why the guard switched this watch off, for whoever finds it
+	// off later. Empty for a watch an operator disabled themselves — "it stopped"
+	// without "why" is indistinguishable from a defect.
+	DisabledReason string `json:"disabledReason,omitempty"`
 }
 
 // inboundSubStore is a durable store for inbound subscriptions, one JSON file per id

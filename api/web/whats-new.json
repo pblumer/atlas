@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "an-inbound-event-watch-has-an-hourly-budget",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An event watch stops itself if it starts looping",
+        "de": "Eine Ereignisüberwachung stoppt sich selbst, wenn sie in eine Schleife gerät"
+      },
+      "summary": {
+        "en": "A watch reads a system and starts a process for what it finds — and that process can write back to the same system. If it writes something the watch's own query matches, it feeds itself, and nothing looks wrong: every run succeeds. Each watch now has a Max events/hour (60 unless you set it). Cross it and the watch switches itself off and says so, naming the number to raise. Nothing is lost — turning it back on re-reads what it refused.",
+        "de": "Eine Überwachung liest ein System und startet zu jedem Fund einen Prozess — und dieser Prozess kann in dasselbe System zurückschreiben. Schreibt er etwas, das die Abfrage der Überwachung selbst findet, füttert sie sich selbst, und nichts sieht falsch aus: jeder Lauf gelingt. Jede Überwachung hat jetzt ein „Max events/hour\" (60, wenn Sie nichts setzen). Wird es überschritten, schaltet sie sich ab und sagt es — samt der Zahl, die Sie erhöhen müssten. Verloren geht nichts: Beim Wiedereinschalten wird das Abgewiesene erneut gelesen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Connectors",
+          "de": "Konnektoren öffnen"
+        },
+        "route": "#/console/connectors"
+      }
+    },
+    {
       "id": "see-what-a-mockup-run-asked-the-database",
       "version": "Unreleased",
       "date": null,
@@ -366,28 +395,6 @@
         },
         "route": "#/operations/ad-mock"
       }
-    },
-    {
-      "id": "atlas-can-terminate-tls-itself",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Atlas can serve HTTPS on its own now",
-        "de": "Atlas kann jetzt selbst HTTPS sprechen"
-      },
-      "summary": {
-        "en": "Until now the binary spoke plain HTTP and nothing else, so anything reachable beyond its own host needed a reverse proxy in front of it to hold the certificate. That proxy is now a choice rather than a requirement: give the server a certificate and a key and it terminates TLS itself. Both files or neither — naming one without the other stops the server instead of quietly listening in the clear on the port you believed you had just secured. It re-reads the pair whenever either file changes, so a renewal reaches a running server without a restart, and a renewal caught half-written keeps the certificate that still works rather than refusing connections until somebody notices. Only TLS 1.3 is offered, which is the point: its ciphers are fixed by the protocol, so there is no cipher list to configure, nothing to weaken by accident, and nothing to explain to an auditor. Worth knowing before you switch: a client too old to speak TLS 1.3 is refused rather than quietly downgraded, and encryption is not authorization — the health and metrics endpoints answer whoever can reach the port, so a port open to the world still wants something in front of those paths.",
-        "de": "Bisher sprach das Binary ausschliesslich unverschlüsseltes HTTP; wer den Server über den eigenen Host hinaus erreichbar machen wollte, brauchte davor einen Reverse Proxy, der das Zertifikat hält. Dieser Proxy ist jetzt eine Wahl und keine Voraussetzung mehr: Gib dem Server ein Zertifikat und einen Schlüssel, und er terminiert TLS selbst. Beide Dateien oder keine — wer nur eine angibt, bekommt keinen Serverstart statt eines Servers, der still im Klartext auf dem Port lauscht, den man gerade abgesichert glaubte. Das Paar wird neu gelesen, sobald sich eine der beiden Dateien ändert; eine Erneuerung erreicht damit einen laufenden Server ohne Neustart, und eine halb geschriebene Erneuerung behält das noch gültige Zertifikat, statt Verbindungen abzulehnen, bis es jemand merkt. Angeboten wird nur TLS 1.3, und genau das ist der Punkt: Die Cipher sind im Protokoll festgelegt, es gibt also keine Cipher-Liste zu konfigurieren, nichts versehentlich zu schwächen und nichts einem Audit zu erklären. Vor dem Umschalten wissenswert: Ein Client, der kein TLS 1.3 kann, wird abgewiesen und nicht still heruntergestuft — und Verschlüsselung ist keine Autorisierung: Die Health- und Metrics-Endpunkte antworten jedem, der den Port erreicht, ein öffentlich offener Port will davor also weiterhin etwas stehen haben."
-      },
-      "link": {
-        "label": "ADR-0191",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0191-built-in-tls-listener.md"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ]
     }
   ]
 }

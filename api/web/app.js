@@ -3904,13 +3904,16 @@ async function toggleInboundSubs(row, connectorId, kind) {
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
       <td><code>${esc(s.jql || s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
-      <td>${s.enabled ? '<span class="pill ok"><span class="dot"></span>on</span>' : '<span class="pill warn"><span class="dot"></span>off</span>'}</td>
+      <td>${s.enabled
+        ? '<span class="pill ok"><span class="dot"></span>on</span>'
+        : `<span class="pill warn" title="${esc(s.disabledReason || "Switched off.")}"><span class="dot"></span>off</span>`
+          + (s.disabledReason ? ` <span class="muted">${esc(s.disabledReason)}</span>` : "")}</td>
       <td style="text-align:right"><button class="btn ghost danger" data-sdel title="Delete this subscription">Delete</button></td>
     </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">No subscriptions. Add one below to have clio events start or wake processes.</td></tr>`;
   const isJira = kind === "jira";
   const what = isJira
-    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as Atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet.</div>`
-    : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0075).</div>`;
+    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as Atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`
+    : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0075). <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`;
   const source = isJira
     ? `<label class="field" style="margin:0"><span>JQL</span><input name="jql" placeholder="project = OPS AND issuetype = Bug" required/></label>`
     : `<label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="/employees" required/></label>`;
@@ -3938,6 +3941,7 @@ async function toggleInboundSubs(row, connectorId, kind) {
       ${source}
       <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
       <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isJira ? "= issueKey" : "= subjectTail"}"/></label>
+      <label class="field" style="margin:0"><span>Max events/hour</span><input name="maxPerHour" type="number" min="0" placeholder="60"/></label>
       <button class="btn" type="submit" title="Add this inbound event watch">Add</button>
       ${extra}
     </form></td>`;
@@ -3949,6 +3953,7 @@ async function toggleInboundSubs(row, connectorId, kind) {
       const body = {
         messageName: (f.get("messageName") || "").trim(),
         correlationKey: (f.get("correlationKey") || "").trim(),
+        maxPerHour: Number(f.get("maxPerHour") || 0) || 0,
       };
       if (isJira) {
         body.jql = (f.get("jql") || "").trim();

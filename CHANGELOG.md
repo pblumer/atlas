@@ -14,6 +14,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An inbound event watch has an hourly budget.** A watch reads a foreign system and
+  publishes what it finds; every event can start a process, and that process can write
+  back to the system the watch reads. When it writes something the watch's own query
+  matches, the loop closes and has no natural end — and nothing looks broken from inside:
+  every instance is well-formed, every task succeeds, every message is delivered exactly
+  once. Only the *rate* tells a loop from a busy morning
+  ([ADR-draft-inbound-watch-budget](docs/adr/draft-inbound-watch-budget.md)).
+
+  Each watch now carries **Max events/hour** — 60 when it names none, so the protection
+  is the default rather than something to remember. A batch that would cross the ceiling
+  is refused whole and the watch switches itself off, saying so in the Console in words
+  that name the number to raise. The resume cursor stays put, so nothing is lost:
+  enabling the watch again re-reads what was refused, with a fresh window.
+
+  It is deliberately cause-agnostic, because the loop the engine fix below closed is not
+  the only shape: two processes can build one between them with no single model being
+  wrong.
+
 - **See what a mockup run asked the database.** Operations → **Mock database** shows one
   card per SQL worker in mockup mode: every statement it was asked, in order, with the
   values the process bound — and the ones with **no prepared answer** in red, with the
@@ -470,6 +488,33 @@ _Changed_ / _Removed_ for each version.
   extension elements are still `<atlas:jiraConnector>` and friends.
 
 ### Fixed
+
+- **A message start event ran the branches nobody triggered — and could feed itself
+  forever.** A start event is a trigger, and BPMN instantiates at the one that fired.
+  Atlas seeded a token at **every** root start event whatever created the instance, which
+  [ADR-0035](docs/adr/0035-message-start-events.md) recorded as a message start behaving
+  "exactly like a none start". True of a process with one start event; false of a process
+  with two — and the difference is not cosmetic. A Jira event watch
+  ([ADR-0214](docs/adr/0214-jira-inbound-issue-watch.md)) published
+  `jira.ticket.created`; the message-started instance also ran the none-start branch; that
+  branch created a Jira issue; the watch matched it; the next instance created the next
+  issue. The chain is visible in Operations — the instance for `PAT-13` holding
+  `newTicket = PAT-14`, the one for `PAT-14` holding `PAT-15` — and it stopped only when
+  the watch was deleted by hand. Nothing raised an error, because from the engine's side
+  nothing went wrong.
+
+  A trigger now instantiates at itself
+  ([ADR-draft-start-events-are-triggers](docs/adr/draft-start-events-are-triggers.md)):
+  the creation command carries the start event that fired, and the argument is
+  **required**, so a fourth kind of trigger cannot inherit the old behaviour by forgetting
+  it. A create nobody triggered — the API, a call activity — seeds the **none** start
+  events instead, which is what pressing Start means. A process whose only entry is a
+  message or a timer keeps ADR-0035's permissiveness and is seeded at every entry it has,
+  because an instance with no token at all is a worse answer than a permissive one.
+
+  **This changes behaviour for a deployed model with more than one root start event**: the
+  branches that used to run on every trigger now run only on their own. Nothing about the
+  recorded events changes, so recovery of an instance created before this is unaffected.
 
 - **A database connector's setup hint was written into a hidden element.** The "New
   connector" form on Console → Workers asks the same shared description
