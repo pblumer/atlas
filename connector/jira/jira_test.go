@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -955,5 +956,75 @@ func TestSearchUsersReportsARefusal(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "403") {
 		t.Errorf("err = %v, want the status Jira answered with", err)
+	}
+}
+
+// endlessJira answers every search with a full page, for ever: a JQL that matches far
+// more than its author believed, which is what "read every match" actually asks for
+// when the query is wrong.
+func endlessJira(t *testing.T) *httptest.Server {
+	t.Helper()
+	var page atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		issues := make([]any, 100)
+		for i := range issues {
+			issues[i] = map[string]any{"key": fmt.Sprintf("OPS-%d", i)}
+		}
+		if strings.Contains(r.URL.Path, "/user/") {
+			_ = json.NewEncoder(w).Encode(issues) // the account search answers a bare array
+			return
+		}
+		// The page token advances every time, so nothing but the ceiling ends this read.
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"total": 1_000_000, "issues": issues, "nextPageToken": fmt.Sprintf("p%d", page.Add(1)),
+		})
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// An uncapped search is bounded by a ceiling, and reaching it is an error naming the fix.
+//
+// maxResults="0" means "every match", and every match is a number Jira decides — a JQL
+// can be wrong about it by four orders of magnitude. Without the ceiling the loop pages
+// until the site runs out, holds all of it in memory, and lands the lot in ONE process
+// variable the engine has to encode and fsync: one mistyped query is an out-of-memory in
+// the server rather than a failed task. Truncating instead would tell the model it read
+// everything when it read the first few thousand, which is a defect nobody finds twice.
+func TestUncappedSearchStopsAtTheCeiling(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		client func(string) *jira.HTTPClient
+		req    jira.Request
+	}{
+		{"cloud /search/jql", cloudClient, jira.Request{Operation: "search", JQL: "project = OPS"}},
+		{"data center offset search", dcClient, jira.Request{Operation: "search", JQL: "project = OPS"}},
+		{"account search", cloudClient, jira.Request{Operation: "search-users", Query: "a"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.client(endlessJira(t).URL).Do(context.Background(), tc.req)
+			if err == nil {
+				t.Fatal("an uncapped read of an endless result set returned; it must stop at the ceiling")
+			}
+			for _, want := range []string{"maxResults", strconv.Itoa(jira.SearchCeiling)} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to mention %q so the author knows the fix", err, want)
+				}
+			}
+		})
+	}
+}
+
+// The ceiling is a backstop for an uncapped read, not a second cap: a task that says
+// what it wants gets exactly that, ceiling or no ceiling.
+func TestTheCeilingLeavesACappedSearchAlone(t *testing.T) {
+	got, err := cloudClient(endlessJira(t).URL).Do(context.Background(), jira.Request{
+		Operation: "search", JQL: "project = OPS", MaxResults: 150,
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if issues, _ := got.([]any); len(issues) != 150 {
+		t.Fatalf("issues = %d, want the task's own cap of 150", len(issues))
 	}
 }

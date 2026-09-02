@@ -255,6 +255,16 @@ var (
 	ApplicationSourceStreamFailed = newEvent("application_source.stream_failed")
 )
 
+// The inbound event bridge (ADR-0075/0214).
+var (
+	// InboundWatchMinuteOverflowed reports a jira watch whose page filled the batch
+	// limit with issues that all share one minute of its cursor field. JQL compares
+	// timestamps to the minute, so no cursor can separate them: the watch steps past
+	// the minute and skips what it could not read. Warned because that is a delivery
+	// gap — and because standing still instead would silently stop the watch for good.
+	InboundWatchMinuteOverflowed = newEvent("inbound_watch.minute_overflowed")
+)
+
 // History retention (ADR-0115/0144) and the OpenSearch exporter (ADR-0114).
 var (
 	RetentionEnabled   = newEvent("retention.enabled")

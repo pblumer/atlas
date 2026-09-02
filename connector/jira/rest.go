@@ -26,6 +26,32 @@ const apiBase = "/rest/api/2"
 // wants in memory at once.
 const searchPageSize = 100
 
+// SearchCeiling is the most results an *uncapped* read may accumulate before it gives
+// up. A model that authors maxResults="0" asks for every match and the compiler writes
+// that through verbatim (I5) — but "every match" is a number Jira decides, and a JQL can
+// be wrong about it by four orders of magnitude. Left unbounded the loop pages until the
+// site runs out, holds every issue in memory at once, and then lands the lot in ONE
+// process variable that the engine has to encode and fsync into the log: one mistyped
+// query is an out-of-memory in the server rather than a failed task. It is also the only
+// thing that ends the loop at all against a server that ignores the paging offset, which
+// the account search's bare-array answer gives it no other way to detect.
+//
+// Reaching it is an error and not a truncation. A model told it read everything when it
+// read the first few thousand is a defect nobody finds twice; a failed job says what
+// happened, retries, and raises an incident an operator can act on (ADR-0061).
+//
+// Exported because it is the number the error message names, and a test that asserts the
+// message should not have to repeat it.
+const SearchCeiling = 5000
+
+// ceilingReached is the refusal an uncapped read ends with. It names the fix, because
+// the fix is one attribute on the task.
+func ceilingReached(op string, n int) error {
+	return fmt.Errorf("jira: %s read %d results and the task sets no maxResults; give it a maxResults "+
+		"(or narrow the query) — an uncapped read past %d lands every match in one process variable",
+		op, n, SearchCeiling)
+}
+
 // searchJQLPath is the endpoint a search uses on Jira Cloud, and the one place this
 // connector leaves apiBase behind. Atlassian removed the offset-paged
 // /rest/api/{2,3}/search from Cloud over 2025 — a site that has been switched over
@@ -310,6 +336,9 @@ func (c *HTTPClient) searchJQL(ctx context.Context, req Request) (any, error) {
 		if req.MaxResults > 0 && len(issues) >= int(req.MaxResults) {
 			return issues[:req.MaxResults], nil
 		}
+		if req.MaxResults <= 0 && len(issues) > SearchCeiling {
+			return nil, ceilingReached(req.Operation, len(issues))
+		}
 		// An empty page is the end of the result set whatever the envelope says, the
 		// same guard the offset path needs against a query whose matches shrink
 		// mid-read.
@@ -357,6 +386,9 @@ func (c *HTTPClient) searchOffset(ctx context.Context, req Request) (any, error)
 		// arrived rather than trusted to the server.
 		if req.MaxResults > 0 && len(issues) >= int(req.MaxResults) {
 			return issues[:req.MaxResults], nil
+		}
+		if req.MaxResults <= 0 && len(issues) > SearchCeiling {
+			return nil, ceilingReached(req.Operation, len(issues))
 		}
 		// An empty page is the end of the result set whatever the total says: trusting
 		// the total alone is how a query whose matches shrink mid-read loops forever.
@@ -433,9 +465,13 @@ func (c *HTTPClient) searchUsers(ctx context.Context, req Request) (any, error) 
 		if req.MaxResults > 0 && len(users) >= int(req.MaxResults) {
 			return users[:req.MaxResults], nil
 		}
-		// A short page is the end of the result set, and it is also what stops a server
-		// that ignores startAt from being read forever — the condition an envelope's
-		// total would otherwise carry.
+		if req.MaxResults <= 0 && len(users) > SearchCeiling {
+			return nil, ceilingReached(req.Operation, len(users))
+		}
+		// A short page is the end of the result set. It is not on its own what stops a
+		// server that ignores startAt — one that answers every page in full is read
+		// forever, and a bare array carries no total to notice that with; the ceiling
+		// above is what ends that read.
 		if len(got) < page {
 			break
 		}
