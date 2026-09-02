@@ -172,6 +172,11 @@ type ElementStat struct {
 	Work    time.Duration
 	Wait    time.Duration
 	MaxWait time.Duration
+	// Incidents is how many tokens are parked on this element behind a simulated
+	// failure. It is counted per element rather than only per run because "five
+	// incidents" says a run went wrong and "five incidents, all at the payout" says
+	// where — which is the question the run-wide total cannot answer.
+	Incidents int
 }
 
 // PoolStat is what a run measured at one pool.

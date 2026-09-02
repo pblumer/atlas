@@ -253,6 +253,42 @@ func TestTheReportCountsCasesThatDidNotFinish(t *testing.T) {
 	if rep.Cases != 4 || rep.Completed != 0 || rep.Incidents != 4 {
 		t.Errorf("report = %+v, want four cases, none completed, four incidents", rep)
 	}
+	// And it counts them per element. "Four incidents" says a run went wrong; "four
+	// incidents, all at the charge" says where, which is what the diagram can shade.
+	if got := rep.Elements["charge"].Incidents; got != 4 {
+		t.Errorf("incidents at the charge = %d, want all four", got)
+	}
+	for id, st := range rep.Elements {
+		if id != "charge" && st.Incidents != 0 {
+			t.Errorf("%q carries %d incidents, but nothing failed there", id, st.Incidents)
+		}
+	}
+}
+
+// An element's incidents sit beside its other measures rather than replacing them:
+// a failing answer is still an answer, so the element records a run *and* an
+// incident. An overlay that shaded by incidents would otherwise disagree with one
+// that shaded by runs about whether anything happened there.
+func TestAnElementsIncidentsSitBesideItsOtherMeasures(t *testing.T) {
+	sb := openSandbox(t, "service-task.bpmn", playground.StubSet{
+		Default: &playground.Stub{Min: time.Minute, Max: time.Minute, FailPerMillion: 1_000_000},
+	})
+	runPlan(t, sb, playground.Plan{Cases: rows(2)})
+
+	rep, err := sb.Report()
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	st, ok := rep.Elements["charge"]
+	if !ok {
+		t.Fatal("the element every case is stuck on is missing from the report")
+	}
+	if st.Runs != 2 || st.Incidents != 2 {
+		t.Errorf("stat = %+v, want two answers, both of them failures", st)
+	}
+	if st.Work != 2*time.Minute {
+		t.Errorf("work = %s, want the two minutes the failing answers took", st.Work)
+	}
 }
 
 // The same dataset, policy and seed produce the same run — the property that lets

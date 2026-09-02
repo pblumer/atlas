@@ -178,6 +178,32 @@ with the counts filled in and the rest left at zero. Zero is its own shade on th
 canvas: "never reached" is a different statement from "reached least", and
 rendering them alike would answer neither question.
 
+**One overlay at a time, and zero does not always mean the same thing.** The same
+diagram answers four questions — how often each part ran, how long the work took,
+how long cases queued, and where they are stuck — and it answers one of them at a
+time. A diagram shaded by two quantities at once is two answers to a question nobody
+asked, and a reader cannot tell which colour belongs to which. The switcher sits over
+the canvas with the scale beside it, because a shade means nothing until it is read
+against one: "dark" says nothing until it says "dark is twelve days of waiting".
+
+Two things differ between the four. Only the token counts exist for a **sequence
+flow** — an edge has no work time, no queue and nothing to fail on — so the other
+three leave the flows alone rather than colouring them from a different quantity
+than the shapes, and the legend says "shapes only" where that is what it is. And only
+for the counts does **zero deserve its own shade**: there it means "the data never
+got here", which is the coverage question this map exists to answer. On the other
+three zero means "no waiting here", "no work here", "nothing failed here" — the
+ordinary case for most of a healthy diagram, and drawing it dashed and faded says
+"never reached" about a start event that every case went through. Those are simply
+left as they are, badge included.
+
+**Incidents are counted per element** for the same reason the visits are: "five
+incidents" says a run went wrong, "five incidents, all at the payout" says where.
+They are folded onto the element's existing entry rather than beside it, because a
+failing answer is still an answer — the element has a run and a work time too, and an
+overlay shading by incidents has to agree with one shading by runs about whether
+anything happened there.
+
 **Sequence flows have no counter, and no id.** The engine aggregates elements, not
 edges, so flow counts are folded out of the causal token history (ADR-0136), whose
 activation records carry the flow each token arrived on. That is one scan of the

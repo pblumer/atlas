@@ -160,6 +160,9 @@ type elementResp struct {
 	WorkMillis    int64 `json:"workMillis"`
 	WaitMillis    int64 `json:"waitMillis"`
 	MaxWaitMillis int64 `json:"maxWaitMillis"`
+	// Incidents is how many tokens are parked on this element. "Five incidents" says
+	// a run went wrong; "five incidents, all at the payout" says where.
+	Incidents int `json:"incidents"`
 }
 
 type poolResp struct {
@@ -514,6 +517,7 @@ func renderReport(rep playground.Report) reportResp {
 		out.Elements[id] = elementResp{
 			Runs: el.Runs, WorkMillis: el.Work.Milliseconds(),
 			WaitMillis: el.Wait.Milliseconds(), MaxWaitMillis: el.MaxWait.Milliseconds(),
+			Incidents: el.Incidents,
 		}
 	}
 	for name, p := range rep.Pools {

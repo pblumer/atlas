@@ -3687,12 +3687,14 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .editor.pg-active .editor-body {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr) 330px;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
-    "setup canvas analysis"
-    "setup results analysis";
+    "setup overlay  analysis"
+    "setup canvas   analysis"
+    "setup results  analysis";
 }
 .editor.pg-active #pg-setup { grid-area: setup; border-left: 0; border-right: 1px solid var(--border); }
+.editor.pg-active #pg-overlay { grid-area: overlay; }
 .editor.pg-active #canvas { grid-area: canvas; height: auto; min-width: 0; min-height: 0; }
 .editor.pg-active #pg-results { grid-area: results; }
 .editor.pg-active #pg-panel { grid-area: analysis; }
@@ -3704,6 +3706,33 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 @media (max-width: 1400px) {
   .editor.pg-active .editor-body { grid-template-columns: 252px minmax(0, 1fr) 280px; }
 }
+
+/* The overlay switcher, over the diagram: which of the run's four measures shades
+   it, and the scale that shading means. On the canvas rather than in a column
+   because it is a control for the canvas — and a legend has to sit beside the thing
+   it explains, or it is a key to a map on another page. */
+.pg-overlay {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  padding: 5px 10px; border-bottom: 1px solid var(--border); background: var(--surface);
+  font-size: 12px;
+}
+.pg-overlay > div { display: contents; }
+.pg-overlay button {
+  padding: 3px 9px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--muted); font: 500 11.5px/1.4 inherit; cursor: pointer;
+}
+.pg-overlay button:hover { color: var(--text); }
+.pg-overlay button.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+/* The scale, in the same five shades the diagram uses. A colour means nothing until
+   it says what its darkest end is worth. */
+.pg-scale { display: inline-flex; align-items: center; gap: 3px; }
+.pg-scale i { display: inline-block; width: 16px; height: 8px; border-radius: 2px; }
+.pg-heat-key-1 { background: #7aa7ff; }
+.pg-heat-key-2 { background: #4d86ff; }
+.pg-heat-key-3 { background: #c07ad6; }
+.pg-heat-key-4 { background: #e8783c; }
+.pg-heat-key-5 { background: #d93025; }
 
 /* A per-case rule is two lines — which cases, and what they have to show — because
    both halves are expressions and neither fits beside the other in a column this

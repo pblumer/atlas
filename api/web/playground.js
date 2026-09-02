@@ -57,6 +57,27 @@ const TASK_TYPES = new Set([
 // visible difference.
 const HEAT_LEVELS = 5;
 
+// OVERLAYS are the four things a run can shade the diagram by. They are one
+// picture at a time on purpose: a diagram shaded by two quantities at once is two
+// answers to a question nobody asked, and the reader cannot tell which colour
+// belongs to which.
+//
+// Only the token counts exist for a sequence flow — an edge has no work time, no
+// waiting and nothing to fail on — so the other three leave the flows unshaded
+// rather than colouring them from a different quantity than the shapes.
+// `cold` says whether zero is worth drawing as its own state. It is true only for
+// the token counts, where zero means "the data never got here" — the coverage
+// question, and the reason the map is built from the model's shape rather than from
+// the counters. On the other three, zero means "no waiting here", "no work here",
+// "nothing failed here", which is the ordinary case: drawing those dashed and faded
+// says "never reached" about most of a healthy diagram, which is a lie.
+const OVERLAYS = [
+  { key: "runs", label: "Runs", title: "How many tokens passed through", flows: true, cold: true },
+  { key: "work", label: "Duration", title: "How long the work took, in total", flows: false, cold: false },
+  { key: "wait", label: "Waiting", title: "How long cases queued before being worked on", flows: false, cold: false },
+  { key: "incidents", label: "Incidents", title: "How many tokens are parked behind a failure", flows: false, cold: false },
+];
+
 // FIELD_KINDS is what a generated field can be. The labels say what the field
 // produces rather than naming a type: somebody describing a dataset is thinking
 // about orders and amounts, not about int64.
@@ -117,7 +138,6 @@ function barHTML() {
     <button class="btn neutral" id="pg-clock" title="Jump the simulated clock forward one hour and fire what came due" hidden>&#9201; +1 h</button>
     <button class="btn play" id="pg-batch" title="Run the dataset in the panel" hidden>&#9654; Run batch</button>
     <button class="btn neutral" id="pg-cancel" title="Stop the batch, leaving what it did readable" hidden>Stop</button>
-    <button class="btn neutral" id="pg-heat" title="Shade the diagram by how much the run used each part" hidden>Heat map</button>
     <button class="btn neutral" id="pg-stop" title="Discard the sandbox" hidden>Discard</button>
     <label class="sim-speed" id="pg-dur-wrap" title="How long every stubbed job takes in simulated time">Tasks
       <select class="speed" id="pg-dur">${opts}</select>
@@ -156,6 +176,14 @@ function panelHTML() {
     <div class="vars-list" id="pg-body"></div>`;
 }
 
+// overlayBarHTML is the strip over the canvas: which measure shades the diagram,
+// and the scale that shading means. It sits on the diagram rather than in a column
+// because it is a control for the diagram — and the legend has to be beside the
+// thing it explains, or it is a key to a map on another page.
+function overlayBarHTML() {
+  return `<div id="pg-overlay-body"></div>`;
+}
+
 // resultsHTML is the strip under the canvas: the cases themselves, a page at a time.
 // It is under the diagram rather than in a column because it is a table — the one
 // shape a 300 px column cannot hold.
@@ -187,6 +215,13 @@ export function attachPlayground(root, { api, toast, modeler }) {
   setupPanel.innerHTML = setupPanelHTML();
   body.insertBefore(setupPanel, body.firstChild);
 
+  const overlayBar = document.createElement("section");
+  overlayBar.className = "pg-overlay";
+  overlayBar.id = "pg-overlay";
+  overlayBar.hidden = true;
+  overlayBar.innerHTML = overlayBarHTML();
+  body.insertBefore(overlayBar, root.querySelector("#canvas"));
+
   const results = document.createElement("section");
   results.className = "pg-results";
   results.id = "pg-results";
@@ -203,7 +238,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
 
   // The three pieces answer to the same handlers and the same lookups: they are one
   // panel that happens to be laid out in three places.
-  const panes = [setupPanel, results, panel];
+  const panes = [setupPanel, overlayBar, results, panel];
   const el = (id) => {
     const found = bar.querySelector("#" + id);
     if (found) return found;
@@ -245,7 +280,8 @@ export function attachPlayground(root, { api, toast, modeler }) {
     report: null,
     results: null,   // one page of the results table: {total, offset, rows}
     heat: null,      // the heat map, once a run has produced one
-    showHeat: false,
+    // Which measure shades the diagram, or "off". One at a time: see OVERLAYS.
+    overlay: "off",
     polling: 0,
     // What the run has to show, and what it showed. Expectations turn a report
     // somebody reads into a verdict something can act on — the same ones the
@@ -359,7 +395,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.run = null;
     state.report = null;
     state.heat = null;
-    state.showHeat = false;
+    state.overlay = "off";
     state.verdict = null;
     state.comparison = null;
     state.openRequest = null;
@@ -547,7 +583,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
   async function startBatch() {
     state.report = null;
     state.heat = null;
-    state.showHeat = false;
+    state.overlay = "off";
     state.verdict = null;
     state.comparison = null;
     state.results = null;
@@ -630,7 +666,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       state.report = report;
       state.heat = heat;
       state.simTime = report.simEnd || state.simTime;
-      state.showHeat = true;
+      state.overlay = "runs";
       // The verdict is asked for after the report because "every case finishes"
       // means the cases this run had, which is a thing only the finished run knows.
       state.verdict = await api("POST", path("/verdict"), expectBody());
@@ -805,7 +841,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       overlays = modeler.get("overlays");
       registry = modeler.get("elementRegistry");
     } catch { return; }
-    if (state.showHeat && state.heat) drawHeatMap(canvas, overlays, registry);
+    if (state.overlay !== "off" && state.heat) drawOverlay(canvas, overlays, registry);
     else drawRun(canvas, overlays, registry);
   }
 
@@ -836,27 +872,63 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // included. The cold parts are the reason it draws every element rather than
   // only the ones with a count: an author looking for the branch their data never
   // exercised needs to see it marked, not merely left plain.
-  function drawHeatMap(canvas, overlays, registry) {
-    const max = state.heat.maxCount || 0;
-    const mark = (id, count) => {
-      if (!id || !registry.get(id)) return;
-      const cls = `pg-heat-${heatLevel(count, max)}`;
+  // measure is the chosen overlay's value for every element the model has, and the
+  // largest of them.
+  //
+  // Every element the heat map knows about is in it, at zero when the run measured
+  // nothing there. That is the coverage half of the picture and it holds for all
+  // four measures: "no case waited here" is a different statement from "this element
+  // is not in the report", and a map that dropped the second would answer neither.
+  function measure(key) {
+    const values = new Map();
+    for (const e of (state.heat && state.heat.elements) || []) values.set(e.id, 0);
+    if (key === "runs") {
+      for (const e of (state.heat && state.heat.elements) || []) values.set(e.id, e.count);
+    } else {
+      const field = { work: "workMillis", wait: "waitMillis", incidents: "incidents" }[key];
+      for (const [id, st] of Object.entries((state.report && state.report.elements) || {})) {
+        values.set(id, st[field] || 0);
+      }
+    }
+    let max = 0;
+    for (const v of values.values()) max = Math.max(max, v);
+    return { values, max };
+  }
+
+  // overlayFormat renders one of a measure's values for a badge and for the legend.
+  const overlayFormat = (key, v) => (key === "work" || key === "wait" ? fmtDur(v) : String(v));
+
+  function drawOverlay(canvas, overlays, registry) {
+    const key = state.overlay;
+    const spec = OVERLAYS.find((o) => o.key === key);
+    if (!spec) return;
+    const { values, max } = measure(key);
+    // A zero the measure has nothing to say about is left alone, shape and badge
+    // alike: an untouched element and a "0s" badge on every event are the same
+    // statement, and the second one covers the diagram to make it.
+    const shows = (v) => v !== 0 || spec.cold;
+    const mark = (id, v) => {
+      if (!id || !registry.get(id) || !shows(v)) return;
+      const cls = `pg-heat-${heatLevel(v, max)}`;
       canvas.addMarker(id, cls);
       drawn.markers.push([id, cls]);
     };
-    for (const e of state.heat.elements || []) {
-      mark(e.id, e.count);
-      if (!registry.get(e.id)) continue;
+    for (const [id, v] of values) {
+      mark(id, v);
+      if (!registry.get(id) || !shows(v)) continue;
       try {
         // Above the shape, not below it: an event's own label sits underneath, and
-        // a count that hides the name of the end somebody is looking for costs more
+        // a badge that hides the name of the end somebody is looking for costs more
         // than it tells them.
-        drawn.overlays.push(overlays.add(e.id, "pg-heat", {
+        const text = overlayFormat(key, v);
+        drawn.overlays.push(overlays.add(id, "pg-heat", {
           position: { top: -10, right: -6 },
-          html: `<div class="token-badges"><div class="token-badge heat" title="${e.count} token(s)">${e.count}</div></div>`,
+          html: `<div class="token-badges"><div class="token-badge heat"
+            title="${esc(spec.title)}: ${esc(text)}">${esc(text)}</div></div>`,
         }));
       } catch { /* shape without graphics */ }
     }
+    if (!spec.flows) return;
     const conns = connectionIndex(registry);
     for (const f of state.heat.flows || []) {
       mark(conns.get(f.from + " " + f.to), f.count);
@@ -1436,21 +1508,18 @@ export function attachPlayground(root, { api, toast, modeler }) {
     for (const id of ["pg-case", "pg-step", "pg-run", "pg-clock"]) show(id, stepping);
     show("pg-batch", batching && !running);
     show("pg-cancel", batching && running);
-    show("pg-heat", batching && !!state.heat);
     show("pg-stop", open);
     show("pg-start", !open);
     // The policy is fixed for the life of a sandbox, so the selects go away once
     // one is open rather than sitting there implying otherwise.
     el("pg-dur-wrap").hidden = open;
     el("pg-human-wrap").hidden = open;
-    const heatBtn = el("pg-heat");
-    if (heatBtn) heatBtn.classList.toggle("on", state.showHeat);
 
     el("pg-hint").textContent = !open
       ? "Nothing is deployed and no connector can be called — the sandbox has none."
       : batching
         ? running ? "Running the dataset. Stop leaves what it did readable."
-          : state.report ? "The report is in the panel; the heat map shades the diagram."
+          : state.report ? "The report is in the panel; the overlay over the diagram shades it."
             : "Give it a dataset and a timing profile, then run it."
         : state.tasks.length
           ? "A task is waiting for you: complete it in the panel."
@@ -1462,9 +1531,36 @@ export function attachPlayground(root, { api, toast, modeler }) {
     // The results strip is there only when there are results to put in it: an empty
     // band under the diagram is a promise the panel has not kept.
     results.hidden = !(batching && state.report);
+    // The switcher is over the diagram only once there is a run to shade it by.
+    overlayBar.hidden = !(batching && !!state.heat);
     el("pg-setup-body").innerHTML = setupColumnHTML();
     el("pg-body").innerHTML = analysisColumnHTML();
     if (!results.hidden) el("pg-results-body").innerHTML = resultsStripHTML();
+    if (!overlayBar.hidden) el("pg-overlay-body").innerHTML = overlayStripHTML();
+  }
+
+  // overlayStripHTML is the switcher and its legend: which of the run's four
+  // measures shades the diagram, and what the darkest shade is worth.
+  //
+  // A legend rather than a colour alone, because a shade only means something
+  // against a scale — "dark" says nothing until it says "dark is 322 cases".
+  function overlayStripHTML() {
+    const key = state.overlay;
+    const tab = (k, label, title) =>
+      `<button data-overlay="${k}"${k === key ? ' class="active"' : ""} title="${esc(title)}">${esc(label)}</button>`;
+    const spec = OVERLAYS.find((o) => o.key === key);
+    const steps = Array.from({ length: HEAT_LEVELS }, (_, i) =>
+      `<i class="pg-heat-key-${i + 1}"></i>`).join("");
+    return `
+      <span class="muted">Overlay</span>
+      ${tab("off", "Off", "Leave the diagram as it is")}
+      ${OVERLAYS.map((o) => tab(o.key, o.label, o.title)).join("")}
+      <span style="flex:1"></span>
+      ${spec ? `
+        <span class="pg-scale" title="${esc(spec.title)}">
+          <span class="muted">0</span>${steps}<span class="muted">${esc(overlayFormat(key, measure(key).max))}</span>
+        </span>
+        ${spec.flows ? "" : `<span class="muted">· shapes only</span>`}` : ""}`;
   }
 
   // setupColumnHTML is the left column. Before a sandbox exists it is the whole
@@ -1509,11 +1605,6 @@ export function attachPlayground(root, { api, toast, modeler }) {
       case "pg-batch": guard("run the batch", startBatch); break;
       case "pg-cancel": guard("stop the batch", cancelBatch); break;
       case "pg-stop": guard("discard sandbox", stop); break;
-      case "pg-heat":
-        state.showHeat = !state.showHeat;
-        drawCanvas();
-        render();
-        break;
     }
   });
 
@@ -1530,7 +1621,15 @@ export function attachPlayground(root, { api, toast, modeler }) {
       // Each mode paints the canvas its own way, and the heat map belongs to the
       // batch: stepping through a case while the diagram is shaded by a previous
       // run would be two answers on one picture.
-      state.showHeat = state.mode === "batch" && !!state.heat;
+      if (state.mode !== "batch") state.overlay = "off";
+      else if (state.overlay === "off" && state.heat) state.overlay = "runs";
+      drawCanvas();
+      render();
+      return;
+    }
+    const pick = e.target.closest("button[data-overlay]");
+    if (pick) {
+      state.overlay = pick.dataset.overlay;
       drawCanvas();
       render();
       return;
@@ -1678,7 +1777,10 @@ export function attachPlayground(root, { api, toast, modeler }) {
     bar.hidden = !on;
     panel.hidden = !on;
     setupPanel.hidden = !on;
-    if (!on) results.hidden = true;
+    if (!on) {
+      results.hidden = true;
+      overlayBar.hidden = true;
+    }
     editor.classList.toggle("pg-active", on);
     if (on) {
       render();
@@ -1706,6 +1808,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       }
       bar.remove();
       setupPanel.remove();
+      overlayBar.remove();
       results.remove();
       panel.remove();
     },
