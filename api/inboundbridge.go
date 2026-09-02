@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -98,11 +99,21 @@ func (s *Server) pollInbound(ctx context.Context) {
 			}
 		}
 		name := sb.rec.MessageName
+		published := false
 		s.do(func() {
+			// The ceiling is charged in the same run-loop hop as the publish, so a watch
+			// cannot be read as inside its budget and publish outside it.
+			if !s.chargeInboundBudget(subID, len(pubs), now) {
+				return
+			}
 			for _, p := range pubs {
 				s.proc.PublishInbound(p.sourceID, p.seq, name, p.key, p.vars...)
 			}
+			published = true
 		})
+		if !published {
+			continue // over the ceiling: the watch is off and the cursor stays put
+		}
 		// A correlated message can start or advance an instance straight into a
 		// connector task, so the driving happens off the run loop (ADR-0157 step 6).
 		// The cursor only advances once that succeeded; otherwise it is left where it
@@ -173,6 +184,70 @@ func (s *Server) markInboundPolled(subID string, at int64) {
 	}
 	rec.LastPolledAt = at
 	_ = s.inboundSubs.Save(rec)
+}
+
+// defaultInboundPerHour is the ceiling a watch gets when it names none: how many events
+// it may publish in one hour before the guard switches it off.
+//
+// Sixty is one a minute sustained, which is generous for a watch whose every event
+// starts a process and cheap to raise per watch when a project really is that busy. The
+// number it is protecting against is not close: the reported Jira loop published one
+// every ten seconds and would have run until somebody noticed.
+const defaultInboundPerHour = 60
+
+// inboundBudgetWindow is the span the ceiling is counted over. An hour is long enough
+// that a burst of real work does not trip it and short enough that a watch switched off
+// yesterday is not still paying for it.
+const inboundBudgetWindow = time.Hour
+
+// inboundBudget is a watch's ceiling: its own, or the default when it names none.
+func inboundBudget(rec inboundSubscription) int {
+	if rec.MaxPerHour > 0 {
+		return rec.MaxPerHour
+	}
+	return defaultInboundPerHour
+}
+
+// chargeInboundBudget books n events against a watch's hourly ceiling and reports
+// whether they may be published.
+//
+// A watch can feed itself: a process started by an event writes to the system the watch
+// reads, the watch matches what it wrote, and the loop has no natural end. That is not
+// a hypothetical — a Jira watch published jira.ticket.created, the started instance
+// created a Jira issue, the watch matched it, and it ran until the watch was deleted by
+// hand (ADR-draft-inbound-watch-budget). The engine fix for that particular loop
+// (ADR-draft-start-events-are-triggers) closed the shape it took; this closes the class,
+// including the one two processes can build between them, where no single model is
+// wrong.
+//
+// A batch that would cross the ceiling is refused whole and the watch is switched off,
+// rather than published up to the line. Publishing part of a batch would advance nothing
+// an operator can reason about, and a runaway that is merely throttled is still a
+// runaway. The cursor does not advance either, so re-enabling re-reads what was refused.
+//
+// It runs on the run-loop goroutine, which owns the store (invariant I3).
+func (s *Server) chargeInboundBudget(subID string, n int, now time.Time) bool {
+	rec, ok, err := s.inboundSubs.Get(subID)
+	if err != nil || !ok {
+		return false
+	}
+	if now.Unix()-rec.WindowStart >= int64(inboundBudgetWindow.Seconds()) {
+		rec.WindowStart = now.Unix()
+		rec.PublishedInWindow = 0
+	}
+	ceiling := inboundBudget(rec)
+	if rec.PublishedInWindow+n > ceiling {
+		rec.Enabled = false
+		rec.DisabledReason = fmt.Sprintf(
+			"switched off by the loop guard: this watch tried to publish more than %d events in an hour. "+
+				"That is usually a watch matching what its own processes write. Check the query, then raise "+
+				"the hourly limit and enable it again.", ceiling)
+		_ = s.inboundSubs.Save(rec)
+		return false
+	}
+	rec.PublishedInWindow += n
+	_ = s.inboundSubs.Save(rec)
+	return true
 }
 
 // inboundPrimeBatch is the page size the priming path reads while skipping a

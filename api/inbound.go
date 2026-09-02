@@ -88,6 +88,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		CursorField    string `json:"cursorField"`
 		LagSeconds     int    `json:"lagSeconds"`
 		PollSeconds    int    `json:"pollSeconds"`
+		MaxPerHour     int    `json:"maxPerHour"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -151,6 +152,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		CursorField: strings.TrimSpace(p.CursorField),
 		LagSeconds:  p.LagSeconds,
 		PollSeconds: p.PollSeconds,
+		MaxPerHour:  p.MaxPerHour,
 	}
 	if msg := validateInboundWatch(kind, &rec); msg != "" {
 		httpapi.Error(w, http.StatusBadRequest, msg)
@@ -198,6 +200,7 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 		CorrelationKey *string `json:"correlationKey"`
 		Enabled        *bool   `json:"enabled"`
 		StartFromTip   *bool   `json:"startFromTip"`
+		MaxPerHour     *int    `json:"maxPerHour"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -284,9 +287,21 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 		}
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled
+			// Switching a tripped watch back on starts its budget window over and drops
+			// the guard's reason: leaving the old count in place would trip it again on
+			// the next event, and leaving the reason would say a watch that is running is
+			// switched off.
+			if *p.Enabled {
+				rec.DisabledReason = ""
+				rec.WindowStart = time.Now().Unix()
+				rec.PublishedInWindow = 0
+			}
 		}
 		if p.StartFromTip != nil {
 			rec.StartFromTip = *p.StartFromTip
+		}
+		if p.MaxPerHour != nil {
+			rec.MaxPerHour = *p.MaxPerHour
 		}
 		saveErr = s.inboundSubs.Save(rec)
 	})
