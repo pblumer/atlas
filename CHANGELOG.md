@@ -300,6 +300,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The three database Worker Types are one capability, and now say so everywhere.** MS
+  SQL Server, MariaDB and PostgreSQL differ in a driver name, a placeholder syntax and —
+  for SQL Server alone — the ability to bind a parameter by name
+  ([ADR-0173](docs/adr/0173-generic-sql-connector.md)); in everything an operator or an
+  author does with them they are the same kind. The engine, the compiler and the worker
+  already served all three from one code path, but the two Console surfaces and the
+  environment vocabulary did not, and both had drifted. The Worker catalog card told
+  only SQL Server's reader that Atlas supervises the worker for it, only PostgreSQL's
+  about the row cap, and none of the three that a database task can now be tried without
+  a database at all — so which facts an operator learned depended on which of the three
+  they clicked. The Modeler's properties panel repeated the same nine fields three
+  times. Both are now built from one description per surface, and two guards keep them
+  that way. The environment variables a SQL worker reads
+  (`ATLAS_<PRODUCT>_CONNECTORS`, `_<NAME>_DSN`, `_MOCK`, `_MOCK_SEED`) are spelled once,
+  by the product itself, instead of being assembled in the engine and in the worker
+  separately — the same argument `connector/envname` already won for connector names.
+  Nothing an operator sets or a model states changed; SQL Server is now called
+  *Microsoft SQL Server* on the Workers page and in the kind picker, which is what the
+  Modeler and the Worker Type registry already called it.
+
 - **The Workers list reads like a list again.** Console → Workers gave every configured
   worker up to seven action buttons and spelled out every deployed process that resolves
   through it, so a shared mail worker drew fourteen wrapped lines of links and the rows
@@ -390,6 +410,24 @@ _Changed_ / _Removed_ for each version.
   extension elements are still `<atlas:jiraConnector>` and friends.
 
 ### Fixed
+
+- **A database connector's setup hint was written into a hidden element.** The "New
+  connector" form on Console → Workers asks the same shared description
+  ([ADR-0160](docs/adr/0160-one-connector-dialog.md)) which fields a kind uses and what
+  to say about them — and then hid the sentence it got, because the paragraph that
+  renders it carried the mail-only class. So the one line saying that a database's
+  *whole connection string* is the credential, that it is sealed into the vault, and
+  that Atlas supervises the worker for it was produced for every SQL kind and shown for
+  none; the same was true of Active Directory's. The edit dialog had always shown it,
+  which is the disagreement between two forms that ADR-0160 exists to prevent. The hint
+  now appears for any kind that has one.
+
+- **A mock database's refusal named a pattern instead of a variable.** A statement no
+  seed answers fails naming itself, its bound parameters and the seed file to add the
+  answer to ([ADR-0221](docs/adr/0221-sql-mock-mode.md)) — but it quoted the literal
+  `ATLAS_<PRODUCT>_MOCK_SEED`, leaving the reader to substitute their product. It now
+  names the variable that worker actually reads (`ATLAS_MARIADB_MOCK_SEED`, and so on),
+  which is the difference between an error you act on and one you decode.
 
 - **A rejected REST call says what the far side objected to.** A non-2xx response from a
   REST connector task reported only `returned HTTP 400`, and threw away the body the

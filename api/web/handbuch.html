@@ -2351,13 +2351,26 @@ atlas worker --connector mssql</code></pre>
       <p data-l="de">Auch hier ändert sich <b>am Modell nichts</b>: derselbe Worker-Name, dieselbe Anweisung,
         dieselben Parameter. Nur die Verbindungszeichenfolge entfällt — der Worker braucht keine.
         <code>ATLAS_MSSQL_CONNECTORS</code> bleibt dagegen nötig, denn der Task nennt einen Worker beim Namen, und
-        ein Mockup ohne Namen hat nichts, was ein Task ansprechen könnte. Für MariaDB und PostgreSQL heißen die
-        Variablen <code>ATLAS_MARIADB_MOCK</code> beziehungsweise <code>ATLAS_POSTGRES_MOCK</code>.</p>
+        ein Mockup ohne Namen hat nichts, was ein Task ansprechen könnte.</p>
+      <p data-l="de">Für die drei Datenbank-Worker-Typen gilt das <b>gleichermaßen</b>, mit dem Präfix des
+        jeweiligen Produkts: <code>ATLAS_MARIADB_CONNECTORS</code>, <code>ATLAS_MARIADB_MOCK</code>,
+        <code>ATLAS_MARIADB_MOCK_SEED</code> — und ebenso <code>ATLAS_POSTGRES_…</code>. Es ist derselbe Code:
+        gleiches Mockup, gleiche Startdatei, gleiche Verweigerung bei einer nicht hinterlegten Anweisung, die
+        genau die Variable nennt, die dieser Worker liest. Nur die <b>Platzhalter</b> in der Anweisung gehören
+        dem Produkt: <code>@p1</code> bei MS&nbsp;SQL, <code>?</code> bei MariaDB, <code>$1</code> bei
+        PostgreSQL — und weil die Startdatei Anweisungen wörtlich zuordnet, ist eine Startdatei für MariaDB mit
+        <code>?</code> geschrieben.</p>
       <p data-l="en">Here too <b>nothing changes in the model</b>: the same worker name, the same statement, the
         same parameters. Only the connection string falls away — this worker needs none.
         <code>ATLAS_MSSQL_CONNECTORS</code> is still required, because a task names a worker and a mockup with no
-        names has nothing a task could address. For MariaDB and PostgreSQL the variables are
-        <code>ATLAS_MARIADB_MOCK</code> and <code>ATLAS_POSTGRES_MOCK</code>.</p>
+        names has nothing a task could address.</p>
+      <p data-l="en">All three database Worker Types work <b>the same way</b>, under their own product's prefix:
+        <code>ATLAS_MARIADB_CONNECTORS</code>, <code>ATLAS_MARIADB_MOCK</code>,
+        <code>ATLAS_MARIADB_MOCK_SEED</code> — and likewise <code>ATLAS_POSTGRES_…</code>. It is the same code:
+        the same mockup, the same seed file, the same refusal of an unseeded statement, naming the exact variable
+        that worker reads. What belongs to the product is the <b>placeholder</b> syntax in the statement —
+        <code>@p1</code> for MS&nbsp;SQL, <code>?</code> for MariaDB, <code>$1</code> for PostgreSQL — and since
+        the seed matches statements literally, a MariaDB seed is written with <code>?</code>.</p>
       <p data-l="de">Die Startdatei ordnet Anweisungen ihre Antworten zu. Eine Antwort, die <code>params</code>
         oder <code>named</code> nennt, gilt nur für genau diese Belegung; eine, die beides weglässt, ist die
         Auffangantwort derselben Anweisung. So lässt sich „Person 42 gibt es, alle anderen nicht" hinterlegen,

@@ -32,12 +32,11 @@ import (
 // anyone who can list processes — and unlike every other connector's endpoint, a DSN
 // *is* the credential (ADR-0173).
 func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Registry, []string, error) {
-	prefix := "ATLAS_" + envFold(p.Name) + "_"
 	mock, err := sqlMockFromEnv(env, p)
 	if err != nil {
 		return nil, nil, err
 	}
-	names := splitAndTrim(env(prefix + "CONNECTORS"))
+	names := splitAndTrim(env(p.ConnectorsEnv()))
 	if len(names) == 0 {
 		// Unconfigured, not misconfigured — a nil registry and no error, which the
 		// caller reports as a kind this worker does not serve. The two must not be
@@ -49,18 +48,18 @@ func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Regist
 	}
 	reg := sqldb.NewRegistry()
 	for _, name := range names {
-		key := prefix + envFold(name) + "_"
+		dsnVar := p.DSNEnv(name)
 		if mock != nil {
 			// Mock mode: every configured name is the one in-memory database, so the
 			// journal is one list of what the process ran rather than one per name.
 			// A DSN set alongside it is deliberately ignored and not an error — the
 			// point of the switch is to run the same configuration against memory.
-			reg.Register(name, sqldb.OpenMock(p, mock))
+			reg.Register(name, sqldb.OpenMock(mock))
 			continue
 		}
-		dsn := env(key + "DSN")
+		dsn := env(dsnVar)
 		if dsn == "" {
-			return nil, nil, fmt.Errorf("worker: %s connector %q has no connection string: set %sDSN", p.Name, name, key)
+			return nil, nil, fmt.Errorf("worker: %s connector %q has no connection string: set %s", p.Name, name, dsnVar)
 		}
 		// sqldb.Open connects lazily and caps the pool. A database that is merely
 		// down therefore does not stop a worker from starting — a worker must survive
@@ -127,19 +126,17 @@ func RunSQLJob(ctx context.Context, j Job, reg *sqldb.Registry) (map[string]any,
 // model that behaves differently in test and production and would eventually be
 // deployed with the flag still set; here the model is byte-identical either way and
 // what differs is which worker leases its jobs.
-const (
-	// sqlMockEnvSuffix, after ATLAS_<PRODUCT>_, turns mock mode on for that product.
-	sqlMockEnvSuffix = "MOCK"
-	// sqlMockSeedEnvSuffix names the JSON file of seeded answers the mock starts with.
-	// Without it a mock knows nothing, and every statement fails naming itself.
-	sqlMockSeedEnvSuffix = "MOCK_SEED"
-)
+// The two variables are the product's own ([sqldb.Product.MockEnv],
+// [sqldb.Product.MockSeedEnv]): ATLAS_<PRODUCT>_MOCK turns mock mode on, and
+// ATLAS_<PRODUCT>_MOCK_SEED names the JSON file of seeded answers it starts with.
+// Without a seed a mock knows nothing, and every statement fails naming itself — and
+// naming that variable, which is why the spelling belongs to the product rather than
+// to any one of the packages that quote it.
 
 // sqlMockFromEnv decides whether this worker's tasks of product p reach a database or
 // a stand-in in its own memory. A nil database means the real thing.
 func sqlMockFromEnv(env func(string) string, p sqldb.Product) (*sqldb.MockDatabase, error) {
-	prefix := "ATLAS_" + envFold(p.Name) + "_"
-	mockVar, seedVar := prefix+sqlMockEnvSuffix, prefix+sqlMockSeedEnvSuffix
+	mockVar, seedVar := p.MockEnv(), p.MockSeedEnv()
 	on, err := envBool(env, mockVar)
 	if err != nil {
 		return nil, err
@@ -161,7 +158,7 @@ func sqlMockFromEnv(env func(string) string, p sqldb.Product) (*sqldb.MockDataba
 	logging.Warn(logging.SQLMockEnabled,
 		"the "+p.Name+" connector is in mock mode: statements are answered from this worker's memory and reach no database",
 		slog.String("product", p.Name), slog.Int("seeded", len(answers)), slog.String("seed", seed))
-	return sqldb.NewMockDatabase(answers...), nil
+	return sqldb.NewMockDatabase(p, answers...), nil
 }
 
 // sqlMockSeed reads the seed file, if one was named.

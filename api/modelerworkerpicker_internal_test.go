@@ -38,6 +38,11 @@ func TestEveryModelerWorkerPickerNamesAManagedWorkerType(t *testing.T) {
 	for _, k := range managedConnectorKinds {
 		managed[k.name] = true
 	}
+	// The three database kinds contribute nothing here, on purpose: sqlServiceTaskKind
+	// derives their datalist from the kind's own id rather than repeating the name, so
+	// the typo this test exists to catch cannot be written for them.
+	// TestEveryModelerWorkerFieldOffersThePicker still checks that their shared field
+	// declares a picker at all.
 	var pickers, unknown []string
 	for _, re := range []*regexp.Regexp{modelerPickerKindRe, modelerPickerCallRe} {
 		for _, m := range re.FindAllStringSubmatch(src, -1) {
@@ -71,8 +76,11 @@ var workerFieldsWithoutAPicker = map[string]string{
 // the server actually has. A new kind that ships without the picker sends its author
 // back to guessing, and nothing else in the panel says so.
 func TestEveryModelerWorkerFieldOffersThePicker(t *testing.T) {
-	catalog := modelerCatalogSource(t)
-	fields := modelerWorkerFields(t, catalog)
+	// The whole file, not only the catalog array: the three database kinds are built by
+	// a shared function (sqlServiceTaskKind) that declares their Worker field once, and
+	// scanning only the array body would quietly stop covering the field three Worker
+	// Types depend on.
+	fields := modelerWorkerFields(t, modelerSource(t))
 
 	var missing []string
 	has := map[string]bool{}
@@ -114,7 +122,7 @@ type modelerWorkerField struct{ kind, body string }
 // attribute keeps its pre-ADR-0203 spelling because it is the BPMN attribute name.
 var workerFieldKeyRe = regexp.MustCompile(`key:\s*"connector"`)
 
-// modelerWorkerFields cuts every Worker field out of the catalog source. A field runs
+// modelerWorkerFields cuts every Worker field out of the Modeler source. A field runs
 // from its own `key:` to the next one, which is enough to see whether it declares a
 // picker without teaching the test to parse JavaScript.
 func modelerWorkerFields(t *testing.T, catalog string) []modelerWorkerField {
@@ -133,12 +141,30 @@ func modelerWorkerFields(t *testing.T, catalog string) []modelerWorkerField {
 	return out
 }
 
-// modelerCatalogKindAt names the kind a position in the catalog source belongs to: the
+// modelerCatalogKindAt names the kind a position in the Modeler source belongs to: the
 // last `id:` declared before it, since a kind opens with its id.
+//
+// A field can also live in a function that builds several kinds — sqlServiceTaskKind
+// declares the Worker field the three database Worker Types share — and there the last
+// `id:` before it names something else entirely. So a function declared *after* that id
+// wins: the answer is then the builder's own name, which is where a reader has to go to
+// fix the field.
 func modelerCatalogKindAt(catalog string, idx int) string {
-	m := catalogKindIDRe.FindAllStringSubmatch(catalog[:idx], -1)
-	if len(m) == 0 {
-		return "(before the first kind)"
+	kind := "(before the first kind)"
+	at := -1
+	if m := catalogKindIDRe.FindAllStringSubmatchIndex(catalog[:idx], -1); len(m) > 0 {
+		last := m[len(m)-1]
+		kind, at = catalog[last[2]:last[3]], last[0]
 	}
-	return m[len(m)-1][1]
+	if f := catalogBuilderRe.FindAllStringSubmatchIndex(catalog[:idx], -1); len(f) > 0 {
+		last := f[len(f)-1]
+		if last[0] > at {
+			return "the shared field builder " + catalog[last[2]:last[3]]
+		}
+	}
+	return kind
 }
+
+// catalogBuilderRe matches the `function sqlServiceTaskKind(` of a function that builds
+// catalog entries rather than writing them out.
+var catalogBuilderRe = regexp.MustCompile(`\bfunction ([A-Za-z0-9_]+)\(`)

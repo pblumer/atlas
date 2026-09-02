@@ -40,9 +40,15 @@ const (
 	connectorKindPostgres = "postgres"
 )
 
-// sqlConnectorKinds are the three, in the order the Console offers them.
+// sqlConnectorKinds are the three, in the order the Console offers them. They are read
+// out of sqlConnectorProducts rather than listed again, so a product cannot appear in
+// one of the two lists and not the other.
 func sqlConnectorKinds() []string {
-	return []string{connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	names := make([]string, 0, len(sqlConnectorProducts))
+	for _, p := range sqlConnectorProducts {
+		names = append(names, p.name)
+	}
+	return names
 }
 
 // isSQLConnectorKind reports whether a kind name is one of the SQL products, so the
@@ -124,8 +130,11 @@ func (s *Server) sqlWorkerEnvByName(kind string) []string {
 // It reads the connector store and the vault, so it runs on the run-loop goroutine
 // (their owner), like mailWorkerEnv and entraWorkerEnv do.
 func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
-	prefix := "ATLAS_" + connectorEnvKey(p.Name) + "_"
-	connectorsVar := prefix + "CONNECTORS"
+	// The variable names are the product's own (sqldb.Product), not assembled here:
+	// the worker reads exactly these and an operator sets exactly these by hand, so a
+	// second spelling in this package would be a supervised worker handed a credential
+	// under a name nothing reads.
+	connectorsVar := p.ConnectorsEnv()
 
 	var env []string
 	var names []string
@@ -169,8 +178,8 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 				continue
 			}
 			taken[envKey] = c.Name
-			key := prefix + envKey + "_"
-			if strings.TrimSpace(os.Getenv(key+"DSN")) != "" {
+			dsnVar := p.DSNEnv(c.Name)
+			if strings.TrimSpace(os.Getenv(dsnVar)) != "" {
 				// The operator set this one on the host; leave it alone and let the
 				// child inherit it, but keep the name in CONNECTORS.
 				addName(c.Name)
@@ -193,7 +202,7 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 				continue
 			}
 			addName(c.Name)
-			env = append(env, key+"DSN="+dsn)
+			env = append(env, dsnVar+"="+dsn)
 			fromStore = true
 		}
 	})

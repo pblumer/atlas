@@ -20,9 +20,11 @@ import (
 // [MockDatabase] is the other half of the worker (ADR-0168): the same resolved job,
 // the same [Run], the same [Client] over the same database/sql machinery — against
 // answers that live in the worker's memory and are thrown away when it stops.
-// `atlas worker --connector mssql` with ATLAS_MSSQL_MOCK set serves SQL tasks this
-// way, so a model runs end to end against a database that does not exist
-// (ADR-0221).
+// `atlas worker --connector <product>` with that product's ATLAS_<PRODUCT>_MOCK set
+// serves SQL tasks this way, so a model runs end to end against a database that does
+// not exist (ADR-0221). All three products reach it through the same code: what
+// differs is only the variable prefix, which the product spells
+// ([Product.MockEnv], [Product.MockSeedEnv]).
 //
 // The switch is the *worker's*, not the model's, for the reason the AD mock's is: a
 // mockup flag on the task would be a model that behaves differently in test and in
@@ -73,11 +75,6 @@ import (
 // stands in for. The newest are kept, like the AD mock's operation journal.
 const maxMockStatements = 200
 
-// mockSeedEnvHint names the seed file in the error an unseeded statement raises. It is
-// spelled per product by the worker; this is the shape, so the message says where to
-// add the answer instead of only that one is missing.
-const mockSeedEnvHint = "ATLAS_<PRODUCT>_MOCK_SEED"
-
 // MockAnswer is one thing the mock database knows how to answer.
 //
 // Statement is matched ignoring case and runs of whitespace (see [normalizeStatement]).
@@ -116,25 +113,35 @@ type MockStatement struct {
 // MockDatabase is an in-memory database for mock mode. It implements
 // [driver.Connector], so it drops into database/sql exactly where a real driver sits,
 // and it is safe for concurrent use: one database serves every job a worker leases.
+//
+// It knows its product for one reason: the refusal below has to name the seed file an
+// operator must add the answer to, and that variable is spelled per product
+// ([Product.MockSeedEnv]). A message quoting a pattern would leave the reader to apply
+// the substitution themselves, which is the same fold connector/envname exists to stop
+// three packages getting wrong in three ways.
 type MockDatabase struct {
+	product Product
 	mu      sync.Mutex
 	answers []MockAnswer
 	ran     []MockStatement
 	seq     uint64
 }
 
-// NewMockDatabase builds a mock database from seeded answers.
-func NewMockDatabase(answers ...MockAnswer) *MockDatabase {
-	return &MockDatabase{answers: append([]MockAnswer(nil), answers...)}
+// NewMockDatabase builds a mock database of product p from seeded answers.
+func NewMockDatabase(p Product, answers ...MockAnswer) *MockDatabase {
+	return &MockDatabase{product: p, answers: append([]MockAnswer(nil), answers...)}
 }
 
-// OpenMock wraps a mock database as a [Client] of product p, with the same pool policy
-// a real one gets — so the mock exercises the limits rather than being the one path
-// that does not.
-func OpenMock(p Product, m *MockDatabase) *Client {
+// Product returns the product this mock stands in for.
+func (m *MockDatabase) Product() Product { return m.product }
+
+// OpenMock wraps a mock database as a [Client] of its own product, with the same pool
+// policy a real one gets — so the mock exercises the limits rather than being the one
+// path that does not.
+func OpenMock(m *MockDatabase) *Client {
 	db := sql.OpenDB(m)
 	tunePool(db)
-	return NewClient(db, p)
+	return NewClient(db, m.product)
 }
 
 // Statements returns the journal, oldest first.
@@ -193,7 +200,7 @@ func (m *MockDatabase) answer(stmt string, args []driver.NamedValue) (MockAnswer
 	if found == nil {
 		err := fmt.Errorf("sqldb: mock: nothing is seeded for the statement %q%s; add an answer for it to the mock seed (%s), "+
 			"because answering an unseeded statement with no rows would hand the process a fact it made up",
-			strings.TrimSpace(stmt), boundDetail(params, named), mockSeedEnvHint)
+			strings.TrimSpace(stmt), boundDetail(params, named), m.product.MockSeedEnv())
 		m.journal(stmt, params, named, true, err.Error())
 		return MockAnswer{}, err
 	}

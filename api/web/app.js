@@ -509,6 +509,27 @@ const TOPNAV = {
 // "status" is honest about what this single-binary build actually talks to:
 //   active — embedded and used at runtime/deploy time;
 //   planned — a supported integration that this build isn't wired to yet.
+
+// The three database Worker Types are one capability with three drivers (ADR-0173), so
+// the card that describes them says the same things about all three. Written out three
+// times they had already drifted: only SQL Server's mentioned that Atlas supervises the
+// worker, only PostgreSQL's mentioned the row cap, and none of them mentioned that a
+// database task can be tried without a database (ADR-0221) — so which facts an operator
+// learned depended on which of the three they happened to click.
+//
+// What genuinely differs is the product's name, its environment prefix and its
+// placeholder syntax, plus the one sentence about binding by name. Everything else is
+// shared, and a fact added here reaches all three.
+function sqlWorkerTypeDesc(product, envPrefix, placeholder, binding) {
+  return `Runs one statement against a ${product} database \u2014 query for many rows, query one for a single row, execute for an insert, update or delete \u2014 on a worker, off the processor loop. ` +
+    `The statement is literal by construction: it is the one connector field with no fx toggle, because a statement assembled from process data would be an injection that needs no quoting bug. ` +
+    `Values reach it as bound parameters (${placeholder}). ${binding} ` +
+    `A query carries a row cap (1000 by default) and exceeding it fails the task rather than truncating, because a short result set is a wrong business answer and a process that branches on the row count would branch on it confidently. ` +
+    `Configure each database below: the whole connection string is the credential, sealed into the vault. ` +
+    `Worker-only \u2014 the engine never holds a database credential \u2014 so a SQL task needs a worker, which Atlas supervises for you. ` +
+    `A worker started with ATLAS_${envPrefix}_MOCK=1 answers this product's statements from seeded answers in its own memory, so a model that reads or writes a database runs end to end before anyone has a connection string.`;
+}
+
 const CONNECTORS = [
   {
     id: "temis", name: "temis", kind: "Decision engine",
@@ -556,19 +577,19 @@ const CONNECTORS = [
     refs: "ADR-0172", status: "active", statusLabel: "configured below",
   },
   {
-    id: "mssql", name: "SQL Server", kind: "Database",
-    desc: "Runs one statement against a Microsoft SQL Server database \u2014 query for many rows, query one for a single row, execute for an insert, update or delete \u2014 on a worker, off the processor loop. The statement is literal by construction: it is the one connector field with no fx toggle, because a statement assembled from process data would be an injection that needs no quoting bug. Values reach it as bound parameters, and SQL Server is the one product of the three that also binds them by name (@id). Configure each database below: the whole connection string is the credential, sealed into the vault. Worker-only \u2014 the engine never holds a database credential \u2014 so a SQL task needs a worker, which Atlas supervises for you.",
-    refs: "ADR-0173 \u00b7 ADR-0188", status: "active", statusLabel: "configured below",
+    id: "mssql", name: "Microsoft SQL Server", kind: "Database",
+    desc: sqlWorkerTypeDesc("Microsoft SQL Server", "MSSQL", "@p1", "SQL Server is the one product of the three that also binds them by name (@id), which is why an object-shaped parameters variable is accepted here and refused by the other two."),
+    refs: "ADR-0173 \u00b7 ADR-0188 \u00b7 ADR-0221", status: "active", statusLabel: "configured below",
   },
   {
     id: "mariadb", name: "MariaDB", kind: "Database",
-    desc: "The same statement, query and execute operations against a MariaDB or MySQL database, on a worker. Parameters bind positionally (?) and an object-shaped parameters variable is refused rather than flattened into an order nobody wrote \u2014 which is why the three database products are three Worker Types and not one with a dialect field. The whole connection string is the credential and is sealed into the vault. Worker-only.",
-    refs: "ADR-0173 \u00b7 ADR-0188", status: "active", statusLabel: "configured below",
+    desc: sqlWorkerTypeDesc("MariaDB", "MARIADB", "?", "MariaDB binds only positionally, so an object-shaped parameters variable is refused rather than flattened into an order nobody wrote \u2014 which is why the three database products are three Worker Types and not one with a dialect field."),
+    refs: "ADR-0173 \u00b7 ADR-0188 \u00b7 ADR-0221", status: "active", statusLabel: "configured below",
   },
   {
     id: "postgres", name: "PostgreSQL", kind: "Database",
-    desc: "The same statement, query and execute operations against a PostgreSQL database, on a worker. Parameters bind positionally ($1). A query carries a row cap (1000 by default) and exceeding it fails the task rather than truncating, because a short result set is a wrong business answer and a process that branches on the row count would branch on it confidently. The whole connection string is the credential and is sealed into the vault. Worker-only.",
-    refs: "ADR-0173 \u00b7 ADR-0188", status: "active", statusLabel: "configured below",
+    desc: sqlWorkerTypeDesc("PostgreSQL", "POSTGRES", "$1", "PostgreSQL binds only positionally, so an object-shaped parameters variable is refused rather than flattened into an order nobody wrote \u2014 which is why the three database products are three Worker Types and not one with a dialect field."),
+    refs: "ADR-0173 \u00b7 ADR-0188 \u00b7 ADR-0221", status: "active", statusLabel: "configured below",
   },
 ];
 
@@ -3480,7 +3501,7 @@ function wireConnectorManagement(connectors) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option><option value="preview">Preview (in-app outbox)</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -3490,7 +3511,7 @@ function wireConnectorManagement(connectors) {
         <button class="btn" type="submit" title="Add this connector">Add</button>
         <button class="btn neutral conn-f-test" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
         <p class="conn-test-result" style="flex:1 1 100%;margin:0;font-size:12.5px" hidden></p>
-        <p class="muted mail-only conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p></form>`;
+        <p class="muted conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p></form>`;
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
       // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
       // endpoint but a credentialsRef naming a vault JSON auth bundle, and sends as the
@@ -3546,9 +3567,18 @@ function wireConnectorManagement(connectors) {
         credRefIn.required = sh.credRef === "required";
         credRefIn.placeholder = sh.credRefPlaceholder;
         credRefLabel.textContent = sh.credRefLabel;
-        // What this provider needs, said where it is chosen rather than discovered
-        // from a failed send hours later.
-        form.querySelector(".conn-hint").innerHTML = sh.hint;
+        // What this kind needs, said where it is chosen rather than discovered from a
+        // failed job hours later. The hint is *not* mail-only: connectorShape writes
+        // one for Active Directory and for the three databases too, and while it
+        // carried the mail-only class the form wrote all of them into an element it had
+        // just hidden — so the one sentence saying that a database's whole connection
+        // string is the credential, and that Atlas supervises the worker for it, was
+        // written for every SQL kind and shown for none. The edit dialog always showed
+        // it, which is exactly the kind of disagreement ADR-0160 put the shape in one
+        // place to prevent.
+        const hintEl = form.querySelector(".conn-hint");
+        hintEl.innerHTML = sh.hint;
+        hintEl.style.display = sh.hint ? "" : "none";
       };
       kindSel.addEventListener("change", sync);
       providerSel.addEventListener("change", sync);

@@ -21,24 +21,65 @@ import (
 
 // A database an operator added in the Console: the worker is handed its connection
 // string under the name it reads, plus the CONNECTORS list naming it.
+//
+// All three products, and each one round-tripped through the worker that has to read
+// what was rendered. The two halves live in different packages and agree only because
+// both ask sqldb.Product for the variable names; a product that grew its own spelling
+// on either side would hand a supervised worker a credential under a name nothing
+// reads, and the worker would report the database as unconfigured with the DSN sitting
+// right there in its environment.
 func TestASupervisedSQLWorkerGetsItsConnectionStringFromTheVault(t *testing.T) {
-	srv, _ := newValidateServer(t)
-	if _, err := srv.vault.Set("sql/1/dsn", "postgres://u:p@db.example:5432/hr"); err != nil {
-		t.Fatalf("vault.Set: %v", err)
+	// One DSN per product, in that product's own grammar: two of the three drivers
+	// parse the string when the worker opens it, so a postgres:// URL handed to
+	// MariaDB would fail this for a reason that has nothing to do with what is being
+	// tested.
+	dsns := map[string]string{
+		connectorKindPostgres: "postgres://u:p@db.example:5432/hr",
+		connectorKindMariaDB:  "u:p@tcp(db.example:3306)/hr",
+		connectorKindMSSQL:    "sqlserver://u:p@db.example:1433?database=hr",
 	}
-	if err := srv.connectors.Save(connector{
-		ID: "1", Name: "hr-db", Kind: connectorKindPostgres,
-		CredentialsRef: "sql/1/dsn", Enabled: true, CreatedAt: 1,
-	}); err != nil {
-		t.Fatalf("connectors.Save: %v", err)
-	}
+	for _, kind := range sqlConnectorKinds() {
+		t.Run(kind, func(t *testing.T) {
+			p, ok := sqldb.ProductByName(kind)
+			if !ok {
+				t.Fatalf("connector kind %q is not a sqldb product", kind)
+			}
+			dsn := dsns[kind]
+			if dsn == "" {
+				t.Fatalf("this test has no connection string for %q; a new product needs one in its own grammar", kind)
+			}
+			srv, _ := newValidateServer(t)
+			if _, err := srv.vault.Set("sql/1/dsn", dsn); err != nil {
+				t.Fatalf("vault.Set: %v", err)
+			}
+			if err := srv.connectors.Save(connector{
+				ID: "1", Name: "hr-db", Kind: kind,
+				CredentialsRef: "sql/1/dsn", Enabled: true, CreatedAt: 1,
+			}); err != nil {
+				t.Fatalf("connectors.Save: %v", err)
+			}
 
-	env := envOf(t, srv.sqlWorkerEnvByName(connectorKindPostgres))
-	if got := env["ATLAS_POSTGRES_HR_DB_DSN"]; got != "postgres://u:p@db.example:5432/hr" {
-		t.Errorf("ATLAS_POSTGRES_HR_DB_DSN = %q, want the DSN out of the vault", got)
-	}
-	if got := env["ATLAS_POSTGRES_CONNECTORS"]; got != "hr-db" {
-		t.Errorf("ATLAS_POSTGRES_CONNECTORS = %q, want hr-db", got)
+			env := envOf(t, srv.sqlWorkerEnvByName(kind))
+			if got := env[p.DSNEnv("hr-db")]; got != dsn {
+				t.Errorf("%s = %q, want the DSN out of the vault", p.DSNEnv("hr-db"), got)
+			}
+			if got := env[p.ConnectorsEnv()]; got != "hr-db" {
+				t.Errorf("%s = %q, want hr-db", p.ConnectorsEnv(), got)
+			}
+
+			// The worker's half of the same contract: what was rendered has to build a
+			// worker that actually holds the database.
+			built, err := worker.BuiltinConnectors(envMapFrom(env), kind)
+			if err != nil {
+				t.Fatalf("the rendered environment must be one the worker accepts: %v", err)
+			}
+			if !slices.Contains(built.Names, "hr-db") {
+				t.Errorf("names = %v, want the configured database served", built.Names)
+			}
+			if _, ok := built.Handlers[p.JobType]; !ok {
+				t.Errorf("no handler for %s; the supervised worker would serve nothing", p.JobType)
+			}
+		})
 	}
 }
 
