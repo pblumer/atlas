@@ -60,7 +60,7 @@ type inboundSubscription struct {
 	// best-effort: losing it re-reads, which the marks make harmless.
 	LastPolledAt int64 `json:"lastPolledAt,omitempty"`
 
-	// The fields below are the loop guard (ADR-draft-inbound-watch-budget). A watch can
+	// The fields below are the loop guard (ADR-0225). A watch can
 	// feed itself — a process started by an event writes to the system the watch reads,
 	// the watch matches what it wrote — and nothing downstream can tell that apart from
 	// a busy morning, because every instance is well-formed and every task succeeds.

@@ -276,7 +276,7 @@ type messageStartRef struct {
 // signalStartRef is a deployed signal start event: which definition to instantiate and
 // which element the broadcast fires. The element travels with the key for the same
 // reason a message start's does — the instance is seeded at the trigger that fired, not
-// at every entry point the process has (ADR-draft-start-events-are-triggers).
+// at every entry point the process has (ADR-0226).
 type signalStartRef struct {
 	defKey    uint64
 	elementId int32

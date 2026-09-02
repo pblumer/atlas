@@ -208,7 +208,7 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 // behaving "exactly like a none start" and be right about every model that existed then.
 // With two it is not invisible at all: a Jira watch started a process whose *other*
 // branch created a Jira issue, the watch matched that issue, and the loop only stopped
-// when the watch was deleted (ADR-draft-start-events-are-triggers).
+// when the watch was deleted (ADR-0226).
 //
 // triggered is what the creating command carried: exactly the event that fired, or nil
 // for a create nobody triggered — an API create, a call activity. Those seed the process

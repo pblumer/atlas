@@ -1,4 +1,4 @@
-# ADR-DRAFT: A start event is a trigger, and the one that fires is the one that starts
+# ADR-0226: A start event is a trigger, and the one that fires is the one that starts
 
 - **Status:** Proposed
 - **Date:** 2026-09-02

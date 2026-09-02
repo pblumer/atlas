@@ -20,7 +20,7 @@ _Changed_ / _Removed_ for each version.
   matches, the loop closes and has no natural end — and nothing looks broken from inside:
   every instance is well-formed, every task succeeds, every message is delivered exactly
   once. Only the *rate* tells a loop from a busy morning
-  ([ADR-draft-inbound-watch-budget](docs/adr/draft-inbound-watch-budget.md)).
+  ([ADR-0225](docs/adr/0225-inbound-watch-budget.md)).
 
   Each watch now carries **Max events/hour** — 60 when it names none, so the protection
   is the default rather than something to remember. A batch that would cross the ceiling
@@ -504,7 +504,7 @@ _Changed_ / _Removed_ for each version.
   nothing went wrong.
 
   A trigger now instantiates at itself
-  ([ADR-draft-start-events-are-triggers](docs/adr/draft-start-events-are-triggers.md)):
+  ([ADR-0226](docs/adr/0226-start-events-are-triggers.md)):
   the creation command carries the start event that fired, and the argument is
   **required**, so a fourth kind of trigger cannot inherit the old behaviour by forgetting
   it. A create nobody triggered — the API, a call activity — seeds the **none** start

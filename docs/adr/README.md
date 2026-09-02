@@ -278,6 +278,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0222](0222-artifact-id-renames.md) | An artifact's id is its identity — renaming moves it, collisions are refused | Proposed |
 | [0223](0223-jira-account-lookup.md) | Jira account lookup | Proposed |
 | [0224](0224-sql-mock-journal.md) | A mockup run is visible, and it carries what the process bound | Proposed |
+| [0225](0225-inbound-watch-budget.md) | An inbound watch has an hourly budget | Proposed |
+| [0226](0226-start-events-are-triggers.md) | A start event is a trigger, and the one that fires is the one that starts | Proposed |
 
 ## Status values
 

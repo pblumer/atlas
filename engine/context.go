@@ -457,7 +457,7 @@ func (c *ProcessingContext) AppendElementCommand(key uint64, intent model.Intent
 //
 // startElement is the root start event that fired, and every caller here has one: a
 // trigger instantiates at itself, not at every entry the process happens to have
-// (ADR-draft-start-events-are-triggers). It is a required argument rather than an
+// (ADR-0226). It is a required argument rather than an
 // optional one so that adding a fourth kind of trigger cannot quietly inherit the old
 // seed-everything behaviour.
 func (c *ProcessingContext) AppendCreateInstanceCommand(defKey uint64, vars []model.VariableValue, correlationKey string, startElement int32) {

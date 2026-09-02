@@ -186,8 +186,8 @@ func inboundBudget(rec inboundSubscription) int {
 // reads, the watch matches what it wrote, and the loop has no natural end. That is not
 // a hypothetical — a Jira watch published jira.ticket.created, the started instance
 // created a Jira issue, the watch matched it, and it ran until the watch was deleted by
-// hand (ADR-draft-inbound-watch-budget). The engine fix for that particular loop
-// (ADR-draft-start-events-are-triggers) closed the shape it took; this closes the class,
+// hand (ADR-0225). The engine fix for that particular loop
+// (ADR-0226) closed the shape it took; this closes the class,
 // including the one two processes can build between them, where no single model is
 // wrong.
 //

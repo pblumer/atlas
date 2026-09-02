@@ -1,4 +1,4 @@
-# ADR-DRAFT: An inbound watch has an hourly budget
+# ADR-0225: An inbound watch has an hourly budget
 
 - **Status:** Proposed
 - **Date:** 2026-09-02
@@ -18,7 +18,7 @@ was deleted by hand.
 
 The immediate cause of that particular loop was an engine defect — a message-started
 instance also ran the process's none-start branch, which is what created the issue — and
-it is fixed in [ADR-draft-start-events-are-triggers](draft-start-events-are-triggers.md).
+it is fixed in [ADR-0226](0226-start-events-are-triggers.md).
 But the shape is more general than the defect. Two processes can build the same loop
 between them with no single model being wrong: one watches, the other writes, and neither
 knows about the other. One process can build it alone by design, if its own work happens
@@ -108,5 +108,5 @@ Chosen option: **"an hourly budget per watch"**.
 
 - guards [ADR-0075](0075-clio-inbound-event-bridge.md) and
   [ADR-0214](0214-jira-inbound-issue-watch.md) (the bridge and the Jira watch)
-- follows [ADR-draft-start-events-are-triggers](draft-start-events-are-triggers.md) (the
+- follows [ADR-0226](0226-start-events-are-triggers.md) (the
   engine defect that made the reported loop possible)
