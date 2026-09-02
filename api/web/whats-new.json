@@ -280,6 +280,49 @@
       ]
     },
     {
+      "id": "the-workers-list-reads-like-a-list-again",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The Workers list is readable again",
+        "de": "Die Worker-Liste ist wieder lesbar"
+      },
+      "summary": {
+        "en": "Every configured worker used to carry up to seven buttons and the full list of processes running through it, so a shared mail worker filled a dozen wrapped lines and no two rows were the same height — the tallest one always being the one with a problem. The actions now sit behind the row's ⋯ menu, and the processes are a count you can click: Used by 8 processes · 21 deployed versions · 1 running instance. Clicking it opens the list, grouped by process with the newest version first, each version linking to its Operations page and naming the tasks that run through this worker. Nothing was left out — it is the same list, and still the same one Atlas shows you when it refuses to delete a worker that is still in use. Searching the Worker column for a process name still finds the workers it runs through.",
+        "de": "Jeder konfigurierte Worker trug bisher bis zu sieben Knöpfe und die ganze Liste der Prozesse, die über ihn laufen. Ein gemeinsam genutzter Mail-Worker füllte damit ein Dutzend umbrochener Zeilen, und keine zwei Zeilen waren gleich hoch — die höchste war stets die mit einem Problem. Die Aktionen liegen jetzt hinter dem ⋯-Menü der Zeile, und aus den Prozessen ist eine anklickbare Zahl geworden: Used by 8 processes · 21 deployed versions · 1 running instance. Ein Klick öffnet die Liste, nach Prozess gruppiert und mit der neuesten Version zuoberst; jede Version verlinkt auf ihre Operations-Seite und nennt die Tasks, die über diesen Worker laufen. Weggelassen wurde nichts — es ist dieselbe Liste, und weiterhin dieselbe, die Atlas Ihnen zeigt, wenn es das Löschen eines noch benutzten Workers verweigert. Die Suche in der Spalte Worker findet über einen Prozessnamen weiterhin die Worker, über die er läuft."
+      },
+      "link": {
+        "label": "ADR-0163",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0163-deleting-a-referenced-connector.md"
+      },
+      "tags": [
+        "Console",
+        "Workers"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Console › Workers and look at Configured workers — each row is now name, type, where it points, what uses it, and whether it works.",
+          "Click the ⋯ at the end of a row for its actions: Test, Edit, Share, Disable and Delete, plus the ones only that Worker Type has.",
+          "Click the Used by … chip to see which processes run through the worker, grouped by process with every deployed version under it.",
+          "From there, a version takes you to its Operations page — and the dialog says what deleting the worker would park."
+        ],
+        "de": [
+          "Öffnen Sie Console › Workers und sehen Sie sich Configured workers an — jede Zeile zeigt jetzt Name, Typ, Ziel, Verwendung und ob der Worker funktioniert.",
+          "Klicken Sie auf das ⋯ am Zeilenende für die Aktionen: Test, Edit, Share, Disable und Delete, dazu die, die es nur bei diesem Worker Type gibt.",
+          "Klicken Sie auf den Used-by-Chip, um zu sehen, welche Prozesse über den Worker laufen — nach Prozess gruppiert, mit allen deployten Versionen darunter.",
+          "Von dort führt eine Version auf ihre Operations-Seite — und der Dialog sagt Ihnen, was ein Löschen des Workers anhalten würde."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "jira-runs-on-a-worker-by-default",
       "version": "Unreleased",
       "date": null,
@@ -299,28 +342,6 @@
       "tags": [
         "Workers",
         "Connectors"
-      ]
-    },
-    {
-      "id": "new-atlas-mark",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Atlas has a new mark",
-        "de": "Atlas hat eine neue Marke"
-      },
-      "summary": {
-        "en": "The little square beside the Atlas name — in the top bar, the app drawer, on the sign-in screen, in the handbook and on public forms — is now a white peak carrying a cross on black, and the browser tab icon changes with it. Nothing you have set is affected: if your organisation uploaded its own logo under Organization → Appearance, that is still what everyone sees, and removing it now brings back the new mark instead of the old A.",
-        "de": "Das kleine Quadrat neben dem Atlas-Namen — in der Topbar, in der App-Schublade, auf dem Anmeldebildschirm, im Handbuch und auf öffentlichen Formularen — zeigt jetzt einen weissen Berg mit Kreuz auf Schwarz, und das Symbol im Browser-Tab wechselt mit. An Ihren Einstellungen ändert das nichts: Hat Ihre Organisation unter „Organization → Appearance“ ein eigenes Logo hochgeladen, sehen weiterhin alle dieses; wird es entfernt, erscheint neu die neue Marke statt des alten A."
-      },
-      "link": {
-        "label": "ADR-0148",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0148-org-wide-brand-logo.md"
-      },
-      "tags": [
-        "Console",
-        "Organization"
       ]
     }
   ]
