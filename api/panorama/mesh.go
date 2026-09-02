@@ -137,6 +137,11 @@ type Process struct {
 	// observation applies, which is not a finding.
 	State  string
 	Reason string
+	// Incidents is how many unresolved incidents the engine holds against this
+	// definition. It is the count behind Reason rather than a second opinion about
+	// it, carried as a number so a reader can sort by it and a picture can show
+	// which of two degraded processes is the worse one.
+	Incidents int
 }
 
 // Landscape is everything the mesh derives from, already filtered for this caller.
@@ -235,6 +240,15 @@ type Node struct {
 	// empty when the severity is the node's own. ADR-0211 §4 requires it: a red
 	// parent that cannot say which child is red is not actionable.
 	SeverityFrom string `json:"severityFrom,omitempty"`
+	// Incidents is how many unresolved incidents the engine holds against this node.
+	// Only a process node can carry one — an incident belongs to a token, and only a
+	// process has tokens — so it is absent everywhere else rather than zero, because
+	// "no incidents" and "cannot have incidents" are different facts.
+	//
+	// It is a count, not a severity: the state above already says what class this
+	// node is in, and this says how much of it there is. A node with a count is
+	// always in a state that reports one, so the two can never disagree.
+	Incidents int `json:"incidents,omitempty"`
 	// Children is how many nodes a collapsed application stands for. Set only when
 	// the graph is clustered.
 	Children int `json:"children,omitempty"`
@@ -360,7 +374,7 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		node := Node{
 			ID: processNodeID(p.Key), Kind: KindProcess, Name: p.Name,
 			Provenance: ProvenanceDerived, ProcessID: p.ProcessID, Version: p.Version,
-			State: p.State, Reason: p.Reason,
+			State: p.State, Reason: p.Reason, Incidents: p.Incidents,
 		}
 		if _, ok := visibleApps[p.ApplicationID]; ok {
 			node.Application = applicationNodeID(p.ApplicationID)
@@ -603,11 +617,16 @@ func cluster(full Graph, visible []Process, appIDs []string, apps map[string]App
 	// collapsed children are not in the result to be pointed at — which is also why
 	// the reason says how many were collapsed instead of naming one.
 	worst := map[string]Process{}
+	// Incidents survive the collapse as a sum rather than as the worst child's count:
+	// a collapsed application stands for all of them, and reporting one child's
+	// number against the whole would understate what is parked behind it.
+	incidents := map[string]int{}
 	for _, p := range visible {
 		if _, ok := apps[p.ApplicationID]; !ok {
 			continue
 		}
 		children[p.ApplicationID]++
+		incidents[p.ApplicationID] += p.Incidents
 		if have, seen := worst[p.ApplicationID]; !seen ||
 			severityRank[severityOf(p.State)] > severityRank[severityOf(have.State)] {
 			worst[p.ApplicationID] = p
@@ -625,6 +644,7 @@ func cluster(full Graph, visible []Process, appIDs []string, apps map[string]App
 		if p, ok := worst[id]; ok && p.State != "" {
 			node.State = p.State
 			node.Reason = fmt.Sprintf("worst of %d collapsed process(es): %s", children[id], p.Reason)
+			node.Incidents = incidents[id]
 		}
 		out.Nodes = append(out.Nodes, node)
 	}

@@ -358,3 +358,72 @@ func TestAModeledButAbsentNodeIsUnwatchedRatherThanWell(t *testing.T) {
 		t.Errorf("a node Atlas does not have carries a finding about it: %q", ghost.Reason)
 	}
 }
+
+// TestIncidentCountRidesOnTheNodeThatCanHaveOne. The count is what turns "degraded"
+// into something an operator can rank: two degraded processes are not equally
+// degraded, and the number behind them says which to look at first.
+//
+// It rides only on a process, and that is the point of the assertion below. An
+// incident belongs to a token and only a process has tokens, so a node without a
+// count is one that *cannot* have one — never one reported as having none. Rendering
+// those alike is how a picture claims a decision node is free of incidents it was
+// never able to hold.
+func TestIncidentCountRidesOnTheNodeThatCanHaveOne(t *testing.T) {
+	parked := proc(1, "invoice", "Invoice", "a1")
+	parked = withStatus(parked, StateDegraded, "3 token(s) are parked behind an unresolved incident.")
+	parked.Incidents = 3
+	clean := withStatus(proc(2, "dunning", "Dunning", "a1"), StateHealthy, "No work is parked in this process.")
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{parked, clean},
+	}, Options{})
+
+	if got := nodeByID(t, g, "process:1").Incidents; got != 3 {
+		t.Errorf("Incidents = %d, want 3", got)
+	}
+	// Healthy with nothing parked: absent, which is the same wire shape as a node
+	// that cannot hold one. Both are honest — neither has an incident — and the
+	// difference between them is the state, which is already on the node.
+	if got := nodeByID(t, g, "process:2").Incidents; got != 0 {
+		t.Errorf("a process with nothing parked reports Incidents = %d, want 0", got)
+	}
+	for _, id := range []string{"application:a1"} {
+		if got := nodeByID(t, g, id).Incidents; got != 0 {
+			t.Errorf("%s carries Incidents = %d; only a process holds tokens", id, got)
+		}
+	}
+
+	// The count is omitted from the wire when it is zero, so "no incidents" and
+	// "cannot have incidents" arrive as the same absence rather than as a number
+	// asserting a process's worth of nothing about a decision.
+	encoded, err := json.Marshal(nodeByID(t, g, "process:2"))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(encoded), "incidents") {
+		t.Errorf("a node with no incidents still names the field: %s", encoded)
+	}
+}
+
+// TestCollapsedApplicationSumsTheIncidentsBehindIt. A collapsed application stands
+// for every process under it, so it must report what is parked behind all of them.
+// Carrying the worst child's count would understate the outage by exactly the
+// amount somebody needs to know.
+func TestCollapsedApplicationSumsTheIncidentsBehindIt(t *testing.T) {
+	land := Landscape{Applications: []Application{app("a1", "Billing")}}
+	for i := 1; i <= 6; i++ {
+		p := withStatus(proc(uint64(i), "p", "P", "a1"), StateDegraded, "parked")
+		p.Incidents = i
+		land.Processes = append(land.Processes, p)
+	}
+
+	g := DeriveGraph(land, Options{MaxNodes: 3})
+
+	if !g.Clustered {
+		t.Fatal("Clustered = false; this test is about the collapsed shape")
+	}
+	if got := nodeByID(t, g, "application:a1").Incidents; got != 21 {
+		t.Errorf("Incidents = %d, want 21 — the sum of what all six hold", got)
+	}
+}
