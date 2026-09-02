@@ -187,6 +187,51 @@ this would put a field on a structure every deployment builds; a flow travels na
 by the two elements it joins instead, which the only client there is — one holding
 the diagram — resolves against its own registry.
 
+### A dataset described rather than listed
+
+There were two ways to put data into a run, and between them they left a hole at
+exactly the size the Playground is built for. A list of cases is typed into the
+panel: fine for three, and nobody writes three hundred, still less reviews a pull
+request containing them. A CSV is uploaded and parsed on the server by the same
+code a real import uses — which is the right call for a file somebody exported, and
+is also why a run driven by one can never be stored as a scenario: its rows are on
+the server and the browser has nothing to keep.
+
+The third way is to describe the dataset instead: a count, and per start variable
+how its value is drawn — a whole number or a decimal in a range, a boolean with a
+probability, a weighted choice, a constant, a sequence that numbers the cases, or an
+instant in a window. Twenty lines produce three hundred cases, and unlike three
+hundred rows they are something a person writes, a reviewer reads, and a scenario
+stores. The generator is deliberately field-level and unremarkable: it is not a
+model of a business, it is the smallest thing that spreads values across the
+branches an author drew.
+
+Three decisions inside it are worth recording.
+
+**It draws on the run's seed and the case's position, not on a random source.** The
+same description run twice produces the same three hundred amounts, which is what
+lets a generated run be quoted in a review and compared against a baseline. Because
+each case draws only on its own position, the first ten cases of a run of fifty
+thousand can be produced without producing the rest — which is what makes the
+panel's preview *the run* rather than an illustration of it. A preview showing rows
+the run would not carry would be worse than showing none.
+
+**Dates are relative to the run's own simulated start**, not absolute. The run
+happens on a virtual clock; a date typed in once is stale by the time the scenario
+runs again, while "some time in the last thirty days" stays true. So a timestamp
+field carries two offsets, and a scenario stored today still means what it said in
+a year.
+
+**The description travels in the run request, beside the case list.** It could have
+been an endpoint of its own with the rows sent back for the caller to submit; that
+would have moved fifty thousand rows through a browser to no purpose, and would have
+left a generated run unstorable for the same reason a CSV one is. As a field of the
+request the run endpoint already takes, a generated run is a scenario with no new
+plumbing at all: the CI runner and the Modeler send the same body to the same
+endpoint. A request carrying both a list and a description is refused rather than
+resolved — it states two different things about what is about to run, and picking
+one silently is how a run comes to mean something other than what was asked.
+
 ### From a screen somebody reads to a check something runs
 
 A report answers "how did that go?" and needs a person to judge it. Two things

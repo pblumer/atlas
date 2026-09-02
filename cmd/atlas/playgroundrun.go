@@ -153,10 +153,12 @@ func printVerdict(out io.Writer, v verdictBody) {
 
 func printComparison(out io.Writer, c comparisonBody) {
 	fmt.Fprintln(out, "\nagainst the baseline:")
+	moved := 0
 	for _, d := range c.Deltas {
 		if d.Before == d.After {
 			continue // unchanged measures are noise in a diff of two runs
 		}
+		moved++
 		mark := "  "
 		switch {
 		case d.Better:
@@ -166,6 +168,12 @@ func printComparison(out io.Writer, c comparisonBody) {
 		}
 		fmt.Fprintf(out, "%s %-28s %s -> %s\n", mark, d.Name,
 			renderMeasure(d.Unit, d.Before), renderMeasure(d.Unit, d.After))
+	}
+	if moved == 0 {
+		// A heading with nothing under it reads as truncated output, and this is the
+		// answer a reproducible scenario gives every time it has not regressed — the
+		// one a build sees most often. It has to say so.
+		fmt.Fprintln(out, "   nothing moved")
 	}
 }
 

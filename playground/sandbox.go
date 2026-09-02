@@ -370,6 +370,17 @@ func (s *Sandbox) Dir() string { return s.dir }
 // Now is the current simulated instant.
 func (s *Sandbox) Now() time.Time { return s.clock.time() }
 
+// StartedAt is where simulated time began. A generated dataset measures its dates
+// from here rather than from the wall clock, so a scenario re-run next month still
+// carries "some time in the last thirty days" rather than dates that have gone stale.
+func (s *Sandbox) StartedAt() time.Time { return time.Unix(0, s.startedAt).UTC() }
+
+// Seed is the number every draw in this sandbox is derived from — the stub
+// durations, the failures, the arrival stream and a generated dataset alike. It is
+// published so a run can be repeated: quoting a figure from a run is only worth
+// anything if somebody else can produce the same one.
+func (s *Sandbox) Seed() int64 { return s.seed }
+
 // ProcessID is the BPMN id of the process this sandbox runs.
 func (s *Sandbox) ProcessID() string { return s.root.ProcessId() }
 

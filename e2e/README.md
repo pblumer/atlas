@@ -47,8 +47,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   and sequence flows and names the paths the data never reached — resolving a flow the
   server named by its two ends against the client's own registry; a CSV dataset is
   uploaded as a file rather than parsed in the browser (the one call that cannot go
-  through the `api()` helper, so the harness intercepts `fetch` to see it); and stopping
-  a batch leaves what it did readable.
+  through the `api()` helper, so the harness intercepts `fetch` to see it); a dataset
+  is **described** rather than listed — a field's kind decides which parameters it
+  shows, the preview is asked for before the run, and what travels is the twenty-line
+  description rather than five hundred rows built in the browser; and stopping a batch
+  leaves what it did readable.
 
   And the **scenario half**: the checkboxes an author ticks become the expectations a
   build exits on, resolved against the run that happened rather than the dataset in
@@ -57,8 +60,9 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   because the stub policy travels with it; saving one stores the three requests
   themselves, seed included, so re-running it gives the same figures; a run is set
   beside the stored baseline with only what moved shown, and only where moving has a
-  direction; a failing run cannot be kept as the baseline; and a CSV-driven run says
-  why it cannot be saved at all. Drives the real `mountEditor` and `playground.js`
+  direction; a failing run cannot be kept as the baseline; a described dataset *is*
+  saved as a scenario, which is what a CSV-driven run cannot do and what it says
+  instead. Drives the real `mountEditor` and `playground.js`
   against a mock Playground API.
 - **`gateways.spec.mjs`** (ADR-0096): the **exclusive** gateway pauses for a choice and routes
   down the picked branch (and **auto-decide** runs it hands-free); the **parallel** gateway

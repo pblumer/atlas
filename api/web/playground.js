@@ -57,6 +57,21 @@ const TASK_TYPES = new Set([
 // visible difference.
 const HEAT_LEVELS = 5;
 
+// FIELD_KINDS is what a generated field can be. The labels say what the field
+// produces rather than naming a type: somebody describing a dataset is thinking
+// about orders and amounts, not about int64.
+const FIELD_KINDS = [
+  { kind: "int", label: "whole number" },
+  { kind: "decimal", label: "decimal" },
+  { kind: "bool", label: "true or false" },
+  { kind: "choice", label: "one of a list" },
+  { kind: "constant", label: "the same value" },
+  { kind: "sequence", label: "case number" },
+  { kind: "timestamp", label: "a date" },
+];
+
+const DAY_MS = 86_400_000;
+
 // BUSINESS_HOURS is one working day, applied to every pool and to the arrival
 // stream alike. One calendar rather than one per pool: an author asking "do three
 // clerks suffice" is not also modelling shift patterns, and the API keeps the
@@ -164,8 +179,15 @@ export function attachPlayground(root, { api, toast, modeler }) {
     pools: {},       // element id -> {pool, seats}
     hours: false,    // confine pools and arrivals to business hours
     // The batch: its dataset, its arrival profile, and what came back.
+    // A dataset comes from one of three places, and the panel shows one at a time:
+    // a list typed in, a description drawn from, or a file the server parses.
+    source: "list",  // "list" | "generated" | "csv"
     cases: '[{"amount": 1200}, {"amount": 90}]',
     csv: null,       // a File, when the dataset came from one
+    // The description: how many cases, and what each one carries. It starts on the
+    // dataset everybody wants first — a few hundred cases with a random amount.
+    gen: { count: 300, fields: [{ name: "amount", kind: "int", min: 100, max: 5000 }] },
+    genPreview: null,
     arrival: "allAtOnce",
     arrivalN: 10,
     run: null,       // the last run status
@@ -336,7 +358,78 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // arrival profile. It is one function so that what is run and what is saved as a
   // scenario cannot differ.
   function runBody() {
+    if (state.source === "generated") return { generate: genBody(), arrival: arrivalBody() };
     return { cases: parseJSON(state.cases, "the dataset"), arrival: arrivalBody() };
+  }
+
+  // typedValue reads what was typed as the value it looks like: 1200 as a number,
+  // so the model can compare it against a threshold rather than against text, and
+  // true as a boolean. A box that only ever produced strings would make every
+  // generated amount fail the one comparison the dataset exists to exercise.
+  function typedValue(text) {
+    const s = String(text == null ? "" : text).trim();
+    if (s === "true") return true;
+    if (s === "false") return false;
+    if (s !== "" && /^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+    return s;
+  }
+
+  // parseChoices reads "gold:1, silver:3, standard:6" — or the same list without
+  // the weights, which makes the options equally likely. One box rather than a
+  // row per option: a list of three is the common case, and it is a list.
+  function parseChoices(text) {
+    return String(text || "").split(",").map((s) => s.trim()).filter(Boolean).map((s) => {
+      const m = /^(.*):(\d+)$/.exec(s);
+      if (m) return { value: typedValue(m[1]), weight: Number(m[2]) };
+      return { value: typedValue(s) };
+    });
+  }
+
+  // genBody is the dataset description in the shape the run and preview endpoints
+  // take. Fields with no name are left out rather than refused: an empty row is a
+  // row somebody has not filled in yet.
+  function genBody() {
+    const num = (v) => Number(v) || 0;
+    const fields = state.gen.fields.filter((f) => (f.name || "").trim()).map((f) => {
+      const out = { name: f.name.trim(), kind: f.kind };
+      switch (f.kind) {
+        case "int":
+        case "decimal":
+          out.min = num(f.min);
+          out.max = num(f.max);
+          if (f.kind === "decimal") out.decimals = num(f.decimals);
+          break;
+        case "bool": out.percentTrue = num(f.percentTrue); break;
+        case "choice": out.choices = parseChoices(f.choices); break;
+        case "constant": out.value = typedValue(f.value); break;
+        case "sequence": out.prefix = String(f.prefix || ""); break;
+        case "timestamp":
+          out.fromMillis = Math.round(num(f.fromDays) * DAY_MS);
+          out.toMillis = Math.round(num(f.toDays) * DAY_MS);
+          out.onlyDate = !!f.onlyDate;
+          break;
+      }
+      return out;
+    });
+    return { count: Math.max(1, num(state.gen.count)), fields };
+  }
+
+  // genFromBody is genBody read back, so a saved scenario fills the same boxes it
+  // was built from.
+  function genFromBody(g) {
+    const at = (v) => (v == null ? "" : v);
+    return {
+      count: g.count || 1,
+      fields: (g.fields || []).map((f) => ({
+        name: f.name || "", kind: f.kind || "int",
+        min: at(f.min), max: at(f.max), decimals: at(f.decimals),
+        percentTrue: at(f.percentTrue),
+        choices: (f.choices || []).map((c) => (c.weight ? `${c.value}:${c.weight}` : String(c.value))).join(", "),
+        value: at(f.value), prefix: f.prefix || "",
+        fromDays: (f.fromMillis || 0) / DAY_MS, toDays: (f.toMillis || 0) / DAY_MS,
+        onlyDate: !!f.onlyDate,
+      })),
+    };
   }
 
   // expectBody is what the run has to show, in the shape the verdict endpoint
@@ -392,7 +485,8 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.showHeat = false;
     state.verdict = null;
     state.comparison = null;
-    if (state.csv) {
+    if (state.source === "csv") {
+      if (!state.csv) throw new Error("choose a CSV file, or take the dataset from the list or the generator");
       const form = new FormData();
       form.append("file", state.csv);
       form.append("arrival", JSON.stringify(arrivalBody()));
@@ -402,12 +496,19 @@ export function attachPlayground(root, { api, toast, modeler }) {
       state.run = data;
     } else {
       const body = runBody();
-      if (!Array.isArray(body.cases) || !body.cases.length) {
+      if (body.cases && !body.cases.length) {
         throw new Error("the dataset is a list of cases, and it needs at least one");
       }
       state.run = await api("POST", path("/runs"), body);
     }
     startPolling();
+  }
+
+  // previewDataset shows the first cases the description would produce — the
+  // cases the run will carry, drawn on this sandbox's own seed, rather than an
+  // illustration of what one might look like.
+  async function previewDataset() {
+    state.genPreview = await api("POST", path("/generate?limit=8"), genBody());
   }
 
   async function cancelBatch() {
@@ -500,8 +601,12 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.baseline = sc.baseline || null;
     state.pickedScenario = sc.id;
     state.csv = null;
-    state.cases = JSON.stringify((sc.spec.run && sc.spec.run.cases) || [], null, 1);
-    const arrival = (sc.spec.run && sc.spec.run.arrival) || {};
+    state.genPreview = null;
+    const run = sc.spec.run || {};
+    state.source = run.generate ? "generated" : "list";
+    if (run.generate) state.gen = genFromBody(run.generate);
+    state.cases = JSON.stringify(run.cases || [], null, 1);
+    const arrival = run.arrival || {};
     state.arrival = arrival.mode || "allAtOnce";
     if (arrival.intervalMillis) state.arrivalN = Math.round(arrival.intervalMillis / 60000);
     if (arrival.perHour) state.arrivalN = arrival.perHour;
@@ -518,8 +623,8 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // build — can run exactly it. What is stored is the requests themselves, which
   // is why there is nothing here that has to be kept in step with the endpoints.
   async function saveScenario() {
-    if (state.csv) {
-      throw new Error("a run from an uploaded CSV cannot be saved as a scenario: its rows are parsed on the server and are not in the browser to store");
+    if (state.source === "csv") {
+      throw new Error("a run from an uploaded CSV cannot be saved as a scenario: its rows are parsed on the server and are not in the browser to store — describe the dataset instead and it can be");
     }
     const name = (state.scenarioName || "").trim();
     if (!name) throw new Error("give the scenario a name");
@@ -779,11 +884,12 @@ export function attachPlayground(root, { api, toast, modeler }) {
 
   // scenarioSaveHTML is how a run becomes repeatable by somebody who is not here.
   function scenarioSaveHTML() {
-    if (state.csv) {
+    if (state.source === "csv") {
       return `<div class="pg-sec"><b>Scenario</b></div>
         <p class="muted">A run from an uploaded CSV cannot be saved as a scenario: its
           rows are parsed on the server, by the same code a real import uses, and are
-          not in the browser to store.</p>`;
+          not in the browser to store. A described dataset can be — that is what
+          <b>Generated</b> is for.</p>`;
     }
     return `
       <div class="pg-sec"><b>Scenario</b>
@@ -841,21 +947,109 @@ export function attachPlayground(root, { api, toast, modeler }) {
   }
 
   // batchHTML is the dataset, the timing, and what came back.
+  // datasetHTML is the three ways data gets into a run, one at a time. They are
+  // tabs rather than three boxes down the page because only one of them drives the
+  // run, and a panel showing all three invites filling in two of them.
+  function datasetHTML() {
+    const tab = (id, label) =>
+      `<button data-source="${id}"${state.source === id ? ' class="active"' : ""}>${label}</button>`;
+    const body = state.source === "csv" ? csvHTML()
+      : state.source === "generated" ? generatorHTML()
+        : `<label class="field"><span>Cases (JSON list)</span>
+             <textarea id="pg-cases" rows="5" spellcheck="false">${esc(state.cases)}</textarea></label>`;
+    return `
+      <div class="pg-sec"><b>Dataset</b></div>
+      <div class="pg-source">${tab("list", "A list")}${tab("generated", "Generated")}${tab("csv", "A CSV file")}</div>
+      ${body}`;
+  }
+
+  function csvHTML() {
+    return state.csv
+      ? `<div class="pg-file"><span class="mono">${esc(state.csv.name)}</span>
+           <button class="btn neutral small" id="pg-csv-clear">Choose another</button></div>`
+      : `<div class="pg-file"><input type="file" id="pg-csv" accept=".csv,text/csv" />
+           <span class="muted">its header names the variables</span></div>`;
+  }
+
+  // generatorHTML describes the dataset rather than listing it: a count, and a row
+  // per variable saying how its value is drawn.
+  function generatorHTML() {
+    return `
+      <div class="pg-timing"><span class="muted" style="flex:1">how many cases</span>
+        <input type="number" min="1" step="1" id="pg-gen-count" value="${esc(state.gen.count)}" /></div>
+      <div class="pg-fields">${state.gen.fields.map(fieldRowHTML).join("")}</div>
+      <div class="pg-timing">
+        <button class="btn neutral small" id="pg-gen-add">Add a field</button>
+        <button class="btn neutral small" id="pg-gen-preview">Preview</button>
+      </div>
+      ${previewHTML()}`;
+  }
+
+  // A field is two lines: what it is called and what kind it is, then that kind's
+  // parameters. One line was tried first and does not fit — in a panel this narrow
+  // a name and three boxes leave "amount" showing as "amour", and a date field with
+  // two offsets and a checkbox is unreadable.
+  function fieldRowHTML(f, i) {
+    const kinds = FIELD_KINDS.map((k) =>
+      `<option value="${k.kind}"${k.kind === f.kind ? " selected" : ""}>${esc(k.label)}</option>`).join("");
+    return `
+      <div class="pg-field">
+        <div class="pg-field-head">
+          <input type="text" data-gen="name" data-i="${i}" value="${esc(f.name)}"
+            placeholder="variable" aria-label="Variable name" />
+          <select data-gen="kind" data-i="${i}" aria-label="How it is drawn">${kinds}</select>
+          <button class="icon-btn" data-gen-del="${i}" title="Remove this field"
+            aria-label="Remove this field">&#10005;</button>
+        </div>
+        <div class="pg-field-args">${fieldParamsHTML(f, i)}</div>
+      </div>`;
+  }
+
+  function fieldParamsHTML(f, i) {
+    const num = (key, hint) =>
+      `<input type="number" data-gen="${key}" data-i="${i}" value="${esc(f[key])}"
+         placeholder="${hint}" aria-label="${hint}" />`;
+    const text = (key, hint) =>
+      `<input type="text" data-gen="${key}" data-i="${i}" value="${esc(f[key])}"
+         placeholder="${hint}" aria-label="${hint}" />`;
+    switch (f.kind) {
+      case "int": return num("min", "min") + num("max", "max");
+      case "decimal": return num("min", "min") + num("max", "max") + num("decimals", "places");
+      case "bool": return num("percentTrue", "% true");
+      case "choice": return text("choices", "gold:1, silver:3, standard:6");
+      case "constant": return text("value", "value");
+      case "sequence": return text("prefix", "ORDER-");
+      default: return num("fromDays", "from (days)") + num("toDays", "to (days)") +
+        `<label class="pg-check"><input type="checkbox" data-gen="onlyDate" data-i="${i}"
+           ${f.onlyDate ? "checked" : ""} /> date only</label>`;
+    }
+  }
+
+  // previewHTML shows the first cases of the described dataset. They are the cases
+  // the run will carry, which is the only reason showing them is worth anything.
+  function previewHTML() {
+    const p = state.genPreview;
+    if (!p) return "";
+    if (!p.rows.length || !p.columns.length) {
+      return `<p class="muted">Nothing described yet: a field needs a name.</p>`;
+    }
+    const cell = (v) => esc(typeof v === "boolean" ? String(v) : v);
+    return `
+      <div class="pg-preview"><table>
+        <thead><tr>${p.columns.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+        <tbody>${p.rows.map((r) =>
+          `<tr>${p.columns.map((c) => `<td>${cell(r[c])}</td>`).join("")}</tr>`).join("")}</tbody>
+      </table></div>
+      <p class="muted">The first ${p.rows.length} of ${p.total} — these are the cases the run carries.</p>`;
+  }
+
   function batchHTML() {
     const modes = ARRIVALS.map((a) =>
       `<option value="${a.mode}"${a.mode === state.arrival ? " selected" : ""}>${esc(a.label)}</option>`).join("");
     const arrival = ARRIVALS.find((a) => a.mode === state.arrival);
     const param = arrival ? arrival.param : null;
     return `
-      <div class="pg-sec"><b>Dataset</b>
-        <span class="muted">${state.csv ? "from a file" : "one entry per case"}</span></div>
-      ${state.csv
-        ? `<div class="pg-file"><span class="mono">${esc(state.csv.name)}</span>
-             <button class="btn neutral small" id="pg-csv-clear">Use the list instead</button></div>`
-        : `<label class="field"><span>Cases (JSON list)</span>
-             <textarea id="pg-cases" rows="5" spellcheck="false">${esc(state.cases)}</textarea></label>
-           <div class="pg-file"><input type="file" id="pg-csv" accept=".csv,text/csv" />
-             <span class="muted">or a CSV, whose header names the variables</span></div>`}
+      ${datasetHTML()}
       <div class="pg-sec"><b>Timing</b></div>
       <div class="pg-timing">
         <select id="pg-arrival">${modes}</select>
@@ -1085,9 +1279,31 @@ export function attachPlayground(root, { api, toast, modeler }) {
       render();
       return;
     }
+    const source = e.target.closest("button[data-source]");
+    if (source) {
+      state.source = source.dataset.source;
+      render();
+      return;
+    }
     if (e.target.closest("#pg-csv-clear")) {
       state.csv = null;
       render();
+      return;
+    }
+    if (e.target.closest("#pg-gen-add")) {
+      state.gen.fields.push({ name: "", kind: "int", min: 0, max: 100 });
+      render();
+      return;
+    }
+    const del = e.target.closest("[data-gen-del]");
+    if (del) {
+      state.gen.fields.splice(Number(del.dataset.genDel), 1);
+      state.genPreview = null;
+      render();
+      return;
+    }
+    if (e.target.closest("#pg-gen-preview")) {
+      guard("preview the dataset", previewDataset);
       return;
     }
     if (e.target.closest("#pg-scenario-open")) {
@@ -1129,6 +1345,12 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (t.id === "pg-x-p90") state.expect.p90Hours = t.value;
     if (t.id === "pg-x-reach") state.expect.mustReach = t.value;
     if (t.id === "pg-scenario-name") state.scenarioName = t.value;
+    if (t.id === "pg-gen-count") state.gen.count = t.value;
+    // A generated field's boxes are kept without re-rendering, like every other
+    // box here: a render would move the caret to the end of the one being typed in.
+    if (t.dataset.gen && t.dataset.gen !== "kind") {
+      state.gen.fields[Number(t.dataset.i)][t.dataset.gen] = t.value;
+    }
     if (t.dataset.queue != null) state.expect.queue[t.dataset.queue] = t.value;
     if (t.dataset.pool != null) {
       state.pools[t.dataset.pool] = { ...state.pools[t.dataset.pool], pool: t.value };
@@ -1146,6 +1368,13 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (t.id === "pg-scenario-pick") state.pickedScenario = t.value;
     if (t.id === "pg-arrival") { state.arrival = t.value; render(); }
     if (t.id === "pg-csv" && t.files && t.files[0]) { state.csv = t.files[0]; render(); }
+    if (t.dataset.gen === "kind") {
+      // The kind decides which parameters the row shows, so this one does redraw.
+      state.gen.fields[Number(t.dataset.i)].kind = t.value;
+      state.genPreview = null;
+      render();
+    }
+    if (t.dataset.gen === "onlyDate") state.gen.fields[Number(t.dataset.i)].onlyDate = t.checked;
   });
 
   // A sandbox runs the diagram as it was when it started. Editing after that means

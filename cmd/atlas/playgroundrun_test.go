@@ -553,3 +553,50 @@ func TestTheRunnerReportsWhatWentWrongWithTheServer(t *testing.T) {
 		}
 	})
 }
+
+// A described dataset is what makes a scenario worth running twice: the same
+// twenty lines produce the same forty cases, so a build comparing a run against
+// its baseline is measuring the process rather than the data. When nothing has
+// regressed the comparison has nothing to list — and has to say so, because a
+// heading with nothing under it reads as output that was cut off.
+func TestAGeneratedScenarioReproducesItselfExactly(t *testing.T) {
+	ts, _ := liveServer(t)
+	saveScenario(t, ts, "generated", `{
+		"open": {"source":"draft","ref":"approval","seed":7,
+			"stubs":{"human":{"minMillis":600000,"maxMillis":5400000},
+				"pools":{"clerks":{"capacity":2}},"poolOf":{"approve":"clerks"}}},
+		"run": {"generate":{"count":40,"fields":[
+			{"name":"amount","kind":"int","min":100,"max":5000},
+			{"name":"tier","kind":"choice","choices":[{"value":"gold","weight":1},{"value":"standard","weight":9}]},
+			{"name":"ref","kind":"sequence","prefix":"ORDER-"}
+		]},"arrival":{"mode":"every","intervalMillis":900000}},
+		"expect": {"minCompleted":40,"maxIncidents":0}
+	}`)
+
+	var first bytes.Buffer
+	if err := runPlaygroundScenario([]string{"--server", ts.URL, "--scenario", "generated", "--keep-baseline"}, &first); err != nil {
+		t.Fatalf("baseline run: %v\n%s", err, first.String())
+	}
+	if !strings.Contains(first.String(), "40 of 40 cases finished") {
+		t.Fatalf("the description did not produce forty cases:\n%s", first.String())
+	}
+
+	var second bytes.Buffer
+	if err := runPlaygroundScenario([]string{"--server", ts.URL, "--scenario", "generated", "--compare"}, &second); err != nil {
+		t.Fatalf("second run: %v\n%s", err, second.String())
+	}
+	_, comparison, found := strings.Cut(second.String(), "against the baseline:")
+	if !found {
+		t.Fatalf("no comparison printed:\n%s", second.String())
+	}
+	if !strings.Contains(comparison, "nothing moved") {
+		t.Errorf("the same description and seed produced a different run:\n%s", second.String())
+	}
+	// Durations, queues and outcomes alike: a single figure that moved would be
+	// listed, so the absence of every mark is the claim being made.
+	for _, mark := range []string{"!!", "->"} {
+		if strings.Contains(comparison, mark) {
+			t.Errorf("a measure moved between two runs of one description:\n%s", second.String())
+		}
+	}
+}
