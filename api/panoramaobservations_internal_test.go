@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )
@@ -67,6 +69,11 @@ func TestCollectLocalFactsReportsStoreFailures(t *testing.T) {
 		s.store = store
 		s.versions = map[string]int32{}
 		s.workers = newWorkerRegistry(func() int64 { return 1 })
+		// The engine-wide job-type table and the in-process runner, because the
+		// projection now observes each kind of work this server knows — and, like the
+		// processor above, a Server without them is not a Server.
+		s.jobTypes = jobTypesFor(t, dir)
+		s.jobRunner = job.NewRunner(store, s.proc)
 		return s
 	}
 
@@ -123,8 +130,19 @@ func TestCollectLocalFactsReportsStoreFailures(t *testing.T) {
 	if len(peers) != 0 {
 		t.Errorf("peers = %+v, want none on a server with no deployment targets", peers)
 	}
-	if facts.JobTypes != nil {
-		t.Error("JobTypes is present; nothing on this server observes a job type")
+	// Job types are observed now, and the reserved half is there before anything is
+	// deployed: those indices are compile-time constants every build reserves, so a
+	// bare server already knows what io.atlas.dmn is and that it runs it itself.
+	if len(facts.JobTypes) == 0 {
+		t.Error("JobTypes is empty; the engine's reserved kinds are known before any deployment")
+	}
+	// The state is not asserted here: this fixture's runner registers no handlers, so
+	// what it reports is a property of the fixture rather than of the mapping. The
+	// mapping is pinned in TestJobTypeStatusAnswersOnlyWhatTheEngineCanSee, and on a
+	// real server in TestJobTypeObservationSaysWhatItCanAndCannotSee.
+	if _, known := facts.JobTypes[compiler.DMNJobType]; !known {
+		t.Errorf("JobTypes does not carry %q; the reserved half is known to every build",
+			compiler.DMNJobType)
 	}
 	if len(facts.Runtimes) != 1 {
 		t.Errorf("Runtimes = %v, want exactly this node", facts.Runtimes)

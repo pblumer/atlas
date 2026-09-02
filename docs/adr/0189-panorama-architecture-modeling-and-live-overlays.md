@@ -1,6 +1,6 @@
 # ADR-0189: Panorama architecture modeling and live operational overlays
 
-- **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; amended 2026-09-01 — P5's "over time" is a journal of transitions, not a store of samples, its historical context is a query rather than a copy, and arranging a view splices the document rather than re-serialising it; see the amendment notes below)
+- **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; amended 2026-09-01 — P5's "over time" is a journal of transitions, not a store of samples, its historical context is a query rather than a copy, and arranging a view splices the document rather than re-serialising it; amended 2026-09-02 — §4/§6 say what an observation of a job type asserts, and where it stops; see the amendment notes below)
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 
@@ -371,6 +371,30 @@ typical trace is:
 
 Technical functions reported by an Atlas runtime are called **features**, not
 capabilities, to preserve that distinction.
+
+> **Amendment (2026-09-02): what an observation of a job type asserts.**
+> §6's states describe resources, and a job type is not one — it is a name for work.
+> That mismatch is why `atlas.jobType` resolved but was never observed, and why the
+> gap was a decision rather than a missing lookup.
+>
+> The question is turned into one the engine can answer — *is this kind of work
+> getting done here* — and answered only where the evidence exists. Work parked
+> behind incidents is **degraded**, from the same evidence a process is judged by. A
+> kind the engine runs in-process is **healthy** on knowledge: it built the handler,
+> so there is nothing outside this process to ask. A kind a worker has demonstrably
+> taken since startup is **healthy** on evidence — not "a worker is registered", but
+> *this work has been done here*.
+>
+> Everything else is **unbound**, and that is the load-bearing row. The worker
+> registry is runtime state that a restart empties, so *no worker has polled* is not
+> evidence that none exists; a mapping that read it as "nobody serves this" would
+> mark every worker-served kind broken on every restart — the mistake ADR-0211 §4's
+> severity rules exist to prevent. The queue depth rides in the observation's detail,
+> so a reader can see there is work waiting without the view claiming to know why.
+>
+> The deliberate omission is a *not-ready*. "Queued and nobody is serving it" is the
+> state an operator most wants, and this server cannot tell it apart from "queued and
+> the worker polls every five minutes". Saying so is the whole of the answer.
 
 ### 5. Editor packaging
 

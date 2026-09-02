@@ -19,6 +19,14 @@
   --danger-soft: #fdecea;
   --warn: #b7791f;
   --warn-soft: #fef6e7;
+  /* The amber the landscape's status marks use, and deliberately not --warn.
+     The two are solving different problems: --warn is text and thin borders on
+     pale backgrounds, where luminance contrast is what makes it readable, and it
+     is tuned dark for that. A mark on a canvas is not read, it is *noticed* — and
+     what draws the eye there is saturation, which is why the muted ochre above
+     disappears as a ring on a tinted circle while this does not. Kept out of the
+     dense views for the same reason it is used here. */
+  --mesh-attention: #d97706;
   --ok: #2d8a4e;
   --topbar-h: 48px;
   --radius: 8px;
@@ -3571,7 +3579,7 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    carrying the severity and the fill goes on carrying the kind, and the beat is
    added to the picture rather than taken out of it. */
 .mesh-beat { fill: none; stroke-width: 2.5; opacity: 0; pointer-events: none; }
-.mesh-sev-attention .mesh-beat { stroke: var(--warn); }
+.mesh-sev-attention .mesh-beat { stroke: var(--mesh-attention); }
 .mesh-sev-critical .mesh-beat { stroke: var(--danger); }
 @keyframes mesh-beat-quick {
   0% { transform: scale(1); opacity: 0.6; }
@@ -3687,7 +3695,7 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
 }
 .mesh-finding-go:hover { border-color: var(--accent); }
 .mesh-finding-go.mesh-sev-critical { border-left-color: var(--danger); }
-.mesh-finding-go.mesh-sev-attention { border-left-color: var(--warn); }
+.mesh-finding-go.mesh-sev-attention { border-left-color: var(--mesh-attention); }
 .mesh-finding-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mesh-finding-state { color: var(--muted); font-size: 11px; }
 /* The sentence behind the finding, clamped: an operator needs to see there is one
@@ -3791,10 +3799,24 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
    one. Node fills stay as the kind and the ArchiMate layer set them (ADR-0189 §6). */
 .mesh-badge-dot { fill: var(--surface); stroke: var(--border-strong); stroke-width: 1.5; }
 .mesh-badge-glyph { font-size: 10px; font-weight: 700; fill: var(--text); }
+/* Both findings are drawn as a *filled* badge, and that is the correction.
+   Critical always was; attention was a pale wash inside a thin ochre outline, so
+   the two classes differed in form as well as in colour — and the form was doing
+   most of the work. A tinted outline beside a solid disc does not read as "less
+   urgent", it reads as "not really a finding", which is not what attention means.
+   Each keeps its own hue, and each takes the glyph colour that is legible on it:
+   white on the red, near-black on the amber. */
 .mesh-sev-critical .mesh-badge-dot { fill: var(--danger); stroke: var(--danger); }
 .mesh-sev-critical .mesh-badge-glyph { fill: #fff; }
-.mesh-sev-attention .mesh-badge-dot { fill: var(--warn-soft); stroke: var(--warn); }
-.mesh-sev-attention .mesh-badge-glyph { fill: var(--warn); }
+.mesh-sev-attention .mesh-badge-dot { fill: var(--mesh-attention); stroke: var(--mesh-attention); }
+.mesh-sev-attention .mesh-badge-glyph { fill: #241a05; }
+/* A node with a finding wears a heavier ring than one without. Colour alone had to
+   carry the whole difference before, at the same weight as every other outline on
+   the canvas; weight is the channel that survives being small, being zoomed out,
+   and being looked at by somebody who does not separate red from amber. */
+.mesh-sev-attention .mesh-body, .mesh-sev-critical .mesh-body { stroke-width: 3.5; }
+.mesh-node.mesh-sev-attention:hover .mesh-body,
+.mesh-node.mesh-sev-critical:hover .mesh-body { stroke-width: 4.5; }
 .mesh-sev-unknown .mesh-badge-dot { fill: var(--bg); stroke: var(--muted); }
 .mesh-sev-unknown .mesh-badge-glyph { fill: var(--muted); }
 .mesh-sev-glyph { font-size: 10px; font-weight: 700; fill: var(--text); }

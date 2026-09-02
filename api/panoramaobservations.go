@@ -86,18 +86,39 @@ func (s *Server) collectLocalFacts(r *http.Request) (panorama.Facts, []remoteTar
 		Runtimes:     map[string]panorama.Fact{},
 		Targets:      map[string]panorama.Fact{},
 		Releases:     map[string]panorama.Fact{},
-		// JobTypes stays absent, and the reason is no longer the one that used to be
-		// written here. It said a job type is not registered as a resource, which is
-		// untrue — the engine keeps a table of them, and the binding catalog beside
-		// this now resolves against it. What is missing is a decision, not a lookup:
-		// a job type is a *kind of work*, not a thing that can be well or unwell, and
-		// what an observation of one would assert is its own question. The engine can
-		// say how many are queued, whether it runs the kind itself and how many jobs
-		// of it are parked behind an incident — but "healthy" for a kind of work,
-		// where no worker having polled this run is not evidence that none exists
-		// (the worker registry does not survive a restart), is a mapping somebody has
-		// to choose. Until then the map is absent, which reports "not produced here"
-		// rather than "nothing is wrong".
+		JobTypes:     map[string]panorama.Fact{},
+	}
+
+	// Job types: what this server can observe about each kind of work it knows.
+	//
+	// The question a job type answers is not "is this resource well" — a job type is
+	// a name for work, not a thing that can be unwell — but "is this kind of work
+	// getting done here", which the engine can answer from evidence it already
+	// holds. jobTypeStatus is where that turn is made and defended.
+	//
+	// Every type in the engine-wide table, matching the catalog that resolves the
+	// bindings: a model can bind a type nothing currently uses, and reporting it as
+	// absent would blame the model for a fact about the traffic.
+	taken := s.jobTypeTaken()
+	jobIncidents := s.incidentsByJobType()
+	users := s.jobTypeUsers()
+	for _, e := range s.jobTypes.All() {
+		state, reason := jobTypeStatus(taken[e.Name], jobIncidents[e.Index],
+			s.jobRunner.Handles(e.Index))
+		detail := map[string]string{
+			"takenThisRun": strconv.FormatInt(taken[e.Name], 10),
+			"inFlight":     strconv.FormatInt(s.workers.inFlightOf(e.Name), 10),
+			"incidents":    strconv.FormatInt(jobIncidents[e.Index], 10),
+			// How many deployed definitions ask for this kind of work. A type with
+			// no users and no traffic is a leftover; one with users and no traffic is
+			// a question. The two look identical without this.
+			"usedBy": strconv.Itoa(len(users[e.Index])),
+			// Where it comes from, in the same words the binding catalog uses.
+			"origin": jobTypeDisplayName(e.Index),
+		}
+		facts.JobTypes[e.Name] = panorama.Fact{
+			Source: panorama.SourceWorkers, State: state, Reason: reason, Detail: detail,
+		}
 	}
 
 	// Processes, and the per-application totals they roll up into. The map holds

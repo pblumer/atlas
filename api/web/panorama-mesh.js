@@ -89,7 +89,7 @@ const PROVENANCE = {
 //     problem — which is how a status view teaches people to ignore it.
 const SEVERITY = {
   critical: { glyph: "!", stroke: "var(--danger)", beats: true, label: "Critical — it cannot do work" },
-  attention: { glyph: "•", stroke: "var(--warn)", beats: true, label: "Attention — something inside it went wrong" },
+  attention: { glyph: "•", stroke: "var(--mesh-attention)", beats: true, label: "Attention — something inside it went wrong" },
   ok: { glyph: "", stroke: "", label: "OK — nothing is wrong here" },
   unknown: { glyph: "?", stroke: "", label: "Unwatched — nothing here observes it" },
 };

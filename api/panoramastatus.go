@@ -244,3 +244,63 @@ func (s *Server) workerHoldings() (held map[string]bool, polled bool) {
 	}
 	return held, polled
 }
+
+// jobTypeStatus says what this server can honestly observe about one kind of work.
+//
+// This is the mapping ADR-0189 §6 needs and nobody had chosen, and the reason it
+// stayed unchosen is real: a job type is not a thing that can be well or unwell. It
+// is a *name for work*, and the states in §6 describe resources. So the question had
+// to be turned into one the engine can answer — "is this kind of work getting done
+// here" — and answered only where the evidence exists.
+//
+// Four answers, in the order they are checked, because the first that applies is the
+// most specific thing known:
+//
+//   - Work of this kind is parked behind incidents: **degraded**. Jobs exist, they
+//     were attempted, and they failed. That is the same reading a process gets, from
+//     the same evidence.
+//   - The engine runs this kind itself: **healthy**. It built the handler, so it
+//     knows; there is no worker to wait for and nothing outside this process to ask.
+//   - A worker has taken jobs of this kind since the server started: **healthy**.
+//     Not "a worker exists" — *this kind of work has demonstrably been done here*,
+//     which is a fact rather than an inference from a registration.
+//   - Otherwise: **unbound**, which is not a finding. The worker registry is runtime
+//     state that a restart empties, so *no worker has polled* is not evidence that
+//     none exists — and a fresh server would otherwise mark every worker-served kind
+//     as broken, which is precisely the mistake §4's severity rules exist to prevent.
+//     The queue depth rides along in the detail, so a reader can see there is work
+//     waiting without the view claiming to know why.
+//
+// The deliberate omission is a *not-ready*: "queued and nobody is serving it" is the
+// state an operator most wants, and this server cannot tell it apart from "queued
+// and the worker polls every five minutes". Saying so is the whole of the answer.
+func jobTypeStatus(taken, incidents int64, inProcess bool) (state, reason string) {
+	switch {
+	case incidents > 0:
+		return panorama.StateDegraded, fmt.Sprintf(
+			"%d job(s) of this type are parked behind an unresolved incident.", incidents)
+	case inProcess:
+		return panorama.StateHealthy, "The engine runs this job type itself."
+	case taken > 0:
+		return panorama.StateHealthy, fmt.Sprintf(
+			"A worker has taken %d job(s) of this type since this server started.", taken)
+	default:
+		return panorama.StateUnbound, "No worker has taken work of this type since this " +
+			"server started, which is not the same as none serving it: the worker registry " +
+			"is emptied by a restart."
+	}
+}
+
+// jobTypeTaken counts, per job type, how many jobs the workers seen this run have
+// pulled. Cumulative rather than in-flight on purpose: a type whose queue drained an
+// hour ago is being served, and an in-flight gauge of zero would report it as
+// unobserved every time it happened to be idle.
+func (s *Server) jobTypeTaken() map[string]int64 {
+	out := map[string]int64{}
+	for _, st := range s.workers.byName {
+		for jobType, n := range st.Types {
+			out[jobType] += n
+		}
+	}
+	return out
+}
