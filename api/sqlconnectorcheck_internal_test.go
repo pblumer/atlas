@@ -28,31 +28,51 @@ func (p *probeCalls) probe(_ context.Context, product sqldb.Product, dsn string)
 // anything is saved. A connection string is a SQL connector's whole configuration, so
 // the alternative to answering here is saving a wrong one and learning about it as an
 // incident on a parked task.
+//
+// It runs for all three products, because the one thing the check does that is *not*
+// shared is picking the kind's own driver — a kind routed to the wrong product's
+// driver would dial with a grammar the string is not written in and report the
+// operator's correct connection string as broken.
 func TestASQLConnectorIsCheckedBeforeItIsSaved(t *testing.T) {
-	calls := &probeCalls{}
-	srv, _ := newValidateServer(t, WithSQLProbe(calls.probe))
+	for _, tc := range []struct{ kind, dsn string }{
+		{"mssql", "sqlserver://sa:pw@db.example.com:1433?database=hr"},
+		{"mariadb", "atlas:pw@tcp(db.example.com:3306)/hr"},
+		{"postgres", "postgres://atlas:pw@db.example.com:5432/hr?sslmode=require"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			calls := &probeCalls{}
+			srv, _ := newValidateServer(t, WithSQLProbe(calls.probe))
 
-	code, res := postTest(t, srv, `{"name":"hr-db","kind":"mssql","connectionString":"sqlserver://sa:pw@db.example.com:1433?database=hr"}`)
-	if code != http.StatusOK || !res.OK {
-		t.Fatalf("check: status=%d ok=%v detail=%q error=%q", code, res.OK, res.Detail, res.Error)
-	}
-	if calls.product != "mssql" {
-		t.Errorf("probed product %q, want mssql — the check must use the kind's own driver", calls.product)
-	}
-	if calls.dsn != "sqlserver://sa:pw@db.example.com:1433?database=hr" {
-		t.Errorf("probed dsn = %q, want the typed one", calls.dsn)
-	}
-	// The verdict says what was proved and what was not, because "OK" does not tell an
-	// operator whether the login may read the table their statement names.
-	if !strings.Contains(res.Detail, "db.example.com") {
-		t.Errorf("detail = %q, want it to name the database that answered", res.Detail)
-	}
-	if strings.Contains(res.Detail, "pw") {
-		t.Errorf("detail = %q leaks the password", res.Detail)
-	}
-	// Checking stores nothing.
-	if recs, err := srv.connectors.LoadAll(); err != nil || len(recs) != 0 {
-		t.Errorf("the check stored %d connector(s) (err=%v), want none", len(recs), err)
+			code, res := postTest(t, srv, `{"name":"hr-db","kind":"`+tc.kind+`","connectionString":"`+tc.dsn+`"}`)
+			if code != http.StatusOK || !res.OK {
+				t.Fatalf("check: status=%d ok=%v detail=%q error=%q", code, res.OK, res.Detail, res.Error)
+			}
+			if calls.product != tc.kind {
+				t.Errorf("probed product %q, want %s — the check must use the kind's own driver", calls.product, tc.kind)
+			}
+			if calls.dsn != tc.dsn {
+				t.Errorf("probed dsn = %q, want the typed one", calls.dsn)
+			}
+			// The verdict says what was proved and what was not, because "OK" does not
+			// tell an operator whether the login may read the table their statement
+			// names. A MariaDB DSN is not a URL, so it has no label to derive — the
+			// verdict then says "the database" rather than guessing at one, which is
+			// what redactedSQLTarget is written to do.
+			if strings.Contains(res.Detail, "pw") {
+				t.Errorf("detail = %q leaks the password", res.Detail)
+			}
+			want := "db.example.com"
+			if redactedSQLTarget(tc.dsn) == "" {
+				want = "the database"
+			}
+			if !strings.Contains(res.Detail, want) {
+				t.Errorf("detail = %q, want it to name %q", res.Detail, want)
+			}
+			// Checking stores nothing.
+			if recs, err := srv.connectors.LoadAll(); err != nil || len(recs) != 0 {
+				t.Errorf("the check stored %d connector(s) (err=%v), want none", len(recs), err)
+			}
+		})
 	}
 }
 

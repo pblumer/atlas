@@ -74,9 +74,6 @@ var authoredKindJobTypes = map[string][]int32{
 	"ad":                    {compiler.AdJobTypeIndex},
 	"ldif":                  {compiler.LdifJobTypeIndex},
 	"entra":                 {compiler.EntraJobTypeIndex},
-	"mssql":                 {compiler.MsSqlJobTypeIndex},
-	"mariadb":               {compiler.MariaDBJobTypeIndex},
-	"postgres":              {compiler.PostgresJobTypeIndex},
 	connectorKindClio:       {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
 	connectorKindMail:       {compiler.MailJobTypeIndex},
 	"csv":                   {compiler.CsvImportJobTypeIndex},
@@ -96,6 +93,17 @@ var authoredKindJobTypes = map[string][]int32{
 	// a central temis service. Two kinds to the operator, so they move separately.
 	"dmn":              {compiler.DMNJobTypeIndex},
 	connectorKindTemis: {compiler.TemisDecisionJobTypeIndex},
+}
+
+// The three SQL products are added from sqlConnectorProducts rather than listed again:
+// that table already pairs a Console kind name with the reserved job type a task of it
+// carries, and pairing them twice is how one product ends up reporting another's
+// placement — a badge that says "runs in the engine" for a kind that has no in-engine
+// handler at all.
+func init() {
+	for _, p := range sqlConnectorProducts {
+		authoredKindJobTypes[p.name] = []int32{p.jobType}
+	}
 }
 
 // catalogKindsWithoutJobType are the picker entries that compile to no job at all,

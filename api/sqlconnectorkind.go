@@ -40,9 +40,15 @@ const (
 	connectorKindPostgres = "postgres"
 )
 
-// sqlConnectorKinds are the three, in the order the Console offers them.
+// sqlConnectorKinds are the three, in the order the Console offers them. They are read
+// out of sqlConnectorProducts rather than listed again, so a product cannot appear in
+// one of the two lists and not the other.
 func sqlConnectorKinds() []string {
-	return []string{connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	names := make([]string, 0, len(sqlConnectorProducts))
+	for _, p := range sqlConnectorProducts {
+		names = append(names, p.name)
+	}
+	return names
 }
 
 // isSQLConnectorKind reports whether a kind name is one of the SQL products, so the
@@ -145,8 +151,11 @@ func (s *Server) sqlWorkerEnvByName(kind string) []string {
 // It reads the connector store and the vault, so it runs on the run-loop goroutine
 // (their owner), like mailWorkerEnv and entraWorkerEnv do.
 func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
-	prefix := "ATLAS_" + connectorEnvKey(p.Name) + "_"
-	connectorsVar := prefix + "CONNECTORS"
+	// The variable names are the product's own (sqldb.Product), not assembled here:
+	// the worker reads exactly these and an operator sets exactly these by hand, so a
+	// second spelling in this package would be a supervised worker handed a credential
+	// under a name nothing reads.
+	connectorsVar := p.ConnectorsEnv()
 
 	var env []string
 	var names []string
@@ -174,7 +183,7 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 				slog.String("product", p.Name), slog.String("error", err.Error()))
 		} else if stored {
 			mock = m.Enabled
-			env = append(env, prefix+"MOCK="+boolEnv(m.Enabled))
+			env = append(env, p.MockEnv()+"="+boolEnv(m.Enabled))
 			// The seed is a file Atlas wrote and Atlas names, not one an operator
 			// pointed at: the Console is org-wide, and a path typed there belongs to
 			// whichever host happens to run the worker (ADR-0202). Its name carries a
@@ -188,7 +197,7 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 			// a half-finished setup, and silence would leave the operator believing they
 			// had one.
 			if seed := s.settings.sqlSeedPath(m); seed != "" && m.Enabled {
-				env = append(env, prefix+"MOCK_SEED="+seed)
+				env = append(env, p.MockSeedEnv()+"="+seed)
 			}
 			// And where to report the journal it ends up holding, so an operator can
 			// see what a run asked in Operations rather than reconstruct it from the
@@ -231,8 +240,8 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 				continue
 			}
 			taken[envKey] = c.Name
-			key := prefix + envKey + "_"
-			if strings.TrimSpace(os.Getenv(key+"DSN")) != "" {
+			dsnVar := p.DSNEnv(c.Name)
+			if strings.TrimSpace(os.Getenv(dsnVar)) != "" {
 				// The operator set this one on the host; leave it alone and let the
 				// child inherit it, but keep the name in CONNECTORS.
 				addName(c.Name)
@@ -265,7 +274,7 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 				continue
 			}
 			addName(c.Name)
-			env = append(env, key+"DSN="+dsn)
+			env = append(env, dsnVar+"="+dsn)
 			fromStore = true
 		}
 	})

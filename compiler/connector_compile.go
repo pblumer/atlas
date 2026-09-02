@@ -90,27 +90,14 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Ad.Retries },
 		compile: compileAdConnectorTask,
 	},
-	{
-		present: func(st xmlServiceTask) bool { return st.MsSql != nil },
-		retries: func(st xmlServiceTask) string { return st.MsSql.Retries },
-		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
-			return compileSqlConnectorTask(b, st, retries, sqlProducts[MsSqlJobType])
-		},
-	},
-	{
-		present: func(st xmlServiceTask) bool { return st.MariaDB != nil },
-		retries: func(st xmlServiceTask) string { return st.MariaDB.Retries },
-		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
-			return compileSqlConnectorTask(b, st, retries, sqlProducts[MariaDBJobType])
-		},
-	},
-	{
-		present: func(st xmlServiceTask) bool { return st.Postgres != nil },
-		retries: func(st xmlServiceTask) string { return st.Postgres.Retries },
-		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
-			return compileSqlConnectorTask(b, st, retries, sqlProducts[PostgresJobType])
-		},
-	},
+	// The three SQL products, in their registry positions. Each is built from the
+	// product table rather than written out, so which extension element a product is
+	// read from is stated once — the way to get this wrong by hand is an entry whose
+	// `present` tests one product's element and whose `compile` names another's, which
+	// compiles a MariaDB task as if it were a SQL Server one.
+	sqlConnectorCompiler(MsSqlJobType),
+	sqlConnectorCompiler(MariaDBJobType),
+	sqlConnectorCompiler(PostgresJobType),
 	{
 		present: func(st xmlServiceTask) bool { return st.Entra != nil },
 		retries: func(st xmlServiceTask) string { return st.Entra.Retries },
@@ -481,6 +468,20 @@ var sqlProducts = map[string]sqlProduct{
 	MsSqlJobType:    {kind: "mssql connector", jobType: MsSqlJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.MsSql }},
 	MariaDBJobType:  {kind: "mariadb connector", jobType: MariaDBJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.MariaDB }},
 	PostgresJobType: {kind: "postgres connector", jobType: PostgresJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.Postgres }},
+}
+
+// sqlConnectorCompiler is the registry entry for one SQL product. All three read the
+// same fields and compile through the same function; what a product contributes is the
+// extension element it is read from, which sqlProducts already holds.
+func sqlConnectorCompiler(jobType string) connectorCompiler {
+	p := sqlProducts[jobType]
+	return connectorCompiler{
+		present: func(st xmlServiceTask) bool { return p.ext(st) != nil },
+		retries: func(st xmlServiceTask) string { return p.ext(st).Retries },
+		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+			return compileSqlConnectorTask(b, st, retries, p)
+		},
+	}
 }
 
 // sqlOps is the set of operations a SQL connector task can author. query returns

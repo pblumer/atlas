@@ -52,10 +52,10 @@ func TestTheReporterSendsTheJournalUnderItsOwnName(t *testing.T) {
 	sink := &journalSink{}
 	srv := sink.server(t)
 
-	db := sqldb.NewMockDatabase(sqldb.MockAnswer{
+	db := sqldb.NewMockDatabase(mustProduct(t, "mssql"), sqldb.MockAnswer{
 		Statement: "SELECT mail FROM personen WHERE id = @p1", Columns: []string{"mail"}, Rows: [][]any{{"arno@example.com"}},
 	})
-	client := sqldb.OpenMock(mustProduct(t, "mssql"), db)
+	client := sqldb.OpenMock(db)
 	t.Cleanup(func() { _ = client.Close() })
 	if _, err := client.Query(context.Background(), "SELECT mail FROM personen WHERE id = @p1", []any{int64(42)}, 0); err != nil {
 		t.Fatalf("Query: %v", err)
@@ -92,8 +92,8 @@ func TestTheReporterSendsTheJournalUnderItsOwnName(t *testing.T) {
 func TestTheReporterSaysNothingTwice(t *testing.T) {
 	sink := &journalSink{}
 	srv := sink.server(t)
-	db := sqldb.NewMockDatabase(sqldb.MockAnswer{Statement: "SELECT 1", Columns: []string{"n"}, Rows: [][]any{{1}}})
-	client := sqldb.OpenMock(mustProduct(t, "mssql"), db)
+	db := sqldb.NewMockDatabase(mustProduct(t, "mssql"), sqldb.MockAnswer{Statement: "SELECT 1", Columns: []string{"n"}, Rows: [][]any{{1}}})
+	client := sqldb.OpenMock(db)
 	t.Cleanup(func() { _ = client.Close() })
 
 	r := newSQLMockReporter(envMap(map[string]string{SQLMockViewURLEnv: srv.URL, WorkerIDEnv: "sql-1"}), db)
@@ -117,7 +117,7 @@ func TestTheReporterSaysNothingTwice(t *testing.T) {
 func TestAFailedReportIsNotAFailedJob(t *testing.T) {
 	sink := &journalSink{status: http.StatusInternalServerError}
 	srv := sink.server(t)
-	db := sqldb.NewMockDatabase()
+	db := sqldb.NewMockDatabase(mustProduct(t, "mssql"))
 	r := newSQLMockReporter(envMap(map[string]string{SQLMockViewURLEnv: srv.URL, WorkerIDEnv: "sql-1"}), db)
 
 	// report never returns an error at all — there is no channel by which it could fail
@@ -139,7 +139,7 @@ func TestAFailedReportIsNotAFailedJob(t *testing.T) {
 // A worker given no address keeps its journal to itself, and every call site treats
 // that the same way — the handler calls report() whether or not there is a view.
 func TestNoAddressMeansNoReporterAndNoPanic(t *testing.T) {
-	if r := newSQLMockReporter(envMap(map[string]string{WorkerIDEnv: "sql-1"}), sqldb.NewMockDatabase()); r != nil {
+	if r := newSQLMockReporter(envMap(map[string]string{WorkerIDEnv: "sql-1"}), sqldb.NewMockDatabase(mustProduct(t, "mssql"))); r != nil {
 		t.Fatal("a reporter was built for a worker with nowhere to report to")
 	}
 	var nilReporter *sqlMockReporter
@@ -153,7 +153,7 @@ func TestNoAddressMeansNoReporterAndNoPanic(t *testing.T) {
 func TestTheStartupReportWaitsForTheServer(t *testing.T) {
 	sink := &journalSink{status: http.StatusServiceUnavailable}
 	srv := sink.server(t)
-	db := sqldb.NewMockDatabase()
+	db := sqldb.NewMockDatabase(mustProduct(t, "mssql"))
 
 	r := newSQLMockReporter(envMap(map[string]string{SQLMockViewURLEnv: srv.URL, WorkerIDEnv: "sql-1"}), db)
 	r.backoff = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}
@@ -196,10 +196,10 @@ func mustProduct(t *testing.T, name string) sqldb.Product {
 func TestBoundValuesSurviveTheReport(t *testing.T) {
 	sink := &journalSink{}
 	srv := sink.server(t)
-	db := sqldb.NewMockDatabase(sqldb.MockAnswer{
+	db := sqldb.NewMockDatabase(mustProduct(t, "mssql"), sqldb.MockAnswer{
 		Statement: "UPDATE personen SET aktiv = @aktiv WHERE id = @id", Named: map[string]any{"id": 7, "aktiv": true}, Affected: 1,
 	})
-	client := sqldb.OpenMock(mustProduct(t, "mssql"), db)
+	client := sqldb.OpenMock(db)
 	t.Cleanup(func() { _ = client.Close() })
 
 	reg := sqldb.NewRegistry()

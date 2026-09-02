@@ -5,14 +5,17 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/worker"
 )
 
-// The whole ask in one test: a Microsoft SQL Server task, from a deployed model to a
-// process variable holding the row, with no database anywhere.
+// The whole ask in one test, for every one of the three products: a database task,
+// from a deployed model to a process variable holding the row, with no database
+// anywhere.
 //
 // Every seam this crosses had a test of its own and none of them met. The compiler
 // accepted the extension element, sqldb.Resolve produced a Job, the payload arm sent
@@ -26,39 +29,48 @@ import (
 // chain and offloads the job, a worker built from an environment leases it, the mock
 // answers the statement, and the process continues with the row in the variable the
 // task named.
-func TestAWorkerRunsAnMsSqlTaskEndToEnd(t *testing.T) {
-	ts := liveAtlasWith(t, msSqlPositionalModel,
-		`{"abteilung":"IT","params":["IT"]}`)
+//
+// It runs per product because the products share every line of this path and differ in
+// three details that are each on it — the extension element the compiler reads, the
+// reserved job type the worker subscribes to, and the placeholder the statement is
+// written with. A test for one of them proves nothing about the other two; that is how
+// a Worker Type ends up shipping without the one variable it needs.
+func TestAWorkerRunsASQLTaskEndToEnd(t *testing.T) {
+	for _, tc := range sqlEndToEndProducts {
+		t.Run(tc.product, func(t *testing.T) {
+			ts := liveAtlasWith(t, sqlPositionalModel(tc), `{"abteilung":"IT","params":["IT"]}`)
 
-	runOneSQLJob(t, ts, `{"answers":[{
-	  "statement":"SELECT id, mail FROM personen WHERE abteilung = @p1",
+			runOneSQLJob(t, ts, tc.product, `{"answers":[{
+	  "statement":"SELECT id, mail FROM personen WHERE abteilung = `+tc.placeholder+`",
 	  "params":["IT"],
 	  "columns":["id","mail"],
 	  "rows":[[7,"arno@example.com"],[9,"bea@example.com"]]
 	}]}`)
 
-	if running := runningInstances(t, ts); running != 0 {
-		t.Errorf("%d instances still running, want 0 — the SQL job was not completed", running)
-	}
-	vars := instanceVariables(t, ts)
-	rows, ok := vars["zeilen"].([]any)
-	if !ok {
-		t.Fatalf("zeilen = %#v, want the queried rows; the result never reached the process", vars["zeilen"])
-	}
-	if len(rows) != 2 {
-		t.Fatalf("zeilen has %d rows, want 2: %#v", len(rows), rows)
-	}
-	first, ok := rows[0].(map[string]any)
-	if !ok {
-		t.Fatalf("row = %#v, want a column-keyed object", rows[0])
-	}
-	if first["mail"] != "arno@example.com" {
-		t.Errorf("zeilen[0].mail = %#v, want the seeded address", first["mail"])
-	}
-	// An id must arrive as a number a FEEL expression can compare, not as the string
-	// or float a JSON round trip through the payload could have made of it.
-	if n, ok := first["id"].(float64); !ok || n != 7 {
-		t.Errorf("zeilen[0].id = %#v, want the number 7", first["id"])
+			if running := runningInstances(t, ts); running != 0 {
+				t.Errorf("%d instances still running, want 0 — the SQL job was not completed", running)
+			}
+			vars := instanceVariables(t, ts)
+			rows, ok := vars["zeilen"].([]any)
+			if !ok {
+				t.Fatalf("zeilen = %#v, want the queried rows; the result never reached the process", vars["zeilen"])
+			}
+			if len(rows) != 2 {
+				t.Fatalf("zeilen has %d rows, want 2: %#v", len(rows), rows)
+			}
+			first, ok := rows[0].(map[string]any)
+			if !ok {
+				t.Fatalf("row = %#v, want a column-keyed object", rows[0])
+			}
+			if first["mail"] != "arno@example.com" {
+				t.Errorf("zeilen[0].mail = %#v, want the seeded address", first["mail"])
+			}
+			// An id must arrive as a number a FEEL expression can compare, not as the
+			// string or float a JSON round trip through the payload could have made of it.
+			if n, ok := first["id"].(float64); !ok || n != 7 {
+				t.Errorf("zeilen[0].id = %#v, want the number 7", first["id"])
+			}
+		})
 	}
 }
 
@@ -70,7 +82,7 @@ func TestAnMsSqlTaskBindsNamedParametersEndToEnd(t *testing.T) {
 	ts := liveAtlasWith(t, msSqlNamedModel,
 		`{"params":{"id":42,"aktiv":false}}`)
 
-	runOneSQLJob(t, ts, `{"answers":[
+	runOneSQLJob(t, ts, "mssql", `{"answers":[
 	  {"statement":"UPDATE personen SET aktiv = @aktiv WHERE id = @id","named":{"id":42,"aktiv":false},"affected":1},
 	  {"statement":"UPDATE personen SET aktiv = @aktiv WHERE id = @id","affected":0}
 	]}`)
@@ -91,37 +103,46 @@ func TestAnMsSqlTaskBindsNamedParametersEndToEnd(t *testing.T) {
 // asked. That is the mock's refusal seen from where it matters: a process that would
 // have branched on an invented empty result stops instead.
 func TestAnUnseededStatementRaisesAnIncident(t *testing.T) {
-	ts := liveAtlasWith(t, msSqlPositionalModel,
-		`{"abteilung":"IT","params":["IT"]}`)
+	for _, tc := range sqlEndToEndProducts {
+		t.Run(tc.product, func(t *testing.T) {
+			ts := liveAtlasWith(t, sqlPositionalModel(tc), `{"abteilung":"IT","params":["IT"]}`)
 
-	runOneSQLJob(t, ts, `{"answers":[{"statement":"SELECT 1","columns":["n"],"rows":[[1]]}]}`)
+			runOneSQLJob(t, ts, tc.product, `{"answers":[{"statement":"SELECT 1","columns":["n"],"rows":[[1]]}]}`)
 
-	if running := runningInstances(t, ts); running != 1 {
-		t.Errorf("%d instances running, want the one whose job failed", running)
-	}
-	if _, ok := instanceVariables(t, ts)["zeilen"]; ok {
-		t.Error("the task wrote a result variable for a statement the mock refused")
+			if running := runningInstances(t, ts); running != 1 {
+				t.Errorf("%d instances running, want the one whose job failed", running)
+			}
+			if _, ok := instanceVariables(t, ts)["zeilen"]; ok {
+				t.Error("the task wrote a result variable for a statement the mock refused")
+			}
+		})
 	}
 }
 
-// runOneSQLJob builds a worker the way an operator does — from an environment, with
-// mock mode on and a seed file — and lets it work one round against the live server.
-func runOneSQLJob(t *testing.T, ts *httptest.Server, seed string) {
+// runOneSQLJob builds a worker of one product the way an operator does — from an
+// environment, with mock mode on and a seed file — and lets it work one round against
+// the live server. The variable names come from the product itself, so this test sets
+// exactly what a worker reads rather than a second spelling of it.
+func runOneSQLJob(t *testing.T, ts *httptest.Server, product, seed string) {
 	t.Helper()
+	p, ok := sqldb.ProductByName(product)
+	if !ok {
+		t.Fatalf("no such SQL product: %q", product)
+	}
 	path := filepath.Join(t.TempDir(), "seed.json")
 	if err := os.WriteFile(path, []byte(seed), 0o600); err != nil {
 		t.Fatalf("write seed: %v", err)
 	}
 	env := map[string]string{
-		"ATLAS_MSSQL_CONNECTORS": "hr-db",
-		"ATLAS_MSSQL_MOCK":       "1",
-		"ATLAS_MSSQL_MOCK_SEED":  path,
+		p.ConnectorsEnv(): "hr-db",
+		p.MockEnv():       "1",
+		p.MockSeedEnv():   path,
 	}
-	execs, err := worker.BuiltinConnectors(func(k string) string { return env[k] }, "mssql")
+	execs, err := worker.BuiltinConnectors(func(k string) string { return env[k] }, product)
 	if err != nil {
 		t.Fatalf("BuiltinConnectors: %v", err)
 	}
-	w := worker.New(worker.Options{Server: ts.URL, ID: "mssql-1", Handlers: execs.Handlers})
+	w := worker.New(worker.Options{Server: ts.URL, ID: product + "-1", Handlers: execs.Handlers})
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := w.RunOnce(ctx); err != nil {
@@ -129,17 +150,38 @@ func runOneSQLJob(t *testing.T, ts *httptest.Server, seed string) {
 	}
 }
 
-// The parameters variable is a list, so it binds positionally against SQL Server's
-// @p1 — the ordinary shape, and the one the modeler's placeholder text shows.
-const msSqlPositionalModel = `<?xml version="1.0" encoding="UTF-8"?>
+// sqlEndToEndProduct is what differs between the three on this path: the operator-facing
+// product name, the BPMN extension element a task of it carries, and the placeholder
+// syntax its statements are written in.
+type sqlEndToEndProduct struct{ product, ext, placeholder string }
+
+// sqlEndToEndProducts are the three, so every test above runs against all of them.
+var sqlEndToEndProducts = []sqlEndToEndProduct{
+	{product: "mssql", ext: "mssqlConnector", placeholder: "@p1"},
+	{product: "mariadb", ext: "mariadbConnector", placeholder: "?"},
+	{product: "postgres", ext: "postgresConnector", placeholder: "$1"},
+}
+
+// sqlPositionalModel is the positional-binding model for one product: a list-shaped
+// parameters variable bound against the product's own placeholder. It is the ordinary
+// shape, and the one the Modeler's placeholder text shows.
+func sqlPositionalModel(p sqlEndToEndProduct) string {
+	return strings.NewReplacer("{{ext}}", p.ext, "{{placeholder}}", p.placeholder).Replace(sqlPositionalModelTemplate)
+}
+
+// The parameters variable is a list, so it binds positionally against the product's
+// own placeholder — @p1, ? or $1. The element and the placeholder are the only two
+// things that differ; everything else about the model is the same for all three, which
+// is the property this template states.
+const sqlPositionalModelTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
   <bpmn:process id="abteilungsliste" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
       <bpmn:extensionElements>
-        <atlas:mssqlConnector connector="hr-db" operation="query"
-                              statement="SELECT id, mail FROM personen WHERE abteilung = @p1"
+        <atlas:{{ext}} connector="hr-db" operation="query"
+                              statement="SELECT id, mail FROM personen WHERE abteilung = {{placeholder}}"
                               parametersVariable="params" resultVariable="zeilen"/>
       </bpmn:extensionElements>
     </bpmn:serviceTask>
