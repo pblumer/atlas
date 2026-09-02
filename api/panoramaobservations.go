@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/panorama"
@@ -111,15 +112,28 @@ func (s *Server) collectLocalFacts(r *http.Request) (panorama.Facts, []remoteTar
 		if !s.canViewArtifact(r, d.ProjectID, d.DeployedBy, projs) {
 			continue
 		}
-		state, reason := processStatus(parked[d.Key])
+		tally := parked[d.Key]
+		state, reason := processStatus(tally.Count)
+		detail := map[string]string{
+			"version":       strconv.FormatInt(int64(d.Version), 10),
+			"instances":     strconv.Itoa(live[d.Key]),
+			"parkedTokens":  strconv.Itoa(tally.Count),
+			"definitionKey": strconv.FormatUint(d.Key, 10),
+		}
+		// Where the worst of it is parked, on the observation as well as on the mesh.
+		// A model overlay that says "degraded" and cannot say where sends somebody to
+		// a second view to find out; one element id spares them that trip, and the
+		// rest of the list is in Operations either way.
+		if len(tally.Sites) > 0 {
+			worst := tally.Sites[0]
+			detail["parkedAt"] = strings.TrimSpace(worst.ElementType + " " + worst.ElementID)
+			if worst.Message != "" {
+				detail["parkedReason"] = worst.Message
+			}
+		}
 		facts.Processes[pid] = panorama.Fact{
 			Source: panorama.SourceDeployments, State: state, Reason: reason,
-			Detail: map[string]string{
-				"version":       strconv.FormatInt(int64(d.Version), 10),
-				"instances":     strconv.Itoa(live[d.Key]),
-				"parkedTokens":  strconv.Itoa(parked[d.Key]),
-				"definitionKey": strconv.FormatUint(d.Key, 10),
-			},
+			Detail: detail,
 		}
 		if d.ProjectID == "" {
 			continue
@@ -127,7 +141,7 @@ func (s *Server) collectLocalFacts(r *http.Request) (panorama.Facts, []remoteTar
 		t := totals[d.ProjectID]
 		t.processes++
 		t.instances += live[d.Key]
-		t.incidents += parked[d.Key]
+		t.incidents += tally.Count
 		totals[d.ProjectID] = t
 	}
 

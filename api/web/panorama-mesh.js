@@ -721,10 +721,26 @@ const CONTEXT_HOPS = 1;
 function filterGraph(graph, term) {
   if (!term) return graph;
   const matched = new Set(graph.nodes.filter((n) => matches(n, term)).map((n) => n.id));
+  return around(graph, matched, CONTEXT_HOPS);
+}
 
-  const keep = new Set(matched);
-  let frontier = [...matched];
-  for (let hop = 0; hop < CONTEXT_HOPS && frontier.length; hop++) {
+// around cuts the graph down to a set of nodes and whatever is within `hops` of
+// them, marking which of the survivors were asked for and which are only there to
+// explain them.
+//
+// One walk for both ways of narrowing the picture — a search and a drilldown — for
+// the reason every other rule in this file is written once: two implementations of
+// "and its neighbours" would eventually disagree about what a neighbour is, and the
+// difference would show up as a picture that answers a slightly different question
+// depending on how you got to it.
+//
+// Direction is not consulted. "What is this attached to" includes the application it
+// sits in and the worker it calls alike; a hop that only counted arrows pointing one
+// way would answer a question nobody asked while looking like this one.
+function around(graph, seeds, hops) {
+  const keep = new Set(seeds);
+  let frontier = [...seeds];
+  for (let hop = 0; hop < hops && frontier.length; hop++) {
     const reached = new Set(frontier);
     const next = [];
     for (const e of graph.edges) {
@@ -736,13 +752,28 @@ function filterGraph(graph, term) {
     }
     frontier = next;
   }
-
   return {
     ...graph,
-    matched,
+    matched: new Set(seeds),
     nodes: graph.nodes.filter((n) => keep.has(n.id)),
     edges: graph.edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
   };
+}
+
+// drillInto is the whole landscape reduced to one node and what it touches.
+//
+// It is the same cut as a search that matched exactly one thing, and deliberately
+// so: reading a landscape is mostly narrowing, and there should be one idea of what
+// narrowed looks like rather than one per gesture. What differs is the reach — a
+// search keeps one hop because a name can match a hundred nodes, while a drilldown
+// starts from exactly one and can afford to follow the depth already on screen.
+//
+// Returns null when the node is not in this graph. A drilldown onto nothing is not
+// an empty landscape; it is a question that can no longer be asked, and the caller
+// has to say so rather than draw a blank canvas.
+export function drillInto(graph, id, hops) {
+  if (!graph.nodes.some((n) => n.id === id)) return null;
+  return around(graph, new Set([id]), hops);
 }
 
 function legendHTML(graph, layoutMs) {
@@ -960,8 +991,28 @@ function findingsHTML(graph) {
         <span class="mesh-finding-state">${esc(STATE_TEXT[n.state] || n.state || "")}${
           n.incidents ? ` · ${n.incidents} incident(s)` : ""}</span>
         ${n.reason ? `<span class="mesh-finding-why">${esc(n.reason)}</span>` : ""}
-      </button></li>`).join("")}</ul>
+      </button>${sitesHTML(n)}</li>`).join("")}</ul>
   </div>`;
+}
+
+// sitesHTML lists where in a process the parked work actually is.
+//
+// "Three tokens are parked" says there is a problem; "three on the service task
+// charge-card, and the last one said 502 Bad Gateway" says where to go. The element
+// is named by its BPMN id and type rather than by a label, because only user tasks
+// carry a title in a compiled process — an identifier that is sometimes there is
+// worse than one that is always there — and because that is what Operations shows,
+// so the two name the same thing the same way.
+function sitesHTML(node) {
+  if (!Array.isArray(node?.sites) || !node.sites.length) return "";
+  return `<ul class="mesh-sites">${node.sites.map((site) => `<li>
+    <span class="mesh-site-where">
+      ${site.elementType ? `<span class="muted">${esc(site.elementType)}</span> ` : ""}
+      <code>${esc(site.elementId)}</code>
+      ${site.count > 1 ? `<span class="mesh-site-count">${site.count}×</span>` : ""}
+    </span>
+    ${site.message ? `<span class="mesh-site-why">${esc(site.message)}</span>` : ""}
+  </li>`).join("")}</ul>`;
 }
 
 // SEVERITY_ORDER ranks the classes for the findings list. It is the same order the
@@ -974,7 +1025,7 @@ const SEVERITY_ORDER = { critical: 3, attention: 2, ok: 1, unknown: 0 };
 // point — a highlighted subgraph tells you *which*, a count tells you *how many*,
 // and "17 things depend on this worker" is the sentence somebody repeats in a
 // change-approval meeting.
-function impactPanelHTML(node, result, direction, depth) {
+function impactPanelHTML(node, result, direction, depth, { pinned = false } = {}) {
   if (!node) {
     return `<div class="mesh-panel mesh-panel-empty">
       <b>Nothing selected</b>
@@ -985,6 +1036,13 @@ function impactPanelHTML(node, result, direction, depth) {
   const word = direction === "dependents" ? "depend on this" : "are needed by this";
   const drill = node.kind === "process"
     ? `<a class="mesh-drill" href="${hrefFor(node)}">Open in Operations →</a>`
+    : "";
+  // Releasing one hand-placed node lives here, beside the node it is about. It used
+  // to be a double-click, which is a thing you have to be told; a button on the
+  // thing itself is a thing you can see.
+  const release = pinned
+    ? `<button type="button" class="mesh-unpin" data-unpin="${esc(node.id)}">
+        Release this node</button>`
     : "";
   // An answer that stopped at a permission boundary must not read as a complete
   // one. This is the same rule the mesh applies to the picture, applied to the
@@ -1006,6 +1064,7 @@ function impactPanelHTML(node, result, direction, depth) {
       <b>${esc(sev.label.split(" — ")[0])}</b>
       <span class="muted">${esc(STATE_TEXT[node.state] || node.state || "unbound")}</span>
       ${node.reason ? `<p>${esc(node.reason)}${inherited}</p>` : ""}
+      ${sitesHTML(node)}
     </div>`;
   return `<div class="mesh-panel">
     <div class="mesh-panel-head">
@@ -1017,6 +1076,7 @@ function impactPanelHTML(node, result, direction, depth) {
       <span class="muted">within ${depth === Infinity ? "any" : depth} hop(s)</span></div>
     ${truncation}
     ${drill}
+    ${release}
   </div>`;
 }
 
@@ -1045,6 +1105,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       <h1>Landscape</h1>
       <input id="mesh-search" type="search" class="mesh-search" autocomplete="off"
         placeholder="Filter by name, kind or process id…" aria-label="Filter the landscape"/>
+      <button id="mesh-drill-out" type="button" class="mesh-drill-chip" hidden></button>
       <span id="mesh-count" class="muted"></span>
     </div>
     <div id="mesh-legend-slot"></div>
@@ -1100,6 +1161,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   </div>`;
 
   const search = document.getElementById("mesh-search");
+  const drillOut = document.getElementById("mesh-drill-out");
   const surface = document.getElementById("mesh-surface");
   const zoomIn = document.getElementById("mesh-zoom-in");
   const zoomOut = document.getElementById("mesh-zoom-out");
@@ -1117,6 +1179,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const viewNote = document.getElementById("mesh-view-note");
 
   let selected = null;
+  // drilled is the node the landscape has been reduced to, or null for all of it.
+  //
+  // A drilldown is a *place to stand*, not a filter over names: it is the one node
+  // somebody double-clicked and whatever is within the depth already on screen. It
+  // and the search box are two ways of asking the same kind of question, so only one
+  // of them is ever in force — entering one clears the other, because two narrowings
+  // compounding invisibly is how a picture ends up showing something nobody asked
+  // for and nobody can undo.
+  let drilled = null;
   // pinned holds every node somebody has dragged, by id, at the world coordinates
   // they dropped it on. It is the whole of the arrangement: the layout reads it on
   // every paint, so a hand-placed node survives filtering, selecting and resizing —
@@ -1181,7 +1252,17 @@ export async function mountPanoramaMesh(view, { api, toast }) {
 
   function paint() {
     const term = search.value.trim().toLowerCase();
-    shown = filterGraph(graph, term);
+    const hops = depthSelect.value === "all" ? Infinity : Number(depthSelect.value);
+    // A drilldown onto a node that is no longer in the landscape is not an empty
+    // landscape — it is a question that can no longer be asked, and saying so beats
+    // drawing a blank canvas somebody would read as "everything is gone".
+    const drilledGraph = drilled ? drillInto(graph, drilled, hops) : null;
+    if (drilled && !drilledGraph) {
+      drilled = null;
+      toast("That node is no longer in this landscape.");
+    }
+    shown = drilledGraph || filterGraph(graph, term);
+    paintDrillChip();
     // A selection that the filter removed is no longer selected: highlighting a node
     // that is not on screen would leave the panel describing something invisible.
     if (selected && !shown.nodes.some((n) => n.id === selected)) selected = null;
@@ -1210,10 +1291,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // node matched the term would be the header agreeing with the drawing and both
     // of them misreporting the search.
     const context = shown.nodes.length - (shown.matched?.size ?? shown.nodes.length);
-    count.textContent = term
-      ? `${shown.matched?.size ?? 0} of ${graph.nodes.length} node(s) match` +
-        (context ? `, ${context} shown for context` : "")
-      : `${graph.nodes.length} node(s), ${graph.edges.length} edge(s)`;
+    if (drilled) {
+      count.textContent = `${context} of ${graph.nodes.length} node(s) within ` +
+        `${depthSelect.value === "all" ? "any" : depthSelect.value} hop(s)`;
+    } else {
+      count.textContent = term
+        ? `${shown.matched?.size ?? 0} of ${graph.nodes.length} node(s) match` +
+          (context ? `, ${context} shown for context` : "")
+        : `${graph.nodes.length} node(s), ${graph.edges.length} edge(s)`;
+    }
     refresh();
   }
 
@@ -1240,8 +1326,21 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       line.classList.toggle("mesh-dimmed", Boolean(highlight) && !inside);
     }
     panel.innerHTML = impactPanelHTML(
-      shown.nodes.find((n) => n.id === selected) || null, result, direction, depth);
+      shown.nodes.find((n) => n.id === selected) || null, result, direction, depth,
+      { pinned: pinned.has(selected) });
   }
+
+  // Releasing the one node the panel is about, without disturbing the arrangement
+  // around it.
+  panel.addEventListener("click", (event) => {
+    const id = event.target.closest?.("[data-unpin]")?.getAttribute("data-unpin");
+    if (!id || !pinned.has(id)) return;
+    pinned.delete(id);
+    const node = at.get(id);
+    if (node) node.held = false;
+    updateRelease();
+    paint();
+  });
 
   // index caches the elements a drag writes to. Looking them up once per render and
   // then writing coordinates straight onto them is what keeps a drag at frame rate:
@@ -1516,18 +1615,12 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // the one thing somebody dragging toward the edge is not asking for.
   surface.addEventListener("pointerleave", () => { if (!moving) endGesture(); });
 
-  // Double-clicking a node you have placed puts that one back, without disturbing
-  // the rest of the arrangement.
+  // Double-clicking a node goes into it.
   surface.addEventListener("dblclick", (event) => {
-    const element = event.target.closest?.("[data-node-id]");
-    const id = element?.getAttribute("data-node-id");
-    if (!id || !pinned.has(id)) return;
-    pinned.delete(id);
-    const node = at.get(id);
-    if (node) node.held = false;
-    element.classList.remove("mesh-pinned");
-    updateRelease();
-    paint();
+    const id = event.target.closest?.("[data-node-id]")?.getAttribute("data-node-id");
+    if (!id) return;
+    event.preventDefault();
+    drillTo(id);
   });
 
   release.addEventListener("click", () => {
@@ -1558,7 +1651,63 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     if (node) select(node.getAttribute("data-node-id"));
     else select(null);
   });
+  // Drilling into a node: the landscape reduced to it and what it touches.
+  //
+  // Double-click, because it is the gesture for "open this" everywhere else and
+  // because the single click is already spoken for by selecting. Which cost the
+  // double-click its previous job — releasing one pinned node — and that moved into
+  // the panel beside the node it is about, where it is visible instead of being
+  // folklore.
+  function paintDrillChip() {
+    if (!drilled) {
+      drillOut.hidden = true;
+      return;
+    }
+    const node = graph.nodes.find((n) => n.id === drilled);
+    drillOut.hidden = false;
+    drillOut.textContent = `Inside ${node?.name || drilled} ✕`;
+    drillOut.title = "Back to the whole landscape";
+  }
+
+  function drillTo(id) {
+    drilled = id;
+    // The search box and the drilldown are two ways of asking the same kind of
+    // question, so entering one clears the other rather than compounding with it.
+    search.value = "";
+    selected = id;
+    // Refitted, because the picture that comes back is a different graph in a
+    // different world, and a frame from the old one lands on nothing.
+    frameView = null;
+    paint();
+  }
+
+  function drillOutOf() {
+    if (!drilled) return;
+    drilled = null;
+    frameView = null;
+    // The selection is left alone, so the landscape comes back with the thing that
+    // was being read still marked in it: leaving a drilldown should not mean having
+    // to find the node again.
+    paint();
+  }
+
+  drillOut.addEventListener("click", drillOutOf);
+  // Escape is what leaves a thing you have gone into, in every other view — and it
+  // has to work wherever the focus happens to be, because somebody who has just
+  // double-clicked a circle has not focused anything in particular.
+  //
+  // Bound to the document for that reason, and guarded on this view still being on
+  // the page: the landscape is one route of a single-page app, and a handler that
+  // outlived it would act on a picture nobody is looking at.
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !drilled) return;
+    if (!document.body.contains(view)) return;
+    event.preventDefault();
+    drillOutOf();
+  });
+
   // Saved views.
+
   //
   // Reading a landscape is not a single act: somebody watching one node filters down
   // to it, zooms in, arranges what is around it — and a reload puts them back at the
@@ -1742,7 +1891,11 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     select(node.getAttribute("data-node-id"));
   });
   dirSelect.addEventListener("change", refresh);
-  depthSelect.addEventListener("change", refresh);
+  // Depth means two things at once, and only one of them is free. Inside a drilldown
+  // it decides how far the picture reaches, so changing it is a different graph and
+  // has to be laid out again; outside one it only bounds the impact walk, which is
+  // classes on the nodes already drawn.
+  depthSelect.addEventListener("change", () => (drilled ? paint() : refresh()));
 
   // Re-laying out on every keystroke is the wrong trade at 400 nodes, where the
   // simulation costs a few hundred milliseconds. A short debounce keeps typing
@@ -1750,6 +1903,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   let pending;
   search.addEventListener("input", () => {
     clearTimeout(pending);
+    // Typing is asking about the whole landscape again. Leaving the drilldown in
+    // force would search inside it while the box says otherwise.
+    drilled = null;
     // A filter changes what is on screen, so the frame the viewer had zoomed into is
     // about a picture that no longer exists. Refitting is the honest reset; keeping
     // the old frame would land them on empty space and read as a broken view.

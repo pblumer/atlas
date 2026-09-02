@@ -332,7 +332,13 @@ const statusGraph = {
     { id: "process:1", kind: "process", name: "Invoice", provenance: "derived",
       application: "application:a1", processId: "invoice", version: 1,
       state: "degraded", severity: "attention", incidents: 3,
-      reason: "3 token(s) are parked behind an unresolved incident." },
+      reason: "3 token(s) are parked behind an unresolved incident.",
+      sites: [
+        { elementId: "charge-card", elementType: "ServiceTask", count: 2,
+          message: "POST https://payments.example/charge: 502 Bad Gateway" },
+        { elementId: "notify-customer", elementType: "SendTask", count: 1,
+          message: "no worker holds the mail connector" },
+      ] },
     { id: "process:2", kind: "process", name: "Dunning", provenance: "derived",
       application: "application:a1", processId: "dunning", version: 1,
       state: "not-ready", severity: "critical", reason: "This worker cannot serve work: it is disabled." },
@@ -926,7 +932,11 @@ test("release puts everything back where the layout wants it", async ({ page }) 
   expect(Math.hypot(back.x - original.x, back.y - original.y)).toBeLessThan(1);
 });
 
-test("double-clicking one node releases only that one", async ({ page }) => {
+// Releasing one node lives in the panel beside the node it is about. It used to be
+// a double-click — which is a thing you have to be told, and which the drilldown
+// now wants — so it became a button on the thing itself, which is a thing you can
+// see.
+test("one node can be released without disturbing the arrangement", async ({ page }) => {
   installMock(page, meshOf(12));
   await page.goto("/index.html#/panorama/landscape");
   await page.locator(".mesh-node").first().waitFor();
@@ -937,11 +947,17 @@ test("double-clicking one node releases only that one", async ({ page }) => {
   await expect(page.locator('[data-node-id="process:9"]')).toHaveClass(/mesh-pinned/);
   const kept = await worldAt(page, "process:9");
 
-  await page.locator('[data-node-id="process:2"] .mesh-body').dblclick();
+  // Nothing selected: the panel offers no release, because there is no node it
+  // would be about.
+  await expect(page.locator(".mesh-unpin")).toHaveCount(0);
+
+  await page.locator('[data-node-id="process:2"]').click();
+  await page.locator(".mesh-unpin").click();
   await expect(page.locator('[data-node-id="process:2"]')).not.toHaveClass(/mesh-pinned/);
+
+  // The other one is untouched — both its pin and the place it was put.
   await expect(page.locator('[data-node-id="process:9"]')).toHaveClass(/mesh-pinned/);
   await expect(page.locator("#mesh-release")).toBeEnabled();
-
   const still = await worldAt(page, "process:9");
   expect(Math.hypot(still.x - kept.x, still.y - kept.y)).toBeLessThan(1);
 });
@@ -1209,4 +1225,134 @@ test("a filtered findings list says it is filtered", async ({ page }) => {
 
   await page.fill("#mesh-search", "dunning");
   await expect(page.locator(".mesh-findings-head")).toContainText("in the filtered landscape");
+});
+
+// Drilling into a node: the landscape reduced to it and what it touches.
+//
+// The complaint it answers is the one every large graph has: you find the thing you
+// came for and it is still sitting in four hundred circles of everything else.
+test("double-clicking a node goes into it", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-node")).toHaveCount(7);
+  await expect(page.locator("#mesh-drill-out")).toBeHidden();
+
+  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+
+  // Invoice, and what it touches at the depth already on screen (2 hops): its
+  // application, both processes, the restricted placeholder, the mail worker, and
+  // the decision Dunning uses. Not the unresolved archive dependency's siblings.
+  await expect(page.locator("#mesh-drill-out")).toBeVisible();
+  await expect(page.locator("#mesh-drill-out")).toContainText("Inside Invoice");
+  await expect(page.locator('[data-node-id="process:1"]')).toHaveCount(1);
+  await expect(page.locator('[data-node-id="worker:c1"]')).toHaveCount(1);
+
+  // The node it went into is the subject; everything else is there to explain it,
+  // and is drawn as such — the same language a filtered picture uses.
+  await expect(page.locator('[data-node-id="process:1"]')).not.toHaveClass(/mesh-context/);
+  await expect(page.locator('[data-node-id="worker:c1"]')).toHaveClass(/mesh-context/);
+
+  // And it is selected, so the panel explains it without a second click.
+  await expect(page.locator(".mesh-panel-head")).toContainText("Invoice");
+  await expect(page.locator("#mesh-count")).toContainText("hop(s)");
+});
+
+// The depth control decides the reach, so "just this" and "this and its whole chain"
+// are the same gesture at two settings.
+test("the drilldown reaches as far as the depth says", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+
+  await page.selectOption("#mesh-depth", "1");
+  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+  const oneHop = await page.locator(".mesh-node").count();
+  // Invoice's own neighbours only: the decision that only Dunning uses is two away.
+  await expect(page.locator('[data-node-id="decision:credit"]')).toHaveCount(0);
+
+  await page.selectOption("#mesh-depth", "2");
+  await expect(page.locator('[data-node-id="decision:credit"]')).toHaveCount(1);
+  expect(await page.locator(".mesh-node").count()).toBeGreaterThan(oneHop);
+});
+
+// A drilldown is a place you are standing, so there has to be a way back — and
+// coming back must not mean finding the node again.
+test("leaving a drilldown restores the landscape with the node still marked", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+
+  await page.locator('[data-node-id="worker:c1"] .mesh-body').dblclick();
+  await expect(page.locator("#mesh-drill-out")).toBeVisible();
+
+  await page.locator("#mesh-drill-out").click();
+  await expect(page.locator("#mesh-drill-out")).toBeHidden();
+  await expect(page.locator(".mesh-node")).toHaveCount(7);
+  await expect(page.locator(".mesh-panel-head")).toContainText("ops-mail");
+
+  // Escape is the other way out, the one it is everywhere else.
+  await page.locator('[data-node-id="process:2"] .mesh-body').dblclick();
+  await expect(page.locator("#mesh-drill-out")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#mesh-drill-out")).toBeHidden();
+  await expect(page.locator(".mesh-node")).toHaveCount(7);
+});
+
+// The search box and the drilldown ask the same kind of question, so only one is
+// ever in force. Two narrowings compounding invisibly is how a picture ends up
+// showing something nobody asked for and nobody can undo.
+test("a search leaves the drilldown rather than compounding with it", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+
+  await page.fill("#mesh-search", "invoice");
+  await expect(page.locator("#mesh-count")).toContainText("match");
+
+  // Drilling in clears the box, so the header is never describing one narrowing
+  // while the picture shows another.
+  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+  await expect(page.locator("#mesh-search")).toHaveValue("");
+  await expect(page.locator("#mesh-count")).toContainText("hop(s)");
+
+  // And typing goes back to asking about the whole landscape.
+  await page.fill("#mesh-search", "dunning");
+  await expect(page.locator("#mesh-drill-out")).toBeHidden();
+  await expect(page.locator("#mesh-count")).toContainText("match");
+});
+
+// Where exactly the work is parked. "Three tokens are parked" says there is a
+// problem; naming the task and quoting what it said says where to go — which is the
+// difference between a status view somebody glances at and one they act on.
+test("a finding says which task the work is parked on", async ({ page }) => {
+  installMock(page, statusGraph);
+  await page.goto("/index.html#/panorama/landscape");
+
+  const finding = page.locator(".mesh-findings");
+  await expect(finding).toContainText("charge-card");
+  await expect(finding).toContainText("ServiceTask");
+  await expect(finding).toContainText("502 Bad Gateway");
+
+  // Worst first, and a repeated element is one entry with a count rather than one
+  // entry each.
+  const rows = await page.locator(".mesh-findings .mesh-sites li").allTextContents();
+  expect(rows[0]).toContain("charge-card");
+  expect(rows[0]).toContain("2×");
+  expect(rows[1]).toContain("notify-customer");
+  // One incident on an element is not decorated with "1×" — a count that is always
+  // there stops being read.
+  expect(rows[1]).not.toContain("1×");
+
+  // The selected node repeats it beside the picture, so acting on a finding does not
+  // mean reading it in one panel and selecting it in another.
+  await page.locator('[data-node-id="process:1"]').click();
+  await expect(page.locator(".mesh-finding")).toContainText("charge-card");
+});
+
+// A node with a finding and no sites is the ordinary case for everything that is not
+// a process: an incident belongs to a token, and only a process has tokens.
+test("a finding with nowhere to point does not invent a place", async ({ page }) => {
+  installMock(page, statusGraph);
+  await page.goto("/index.html#/panorama/landscape");
+
+  await page.locator('[data-node-id="process:2"]').click();
+  await expect(page.locator(".mesh-finding")).toContainText("This worker cannot serve work");
+  await expect(page.locator(".mesh-finding .mesh-sites")).toHaveCount(0);
 });
