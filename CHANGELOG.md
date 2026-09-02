@@ -14,6 +14,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A Jira task can look an account up.** An eighth Jira operation, `search-users`, turns
+  what a process knows about a person — an address, a name — into the `accountId` Jira
+  assigns an issue to ([ADR-draft-jira-account-lookup](docs/adr/draft-jira-account-lookup.md)).
+  The term travels as `query` on Cloud and `username` on Data Center, decided by the
+  connector's own credential rather than by the model, and an optional project restricts
+  the search to the accounts that project can actually assign — the ones a later
+  `assign-issue` will not be refused for. The matched accounts land in the result variable
+  as a JSON array, so an assign reads `=konten[1].accountId` (FEEL lists are 1-based).
+  Before this, a model could only hard-code an opaque per-site id or call Jira through the
+  REST connector with a second copy of the credential.
+
 - **A Jira issue can start a process.** A Jira connector now carries inbound event
   watches beside its outbound operations
   ([ADR-0214](docs/adr/0214-jira-inbound-issue-watch.md)): Console → Connectors →

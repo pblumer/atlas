@@ -2852,7 +2852,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "jira", name: "Jira", group: "Applications", desc: "Create, read, update, transition, comment on, assign, or search Jira issues", icon: "J",
+    id: "jira", name: "Jira", group: "Applications", desc: "Create, read, update, transition, comment on, assign, or search Jira issues, and look up the accounts to assign them to", icon: "J",
     // A check-mark inside a rounded square on Atlassian blue: the issue, ticked —
     // this connector's counterpart to REST's globe and Remedy's ticket. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2873,6 +2873,7 @@ const SERVICE_TASK_KINDS = [
           { v: "add-comment", l: "Add comment" },
           { v: "assign-issue", l: "Assign issue" },
           { v: "search", l: "Search (JQL)" },
+          { v: "search-users", l: "Search users" },
         ],
       },
       {
@@ -2884,8 +2885,10 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "project", label: "Project", placeholder: "OPS", fx: true,
-        showIf: (v) => v.operation === "create-issue",
-        hint: "The project key the issue is created in. A value that is all digits is read as a project id instead. May be a FEEL expression (fx).",
+        showIf: (v) => v.operation === "create-issue" || v.operation === "search-users",
+        hint: (v) => (v.operation === "search-users"
+          ? "Optional. Restricts the search to the accounts this project can actually assign — without it the search covers the whole site, and an account it finds may still be one Jira refuses to hand an issue to. May be a FEEL expression (fx)."
+          : "The project key the issue is created in. A value that is all digits is read as a project id instead. May be a FEEL expression (fx)."),
       },
       {
         key: "issueType", label: "Issue type", placeholder: "Task", fx: true,
@@ -2923,9 +2926,16 @@ const SERVICE_TASK_KINDS = [
         hint: "The Jira query the search runs, written exactly as in Jira's own search box. It must restrict what it matches — Jira Cloud refuses an unbounded query outright, so a query that only sorts (order by created DESC) comes back as HTTP 400; name at least a project, an assignee or a label. May be a FEEL expression (fx), so a process can search for what it is actually about — e.g. =\"project = OPS AND reporter = \" + melder.",
       },
       {
-        key: "maxResults", label: "Maximum issues", placeholder: "50",
-        showIf: (v) => v.operation === "search",
-        hint: "Caps what may land in the result variable. The connector follows Jira's paging to that many issues, so the result is the issues themselves, never one page of them. Empty uses 50; 0 reads every match.",
+        key: "query", label: "Search term", placeholder: "=antragsteller.mail", fx: true,
+        showIf: (v) => v.operation === "search-users",
+        hint: "A fragment of the account's display name or address — Jira matches it as a substring. On Jira Cloud it searches both; on Data Center it matches the username. Usually a FEEL expression (fx) naming what the process already knows about the person, e.g. =antragsteller.mail.",
+      },
+      {
+        key: "maxResults", label: "Maximum results", placeholder: "50",
+        showIf: (v) => v.operation === "search" || v.operation === "search-users",
+        hint: (v) => (v.operation === "search-users"
+          ? "Caps what may land in the result variable. The connector follows Jira's paging to that many accounts. Empty uses 50; 0 reads every match."
+          : "Caps what may land in the result variable. The connector follows Jira's paging to that many issues, so the result is the issues themselves, never one page of them. Empty uses 50; 0 reads every match."),
       },
       {
         key: "fields", label: "Further fields", type: "map", childType: "atlas:JiraField", fx: true,
@@ -2935,17 +2945,24 @@ const SERVICE_TASK_KINDS = [
       { group: "Output" },
       {
         key: "resultVariable", label: "Result variable",
-        resultType: (v) => (v.operation === "search" ? "array" : "object"),
+        resultType: (v) => (v.operation === "search" || v.operation === "search-users" ? "array" : "object"),
         placeholder: "ticket",
-        // Three of the seven operations Jira answers with 204 No Content, so a result
+        // Three of the eight operations Jira answers with 204 No Content, so a result
         // variable there would name a value that is never written — the panel hides it
         // rather than letting an author expect one (the compiler refuses it too).
-        showIf: (v) => ["create-issue", "get-issue", "add-comment", "search"].includes(v.operation),
-        hint: (v) => v.operation === "search"
-          ? "The matched issues are written into this process variable as a JSON array — the issues themselves, not Jira's paging envelope."
-          : (v.operation === "create-issue"
-            ? "The created issue is written into this process variable, so a later task can address it as =ticket.key. Leave empty to discard it."
-            : "What Jira returned is written into this process variable (leave empty to discard it)."),
+        showIf: (v) => ["create-issue", "get-issue", "add-comment", "search", "search-users"].includes(v.operation),
+        hint: (v) => {
+          switch (v.operation) {
+            case "search-users":
+              return "The matched accounts are written into this process variable as a JSON array. FEEL lists are 1-based, so the first account's id is =konten[1].accountId — which is what Assign issue takes, and what an assignee field on Create issue takes as ={\"accountId\": konten[1].accountId}.";
+            case "search":
+              return "The matched issues are written into this process variable as a JSON array — the issues themselves, not Jira's paging envelope.";
+            case "create-issue":
+              return "The created issue is written into this process variable, so a later task can address it as =ticket.key. Leave empty to discard it.";
+            default:
+              return "What Jira returned is written into this process variable (leave empty to discard it).";
+          }
+        },
       },
     ],
   },

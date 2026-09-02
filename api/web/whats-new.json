@@ -2,6 +2,28 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "a-jira-task-can-look-an-account-up",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A Jira task can find the person to assign a ticket to",
+        "de": "Ein Jira-Task kann die Person finden, der ein Ticket gehört"
+      },
+      "summary": {
+        "en": "Jira hands a ticket to an account id — an opaque string like 5bbb13f8… — while your process knows the person by their mail address. The Jira connector has a new operation, Search users, that turns the one into the other: give it an address or part of a name, and the matching accounts land in a process variable. A following Assign issue then takes =konten[1].accountId, and a Create issue can carry the same value as an assignee field. Name a project and the search only offers accounts that project can actually assign, so the assign a step later does not bounce. Until now a model had to hard-code an id that is different on every Jira site and for every person.",
+        "de": "Jira übergibt ein Ticket an eine Konto-Id — eine kryptische Zeichenfolge wie 5bbb13f8… —, während Ihr Prozess die Person an ihrer Mailadresse kennt. Der Jira-Konnektor hat dafür eine neue Operation „Search users\": Sie geben eine Adresse oder einen Namensteil an, und die passenden Konten landen in einer Prozessvariablen. Ein nachfolgendes „Assign issue\" nimmt dann =konten[1].accountId, und ein „Create issue\" kann denselben Wert als Assignee-Feld mitgeben. Nennen Sie zusätzlich ein Projekt, findet die Suche nur Konten, denen dieses Projekt überhaupt zugewiesen werden kann — dann scheitert das Zuweisen einen Schritt später nicht. Bisher musste ein Modell eine Id fest eintragen, die auf jeder Jira-Instanz und für jede Person eine andere ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ]
+    },
+    {
       "id": "a-jira-issue-can-start-a-process",
       "version": "Unreleased",
       "date": null,
@@ -299,28 +321,6 @@
       "tags": [
         "Workers",
         "Connectors"
-      ]
-    },
-    {
-      "id": "new-atlas-mark",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Atlas has a new mark",
-        "de": "Atlas hat eine neue Marke"
-      },
-      "summary": {
-        "en": "The little square beside the Atlas name — in the top bar, the app drawer, on the sign-in screen, in the handbook and on public forms — is now a white peak carrying a cross on black, and the browser tab icon changes with it. Nothing you have set is affected: if your organisation uploaded its own logo under Organization → Appearance, that is still what everyone sees, and removing it now brings back the new mark instead of the old A.",
-        "de": "Das kleine Quadrat neben dem Atlas-Namen — in der Topbar, in der App-Schublade, auf dem Anmeldebildschirm, im Handbuch und auf öffentlichen Formularen — zeigt jetzt einen weissen Berg mit Kreuz auf Schwarz, und das Symbol im Browser-Tab wechselt mit. An Ihren Einstellungen ändert das nichts: Hat Ihre Organisation unter „Organization → Appearance“ ein eigenes Logo hochgeladen, sehen weiterhin alle dieses; wird es entfernt, erscheint neu die neue Marke statt des alten A."
-      },
-      "link": {
-        "label": "ADR-0148",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0148-org-wide-brand-logo.md"
-      },
-      "tags": [
-        "Console",
-        "Organization"
       ]
     }
   ]

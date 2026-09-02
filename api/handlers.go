@@ -4786,7 +4786,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"connector": j.Connector, "operation": j.Operation, "issue": j.Issue,
 			"project": j.Project, "issueType": j.IssueType, "summary": j.Summary,
 			"description": j.Description, "transition": j.Transition, "comment": j.Comment,
-			"assignee": j.Assignee, "jql": j.JQL, "maxResults": j.MaxResults,
+			"assignee": j.Assignee, "jql": j.JQL, "query": j.Query, "maxResults": j.MaxResults,
 			"fields": j.Fields, "requestId": j.RequestID, "resultVariable": j.ResultVariable,
 		}}
 	case compiler.MsSqlJobTypeIndex, compiler.MariaDBJobTypeIndex, compiler.PostgresJobTypeIndex:

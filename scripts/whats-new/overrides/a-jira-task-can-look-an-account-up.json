@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Connectors",
+    "Modeler"
+  ],
+  "title": {
+    "en": "A Jira task can find the person to assign a ticket to",
+    "de": "Ein Jira-Task kann die Person finden, der ein Ticket gehört"
+  },
+  "summary": {
+    "en": "Jira hands a ticket to an account id — an opaque string like 5bbb13f8… — while your process knows the person by their mail address. The Jira connector has a new operation, Search users, that turns the one into the other: give it an address or part of a name, and the matching accounts land in a process variable. A following Assign issue then takes =konten[1].accountId, and a Create issue can carry the same value as an assignee field. Name a project and the search only offers accounts that project can actually assign, so the assign a step later does not bounce. Until now a model had to hard-code an id that is different on every Jira site and for every person.",
+    "de": "Jira übergibt ein Ticket an eine Konto-Id — eine kryptische Zeichenfolge wie 5bbb13f8… —, während Ihr Prozess die Person an ihrer Mailadresse kennt. Der Jira-Konnektor hat dafür eine neue Operation „Search users\": Sie geben eine Adresse oder einen Namensteil an, und die passenden Konten landen in einer Prozessvariablen. Ein nachfolgendes „Assign issue\" nimmt dann =konten[1].accountId, und ein „Create issue\" kann denselben Wert als Assignee-Feld mitgeben. Nennen Sie zusätzlich ein Projekt, findet die Suche nur Konten, denen dieses Projekt überhaupt zugewiesen werden kann — dann scheitert das Zuweisen einen Schritt später nicht. Bisher musste ein Modell eine Id fest eintragen, die auf jeder Jira-Instanz und für jede Person eine andere ist."
+  }
+}
