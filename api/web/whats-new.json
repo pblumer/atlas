@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "a-message-start-event-says-whether-anything-feeds-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A message start event now shows what feeds it",
+        "de": "Ein Nachrichten-Start zeigt jetzt, wer ihn speist"
+      },
+      "summary": {
+        "en": "A process that starts on a message only names the message — deliberately, so the same process can be triggered by a Jira watch today and something else tomorrow without touching the model. The catch was that a name typed slightly differently in the model and in Connectors → Events left two halves that never meet: nothing fails, the process just never starts. The Modeler now writes it under the message name — which watches publish it, on which connector, and whether one is switched off — or tells you none does and where to add one.",
+        "de": "Ein Prozess, der auf eine Nachricht startet, nennt nur die Nachricht — mit Absicht, damit ihn heute eine Jira-Überwachung und morgen etwas anderes auslösen kann, ohne das Modell anzufassen. Der Haken: Ein Name, der im Modell und unter „Connectors → Events\" leicht verschieden getippt ist, ergibt zwei Hälften, die sich nie treffen — nichts schlägt fehl, der Prozess startet einfach nie. Der Modeler schreibt es jetzt unter den Nachrichtennamen: welche Überwachungen ihn veröffentlichen, auf welchem Konnektor, und ob eine abgeschaltet ist — oder dass es keine gibt und wo Sie eine anlegen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-jira-task-can-look-an-account-up",
       "version": "Unreleased",
       "date": null,
@@ -327,35 +356,6 @@
       "link": {
         "label": "ADR-0210",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0210-federated-authentication.md"
-      },
-      "tags": [
-        "Security",
-        "Console"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organization öffnen"
-        },
-        "route": "#/console/org"
-      }
-    },
-    {
-      "id": "let-the-provider-s-groups-decide-roles",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Let the provider's groups decide roles",
-        "de": "Die Gruppen des Anbieters entscheiden über die Rollen"
-      },
-      "summary": {
-        "en": "Signing in with your identity provider granted nothing until now: a first sign-in produced an account with the user role, and an administrator granted the rest by hand. Under Organization → Single sign-on you can now name one claim in the provider's token and a list of exact values it may carry, and say what each value grants — Atlas roles, and membership of Atlas groups. Onboarding and offboarding then become a group membership somebody already maintains: the role and the shared projects arrive at the next sign-in and go away at the sign-in after the membership does. It is off until you turn it on, and worth one decision before you do: while it is on, whoever administers those groups administers this instance's roles, and a role you grant by hand is replaced at that person's next sign-in. Group membership follows only for the groups your rules name, so a group you manage yourself is left alone. Nothing is granted by absence — somebody the provider says nothing about matches no rule and simply holds user — and a rule that could never work, naming a role Atlas does not enforce or a group you have deleted, is refused when you save it rather than ignored on every login.",
-        "de": "Die Anmeldung über Ihren Identitätsanbieter vergab bisher nichts: Die erste Anmeldung legte ein Konto mit der Rolle «user» an, den Rest vergab eine Administratorin von Hand. Unter «Organization → Single sign-on» benennen Sie jetzt einen Claim im Token des Anbieters und eine Liste genauer Werte, die er tragen darf — und zu jedem Wert, was er vergibt: Atlas-Rollen und die Mitgliedschaft in Atlas-Gruppen. Ein- und Austritt sind damit eine Gruppenmitgliedschaft, die ohnehin jemand pflegt: Rolle und geteilte Projekte kommen mit der nächsten Anmeldung und verschwinden mit der übernächsten, wenn die Mitgliedschaft weg ist. Es ist ausgeschaltet, bis Sie es einschalten — und diese eine Entscheidung ist es wert: Solange es an ist, verwaltet die Rollen dieser Installation, wer jene Gruppen verwaltet, und eine von Hand vergebene Rolle wird bei der nächsten Anmeldung dieser Person ersetzt. Die Gruppenmitgliedschaft folgt nur für die Gruppen, die Ihre Regeln nennen; eine Gruppe, die Sie selbst pflegen, bleibt unberührt. Abwesenheit vergibt nichts — wer beim Anbieter in keiner genannten Gruppe ist, trifft auf keine Regel und behält schlicht «user» — und eine Regel, die nie funktionieren könnte, weil sie eine Rolle nennt, die Atlas nicht durchsetzt, oder eine gelöschte Gruppe, wird beim Speichern abgewiesen statt bei jeder Anmeldung still übergangen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
         "Security",

@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A message start event says whether anything feeds it.** A model names a message and
+  nothing else — what publishes it is an operational fact, so the same process can be
+  started by a Jira watch, a clio subscription, a `POST /api/v1/messages` or another
+  process's send task, and swapping one for another is a Console change rather than a
+  redeploy. The cost of that seam was that a name typed one character differently in the
+  model and in Console → Connectors → Events is two working halves that never meet: no
+  error anywhere, and a process that simply never starts. The Modeler now reads
+  `GET /api/v1/message-sources` and says, under the message name, which inbound watches
+  publish it — the connector, its kind, the JQL or subject it follows, and whether it is
+  switched off — or that none does, with where one is configured. It reports; it does not
+  bind: the model still names no source. A watch's query is configuration, so it is shown
+  only to a caller with viewer access to that connector; that a name is fed at all is
+  answered to any modeller, like the connector picker's own listing.
+
 - **A Jira task can look an account up.** An eighth Jira operation, `search-users`, turns
   what a process knows about a person — an address, a name — into the `accountId` Jira
   assigns an issue to ([ADR-draft-jira-account-lookup](docs/adr/draft-jira-account-lookup.md)).

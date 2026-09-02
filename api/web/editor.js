@@ -3911,6 +3911,7 @@ function messageFieldsHTML(modeler, med, hint) {
   const fields = current ? `
     <label class="field"><span>Message name</span>
       <input type="text" id="f-msgname" value="${esc(current.name || "")}" placeholder="payment-received"/></label>
+    <p class="muted" style="font-size:12px" id="f-msgsources"></p>
     <label class="field"><span>Correlation key (FEEL)</span>
       <textarea id="f-corrkey" rows="1" placeholder="orderId">${esc(messageCorrelationKey(current))}</textarea></label>
     <p class="muted" style="font-size:12px">Shared with every event that uses this message — a throw and a catch correlate when they use the same message and their keys evaluate equal.</p>` : "";
@@ -3923,6 +3924,48 @@ function messageFieldsHTML(modeler, med, hint) {
       </select></label>
     ${fields}
     <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+
+// fillMessageSources says whether anything on this server publishes the message name in
+// front of the author, and what.
+//
+// A model names a message and nothing else, on purpose: what feeds it is an operational
+// fact, so the same process can be started by a Jira watch, a clio subscription, a POST
+// to /api/v1/messages or another process's send task, and swapping one for another is a
+// Console change rather than a redeploy (ADR-0075/0214). The cost of that seam is
+// exactly this: a name typed one character differently here and in Console → Connectors
+// → Events is two working halves that never meet — no error anywhere, and a process that
+// never starts. The line closes the gap without closing the seam: it reports, it does not
+// bind.
+//
+// It is deliberately silent about *catchers*. A name with no inbound watch is entirely
+// normal — a throw event inside the same model, or an external system posting the
+// message, are both invisible from here — so the empty case says where watches are
+// configured rather than claiming the name is wrong.
+//
+// A failed fetch leaves the line empty, like every other server-fed hint in this panel:
+// an author who cannot reach the server is not helped by being told so twice.
+function fillMessageSources(api, el, name) {
+  if (!api || !el) return;
+  const want = (name || "").trim();
+  if (!want) return;
+  api("GET", "/api/v1/message-sources").then((list) => {
+    const mine = (list || []).filter((s) => s && s.messageName === want);
+    if (!mine.length) {
+      el.innerHTML = `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
+        + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
+        + `for a Jira or clio event, add a watch under <b>Connectors → Events</b> in the Console.</span>`;
+      return;
+    }
+    const parts = mine.map((s) => {
+      const what = s.description ? ` — ${esc(s.description)}` : "";
+      const off = s.enabled ? "" : ' <span class="pill warn">off</span>';
+      return `<li>${esc(s.kind)} <b>${esc(s.connectorName)}</b>${what}${off}</li>`;
+    }).join("");
+    el.innerHTML = `Published by ${mine.length} inbound event watch${mine.length > 1 ? "es" : ""}:`
+      + `<ul style="margin:4px 0 0 16px;padding:0">${parts}</ul>`;
+  }).catch(() => { /* no hint; the field works the same */ });
 }
 
 // messagesManagerHTML lists the model's messages for central management (add,
@@ -6494,9 +6537,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     const fmsgname = body.querySelector("#f-msgname");
     if (fmsgname) {
+      fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value);
       fmsgname.addEventListener("change", () => {
         const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) med.messageRef.name = (fmsgname.value || "").trim();
+        // Renaming the message changes which watches feed it, so the line is re-read
+        // rather than left describing the name that was there a moment ago.
+        fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value);
       });
     }
     const fcorrkey = body.querySelector("#f-corrkey");
