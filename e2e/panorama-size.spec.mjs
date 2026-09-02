@@ -88,3 +88,80 @@ test("degree counts dependencies, not containment", async ({ page }) => {
 
   expect(degrees).toEqual({ a: 0, p1: 3, p2: 2, w: 1 });
 });
+
+// Shape is the third channel after colour and size, and the one that survives what
+// they do not: a printout, a projector, and a reader who does not separate the hues.
+
+// The property the whole change rests on. The layout's separation guarantee is
+// stated in circles — every node keeps a clear radius around it — so a shape that
+// never leaves that circle cannot break it, and the guarantee transfers for free.
+// A shape that poked out would put corners through neighbours at exactly the sizes
+// where the picture is already tightest.
+test("no shape leaves the circle the layout reserved for it", async ({ page }) => {
+  const worst = await page.evaluate(() => {
+    const out = {};
+    for (const shape of ["circle", "square", "triangle", "hexagon", "diamond"]) {
+      let far = 0;
+      for (const r of [1, 11, 12, 17, 30, 42]) {
+        for (const [x, y] of window.shapeVertices(shape, r)) {
+          far = Math.max(far, Math.hypot(x, y) / r);
+        }
+      }
+      out[shape] = far;
+    }
+    return out;
+  });
+
+  for (const [shape, reach] of Object.entries(worst)) {
+    // A circle has no vertices, so its reach is 0 and it trivially fits; every
+    // polygon touches the circle exactly and never crosses it.
+    expect(reach, shape).toBeLessThanOrEqual(1.0001);
+  }
+  expect(worst.circle).toBe(0);
+  for (const shape of ["square", "triangle", "hexagon", "diamond"]) {
+    expect(worst[shape], shape).toBeCloseTo(1, 5);
+  }
+});
+
+// Each kind gets its own outline, and no two kinds share one — a shape that stood
+// for two things would be a channel spent on nothing.
+test("every kind is a different shape", async ({ page }) => {
+  const shapes = await page.evaluate(() => Object.fromEntries(
+    ["application", "process", "worker", "decision", "restricted"]
+      .map((kind) => [kind, window.shapeForNode({ kind, id: `${kind}:1` })])));
+
+  expect(shapes).toEqual({
+    application: "circle", process: "square", worker: "hexagon",
+    decision: "triangle", restricted: "diamond",
+  });
+  expect(new Set(Object.values(shapes)).size).toBe(Object.keys(shapes).length);
+});
+
+// An unresolved dependency is drawn in the silhouette of the thing that is *missing*
+// rather than in one that means "missing": its id names the kind, the dashes already
+// say it is not there, and the shape says what should have been.
+test("an unresolved dependency wears the shape of what is missing", async ({ page }) => {
+  const shapes = await page.evaluate(() => ({
+    process: window.shapeForNode({ kind: "unresolved", id: "unresolved:process:archive" }),
+    worker: window.shapeForNode({ kind: "unresolved", id: "unresolved:worker:mail" }),
+    decision: window.shapeForNode({ kind: "unresolved", id: "unresolved:decision:credit" }),
+    // A kind this build does not draw, and an id that names none: both fall back to
+    // the shape that is not any kind's, rather than borrowing one that is.
+    unknown: window.shapeForNode({ kind: "unresolved", id: "unresolved:something:new" }),
+    malformed: window.shapeForNode({ kind: "unresolved", id: "unresolved" }),
+  }));
+
+  expect(shapes).toEqual({
+    process: "square", worker: "hexagon", decision: "triangle",
+    unknown: "diamond", malformed: "diamond",
+  });
+});
+
+// A kind this build does not know still gets drawn: a node with no shape is a node
+// that is not on the picture, and a payload this view does not recognise is still a
+// payload it has to render.
+test("an unfamiliar kind still has a shape", async ({ page }) => {
+  const shape = await page.evaluate(() =>
+    window.shapeForNode({ kind: "something-new", id: "something-new:1" }));
+  expect(shape).toBe("square");
+});

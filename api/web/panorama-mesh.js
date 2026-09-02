@@ -35,16 +35,91 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
 // without either overwriting the other — what kind of thing this is, and how much
 // of the landscape hangs off it.
 const KIND = {
-  application: { r: 30, grow: 12, fill: "var(--accent-soft)", stroke: "var(--accent)", label: "Application" },
-  process: { r: 17, grow: 5, fill: "var(--surface)", stroke: "var(--border-strong)", label: "Process" },
+  application: { r: 30, grow: 12, shape: "circle", fill: "var(--accent-soft)", stroke: "var(--accent)", label: "Application" },
+  process: { r: 17, grow: 5, shape: "square", fill: "var(--surface)", stroke: "var(--border-strong)", label: "Process" },
   // --ok is a fixed green rather than a shade of the configurable accent, so its
   // soft companion is a literal here too. There is no --ok-soft at :root, and
   // defining one would change the one other rule that already asks for it.
-  worker: { r: 12, grow: 3.5, fill: "#e8f5ec", stroke: "var(--ok)", label: "Worker" },
-  decision: { r: 12, grow: 3.5, fill: "var(--accent-soft)", stroke: "var(--accent-hover)", label: "Decision" },
-  restricted: { r: 11, grow: 3, fill: "var(--bg)", stroke: "var(--muted)", label: "Restricted — outside your access", dashed: true },
-  unresolved: { r: 11, grow: 3, fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
+  worker: { r: 12, grow: 3.5, shape: "hexagon", fill: "#e8f5ec", stroke: "var(--ok)", label: "Worker" },
+  decision: { r: 12, grow: 3.5, shape: "triangle", fill: "var(--accent-soft)", stroke: "var(--accent-hover)", label: "Decision" },
+  // A placeholder for something real whose kind we may not learn, so it takes the
+  // shape that is not any kind's. Drawing it as one of them would be a guess wearing
+  // the same clothes as a fact.
+  restricted: { r: 11, grow: 3, shape: "diamond", fill: "var(--bg)", stroke: "var(--muted)", label: "Restricted — outside your access", dashed: true },
+  // Shape comes from the id, which names the kind of thing that is missing — see
+  // shapeForNode. The fallback is the same "no kind" diamond.
+  unresolved: { r: 11, grow: 3, shape: "diamond", fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
 };
+
+// Shape is the third channel, after colour and size, and the one that survives what
+// they do not: a printout, a projector, and a reader who does not separate the hues.
+// Colour already carries the kind *and* the ArchiMate layer; size already carries
+// rank and connectivity. Form was the last thing left, and a landscape of four
+// hundred identical circles was spending it on nothing.
+//
+// Every shape is **inscribed in the circle the layout reserved** — no vertex is
+// further from the centre than the radius the simulation kept clear. That is what
+// makes the change free: the separation guarantee is stated in circles, and a shape
+// that never leaves its circle cannot break it. It also means the shapes are a
+// little smaller than the circles they replace, which is the right way round: the
+// application stays the largest thing on screen.
+
+// shapeForNode is which outline a node is drawn with.
+//
+// An unresolved dependency takes the shape of the thing that is *missing* rather
+// than a shape meaning "missing": its id names the kind — a deployment, a worker, a
+// decision — and drawing the gap in the silhouette of what should fill it says what
+// is wrong at a glance. The dashes already say it is not there.
+export function shapeForNode(node) {
+  if (node?.kind === "unresolved") {
+    const missing = String(node.id || "").split(":")[1];
+    return KIND[missing]?.shape || KIND.unresolved.shape;
+  }
+  return (KIND[node?.kind] || KIND.process).shape;
+}
+
+// shapeVertices returns a shape's corners at radius r, and an empty list for the
+// circle, which has none. Exported because "no vertex leaves the reserved circle" is
+// the property the layout depends on, and a property is worth checking as arithmetic
+// rather than trusting to the drawing code that happens to implement it.
+export function shapeVertices(shape, r) {
+  const at = (sides, rotation) => Array.from({ length: sides }, (_, i) => {
+    const angle = rotation + (i * 2 * Math.PI) / sides;
+    return [Math.cos(angle) * r, Math.sin(angle) * r];
+  });
+  switch (shape) {
+    // Apex up, the way a warning triangle and a flowchart decision both point.
+    case "triangle": return at(3, -Math.PI / 2);
+    // Flat top and bottom, which is what reads as a hexagon rather than as a blob.
+    case "hexagon": return at(6, 0);
+    case "diamond": return at(4, -Math.PI / 2);
+    // Axis-aligned, so it reads as a tile rather than as a rotated diamond. Its
+    // half-diagonal is r, which is what keeps it inside the reserved circle.
+    case "square": return at(4, -Math.PI / 4);
+    default: return [];
+  }
+}
+
+// bodyElement is the node's own outline, as SVG. Everything downstream keys off the
+// mesh-body class rather than off the element name, so severity, hover and impact
+// styling are unchanged by a node being a square.
+//
+// data-r carries the radius the layout reserved. The drawn outline is inscribed in
+// it and no longer reports it as an attribute of its own, and it is the reserved
+// circle — not the polygon — that the separation guarantee is about.
+function bodyElement(shape, r, attrs) {
+  const common = `class="mesh-body" data-r="${r.toFixed(1)}" ${attrs}`;
+  if (shape === "square") {
+    const half = r / Math.SQRT2;
+    return `<rect ${common} x="${(-half).toFixed(1)}" y="${(-half).toFixed(1)}"
+      width="${(half * 2).toFixed(1)}" height="${(half * 2).toFixed(1)}"
+      rx="${(half * 0.26).toFixed(1)}"/>`;
+  }
+  const vertices = shapeVertices(shape, r);
+  if (!vertices.length) return `<circle ${common} r="${r.toFixed(1)}"/>`;
+  const points = vertices.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  return `<polygon ${common} points="${points}"/>`;
+}
 
 // DEGREE_FULL is the number of dependencies at which a node is drawn at the top of
 // its band. It is a fixed reference rather than the busiest node in this particular
@@ -778,12 +853,16 @@ export function drillInto(graph, id, hops) {
 
 function legendHTML(graph, layoutMs) {
   const present = new Set(graph.nodes.map((n) => n.kind));
+  // The swatch is drawn by the same function the node is, so a legend cannot come to
+  // disagree with the picture it explains.
   const swatches = Object.entries(KIND)
     .filter(([kind]) => present.has(kind))
     .map(([kind, style]) => `<span class="mesh-swatch">
-      <svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="5"
-        fill="${style.fill}" stroke="${style.stroke}" stroke-width="2"
-        ${style.dashed ? 'stroke-dasharray="3 2"' : ""}/></svg>${esc(style.label)}</span>`)
+      <svg width="16" height="16" aria-hidden="true"><g transform="translate(8,8)">
+        ${bodyElement(style.shape, 6,
+          `fill="${style.fill}" stroke="${style.stroke}" stroke-width="2" ` +
+          (style.dashed ? 'stroke-dasharray="3 2"' : ""))}
+      </g></svg>${esc(style.label)}</span>`)
     .join("");
 
   const notes = [];
@@ -921,8 +1000,9 @@ function renderGraph(graph, layoutMs, frame, { pinned, from } = {}) {
       ${sev.beats ? `<circle class="mesh-beat" r="${r.toFixed(1)}"/>` : ""}
       <circle class="mesh-halo" r="${(r + 6).toFixed(1)}"/>
       ${prov.ring ? `<circle r="${(r + 4).toFixed(1)}" fill="none" stroke="${style.stroke}" stroke-width="1" opacity="0.55"/>` : ""}
-      <circle class="mesh-body" r="${r.toFixed(1)}" fill="${prov.ghost ? "none" : style.fill}" stroke="${sev.stroke || style.stroke}"
-        stroke-width="${sev.stroke ? 3 : 2}" ${style.dashed || prov.ghost ? 'stroke-dasharray="4 3"' : ""}/>
+      ${bodyElement(shapeForNode(n), r,
+        `fill="${prov.ghost ? "none" : style.fill}" stroke="${sev.stroke || style.stroke}" ` +
+        `stroke-width="${sev.stroke ? 3 : 2}" ${style.dashed || prov.ghost ? 'stroke-dasharray="4 3"' : ""}`)}
       <circle class="mesh-pin" r="4" cx="${(-r * 0.72).toFixed(1)}" cy="${(r * 0.72).toFixed(1)}"/>
       ${n.children ? `<text class="mesh-count" text-anchor="middle" dy="4">${n.children}</text>` : ""}
       ${badge}

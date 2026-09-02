@@ -13,9 +13,11 @@
   <body>
     <div id="ready">loading</div>
     <script type="module">
-      import { radiusFor, degreesOf } from "/panorama-mesh.js";
+      import { radiusFor, degreesOf, shapeForNode, shapeVertices } from "/panorama-mesh.js";
       window.radiusFor = (node, degree) => radiusFor(node, degree);
       window.degreesOf = (graph) => [...degreesOf(graph)];
+      window.shapeForNode = (node) => shapeForNode(node);
+      window.shapeVertices = (shape, r) => shapeVertices(shape, r);
       document.getElementById("ready").textContent = "ready";
     </script>
   </body>
