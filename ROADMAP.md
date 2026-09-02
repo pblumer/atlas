@@ -176,8 +176,22 @@ The control-flow basics most real models use.
   reference matching nothing here is **stated, not dropped**: it is the edge of what
   one instance can see, and precisely the boundary slice 5 removes. An application
   that models nothing still gets its objects drawn, and the graph says it is
-  degraded. Next: **data stores** bound to a class and a Worker, and the
-  cross-instance data index the business key exists for.
+  degraded. **Slice 5a landed**: the **data-centric index** — `GET /api/v1/data-objects`
+  now answers the question BPMN structurally cannot express, *which instances, across
+  which processes, are carrying this order*, filtered by class and by **business key**.
+  With `?history=true` it sweeps finished instances too, which costs a longer walk and
+  nothing on disk: a finished instance keeps its data objects until it is purged, and
+  retention is opt-in (ADR-0115). It is deliberately a **sweep and not a durable
+  index** — one would have to live in `applyToState`, know what a business key is (the
+  engine reads integer indices; the key lives in design-time state it must not read),
+  and be swept by a purge that deletes by instance-key prefix and could not reach it.
+  That is a decision of its own, worth taking when a sweep starts to hurt. The answer
+  says how many instances it examined and whether a bound stopped it, because a
+  partial answer read as a whole one is the worst thing an index can do. Data ›
+  Instances groups by class and then by key — one datum, several instances — and the
+  object diagram's "this customer is not in this instance" note now links straight
+  into it. Next: **slice 5b**, `<dataStoreReference>` parsed and bound to a class and
+  a Worker, read-only to start.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🚧 **Conformance tests against a curated BPMN model set** — the
   [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN

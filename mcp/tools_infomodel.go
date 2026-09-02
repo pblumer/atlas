@@ -228,22 +228,37 @@ func infomodelTools() []Tool {
 		},
 		{
 			Name: "atlas_data_objects",
-			Description: "List the BPMN data objects the running instances carry, newest instance first — " +
-				"the landscape read from the data's side rather than the process's. Each row names its " +
-				"instance and process, the type the model declared (itemSubjectRef), the data state it is " +
-				"in and its value. Filter by class to answer \"which processes are handling an Order right " +
-				"now\". Running instances only; a finished instance's data is read through " +
-				"atlas_instance_data_objects.",
+			Description: "The data-centric index: which instances carry which data, newest first — the " +
+				"landscape read from the data's side rather than the process's. Each row names its " +
+				"instance and process, the type the model declared (itemSubjectRef), the data state, the " +
+				"value, and the business key when the class declares an identity. Filter by class for " +
+				"\"which processes are handling an Order\", and by key for the question BPMN cannot " +
+				"express: which instances, across which processes, are carrying THIS order. Running " +
+				"instances only unless history is true, which also sweeps finished ones. The answer says " +
+				"how many instances it examined and whether a bound stopped it — treat a truncated " +
+				"answer as a page, not as the whole truth.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"class": stringProp("Optional declared type name to filter by, e.g. \"Order\"."),
+					"class":   stringProp("Optional declared type name to filter by, e.g. \"Order\"."),
+					"key":     stringProp("Optional business key to filter by, e.g. \"ORD-1\". Only rows whose class declares an identity can match."),
+					"history": map[string]any{"type": "boolean", "description": "Also sweep finished instances. Costs a longer walk; their data is retained until purged."},
 				},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
-				path := "/api/v1/data-objects"
+				params := url.Values{}
 				if class := strings.TrimSpace(optString(args, "class")); class != "" {
-					path += "?class=" + url.QueryEscape(class)
+					params.Set("class", class)
+				}
+				if key := strings.TrimSpace(optString(args, "key")); key != "" {
+					params.Set("key", key)
+				}
+				if h, ok := args["history"].(bool); ok && h {
+					params.Set("history", "true")
+				}
+				path := "/api/v1/data-objects"
+				if len(params) > 0 {
+					path += "?" + params.Encode()
 				}
 				return asText(c.get(path))
 			},

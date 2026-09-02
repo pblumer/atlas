@@ -209,26 +209,63 @@ func TestInformationModelToolsScenario(t *testing.T) {
 	}
 	callOne(t, atlas, "atlas_create_instance", map[string]any{"key": procs[0].Key})
 
-	dataJSON := callOne(t, atlas, "atlas_data_objects", map[string]any{"class": "Order"})
-	var rows []struct {
-		Name        string `json:"name"`
-		ItemType    string `json:"itemType"`
-		State       string `json:"state"`
-		InstanceKey uint64 `json:"instanceKey"`
+	readIndex := func(args map[string]any) struct {
+		Objects []struct {
+			Name        string `json:"name"`
+			ItemType    string `json:"itemType"`
+			State       string `json:"state"`
+			InstanceKey uint64 `json:"instanceKey"`
+			Key         string `json:"key"`
+		} `json:"objects"`
+		Scanned   int  `json:"scanned"`
+		Truncated bool `json:"truncated"`
+		History   bool `json:"history"`
+	} {
+		t.Helper()
+		out := struct {
+			Objects []struct {
+				Name        string `json:"name"`
+				ItemType    string `json:"itemType"`
+				State       string `json:"state"`
+				InstanceKey uint64 `json:"instanceKey"`
+				Key         string `json:"key"`
+			} `json:"objects"`
+			Scanned   int  `json:"scanned"`
+			Truncated bool `json:"truncated"`
+			History   bool `json:"history"`
+		}{}
+		raw := callOne(t, atlas, "atlas_data_objects", args)
+		if err := json.Unmarshal([]byte(raw), &out); err != nil {
+			t.Fatalf("decode data objects: %v (%s)", err, raw)
+		}
+		return out
 	}
-	if err := json.Unmarshal([]byte(dataJSON), &rows); err != nil {
-		t.Fatalf("decode data objects: %v (%s)", err, dataJSON)
+
+	index := readIndex(map[string]any{"class": "Order"})
+	if len(index.Objects) != 1 || index.Objects[0].ItemType != "Order" ||
+		index.Objects[0].State != "approved" || index.Objects[0].InstanceKey == 0 {
+		t.Fatalf("data objects = %+v", index.Objects)
 	}
-	if len(rows) != 1 || rows[0].ItemType != "Order" || rows[0].State != "approved" || rows[0].InstanceKey == 0 {
-		t.Fatalf("data objects = %+v", rows)
+	// The answer says what it looked at, so a truncated sweep cannot be read as the
+	// whole truth.
+	if index.Scanned != 1 || index.Truncated || index.History {
+		t.Errorf("sweep = %+v", index)
 	}
 	// A class nothing declares is an empty list, not an error.
-	if got := strings.TrimSpace(callOne(t, atlas, "atlas_data_objects", map[string]any{"class": "Invoice"})); got != "[]" {
-		t.Errorf("filtering by an unmodeled class = %s, want []", got)
+	if got := readIndex(map[string]any{"class": "Invoice"}); len(got.Objects) != 0 {
+		t.Errorf("filtering by an unmodeled class = %+v, want none", got.Objects)
+	}
+	// The process was deployed outside any application, so nothing resolves its
+	// class to an identity and no key can be matched on.
+	if got := readIndex(map[string]any{"key": "ORD-1"}); len(got.Objects) != 0 {
+		t.Errorf("a key matched without an identity to match on: %+v", got.Objects)
+	}
+	if got := readIndex(map[string]any{"history": true}); !got.History {
+		t.Error("the answer does not say it swept history")
 	}
 
 	// 8. The same instance, drawn as objects: the class diagram's run-time twin.
-	graphJSON := callOne(t, atlas, "atlas_instance_object_graph", map[string]any{"key": rows[0].InstanceKey})
+	graphJSON := callOne(t, atlas, "atlas_instance_object_graph", map[string]any{"key": index.Objects[0].InstanceKey})
 	var graph struct {
 		Nodes []struct {
 			ID    string `json:"id"`

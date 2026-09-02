@@ -553,8 +553,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Export a Panorama model as its original ArchiMate Open Exchange XML (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: xmlBody("ArchiMate Open Exchange XML")}},
 		{"GET", "/api/v1/data-objects", s.handleDataObjectsAcrossInstances, apiOp{
-			summary: "List the data objects the running instances carry, newest instance first — the landscape read from the data's side rather than the process's; filter with ?class= (the declared itemSubjectRef type)", tag: "Information model", role: RoleOperator,
-			resp: jsonBody("Data objects across instances", tArray())}},
+			summary: "The data-centric index: which instances carry which data, newest instance first — the landscape read from the data's side rather than the process's. Filter with ?class= (the declared itemSubjectRef type) and ?key= (the business key, which is what makes a datum the same one across processes); ?history=true also sweeps finished instances. The answer says how many instances it examined and whether a bound stopped it", tag: "Information model", role: RoleOperator,
+			resp: jsonBody("Data objects across instances", tObject())}},
 		{"GET", "/api/v1/infomodel/subset", s.infomodel.HandleSubset, apiOp{
 			summary: "Read the information model's authoring subset — the class kinds, association kinds, primitive types and multiplicities this build authors, the matrix of what may be drawn between what, and what it deliberately does not author (ADR-draft-process-information-model)", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Authoring subset", tObject())}},

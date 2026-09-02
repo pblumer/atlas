@@ -2770,13 +2770,14 @@ func scalarOf(v *model.DataObjectValue) any {
 	}
 }
 
-// crossInstanceDataObject is one datum a running instance is carrying, seen from the
-// data's side rather than the process's. It is deliberately leaner than
-// dataObjectView: no trail and no attribution, because those need a scan of the
-// instance's whole element history and this view reads many instances at once. Both
-// are one click away in that instance's Data tab.
+// crossInstanceDataObject is one datum an instance is carrying, seen from the data's
+// side rather than the process's. It is deliberately leaner than dataObjectView: no
+// trail and no attribution, because those need a scan of the instance's whole element
+// history and this view reads many instances at once. Both are one click away in that
+// instance's Data tab.
 type crossInstanceDataObject struct {
 	InstanceKey   uint64 `json:"instanceKey"`
+	InstanceState string `json:"instanceState"`
 	ProcessID     string `json:"processId"`
 	ProcessDefKey uint64 `json:"processDefKey"`
 	Name          string `json:"name"`
@@ -2785,80 +2786,144 @@ type crossInstanceDataObject struct {
 	State         string `json:"state"`
 	Value         any    `json:"value"`
 	Kind          string `json:"kind"`
+	// Key is the object's business key, when its declared class resolves to one that
+	// has an identity. It is what makes this datum *this* order across processes, and
+	// what the key filter matches on.
+	Key string `json:"key,omitempty"`
 }
 
-// dataObjectsAcrossInstancesLimit caps the sweep. This walks every running instance,
-// so it is a listing rather than a query: it answers "what data is out there right
-// now", and the answer stops being readable long before it stops being cheap.
-const dataObjectsAcrossInstancesLimit = 500
+// dataObjectIndexResp is the answer to "which instances carry this datum".
+//
+// It is an object rather than a bare array because the two answers a sweep can give
+// are different: a complete list, and a list that stopped looking. An array cannot
+// say which one it is holding, and a caller that cannot tell will read a partial
+// answer as a whole one — which is the worst thing an index can do.
+type dataObjectIndexResp struct {
+	Objects []crossInstanceDataObject `json:"objects"`
+	// Scanned is how many instances were examined, Truncated whether a bound stopped
+	// the sweep before it ran out of instances.
+	Scanned   int  `json:"scanned"`
+	Truncated bool `json:"truncated"`
+	// History says whether finished instances were included at all.
+	History bool `json:"history"`
+}
 
-// handleDataObjectsAcrossInstances lists the data objects the running instances
-// carry, newest instance first — the process landscape read from the data's side.
+// The sweep's two bounds. Results are capped so one query cannot return a page
+// nobody reads; the *scan* is capped separately because finished instances are
+// retained indefinitely unless an operator turns retention on (ADR-0115 is opt-in),
+// so "every instance ever run" is a real number here and an unbounded walk of it on
+// a UI read is a trap rather than a feature.
+const (
+	dataObjectsAcrossInstancesLimit = 500
+	dataObjectsScanLimit            = 5000
+)
+
+// handleDataObjectsAcrossInstances is the data-centric index: the landscape read
+// from the data's side rather than the process's (ADR-draft-process-information-model).
 //
-// It is the first step of the question the information model exists to answer
-// ("which processes touch an Order?") and it is honest about being only the first:
-// it groups by the *declared type name*, which is what the BPMN model wrote in
-// itemSubjectRef, and joins nothing against a resolved class. Resolution at deploy
-// time, and correlation by business key, are the following slices.
+// It answers the question BPMN structurally cannot express — *which instances, across
+// which processes, are carrying this order* — and it answers it by sweeping rather
+// than by a durable index, deliberately. A durable one would have to live in
+// applyToState, know what a business key is (the engine reads integer indices; the
+// key lives in the information model, which is design-time state it must not read),
+// and be swept by a purge that deletes by instance-key prefix and could not reach it.
+// That is a decision of its own, and worth taking when a sweep starts to hurt rather
+// than before.
 //
-// Only running instances are swept. A finished instance's data is retained and
-// readable through its own endpoint, but sweeping history would turn a listing into
-// a scan of everything Atlas has ever run.
+// With ?history=true the sweep includes finished instances, whose data objects are
+// retained until they are purged. Without it, only running ones — the cheaper
+// question, and usually the one being asked.
 func (s *Server) handleDataObjectsAcrossInstances(w http.ResponseWriter, r *http.Request) {
-	classFilter := strings.TrimSpace(r.URL.Query().Get("class"))
-	out := []crossInstanceDataObject{}
+	q := r.URL.Query()
+	classFilter := strings.TrimSpace(q.Get("class"))
+	keyFilter := strings.TrimSpace(q.Get("key"))
+	history := q.Get("history") == "true"
+
+	resp := dataObjectIndexResp{Objects: []crossInstanceDataObject{}, History: history}
 	var scanErr error
 	s.do(func() {
 		type instanceRow struct {
-			key uint64
-			pi  *model.ProcessInstanceValue
+			key   uint64
+			pi    model.ProcessInstanceValue
+			state string
 		}
 		var rows []instanceRow
-		scanErr = s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
-			c := *v
-			rows = append(rows, instanceRow{key: key, pi: &c})
-			return nil
-		})
-		if scanErr != nil {
+		collect := func(state string) func(uint64, *model.ProcessInstanceValue) error {
+			return func(key uint64, v *model.ProcessInstanceValue) error {
+				rows = append(rows, instanceRow{key: key, pi: *v, state: state})
+				return nil
+			}
+		}
+		if scanErr = s.store.ActiveProcessInstances(collect("active")); scanErr != nil {
 			return
 		}
-		// Newest instance first, so a sweep that hits the cap keeps the rows an
+		if history {
+			if scanErr = s.store.CompletedProcessInstances(collect("")); scanErr != nil {
+				return
+			}
+		}
+		// Newest instance first, so a sweep that hits a bound keeps the rows an
 		// operator is most likely to be looking for.
 		sort.Slice(rows, func(a, b int) bool { return rows[a].key > rows[b].key })
 
+		// The vocabulary is per application and the sweep crosses them, so it is
+		// resolved once per application rather than once per instance.
+		vocabs := map[string]*infomodel.Vocabulary{}
+		vocabFor := func(applicationID string) *infomodel.Vocabulary {
+			if v, ok := vocabs[applicationID]; ok {
+				return v
+			}
+			v, err := s.infomodel.VocabularyOnLoop(applicationID)
+			if err != nil {
+				v = infomodel.NewVocabulary(nil) // best-effort: the values still read
+			}
+			vocabs[applicationID] = v
+			return v
+		}
+
 		for _, row := range rows {
-			if len(out) >= dataObjectsAcrossInstancesLimit {
+			if len(resp.Objects) >= dataObjectsAcrossInstancesLimit || resp.Scanned >= dataObjectsScanLimit {
+				resp.Truncated = len(rows) > resp.Scanned
 				break
 			}
+			resp.Scanned++
 			// The declared half comes off the definition, exactly as the per-instance
-			// read does; an instance whose definition is gone simply reports no class.
+			// read does; an instance whose definition is gone reports no class.
 			declared := map[string]compiler.CompiledDataObject{}
-			processID := ""
+			processID, applicationID := "", ""
+			var cp *compiler.CompiledProcess
 			if d, ok := s.deployments[row.pi.ProcessDefKey]; ok && d.cp != nil {
-				processID = d.ProcessID
-				for _, do := range d.cp.DataObjects() {
-					declared[d.cp.Intern(do.Name)] = do
+				processID, applicationID, cp = d.ProcessID, d.ProjectID, d.cp
+				for _, do := range cp.DataObjects() {
+					declared[cp.Intern(do.Name)] = do
 				}
 			}
-			cp := func(idx int32) string {
-				if d, ok := s.deployments[row.pi.ProcessDefKey]; ok && d.cp != nil {
-					return d.cp.Intern(idx)
-				}
-				return ""
+			state := row.state
+			if state == "" {
+				state = row.pi.State.String()
 			}
 			err := s.store.DataObjectsOfScope(row.key, func(v *model.DataObjectValue) error {
 				item := crossInstanceDataObject{
-					InstanceKey: row.key, ProcessID: processID, ProcessDefKey: row.pi.ProcessDefKey,
-					Name: v.Name, State: v.State,
+					InstanceKey: row.key, InstanceState: state, ProcessID: processID,
+					ProcessDefKey: row.pi.ProcessDefKey, Name: v.Name, State: v.State,
 				}
-				if do, ok := declared[v.Name]; ok {
-					item.ItemType, item.IsCollection = cp(do.ItemType), do.IsCollection
+				if do, ok := declared[v.Name]; ok && cp != nil {
+					item.ItemType, item.IsCollection = cp.Intern(do.ItemType), do.IsCollection
 				}
 				if classFilter != "" && item.ItemType != classFilter {
 					return nil
 				}
 				item.Kind, item.Value = dataObjectKindValue(v)
-				out = append(out, item)
+				if item.ItemType != "" && v.Kind == model.VarJSON {
+					item.Key = infomodel.BusinessKey(vocabFor(applicationID), item.ItemType, json.RawMessage(v.Text))
+				}
+				// A key filter is a question about identity, so an object whose key is
+				// unknown is not a match — answering "maybe" here would relate two data
+				// that nothing says are the same.
+				if keyFilter != "" && item.Key != keyFilter {
+					return nil
+				}
+				resp.Objects = append(resp.Objects, item)
 				return nil
 			})
 			if err != nil {
@@ -2871,7 +2936,7 @@ func (s *Server) handleDataObjectsAcrossInstances(w http.ResponseWriter, r *http
 		httpapi.Error(w, http.StatusInternalServerError, "read data objects: "+scanErr.Error())
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, resp)
 }
 
 // decisionEvaluationView renders one DMN decision evaluation for the operator UI

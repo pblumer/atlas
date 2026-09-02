@@ -9589,8 +9589,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       notes.push(`The picture stops short: this instance carries more nested objects than a readable diagram holds.`);
     }
     for (const u of g.unresolved || []) {
+      // The one place the picture admits its own edge — so it also says where to
+      // look. The data index answers exactly this across every instance.
+      const find = `#/data/instances?class=${encodeURIComponent(u.class)}&key=${encodeURIComponent(u.value)}&history=true`;
       notes.push(`<b>${esc(u.from)}.${esc(u.role)}</b> refers to the ${esc(u.class)} <code>${esc(u.value)}</code>,
-        which this instance does not carry — it lives in another instance or in a data store.`);
+        which this instance does not carry — it lives in another instance or in a data store.
+        <a href="${find}" title="Search every instance for this one">Find it →</a>`);
     }
 
     dataEl.innerHTML = dataHead() + `

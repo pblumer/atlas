@@ -14,6 +14,32 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Which instances are carrying this order?** The question BPMN structurally cannot
+  express now has an answer: **Data › Instances** groups every data object by the type
+  its model declares and then by its **business key**, so one order appearing in three
+  processes reads as one datum with three instances under it
+  ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md),
+  slice 5a). `GET /api/v1/data-objects` (and `atlas_data_objects` over MCP) takes a
+  `class` and a `key`, and with `history=true` sweeps finished instances too.
+
+  Including history costs a longer walk and **nothing on disk**: a finished instance
+  keeps its data objects until it is purged, and purging is opt-in
+  ([ADR-0115](docs/adr/0115-history-retention-hard-delete.md)). That is why this is a sweep rather
+  than a durable index. A durable one would have to live in `applyToState`, know what a
+  business key is — the engine reads integer indices, and the key lives in the
+  information model, which is design-time state it must not read — and be swept by a
+  purge that deletes by instance-key prefix and could not reach it. Each of those is
+  answerable, and none is worth answering before a sweep starts to hurt.
+
+  So the sweep says what it did: how many instances it examined, and whether a bound
+  stopped it before the end. An array cannot say whether it is complete, and a caller
+  that cannot tell will read a partial answer as a whole one — which is the worst
+  thing an index can do. The response is an object for that reason.
+
+  The object diagram's one admission of its own edge — *"this customer is not in this
+  instance; it lives in another instance or in a data store"* — now links straight into
+  the index, which is the thing that can find it.
+
 - **An instance's data, drawn as objects.** The Data tab in the Operations replay
   now switches between a list and an **object diagram**
   ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md),

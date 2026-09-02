@@ -125,12 +125,18 @@ test.describe("the object diagram", () => {
     await expect(page.locator(".og-line-label")).toHaveText(["lines", "customer"]);
   });
 
-  test("a reference this instance cannot satisfy is stated, not dropped", async ({ page }) => {
+  test("a reference this instance cannot satisfy is stated, and points at where to look", async ({ page }) => {
     // Not a fault: it is the edge of what one instance can see, and exactly the
     // boundary a data store removes.
     await expect(page.locator(".og-notes")).toContainText("order.agent");
     await expect(page.locator(".og-notes")).toContainText("C-99");
     await expect(page.locator(".og-notes")).toContainText("another instance or in a data store");
+    // And the one place the picture admits its own edge is the one place it says
+    // where to look: the data index answers exactly this, across every instance.
+    const find = page.locator(".og-notes a");
+    await expect(find).toHaveText("Find it →");
+    await expect(find).toHaveAttribute("href",
+      "#/data/instances?class=Customer&key=C-99&history=true");
   });
 
   test("the reading is remembered, and switching back shows the list", async ({ page }) => {

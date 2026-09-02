@@ -346,6 +346,30 @@ func (v *Vocabulary) relations(className string) []relation {
 	return v.rels[className]
 }
 
+// BusinessKey renders one data object's business key: the value of the attributes
+// its class declares as its identity, joined. "" when the class is unknown, declares
+// no key, or the value does not carry all of it.
+//
+// This is the fact the cross-instance index is built on, and the reason a partial
+// key is refused rather than joined from what is there: half a key identifies half
+// as many things as a whole one only by accident, and an index that matched on it
+// would quietly relate two orders that are not the same order.
+func BusinessKey(vocab *Vocabulary, className string, value json.RawMessage) string {
+	class, ok := vocab.Class(className)
+	if !ok || len(class.Identity) == 0 {
+		return ""
+	}
+	decoded, ok := decodeValue(value)
+	if !ok {
+		return ""
+	}
+	fields, isObject := decoded.(map[string]any)
+	if !isObject {
+		return ""
+	}
+	return keyValue(class, fields)
+}
+
 // keyValue renders a class's business key from an object's fields, "" when the
 // class declares none or the value does not carry all of it — a partial key
 // identifies nothing, so it is not offered as one.

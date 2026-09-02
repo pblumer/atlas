@@ -553,78 +553,82 @@ func TestDataObjectsAcrossInstances(t *testing.T) {
 	readDataObjectRows(t, ts, dataObjectLineageBPMN)
 	readDataObjectRows(t, ts, dataObjectBPMN)
 
-	code, body := doReq(t, ts, http.MethodGet, "/api/v1/data-objects", "", "")
-	if code != http.StatusOK {
-		t.Fatalf("list data objects: status=%d body=%s", code, body)
-	}
-	var all []struct {
-		InstanceKey  uint64 `json:"instanceKey"`
-		ProcessID    string `json:"processId"`
-		Name         string `json:"name"`
-		ItemType     string `json:"itemType"`
-		IsCollection bool   `json:"isCollection"`
-		State        string `json:"state"`
-		Kind         string `json:"kind"`
-	}
-	if err := json.Unmarshal(body, &all); err != nil {
-		t.Fatalf("decode: %v (%s)", err, body)
-	}
+	all := readDataObjectIndex(t, ts, "")
 	// order + the two of the untyped model.
-	if len(all) != 3 {
-		t.Fatalf("got %d rows, want 3: %s", len(all), body)
+	if len(all.Objects) != 3 {
+		t.Fatalf("got %d rows, want 3: %+v", len(all.Objects), all)
 	}
-	var order *struct {
-		InstanceKey  uint64 `json:"instanceKey"`
-		ProcessID    string `json:"processId"`
-		Name         string `json:"name"`
-		ItemType     string `json:"itemType"`
-		IsCollection bool   `json:"isCollection"`
-		State        string `json:"state"`
-		Kind         string `json:"kind"`
+	if all.Scanned != 2 || all.Truncated || all.History {
+		t.Errorf("sweep = %+v, want two instances examined, complete, running only", all)
 	}
-	for i := range all {
-		if all[i].ItemType == "Order" {
-			order = &all[i]
+	var order *dataIndexRow
+	for i := range all.Objects {
+		if all.Objects[i].ItemType == "Order" {
+			order = &all.Objects[i]
 		}
 	}
 	if order == nil {
-		t.Fatalf("no row carries the declared class: %s", body)
+		t.Fatalf("no row carries the declared class: %+v", all.Objects)
 	}
 	if order.Name != "order" || order.State != "approved" || order.Kind != "number" {
 		t.Errorf("row = %+v, want the written order", *order)
 	}
-	if order.ProcessID != "withlineage" || order.InstanceKey == 0 {
+	if order.ProcessID != "withlineage" || order.InstanceKey == 0 || order.InstanceState != "active" {
 		t.Errorf("row does not locate its instance: %+v", *order)
 	}
 
 	// The filter is on the declared type, which is what the BPMN model wrote in
-	// itemSubjectRef — the string the information model will later resolve.
-	code, body = doReq(t, ts, http.MethodGet, "/api/v1/data-objects?class=Order", "", "")
-	if code != http.StatusOK {
-		t.Fatalf("filtered: status=%d body=%s", code, body)
-	}
-	var filtered []struct {
-		ItemType string `json:"itemType"`
-	}
-	if err := json.Unmarshal(body, &filtered); err != nil {
-		t.Fatalf("decode filtered: %v", err)
-	}
-	if len(filtered) != 1 || filtered[0].ItemType != "Order" {
-		t.Errorf("filtered = %+v, want only the Order row", filtered)
+	// itemSubjectRef and what the information model resolves.
+	filtered := readDataObjectIndex(t, ts, "?class=Order")
+	if len(filtered.Objects) != 1 || filtered.Objects[0].ItemType != "Order" {
+		t.Errorf("filtered = %+v, want only the Order row", filtered.Objects)
 	}
 
 	// A class nothing declares is an empty list, not an error.
-	code, body = doReq(t, ts, http.MethodGet, "/api/v1/data-objects?class=Invoice", "", "")
-	if code != http.StatusOK || string(bytes.TrimSpace(body)) != "[]" {
-		t.Errorf("unknown class: status=%d body=%s, want 200 []", code, body)
+	if unknown := readDataObjectIndex(t, ts, "?class=Invoice"); len(unknown.Objects) != 0 {
+		t.Errorf("unknown class = %+v, want none", unknown.Objects)
 	}
 }
 
-// TestDataObjectsAcrossInstancesSkipsFinished pins the boundary the sweep draws: it
-// walks running instances only. A finished instance's data is retained and readable
-// through its own endpoint; sweeping history would turn a listing into a scan of
-// everything Atlas has ever run.
-func TestDataObjectsAcrossInstancesSkipsFinished(t *testing.T) {
+// dataIndexRow is one row of the data-centric index.
+type dataIndexRow struct {
+	InstanceKey   uint64 `json:"instanceKey"`
+	InstanceState string `json:"instanceState"`
+	ProcessID     string `json:"processId"`
+	Name          string `json:"name"`
+	ItemType      string `json:"itemType"`
+	IsCollection  bool   `json:"isCollection"`
+	State         string `json:"state"`
+	Kind          string `json:"kind"`
+	Key           string `json:"key"`
+}
+
+type dataIndexResp struct {
+	Objects   []dataIndexRow `json:"objects"`
+	Scanned   int            `json:"scanned"`
+	Truncated bool           `json:"truncated"`
+	History   bool           `json:"history"`
+}
+
+func readDataObjectIndex(t *testing.T, ts *httptest.Server, query string) dataIndexResp {
+	t.Helper()
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/data-objects"+query, "", "")
+	if code != http.StatusOK {
+		t.Fatalf("data-objects%s: status=%d body=%s", query, code, body)
+	}
+	var out dataIndexResp
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	return out
+}
+
+// TestDataObjectsAcrossInstancesHistory pins the boundary the sweep draws and how
+// it is crossed: running instances by default, finished ones on request. A finished
+// instance keeps its data objects until it is purged (ADR-0115, opt-in), so history
+// costs a longer walk rather than anything new on disk — which is the whole reason
+// this is a sweep and not an index.
+func TestDataObjectsAcrossInstancesHistory(t *testing.T) {
 	ts := newTestServer(t)
 	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", dataObjectSelfCompletingBPMN, "application/xml")
 	if code != http.StatusOK {
@@ -640,11 +644,125 @@ func TestDataObjectsAcrossInstancesSkipsFinished(t *testing.T) {
 		t.Fatalf("create instance: status=%d body=%s", code, b)
 	}
 
-	code, body = doReq(t, ts, http.MethodGet, "/api/v1/data-objects", "", "")
-	if code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", code, body)
+	if running := readDataObjectIndex(t, ts, ""); len(running.Objects) != 0 {
+		t.Errorf("objects = %+v, want none — the instance finished", running.Objects)
 	}
-	if got := string(bytes.TrimSpace(body)); got != "[]" {
-		t.Errorf("body = %s, want [] — the instance finished", got)
+	// …and are found the moment history is asked for, because a finished instance
+	// keeps its data objects until it is purged.
+	past := readDataObjectIndex(t, ts, "?history=true")
+	if !past.History {
+		t.Error("the answer does not say it swept history")
+	}
+	if len(past.Objects) != 1 || past.Objects[0].Name != "order" {
+		t.Fatalf("history sweep = %+v, want the finished instance's order", past.Objects)
+	}
+	if past.Objects[0].InstanceState != "completed" {
+		t.Errorf("instanceState = %q, want completed", past.Objects[0].InstanceState)
+	}
+}
+
+// dataKeyBPMN writes a structured order carrying a business key, so the index has an
+// identity to match on.
+const dataKeyBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <itemDefinition id="ItemDefinition_Order" structureRef="Order"/>
+  <process id="keyed" isExecutable="true">
+    <dataObject id="DO_order" name="order" itemSubjectRef="ItemDefinition_Order"/>
+    <dataObjectReference id="Ref_w" name="order" dataObjectRef="DO_order"/>
+    <startEvent id="s"/>
+    <scriptTask id="seed">
+      <extensionElements><zeebe:script expression="= {id: &quot;ORD-1&quot;}" resultVariable="v"/></extensionElements>
+    </scriptTask>
+    <task id="record">
+      <dataOutputAssociation id="doa"><targetRef>Ref_w</targetRef><assignment><from>= v</from></assignment></dataOutputAssociation>
+    </task>
+    <intermediateCatchEvent id="w"><timerEventDefinition><timeDuration>PT3600S</timeDuration></timerEventDefinition></intermediateCatchEvent>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="seed"/>
+    <sequenceFlow id="f2" sourceRef="seed" targetRef="record"/>
+    <sequenceFlow id="f3" sourceRef="record" targetRef="w"/>
+    <sequenceFlow id="f4" sourceRef="w" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestDataObjectsIndexByBusinessKey is the question the whole record exists for:
+// which instances, across which processes, are carrying *this* order. It is
+// answerable only because a class declares an identity — the part BPMN has no
+// equivalent for.
+func TestDataObjectsIndexByBusinessKey(t *testing.T) {
+	ts := newTestServer(t)
+	appID := newApplicationWithOrderClass(t, ts)
+
+	// Two instances of the same process, both carrying ORD-1: the case a
+	// process-centric view cannot put together.
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments?projectId="+appID, dataKeyBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if c, b := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), "{}", "application/json"); c != http.StatusOK {
+			t.Fatalf("create instance: status=%d body=%s", c, b)
+		}
+	}
+
+	all := readDataObjectIndex(t, ts, "?class=Order")
+	if len(all.Objects) != 2 {
+		t.Fatalf("objects = %+v, want both instances' orders", all.Objects)
+	}
+	for _, o := range all.Objects {
+		if o.Key != "ORD-1" {
+			t.Errorf("row = %+v, want the business key resolved from the model", o)
+		}
+	}
+	// Two different instances carrying what the model says is the same order.
+	if all.Objects[0].InstanceKey == all.Objects[1].InstanceKey {
+		t.Error("both rows name the same instance")
+	}
+
+	// The key filter is a question about identity, so it answers with exactly the
+	// objects that *are* that order.
+	hit := readDataObjectIndex(t, ts, "?class=Order&key=ORD-1")
+	if len(hit.Objects) != 2 {
+		t.Errorf("key filter = %+v, want both", hit.Objects)
+	}
+	if miss := readDataObjectIndex(t, ts, "?class=Order&key=ORD-9"); len(miss.Objects) != 0 {
+		t.Errorf("a key nothing carries = %+v, want none", miss.Objects)
+	}
+}
+
+// TestDataObjectsIndexWithoutAModelHasNoKey covers the honest gap: without an
+// information model nothing says which attribute identifies an order, so no row
+// carries a key and a key filter matches nothing rather than guessing.
+func TestDataObjectsIndexWithoutAModelHasNoKey(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", dataKeyBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if c, b := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), "{}", "application/json"); c != http.StatusOK {
+		t.Fatalf("create instance: status=%d body=%s", c, b)
+	}
+
+	all := readDataObjectIndex(t, ts, "?class=Order")
+	if len(all.Objects) != 1 {
+		t.Fatalf("objects = %+v", all.Objects)
+	}
+	if all.Objects[0].Key != "" {
+		t.Errorf("a key was invented without a model: %q", all.Objects[0].Key)
+	}
+	if hit := readDataObjectIndex(t, ts, "?key=ORD-1"); len(hit.Objects) != 0 {
+		t.Errorf("a key filter matched without an identity to match on: %+v", hit.Objects)
 	}
 }

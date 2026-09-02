@@ -6939,87 +6939,163 @@ async function viewInfoModels() {
 // because that string is what the information model will resolve against; joining a
 // resolved class, and correlating two instances by business key, are the next slices.
 async function viewDataInstances() {
+  // The query lives in the URL, so a found datum is a link somebody can send: the
+  // object diagram's "this customer is not in this instance" note points here.
+  const params = new URLSearchParams((location.hash.split("?")[1] || ""));
+  const classFilter = params.get("class") || "";
+  const keyFilter = params.get("key") || "";
+  const history = params.get("history") === "true";
+
   view.innerHTML = `<p class="muted">Loading data objects…</p>`;
-  let rows, models;
+  const query = new URLSearchParams();
+  if (classFilter) query.set("class", classFilter);
+  if (keyFilter) query.set("key", keyFilter);
+  if (history) query.set("history", "true");
+
+  let index, models;
   try {
-    [rows, models] = await Promise.all([
-      api("GET", "/api/v1/data-objects"),
+    [index, models] = await Promise.all([
+      api("GET", "/api/v1/data-objects" + (query.toString() ? "?" + query : "")),
       api("GET", "/api/v1/infomodel/models").catch(() => []),
     ]);
   } catch (e) {
     view.innerHTML = `<div class="card empty"><h1>Data</h1><p>${esc(e.message)}</p></div>`;
     return;
   }
+  const rows = (index && index.objects) || [];
 
   // A declared type that no class in any information model matches is the gap this
-  // area exists to close, so it is marked rather than left to look the same as one
-  // that resolves. The join is by name because that is all itemSubjectRef carries.
+  // area exists to close, so it is marked rather than left looking like one that
+  // resolves. The join is by name, because that is all itemSubjectRef carries.
   const classNames = new Set();
-  await Promise.all(models.map(async (m) => {
+  await Promise.all((models || []).map(async (m) => {
     try {
       const full = await api("GET", `/api/v1/infomodel/models/${encodeURIComponent(m.id)}`);
       for (const c of full.classes || []) classNames.add(c.name);
     } catch { /* a model we cannot read simply contributes no names */ }
   }));
 
+  const fmtVal = (r) => {
+    if (r.kind === "null" || r.value == null) return `<span class="muted"><i>unset</i></span>`;
+    if (r.kind === "json") return `<code>${esc(JSON.stringify(r.value))}</code>`;
+    return `<code>${esc(String(r.value))}</code>`;
+  };
+  const goto = (next) => {
+    const q = new URLSearchParams();
+    if (next.class) q.set("class", next.class);
+    if (next.key) q.set("key", next.key);
+    if (next.history) q.set("history", "true");
+    location.hash = "#/data/instances" + (q.toString() ? "?" + q : "");
+  };
+
+  // Grouped by class, and inside a class by business key — because the key is what
+  // says two rows are the same datum. Rows whose class declares no identity fall
+  // into one unkeyed group rather than pretending each is its own thing.
   const groups = new Map();
   for (const r of rows) {
     const key = r.itemType || "";
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(r);
   }
-  const fmtVal = (r) => {
-    if (r.kind === "null" || r.value == null) return `<span class="muted"><i>unset</i></span>`;
-    if (r.kind === "json") return `<code>${esc(JSON.stringify(r.value))}</code>`;
-    return `<code>${esc(String(r.value))}</code>`;
+
+  const identityBlock = (items) => {
+    const keyed = new Map();
+    for (const r of items) {
+      const k = r.key || "";
+      if (!keyed.has(k)) keyed.set(k, []);
+      keyed.get(k).push(r);
+    }
+    return [...keyed.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([k, list]) => {
+      const instances = new Set(list.map((i) => i.instanceKey)).size;
+      // The headline: one datum, several instances. It is the sentence the whole
+      // information model exists to make sayable.
+      const head = k
+        ? `<div class="im-key-head"><span class="im-key">⚿ ${esc(k)}</span>
+             <span class="muted">${instances} ${instances === 1 ? "instance" : "instances"}</span>
+             ${keyFilter ? "" : `<button type="button" class="btn ghost small" data-key="${esc(k)}"
+               data-class="${esc(list[0].itemType || "")}" title="Show only this one">Isolate</button>`}</div>`
+        : `<div class="im-key-head"><span class="muted im-key none"
+             title="This class declares no business key, so nothing says which of these are the same datum">no identity declared</span></div>`;
+      return head + `<table>
+        <thead><tr><th>Object</th><th>State</th><th>Value</th><th>Process</th><th>Instance</th></tr></thead>
+        <tbody>${list.map((r) => `<tr>
+          <td><b>${esc(r.name)}</b>${r.isCollection ? ` <span class="do-coll">list</span>` : ""}</td>
+          <td>${r.state ? `<span class="do-state">${esc(r.state)}</span>` : `<span class="muted">—</span>`}</td>
+          <td>${fmtVal(r)}</td>
+          <td class="muted">${esc(r.processId || "—")}</td>
+          <td><a href="#/operations/i/${r.instanceKey}" title="Open this instance's Data tab">${r.instanceKey}</a>
+            ${r.instanceState && r.instanceState !== "active" ? ` <span class="im-past">${esc(r.instanceState)}</span>` : ""}</td>
+        </tr>`).join("")}</tbody>
+      </table>`;
+    }).join("");
   };
 
   const groupBlock = ([type, items]) => {
     const resolved = type && classNames.has(type);
     const head = type
       ? `<span class="do-class">${esc(type)}</span>${resolved
-        ? `<span class="im-resolved" title="A class of this name is modeled in an information model">modeled</span>`
-        : `<span class="im-unresolved" title="No class of this name exists in any information model you can see. Model it so the type means something across processes.">not modeled</span>`}`
+        ? `<span class="im-resolved" title="A class of this name is modelled in an information model">modelled</span>`
+        : `<span class="im-unresolved" title="No class of this name exists in any information model you can see. Model it so the type means something across processes.">not modelled</span>`}`
       : `<span class="do-class none">untyped</span><span class="im-unresolved"
            title="This data object declares no itemSubjectRef, so nothing says what kind of thing it is.">no declared type</span>`;
     return `<div class="card" style="padding:0; margin-top:16px">
       <div class="im-group-head">${head}<span class="muted">${items.length}
-        ${items.length === 1 ? "object" : "objects"} in ${new Set(items.map((i) => i.instanceKey)).size}
-        ${new Set(items.map((i) => i.instanceKey)).size === 1 ? "instance" : "instances"}</span></div>
-      <table>
-        <thead><tr><th>Object</th><th>State</th><th>Value</th><th>Process</th><th>Instance</th></tr></thead>
-        <tbody>${items.map((r) => `<tr>
-          <td><b>${esc(r.name)}</b>${r.isCollection ? ` <span class="do-coll">list</span>` : ""}</td>
-          <td>${r.state ? `<span class="do-state">${esc(r.state)}</span>` : `<span class="muted">—</span>`}</td>
-          <td>${fmtVal(r)}</td>
-          <td class="muted">${esc(r.processId || "—")}</td>
-          <td><a href="#/operations/i/${r.instanceKey}" title="Open this instance's Data tab">${r.instanceKey}</a></td>
-        </tr>`).join("")}</tbody>
-      </table>
+        ${items.length === 1 ? "object" : "objects"}</span></div>
+      <div class="im-groups">${identityBlock(items)}</div>
     </div>`;
   };
 
   const ordered = [...groups.entries()].sort((a, b) => (a[0] || "\uffff").localeCompare(b[0] || "\uffff"));
-  view.innerHTML = `<div>
+  const filtering = classFilter || keyFilter;
+  view.innerHTML = `<div id="di-root">
     <div class="between">
       <div>
-        <h1>Data objects in flight</h1>
-        <p class="muted" style="margin:0">Every data object the running instances are carrying, grouped by the
-          type their model declares. ${models.length ? "" : "Nothing is modeled yet — the types below are just strings."}</p>
+        <h1>Data objects${keyFilter ? ` · ⚿ ${esc(keyFilter)}` : ""}</h1>
+        <p class="muted" style="margin:0">Which instances carry which data, grouped by the type their model
+          declares and by the business key that says two of them are the same one.</p>
       </div>
       <a class="btn neutral" href="#/data">Model →</a>
     </div>
+    <div class="card di-filters">
+      <label class="di-field"><span>Class</span>
+        <input id="di-class" value="${esc(classFilter)}" placeholder="Order" list="di-classes"/></label>
+      <datalist id="di-classes">${[...classNames].sort().map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
+      <label class="di-field"><span>Business key</span>
+        <input id="di-key" value="${esc(keyFilter)}" placeholder="ORD-1"/></label>
+      <label class="di-toggle"><input type="checkbox" id="di-history"${history ? " checked" : ""}/>
+        <span>Include finished instances</span></label>
+      <button class="btn" id="di-apply">Search</button>
+      ${filtering || history ? `<button class="btn ghost" id="di-clear">Clear</button>` : ""}
+    </div>
     ${rows.length ? ordered.map(groupBlock).join("") : `<div class="card empty" style="margin-top:16px">
-      <h2>No data objects in flight</h2>
-      <p>Running instances that carry BPMN data objects show up here. Draw a data object on a process,
-         give an activity a data association to write it, and start an instance.</p>
+      <h2>${filtering ? "Nothing carries that" : "No data objects in flight"}</h2>
+      <p>${filtering
+        ? `No ${history ? "instance" : "running instance"} carries a data object matching that${history ? "" : " — try including finished instances"}.`
+        : "Running instances that carry BPMN data objects show up here. Draw a data object on a process, give an activity a data association to write it, and start an instance."}</p>
       <a class="btn ghost" href="#/operations">Open Operations</a>
     </div>`}
-    ${rows.length ? `<p class="muted" style="margin-top:16px; font-size:12px">Running instances only —
-      a finished instance keeps its data, readable in its own replay. Grouping is by the declared
-      <code>itemSubjectRef</code>; resolving that name to a modeled class happens at deploy time in a
-      following slice.</p>` : ""}
+    <p class="muted di-note">Examined ${index.scanned} instance${index.scanned === 1 ? "" : "s"}${history
+      ? "" : " — running only"}.${index.truncated
+      ? " <b>The sweep stopped before the end</b>, so this is a page and not the whole answer: narrow it with a class or a key."
+      : ""}
+      ${history ? "" : " A finished instance keeps its data until it is purged; tick the box above to sweep those too."}</p>
   </div>`;
+
+  const root = document.getElementById("di-root");
+  const apply = () => goto({
+    class: document.getElementById("di-class").value.trim(),
+    key: document.getElementById("di-key").value.trim(),
+    history: document.getElementById("di-history").checked,
+  });
+  root.addEventListener("click", (e) => {
+    if (e.target.closest("#di-apply")) return apply();
+    if (e.target.closest("#di-clear")) return goto({});
+    const isolate = e.target.closest("[data-key]");
+    if (isolate) return goto({ class: isolate.dataset.class, key: isolate.dataset.key, history });
+  });
+  root.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.closest(".di-field")) apply();
+  });
   enhanceViewTables();
 }
 

@@ -453,3 +453,45 @@ func TestObjectGraphEmptyInstance(t *testing.T) {
 		t.Errorf("nodes = %+v", g.Nodes)
 	}
 }
+
+// TestBusinessKey covers the fact the cross-instance index is built on: an object's
+// identity, rendered from the attributes its class declares as one.
+func TestBusinessKey(t *testing.T) {
+	vocab := salesModel(t)
+	tests := []struct {
+		name, class, value, want string
+	}{
+		{"the declared key", "Order", `{"id":"ORD-1","placedOn":"2026-09-02"}`, "ORD-1"},
+		{"a class with no key declares none", "Address", `{"city":"Zug"}`, ""},
+		{"a class nothing models", "Claim", `{"id":"X"}`, ""},
+		// A partial key identifies nothing: joining what is there would quietly relate
+		// two objects that are not the same one.
+		{"a value missing the key", "Order", `{"placedOn":"2026-09-02"}`, ""},
+		{"an unset object", "Order", ``, ""},
+		{"a value that is not a structure", "Order", `42`, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := BusinessKey(vocab, tt.class, json.RawMessage(tt.value)); got != tt.want {
+				t.Errorf("BusinessKey = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestBusinessKeyComposite covers a key made of more than one attribute: both parts
+// are needed, and the rendering is the one the object diagram shows, so a search by
+// what is on screen finds what is on screen.
+func TestBusinessKeyComposite(t *testing.T) {
+	m := orderModel()
+	m.Classes[1].Identity = []string{"id", "placedOn"}
+	m.Classes[1].Attributes[1].Multiplicity = MultOne // a key part may not be absent
+	vocab := NewVocabulary([]Model{m})
+
+	if got := BusinessKey(vocab, "Order", json.RawMessage(`{"id":"ORD-1","placedOn":"2026-09-02"}`)); got != "ORD-1 · 2026-09-02" {
+		t.Errorf("BusinessKey = %q", got)
+	}
+	if got := BusinessKey(vocab, "Order", json.RawMessage(`{"id":"ORD-1"}`)); got != "" {
+		t.Errorf("half a key rendered as %q, want none", got)
+	}
+}
