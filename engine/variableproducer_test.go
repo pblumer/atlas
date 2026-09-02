@@ -73,7 +73,7 @@ func variableProducers(t *testing.T, s *state.Store, scopeKey uint64) map[string
 // variable, and the diagram's in/out card crediting *both* variables to *both* tasks —
 // because the only thing history said was what the variables were before and after
 // each element, and on a fork the sibling's write falls inside that window. The engine
-// now states who wrote each value (ADR-draft-variable-write-attribution), so the
+// now states who wrote each value (ADR-0219), so the
 // question is answered rather than inferred.
 func TestJobOutputsAreAttributedToTheirTask(t *testing.T) {
 	h := openHarness(t, t.TempDir())

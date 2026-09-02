@@ -1,4 +1,4 @@
-# ADR-DRAFT: Variable write attribution
+# ADR-0219: Variable write attribution
 
 - **Status:** Accepted
 - **Date:** 2026-09-01

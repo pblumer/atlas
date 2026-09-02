@@ -142,7 +142,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   capped incident page says its counts are a lower bound, and a variable-search hit that is
   parked is flagged apart from an equally "active" one.
 
-- **`io-card.spec.mjs`** (ADR-0161 / [ADR-draft-variable-write-attribution](../docs/adr/draft-variable-write-attribution.md)):
+- **`io-card.spec.mjs`** (ADR-0161 / [ADR-0219](../docs/adr/0219-variable-write-attribution.md)):
   the **in/out card on the diagram**, on the shape that made it lie — a parallel fork whose
   two branches each write one variable, so each branch's *snapshot* holds both. Each branch
   must claim only what it wrote, a gateway that produced nothing must get no card at all,

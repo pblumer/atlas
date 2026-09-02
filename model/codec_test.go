@@ -391,7 +391,7 @@ func TestAppendRecordNoAlloc(t *testing.T) {
 // TestVariableProducerRoundTrip covers the write-attribution field: the element
 // instance that produced a variable rides on the record, so history can answer "which
 // task wrote this" without inferring it from a diff of two snapshots
-// (ADR-draft-variable-write-attribution).
+// (ADR-0219).
 func TestVariableProducerRoundTrip(t *testing.T) {
 	producer := NewKey(1, 42)
 	buf := AppendValue(nil, &VariableValue{

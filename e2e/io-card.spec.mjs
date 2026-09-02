@@ -1,5 +1,5 @@
 // End-to-end coverage for the diagram's in/out card on a parallel fork
-// (api/web/editor.js, ADR-0161 and ADR-draft-variable-write-attribution).
+// (api/web/editor.js, ADR-0161 and ADR-0219).
 //
 // The case behind it: a fork ran "erstelle ein Ticket" and "alle Tickets holen" at the
 // same time. Selecting either one listed *both* newTicket and tickets under out, because

@@ -283,7 +283,7 @@ _Changed_ / _Removed_ for each version.
   frozen into the variable event and rebuilt by replay like every other. An instance that
   ran before this keeps the old inference — a record cannot be back-filled with a fact it
   never carried — and says so on the section
-  ([ADR-draft-variable-write-attribution](docs/adr/draft-variable-write-attribution.md)).
+  ([ADR-0219](docs/adr/0219-variable-write-attribution.md)).
 
 - **A Jira search called an endpoint Jira Cloud has removed.** The `search`
   operation posted to `/rest/api/2/search` with `startAt` paging; Atlassian

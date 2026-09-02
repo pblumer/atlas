@@ -412,7 +412,7 @@ type VariableValue struct {
 	// the catch event the message payload arrived on. It is the fact that says *who
 	// wrote this*, which no diff of two variable snapshots can recover — on two
 	// parallel branches both branches see both writes, so both appear to have made
-	// them (ADR-draft-variable-write-attribution).
+	// them (ADR-0219).
 	//
 	// 0 means no element wrote it: the instance's start variables, an operator's
 	// override (ADR-0098 records that one), or a record written before attribution

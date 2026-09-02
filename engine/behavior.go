@@ -617,7 +617,7 @@ func handleJobCompleted(c *ProcessingContext) {
 	// The command names the job, not the element, so the task the result belongs to has
 	// to be stated here — without it a worker's result would be the one write no element
 	// claims, which is the whole of what a service task produces
-	// (ADR-draft-variable-write-attribution).
+	// (ADR-0219).
 	c.producer = job.ElementInstanceKey
 	for i := range c.cmd.StartVars {
 		v := c.cmd.StartVars[i]
@@ -2214,7 +2214,7 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	}))
 	// A payload is attributed to the catch event that received it (below); the command
 	// driving this may itself be an element's — a throw event publishing the message — so
-	// the producer is put back rather than zeroed (ADR-draft-variable-write-attribution).
+	// the producer is put back rather than zeroed (ADR-0219).
 	prevProducer := c.producer
 	for i := range matches {
 		m := matches[i]
@@ -2376,7 +2376,7 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 		c.AppendSignalSubscriptionEvent(m.elKey, model.IntentSubscriptionCorrelated, m.sub)
 		// As in correlateMessage: the broadcast payload is the catch event's own
 		// production, not the broadcaster's, and the producer of the command that got
-		// here is put back afterwards (ADR-draft-variable-write-attribution).
+		// here is put back afterwards (ADR-0219).
 		c.producer = m.elKey
 		for j := range vars {
 			vv := vars[j]
@@ -4019,7 +4019,7 @@ func resumeCaller(c *ProcessingContext, childScope, callerKey uint64) {
 	detail := callerCp.CallActivity(callerCp.Node(caller.ElementId).Detail)
 	// What the child leaves in the caller is the call activity's own output, so it is
 	// attributed to it and not to whichever element of the *child* was completing when
-	// this ran (ADR-draft-variable-write-attribution). Restored before returning rather
+	// this ran (ADR-0219). Restored before returning rather
 	// than deferred: a closure would allocate on the command path (I1).
 	prevProducer := c.producer
 	c.producer = callerKey

@@ -8539,7 +8539,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let steps = [];    // element-activation audit timeline, oldest first
   let frames = [];   // complete logical token states, oldest first
   // Whether this instance's history records which element wrote each variable
-  // (ADR-draft-variable-write-attribution). False for an instance that ran before it
+  // (ADR-0219). False for an instance that ran before it
   // did — there the "out" side falls back to the old inference, and says so.
   let attributed = !!tl.variableAttribution;
   let marked = [];   // element markers to clear on the next render

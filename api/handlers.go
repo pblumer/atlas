@@ -297,7 +297,7 @@ type timelineStep struct {
 	// Absent while the element is still active or parked, since it has not finished.
 	VariablesAfter []variableView `json:"variablesAfter,omitempty"`
 	// Writes is what this element instance itself produced: every variable its own
-	// processing wrote, at the value it last wrote (ADR-draft-variable-write-attribution).
+	// processing wrote, at the value it last wrote (ADR-0219).
 	// This is the honest answer to "what came out of this task", which the difference
 	// between Variables and VariablesAfter is not — two branches of a fork each see the
 	// other's writes land inside their own window, so a diff credits both writes to both
@@ -416,7 +416,7 @@ type instanceTimelineResp struct {
 	// why a step names an element the diagram does not contain.
 	Migrated bool `json:"migrated,omitempty"`
 	// VariableAttribution says this instance's history records *which element* wrote each
-	// variable (ADR-draft-variable-write-attribution), so a step's `writes` is the
+	// variable (ADR-0219), so a step's `writes` is the
 	// element's own production rather than a guess. It is false for an instance that ran
 	// before attribution existed: there the log cannot say, and a reader that wants an
 	// "out" list has only the old inference — what changed between the element's
@@ -2025,7 +2025,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			resp.Steps[r.idx].VariablesAfter = vars
 		}
 
-		// What each element itself produced (ADR-draft-variable-write-attribution). The two
+		// What each element itself produced (ADR-0219). The two
 		// folds above are snapshots — everything the instance held at a point in time — and
 		// the difference between them was, until the engine recorded who wrote what, the
 		// only available answer to "what did this task put there". On a fork it is the wrong
