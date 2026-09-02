@@ -48,7 +48,7 @@ func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 	// Data-flow findings are appended when the caller says which application the
 	// draft belongs to, because a data object's declared type resolves against *that*
 	// application's information model and against nothing else
-	// (ADR-draft-process-information-model). Without an application id the answer is
+	// (ADR-0230). Without an application id the answer is
 	// the compiler's alone, exactly as before: the panel on a draft filed nowhere is
 	// not suddenly quieter or noisier.
 	if appID := strings.TrimSpace(r.URL.Query().Get("applicationId")); appID != "" {
@@ -63,7 +63,7 @@ func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 }
 
 // dataFlowWarnings renders the information model's findings on a compiled process
-// as deploy warnings (ADR-draft-process-information-model, slice 3).
+// as deploy warnings (ADR-0230, slice 3).
 //
 // They are warnings by construction and never a refusal, for the same reason a
 // connector reference that resolves to nothing is one (ADR-0158): a model is

@@ -718,7 +718,7 @@ function unsupportedReason(bo) {
 // carrying the shorthand `itemSubjectRef="Order"` with no matching <itemDefinition>
 // therefore loses its types the moment it is opened here and saved, silently. These
 // three functions are what keeps that from happening
-// (ADR-draft-process-information-model).
+// (ADR-0230).
 
 // itemTypeOf reads the declared type off a <dataObject>: the referenced
 // definition's structureRef, the name it carries in a vendor property when it has
@@ -808,7 +808,7 @@ function repairItemDefinitions(xml) {
 // widens what the panel can say: a data object's declared type resolves against
 // *that* application's information model, so the panel reports a type nothing
 // models, a write targeting a member the class does not have, and a read no writer
-// precedes (ADR-draft-process-information-model). A draft filed nowhere has no
+// precedes (ADR-0230). A draft filed nowhere has no
 // vocabulary to resolve against and gets the compiler's findings alone — the same
 // answer as before, rather than a quieter or a noisier one.
 function wireProblems(root, modeler, api, applicationId) {
@@ -5014,7 +5014,7 @@ function groupifyPanel(body, ctl) {
 
 function wireProperties(root, modeler, api, projectId, toast, identity) {
   // The class names this application models, offered as suggestions for a data
-  // object's type (ADR-draft-process-information-model). It is a *suggestion* and
+  // object's type (ADR-0230). It is a *suggestion* and
   // not a closed list on purpose: a model is routinely drawn before the vocabulary
   // it names exists, so typing a class that is not modeled yet has to stay possible
   // — the Problems panel says so, and a deploy is never refused for it.

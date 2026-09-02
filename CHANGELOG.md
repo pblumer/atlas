@@ -18,7 +18,7 @@ _Changed_ / _Removed_ for each version.
   the box on the diagram meaning "this outlives the process" — and says nothing about
   what it holds or what keeps it. Atlas did not even parse it. It does now, and a
   **data store is declared in the application's information model**
-  ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md),
+  ([ADR-0230](docs/adr/0230-process-information-model.md),
   slice 5b): once per application, named by every process that reaches it, with the
   class it holds and the Worker that keeps it.
 
@@ -47,7 +47,7 @@ _Changed_ / _Removed_ for each version.
   express now has an answer: **Data › Instances** groups every data object by the type
   its model declares and then by its **business key**, so one order appearing in three
   processes reads as one datum with three instances under it
-  ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md),
+  ([ADR-0230](docs/adr/0230-process-information-model.md),
   slice 5a). `GET /api/v1/data-objects` (and `atlas_data_objects` over MCP) takes a
   `class` and a `key`, and with `history=true` sweeps finished instances too.
 
@@ -71,7 +71,7 @@ _Changed_ / _Removed_ for each version.
 
 - **An instance's data, drawn as objects.** The Data tab in the Operations replay
   now switches between a list and an **object diagram**
-  ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md),
+  ([ADR-0230](docs/adr/0230-process-information-model.md),
   slice 4): each data object as a UML object node — `order : Order`, its name
   underlined the way the notation marks an instance — with the attributes its class
   declares, in the class's own order, its business key marked, and a member the value
@@ -101,7 +101,7 @@ _Changed_ / _Removed_ for each version.
 - **A data object's declared type now means something.** BPMN's `itemSubjectRef` —
   the slot where a data object says what kind of thing it is — resolves against the
   owning application's information model, at deploy and in the Modeler's Problems
-  panel ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md),
+  panel ([ADR-0230](docs/adr/0230-process-information-model.md),
   slice 3). Three findings follow from it: a type nothing models, a write targeting a
   member the class has no attribute for, and the one
   [ADR-0053](docs/adr/0053-first-class-data-objects.md) named as the whole point of
@@ -136,7 +136,7 @@ _Changed_ / _Removed_ for each version.
 - **Atlas can now say what the data in a process actually *is*.** A new top-level
   **Data** area holds a **process information model**: a UML class-diagram subset,
   owned by a process application and shared by every process in it
-  ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md),
+  ([ADR-0230](docs/adr/0230-process-information-model.md),
   slice 2). A class has typed attributes with multiplicities, documentation, and a
   **business key** — the part BPMN has no equivalent for, and the fact that makes
   `Order#ORD-1` the same order in three processes. Three stereotypes carry the
@@ -179,7 +179,7 @@ _Changed_ / _Removed_ for each version.
   (`received` → `approved`), and its current value. Each row opens into the object's
   **state trail** — every durable write, the state it moved the object into, when, and
   **which element on the diagram made it**
-  ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md),
+  ([ADR-0230](docs/adr/0230-process-information-model.md),
   slice 1). Atlas has recorded a data object's every transition since data objects
   became first class ([ADR-0053](docs/adr/0053-first-class-data-objects.md)); until
   now nothing read that history back, so the one thing that distinguishes a data
@@ -737,7 +737,7 @@ _Changed_ / _Removed_ for each version.
 - **A type a modeling tool wrote in its own namespace read back as a GUID.** BPMN gives
   an `<itemDefinition>` no name of its own — a root element carries an id and nothing
   else — so `structureRef` is the only slot the specification offers for the name of the
-  type being declared ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md)).
+  type being declared ([ADR-0230](docs/adr/0230-process-information-model.md)).
   A tool that does not use it has to invent somewhere, and MID Innovator does: its
   itemDefinitions are a bare GUID id with `<bpanda:property name="Name" value="Incident"/>`
   beside them. Atlas read the id, so every data object in such a model declared a type

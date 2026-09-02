@@ -1,6 +1,6 @@
 // Package infomodel holds Atlas's process information model: a UML class-diagram
 // subset that gives BPMN's data objects a type they can share across processes
-// (ADR-draft-process-information-model).
+// (ADR-0230).
 //
 // BPMN scopes a data object to one process definition and leaves its type slot —
 // `itemSubjectRef` → `<itemDefinition structureRef="…">` — deliberately opaque,

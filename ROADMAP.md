@@ -105,7 +105,7 @@ The control-flow basics most real models use.
   authors all of this (ADR-0053): a `DataObjectReference` panel (name, data state,
   collection) and an association panel (the FEEL value, the target member/variable),
   with input associations defaulting their target on draw. **The Operations replay
-  now has a Data tab** (ADR-draft-process-information-model, slice 1): every data
+  now has a Data tab** (ADR-0230, slice 1): every data
   object the instance carries, with its declared class (the `itemSubjectRef` BPMN
   leaves opaque), its collection flag, its current data state and typed value — and,
   expandable per object, the **state trail**: every durable write, the state it moved
@@ -121,7 +121,7 @@ The control-flow basics most real models use.
   Problems panel can check data flow against it; then the instance **object diagram**,
   and **data stores** bound to a class and a Worker (the cross-process channel BPMN
   never specified).
-- 🚧 **The process information model** (ADR-draft-process-information-model): the
+- 🚧 **The process information model** (ADR-0230): the
   answer to the one thing BPMN structurally cannot say. A `<dataObject>` is scoped to
   one process definition and its `itemSubjectRef` points at a type the specification
   deliberately leaves opaque, so two processes that both handle an order share a

@@ -1,5 +1,5 @@
 // The UML class canvas: the authoring surface for a process information model
-// (ADR-draft-process-information-model, slice 2).
+// (ADR-0230, slice 2).
 //
 // Two decisions shape everything here.
 //

@@ -788,7 +788,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		// The information model of the application this deploy files under, resolved
 		// once for every pool: what a data object's itemSubjectRef points at. An
 		// application with no model resolves to an unmodeled vocabulary, and the type
-		// checks then say nothing (ADR-draft-process-information-model).
+		// checks then say nothing (ADR-0230).
 		vocab, vocabErr := s.infomodel.VocabularyOnLoop(projectID)
 		for _, d := range deployed {
 			if dep, ok := s.deployments[d.Key]; ok && dep.cp != nil {
@@ -2694,7 +2694,7 @@ func (s *Server) annotateDataObjects(key uint64, byName map[string]*dataObjectVi
 
 // handleInstanceObjectGraph derives one instance's object diagram: its data objects
 // as UML object nodes, linked by the class model's associations resolved through
-// the objects' own values (ADR-draft-process-information-model, slice 4).
+// the objects' own values (ADR-0230, slice 4).
 //
 // UML draws types and instances as two different diagrams, and that distinction is
 // why a class diagram was the right notation for Atlas at all: it falls on the
@@ -2819,7 +2819,7 @@ const (
 )
 
 // handleDataObjectsAcrossInstances is the data-centric index: the landscape read
-// from the data's side rather than the process's (ADR-draft-process-information-model).
+// from the data's side rather than the process's (ADR-0230).
 //
 // It answers the question BPMN structurally cannot express — *which instances, across
 // which processes, are carrying this order* — and it answers it by sweeping rather

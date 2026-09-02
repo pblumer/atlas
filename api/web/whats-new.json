@@ -15,8 +15,8 @@
         "de": "BPMN hat einen Kasten für „das überlebt den Prozess“ — einen Data Store — und sagt kein Wort darüber, was darin liegt oder wer ihn führt. Atlas hat ihn bisher nicht einmal gelesen. Jetzt deklarieren Sie einen Data Store im Informationsmodell Ihrer Applikation, neben Ihren Klassen: Er nennt die Klasse, die er verwahrt, und den Worker, der das tatsächlich tut — und jeder Prozess, der diesen Kasten zeichnet, meint denselben Store. Dass er neben den Klassen steht und nicht in einer, ist Absicht. Eine Bestellung ist eine Bestellung, wo immer sie liegt; die Klasse bleibt also frei von jeder Aussage über Speicherung, und der Store ist die einzige Stelle, die sagt wo. Auf dem Diagramm erscheint er als Zylinder mit gestrichelter Linie zu seiner Klasse — bewusst nicht dieselbe Form wie eine Klasse, und bewusst keine Assoziation, denn im Modell steht nichts, was diese beiden in Beziehung setzt. Eine Regel lohnt sich zu kennen: Ein Store darf nur ein Geschäftsobjekt verwahren, das einen fachlichen Schlüssel hat. Ein Prozess liest aus einem Store, indem er benennt, welches Ding er will, und der Schlüssel ist das Einzige, was eines benennt — ein Store über einer Klasse ohne Identität liesse sich also füllen und nie lesen, und darum wird er abgelehnt. Beim Deployen bekommt ein Prozess, der einen nicht deklarierten Store nennt oder einen, hinter dem noch kein Worker steht, eine Warnung statt einer Ablehnung: Man zeichnet den Prozess, bevor der Store existiert, und modelliert den Store, bevor ihn jemand verkabelt — das sind verschiedene Tage. Vorerst ist ein Store zum Lesen da. Zurückzuschreiben ist eine Transaktion gegen etwas ausserhalb von Atlas, dessen Haltbarkeitsversprechen am eigenen Log endet, und das verdient eine eigene Entscheidung statt einer stillen zweiten Auswahl in einem Dropdown."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0230",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
       },
       "tags": [
         "Data",
@@ -61,8 +61,8 @@
         "de": "Bisher konnten Sie einen Prozess fragen, welche Daten er trägt. Sie konnten nicht ein Datum fragen, welche Prozesse es tragen. „Data › Instances\" dreht die Frage um: Es gruppiert alles, was die Engine hält, nach dem Typ, den ihr Modell nennt, und dann nach dem fachlichen Schlüssel — Bestellung ORD-1 erscheint also einmal, und darunter jede Instanz, die daran arbeitet, gleich in welchem Prozess. Suchen Sie nach Klasse, nach Schlüssel oder beidem; die Adresszeile ist der Link, eine gefundene Bestellung lässt sich also einem Kollegen schicken. Es gibt ein Kästchen für abgeschlossene Instanzen, und es lohnt sich zu wissen, was das kostet — nämlich weniger, als man denkt: Eine abgeschlossene Instanz behält ihre Daten, bis Sie sie löschen lassen, und das ist standardmässig aus. Historie ist also ein längerer Blick, kein zusätzlicher Speicher. Atlas geht dafür die Instanzen durch, statt eine eigene Nachschlagetabelle zu führen, und sagt Ihnen hinterher, wie viele es angeschaut hat und ob es vorzeitig aufgehört hat — denn eine Liste, die sich still selbst abgeschnitten hat und wie die ganze Antwort gelesen wird, ist schlimmer als gar keine. Und das Objektdiagramm, dort wo es ehrlich zugibt, dass ein Kunde nicht in dieser Instanz steckt, hat jetzt einen Link, der ihn suchen geht."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0230",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
       },
       "tags": [
         "Data",
@@ -109,8 +109,8 @@
         "de": "Der Reiter „Data\" einer Instanz hat aufgelistet, was der Prozess mit sich führt. Jetzt zeichnet er es auch. Jedes Datenobjekt wird zu einem Kasten mit unterstrichenem Namen — so sagt UML „das ist ein konkretes Ding, kein Typ\" — und zeigt die Felder, die seine Klasse deklariert, in der Reihenfolge der Klasse, mit markiertem fachlichem Schlüssel. Ein Feld, das der Wert schlicht nicht hat, sagt „not set\", denn das ist eine andere Aussage als vorhanden und leer. Zwischen den Kästen erscheinen zwei Arten von Linien, die Verschiedenes bedeuten und deshalb verschieden aussehen. Eine durchgezogene Linie mit Raute heisst: das eine ist Teil des anderen und liegt in dessen Wert — eine Bestellung und ihre Positionen. Eine gestrichelte Linie heisst: ein Objekt hält den fachlichen Schlüssel eines anderen — die Bestellung nennt als Kunden C-7, und ein Kunde hier ist C-7 — was ein Schluss aus zwei übereinstimmenden Werten ist und nirgends so notiert steht. Und wenn eine Bestellung auf einen Kunden zeigt, den es in dieser Instanz nicht gibt, sagt das Diagramm das darunter, statt die Linie still wegzulassen: Dieser Kunde steckt in einer anderen Instanz oder in einem Data Store, und zu wissen, wo das Bild aufhört, ist das, was den Rest davon vertrauenswürdig macht. Es ist dasselbe Modell, das Sie unter Data › Model gezeichnet haben, eine Ebene tiefer: Jenes Diagramm sagt, was eine Bestellung ist — dieses, welche Bestellungen hier sind."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0230",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
       },
       "tags": [
         "Operations",
@@ -157,8 +157,8 @@
         "de": "Ein Datenobjekt im Diagramm konnte immer schon sagen, welchen Typ es hat, und geprüft hat das nie jemand — das Wort war Dekoration. Jetzt wird es im Informationsmodell der Applikation nachgeschlagen, zu der der Prozess gehört, und drei Arten von Fehler zeigen sich beim Modellieren statt erst, nachdem ein Token gelaufen ist. Ein Typ, den niemand modelliert hat, wird benannt. Eine Aufgabe, die in ein Feld schreibt, das die Klasse nicht hat, wird benannt — mit Klasse und Feld — und ebenso ein Schreibvorgang, der in einen einfachen Wert oder in eine feste Werteliste hineingreifen will, in denen es nichts zu beschreiben gibt. Und der, für den sich das Ganze lohnt: eine Aufgabe, die ein Datenobjekt liest, das keine Aufgabe davor gefüllt hat. Diese Prüfung braucht gar keinen modellierten Typ — sie liest das Diagramm — und sie ist vorsichtig mit dem, was sie behauptet: eine Schleife, deren schreibender Schritt vor dem lesenden herumkommt, bleibt unbehelligt, während eine Aufgabe, die liest, was sie erst beim Abschliessen schreibt, gemeldet wird, denn im ersten Durchlauf liest sie nichts. Nichts davon verweigert ein Deployment. Man zeichnet einen Prozess, bevor das Vokabular dazu existiert; beim Deploy darauf hingewiesen zu werden ist der Sinn, aufgehalten zu werden wäre es nicht. Der Modeler hat ausserdem das Feld „Type\", das dafür immer gefehlt hat — es schlägt die Klassen vor, die Ihre Applikation modelliert hat. Beim Einbauen kam etwas heraus, das man wissen sollte: Der Typ ging still verloren, sobald ein von Hand oder von einem Agenten geschriebenes Diagramm hier geöffnet und wieder gespeichert wurde. Das ist behoben, und kurz geschriebene Modelle laufen unverändert weiter."
       },
       "link": {
-        "label": "ADR-0053",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0053-first-class-data-objects.md"
+        "label": "ADR-0230",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
       },
       "tags": [
         "Data",
@@ -205,8 +205,8 @@
         "de": "BPMN lässt Sie ein Datenobjekt zeichnen und ihm einen Typnamen geben — und sagt danach nichts darüber, was dieser Typ ist. Zwei Prozesse, die beide eine Bestellung bearbeiten, teilen sich also das Wort „Order\" und sonst nichts: keine Felder, keine Regeln, keine Möglichkeit festzustellen, ob dasselbe gemeint ist. Es gibt jetzt einen Bereich „Data\" mit einem Klassendiagramm darin: Sie zeichnen eine Bestellung einmal, geben ihr ihre Felder mit Typen und markieren, welches davon ihr fachlicher Schlüssel ist — das, was ORD-1 im Bestellprozess, im Fakturaprozess und im Retourenprozess zur selben Bestellung macht. Drei Klassenarten tragen den Unterschied, auf den es ankommt: etwas, das die Fachseite benennen und identifizieren kann; ein strukturierter Wert wie eine Adresse, der nur aus seinem Inhalt besteht; und eine abgeschlossene Werteliste wie Entwurf/freigegeben/abgelehnt. Die Zeichenfläche lässt keine Beziehung zu, die keinen Sinn ergibt — auf eine Werteliste zeigt kein Pfeil, und eine Adresse kann keine Teile besitzen, weil sie selbst keine eigene Existenz hat — und wenn sie ablehnt, sagt sie warum, mit denselben Worten wie der Server. Sie sagt auch klar, welche Ablehnung die Notation selbst ist und welche nur das, was diese Version noch nicht kann. Jede Klasse lässt sich als JSON Schema anzeigen — das, woran ein Wert geprüft wird — und diese Ansicht ist ehrlich darüber, was sie nicht ausdrücken kann: ein Dokument ist ein Baum, und zwei Dinge, die nur aufeinander verweisen, sind keiner."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0230",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
       },
       "tags": [
         "Data",
@@ -253,8 +253,8 @@
         "de": "Ein Prozess ist dazu da, Daten zu bewegen: eine Bestellung, einen Schadenfall, einen Vertrag. Bisher konnten Sie dem Token zusehen und die Variablen lesen, aber die Datenobjekte auf dem Diagramm — jene mit einem Namen und einem Zustand wie [received] oder [approved] — zeigten im laufenden Prozess überhaupt nichts. Der Replay einer Instanz hat jetzt einen Reiter „Data\": jedes Datenobjekt, das sie trägt, die Klasse, die das Modell dafür nennt, den Zustand, in dem es steht, und den aktuellen Wert. Eine Zeile aufgeklappt zeigt das ganze Leben dieses Datums: jeden Schreibvorgang, den Zustand, in den er es gebracht hat, wann — und welche Aufgabe im Diagramm ihn gemacht hat. Diese letzte Spalte ist die eigentliche Neuerung. Zwei Aufgaben, die auf einem parallelen Zweig nebeneinander laufen, sehen beide so aus, als hätten sie alles geschrieben, wenn man nur Momentaufnahmen davor und danach vergleicht — und genau darauf ist jede Engine ohne aufgezeichnete Zuordnung angewiesen. Atlas hält jetzt im Moment des Schreibens fest, wer geschrieben hat; die Antwort wird also gelesen und nicht geraten. Instanzen, die vorher liefen, sagen das offen, statt eine Aufgabe zu nennen, die die falsche sein könnte."
       },
       "link": {
-        "label": "ADR-0053",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0053-first-class-data-objects.md"
+        "label": "ADR-0230",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
       },
       "tags": [
         "Operations",

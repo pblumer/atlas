@@ -1072,7 +1072,7 @@ type xmlDefinitions struct {
 // A BPMN <itemDefinition> declares a data structure a data object can be typed
 // with. Atlas reads two things off it: its id, which is what an itemSubjectRef
 // references, and its structureRef, which names the structure — the class in the
-// application's information model (ADR-draft-process-information-model).
+// application's information model (ADR-0230).
 //
 // The indirection is worth carrying rather than reading the reference as the name
 // directly, because the id is an XML id and the name is not: a class called "Line

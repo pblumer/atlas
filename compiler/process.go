@@ -1724,7 +1724,7 @@ func (p *CompiledProcess) StartEvents() []int32 { return p.startEvents }
 func (p *CompiledProcess) DataObjects() []CompiledDataObject { return p.dataObjects }
 
 // DataStores returns the data stores this process names — where its data lives
-// beyond one instance (ADR-draft-process-information-model). Like a data object a
+// beyond one instance (ADR-0230). Like a data object a
 // store is not a flow node: no token passes through it, so it carries no behavior
 // and adds nothing to the dispatch table. The engine does not read this table at
 // all; it exists so a deploy can resolve the store against the owning application's

@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// The information-model tools (ADR-draft-process-information-model).
+// The information-model tools (ADR-0230).
 //
 // An agent that authors BPMN through these tools runs into exactly the gap the
 // information model exists to close: it can write `itemSubjectRef="Order"` on a data

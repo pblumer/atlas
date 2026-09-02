@@ -283,6 +283,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0227](0227-jira-read-bounds-and-progress.md) | A Jira read is bounded and moves forward | Proposed |
 | [0228](0228-user-presence.md) | User presence in the Console | Proposed |
 | [0229](0229-modeler-bar-hierarchy.md) | The Modeler's editor bar carries two acts and a menu | Accepted |
+| [0230](0230-process-information-model.md) | The process information model — UML classes above BPMN's data objects | Proposed |
 
 ## Status values
 

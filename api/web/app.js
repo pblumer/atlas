@@ -7357,7 +7357,7 @@ function viewComingSoon(appId) {
 // specification deliberately does not describe — so two processes that both handle
 // an order share a five-letter string and nothing else. These views author the
 // missing half: a UML class-diagram subset, owned by a process application, that
-// itemSubjectRef resolves against (ADR-draft-process-information-model).
+// itemSubjectRef resolves against (ADR-0230).
 //
 // Why a class diagram and not an entity-relationship one: an ERD's vocabulary is
 // storage — entities, columns, foreign keys — and where a datum is persisted is the

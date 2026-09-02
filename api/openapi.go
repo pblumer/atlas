@@ -200,7 +200,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"key": tInteger(), "processId": tString(), "version": tInteger(), "deployments": tArray(),
 			}))}},
 		{"POST", "/api/v1/validate", s.handleValidate, apiOp{
-			summary: "Validate a BPMN model without deploying — a dry-run compile returning structured problems (errors and warnings) and the engine version, for the Modeler's Problems panel (ADR-0026). Pass ?applicationId= to also resolve each data object's itemSubjectRef against that application's information model and check its member writes and read order (ADR-draft-process-information-model)", tag: "Deployments", role: RoleModeler,
+			summary: "Validate a BPMN model without deploying — a dry-run compile returning structured problems (errors and warnings) and the engine version, for the Modeler's Problems panel (ADR-0026). Pass ?applicationId= to also resolve each data object's itemSubjectRef against that application's information model and check its member writes and read order (ADR-0230)", tag: "Deployments", role: RoleModeler,
 			req: xmlBody("BPMN 2.0 XML"),
 			resp: jsonBody("Validation problems and the engine version that produced them", schemaObj(map[string]any{
 				"version": tString(), "problems": tArray(),
@@ -275,7 +275,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Read a process instance's data objects — each with its name, data state, typed value, declared class (itemSubjectRef), collection flag, and the trail of every state it passed through with the element that wrote it", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Instance data objects", tArray())}},
 		{"GET", "/api/v1/instances/{key}/object-graph", s.handleInstanceObjectGraph, apiOp{
-			summary: "Derive a process instance's object diagram — its data objects as UML object nodes with their attributes and business keys, linked by containment and by matching business keys, plus the references this instance cannot resolve (ADR-draft-process-information-model)", tag: "Instances", role: RoleOperator,
+			summary: "Derive a process instance's object diagram — its data objects as UML object nodes with their attributes and business keys, linked by containment and by matching business keys, plus the references this instance cannot resolve (ADR-0230)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Object graph", tObject())}},
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
 			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances", role: RoleOperator,
@@ -560,7 +560,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "The data-centric index: which instances carry which data, newest instance first — the landscape read from the data's side rather than the process's. Filter with ?class= (the declared itemSubjectRef type) and ?key= (the business key, which is what makes a datum the same one across processes); ?history=true also sweeps finished instances. The answer says how many instances it examined and whether a bound stopped it", tag: "Information model", role: RoleOperator,
 			resp: jsonBody("Data objects across instances", tObject())}},
 		{"GET", "/api/v1/infomodel/subset", s.infomodel.HandleSubset, apiOp{
-			summary: "Read the information model's authoring subset — the class kinds, association kinds, primitive types and multiplicities this build authors, the matrix of what may be drawn between what, and what it deliberately does not author (ADR-draft-process-information-model)", tag: "Information model", role: RoleModeler,
+			summary: "Read the information model's authoring subset — the class kinds, association kinds, primitive types and multiplicities this build authors, the matrix of what may be drawn between what, and what it deliberately does not author (ADR-0230)", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Authoring subset", tObject())}},
 		{"GET", "/api/v1/infomodel/models", s.infomodel.HandleList, apiOp{
 			summary: "List information models — the UML class-diagram documents that give a BPMN data object's itemSubjectRef a type to resolve against; filter with ?applicationId=", tag: "Information model", role: RoleModeler,

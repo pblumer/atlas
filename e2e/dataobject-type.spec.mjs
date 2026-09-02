@@ -1,5 +1,5 @@
 // End-to-end coverage for a data object's declared type in the Modeler
-// (ADR-draft-process-information-model, slice 3).
+// (ADR-0230, slice 3).
 //
 // The case behind it: BPMN's itemSubjectRef is the slot where a data object says
 // what kind of thing it is, and until there was an information model there was

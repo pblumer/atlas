@@ -1,5 +1,5 @@
 // End-to-end coverage for the UML class canvas (api/web/infomodel-editor.js,
-// ADR-draft-process-information-model slice 2).
+// ADR-0230 slice 2).
 //
 // The case behind it: BPMN scopes a data object to one process definition and
 // leaves its type slot opaque, so the class diagram is where a type gets a meaning
@@ -156,7 +156,7 @@ test("the panel states that this is a subset, and what it does not author", asyn
   await expect(page.locator(".im-note")).toContainText("Where a datum lives is the data store's question");
 });
 
-// Data stores on the class canvas (ADR-draft-process-information-model, slice 5b).
+// Data stores on the class canvas (ADR-0230, slice 5b).
 // A store is where instances of a class outlive the process that made them — the
 // thing BPMN's <dataStoreReference> gestures at and then says nothing about. It is
 // declared once per application here, and named by every process that reaches it.

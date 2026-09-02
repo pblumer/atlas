@@ -4255,7 +4255,7 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 
 .token-badge.heat { background: var(--muted); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
 
-/* ---- Data objects tab (ADR-draft-process-information-model) -----------------
+/* ---- Data objects tab (ADR-0230) -----------------
    The instance's data objects: what each datum is, what state it is in, what it
    holds, and which element put it there. It reuses .vt so a data object and a
    variable read alike in the same inspector — they are the same shape of thing,
@@ -4314,7 +4314,7 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .do-trail-table .do-t-at { width: 1%; white-space: nowrap; color: var(--muted); font: 11.5px/1.6 ui-monospace, monospace; }
 
 /* ---- Information model: the UML class canvas -------------------------------
-   (ADR-draft-process-information-model, slice 2)
+   (ADR-0230, slice 2)
 
    The diagram is the point of this screen, so it gets the room: a toolbar, the
    canvas, a properties panel beside it, and the problems bar underneath — the
@@ -4459,7 +4459,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 .im-group-head .muted { margin-left: auto; font-size: 12px; }
 
 /* ---- The object diagram: the Data tab's second reading ---------------------
-   (ADR-draft-process-information-model, slice 4)
+   (ADR-0230, slice 4)
 
    The class diagram under Data › Model says what an Order is; this says which
    orders are here. UML draws those as two diagrams, and the shapes echo each
@@ -4519,7 +4519,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 .og-notes b { color: var(--text); }
 
 /* ---- Data › Instances: the data-centric index ------------------------------
-   (ADR-draft-process-information-model, slice 5a)
+   (ADR-0230, slice 5a)
 
    The question BPMN structurally cannot express — which instances, across which
    processes, are carrying *this* order — so the layout leads with identity: the
@@ -4563,7 +4563,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 }
 
 /* ---- Data stores on the class canvas ---------------------------------------
-   (ADR-draft-process-information-model, slice 5b)
+   (ADR-0230, slice 5b)
 
    A store is drawn the way the notation draws a persistent thing — an open-ended
    cylinder — because the one mistake to prevent here is reading it as a class. A

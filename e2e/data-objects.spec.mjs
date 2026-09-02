@@ -1,5 +1,5 @@
 // End-to-end coverage for the replay's Data tab (api/web/editor.js,
-// ADR-draft-process-information-model): the data objects an instance carries, and —
+// ADR-0230): the data objects an instance carries, and —
 // the part no variable view can answer — which element on the diagram put each value
 // there.
 //
@@ -87,7 +87,7 @@ test("a write the log cannot attribute says unknown rather than borrowing a name
 });
 
 // The Data tab's second reading: the same instance as an object diagram
-// (ADR-draft-process-information-model, slice 4). UML draws types and instances as
+// (ADR-0230, slice 4). UML draws types and instances as
 // two diagrams, and that split is why a class diagram was the right notation for
 // Atlas at all — it falls on the design-time/run-time line the engine already has.
 test.describe("the object diagram", () => {
