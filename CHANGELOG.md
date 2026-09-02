@@ -14,6 +14,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An inbound event watch has an hourly budget.** A watch reads a foreign system and
+  publishes what it finds; every event can start a process, and that process can write
+  back to the system the watch reads. When it writes something the watch's own query
+  matches, the loop closes and has no natural end — and nothing looks broken from inside:
+  every instance is well-formed, every task succeeds, every message is delivered exactly
+  once. Only the *rate* tells a loop from a busy morning
+  ([ADR-draft-inbound-watch-budget](docs/adr/draft-inbound-watch-budget.md)).
+
+  Each watch now carries **Max events/hour** — 60 when it names none, so the protection
+  is the default rather than something to remember. A batch that would cross the ceiling
+  is refused whole and the watch switches itself off, saying so in the Console in words
+  that name the number to raise. The resume cursor stays put, so nothing is lost:
+  enabling the watch again re-reads what was refused, with a fresh window.
+
+  It is deliberately cause-agnostic, because the loop the engine fix below closed is not
+  the only shape: two processes can build one between them with no single model being
+  wrong.
+
 - **An example where a Jira ticket starts the process.** `examples/jira-ticket-eingang/`
   is the Zugangsantrag's other direction: instead of Atlas writing to Jira, Jira starts
   Atlas. A message start event waits on `jira.ticket.created`, an event watch under

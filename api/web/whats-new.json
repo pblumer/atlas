@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "an-inbound-event-watch-has-an-hourly-budget",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An event watch stops itself if it starts looping",
+        "de": "Eine Ereignisüberwachung stoppt sich selbst, wenn sie in eine Schleife gerät"
+      },
+      "summary": {
+        "en": "A watch reads a system and starts a process for what it finds — and that process can write back to the same system. If it writes something the watch's own query matches, it feeds itself, and nothing looks wrong: every run succeeds. Each watch now has a Max events/hour (60 unless you set it). Cross it and the watch switches itself off and says so, naming the number to raise. Nothing is lost — turning it back on re-reads what it refused.",
+        "de": "Eine Überwachung liest ein System und startet zu jedem Fund einen Prozess — und dieser Prozess kann in dasselbe System zurückschreiben. Schreibt er etwas, das die Abfrage der Überwachung selbst findet, füttert sie sich selbst, und nichts sieht falsch aus: jeder Lauf gelingt. Jede Überwachung hat jetzt ein „Max events/hour\" (60, wenn Sie nichts setzen). Wird es überschritten, schaltet sie sich ab und sagt es — samt der Zahl, die Sie erhöhen müssten. Verloren geht nichts: Beim Wiedereinschalten wird das Abgewiesene erneut gelesen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Connectors",
+          "de": "Konnektoren öffnen"
+        },
+        "route": "#/console/connectors"
+      }
+    },
+    {
       "id": "an-example-where-a-jira-ticket-starts-the-process",
       "version": "Unreleased",
       "date": null,
@@ -316,51 +345,6 @@
         "Security",
         "Operations"
       ]
-    },
-    {
-      "id": "the-active-directory-worker-type-can-search",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Active Directory: look an account or a group up first",
-        "de": "Active Directory: Konto oder Gruppe zuerst nachschlagen"
-      },
-      "summary": {
-        "en": "A new operation, Find entry (search), asks the directory whether an account or a group is there — and hands back its full name in the tree, ready for the next step to use. That is what a membership change was missing: you can only put somebody into a group once you know the group exists and where it sits. Finding nothing is an answer, not an error: the step completes and a gateway takes the other path.",
-        "de": "Ein neuer Vorgang, Eintrag suchen, fragt das Verzeichnis, ob es ein Konto oder eine Gruppe gibt — und liefert deren vollständigen Namen im Verzeichnisbaum gleich mit, verwendbar im nächsten Schritt. Genau das fehlte einer Gruppenzuweisung: jemanden in eine Gruppe aufzunehmen geht erst, wenn feststeht, dass es die Gruppe gibt und wo sie liegt. Nichts gefunden ist dabei eine Antwort und kein Fehler: der Schritt wird abgeschlossen, und ein Gateway nimmt den anderen Weg."
-      },
-      "link": {
-        "label": "ADR-0166",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0166-active-directory-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the Modeler and put a service task on the canvas.",
-          "In Implement, choose the Active Directory Connector, then Operation → Find entry (search).",
-          "Set the Base DN to where you want to look (e.g. ou=groups,dc=example,dc=com), the Scope, and a Filter such as (&(objectClass=group)(cn=Vertrieb)).",
-          "Name a Result variable, e.g. gruppe.",
-          "Branch on =gruppe.found with an exclusive gateway, and give the next task's Target DN the value =gruppe.dn."
-        ],
-        "de": [
-          "Modeler öffnen und einen Service-Task auf die Fläche ziehen.",
-          "Unter Implement den Active Directory Connector wählen, dann Operation → Find entry (search).",
-          "Base DN setzen, wo gesucht werden soll (z.B. ou=groups,dc=example,dc=com), dazu Scope und einen Filter wie (&(objectClass=group)(cn=Vertrieb)).",
-          "Eine Result variable vergeben, z.B. gruppe.",
-          "Mit einem exklusiven Gateway auf =gruppe.found verzweigen und dem nächsten Task als Target DN den Wert =gruppe.dn geben."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }
