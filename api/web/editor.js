@@ -2872,7 +2872,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "jira", name: "Jira", group: "Applications", desc: "Create, read, update, transition, comment on, assign, or search Jira issues", icon: "J",
+    id: "jira", name: "Jira", group: "Applications", desc: "Create, read, update, transition, comment on, assign, or search Jira issues, and look up the accounts to assign them to", icon: "J",
     // A check-mark inside a rounded square on Atlassian blue: the issue, ticked —
     // this connector's counterpart to REST's globe and Remedy's ticket. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2893,6 +2893,7 @@ const SERVICE_TASK_KINDS = [
           { v: "add-comment", l: "Add comment" },
           { v: "assign-issue", l: "Assign issue" },
           { v: "search", l: "Search (JQL)" },
+          { v: "search-users", l: "Search users" },
         ],
       },
       {
@@ -2904,8 +2905,10 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "project", label: "Project", placeholder: "OPS", fx: true,
-        showIf: (v) => v.operation === "create-issue",
-        hint: "The project key the issue is created in. A value that is all digits is read as a project id instead. May be a FEEL expression (fx).",
+        showIf: (v) => v.operation === "create-issue" || v.operation === "search-users",
+        hint: (v) => (v.operation === "search-users"
+          ? "Optional. Restricts the search to the accounts this project can actually assign — without it the search covers the whole site, and an account it finds may still be one Jira refuses to hand an issue to. May be a FEEL expression (fx)."
+          : "The project key the issue is created in. A value that is all digits is read as a project id instead. May be a FEEL expression (fx)."),
       },
       {
         key: "issueType", label: "Issue type", placeholder: "Task", fx: true,
@@ -2943,9 +2946,16 @@ const SERVICE_TASK_KINDS = [
         hint: "The Jira query the search runs, written exactly as in Jira's own search box. It must restrict what it matches — Jira Cloud refuses an unbounded query outright, so a query that only sorts (order by created DESC) comes back as HTTP 400; name at least a project, an assignee or a label. May be a FEEL expression (fx), so a process can search for what it is actually about — e.g. =\"project = OPS AND reporter = \" + melder.",
       },
       {
-        key: "maxResults", label: "Maximum issues", placeholder: "50",
-        showIf: (v) => v.operation === "search",
-        hint: "Caps what may land in the result variable. The connector follows Jira's paging to that many issues, so the result is the issues themselves, never one page of them. Empty uses 50; 0 reads every match.",
+        key: "query", label: "Search term", placeholder: "=antragsteller.mail", fx: true,
+        showIf: (v) => v.operation === "search-users",
+        hint: "A fragment of the account's display name or address — Jira matches it as a substring. On Jira Cloud it searches both; on Data Center it matches the username. Usually a FEEL expression (fx) naming what the process already knows about the person, e.g. =antragsteller.mail. If it finds nobody, that is not necessarily \"no such person\": Jira answers a caller it does not recognise, or one without the global \"Browse users and groups\" permission, by seeing nobody rather than by refusing — and on Cloud an address matches only as far as that account's profile visibility allows, so the display name is the term to fall back to.",
+      },
+      {
+        key: "maxResults", label: "Maximum results", placeholder: "50",
+        showIf: (v) => v.operation === "search" || v.operation === "search-users",
+        hint: (v) => (v.operation === "search-users"
+          ? "Caps what may land in the result variable. The connector follows Jira's paging to that many accounts. Empty uses 50; 0 reads every match."
+          : "Caps what may land in the result variable. The connector follows Jira's paging to that many issues, so the result is the issues themselves, never one page of them. Empty uses 50; 0 reads every match."),
       },
       {
         key: "fields", label: "Further fields", type: "map", childType: "atlas:JiraField", fx: true,
@@ -2955,17 +2965,24 @@ const SERVICE_TASK_KINDS = [
       { group: "Output" },
       {
         key: "resultVariable", label: "Result variable",
-        resultType: (v) => (v.operation === "search" ? "array" : "object"),
+        resultType: (v) => (v.operation === "search" || v.operation === "search-users" ? "array" : "object"),
         placeholder: "ticket",
-        // Three of the seven operations Jira answers with 204 No Content, so a result
+        // Three of the eight operations Jira answers with 204 No Content, so a result
         // variable there would name a value that is never written — the panel hides it
         // rather than letting an author expect one (the compiler refuses it too).
-        showIf: (v) => ["create-issue", "get-issue", "add-comment", "search"].includes(v.operation),
-        hint: (v) => v.operation === "search"
-          ? "The matched issues are written into this process variable as a JSON array — the issues themselves, not Jira's paging envelope."
-          : (v.operation === "create-issue"
-            ? "The created issue is written into this process variable, so a later task can address it as =ticket.key. Leave empty to discard it."
-            : "What Jira returned is written into this process variable (leave empty to discard it)."),
+        showIf: (v) => ["create-issue", "get-issue", "add-comment", "search", "search-users"].includes(v.operation),
+        hint: (v) => {
+          switch (v.operation) {
+            case "search-users":
+              return "The matched accounts are written into this process variable as a JSON array. FEEL lists are 1-based, so the first account's id is =konten[1].accountId — which is what Assign issue takes, and what an assignee field on Create issue takes as ={\"accountId\": konten[1].accountId}.";
+            case "search":
+              return "The matched issues are written into this process variable as a JSON array — the issues themselves, not Jira's paging envelope.";
+            case "create-issue":
+              return "The created issue is written into this process variable, so a later task can address it as =ticket.key. Leave empty to discard it.";
+            default:
+              return "What Jira returned is written into this process variable (leave empty to discard it).";
+          }
+        },
       },
     ],
   },
@@ -3894,6 +3911,7 @@ function messageFieldsHTML(modeler, med, hint) {
   const fields = current ? `
     <label class="field"><span>Message name</span>
       <input type="text" id="f-msgname" value="${esc(current.name || "")}" placeholder="payment-received"/></label>
+    <p class="muted" style="font-size:12px" id="f-msgsources"></p>
     <label class="field"><span>Correlation key (FEEL)</span>
       <textarea id="f-corrkey" rows="1" placeholder="orderId">${esc(messageCorrelationKey(current))}</textarea></label>
     <p class="muted" style="font-size:12px">Shared with every event that uses this message — a throw and a catch correlate when they use the same message and their keys evaluate equal.</p>` : "";
@@ -3906,6 +3924,48 @@ function messageFieldsHTML(modeler, med, hint) {
       </select></label>
     ${fields}
     <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+
+// fillMessageSources says whether anything on this server publishes the message name in
+// front of the author, and what.
+//
+// A model names a message and nothing else, on purpose: what feeds it is an operational
+// fact, so the same process can be started by a Jira watch, a clio subscription, a POST
+// to /api/v1/messages or another process's send task, and swapping one for another is a
+// Console change rather than a redeploy (ADR-0075/0214). The cost of that seam is
+// exactly this: a name typed one character differently here and in Console → Connectors
+// → Events is two working halves that never meet — no error anywhere, and a process that
+// never starts. The line closes the gap without closing the seam: it reports, it does not
+// bind.
+//
+// It is deliberately silent about *catchers*. A name with no inbound watch is entirely
+// normal — a throw event inside the same model, or an external system posting the
+// message, are both invisible from here — so the empty case says where watches are
+// configured rather than claiming the name is wrong.
+//
+// A failed fetch leaves the line empty, like every other server-fed hint in this panel:
+// an author who cannot reach the server is not helped by being told so twice.
+function fillMessageSources(api, el, name) {
+  if (!api || !el) return;
+  const want = (name || "").trim();
+  if (!want) return;
+  api("GET", "/api/v1/message-sources").then((list) => {
+    const mine = (list || []).filter((s) => s && s.messageName === want);
+    if (!mine.length) {
+      el.innerHTML = `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
+        + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
+        + `for a Jira or clio event, add a watch under <b>Connectors → Events</b> in the Console.</span>`;
+      return;
+    }
+    const parts = mine.map((s) => {
+      const what = s.description ? ` — ${esc(s.description)}` : "";
+      const off = s.enabled ? "" : ' <span class="pill warn">off</span>';
+      return `<li>${esc(s.kind)} <b>${esc(s.connectorName)}</b>${what}${off}</li>`;
+    }).join("");
+    el.innerHTML = `Published by ${mine.length} inbound event watch${mine.length > 1 ? "es" : ""}:`
+      + `<ul style="margin:4px 0 0 16px;padding:0">${parts}</ul>`;
+  }).catch(() => { /* no hint; the field works the same */ });
 }
 
 // messagesManagerHTML lists the model's messages for central management (add,
@@ -6477,9 +6537,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     const fmsgname = body.querySelector("#f-msgname");
     if (fmsgname) {
+      fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value);
       fmsgname.addEventListener("change", () => {
         const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) med.messageRef.name = (fmsgname.value || "").trim();
+        // Renaming the message changes which watches feed it, so the line is re-read
+        // rather than left describing the name that was there a moment ago.
+        fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value);
       });
     }
     const fcorrkey = body.querySelector("#f-corrkey");

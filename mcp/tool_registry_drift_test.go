@@ -357,6 +357,13 @@ var mcpOmittedRoutes = map[string]string{
 	"PATCH /api/v1/inbound-subscriptions/{id}":           "connector infrastructure is admin config",
 	"DELETE /api/v1/inbound-subscriptions/{id}":          "connector infrastructure is admin config",
 	"POST /api/v1/connectors/{id}/provision-clio-key":    "connector infrastructure is admin config",
+	// Which inbound watches publish a message name. It reads the same connector
+	// configuration as the family above, and the blind spot it exists to close is not
+	// one an agent has: a person authoring in the Console cannot see whether a
+	// Console-configured watch feeds the name they typed, while an agent that wants a
+	// process to run publishes the message itself with atlas_publish_message and never
+	// depends on a watch existing at all.
+	"GET /api/v1/message-sources": "the Modeler's authoring aid over watch configuration; an agent publishes a message itself rather than needing one to exist",
 
 	// Repository: package management, an admin/UI concern.
 	"GET /api/v1/repository/packages":               "repository management is a UI concern",

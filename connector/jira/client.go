@@ -1,8 +1,8 @@
 // Package jira integrates Atlassian Jira as a server-registered Atlas connector: a
 // BPMN Jira connector task performs one issue-tracker operation — create an issue,
-// read one, update it, move it through its workflow, comment on it, assign it, or
-// search — against a configured Jira instance via the job path
-// (ADR-0201). It mirrors how the remedy package delegates a ticket to
+// read one, update it, move it through its workflow, comment on it, assign it, search
+// for issues, or look an account up — against a configured Jira instance via the job
+// path (ADR-0201). It mirrors how the remedy package delegates a ticket to
 // a registry-managed ITSM instance (ADR-0106) and mail a send to a registry-managed
 // provider (ADR-0079), and inherits the job protocol's durability and non-blocking
 // properties (ADR-0007):
@@ -73,6 +73,11 @@ type Op struct {
 	NeedsComment    bool
 	NeedsAssignee   bool
 	NeedsJQL        bool
+	// NeedsQuery marks search-users: the name or address fragment an account is looked
+	// up by. Its own field rather than a reuse of NeedsJQL, because the two are not the
+	// same language — one is JQL, the other a substring Jira matches against a display
+	// name and an address.
+	NeedsQuery bool
 	// NeedsResult marks an operation whose whole point is what it returns: a read
 	// that discards its answer is a call made for nothing.
 	NeedsResult bool
@@ -87,6 +92,12 @@ type Op struct {
 // tracker. It is deliberately not "every Jira endpoint" — what earns a row is a step a
 // business process takes, which is why there is no board, sprint or worklog here and
 // why the generic REST connector (ADR-0067) remains the way to reach the rest.
+//
+// search-users is the one row that is not about an issue, and it earns its place as
+// assign-issue's missing argument (ADR-draft-jira-account-lookup): Jira hands an issue
+// to an accountId, a process knows a person by name or address, and without a row for
+// the step between them a model had to hard-code an opaque id or call Jira twice through
+// two different connectors.
 var Ops = map[string]Op{
 	"create-issue":     {NeedsProject: true, NeedsSummary: true, Label: "create an issue"},
 	"get-issue":        {NeedsIssue: true, NeedsResult: true, Label: "read an issue"},
@@ -95,6 +106,7 @@ var Ops = map[string]Op{
 	"add-comment":      {NeedsIssue: true, NeedsComment: true, Label: "comment on an issue"},
 	"assign-issue":     {NeedsIssue: true, NeedsAssignee: true, Label: "assign an issue"},
 	"search":           {NeedsJQL: true, NeedsResult: true, Label: "search issues"},
+	"search-users":     {NeedsQuery: true, NeedsResult: true, Label: "search for accounts"},
 }
 
 // OpNames lists the operations, sorted, for the error messages that have to say what
@@ -121,6 +133,8 @@ type Request struct {
 	Issue string
 	// Project and IssueType create an issue. A value that is all digits addresses the
 	// project or type by id; anything else by key (project) or name (issue type).
+	// Project also restricts an account search to the accounts a project can actually
+	// assign, which is the only place it appears without IssueType.
 	Project     string
 	IssueType   string
 	Summary     string
@@ -135,9 +149,11 @@ type Request struct {
 	// Assignee is the account an issue is handed to — an accountId on Jira Cloud, a
 	// username on Data Center. The client knows which from its own credential.
 	Assignee string
-	// JQL is a search's query and MaxResults the cap on what may be returned; 0 reads
-	// every matching issue. The compiler has already applied the default.
+	// JQL is an issue search's query and Query an account search's term — a fragment of
+	// a display name or an address. MaxResults caps what either may return; 0 reads every
+	// match. The compiler has already applied the default.
 	JQL        string
+	Query      string
 	MaxResults int32
 	// Fields are extra issue fields keyed by Jira field id or name, each carrying the
 	// JSON shape its FEEL value had — a string stays a string, an object or a list is
@@ -156,11 +172,11 @@ type Request struct {
 // The shape is a single Do rather than a method per operation for the reason the
 // Entra connector gives (ADR-0172): this is a typed façade over Jira's REST API, and
 // the value it adds is at the *model* level — naming the operations and building
-// their URLs and bodies — not in wrapping seven HTTP calls in seven Go signatures.
+// their URLs and bodies — not in wrapping eight HTTP calls in eight Go signatures.
 type Client interface {
 	// Do performs one operation and returns what Jira answered: the created or read
-	// object, the array of issues a search matched, or nil where Jira answers with no
-	// content.
+	// object, the array of issues or accounts a search matched, or nil where Jira answers
+	// with no content.
 	Do(ctx context.Context, req Request) (any, error)
 }
 

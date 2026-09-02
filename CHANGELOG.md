@@ -14,6 +14,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A message start event says whether anything feeds it.** A model names a message and
+  nothing else — what publishes it is an operational fact, so the same process can be
+  started by a Jira watch, a clio subscription, a `POST /api/v1/messages` or another
+  process's send task, and swapping one for another is a Console change rather than a
+  redeploy. The cost of that seam was that a name typed one character differently in the
+  model and in Console → Connectors → Events is two working halves that never meet: no
+  error anywhere, and a process that simply never starts. The Modeler now reads
+  `GET /api/v1/message-sources` and says, under the message name, which inbound watches
+  publish it — the connector, its kind, the JQL or subject it follows, and whether it is
+  switched off — or that none does, with where one is configured. It reports; it does not
+  bind: the model still names no source. A watch's query is configuration, so it is shown
+  only to a caller with viewer access to that connector; that a name is fed at all is
+  answered to any modeller, like the connector picker's own listing.
+
+- **A Jira task can look an account up.** An eighth Jira operation, `search-users`, turns
+  what a process knows about a person — an address, a name — into the `accountId` Jira
+  assigns an issue to ([ADR-draft-jira-account-lookup](docs/adr/draft-jira-account-lookup.md)).
+  The term travels as `query` on Cloud and `username` on Data Center, decided by the
+  connector's own credential rather than by the model, and an optional project restricts
+  the search to the accounts that project can actually assign — the ones a later
+  `assign-issue` will not be refused for. The matched accounts land in the result variable
+  as a JSON array, so an assign reads `=konten[1].accountId` (FEEL lists are 1-based).
+  Before this, a model could only hard-code an opaque per-site id or call Jira through the
+  REST connector with a second copy of the credential.
+
 - **A database task can be tried without a database.** The SQL Worker Types — MS SQL
   Server, MariaDB, PostgreSQL — were the only ones that could not be exercised at all
   without the production dependency, and the database a process reads is the HR system
@@ -353,6 +378,13 @@ _Changed_ / _Removed_ for each version.
   extension elements are still `<atlas:jiraConnector>` and friends.
 
 ### Fixed
+
+- **A rejected REST call says what the far side objected to.** A non-2xx response from a
+  REST connector task reported only `returned HTTP 400`, and threw away the body the
+  server had already sent to explain it — leaving an operator to guess which of the URL,
+  the headers, the query parameters or the body was wrong. The incident message now
+  carries an excerpt of that response: one line, collapsed and bounded, so a proxy's HTML
+  error page cannot become the incident.
 
 - **Renaming a saved diagram or form left a duplicate — or silently overwrote another
   one.** A draft is stored under its process id and a form under the id a user task

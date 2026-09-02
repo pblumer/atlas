@@ -2370,10 +2370,12 @@ type xmlSharePointConnector struct {
 // issueType, summary and description are what an issue is created with (summary and
 // description also carry an update); transition names the workflow step to perform;
 // comment is a comment body (its own operation, and optionally alongside a
-// transition); assignee is the account an issue is handed to; jql and maxResults are a
-// search. jiraField children set any further issue field, including a custom field, by
-// its Jira field id or name. Every value is literal or, with a leading '=', a FEEL
-// expression evaluated over the variables the task sees at call time.
+// transition); assignee is the account an issue is handed to; jql and maxResults are an
+// issue search; query is an account search's term, which maxResults caps too and which
+// project — the one place project appears without issueType — restricts to the accounts
+// that project can assign. jiraField children set any further issue field, including a
+// custom field, by its Jira field id or name. Every value is literal or, with a leading
+// '=', a FEEL expression evaluated over the variables the task sees at call time.
 type xmlJiraConnector struct {
 	Connector      string      `xml:"connector,attr"`
 	Operation      string      `xml:"operation,attr"`
@@ -2386,6 +2388,7 @@ type xmlJiraConnector struct {
 	Comment        string      `xml:"comment,attr"`
 	Assignee       string      `xml:"assignee,attr"`
 	JQL            string      `xml:"jql,attr"`
+	Query          string      `xml:"query,attr"`
 	MaxResults     string      `xml:"maxResults,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"jiraField"`

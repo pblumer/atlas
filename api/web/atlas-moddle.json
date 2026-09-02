@@ -360,6 +360,7 @@
         { "name": "comment", "type": "String", "isAttr": true },
         { "name": "assignee", "type": "String", "isAttr": true },
         { "name": "jql", "type": "String", "isAttr": true },
+        { "name": "query", "type": "String", "isAttr": true },
         { "name": "maxResults", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true },

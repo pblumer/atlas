@@ -907,6 +907,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Update an inbound event subscription", tag: "Connectors", role: RoleModeler, req: jsonBody("Subscription update", tObject()), resp: jsonBody("Updated subscription", tObject())}},
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
 			summary: "Delete an inbound event subscription", tag: "Connectors", role: RoleModeler, status: http.StatusNoContent}},
+		{"GET", "/api/v1/message-sources", s.handleListMessageSources, apiOp{
+			summary: "List every inbound event watch by the message name it publishes, so a model can be told whether its message start event has a source", tag: "Connectors", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
 
 		{"PUT", "/api/v1/connectors/{id}/members/{principalId}", s.handleSetConnectorMember, apiOp{
 			summary: "Share a connector with a user or a group, or change their role (ADR-0205); owner only", tag: "Connectors", role: RoleModeler, req: jsonBody("Member role", tObject()), resp: jsonBody("Updated connector", tObject())}},

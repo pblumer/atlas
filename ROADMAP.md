@@ -287,11 +287,13 @@ The control-flow basics most real models use.
   **Jira is another Worker Type in the catalog**
   ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked
   `<atlas:jiraConnector connector operation …>` performs one Atlassian Jira operation
-  through the REST API on the job path. Seven operations cover the loop a process runs
+  through the REST API on the job path. Eight operations cover the loop a process runs
   against an issue tracker — `create-issue`, `get-issue`, `update-issue`,
-  `transition-issue`, `add-comment`, `assign-issue` and `search` (JQL) — with every
+  `transition-issue`, `add-comment`, `assign-issue`, `search` (JQL) and `search-users`
+  (the account lookup that produces what an assign takes,
+  [ADR-draft-jira-account-lookup](docs/adr/draft-jira-account-lookup.md)) — with every
   authored value literal-or-FEEL, and what Jira returned written into a result variable
-  for the four operations that return anything. The site URL and the credential bundle
+  for the five operations that return anything. The site URL and the credential bundle
   (`{email, apiToken}` for Jira Cloud, `{token}` for a Data Center personal access token)
   are server-registered and vault-resolved like mail/clio/Remedy, never in the model; the
   same fact decides both the authentication scheme and how an account is addressed when

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/pblumer/atlas/connector/nettimeout"
@@ -107,6 +108,8 @@ func (c *HTTPClient) Do(ctx context.Context, req Request) (any, error) {
 		return c.call(ctx, http.MethodPut, apiBase+"/issue/"+url.PathEscape(req.Issue)+"/assignee", map[string]any{field: req.Assignee}, req)
 	case "search":
 		return c.search(ctx, req)
+	case "search-users":
+		return c.searchUsers(ctx, req)
 	default:
 		return nil, fmt.Errorf("jira: unknown operation %q (want %s)", req.Operation, strings.Join(OpNames(), ", "))
 	}
@@ -119,15 +122,22 @@ func (c *HTTPClient) Do(ctx context.Context, req Request) (any, error) {
 // permission to create issues in it", which reads as a wrong key or a missing grant and
 // sends an operator looking in Jira for a fault that is a stray space in a form field.
 //
-// It is deliberately only the identifiers. A summary, a description, a comment and a
-// JQL are content: what they contain is the author's business, and silently reshaping
-// text a model composed would be a different kind of surprise.
+// An account search's term is trimmed with them, for the same reason rather than by
+// analogy: Jira matches it as a *substring* of a display name and an address, so a
+// leading space is not a difference in formatting but a term nothing can match.
+//
+// It is deliberately only those. A summary, a description, a comment and a JQL are
+// content: what they contain is the author's business, and silently reshaping text a
+// model composed would be a different kind of surprise. A JQL's own whitespace is
+// insignificant to Jira's parser, so trimming it would buy nothing to weigh against
+// that.
 func trimIdentifiers(req Request) Request {
 	req.Issue = strings.TrimSpace(req.Issue)
 	req.Project = strings.TrimSpace(req.Project)
 	req.IssueType = strings.TrimSpace(req.IssueType)
 	req.Transition = strings.TrimSpace(req.Transition)
 	req.Assignee = strings.TrimSpace(req.Assignee)
+	req.Query = strings.TrimSpace(req.Query)
 	return req
 }
 
@@ -363,6 +373,74 @@ func (c *HTTPClient) searchOffset(ctx context.Context, req Request) (any, error)
 		}
 	}
 	return issues, nil
+}
+
+// searchUsers looks accounts up by a fragment of a name or an address, and answers with
+// the accounts themselves. It is what makes assign-issue usable from a process
+// (ADR-draft-jira-account-lookup): Jira hands an issue to an accountId, a process knows a
+// person by their address, and this is the step between the two.
+//
+// Two things about it are decided by the product, and both follow from the credential
+// rather than from anything an operator has to choose:
+//
+//   - The parameter naming the term. Jira Cloud takes query, which it matches against a
+//     display name and an address; Data Center takes username. Cloud does not merely
+//     prefer query — it refuses username outright, because after its GDPR changes an
+//     account is not addressable by name from outside.
+//   - Nothing else: the path, the paging and the shape of the answer are the same on
+//     both, so there is one loop here rather than two.
+//
+// A project restricts the search to the accounts that project can actually assign,
+// through Jira's assignable-user endpoint. It is worth its own endpoint rather than a
+// filter afterwards: an account that exists but cannot be assigned in the project is
+// exactly the value that makes a later assign-issue fail with "User cannot be assigned
+// issues", one task after the one that chose it.
+func (c *HTTPClient) searchUsers(ctx context.Context, req Request) (any, error) {
+	path := apiBase + "/user/search"
+	if req.Project != "" {
+		path = apiBase + "/user/assignable/search"
+	}
+	term := "username" // Data Center matches a username fragment
+	if c.cloud() {
+		term = "query" // Cloud matches a display name or an address, and refuses username
+	}
+	users := []any{}
+	for {
+		// Ask for no more than the cap allows. It stays positive because the loop returns
+		// as soon as the cap is reached, so this is never asked to page zero accounts.
+		page := searchPageSize
+		if remaining := int(req.MaxResults) - len(users); req.MaxResults > 0 && remaining < page {
+			page = remaining
+		}
+		q := url.Values{}
+		q.Set(term, req.Query)
+		if req.Project != "" {
+			q.Set("project", req.Project)
+		}
+		q.Set("startAt", strconv.Itoa(len(users)))
+		q.Set("maxResults", strconv.Itoa(page))
+		raw, err := c.call(ctx, http.MethodGet, path+"?"+q.Encode(), nil, req)
+		if err != nil {
+			return nil, err
+		}
+		// Unlike an issue search this endpoint answers with a bare array: there is no
+		// envelope, so no total and no token — the page's own length is the only thing
+		// that says whether another one exists.
+		got, _ := raw.([]any)
+		users = append(users, got...)
+		// The cap is the model's statement about what may reach its result variable, so
+		// it is applied to what arrived rather than trusted to the server.
+		if req.MaxResults > 0 && len(users) >= int(req.MaxResults) {
+			return users[:req.MaxResults], nil
+		}
+		// A short page is the end of the result set, and it is also what stops a server
+		// that ignores startAt from being read forever — the condition an envelope's
+		// total would otherwise carry.
+		if len(got) < page {
+			break
+		}
+	}
+	return users, nil
 }
 
 // jiraError is the error envelope Jira returns. Surfacing its messages is the

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -181,6 +182,71 @@ func TestHTTPClientNon2xx(t *testing.T) {
 	c := NewHTTPClient()
 	if _, err := c.Do(context.Background(), Request{Method: "GET", URL: srv.URL + "/x"}); err == nil {
 		t.Fatal("Do on HTTP 500: err = nil, want error")
+	}
+}
+
+// A rejection carries what the server said about it. The status alone names the class
+// of fault and never the fault: "returned HTTP 400" sends an operator to guess which of
+// a request's parts the far side objected to, while the body it already sent back
+// usually names it outright.
+func TestHTTPClientNon2xxCarriesTheResponseBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"errorMessages":["The query parameter 'query' is required."]}`))
+	}))
+	defer srv.Close()
+	_, err := NewHTTPClient().Do(context.Background(), Request{Method: "GET", URL: srv.URL + "/x"})
+	if err == nil {
+		t.Fatal("Do on HTTP 400: err = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "The query parameter 'query' is required.") {
+		t.Errorf("err = %v, want it to carry what the server said", err)
+	}
+	if !strings.Contains(err.Error(), "returned HTTP 400") {
+		t.Errorf("err = %v, want the status too", err)
+	}
+}
+
+// The body is an excerpt on one line, not a transcript. A rejected call is as likely to
+// answer with a proxy's HTML page as with a JSON envelope, and an incident message that
+// carries thirty lines of markup is one nobody reads to the end.
+func TestHTTPClientErrorBodyIsOneTruncatedLine(t *testing.T) {
+	long := "<html>\n  <body>\n    " + strings.Repeat("sehr ausführlich ", 200) + "\n  </body>\n</html>"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(long))
+	}))
+	defer srv.Close()
+	_, err := NewHTTPClient().Do(context.Background(), Request{Method: "GET", URL: srv.URL + "/x"})
+	if err == nil {
+		t.Fatal("Do on HTTP 502: err = nil, want error")
+	}
+	msg := err.Error()
+	if strings.ContainsAny(msg, "\n\r") {
+		t.Errorf("err = %q, want a single line", msg)
+	}
+	if !strings.Contains(msg, "…") {
+		t.Errorf("err = %q, want the excerpt marked as truncated", msg)
+	}
+	// Generous, but bounded: the point is that an incident message stays readable.
+	if len([]rune(msg)) > 700 {
+		t.Errorf("err is %d runes long, want a bounded excerpt: %q", len([]rune(msg)), msg)
+	}
+}
+
+// A rejection with no body says only what it can. Appending an empty excerpt would put
+// a dangling separator on the end of every such message.
+func TestHTTPClientErrorWithoutABody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+	_, err := NewHTTPClient().Do(context.Background(), Request{Method: "GET", URL: srv.URL + "/x"})
+	if err == nil {
+		t.Fatal("Do on HTTP 403: err = nil, want error")
+	}
+	if got := err.Error(); !strings.HasSuffix(got, "returned HTTP 403") {
+		t.Errorf("err = %q, want it to end at the status", got)
 	}
 }
 
