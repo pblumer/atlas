@@ -5,6 +5,16 @@
 // a wider audience".
 import { test, expect } from "@playwright/test";
 
+// Documentation lives behind the bar's "…" menu now, with Save and Deploy the only
+// controls still on the bar itself (ADR-0229). Every reach for it
+// goes through the menu, including the second press that toggles the panel shut.
+const docExport = async (page) => {
+  await page.locator("#bar-more").click();
+  await expect(page.locator("#bar-menu")).toBeVisible();
+  await page.locator("#docexport").click();
+  await expect(page.locator("#bar-menu")).toBeHidden();
+};
+
 test.beforeEach(async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -20,7 +30,7 @@ test.afterEach(async ({ page }) => {
 
 test("the panel opens with the process name and an empty history", async ({ page }) => {
   await expect(page.locator("#doc-panel")).toBeHidden();
-  await page.locator("#docexport").click();
+  await docExport(page);
 
   await expect(page.locator("#doc-panel")).toBeVisible();
   // The title is prefilled from the model, so the common case is one click.
@@ -28,12 +38,12 @@ test("the panel opens with the process name and an empty history", async ({ page
   await expect(page.locator("#doc-history")).toContainText("No version published yet.");
 
   // The button toggles the panel shut again.
-  await page.locator("#docexport").click();
+  await docExport(page);
   await expect(page.locator("#doc-panel")).toBeHidden();
 });
 
 test("publishing produces a numbered version carrying the model's prose", async ({ page }) => {
-  await page.locator("#docexport").click();
+  await docExport(page);
   await page.locator("#doc-note").fill("Freigabe Q3");
   await page.locator("#doc-publish").click();
 
@@ -68,7 +78,7 @@ test("publishing produces a numbered version carrying the model's prose", async 
 });
 
 test("a second publish adds a version above the first", async ({ page }) => {
-  await page.locator("#docexport").click();
+  await docExport(page);
   await page.locator("#doc-publish").click();
   await expect(page.locator(".doc-version")).toHaveCount(1);
   await page.locator("#doc-note").fill("Nach dem Review");
@@ -85,7 +95,7 @@ test("a second publish adds a version above the first", async ({ page }) => {
 });
 
 test("a version is private until shared, and revoking takes the link away", async ({ page }) => {
-  await page.locator("#docexport").click();
+  await docExport(page);
   await page.locator("#doc-publish").click();
   await expect(page.locator(".doc-version")).toHaveCount(1);
 
@@ -107,7 +117,7 @@ test("a version is private until shared, and revoking takes the link away", asyn
 });
 
 test("sharing is per version: publishing v2 does not expose v1", async ({ page }) => {
-  await page.locator("#docexport").click();
+  await docExport(page);
   await page.locator("#doc-publish").click();
   await page.locator("#doc-publish").click();
   await expect(page.locator(".doc-version")).toHaveCount(2);
@@ -122,7 +132,7 @@ test("sharing is per version: publishing v2 does not expose v1", async ({ page }
 });
 
 test("a failure is reported in the panel rather than silently swallowed", async ({ page }) => {
-  await page.locator("#docexport").click();
+  await docExport(page);
   await page.locator("#doc-publish").click();
   await expect(page.locator(".doc-version")).toHaveCount(1);
 

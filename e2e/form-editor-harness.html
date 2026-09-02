@@ -47,6 +47,34 @@
           api: makeApi(0, [{ type: "textfield", key: "vorname", label: "Vorname" }]),
           toast: noop, formId: "form-x",
         });
+      // A form left in the state the old editor produced: stored as "form-mtjs4", but
+      // carrying "frm_jira_ticket_new" in its schema because the Design pane's ID field
+      // edited the document and nothing else. The chip used to show one id and the
+      // properties panel the other; now there is one id, and it is the stored one on
+      // open (ADR-0222). Saves are captured rather than sent.
+      window.__saved = null;
+      window.__mountDivergent = () => {
+        const api = async (method, url, body) => {
+          if (/\/forms\/[^/]+\/availability$/.test(url)) {
+            const id = decodeURIComponent(url.split("/").slice(-2)[0]);
+            return { id, available: true };
+          }
+          if (method === "GET" && /\/forms\/[^/]+$/.test(url)) {
+            return {
+              id: "form-mtjs4", name: "JIRA Ticket erstellen", projectId: "",
+              schema: { type: "default", id: "frm_jira_ticket_new", components: [] },
+            };
+          }
+          if (method === "POST" && url.endsWith("/forms")) {
+            window.__saved = JSON.parse(JSON.stringify(body));
+            return { id: body.id, name: body.name, renamedFrom: "" };
+          }
+          if (url.endsWith("/projects") || url.endsWith("/applications")) return [];
+          return {};
+        };
+        return mountFormEditor(view, { api, toast: noop, formId: "form-mtjs4" });
+      };
+      window.__save = () => document.getElementById("form-save").click();
       window.__cleanup = cleanup; // stands in for the navigation teardown (route → __atlasCleanup)
       window.__ready = true;
     </script>

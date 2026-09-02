@@ -61,6 +61,10 @@ var wantAdminRoutes = []string{
 	// list — no more public than the seed file they started from, which is admin-only
 	// for the same reason (ADR-0202).
 	"GET /api/v1/ad/mock-directory",
+	// And what a mock SQL worker was asked. Invented answers, but the *values a
+	// process bound* travel with them, and nothing can tell a password on its way into
+	// a table from an id — a stronger reason than the directory's, for the same gate.
+	"GET /api/v1/sql/mock-journal",
 
 	// Credentials, in every shape Atlas has one.
 	"POST /api/v1/targets",
@@ -87,6 +91,10 @@ var wantAdminRoutes = []string{
 	"PUT /api/v1/settings/logo",
 	"DELETE /api/v1/settings/logo",
 	"PUT /api/v1/settings/ad-mock",
+	// Turning the database mockup on makes every SQL task stop reaching a database, and
+	// turning it off makes them start again — the same authority the AD switch above
+	// carries, over the workers whose credential is the most valuable one Atlas holds.
+	"PUT /api/v1/settings/sql-mock",
 	"PUT /api/v1/settings/registration",
 	"DELETE /api/v1/settings/registration",
 
@@ -98,6 +106,10 @@ var wantAdminRoutes = []string{
 
 	// Who exists, what they may do, and the record of what they did.
 	"GET /api/v1/users",
+	// Who is signed in this minute. Same list, same reach: presence says where a
+	// person is, and only the people who administer accounts see it
+	// (ADR-0228).
+	"GET /api/v1/users/presence",
 	"POST /api/v1/users",
 	"GET /api/v1/users/{id}",
 	"PATCH /api/v1/users/{id}",

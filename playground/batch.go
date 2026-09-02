@@ -126,7 +126,7 @@ func (s *Sandbox) StartPlan(p Plan) error {
 	if err := p.Arrival.Calendar.validate("the arrival calendar"); err != nil {
 		return err
 	}
-	at, err := s.arrivalTimes(p)
+	at, err := s.arrivalTimes(len(p.Cases), p.Arrival)
 	if err != nil {
 		return err
 	}
@@ -152,10 +152,9 @@ func (s *Sandbox) Arrivals() []time.Time {
 // arrivalTimes lays the plan out on the clock. Every mode but sequential is
 // computed here, up front and from the seed, so the stream is part of the run's
 // reproducible input rather than something the run improvises.
-func (s *Sandbox) arrivalTimes(p Plan) ([]int64, error) {
+func (s *Sandbox) arrivalTimes(n int, a Arrival) ([]int64, error) {
 	start := s.clock.Now()
-	n := len(p.Cases)
-	switch p.Arrival.Mode {
+	switch a.Mode {
 	case ArrivalSequential:
 		return nil, nil
 	case ArrivalAllAtOnce:
@@ -165,30 +164,30 @@ func (s *Sandbox) arrivalTimes(p Plan) ([]int64, error) {
 		}
 		return at, nil
 	case ArrivalEvery:
-		if p.Arrival.Interval <= 0 {
+		if a.Interval <= 0 {
 			return nil, errors.New("playground: a fixed takt needs a positive interval")
 		}
 		at := make([]int64, n)
 		t := start
 		for i := range at {
 			var ok bool
-			if t, ok = p.Arrival.opensAfter(t); !ok {
+			if t, ok = a.opensAfter(t); !ok {
 				return nil, fmt.Errorf("playground: the arrival calendar does not open within %d days", calendarSearchDays)
 			}
 			at[i] = t
-			t += int64(p.Arrival.Interval)
+			t += int64(a.Interval)
 		}
 		return at, nil
 	case ArrivalPoisson:
-		if p.Arrival.PerHour <= 0 {
+		if a.PerHour <= 0 {
 			return nil, errors.New("playground: a Poisson stream needs a positive rate")
 		}
-		mean := float64(time.Hour) / p.Arrival.PerHour
+		mean := float64(time.Hour) / a.PerHour
 		at := make([]int64, n)
 		t := start
 		for i := range at {
 			var ok bool
-			if t, ok = p.Arrival.opensAfter(t); !ok {
+			if t, ok = a.opensAfter(t); !ok {
 				return nil, fmt.Errorf("playground: the arrival calendar does not open within %d days", calendarSearchDays)
 			}
 			at[i] = t
@@ -199,7 +198,7 @@ func (s *Sandbox) arrivalTimes(p Plan) ([]int64, error) {
 		}
 		return at, nil
 	default:
-		return nil, fmt.Errorf("playground: unknown arrival mode %d", p.Arrival.Mode)
+		return nil, fmt.Errorf("playground: unknown arrival mode %d", a.Mode)
 	}
 }
 
@@ -317,11 +316,28 @@ func (s *Sandbox) Report() (Report, error) {
 	}
 	tl.finish()
 	rep.Timeline = *tl
-	if err := s.store.Incidents(func(_ uint64, _ *model.IncidentValue) error {
+	stuck := map[string]int{}
+	if err := s.store.Incidents(func(_ uint64, v *model.IncidentValue) error {
 		rep.Incidents++
+		id, err := s.incidentElement(v)
+		if err != nil {
+			return err
+		}
+		if id != "" {
+			stuck[id]++
+		}
 		return nil
 	}); err != nil {
 		return Report{}, fmt.Errorf("playground: count incidents: %w", err)
+	}
+	// Written back after the job stats are copied in, so the count lands on the
+	// element's existing entry: a failing answer is still an answer, so an element
+	// with incidents has a run and a work time too, and an overlay shading by
+	// incidents has to agree with one shading by runs about what happened there.
+	for id, n := range stuck {
+		st := rep.Elements[id]
+		st.Incidents = n
+		rep.Elements[id] = st
 	}
 	rep.Duration = summarise(durations)
 	return rep, nil
@@ -430,6 +446,27 @@ func (s *Sandbox) caseRow(index int, key uint64, incidents map[uint64]int) (Case
 		return CaseRow{}, false, err
 	}
 	return row, true, nil
+}
+
+// incidentElement is the BPMN id an incident is parked on.
+//
+// The element index in the record is relative to the compiled process the case
+// runs, so the definition is read rather than assumed: using the root's table for a
+// call activity's child would name a real element that is the wrong one, which is
+// worse than naming none.
+func (s *Sandbox) incidentElement(v *model.IncidentValue) (string, error) {
+	pi, ok, err := s.store.ProcessInstance(v.ProcessInstanceKey)
+	if err != nil {
+		return "", fmt.Errorf("playground: read the case an incident is on: %w", err)
+	}
+	if !ok {
+		return "", nil
+	}
+	cp := s.byKey[pi.ProcessDefKey]
+	if cp == nil {
+		return "", nil
+	}
+	return cp.ElementBpmnId(v.ElementId), nil
 }
 
 // lastElement is the BPMN id of the last element a case reached — its outcome,

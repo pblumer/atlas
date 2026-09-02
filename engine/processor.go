@@ -61,7 +61,7 @@ type Processor struct {
 	// singleton state). Like messageStarts it is derived from the compiled definitions,
 	// rebuilt by Deploy on every start, so it needs no durable state of its own — the
 	// instances it creates go through the normal event path and recover from the log.
-	signalStarts map[string][]uint64
+	signalStarts map[string][]signalStartRef
 
 	// latestProcess indexes bpmn process id → the newest deployed definition key, so
 	// a call activity with `latest` binding resolves the process to start as a child
@@ -140,7 +140,7 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 		keygen:        &keyGen{partition: partition},
 		processes:     map[uint64]*compiler.CompiledProcess{},
 		messageStarts: map[string][]messageStartRef{},
-		signalStarts:  map[string][]uint64{},
+		signalStarts:  map[string][]signalStartRef{},
 		inactive:      map[uint64]bool{},
 		latestProcess: map[string]uint64{},
 		callOverrides: map[string]CallTargetOverride{},
@@ -178,7 +178,8 @@ func (p *Processor) Deploy(cp *compiler.CompiledProcess) {
 	}
 	// Index signal start events too, so a broadcast signal instantiates them (ADR-0088).
 	for _, ss := range cp.SignalStartEvents() {
-		p.signalStarts[ss.SignalName] = append(p.signalStarts[ss.SignalName], cp.Key)
+		p.signalStarts[ss.SignalName] = append(p.signalStarts[ss.SignalName],
+			signalStartRef{defKey: cp.Key, elementId: ss.ElementId})
 	}
 }
 
@@ -272,6 +273,15 @@ type messageStartRef struct {
 	singletonStart bool
 }
 
+// signalStartRef is a deployed signal start event: which definition to instantiate and
+// which element the broadcast fires. The element travels with the key for the same
+// reason a message start's does — the instance is seeded at the trigger that fired, not
+// at every entry point the process has (ADR-0226).
+type signalStartRef struct {
+	defKey    uint64
+	elementId int32
+}
+
 // supersedeStarts drops every message- and signal-start index entry that points at
 // an older version of newKey's process id, so redeploying a process leaves only its
 // latest version able to start on an incoming message or signal. newKey must already
@@ -309,11 +319,11 @@ func (p *Processor) supersedeStarts(newKey uint64) {
 			p.messageStarts[name] = kept
 		}
 	}
-	for name, keys := range p.signalStarts {
-		kept := keys[:0:0]
-		for _, k := range keys {
-			if !olderVersion(k) {
-				kept = append(kept, k)
+	for name, refs := range p.signalStarts {
+		kept := refs[:0:0]
+		for _, r := range refs {
+			if !olderVersion(r.defKey) {
+				kept = append(kept, r)
 			}
 		}
 		if len(kept) == 0 {
@@ -336,17 +346,17 @@ func removeStartRef(refs []messageStartRef, defKey uint64) []messageStartRef {
 	return refs
 }
 
-// removeSignalStart returns keys with the first entry for defKey removed — the
+// removeSignalStart returns refs with the first entry for defKey removed — the
 // signal-start counterpart of removeStartRef (ADR-0088). A name whose last
 // signal-start definition is undeployed keeps an empty slice, which instantiates
 // nothing; harmless and rare, so it is not pruned from the map.
-func removeSignalStart(keys []uint64, defKey uint64) []uint64 {
-	for i, k := range keys {
-		if k == defKey {
-			return append(keys[:i], keys[i+1:]...)
+func removeSignalStart(refs []signalStartRef, defKey uint64) []signalStartRef {
+	for i, r := range refs {
+		if r.defKey == defKey {
+			return append(refs[:i], refs[i+1:]...)
 		}
 	}
-	return keys
+	return refs
 }
 
 // SetJobNotifier installs the hook the service-task behavior triggers (after

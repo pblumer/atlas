@@ -156,6 +156,23 @@ func TestParseJiraConnectorOperations(t *testing.T) {
 			},
 		},
 		{
+			op:    "search-users",
+			attrs: `query="=antragsteller.mail" project="OPS" maxResults="10" resultVariable="konten"`,
+			check: func(t *testing.T, cp *CompiledProcess, d *ConnectorTaskDetail) {
+				if d.JiraQuery.Expr == nil {
+					t.Errorf("query = %+v, want a FEEL expression", d.JiraQuery)
+				}
+				// The one operation that takes a project without an issue type: it
+				// restricts the search to the accounts that project can assign.
+				if d.JiraProject.Literal != "OPS" {
+					t.Errorf("project = %+v, want the literal OPS", d.JiraProject)
+				}
+				if d.JiraMaxResults != 10 {
+					t.Errorf("maxResults = %d, want 10", d.JiraMaxResults)
+				}
+			},
+		},
+		{
 			op:    "search",
 			attrs: `jql="project = OPS AND status = Open" maxResults="25" resultVariable="offen"`,
 			check: func(t *testing.T, cp *CompiledProcess, d *ConnectorTaskDetail) {
@@ -202,31 +219,37 @@ func TestParseJiraConnectorSearchDefaultsItsPageSize(t *testing.T) {
 
 func TestParseJiraConnectorErrors(t *testing.T) {
 	cases := map[string]string{
-		"missing connector":      `<atlas:jiraConnector operation="get-issue" issueKey="OPS-1"/>`,
-		"missing operation":      `<atlas:jiraConnector connector="acme" issueKey="OPS-1"/>`,
-		"unknown operation":      `<atlas:jiraConnector connector="acme" operation="explode" issueKey="OPS-1"/>`,
-		"create without project": `<atlas:jiraConnector connector="acme" operation="create-issue" issueType="Task" summary="s"/>`,
-		"create without type":    `<atlas:jiraConnector connector="acme" operation="create-issue" project="OPS" summary="s"/>`,
-		"create without summary": `<atlas:jiraConnector connector="acme" operation="create-issue" project="OPS" issueType="Task"/>`,
-		"get without issue":      `<atlas:jiraConnector connector="acme" operation="get-issue" resultVariable="t"/>`,
-		"get without result":     `<atlas:jiraConnector connector="acme" operation="get-issue" issueKey="OPS-1"/>`,
-		"update without change":  `<atlas:jiraConnector connector="acme" operation="update-issue" issueKey="OPS-1"/>`,
-		"transition without id":  `<atlas:jiraConnector connector="acme" operation="transition-issue" issueKey="OPS-1"/>`,
-		"comment without body":   `<atlas:jiraConnector connector="acme" operation="add-comment" issueKey="OPS-1" resultVariable="k"/>`,
-		"assign without account": `<atlas:jiraConnector connector="acme" operation="assign-issue" issueKey="OPS-1"/>`,
-		"search without jql":     `<atlas:jiraConnector connector="acme" operation="search" resultVariable="offen"/>`,
-		"search without result":  `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS"/>`,
-		"result on an assign":    `<atlas:jiraConnector connector="acme" operation="assign-issue" issueKey="OPS-1" assignee="a" resultVariable="x"/>`,
-		"search with bad max":    `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" maxResults="viele" resultVariable="offen"/>`,
-		"negative max":           `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" maxResults="-1" resultVariable="offen"/>`,
-		"project on a search":    `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" project="OPS" resultVariable="offen"/>`,
-		"comment on a search":    `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" comment="hallo" resultVariable="offen"/>`,
-		"fields on a search":     `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" resultVariable="offen"><atlas:jiraField name="labels" value="x"/></atlas:jiraConnector>`,
-		"issue key on a search":  `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" issueKey="OPS-1" resultVariable="offen"/>`,
-		"jql on a create":        `<atlas:jiraConnector connector="acme" operation="create-issue" project="OPS" issueType="Task" summary="s" jql="project = OPS"/>`,
-		"malformed FEEL summary": `<atlas:jiraConnector connector="acme" operation="create-issue" project="OPS" issueType="Task" summary="=("/>`,
-		"malformed FEEL field":   `<atlas:jiraConnector connector="acme" operation="create-issue" project="OPS" issueType="Task" summary="s"><atlas:jiraField name="labels" value="=("/></atlas:jiraConnector>`,
-		"duplicate field":        `<atlas:jiraConnector connector="acme" operation="create-issue" project="OPS" issueType="Task" summary="s"><atlas:jiraField name="labels" value="a"/><atlas:jiraField name="labels" value="b"/></atlas:jiraConnector>`,
+		"missing connector":       `<atlas:jiraConnector operation="get-issue" issueKey="OPS-1"/>`,
+		"missing operation":       `<atlas:jiraConnector connector="acme" issueKey="OPS-1"/>`,
+		"unknown operation":       `<atlas:jiraConnector connector="acme" operation="explode" issueKey="OPS-1"/>`,
+		"create without project":  `<atlas:jiraConnector connector="acme" operation="create-issue" issueType="Task" summary="s"/>`,
+		"create without type":     `<atlas:jiraConnector connector="acme" operation="create-issue" project="OPS" summary="s"/>`,
+		"create without summary":  `<atlas:jiraConnector connector="acme" operation="create-issue" project="OPS" issueType="Task"/>`,
+		"get without issue":       `<atlas:jiraConnector connector="acme" operation="get-issue" resultVariable="t"/>`,
+		"get without result":      `<atlas:jiraConnector connector="acme" operation="get-issue" issueKey="OPS-1"/>`,
+		"update without change":   `<atlas:jiraConnector connector="acme" operation="update-issue" issueKey="OPS-1"/>`,
+		"transition without id":   `<atlas:jiraConnector connector="acme" operation="transition-issue" issueKey="OPS-1"/>`,
+		"comment without body":    `<atlas:jiraConnector connector="acme" operation="add-comment" issueKey="OPS-1" resultVariable="k"/>`,
+		"assign without account":  `<atlas:jiraConnector connector="acme" operation="assign-issue" issueKey="OPS-1"/>`,
+		"search without jql":      `<atlas:jiraConnector connector="acme" operation="search" resultVariable="offen"/>`,
+		"users without query":     `<atlas:jiraConnector connector="acme" operation="search-users" resultVariable="konten"/>`,
+		"users without result":    `<atlas:jiraConnector connector="acme" operation="search-users" query="patrick"/>`,
+		"users with an issueType": `<atlas:jiraConnector connector="acme" operation="search-users" query="patrick" issueType="Task" resultVariable="konten"/>`,
+		"users with a jql":        `<atlas:jiraConnector connector="acme" operation="search-users" query="patrick" jql="project = OPS" resultVariable="konten"/>`,
+		"query on a search":       `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" query="patrick" resultVariable="offen"/>`,
+		"query on a create":       `<atlas:jiraConnector connector="acme" operation="create-issue" project="OPS" issueType="Task" summary="s" query="patrick"/>`,
+		"search without result":   `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS"/>`,
+		"result on an assign":     `<atlas:jiraConnector connector="acme" operation="assign-issue" issueKey="OPS-1" assignee="a" resultVariable="x"/>`,
+		"search with bad max":     `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" maxResults="viele" resultVariable="offen"/>`,
+		"negative max":            `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" maxResults="-1" resultVariable="offen"/>`,
+		"project on a search":     `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" project="OPS" resultVariable="offen"/>`,
+		"comment on a search":     `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" comment="hallo" resultVariable="offen"/>`,
+		"fields on a search":      `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" resultVariable="offen"><atlas:jiraField name="labels" value="x"/></atlas:jiraConnector>`,
+		"issue key on a search":   `<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" issueKey="OPS-1" resultVariable="offen"/>`,
+		"jql on a create":         `<atlas:jiraConnector connector="acme" operation="create-issue" project="OPS" issueType="Task" summary="s" jql="project = OPS"/>`,
+		"malformed FEEL summary":  `<atlas:jiraConnector connector="acme" operation="create-issue" project="OPS" issueType="Task" summary="=("/>`,
+		"malformed FEEL field":    `<atlas:jiraConnector connector="acme" operation="create-issue" project="OPS" issueType="Task" summary="s"><atlas:jiraField name="labels" value="=("/></atlas:jiraConnector>`,
+		"duplicate field":         `<atlas:jiraConnector connector="acme" operation="create-issue" project="OPS" issueType="Task" summary="s"><atlas:jiraField name="labels" value="a"/><atlas:jiraField name="labels" value="b"/></atlas:jiraConnector>`,
 	}
 	for name, inner := range cases {
 		t.Run(name, func(t *testing.T) {

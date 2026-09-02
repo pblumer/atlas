@@ -25,12 +25,17 @@ func TestRemoveStartRef(t *testing.T) {
 // it drops the first entry for a definition key and returns the slice unchanged
 // when the key is absent or the slice is nil.
 func TestRemoveSignalStart(t *testing.T) {
-	keys := []uint64{1, 2, 3}
-	if got := removeSignalStart(keys, 2); len(got) != 2 || got[0] != 1 || got[1] != 3 {
-		t.Errorf("removeSignalStart(keys, 2) = %v, want [1 3]", got)
+	refs := []signalStartRef{{defKey: 1, elementId: 4}, {defKey: 2, elementId: 5}, {defKey: 3, elementId: 6}}
+	if got := removeSignalStart(refs, 2); len(got) != 2 || got[0].defKey != 1 || got[1].defKey != 3 {
+		t.Errorf("removeSignalStart(refs, 2) = %v, want the entries for 1 and 3", got)
 	}
-	if got := removeSignalStart(keys, 9); len(got) != 3 {
-		t.Errorf("removeSignalStart(keys, 9) = %v, want the slice unchanged", got)
+	// The element id travels with the key: a broadcast seeds the start event that fired,
+	// so an entry that lost it would seed the whole process again.
+	if got := removeSignalStart(refs, 2); len(got) == 2 && got[1].elementId != 6 {
+		t.Errorf("removeSignalStart kept defKey 3 with element %d, want 6", got[1].elementId)
+	}
+	if got := removeSignalStart(refs, 9); len(got) != 3 {
+		t.Errorf("removeSignalStart(refs, 9) = %v, want the slice unchanged", got)
 	}
 	if got := removeSignalStart(nil, 1); got != nil {
 		t.Errorf("removeSignalStart(nil, 1) = %v, want nil", got)

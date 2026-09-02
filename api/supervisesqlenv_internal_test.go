@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -21,24 +22,65 @@ import (
 
 // A database an operator added in the Console: the worker is handed its connection
 // string under the name it reads, plus the CONNECTORS list naming it.
+//
+// All three products, and each one round-tripped through the worker that has to read
+// what was rendered. The two halves live in different packages and agree only because
+// both ask sqldb.Product for the variable names; a product that grew its own spelling
+// on either side would hand a supervised worker a credential under a name nothing
+// reads, and the worker would report the database as unconfigured with the DSN sitting
+// right there in its environment.
 func TestASupervisedSQLWorkerGetsItsConnectionStringFromTheVault(t *testing.T) {
-	srv, _ := newValidateServer(t)
-	if _, err := srv.vault.Set("sql/1/dsn", "postgres://u:p@db.example:5432/hr"); err != nil {
-		t.Fatalf("vault.Set: %v", err)
+	// One DSN per product, in that product's own grammar: two of the three drivers
+	// parse the string when the worker opens it, so a postgres:// URL handed to
+	// MariaDB would fail this for a reason that has nothing to do with what is being
+	// tested.
+	dsns := map[string]string{
+		connectorKindPostgres: "postgres://u:p@db.example:5432/hr",
+		connectorKindMariaDB:  "u:p@tcp(db.example:3306)/hr",
+		connectorKindMSSQL:    "sqlserver://u:p@db.example:1433?database=hr",
 	}
-	if err := srv.connectors.Save(connector{
-		ID: "1", Name: "hr-db", Kind: connectorKindPostgres,
-		CredentialsRef: "sql/1/dsn", Enabled: true, CreatedAt: 1,
-	}); err != nil {
-		t.Fatalf("connectors.Save: %v", err)
-	}
+	for _, kind := range sqlConnectorKinds() {
+		t.Run(kind, func(t *testing.T) {
+			p, ok := sqldb.ProductByName(kind)
+			if !ok {
+				t.Fatalf("connector kind %q is not a sqldb product", kind)
+			}
+			dsn := dsns[kind]
+			if dsn == "" {
+				t.Fatalf("this test has no connection string for %q; a new product needs one in its own grammar", kind)
+			}
+			srv, _ := newValidateServer(t)
+			if _, err := srv.vault.Set("sql/1/dsn", dsn); err != nil {
+				t.Fatalf("vault.Set: %v", err)
+			}
+			if err := srv.connectors.Save(connector{
+				ID: "1", Name: "hr-db", Kind: kind,
+				CredentialsRef: "sql/1/dsn", Enabled: true, CreatedAt: 1,
+			}); err != nil {
+				t.Fatalf("connectors.Save: %v", err)
+			}
 
-	env := envOf(t, srv.sqlWorkerEnvByName(connectorKindPostgres))
-	if got := env["ATLAS_POSTGRES_HR_DB_DSN"]; got != "postgres://u:p@db.example:5432/hr" {
-		t.Errorf("ATLAS_POSTGRES_HR_DB_DSN = %q, want the DSN out of the vault", got)
-	}
-	if got := env["ATLAS_POSTGRES_CONNECTORS"]; got != "hr-db" {
-		t.Errorf("ATLAS_POSTGRES_CONNECTORS = %q, want hr-db", got)
+			env := envOf(t, srv.sqlWorkerEnvByName(kind))
+			if got := env[p.DSNEnv("hr-db")]; got != dsn {
+				t.Errorf("%s = %q, want the DSN out of the vault", p.DSNEnv("hr-db"), got)
+			}
+			if got := env[p.ConnectorsEnv()]; got != "hr-db" {
+				t.Errorf("%s = %q, want hr-db", p.ConnectorsEnv(), got)
+			}
+
+			// The worker's half of the same contract: what was rendered has to build a
+			// worker that actually holds the database.
+			built, err := worker.BuiltinConnectors(envMapFrom(env), kind)
+			if err != nil {
+				t.Fatalf("the rendered environment must be one the worker accepts: %v", err)
+			}
+			if !slices.Contains(built.Names, "hr-db") {
+				t.Errorf("names = %v, want the configured database served", built.Names)
+			}
+			if _, ok := built.Handlers[p.JobType]; !ok {
+				t.Errorf("no handler for %s; the supervised worker would serve nothing", p.JobType)
+			}
+		})
 	}
 }
 
@@ -399,5 +441,153 @@ func TestASQLConnectorWhoseNameFoldsToNothingIsSkipped(t *testing.T) {
 	}
 	if len(env) != 0 {
 		t.Errorf("environment = %v, want nothing", env)
+	}
+}
+
+// The Console switch has to reach the worker, or it is a checkbox that does nothing.
+// Turning the mockup on renders the variable for every SQL product, plus the file
+// Atlas wrote the seed to — a path Atlas owns, because the Console is org-wide and a
+// path typed there belongs to whichever host happens to run the worker.
+func TestTheMockupSwitchReachesTheSupervisedSQLWorker(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.do(func() {
+		if err := srv.settings.saveSQLMock(sqlMockSetting{Enabled: true, Seed: sqlMockSeedJSON, SeedName: "hr.json"}); err != nil {
+			t.Fatalf("saveSQLMock: %v", err)
+		}
+	})
+
+	env := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))
+	if got := env["ATLAS_MSSQL_MOCK"]; got != "1" {
+		t.Errorf("ATLAS_MSSQL_MOCK = %q, want 1", got)
+	}
+	seed := env["ATLAS_MSSQL_MOCK_SEED"]
+	if seed == "" {
+		t.Fatalf("env = %v, want a seed file for the worker to read", env)
+	}
+	data, err := os.ReadFile(seed)
+	if err != nil {
+		t.Fatalf("the worker is pointed at %q, which it cannot read: %v", seed, err)
+	}
+	if string(data) != sqlMockSeedJSON {
+		t.Errorf("the seed file holds %q, want what the operator saved", data)
+	}
+	// Every product, not one: mocking SQL Server while really writing to PostgreSQL is
+	// the half-state a single switch exists to prevent.
+	for _, kind := range []string{connectorKindMariaDB, connectorKindPostgres} {
+		e := envOf(t, srv.sqlWorkerEnvByName(kind))
+		if got := e["ATLAS_"+strings.ToUpper(kind)+"_MOCK"]; got != "1" {
+			t.Errorf("%s: mock variable = %q, want the mockup on for it too", kind, got)
+		}
+	}
+}
+
+// A stored "off" says off, rather than saying nothing. A switch that reads off while
+// the worker still simulates would be lying to the person who flipped it.
+func TestAStoredOffTellsTheSQLWorkerToUseARealDatabase(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.do(func() { _ = srv.settings.saveSQLMock(sqlMockSetting{Enabled: false, Seed: sqlMockSeedJSON}) })
+
+	env := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))
+	if got := env["ATLAS_MSSQL_MOCK"]; got != "0" {
+		t.Errorf("ATLAS_MSSQL_MOCK = %q, want 0", got)
+	}
+	// And no seed: a worker reaching a real database has nothing to read one for, and
+	// the variable set alongside MOCK=0 is what the worker refuses to start on.
+	if got := env["ATLAS_MSSQL_MOCK_SEED"]; got != "" {
+		t.Errorf("ATLAS_MSSQL_MOCK_SEED = %q, want nothing handed to a worker that is not mocking", got)
+	}
+}
+
+// No stored record renders nothing at all, so a server started with ATLAS_MSSQL_MOCK
+// by hand keeps deciding for itself. That is what keeps an existing install working
+// exactly as it did until somebody touches the switch.
+func TestNoStoredSQLMockRecordLeavesTheHostEnvironmentAlone(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	for _, v := range srv.sqlWorkerEnvByName(connectorKindMSSQL) {
+		if strings.HasPrefix(v, "ATLAS_MSSQL_MOCK") {
+			t.Errorf("env carries %q with nothing stored; the host's own setting must still decide", v)
+		}
+	}
+}
+
+// The blocker that would have made the switch useless. A worker record with no
+// connection string is left out of CONNECTORS normally — a name the worker is told to
+// serve with no DSN behind it is exactly the misconfiguration it refuses to start on
+// (the test above). In mockup mode there is no DSN to have, so leaving the name out
+// would mean the mockup serves nothing a task can address.
+func TestInMockupModeASQLWorkerWithNoDSNIsStillServed(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	if err := srv.connectors.Save(connector{
+		ID: "1", Name: "hr-db", Kind: connectorKindMSSQL, Enabled: true, CreatedAt: 1,
+		// No CredentialsRef: nothing to resolve, which is the whole point.
+	}); err != nil {
+		t.Fatalf("connectors.Save: %v", err)
+	}
+	srv.do(func() { _ = srv.settings.saveSQLMock(sqlMockSetting{Enabled: true, Seed: sqlMockSeedJSON}) })
+
+	env := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))
+	if got := env["ATLAS_MSSQL_CONNECTORS"]; got != "hr-db" {
+		t.Errorf("ATLAS_MSSQL_CONNECTORS = %q, want hr-db — the mockup has no name to answer to otherwise", got)
+	}
+	if got := env["ATLAS_MSSQL_HR_DB_DSN"]; got != "" {
+		t.Errorf("a DSN was rendered in mockup mode: %q", got)
+	}
+}
+
+// And with the mockup off it stays out, unchanged.
+func TestWithTheMockupOffASQLWorkerWithNoDSNIsStillLeftOut(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	if err := srv.connectors.Save(connector{
+		ID: "1", Name: "hr-db", Kind: connectorKindMSSQL, Enabled: true, CreatedAt: 1,
+	}); err != nil {
+		t.Fatalf("connectors.Save: %v", err)
+	}
+	srv.do(func() { _ = srv.settings.saveSQLMock(sqlMockSetting{Enabled: false}) })
+
+	if got := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))["ATLAS_MSSQL_CONNECTORS"]; got != "" {
+		t.Errorf("ATLAS_MSSQL_CONNECTORS = %q, want the secretless worker left out", got)
+	}
+}
+
+// Where the worker reports its journal, handed over at spawn — and only while the
+// mockup is on. A journal view fed by a worker talking to a real database would be the
+// worst possible thing for that screen to be: it would show real statements against
+// real data under a heading that says "mockup".
+func TestTheJournalViewURLIsHandedOverOnlyWhileMockedOn(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.superviseURL = "https://atlas.example.com"
+
+	srv.do(func() { _ = srv.settings.saveSQLMock(sqlMockSetting{Enabled: true, Seed: sqlMockSeedJSON}) })
+	env := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))
+	if got := env[sqlMockViewURLEnv]; got != "https://atlas.example.com/api/v1/sql/mock-journal" {
+		t.Errorf("%s = %q, want this server's journal endpoint", sqlMockViewURLEnv, got)
+	}
+
+	srv.do(func() { _ = srv.settings.saveSQLMock(sqlMockSetting{Enabled: false}) })
+	if got := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))[sqlMockViewURLEnv]; got != "" {
+		t.Errorf("%s = %q with the mockup off — a worker on a real database must report nothing", sqlMockViewURLEnv, got)
+	}
+}
+
+// A server that does not know its own address hands over no endpoint rather than a
+// broken one: a worker retrying against a URL that cannot resolve would log a warning
+// per statement for the life of the run.
+func TestNoSuperviseURLMeansNoJournalReporting(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.superviseURL = ""
+	srv.do(func() { _ = srv.settings.saveSQLMock(sqlMockSetting{Enabled: true, Seed: sqlMockSeedJSON}) })
+
+	if got := envOf(t, srv.sqlWorkerEnvByName(connectorKindMSSQL))[sqlMockViewURLEnv]; got != "" {
+		t.Errorf("%s = %q, want nothing when this server has no address to be reported to", sqlMockViewURLEnv, got)
+	}
+}
+
+// The engine renders the variable and the worker reads it, from two packages that do
+// not import each other — deliberately, because reaching into the worker for one string
+// would link three database drivers into a package that never opens a database
+// (ADR-0173). So the two spellings are held together here instead.
+func TestTheJournalViewURLVariableIsSpelledTheSameOnBothSides(t *testing.T) {
+	if sqlMockViewURLEnv != worker.SQLMockViewURLEnv {
+		t.Errorf("the engine renders %q and the worker reads %q", sqlMockViewURLEnv, worker.SQLMockViewURLEnv)
 	}
 }

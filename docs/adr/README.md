@@ -275,6 +275,14 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0219](0219-variable-write-attribution.md) | Variable write attribution | Accepted |
 | [0220](0220-checking-a-database-connector.md) | The Console may dial a database, and the engine still links no driver | Proposed |
 | [0221](0221-sql-mock-mode.md) | A database task runs against seeded answers, not against a SQL engine | Proposed |
+| [0222](0222-artifact-id-renames.md) | An artifact's id is its identity — renaming moves it, collisions are refused | Proposed |
+| [0223](0223-jira-account-lookup.md) | Jira account lookup | Proposed |
+| [0224](0224-sql-mock-journal.md) | A mockup run is visible, and it carries what the process bound | Proposed |
+| [0225](0225-inbound-watch-budget.md) | An inbound watch has an hourly budget | Proposed |
+| [0226](0226-start-events-are-triggers.md) | A start event is a trigger, and the one that fires is the one that starts | Proposed |
+| [0227](0227-jira-read-bounds-and-progress.md) | A Jira read is bounded and moves forward | Proposed |
+| [0228](0228-user-presence.md) | User presence in the Console | Proposed |
+| [0229](0229-modeler-bar-hierarchy.md) | The Modeler's editor bar carries two acts and a menu | Accepted |
 
 ## Status values
 

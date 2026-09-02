@@ -534,3 +534,33 @@ func TestAPaddedIssueKeyDoesNotReachTheURL(t *testing.T) {
 		t.Errorf("path = %q, want the key trimmed before it is escaped into the URL", got)
 	}
 }
+
+// An account search carries its term through the whole resolve: the model's FEEL
+// expression is evaluated against the variables the task sees, and what reaches the
+// client is the address the process actually holds. The resolved job is also what an
+// offloaded task sends over the wire, so a term that did not survive here would leave a
+// worker searching for the empty string — which Jira answers with accounts, not with an
+// error.
+func TestSearchUsersResolvesItsTerm(t *testing.T) {
+	rd, lookup := workerFixture(t,
+		`<atlas:jiraConnector connector="acme" operation="search-users" query="=antragsteller.mail"
+		                     project="OPS" resultVariable="konten"/>`,
+		model.VariableValue{Name: "antragsteller", Kind: model.VarJSON, Text: `{"mail":"patrick@blumer.net"}`},
+	)
+	client := &recordingClient{}
+	reg := jira.NewRegistry()
+	reg.Register("acme", client)
+	if _, err := jira.Handler(rd, lookup, reg)(job.Job{Key: 4, ElementInstanceKey: 42}); err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	req := client.reqs[0]
+	if req.Operation != "search-users" {
+		t.Fatalf("operation = %q, want search-users", req.Operation)
+	}
+	if req.Query != "patrick@blumer.net" {
+		t.Errorf("query = %q, want the evaluated address", req.Query)
+	}
+	if req.Project != "OPS" {
+		t.Errorf("project = %q, want the project the search is restricted to", req.Project)
+	}
+}

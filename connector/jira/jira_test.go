@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -618,6 +621,9 @@ func TestJiraOpsMatchTheConnector(t *testing.T) {
 		if spec.NeedsJQL {
 			add("jql", "jql", "project = OPS")
 		}
+		if spec.NeedsQuery {
+			add("query", "query", "patrick")
+		}
 		if spec.NeedsResult {
 			add("result", "resultVariable", "ergebnis")
 		}
@@ -646,11 +652,12 @@ func TestJiraOpsMatchTheConnector(t *testing.T) {
 			if err := compile(attrsFor(op, spec, "")); err != nil {
 				t.Fatalf("the compiler rejects a model that satisfies Ops[%q]: %v", op, err)
 			}
-			for _, omit := range []string{"issue", "project", "summary", "transition", "comment", "assignee", "jql", "result", "change"} {
+			for _, omit := range []string{"issue", "project", "summary", "transition", "comment", "assignee", "jql", "query", "result", "change"} {
 				required := map[string]bool{
 					"issue": spec.NeedsIssue, "project": spec.NeedsProject, "summary": spec.NeedsSummary,
 					"transition": spec.NeedsTransition, "comment": spec.NeedsComment, "assignee": spec.NeedsAssignee,
-					"jql": spec.NeedsJQL, "result": spec.NeedsResult, "change": spec.NeedsChange,
+					"jql": spec.NeedsJQL, "query": spec.NeedsQuery, "result": spec.NeedsResult,
+					"change": spec.NeedsChange,
 				}[omit]
 				if !required {
 					continue
@@ -777,5 +784,247 @@ func TestSearchOnCloudPagesToTheCap(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Errorf("requests = %d, want two pages to reach the cap", calls)
+	}
+}
+
+// Looking an account up is what makes assign-issue usable from a process: Jira hands an
+// issue to an accountId, a process knows a person by their address. On Cloud the term
+// travels as query, which Jira matches against a display name and an address — username
+// is refused there since its GDPR changes.
+func TestSearchUsersOnCloud(t *testing.T) {
+	f, srv := newFakeJira(t)
+	f.answers["GET /rest/api/2/user/search"] = []any{
+		map[string]any{"accountId": "5bbb", "displayName": "Patrick Blumer"},
+	}
+	got, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{
+		Operation: "search-users", Query: "  patrick@blumer.net  ",
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	users, _ := got.([]any)
+	if len(users) != 1 {
+		t.Fatalf("users = %+v, want the one account", got)
+	}
+	first, _ := users[0].(map[string]any)
+	if first["accountId"] != "5bbb" {
+		t.Errorf("account = %+v, want the accountId a later assign-issue takes", first)
+	}
+	c := f.only(t)
+	if c.method != http.MethodGet || c.path != "/rest/api/2/user/search" {
+		t.Errorf("call = %s %s, want a GET of the user search", c.method, c.path)
+	}
+	q, err := url.ParseQuery(c.query)
+	if err != nil {
+		t.Fatalf("parse query %q: %v", c.query, err)
+	}
+	// Trimmed: Jira matches the term as a substring, so a stray space is not a
+	// difference in formatting but a term nothing can match.
+	if q.Get("query") != "patrick@blumer.net" {
+		t.Errorf("query = %q, want the trimmed term", q.Get("query"))
+	}
+	if q.Has("username") {
+		t.Errorf("query %q carries username, which Cloud refuses", c.query)
+	}
+}
+
+// Data Center matches a username fragment instead, and takes it under that name. The
+// choice follows from the credential, so a model never says which product it is talking
+// to — the same fact that decides how an assignee is addressed.
+func TestSearchUsersOnDataCenterMatchesUsername(t *testing.T) {
+	f, srv := newFakeJira(t)
+	f.answers["GET /rest/api/2/user/search"] = []any{map[string]any{"name": "pblumer"}}
+	if _, err := dcClient(srv.URL).Do(context.Background(), jira.Request{
+		Operation: "search-users", Query: "pblumer",
+	}); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	q, err := url.ParseQuery(f.only(t).query)
+	if err != nil {
+		t.Fatalf("parse query: %v", err)
+	}
+	if q.Get("username") != "pblumer" {
+		t.Errorf("username = %q, want the term Data Center matches on", q.Get("username"))
+	}
+	if q.Has("query") {
+		t.Errorf("query %q carries the Cloud parameter", f.only(t).query)
+	}
+}
+
+// A project restricts the search to the accounts that project can actually assign,
+// through Jira's own assignable-user endpoint. Filtering afterwards would not do: an
+// account that exists but cannot be assigned is exactly the value that makes a later
+// assign-issue fail, one task after the one that chose it.
+func TestSearchUsersInAProjectAsksForAssignableAccounts(t *testing.T) {
+	f, srv := newFakeJira(t)
+	f.answers["GET /rest/api/2/user/assignable/search"] = []any{map[string]any{"accountId": "5bbb"}}
+	if _, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{
+		Operation: "search-users", Query: "patrick", Project: " OPS ",
+	}); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	c := f.only(t)
+	if c.path != "/rest/api/2/user/assignable/search" {
+		t.Errorf("path = %q, want the assignable-user endpoint", c.path)
+	}
+	q, err := url.ParseQuery(c.query)
+	if err != nil {
+		t.Fatalf("parse query: %v", err)
+	}
+	if q.Get("project") != "OPS" {
+		t.Errorf("project = %q, want the trimmed project key", q.Get("project"))
+	}
+}
+
+// The cap is the model's statement about what may reach its result variable, so an
+// account search pages to it and applies it to what arrived. This endpoint answers with
+// a bare array — no envelope, so no total and no token — which is why a short page is
+// what ends the read.
+func TestSearchUsersPagesToTheCap(t *testing.T) {
+	var seen []url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		seen = append(seen, q)
+		startAt, _ := strconv.Atoi(q.Get("startAt"))
+		page, _ := strconv.Atoi(q.Get("maxResults"))
+		users := []any{}
+		for i := startAt; i < startAt+page && i < 5; i++ {
+			users = append(users, map[string]any{"accountId": fmt.Sprintf("id-%d", i)})
+		}
+		_ = json.NewEncoder(w).Encode(users)
+	}))
+	t.Cleanup(srv.Close)
+
+	got, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{
+		Operation: "search-users", Query: "a", MaxResults: 3,
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	users, _ := got.([]any)
+	if len(users) != 3 {
+		t.Fatalf("users = %d, want the cap of 3: %+v", len(users), got)
+	}
+	if len(seen) != 1 {
+		t.Fatalf("requests = %d, want one page asked for exactly the cap", len(seen))
+	}
+	if seen[0].Get("maxResults") != "3" {
+		t.Errorf("maxResults = %q, want the cap rather than a full page", seen[0].Get("maxResults"))
+	}
+}
+
+// An uncapped account search reads every page. A server that ignored startAt would
+// otherwise be read forever: the short page that ends the read is the condition an
+// envelope's total carries on the issue search.
+func TestSearchUsersUncappedReadsEveryPage(t *testing.T) {
+	var pages int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pages++
+		q := r.URL.Query()
+		startAt, _ := strconv.Atoi(q.Get("startAt"))
+		page, _ := strconv.Atoi(q.Get("maxResults"))
+		users := []any{}
+		for i := startAt; i < startAt+page && i < 150; i++ {
+			users = append(users, map[string]any{"accountId": fmt.Sprintf("id-%d", i)})
+		}
+		_ = json.NewEncoder(w).Encode(users)
+	}))
+	t.Cleanup(srv.Close)
+
+	got, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{Operation: "search-users", Query: "a"})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if users, _ := got.([]any); len(users) != 150 {
+		t.Fatalf("users = %d, want all 150 across pages", len(users))
+	}
+	if pages != 2 {
+		t.Errorf("requests = %d, want two pages of a hundred", pages)
+	}
+}
+
+// A refused account search fails the job rather than answering with no accounts. The
+// common cause is a permission rather than a defect — the worker's account needs Jira's
+// global "Browse users and groups" — and an empty result would send an operator looking
+// for a person who is there, one task later and in the wrong place.
+func TestSearchUsersReportsARefusal(t *testing.T) {
+	f, srv := newFakeJira(t)
+	f.status["GET /rest/api/2/user/search"] = http.StatusForbidden
+	_, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{Operation: "search-users", Query: "patrick"})
+	if err == nil {
+		t.Fatal("Do accepted a 403, which would complete the token on a search that never ran")
+	}
+	if !strings.Contains(err.Error(), "403") {
+		t.Errorf("err = %v, want the status Jira answered with", err)
+	}
+}
+
+// endlessJira answers every search with a full page, for ever: a JQL that matches far
+// more than its author believed, which is what "read every match" actually asks for
+// when the query is wrong.
+func endlessJira(t *testing.T) *httptest.Server {
+	t.Helper()
+	var page atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		issues := make([]any, 100)
+		for i := range issues {
+			issues[i] = map[string]any{"key": fmt.Sprintf("OPS-%d", i)}
+		}
+		if strings.Contains(r.URL.Path, "/user/") {
+			_ = json.NewEncoder(w).Encode(issues) // the account search answers a bare array
+			return
+		}
+		// The page token advances every time, so nothing but the ceiling ends this read.
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"total": 1_000_000, "issues": issues, "nextPageToken": fmt.Sprintf("p%d", page.Add(1)),
+		})
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// An uncapped search is bounded by a ceiling, and reaching it is an error naming the fix.
+//
+// maxResults="0" means "every match", and every match is a number Jira decides — a JQL
+// can be wrong about it by four orders of magnitude. Without the ceiling the loop pages
+// until the site runs out, holds all of it in memory, and lands the lot in ONE process
+// variable the engine has to encode and fsync: one mistyped query is an out-of-memory in
+// the server rather than a failed task. Truncating instead would tell the model it read
+// everything when it read the first few thousand, which is a defect nobody finds twice.
+func TestUncappedSearchStopsAtTheCeiling(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		client func(string) *jira.HTTPClient
+		req    jira.Request
+	}{
+		{"cloud /search/jql", cloudClient, jira.Request{Operation: "search", JQL: "project = OPS"}},
+		{"data center offset search", dcClient, jira.Request{Operation: "search", JQL: "project = OPS"}},
+		{"account search", cloudClient, jira.Request{Operation: "search-users", Query: "a"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.client(endlessJira(t).URL).Do(context.Background(), tc.req)
+			if err == nil {
+				t.Fatal("an uncapped read of an endless result set returned; it must stop at the ceiling")
+			}
+			for _, want := range []string{"maxResults", strconv.Itoa(jira.SearchCeiling)} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to mention %q so the author knows the fix", err, want)
+				}
+			}
+		})
+	}
+}
+
+// The ceiling is a backstop for an uncapped read, not a second cap: a task that says
+// what it wants gets exactly that, ceiling or no ceiling.
+func TestTheCeilingLeavesACappedSearchAlone(t *testing.T) {
+	got, err := cloudClient(endlessJira(t).URL).Do(context.Background(), jira.Request{
+		Operation: "search", JQL: "project = OPS", MaxResults: 150,
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if issues, _ := got.([]any); len(issues) != 150 {
+		t.Fatalf("issues = %d, want the task's own cap of 150", len(issues))
 	}
 }

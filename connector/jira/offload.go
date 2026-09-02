@@ -48,9 +48,11 @@ type Job struct {
 	Transition string `json:"transition,omitempty"`
 	Comment    string `json:"comment,omitempty"`
 	Assignee   string `json:"assignee,omitempty"`
-	// JQL is a search's query and MaxResults the cap on what it may return; 0 reads
-	// every match. The compiler has already applied the default.
+	// JQL is an issue search's query and Query an account search's term; MaxResults caps
+	// what either may return, 0 reads every match. The compiler has already applied the
+	// default.
 	JQL        string `json:"jql,omitempty"`
+	Query      string `json:"query,omitempty"`
 	MaxResults int32  `json:"maxResults,omitempty"`
 	// Fields are extra issue fields, each keeping the JSON shape its FEEL value had.
 	Fields map[string]any `json:"fields,omitempty"`
@@ -94,6 +96,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		Comment:        resolveValue(detail.JiraComment, piKey, scopeVars),
 		Assignee:       resolveValue(detail.JiraAssignee, piKey, scopeVars),
 		JQL:            resolveValue(detail.JiraJQL, piKey, scopeVars),
+		Query:          resolveValue(detail.JiraQuery, piKey, scopeVars),
 		MaxResults:     detail.JiraMaxResults,
 		Fields:         resolveFields(detail.JiraFields, piKey, scopeVars),
 		RequestID:      strconv.FormatUint(jobKey, 10),
@@ -125,6 +128,7 @@ func Run(ctx context.Context, j Job, reg *Registry) (any, error) {
 		Comment:     j.Comment,
 		Assignee:    j.Assignee,
 		JQL:         j.JQL,
+		Query:       j.Query,
 		MaxResults:  j.MaxResults,
 		Fields:      j.Fields,
 		RequestID:   j.RequestID,

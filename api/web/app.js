@@ -152,6 +152,56 @@ async function logout() {
   route();
 }
 
+// ---------- Presence (ADR-0228) ----------
+// The browser tells the server two different things, and keeping them apart is the
+// whole feature. The beacon itself says "this tab is still open"; its `active` flag
+// says "somebody is using it". So the interval keeps running when the tab moves to
+// the background — a window behind another one is still signed in — while the flag
+// is only ever set by a real pointer, key, scroll or touch. That is what lets the
+// Organization page tell somebody at their desk from a tab left open overnight from
+// a laptop that was closed.
+//
+// Nothing here reports what the person is doing: no route, no click target, no
+// count. One boolean per minute, and the server keeps neither it nor a history of
+// it (presence.go).
+const PRESENCE_INTERVAL = 60000;
+let presenceTimer = null;
+let presenceWired = false;
+let presenceActive = false;
+
+const noteActivity = () => { presenceActive = true; };
+
+async function sendPresence() {
+  const active = presenceActive;
+  presenceActive = false;
+  try { await api("POST", "/api/v1/auth/presence", { active }); }
+  catch { /* one missed heartbeat; the next one carries the same story */ }
+}
+
+// startPresence begins reporting, once, for a signed-in session. With enforcement
+// off there is no session to be present in, so it does nothing at all.
+function startPresence() {
+  if (presenceTimer || !AUTH.enabled || !AUTH.user) return;
+  if (!presenceWired) {
+    for (const ev of ["pointerdown", "keydown", "wheel", "touchstart"]) {
+      window.addEventListener(ev, noteActivity, { passive: true, capture: true });
+    }
+    // Coming back to the tab is itself somebody doing something.
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) noteActivity(); });
+    presenceWired = true;
+  }
+  presenceActive = true; // opening the app is an act
+  sendPresence();
+  presenceTimer = setInterval(sendPresence, PRESENCE_INTERVAL);
+}
+
+// stopPresence silences the tab: on the login screen there is nobody to be present.
+function stopPresence() {
+  if (!presenceTimer) return;
+  clearInterval(presenceTimer);
+  presenceTimer = null;
+}
+
 // viewLogin is the sign-in screen shown whenever enforcement is on and no session
 // is active. A successful login re-reads auth and drops the user on the Console.
 function viewLogin() {
@@ -492,6 +542,7 @@ const TOPNAV = {
     { name: "Workers", route: "#/operations/workers", role: "operator" },
     { name: "Outbox", route: "#/operations/outbox", role: "operator" },
     { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
+    { name: "Mock database", route: "#/operations/sql-mock", role: "admin" },
     { name: "Decisions", route: "#/operations/decisions", role: "operator" },
     { name: "Call activities", route: "#/operations/call-activities", role: "any" },
   ],
@@ -519,6 +570,27 @@ const TOPNAV = {
 // "status" is honest about what this single-binary build actually talks to:
 //   active — embedded and used at runtime/deploy time;
 //   planned — a supported integration that this build isn't wired to yet.
+
+// The three database Worker Types are one capability with three drivers (ADR-0173), so
+// the card that describes them says the same things about all three. Written out three
+// times they had already drifted: only SQL Server's mentioned that Atlas supervises the
+// worker, only PostgreSQL's mentioned the row cap, and none of them mentioned that a
+// database task can be tried without a database (ADR-0221) — so which facts an operator
+// learned depended on which of the three they happened to click.
+//
+// What genuinely differs is the product's name, its environment prefix and its
+// placeholder syntax, plus the one sentence about binding by name. Everything else is
+// shared, and a fact added here reaches all three.
+function sqlWorkerTypeDesc(product, envPrefix, placeholder, binding) {
+  return `Runs one statement against a ${product} database \u2014 query for many rows, query one for a single row, execute for an insert, update or delete \u2014 on a worker, off the processor loop. ` +
+    `The statement is literal by construction: it is the one connector field with no fx toggle, because a statement assembled from process data would be an injection that needs no quoting bug. ` +
+    `Values reach it as bound parameters (${placeholder}). ${binding} ` +
+    `A query carries a row cap (1000 by default) and exceeding it fails the task rather than truncating, because a short result set is a wrong business answer and a process that branches on the row count would branch on it confidently. ` +
+    `Configure each database below: the whole connection string is the credential, sealed into the vault. ` +
+    `Worker-only \u2014 the engine never holds a database credential \u2014 so a SQL task needs a worker, which Atlas supervises for you. ` +
+    `Or a mockup: the Databases switch on Console \u203a Workers makes every database worker answer from prepared answers in its own memory, and a worker you run yourself reads the same decision from ATLAS_${envPrefix}_MOCK — either way a model that reads or writes a database runs end to end before anyone has a connection string.`;
+}
+
 const CONNECTORS = [
   {
     id: "temis", name: "temis", kind: "Decision engine",
@@ -531,7 +603,7 @@ const CONNECTORS = [
     refs: "ADR-0036 · ADR-0041", status: "active", statusLabel: "configurable",
   },
   {
-    id: "http-rest", name: "HTTP REST", kind: "REST API",
+    id: "rest", name: "HTTP REST", kind: "REST API",
     desc: "Calls a model-authored REST endpoint from a service task off the processor loop — method, URL, headers, query parameters, and basic/bearer/apiKey auth (secrets resolved server-side) — writing the JSON response into a result variable. Authored on a service task with the REST Outbound Worker Type.",
     refs: "ADR-0036 · ADR-0041 · ADR-0067", status: "active", statusLabel: "embedded",
   },
@@ -559,6 +631,26 @@ const CONNECTORS = [
     id: "ad", name: "Active Directory", kind: "Directory",
     desc: "Creates a user, group or contact, sets a password, enables or disables an account, moves or deletes an entry, manages group membership and reads a DirSync delta \u2014 on a worker, off the processor loop. Configure each directory below: its LDAP URL and a vault bundle holding the service account. A model then names the connector and says nothing else about the directory. Tasks written before this that carry their own url and bindDN keep working.",
     refs: "ADR-0166 \u00b7 ADR-0181", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "entra", name: "Entra ID", kind: "Cloud directory",
+    desc: "Creates, licenses, disables, lists or delta-syncs accounts and groups in a Microsoft Entra ID tenant via the Graph API \u2014 on a worker, off the processor loop. A Graph collection arrives page by page and the worker follows the pages itself, so a list operation writes a whole list into a result variable rather than a continuation token. Configure each tenant below: its {tenantId, clientId, clientSecret} bundle lives in the vault and never enters a model. Worker-only, so the tenant credential never reaches the engine.",
+    refs: "ADR-0172", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "mssql", name: "Microsoft SQL Server", kind: "Database",
+    desc: sqlWorkerTypeDesc("Microsoft SQL Server", "MSSQL", "@p1", "SQL Server is the one product of the three that also binds them by name (@id), which is why an object-shaped parameters variable is accepted here and refused by the other two."),
+    refs: "ADR-0173 \u00b7 ADR-0188 \u00b7 ADR-0221", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "mariadb", name: "MariaDB", kind: "Database",
+    desc: sqlWorkerTypeDesc("MariaDB", "MARIADB", "?", "MariaDB binds only positionally, so an object-shaped parameters variable is refused rather than flattened into an order nobody wrote \u2014 which is why the three database products are three Worker Types and not one with a dialect field."),
+    refs: "ADR-0173 \u00b7 ADR-0188 \u00b7 ADR-0221", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "postgres", name: "PostgreSQL", kind: "Database",
+    desc: sqlWorkerTypeDesc("PostgreSQL", "POSTGRES", "$1", "PostgreSQL binds only positionally, so an object-shaped parameters variable is refused rather than flattened into an order nobody wrote \u2014 which is why the three database products are three Worker Types and not one with a dialect field."),
+    refs: "ADR-0173 \u00b7 ADR-0188 \u00b7 ADR-0221", status: "active", statusLabel: "configured below",
   },
 ];
 
@@ -1755,6 +1847,65 @@ async function viewConsoleConnectors() {
       </div>
     </div>`;
 
+  // The database mockup switch (ADR-0221). It sits beside the AD one
+  // because it answers the same question for the other kind of system nobody can
+  // safely try a half-finished process against — and because a worker answering from
+  // a seed looks, from everywhere else in Atlas, exactly like one talking to a
+  // database.
+  let sqlMock = null;
+  try {
+    sqlMock = await api("GET", "/api/v1/settings/sql-mock");
+  } catch (e) {
+    sqlMock = null; // an older server, or unreachable: leave the card out entirely
+  }
+  const sqlMockCard = !sqlMock ? "" : `
+    <div class="card" style="margin-top:18px">
+      <div class="between"><h2>Databases</h2>
+        <span class="pill ${sqlMock.enabled ? "warn" : "ok"}"><span class="dot"></span>${
+          sqlMock.enabled ? "mockup" : "real databases"}</span></div>
+      <p class="muted" style="margin:6px 0 12px">In <b>mockup mode</b> every SQL Server, MariaDB and
+      PostgreSQL worker answers statements from prepared answers in its own memory: no database is
+      touched, no connection string is needed, and nothing in a model changes. One switch covers all
+      three — simulating one product while really writing to another looks like a full mockup run,
+      which is the one thing it must never look like. Switching restarts the workers; Atlas keeps
+      running.</p>
+      <label style="display:flex; align-items:center; gap:10px; margin-bottom:10px">
+        <input type="checkbox" id="sqlmock-on" ${sqlMock.enabled ? "checked" : ""}>
+        <span>Answer database tasks from a mockup</span>
+      </label>
+      <div style="margin-bottom:10px">
+        <div class="muted" style="font-size:13px; margin-bottom:6px">Prepared answers — what each
+        statement returns. A statement with no answer here <b>fails</b> and names itself and the values
+        it was given, so you can paste them straight in; it never comes back as an empty result,
+        because "no rows" is a real business answer and a mockup that invents one would hand your
+        process a fact. An answer may also carry an <code>error</code>, which is how you try the case
+        a real database hands you sooner or later.</div>
+        <div class="between" style="gap:10px; flex-wrap:wrap">
+          <span id="sqlmock-seed-state" data-seed-name="${esc(sqlMock.seedName || "")}" style="font-size:13px">${
+            sqlMock.hasSeed
+              ? `<b>${esc(sqlMock.seedName || "Prepared answers")}</b> — ${
+                  sqlMock.seedAnswers ? `${sqlMock.seedAnswers} answer${sqlMock.seedAnswers === 1 ? "" : "s"}` : "? answers"}`
+              : `<span class="muted">No prepared answers — every statement will fail, naming itself.</span>`}</span>
+          <span style="white-space:nowrap">
+            <input type="file" id="sqlmock-seed-file" accept=".json,application/json,text/plain" style="display:none">
+            <button class="btn ghost" id="sqlmock-seed-pick" title="Read a seed file from this computer">Choose a file…</button>
+            <button class="btn ghost" id="sqlmock-seed-edit" title="Paste or edit the answers directly">Paste or edit</button>
+            <button class="btn ghost" id="sqlmock-seed-example" title="A small seed to try a lookup and an update against">Example</button>
+            <button class="btn ghost danger" id="sqlmock-seed-clear" title="Start from a mockup with no answers">Remove</button>
+          </span>
+        </div>
+        <textarea id="sqlmock-seed" rows="12" spellcheck="false" style="display:none; width:100%; margin-top:8px;
+                  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px">${esc(sqlMock.seed || "")}</textarea>
+      </div>
+      <div class="between">
+        <button class="btn" id="sqlmock-save">Save</button>
+        <span class="muted" id="sqlmock-note" style="font-size:13px">${
+          sqlMock.configured
+            ? "Decided here."
+            : "Not decided here yet — whatever the server was started with (ATLAS_MSSQL_MOCK and friends) applies."}</span>
+      </div>
+    </div>`;
+
   // Encrypted secret vault (ADR-0069): credentials a connector's token reference
   // resolves to, sealed at rest. Every op is admin-gated and the vault may be
   // unconfigured (no master key), so distinguish those states from a populated list.
@@ -1768,6 +1919,10 @@ async function viewConsoleConnectors() {
   // A secret's value is write-only, so the one thing the list can still say about it
   // is what it is *for* — which connector resolves this reference, and therefore what
   // shape the value has to have. Without that a rotation is done blind (ADR-0155).
+  // The key line names the *vault master key* — ADR-0069's keyId, a fingerprint of the
+  // one active key that seals every secret — not a per-secret key. The same value on
+  // every row is therefore the healthy state; a row that differs was sealed under a key
+  // that has since been rotated and no longer opens, which is why the line is shown.
   const secretRow = (c) => {
     const users = (connectors || []).filter((k) => k.credentialsRef === c.name);
     const usedBy = users.length
@@ -1776,7 +1931,7 @@ async function viewConsoleConnectors() {
     return `<tr data-name="${esc(c.name)}">
       <td><span class="chip">${esc(c.name)}</span>
         <div class="muted" style="font-size:12px; margin-top:3px">used by ${usedBy}</div>
-        <div class="muted" style="font-size:12px; margin-top:3px">key <code>${esc(c.keyId)}</code> · updated ${esc(fmtTime(c.updatedAt))}</div></td>
+        <div class="muted" style="font-size:12px; margin-top:3px" title="Fingerprint of the vault master key this secret is sealed under. One key seals them all, so it reads the same on every secret until the key is rotated.">sealed under vault key <code>${esc(c.keyId)}</code> · updated ${esc(fmtTime(c.updatedAt))}</div></td>
       <td style="text-align:right; white-space:nowrap">
         <button class="btn ghost" data-sact="set" title="Set or rotate this secret’s value">Set value</button>
         <button class="btn ghost danger" data-sact="delete" title="Delete this secret from the vault">Delete</button>
@@ -1815,9 +1970,11 @@ async function viewConsoleConnectors() {
     </div>
     ${managedCard}
     ${adMockCard}
+    ${sqlMockCard}
     ${secretsCard}`;
   wireConnectorManagement(connectors);
   wireADMock();
+  wireSQLMock();
   wireSecretsManagement(secrets, secretsState, connectors);
 }
 
@@ -1838,6 +1995,37 @@ async function viewConsoleOrg() {
   }
 
   const me = AUTH.user;
+
+  // Presence (ADR-0228). The Status column says whether the account
+  // may be used; this one says whether anybody is using it this minute. It is shown
+  // only when login is enforced — with enforcement off there are no sessions, so
+  // every row would read "offline" and mean nothing by it.
+  const showPresence = AUTH.enabled;
+  const ago = (unix) => {
+    if (!unix) return "unknown";
+    const secs = Math.max(0, Math.round(Date.now() / 1000 - unix));
+    if (secs < 60) return "a moment ago";
+    if (secs < 3600) return `${Math.round(secs / 60)} min ago`;
+    if (secs < 86400) return `${Math.round(secs / 3600)} h ago`;
+    return fmtTime(unix);
+  };
+  // Three states, and the title says what each one is actually claiming — including
+  // the one that is easy to over-read: a session whose browser stopped reporting is
+  // offline, not signed in, even though the session itself has not expired yet.
+  const presencePill = (p) => {
+    const state = (p && p.state) || "offline";
+    if (state === "online") {
+      return `<span class="pill ok" title="Signed in and using Atlas — last action ${esc(ago(p.lastActiveAt))}"><span class="dot"></span>online</span>`;
+    }
+    if (state === "idle") {
+      return `<span class="pill warn" title="Signed in, but nothing done since ${esc(ago(p.lastActiveAt))}"><span class="dot"></span>idle</span>`;
+    }
+    const closed = p && p.sessions
+      ? `Last signed in, but the browser stopped reporting ${ago(p.lastSeenAt)}`
+      : "Not signed in";
+    return `<span class="pill off" title="${esc(closed)}"><span class="dot"></span>offline</span>`;
+  };
+
   const roleChips = (roles) => (roles || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
   const statusPill = (u) => u.disabled
     ? `<span class="pill warn"><span class="dot"></span>disabled</span>`
@@ -1848,6 +2036,7 @@ async function viewConsoleOrg() {
       <td>${esc(u.displayName || "—")}${u.email ? `<div class="muted" style="font-size:12px">${esc(u.email)}</div>` : ""}</td>
       <td>${roleChips(u.roles)}</td>
       <td>${statusPill(u)}</td>
+      ${showPresence ? `<td class="presence-cell">${presencePill(u.presence)}</td>` : ""}
       <td style="text-align:right; white-space:nowrap">
         <button class="btn ghost" data-act="edit" title="Edit this user’s details and roles">Edit</button>
         <button class="btn ghost" data-act="password" title="Set a new password for this user">Password</button>
@@ -1867,12 +2056,16 @@ async function viewConsoleOrg() {
           Every route names the role that reaches it: <span class="chip">admin</span> for this page and the
           rest of the instance's configuration, <span class="chip">modeler</span> to deploy and to author,
           <span class="chip">operator</span> to run what is deployed, <span class="chip">user</span> for a
-          person's own task list.</p>
+          person's own task list.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
+          administrators see it: <b>online</b> means somebody did something in the last five minutes,
+          <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
+          It is read from the live sessions and never stored — a restart shows nobody.` : ""}</p>
         <div id="user-form-slot" style="padding:0 18px"></div>
         <table data-dt-key="users">
-          <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th>${
+            showPresence ? "<th>Presence</th>" : ""}<th></th></tr></thead>
           <tbody id="user-rows">${(users || []).map(userRow).join("")
-            || `<tr><td colspan="5" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
+            || `<tr><td colspan="${showPresence ? 6 : 5}" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
         </table>
       </div>`;
 
@@ -1953,6 +2146,7 @@ async function viewConsoleOrg() {
   wireSSO(groups);
 
   if (denied) return;
+  wireOrgPresence(showPresence, presencePill);
   const reload = () => viewConsoleOrg();
   const slot = document.getElementById("user-form-slot");
   document.getElementById("new-user").addEventListener("click", () => {
@@ -2002,6 +2196,36 @@ async function viewConsoleOrg() {
       case "rmmember": removeGroupMember(btn.dataset.gid, btn.dataset.uid, reload); break;
     }
   });
+}
+
+// Presence goes stale while the page sits open, so it repaints itself. The cells
+// only — never the page — because an administrator half-way through a user form
+// should not have it wiped from under them every half minute (ADR-0228).
+//
+// Half the beacon's own interval, so a change is on screen inside a minute, and one
+// tiny admin-only read either way.
+const ORG_PRESENCE_INTERVAL = 30000;
+let orgPresenceTimer = null;
+
+function wireOrgPresence(showPresence, presencePill) {
+  if (orgPresenceTimer) { clearInterval(orgPresenceTimer); orgPresenceTimer = null; }
+  if (!showPresence) return;
+  const stop = () => { clearInterval(orgPresenceTimer); orgPresenceTimer = null; };
+  const paint = async () => {
+    const rows = document.getElementById("user-rows");
+    // The view was replaced by another one that sets no cleanup of its own; stop
+    // rather than poll on behalf of a page nobody is looking at.
+    if (!rows || !rows.isConnected) return stop();
+    let live;
+    try { live = await api("GET", "/api/v1/users/presence"); } catch { return; }
+    const byId = new Map((live || []).map((p) => [p.userId, p]));
+    for (const cell of rows.querySelectorAll("td.presence-cell")) {
+      const row = cell.closest("tr");
+      if (row) cell.innerHTML = presencePill(byId.get(row.dataset.id));
+    }
+  };
+  orgPresenceTimer = setInterval(paint, ORG_PRESENCE_INTERVAL);
+  window.__atlasCleanup = stop;
 }
 
 // ---------- Single sign-on (ADR-0210) ----------
@@ -3296,6 +3520,32 @@ async function createDmnRef(projectId, reload) {
   await reload();
 }
 
+// saveOrConfirmOverwrite runs a save that refuses to land on an id something else
+// already holds, and turns that refusal into a question rather than a dead end.
+//
+// `save(from)` is called twice at most: first with "" — "this is new, so refuse a
+// collision" — and, if the author confirms the replacement, with null, which omits the
+// parameter entirely and gets the plain overwrite-by-id every non-interactive writer
+// uses. Omitting it is what lets the retry work without the caller having to know the
+// id inside the file: the server reads it from the document either way.
+//
+// Importing a file whose id already exists is not by itself a mistake — it is usually a
+// corrected export of the same artifact. What it must never be is silent, which is what
+// it was: you picked a file and the draft or form you already had was gone
+// (ADR-0222).
+// Declining the replacement returns null — not an error, since keeping what was there
+// is a perfectly good outcome — so the caller reports it as a cancellation rather than
+// a failure.
+async function saveOrConfirmOverwrite(save, question) {
+  try {
+    return await save("");
+  } catch (e) {
+    if (e.status !== 409) throw e;
+    if (!window.confirm(`${e.message}\n\n${question}`)) return null;
+    return await save(null);
+  }
+}
+
 // importArtifact imports a BPMN diagram, DMN model, or form from an uploaded file and
 // files it into the given project ("" = ungrouped). The kind is detected from the
 // extension and, for an ambiguous .xml, from the root element's namespace: a BPMN
@@ -3318,7 +3568,16 @@ async function importArtifact(projectId, reload) {
       if (!Array.isArray(schema.components)) throw new Error("not a form-js form (no components array)");
       const id = (typeof schema.id === "string" && schema.id.trim()) || ("form-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
       const name = (typeof schema.name === "string" && schema.name.trim()) || base || id;
-      await api("POST", "/api/v1/forms", { id, name, schema, projectId });
+      // "from" empty says this is a new form, so an id something already holds comes
+      // back 409 instead of quietly replacing that form
+      // (ADR-0222). Importing a file over a form you already have
+      // is a real intent — a corrected export of the same form — so it is offered by
+      // name rather than refused; it is just never the default.
+      const savedForm = await saveOrConfirmOverwrite(
+        (from) => api("POST", "/api/v1/forms",
+          from === null ? { id, name, schema, projectId } : { id, name, schema, projectId, from }),
+        `A form with the id “${id}” already exists. Replace it with this file?`);
+      if (!savedForm) { toast(`Import cancelled — the form “${id}” you already had was kept`); return; }
       toast(`Imported form “${name}”`, "ok");
       await reload();
       return;
@@ -3339,8 +3598,16 @@ async function importArtifact(projectId, reload) {
     // BPMN-DI is optional in the standard, so a file may carry no layout at all; the
     // backend lays one out on the way in and says so, and the author is told rather than
     // left to assume the arrangement in front of them is the one their file described.
-    const path = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
-    const d = await api("POST", path, text, true);
+    const draftPath = (from) => {
+      const q = [];
+      if (from !== null) q.push("from=" + encodeURIComponent(from));
+      if (projectId) q.push("projectId=" + encodeURIComponent(projectId));
+      return "/api/v1/drafts" + (q.length ? "?" + q.join("&") : "");
+    };
+    const d = await saveOrConfirmOverwrite(
+      (from) => api("POST", draftPath(from), text, true),
+      "A draft with this diagram's process id already exists. Replace it with this file?");
+    if (!d) { toast("Import cancelled — the draft you already had was kept"); return; }
     toast(d.layoutGenerated
       ? `Imported diagram “${d.name || d.processId}” — the file carried no layout, so one was generated`
       : `Imported diagram “${d.name || d.processId}”`, "ok");
@@ -3423,17 +3690,17 @@ function wireConnectorManagement(connectors) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option><option value="preview">Preview (in-app outbox)</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
-        <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password" placeholder="postgresql://postgres.abc:\u2026@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require"/></label>
+        <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit" title="Add this connector">Add</button>
         <button class="btn neutral conn-f-test" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
         <p class="conn-test-result" style="flex:1 1 100%;margin:0;font-size:12.5px" hidden></p>
-        <p class="muted mail-only conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p></form>`;
+        <p class="muted conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p></form>`;
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
       // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
       // endpoint but a credentialsRef naming a vault JSON auth bundle, and sends as the
@@ -3467,6 +3734,11 @@ function wireConnectorManagement(connectors) {
         // manager fills in whether or not anyone can see it. Disabling it takes it out
         // of the FormData entirely, and clearing it means switching kinds cannot carry
         // a DSN typed for a previous one into the next create.
+        // The example follows the product. It is the only thing on screen that says
+        // which of the three connection-string syntaxes is expected, and they have
+        // none in common — a MariaDB DSN is not even a URL.
+        const connStrIn = form.querySelector('[name="connectionString"]');
+        if (connStrIn) connStrIn.placeholder = sh.dsnPlaceholder;
         form.querySelectorAll(".sql-only").forEach((el) => {
           el.style.display = sh.sql ? "" : "none";
           el.querySelectorAll("input").forEach((inp) => {
@@ -3484,9 +3756,18 @@ function wireConnectorManagement(connectors) {
         credRefIn.required = sh.credRef === "required";
         credRefIn.placeholder = sh.credRefPlaceholder;
         credRefLabel.textContent = sh.credRefLabel;
-        // What this provider needs, said where it is chosen rather than discovered
-        // from a failed send hours later.
-        form.querySelector(".conn-hint").innerHTML = sh.hint;
+        // What this kind needs, said where it is chosen rather than discovered from a
+        // failed job hours later. The hint is *not* mail-only: connectorShape writes
+        // one for Active Directory and for the three databases too, and while it
+        // carried the mail-only class the form wrote all of them into an element it had
+        // just hidden — so the one sentence saying that a database's whole connection
+        // string is the credential, and that Atlas supervises the worker for it, was
+        // written for every SQL kind and shown for none. The edit dialog always showed
+        // it, which is exactly the kind of disagreement ADR-0160 put the shape in one
+        // place to prevent.
+        const hintEl = form.querySelector(".conn-hint");
+        hintEl.innerHTML = sh.hint;
+        hintEl.style.display = sh.hint ? "" : "none";
       };
       kindSel.addEventListener("change", sync);
       providerSel.addEventListener("change", sync);
@@ -3750,13 +4031,16 @@ async function toggleInboundSubs(row, connectorId, kind) {
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
       <td><code>${esc(s.jql || s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
-      <td>${s.enabled ? '<span class="pill ok"><span class="dot"></span>on</span>' : '<span class="pill warn"><span class="dot"></span>off</span>'}</td>
+      <td>${s.enabled
+        ? '<span class="pill ok"><span class="dot"></span>on</span>'
+        : `<span class="pill warn" title="${esc(s.disabledReason || "Switched off.")}"><span class="dot"></span>off</span>`
+          + (s.disabledReason ? ` <span class="muted">${esc(s.disabledReason)}</span>` : "")}</td>
       <td style="text-align:right"><button class="btn ghost danger" data-sdel title="Delete this subscription">Delete</button></td>
     </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">No subscriptions. Add one below to have clio events start or wake processes.</td></tr>`;
   const isJira = kind === "jira";
   const what = isJira
-    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as Atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet.</div>`
-    : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0075).</div>`;
+    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as Atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`
+    : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0075). <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`;
   const source = isJira
     ? `<label class="field" style="margin:0"><span>JQL</span><input name="jql" placeholder="project = OPS AND issuetype = Bug" required/></label>`
     : `<label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="/employees" required/></label>`;
@@ -3784,6 +4068,7 @@ async function toggleInboundSubs(row, connectorId, kind) {
       ${source}
       <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
       <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isJira ? "= issueKey" : "= subjectTail"}"/></label>
+      <label class="field" style="margin:0"><span>Max events/hour</span><input name="maxPerHour" type="number" min="0" placeholder="60"/></label>
       <button class="btn" type="submit" title="Add this inbound event watch">Add</button>
       ${extra}
     </form></td>`;
@@ -3795,6 +4080,7 @@ async function toggleInboundSubs(row, connectorId, kind) {
       const body = {
         messageName: (f.get("messageName") || "").trim(),
         correlationKey: (f.get("correlationKey") || "").trim(),
+        maxPerHour: Number(f.get("maxPerHour") || 0) || 0,
       };
       if (isJira) {
         body.jql = (f.get("jql") || "").trim();
@@ -3941,6 +4227,131 @@ function wireADMock() {
       toast(enabled
         ? "Mockup on — the AD worker restarts and writes to no directory."
         : "Mockup off — the AD worker restarts and talks to the domain controller again.");
+      await viewConsoleConnectors();
+    } catch (e) {
+      if (note) note.textContent = e.message;
+      save.disabled = false;
+    }
+  });
+}
+
+// SQL_SEED_EXAMPLE is a seed small enough to read and complete enough to run a whole
+// process against: the lookup examples/mssql-eintrittsmeldung.bpmn makes, the update it
+// makes afterwards, and the answer for a person who is not there — which is the branch
+// most models get wrong and the one a mockup is most useful for.
+const SQL_SEED_EXAMPLE = JSON.stringify({
+  answers: [
+    {
+      statement: "SELECT id, mail, abteilung FROM personen WHERE kuerzel = @p1",
+      params: ["abo"],
+      columns: ["id", "mail", "abteilung"],
+      rows: [[7, "arno.boesch@example.com", "IT"]],
+    },
+    {
+      // No params: the fallback for every other kuerzel. Nobody found, which is a
+      // business answer and not a failure — the model's gateway is what reads it.
+      statement: "SELECT id, mail, abteilung FROM personen WHERE kuerzel = @p1",
+      columns: ["id", "mail", "abteilung"],
+      rows: [],
+    },
+    {
+      statement: "UPDATE personen SET aktiv = @aktiv WHERE id = @id",
+      named: { id: 7, aktiv: true },
+      affected: 1,
+    },
+    {
+      // What a redelivered job meets on a real database, available on demand here.
+      statement: "INSERT INTO personen (kuerzel, mail) VALUES (@p1, @p2)",
+      error: "Violation of UNIQUE KEY constraint 'UQ_personen_kuerzel'",
+    },
+  ],
+}, null, 2);
+
+// wireSQLMock binds the database mockup switch: one PUT, and the supervised SQL
+// workers are restarted holding the new setting. Writing it is admin-gated
+// server-side, so a non-admin gets the refusal as a message rather than as a control
+// that silently does nothing.
+//
+// The prepared answers are *content*, not a path, for the reason the AD seed is
+// (ADR-0202): the Console is org-wide, and a path typed here belongs to whichever host
+// happens to run the worker. A file chosen here is read in the browser and posted as
+// text, so what an operator picks is what Atlas stores.
+function wireSQLMock() {
+  const save = document.getElementById("sqlmock-save");
+  if (!save) return;
+  const note = document.getElementById("sqlmock-note");
+  const box = document.getElementById("sqlmock-seed");
+  const state = document.getElementById("sqlmock-seed-state");
+  const file = document.getElementById("sqlmock-seed-file");
+  // Seeded from what is stored, so an operator who only flips the switch and saves does
+  // not silently strip the name off a seed they never touched.
+  let seedName = (state && state.dataset.seedName) || "";
+
+  // describe reports what is loaded without claiming to have parsed it: the answer
+  // count comes back from the server, which is the only side that actually parses.
+  const describe = (text, name) => {
+    if (!state) return;
+    state.innerHTML = text.trim()
+      ? `<b>${esc(name || "Prepared answers")}</b> — <span class="muted">not saved yet</span>`
+      : `<span class="muted">No prepared answers — every statement will fail, naming itself.</span>`;
+  };
+
+  const pick = document.getElementById("sqlmock-seed-pick");
+  if (pick && file) {
+    pick.addEventListener("click", () => file.click());
+    file.addEventListener("change", async () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      try {
+        box.value = await f.text();
+        seedName = f.name;
+        describe(box.value, seedName);
+        if (note) note.textContent = "Read from " + f.name + " — press Save to hand it to the workers.";
+      } catch (e) {
+        if (note) note.textContent = "Could not read that file: " + e.message;
+      }
+      file.value = ""; // so picking the same file again still fires a change
+    });
+  }
+
+  const edit = document.getElementById("sqlmock-seed-edit");
+  if (edit) {
+    edit.addEventListener("click", () => {
+      box.style.display = box.style.display === "none" ? "block" : "none";
+      if (box.style.display === "block") box.focus();
+    });
+  }
+
+  const example = document.getElementById("sqlmock-seed-example");
+  if (example) {
+    example.addEventListener("click", () => {
+      box.value = SQL_SEED_EXAMPLE;
+      seedName = "example-answers.json";
+      box.style.display = "block";
+      describe(box.value, seedName);
+      if (note) note.textContent = "An example seed — press Save to hand it to the workers.";
+    });
+  }
+
+  const clear = document.getElementById("sqlmock-seed-clear");
+  if (clear) {
+    clear.addEventListener("click", () => {
+      box.value = "";
+      seedName = "";
+      describe("", "");
+      if (note) note.textContent = "Removed — press Save to start from a mockup with no answers.";
+    });
+  }
+
+  save.addEventListener("click", async () => {
+    const enabled = document.getElementById("sqlmock-on").checked;
+    const seed = box.value.trim();
+    save.disabled = true;
+    try {
+      await api("PUT", "/api/v1/settings/sql-mock", { enabled, seed, seedName });
+      toast(enabled
+        ? "Mockup on — the SQL workers restart and reach no database."
+        : "Mockup off — the SQL workers restart and talk to their databases again.");
       await viewConsoleConnectors();
     } catch (e) {
       if (note) note.textContent = e.message;
@@ -5766,6 +6177,152 @@ async function viewADMockDirectory() {
   // Five seconds: a mockup run is something you watch while clicking through a
   // process, and the read is a small in-memory list on a server that is not the
   // engine's run loop.
+  const timer = setInterval(() => { if (follow.checked) load(); }, 5000);
+  window.__atlasCleanup = () => clearInterval(timer);
+}
+
+// viewSQLMockJournal is the Operations "Mock database" view: what the SQL workers in
+// mockup mode were actually asked (ADR-0224).
+//
+// It is the mock directory's sibling with one difference that decides its whole shape.
+// That view answers "what is in the directory now" — state, so it draws a tree. This
+// mock holds no state at all: it answers statements and executes nothing, so an INSERT
+// changes nothing a later SELECT would see. There is no "now" to draw. What there is,
+// is the sequence — and the sequence is the answer to the question a mockup run is made
+// to ask: what did my process do?
+//
+// The refusals are the entries that matter most. A statement nobody seeded fails and
+// names itself and its values, and that is how an operator builds the seed: read it
+// here, paste it into the card under Workers.
+async function viewSQLMockJournal() {
+  const gen = navGen;
+  view.innerHTML = `
+    <div class="between">
+      <h1>Mock database</h1>
+      <span class="row" style="gap:12px; align-items:center">
+        <label class="field inline" style="margin:0"><input type="checkbox" id="sqlmock-follow" checked> Auto-refresh</label>
+        <button class="btn neutral" id="sqlmock-refresh" title="Reload what the workers have reported">Refresh</button>
+      </span>
+    </div>
+    <p class="muted">Every statement the SQL workers in <b>mockup mode</b> have been asked, newest
+    last. Nothing here reached a database. A statement shown in red had <b>no prepared answer</b> —
+    it failed, and it names itself and the values it was given so you can paste it into the
+    <b>Databases</b> card under Organization &rsaquo; Workers. There is no table to browse: this
+    mockup answers statements and executes none, so an <code>INSERT</code> does not change what a
+    later <code>SELECT</code> returns. A worker restart empties its journal.</p>
+    <div id="sqlmock-list"><p class="empty">Loading…</p></div>`;
+  const list = document.getElementById("sqlmock-list");
+  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+
+  // A bound value, as it goes to the driver. Rendered as JSON so a string "7" and the
+  // number 7 are distinguishable — which is the whole question when a lookup found
+  // nobody, and the reason this view carries the values at all.
+  const val = (v) => `<code>${esc(JSON.stringify(v))}</code>`;
+  const boundList = (st) => {
+    const named = st.named || null;
+    if (named && Object.keys(named).length) {
+      return Object.keys(named).sort().map((k) => `${esc(k)} = ${val(named[k])}`).join(", ");
+    }
+    const params = st.params || [];
+    if (!params.length) return "";
+    // Numbered the way the statement addresses them, so the reader can line the value
+    // up with the placeholder rather than counting commas.
+    return params.map((p, i) => `<span class="muted">${i + 1}</span> ${val(p)}`).join(", ");
+  };
+
+  const renderStatement = (st) => {
+    const bound = boundList(st);
+    return `<tr class="${st.failed ? "sqlmock-failed" : ""}">
+      <td class="sqlmock-seq muted">${esc(st.seq || "")}</td>
+      <td>
+        <code class="sqlmock-stmt">${esc(st.statement || "")}</code>
+        ${bound ? `<div class="muted sqlmock-bound">${bound}</div>` : ""}
+        ${st.failed && st.detail ? `<div class="sqlmock-detail">${esc(st.detail)}</div>` : ""}
+      </td>
+    </tr>`;
+  };
+
+  const renderWorker = (w) => {
+    const sts = w.statements || [];
+    const failed = sts.filter((s) => s.failed).length;
+    return `<div class="card sqlmock-worker" data-worker="${esc(w.worker || "?")}">
+      <details class="sqlmock-card" data-k="card" open>
+        <summary>
+          <span class="admock-card-head">
+            <h2>${esc(w.worker || "?")}</h2>
+            <span class="muted">${w.seeded || 0} prepared answer${(w.seeded || 0) === 1 ? "" : "s"} ·
+            ${w.held || 0} statement${(w.held || 0) === 1 ? "" : "s"} asked${
+              failed ? ` · <b>${failed}</b> with no answer` : ""}</span>
+          </span>
+          <span class="admock-card-state">
+            <span class="pill warn"><span class="dot"></span>mockup</span>
+            <span class="muted" style="margin-left:8px">reported ${esc(fmtNano(w.at))}</span>
+          </span>
+        </summary>
+        ${w.truncated ? `<p class="muted">Showing the newest ${sts.length} of ${w.held} — a run this
+          long is past what this view carries.</p>` : ""}
+        ${sts.length
+          ? `<table class="admock-attrs sqlmock-table"><tbody>${sts.map(renderStatement).join("")}</tbody></table>`
+          : `<p class="empty">Nothing asked yet. This worker is in mockup mode and has served no
+             database task since it started.</p>`}
+      </details>
+    </div>`;
+  };
+
+  // Which cards the reader has put away, addressed by worker rather than by position —
+  // a refresh must not reopen what somebody closed.
+  const keyOf = (d) => {
+    const w = d.closest("[data-worker]");
+    return `${w ? w.dataset.worker : ""}|${d.dataset.k || ""}`;
+  };
+  const foldState = () => {
+    const state = new Map();
+    for (const d of list.querySelectorAll("details")) state.set(keyOf(d), d.open);
+    return state;
+  };
+  const refold = (state) => {
+    for (const d of list.querySelectorAll("details")) {
+      const was = state.get(keyOf(d));
+      if (was !== undefined) d.open = was;
+    }
+  };
+
+  // The last payload rendered. A poll that brings nothing new leaves the DOM alone: the
+  // view refreshes every few seconds, and rebuilding an identical table would cost the
+  // reader their scroll position for no news at all.
+  let rendered = null;
+  const load = async () => {
+    let data;
+    try {
+      data = await api("GET", "/api/v1/sql/mock-journal");
+    } catch (e) {
+      rendered = null; // re-render once it answers again, whatever it says
+      list.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+      return;
+    }
+    const fresh = JSON.stringify(data);
+    if (fresh === rendered) return;
+    const folds = foldState();
+    rendered = fresh;
+    const workers = (data && data.workers) || [];
+    if (!workers.length) {
+      list.innerHTML = `<div class="card"><p class="empty">No worker has reported a mockup run.
+        Switch <b>Answer database tasks from a mockup</b> on under Organization &rsaquo; Workers;
+        the worker restarts and reports itself, and every database task it then serves shows up
+        here.</p></div>`;
+      return;
+    }
+    list.innerHTML = workers.map(renderWorker).join("");
+    refold(folds);
+  };
+
+  await load();
+  if (superseded(gen)) return;
+  document.getElementById("sqlmock-refresh").addEventListener("click", load);
+  const follow = document.getElementById("sqlmock-follow");
+  // Five seconds, like the mock directory: a mockup run is something you watch while
+  // clicking through a process, and the read is a small in-memory list on a server that
+  // is not the engine's run loop.
   const timer = setInterval(() => { if (follow.checked) load(); }, 5000);
   window.__atlasCleanup = () => clearInterval(timer);
 }
@@ -7692,10 +8249,12 @@ async function route() {
     document.getElementById("topnav").innerHTML = "";
     paintApps(); // nobody is signed in, so nobody holds a role: the drawer says so too
     syncIncidentBadge(""); // the login screen has no nav to badge, and must not poll
+    stopPresence(); // and nobody to be present: a logged-out tab reports nothing
     updateAccount();
     return viewLogin();
   }
 
+  startPresence(); // signed in, so this tab is somebody being here (presence.go)
   setChrome(appId, path);
   setTitle(routeTitle(path));
   updateAccount();
@@ -7741,6 +8300,7 @@ async function route() {
     if (path === "#/operations/workers") return await viewWorkers();
     if (path === "#/operations/outbox") return await viewMailOutbox();
     if (path === "#/operations/ad-mock") return await viewADMockDirectory();
+    if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/operations/call-activities") return await viewCallActivities();
     if (path === "#/panorama/landscape") return await viewPanoramaLandscape();

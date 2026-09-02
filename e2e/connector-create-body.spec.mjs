@@ -77,3 +77,47 @@ test("a mail create carries its provider, and values arrive trimmed", async ({ p
   expect(body.sender).toBe("bot@example.com");
   expect(body.provider).toBe("gmail");
 });
+
+// The three database products share a form and share nothing else about a connection
+// string: SQL Server takes a sqlserver:// URL, PostgreSQL a postgres:// one, and
+// MariaDB a form that is not a URL at all. The form showed a PostgreSQL example for
+// all three, so an operator configuring SQL Server was being shown the wrong syntax by
+// the only thing on screen that says what is expected — and the driver's rejection
+// arrives later and says nothing about which of the six parts is wrong.
+test("each database product shows its own connection-string example", async ({ page }) => {
+  const shape = (kind) => page.evaluate((k) => window.shape(k), kind);
+
+  const mssql = await shape("mssql");
+  expect(mssql.sql, "SQL Server is a database kind").toBe(true);
+  expect(mssql.dsnPlaceholder, "SQL Server takes a sqlserver:// URL").toMatch(/^sqlserver:\/\//);
+  expect(mssql.dsnPlaceholder).toContain("1433");
+
+  const mariadb = await shape("mariadb");
+  // Not a URL: the MySQL driver's own form. Showing it a scheme would be showing it
+  // something the driver refuses.
+  expect(mariadb.dsnPlaceholder, "MariaDB's DSN is not a URL").not.toMatch(/^[a-z]+:\/\//);
+  expect(mariadb.dsnPlaceholder).toContain("tcp(");
+  expect(mariadb.dsnPlaceholder).toContain("3306");
+
+  const postgres = await shape("postgres");
+  expect(postgres.dsnPlaceholder).toMatch(/^postgres(ql)?:\/\//);
+  expect(postgres.dsnPlaceholder).toContain("5432");
+
+  // No two products may show the same example — that is exactly the bug.
+  const seen = new Set([mssql.dsnPlaceholder, mariadb.dsnPlaceholder, postgres.dsnPlaceholder]);
+  expect(seen.size, "each product needs its own example").toBe(3);
+
+  // The credential reference names a vault key holding the whole connection string,
+  // so its example must not read like a password either.
+  for (const kind of ["mssql", "mariadb", "postgres"]) {
+    const sh = await shape(kind);
+    expect(sh.credRefPlaceholder, `${kind} credential reference example`).toContain(kind);
+  }
+});
+
+// A kind that is not a database has no connection string to show an example for.
+test("a non-database kind offers no connection-string example", async ({ page }) => {
+  const sh = await page.evaluate(() => window.shape("jira"));
+  expect(sh.sql).toBe(false);
+  expect(sh.dsnPlaceholder || "").toBe("");
+});

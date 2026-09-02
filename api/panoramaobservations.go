@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/panorama"
@@ -85,9 +86,39 @@ func (s *Server) collectLocalFacts(r *http.Request) (panorama.Facts, []remoteTar
 		Runtimes:     map[string]panorama.Fact{},
 		Targets:      map[string]panorama.Fact{},
 		Releases:     map[string]panorama.Fact{},
-		// JobTypes stays absent. A job type is authored in a model rather than
-		// registered as a resource, so there is nothing on this server that observes
-		// one; an empty map would claim it looked.
+		JobTypes:     map[string]panorama.Fact{},
+	}
+
+	// Job types: what this server can observe about each kind of work it knows.
+	//
+	// The question a job type answers is not "is this resource well" — a job type is
+	// a name for work, not a thing that can be unwell — but "is this kind of work
+	// getting done here", which the engine can answer from evidence it already
+	// holds. jobTypeStatus is where that turn is made and defended.
+	//
+	// Every type in the engine-wide table, matching the catalog that resolves the
+	// bindings: a model can bind a type nothing currently uses, and reporting it as
+	// absent would blame the model for a fact about the traffic.
+	taken := s.jobTypeTaken()
+	jobIncidents := s.incidentsByJobType()
+	users := s.jobTypeUsers()
+	for _, e := range s.jobTypes.All() {
+		state, reason := jobTypeStatus(taken[e.Name], jobIncidents[e.Index],
+			s.jobRunner.Handles(e.Index))
+		detail := map[string]string{
+			"takenThisRun": strconv.FormatInt(taken[e.Name], 10),
+			"inFlight":     strconv.FormatInt(s.workers.inFlightOf(e.Name), 10),
+			"incidents":    strconv.FormatInt(jobIncidents[e.Index], 10),
+			// How many deployed definitions ask for this kind of work. A type with
+			// no users and no traffic is a leftover; one with users and no traffic is
+			// a question. The two look identical without this.
+			"usedBy": strconv.Itoa(len(users[e.Index])),
+			// Where it comes from, in the same words the binding catalog uses.
+			"origin": jobTypeDisplayName(e.Index),
+		}
+		facts.JobTypes[e.Name] = panorama.Fact{
+			Source: panorama.SourceWorkers, State: state, Reason: reason, Detail: detail,
+		}
 	}
 
 	// Processes, and the per-application totals they roll up into. The map holds
@@ -102,15 +133,28 @@ func (s *Server) collectLocalFacts(r *http.Request) (panorama.Facts, []remoteTar
 		if !s.canViewArtifact(r, d.ProjectID, d.DeployedBy, projs) {
 			continue
 		}
-		state, reason := processStatus(parked[d.Key])
+		tally := parked[d.Key]
+		state, reason := processStatus(tally.Count)
+		detail := map[string]string{
+			"version":       strconv.FormatInt(int64(d.Version), 10),
+			"instances":     strconv.Itoa(live[d.Key]),
+			"parkedTokens":  strconv.Itoa(tally.Count),
+			"definitionKey": strconv.FormatUint(d.Key, 10),
+		}
+		// Where the worst of it is parked, on the observation as well as on the mesh.
+		// A model overlay that says "degraded" and cannot say where sends somebody to
+		// a second view to find out; one element id spares them that trip, and the
+		// rest of the list is in Operations either way.
+		if len(tally.Sites) > 0 {
+			worst := tally.Sites[0]
+			detail["parkedAt"] = strings.TrimSpace(worst.ElementType + " " + worst.ElementID)
+			if worst.Message != "" {
+				detail["parkedReason"] = worst.Message
+			}
+		}
 		facts.Processes[pid] = panorama.Fact{
 			Source: panorama.SourceDeployments, State: state, Reason: reason,
-			Detail: map[string]string{
-				"version":       strconv.FormatInt(int64(d.Version), 10),
-				"instances":     strconv.Itoa(live[d.Key]),
-				"parkedTokens":  strconv.Itoa(parked[d.Key]),
-				"definitionKey": strconv.FormatUint(d.Key, 10),
-			},
+			Detail: detail,
 		}
 		if d.ProjectID == "" {
 			continue
@@ -118,7 +162,7 @@ func (s *Server) collectLocalFacts(r *http.Request) (panorama.Facts, []remoteTar
 		t := totals[d.ProjectID]
 		t.processes++
 		t.instances += live[d.Key]
-		t.incidents += parked[d.Key]
+		t.incidents += tally.Count
 		totals[d.ProjectID] = t
 	}
 

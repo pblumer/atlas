@@ -550,3 +550,79 @@ func TestObservationsReachARealPeer(t *testing.T) {
 		t.Errorf("the document carries the peer's address: %s", raw)
 	}
 }
+
+// TestJobTypeObservationSaysWhatItCanAndCannotSee. A job type is a name for work,
+// not a thing that can be well or unwell, so the observation answers the question
+// the engine can actually answer — "is this kind of work getting done here" — and
+// stops where the evidence stops.
+//
+// The pair below is the whole point. One type the engine runs itself is healthy on
+// knowledge: it built the handler, so there is nothing outside this process to ask.
+// One nothing has been seen doing is *unbound* rather than broken, because the
+// worker registry is emptied by a restart — a mapping that read an empty registry as
+// "nobody serves this" would mark every worker-served kind broken on every restart.
+func TestJobTypeObservationSaysWhatItCanAndCannotSee(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/applications", `{"name":"Billing"}`, "application/json")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create application: status = %d, body = %s", code, body)
+	}
+	var app struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &app); err != nil {
+		t.Fatalf("decode application: %v", err)
+	}
+
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/panorama/models", mustJSON(t, map[string]any{
+		"applicationId": app.ID, "name": "Job types", "xml": jobTypeBoundArchiMate(),
+	}), "application/json")
+	if code != http.StatusCreated {
+		t.Fatalf("create model: status = %d, body = %s", code, body)
+	}
+	var model struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &model); err != nil {
+		t.Fatalf("decode model: %v", err)
+	}
+
+	doc := getObservations(t, ts, model.ID)
+
+	// The DMN job type is served in this process on any server.
+	state, reason, detail := observedValue(t, doc, "atlas.jobType", "io.atlas.dmn")
+	if state != "healthy" {
+		t.Errorf("a job type the engine runs itself = %q (%s), want healthy", state, reason)
+	}
+	if !strings.Contains(reason, "runs this job type itself") {
+		t.Errorf("reason = %q, want it to say the engine serves this kind", reason)
+	}
+	if detail["origin"] != "Built-in job type" {
+		t.Errorf("detail = %v, want it to say where the type comes from", detail)
+	}
+	if detail["usedBy"] != "0" {
+		t.Errorf("usedBy = %q, want 0 — nothing is deployed on this server", detail["usedBy"])
+	}
+
+	// And one this server has never heard of. The binding does not resolve, so the
+	// observation is about a resource that is not here — which is drift, reported by
+	// the binding resolver, and never a runtime failure invented by this document.
+	state, reason, _ = observedValue(t, doc, "atlas.jobType", "nobody.serves.this")
+	if state != "unbound" {
+		t.Errorf("an unknown job type = %q (%s), want unbound", state, reason)
+	}
+	if !strings.Contains(reason, "nothing to observe") {
+		t.Errorf("reason = %q, want it to say there is nothing here to observe", reason)
+	}
+
+	// The document no longer declares that it cannot observe this kind at all: it
+	// can, and saying otherwise would be the old excuse outliving its cause.
+	code, raw := doReq(t, ts, http.MethodGet, "/api/v1/panorama/models/"+model.ID+"/observations", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("observations status = %d", code)
+	}
+	if strings.Contains(string(raw), "Nothing on this server observes atlas.jobType") {
+		t.Errorf("the document still says it cannot observe job types: %s", raw)
+	}
+}

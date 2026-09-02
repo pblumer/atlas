@@ -172,3 +172,61 @@ func TestProtectedProjectRefusesMutation(t *testing.T) {
 		t.Fatalf("rename ordinary = %d, want 200", got)
 	}
 }
+
+// TestProtectedArtifactRefusesRename covers the newer way to reach a platform-managed
+// artifact: an identity-aware save renames a record by writing it under a new id and
+// *deleting* the one it came from (ADR-0222). The write's own
+// protected check looks at the id being saved onto, which on a rename is a free one —
+// so the record being deleted has to be checked in its own right, or a rename would be
+// the way to take a system draft or form out of the project that protects it.
+func TestProtectedArtifactRefusesRename(t *testing.T) {
+	srv := newServerForErrors(t)
+	h := srv.Handler()
+
+	// Seed one of each inside the protected system project, past the HTTP guards that
+	// would refuse putting them there.
+	if err := srv.drafts.Save(draft{ProcessID: "sys-proc", Name: "System", ProjectID: systemProjectID, XML: draftBody}); err != nil {
+		t.Fatalf("seed system draft: %v", err)
+	}
+	if err := srv.forms.Save(form{ID: "sys-form", Name: "System", ProjectID: systemProjectID, Schema: `{"type":"default","components":[]}`}); err != nil {
+		t.Fatalf("seed system form: %v", err)
+	}
+
+	do := func(method, path, body string) int {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		// An admin principal, so the case doubles as "not even an admin".
+		req = req.WithContext(httpapi.WithPrincipal(req.Context(), &httpapi.Principal{UserID: "a1", Roles: []string{RoleAdmin}}))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	renamedDraft := strings.Replace(draftBody, `id="p"`, `id="stolen"`, 1)
+	if renamedDraft == draftBody {
+		t.Fatal("draftBody no longer carries id=\"p\"; fix this test's rename")
+	}
+	// Both attempts also try to drop the artifact into Ungrouped on the way out, which
+	// is what would slip past a check that only looks at the destination.
+	if got := do(http.MethodPost, "/api/v1/drafts?from=sys-proc&projectId=", renamedDraft); got != http.StatusForbidden {
+		t.Fatalf("rename system draft = %d, want 403", got)
+	}
+	if got := do(http.MethodPost, "/api/v1/forms",
+		`{"id":"stolen-form","schema":{"type":"default","components":[]},"from":"sys-form","projectId":""}`); got != http.StatusForbidden {
+		t.Fatalf("rename system form = %d, want 403", got)
+	}
+
+	// Nothing moved: both are still filed under the protected project, and neither new
+	// id exists.
+	if _, ok, err := srv.drafts.Get("stolen"); err != nil || ok {
+		t.Fatalf("renamed draft was written anyway (ok=%v err=%v)", ok, err)
+	}
+	if _, ok, err := srv.forms.Get("stolen-form"); err != nil || ok {
+		t.Fatalf("renamed form was written anyway (ok=%v err=%v)", ok, err)
+	}
+	if rec, ok, err := srv.drafts.Get("sys-proc"); err != nil || !ok || rec.ProjectID != systemProjectID {
+		t.Fatalf("system draft = %+v ok=%v err=%v, want still in the system project", rec, ok, err)
+	}
+	if rec, ok, err := srv.forms.Get("sys-form"); err != nil || !ok || rec.ProjectID != systemProjectID {
+		t.Fatalf("system form = %+v ok=%v err=%v, want still in the system project", rec, ok, err)
+	}
+}

@@ -147,9 +147,11 @@ func TestObserveDeclaresItCanSeeEverything(t *testing.T) {
 	if doc.Unavailable == nil {
 		t.Error("unavailable is null rather than an empty list; the claim is only legible if it is there")
 	}
-	// And the mesh still has two, from its own list.
-	if len(unobservable) != 2 {
-		t.Errorf("the mesh declares %d unavailable states, want unreachable and stale", len(unobservable))
+	// And a landscape that drew no peer still declares two, from its own list — the
+	// two lists were only ever identical while neither surface could reach anything.
+	if len(unobservableWithoutPeers) != 2 {
+		t.Errorf("a peerless landscape declares %d unavailable states, want unreachable and stale",
+			len(unobservableWithoutPeers))
 	}
 	// An empty model still answers with collections rather than nulls: the renderer
 	// iterates them.

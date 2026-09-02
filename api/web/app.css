@@ -19,6 +19,14 @@
   --danger-soft: #fdecea;
   --warn: #b7791f;
   --warn-soft: #fef6e7;
+  /* The amber the landscape's status marks use, and deliberately not --warn.
+     The two are solving different problems: --warn is text and thin borders on
+     pale backgrounds, where luminance contrast is what makes it readable, and it
+     is tuned dark for that. A mark on a canvas is not read, it is *noticed* — and
+     what draws the eye there is saturation, which is why the muted ochre above
+     disappears as a ring on a tinted circle while this does not. Kept out of the
+     dense views for the same reason it is used here. */
+  --mesh-attention: #d97706;
   --ok: #2d8a4e;
   --topbar-h: 48px;
   --radius: 8px;
@@ -284,11 +292,29 @@ textarea::placeholder {
 .stat span { font-size: 12px; color: var(--muted); }
 .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 .chip { display: inline-block; font: 12px/1.6 ui-monospace, monospace; padding: 1px 7px; border-radius: 5px; background: var(--bg); border: 1px solid var(--border); white-space: nowrap; }
+
+/* Artifact id availability (ADR-0222). A draft is stored under its
+   process id and a form under its own id, so those fields are the artifact's identity:
+   an id another artifact already holds is refused at Save, and the field says so while
+   it is being typed rather than after. `.id-taken` is that collision; `.id-pending` is
+   a form id retyped but not yet saved — the rename is real once Save runs. */
+.field input.id-taken,
+.field input[type="text"].id-taken,
+.chip.id-taken { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
+.field input.id-taken:focus,
+.field input[type="text"].id-taken:focus { border-color: var(--danger); box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.18); }
+.chip.id-pending { border-style: dashed; border-color: var(--accent); }
+.id-check { margin: 4px 0 10px; font-size: 12px; color: var(--danger); }
+/* The form editor's collision note sits in the toolbar beside the id chip. */
+.id-warn { font-size: 12px; color: var(--danger); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46ch; }
 .pill.ok { background: #e7f6ec; color: var(--ok); }
 .pill.err { background: #fdecea; color: var(--danger); }
 .pill.warn { background: #fdf3e2; color: #b26b00; }
+/* Nobody is there: the quietest pill there is, because "offline" is the resting
+   state of most of a user list and must not read as a warning (presence.go). */
+.pill.off { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
-.pill.err .dot, .pill.warn .dot { background: currentColor; }
+.pill.err .dot, .pill.warn .dot, .pill.off .dot { background: currentColor; }
 /* A pill can be the link to what it counts — the incident flag in the Operations
    lists opens the version (or instance) it is about (ADR-0150). */
 /* Deployed, but something in the model will not resolve at runtime (ADR-0158). */
@@ -533,6 +559,14 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    name), and it is the one part a reader can reconstruct from the canvas. */
 .editor-bar > .crumbs { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .editor-bar > .btn { flex: none; }
+/* The overflow menu at the end of the bar (ADR-0229). It borrows
+   the .dropdown-menu look but not app.js's delegated machinery — see wireBarMenu — so it
+   is placed here rather than by placeMenu's viewport coordinates. The bar sits in a
+   position:fixed .editor with nothing clipping it, so absolute is enough. */
+.editor-bar > .dropdown { flex: none; display: flex; }
+.editor-bar .dropdown-menu { position: absolute; left: auto; right: 0; top: calc(100% + 4px); }
+.editor-bar .bar-more { font-size: 20px; line-height: 1; padding: 3px 9px; }
+.editor-bar .bar-more[aria-expanded="true"] { background: var(--bg); border-color: var(--border); color: var(--text); }
 .editor-bar .etabs button { background: none; border: none; padding: 8px 12px; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
 .editor-bar .etabs button.active { color: var(--text); border-bottom-color: var(--accent); }
 .editor-bar .crumbs { color: var(--muted); font-size: 13px; margin-right: 6px; }
@@ -2546,7 +2580,13 @@ tr[hidden] { display: none; }
 .vars-group.collapsed .vars-group-body { display: none; }
 .var-row[draggable="true"] { cursor: grab; }
 .var-row[draggable="true"]:active { cursor: grabbing; }
-#vars-toggle.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+/* Token simulation and Variables are rows in the editor bar's overflow menu now
+   (ADR-0229). A menu row says "on" with a check at its end — the
+   solid accent fill these two used to take is how a *button* reads as held down, and on
+   a menu row it reads as the row under the pointer instead. */
+.dropdown-menu button.active { color: var(--accent); }
+.dropdown-menu button.active .mi-icon { color: var(--accent); }
+.dropdown-menu button.active::after { content: "\2713"; margin-left: auto; padding-left: 14px; font-weight: 600; }
 
 /* ---------- Sharing scopes (ADR-0071): visibility pill + share dialog ---------- */
 .pill.vis { background: var(--bg); color: var(--muted); border: 1px solid var(--border); margin-left: 8px; vertical-align: middle; }
@@ -2648,9 +2688,6 @@ tr[hidden] { display: none; }
 /* ---------- Token simulation (Design view, ADR-0078) ---------- */
 /* A client-side walkthrough: tokens move along sequence flows so the control flow
    reads at a glance. No engine, no deploy — a teaching aid on the unsaved diagram. */
-.sim-toggle.active {
-  background: var(--accent); color: #fff; border-color: var(--accent);
-}
 /* In simulation mode the diagram is driven by tokens, not edited: hide the modeling
    affordances so clicks mean "spawn / choose a path", not "add a shape". */
 .editor.sim-active .djs-palette,
@@ -3118,6 +3155,25 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .admock-ops { margin-top: 12px; }
 .admock-ops > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 
+/* ---------- Mock database journal (ADR-0224) ---------- */
+/* The mock directory's sibling, and deliberately flatter: there is no tree here
+   because this mockup holds no state — what it has is a sequence, and a sequence
+   reads best as rows. */
+.sqlmock-table { width: 100%; margin-top: 4px; }
+/* Scoped to the table so it outranks .admock-attrs td, which sets padding: 2px 0 and
+   would otherwise run the sequence number straight into the statement ("1SELECT …"). */
+.sqlmock-table .sqlmock-seq {
+  width: 1%; padding: 2px 14px 2px 0; text-align: right;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.sqlmock-stmt { white-space: pre-wrap; overflow-wrap: anywhere; }
+.sqlmock-bound { margin-top: 2px; font-size: 12px; }
+/* A statement nobody seeded is the entry an operator came here for: it is what they
+   paste into the prepared answers. So it is coloured, not merely listed. */
+.sqlmock-failed .sqlmock-stmt { color: var(--err, #b3261e); }
+.sqlmock-detail { margin-top: 2px; font-size: 12px; color: var(--err, #b3261e); overflow-wrap: anywhere; }
+.sqlmock-table tr + tr > td, .sqlmock-table tr + tr > th { padding-top: 8px; }
+
 /* ---------- Secret shape hints (ADR-0155) ---------- */
 /* A vault secret is a name and an opaque string, so the form has to say what the
    string is for: which connector resolves it and what shape that connector needs. */
@@ -3435,7 +3491,18 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
      the worse failure on a touch screen, and the zoom buttons stay reachable. */
   touch-action: pan-y;
 }
-.mesh-canvas { display: block; width: 100%; height: 100%; background: var(--surface); }
+.mesh-canvas {
+  display: block; width: 100%; height: 100%; background: var(--surface);
+  /* Nodes are dragged across this surface, and a drag over text selects it. There is
+     nothing here worth selecting — the names are decoration on shapes — and a blue
+     smear of half-selected labels trailing a drag is the picture telling somebody
+     their gesture went to the browser rather than to the graph. */
+  user-select: none; -webkit-user-select: none;
+}
+/* A touch that starts on a node is a drag, so the browser must not take it for a
+   scroll; the background keeps pan-y, where scrolling the page is still what a
+   vertical swipe should do. */
+.mesh-node { touch-action: none; }
 /* Grab only where there is something to grab: at the fitted frame the whole
    landscape is already on screen and dragging is deliberately inert. */
 .mesh-canvas.mesh-zoomed { cursor: grab; }
@@ -3492,16 +3559,79 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .mesh-relating .mesh-related-edge { opacity: 1; stroke: var(--accent); stroke-width: 2.5; }
 .mesh-relating .mesh-related .mesh-label-ink,
 .mesh-relating .mesh-relating-self .mesh-label-ink { opacity: 1; }
+/* Colour on the neighbours as well as on the edges, because lifting them out of the
+   fade only says "these are still here" — a ring in the accent says "these are the
+   ones". It is a ring outside the circle rather than a recolouring of it: the body's
+   own stroke is carrying the severity (ADR-0211 §4), and painting over a red node to
+   say "connected" would trade a finding for a hint. The node in hand takes the
+   stronger ring, so it is never in doubt which one is being asked about. */
+.mesh-halo { fill: none; stroke: var(--accent); stroke-width: 0; opacity: 0; }
+.mesh-relating .mesh-related .mesh-halo {
+  stroke-width: 2.5; opacity: 0.7; transition: opacity 90ms linear;
+}
+.mesh-relating .mesh-relating-self .mesh-halo { stroke-width: 3.5; opacity: 1; }
 .mesh-relating .mesh-relating-self .mesh-body { stroke: var(--accent); stroke-width: 3; }
 /* The hovered node paints over its neighbours, so its name is legible even where
    the graph is at its densest. SVG has no z-index, so this is document order. */
 .mesh-node:hover, .mesh-node:focus-visible { transform-box: fill-box; }
-.mesh-node:hover circle, .mesh-node:focus-visible circle { stroke-width: 3; }
+.mesh-node:hover .mesh-body, .mesh-node:focus-visible .mesh-body { stroke-width: 3; }
 .mesh-count { font-size: 12px; font-weight: 600; fill: var(--accent); }
-.mesh-node { cursor: default; }
+/* A heartbeat on the nodes that have a finding.
+   Motion is the one channel a landscape has left once colour, size, shape and a
+   glyph are all carrying something — and it is the channel the eye finds without
+   being pointed at it, which is exactly what a view somebody glances at needs.
+
+   The worse the state, the *less* pulse, which is the metaphor read honestly rather
+   than backwards: a process that is degraded is still working and beats quickly and
+   twice, like something under strain; one that cannot do work at all beats once,
+   slowly and heavily. A landscape of quick pulses is busy and coping; a landscape of
+   slow ones is in trouble. Each keeps its own severity colour (§4) instead of both
+   going red, because "it is broken" and "something inside it went wrong" are the two
+   findings this view exists to tell apart.
+
+   The ring is a circle of its own under the node, so the body's stroke goes on
+   carrying the severity and the fill goes on carrying the kind, and the beat is
+   added to the picture rather than taken out of it. */
+.mesh-beat { fill: none; stroke-width: 2.5; opacity: 0; pointer-events: none; }
+.mesh-sev-attention .mesh-beat { stroke: var(--mesh-attention); }
+.mesh-sev-critical .mesh-beat { stroke: var(--danger); }
+@keyframes mesh-beat-quick {
+  0% { transform: scale(1); opacity: 0.6; }
+  9% { transform: scale(1.5); opacity: 0; }
+  14% { transform: scale(1); opacity: 0.5; }
+  23% { transform: scale(1.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 0; }
+}
+@keyframes mesh-beat-slow {
+  0% { transform: scale(1); opacity: 0.75; }
+  18% { transform: scale(1.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 0; }
+}
+.mesh-beating .mesh-sev-attention .mesh-beat {
+  animation: mesh-beat-quick 1.15s ease-out infinite;
+}
+.mesh-beating .mesh-sev-critical .mesh-beat {
+  animation: mesh-beat-slow 3s ease-out infinite;
+}
+/* Past the budget, and for anybody who has asked their system for less movement, the
+   ring stays and stops moving. The finding is still marked; it has simply stopped
+   competing for attention it no longer needs to win. */
+.mesh-canvas:not(.mesh-beating) .mesh-beat { opacity: 0.35; }
+@media (prefers-reduced-motion: reduce) {
+  .mesh-beating .mesh-beat { animation: none; opacity: 0.35; }
+}
+/* Dragging a node. The cursor says the bubbles are things you can pick up before
+   anybody tries, and the mark says which ones somebody already has: a node that is
+   not where the layout put it is a fact about the picture, and hiding it would make
+   the arrangement look like the simulation's own answer. */
+.mesh-node { cursor: grab; }
+.mesh-node:active { cursor: grabbing; }
+.mesh-pin { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; opacity: 0; }
+.mesh-pinned .mesh-pin { opacity: 1; }
+.mesh-zoom button:disabled { opacity: 0.45; cursor: default; }
 a .mesh-node { cursor: pointer; }
-a:hover .mesh-node circle { stroke-width: 3; }
-a:focus-visible .mesh-node circle { stroke: var(--accent); stroke-width: 3; }
+a:hover .mesh-node .mesh-body { stroke-width: 3; }
+a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; }
 .mesh-search {
   flex: 1; min-width: 0; max-width: 320px; padding: 6px 10px;
   border: 1px solid var(--border-strong); border-radius: 6px;
@@ -3509,6 +3639,28 @@ a:focus-visible .mesh-node circle { stroke: var(--accent); stroke-width: 3; }
 }
 .mesh-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mesh-empty-filter { margin: 0; padding: 32px; text-align: center; color: var(--muted); }
+/* Being inside a drilldown is a place you are standing, not a setting you have
+   changed — so it is stated in the header where the picture is described, with the
+   way out on the same control. */
+.mesh-drill-chip {
+  flex: none; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 5px 10px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--accent); border-radius: 999px;
+  background: var(--accent-soft); color: var(--text);
+}
+.mesh-drill-chip:hover { border-color: var(--accent-hover); }
+.mesh-drill-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mesh-unpin {
+  align-self: flex-start; padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--bg); color: var(--text);
+}
+.mesh-unpin:hover { border-color: var(--accent); }
+/* A filtered node on its own answers "does this exist" and nothing else, so the
+   filter keeps one hop of neighbourhood around every match. Those are context rather
+   than results, and are drawn as such: a search that presented things which do not
+   match the search as matches would be a worse answer than the empty field. */
+.mesh-context { opacity: 0.55; }
 
 /* Impact analysis (ADR-0211 §6). The canvas and the panel are one answer: the
    highlight says which, the panel says how many and whether the count is a floor. */
@@ -3536,9 +3688,91 @@ a:focus-visible .mesh-node circle { stroke: var(--accent); stroke-width: 3; }
 /* A truncated answer is a warning, not a footnote: the number above it is a floor. */
 .mesh-truncated { color: var(--warn); }
 .mesh-drill { font-size: 13px; }
-.mesh-node { cursor: pointer; }
-.mesh-node:focus-visible circle { stroke: var(--accent); stroke-width: 3; }
-.mesh-in-impact circle { stroke-width: 3; }
+/* Findings: the same nodes the picture marks, as an index. On four hundred circles,
+   spotting three red dots is hunting, and hunting is what somebody does instead of
+   noticing — so the findings are also a list, worst first, and clicking one goes
+   there. */
+.mesh-findings { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.mesh-findings-head { display: flex; align-items: baseline; gap: 6px; justify-content: space-between; }
+.mesh-findings-head .muted { font-size: 11px; }
+.mesh-findings-list {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px;
+  /* Bounded, because the sidebar is not the page: a hundred findings must not push
+     the saved views off the bottom of a column somebody is trying to use. */
+  max-height: 220px; overflow-y: auto;
+}
+.mesh-finding-go {
+  display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left;
+  padding: 5px 8px; font: inherit; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); border-left-width: 3px; border-radius: 6px;
+  background: var(--surface); color: var(--text);
+}
+.mesh-finding-go:hover { border-color: var(--accent); }
+.mesh-finding-go.mesh-sev-critical { border-left-color: var(--danger); }
+.mesh-finding-go.mesh-sev-attention { border-left-color: var(--mesh-attention); }
+.mesh-finding-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mesh-finding-state { color: var(--muted); font-size: 11px; }
+/* The sentence behind the finding, clamped: an operator needs to see there is one
+   and read it on the node itself, and three lines of reason each would turn the list
+   back into the thing it replaced. */
+.mesh-finding-why {
+  color: var(--muted); font-size: 11px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.mesh-findings :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Where in the process the parked work is. Indented under the finding it belongs to,
+   because an element id is only meaningful with the process it is in — the same
+   reason a collapsed application carries no sites at all. */
+.mesh-sites {
+  list-style: none; margin: 2px 0 0; padding: 0 0 0 10px;
+  border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 3px;
+}
+.mesh-sites li { display: flex; flex-direction: column; gap: 1px; font-size: 11px; }
+.mesh-site-where code { font-size: 11px; }
+.mesh-site-count { color: var(--warn); font-weight: 600; }
+.mesh-site-why {
+  color: var(--muted);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* Saved views. A landscape somebody watches is a setup — a filter, a zoom, an
+   arrangement — and without this it has to be rebuilt on every visit. The list is
+   names because opening one changes five controls at once; a name is the only handle
+   small enough to keep in a column this narrow. */
+.mesh-views { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.mesh-views-head { display: flex; align-items: baseline; gap: 6px; justify-content: space-between; }
+.mesh-views-head .muted { font-size: 11px; }
+.mesh-view-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.mesh-view-list li { display: flex; gap: 4px; align-items: stretch; }
+.mesh-view-empty { color: var(--muted); font-size: 12px; padding: 2px 0; }
+.mesh-view-open {
+  flex: 1; min-width: 0; text-align: left; padding: 5px 8px; font: inherit; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+  color: var(--text); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mesh-view-open:hover { border-color: var(--accent); }
+.mesh-view-drop {
+  flex: none; width: 26px; padding: 0; font: inherit; font-size: 15px; line-height: 1;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+  color: var(--muted); cursor: pointer;
+}
+.mesh-view-drop:hover { color: var(--danger); border-color: var(--danger); }
+.mesh-view-save { display: flex; gap: 4px; }
+.mesh-view-save input {
+  flex: 1; min-width: 0; padding: 5px 8px; font: inherit; font-size: 13px;
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--surface); color: var(--text);
+}
+.mesh-view-save button {
+  flex: none; padding: 5px 10px; font: inherit; font-size: 13px;
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--bg); color: var(--text); cursor: pointer;
+}
+.mesh-view-save button:hover { border-color: var(--accent); }
+.mesh-views :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mesh-node:focus-visible .mesh-body { stroke: var(--accent); stroke-width: 3; }
+.mesh-in-impact .mesh-body { stroke-width: 3; }
 line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 /* Dimmed rather than hidden: the rest of the landscape stays visible as context,
    so an impact set reads as a part of the whole rather than as the whole. */
@@ -3579,10 +3813,24 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
    one. Node fills stay as the kind and the ArchiMate layer set them (ADR-0189 §6). */
 .mesh-badge-dot { fill: var(--surface); stroke: var(--border-strong); stroke-width: 1.5; }
 .mesh-badge-glyph { font-size: 10px; font-weight: 700; fill: var(--text); }
+/* Both findings are drawn as a *filled* badge, and that is the correction.
+   Critical always was; attention was a pale wash inside a thin ochre outline, so
+   the two classes differed in form as well as in colour — and the form was doing
+   most of the work. A tinted outline beside a solid disc does not read as "less
+   urgent", it reads as "not really a finding", which is not what attention means.
+   Each keeps its own hue, and each takes the glyph colour that is legible on it:
+   white on the red, near-black on the amber. */
 .mesh-sev-critical .mesh-badge-dot { fill: var(--danger); stroke: var(--danger); }
 .mesh-sev-critical .mesh-badge-glyph { fill: #fff; }
-.mesh-sev-attention .mesh-badge-dot { fill: var(--warn-soft); stroke: var(--warn); }
-.mesh-sev-attention .mesh-badge-glyph { fill: var(--warn); }
+.mesh-sev-attention .mesh-badge-dot { fill: var(--mesh-attention); stroke: var(--mesh-attention); }
+.mesh-sev-attention .mesh-badge-glyph { fill: #241a05; }
+/* A node with a finding wears a heavier ring than one without. Colour alone had to
+   carry the whole difference before, at the same weight as every other outline on
+   the canvas; weight is the channel that survives being small, being zoomed out,
+   and being looked at by somebody who does not separate red from amber. */
+.mesh-sev-attention .mesh-body, .mesh-sev-critical .mesh-body { stroke-width: 3.5; }
+.mesh-node.mesh-sev-attention:hover .mesh-body,
+.mesh-node.mesh-sev-critical:hover .mesh-body { stroke-width: 4.5; }
 .mesh-sev-unknown .mesh-badge-dot { fill: var(--bg); stroke: var(--muted); }
 .mesh-sev-unknown .mesh-badge-glyph { fill: var(--muted); }
 .mesh-sev-glyph { font-size: 10px; font-weight: 700; fill: var(--text); }
@@ -3665,12 +3913,14 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .editor.pg-active .editor-body {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr) 330px;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
-    "setup canvas analysis"
-    "setup results analysis";
+    "setup overlay  analysis"
+    "setup canvas   analysis"
+    "setup results  analysis";
 }
 .editor.pg-active #pg-setup { grid-area: setup; border-left: 0; border-right: 1px solid var(--border); }
+.editor.pg-active #pg-overlay { grid-area: overlay; }
 .editor.pg-active #canvas { grid-area: canvas; height: auto; min-width: 0; min-height: 0; }
 .editor.pg-active #pg-results { grid-area: results; }
 .editor.pg-active #pg-panel { grid-area: analysis; }
@@ -3682,6 +3932,33 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 @media (max-width: 1400px) {
   .editor.pg-active .editor-body { grid-template-columns: 252px minmax(0, 1fr) 280px; }
 }
+
+/* The overlay switcher, over the diagram: which of the run's four measures shades
+   it, and the scale that shading means. On the canvas rather than in a column
+   because it is a control for the canvas — and a legend has to sit beside the thing
+   it explains, or it is a key to a map on another page. */
+.pg-overlay {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  padding: 5px 10px; border-bottom: 1px solid var(--border); background: var(--surface);
+  font-size: 12px;
+}
+.pg-overlay > div { display: contents; }
+.pg-overlay button {
+  padding: 3px 9px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--muted); font: 500 11.5px/1.4 inherit; cursor: pointer;
+}
+.pg-overlay button:hover { color: var(--text); }
+.pg-overlay button.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+/* The scale, in the same five shades the diagram uses. A colour means nothing until
+   it says what its darkest end is worth. */
+.pg-scale { display: inline-flex; align-items: center; gap: 3px; }
+.pg-scale i { display: inline-block; width: 16px; height: 8px; border-radius: 2px; }
+.pg-heat-key-1 { background: #7aa7ff; }
+.pg-heat-key-2 { background: #4d86ff; }
+.pg-heat-key-3 { background: #c07ad6; }
+.pg-heat-key-4 { background: #e8783c; }
+.pg-heat-key-5 { background: #d93025; }
 
 /* A per-case rule is two lines — which cases, and what they have to show — because
    both halves are expressions and neither fits beside the other in a column this
@@ -3728,6 +4005,18 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .pg-results-scroll { overflow: auto; min-height: 0; }
 .pg-cases { min-width: 100%; }
 .pg-cases th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
+/* A row is a way into its own case, so it looks like one. The open row stays marked
+   while the diagram shows it: the number in the strip and the row under it have to
+   be visibly the same case. */
+.pg-cases tbody tr { cursor: pointer; }
+.pg-cases tbody tr.pg-open { background: var(--accent-soft); }
+.pg-cases tbody tr.pg-open td:first-child {
+  font-weight: 600; color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* While a case is on the diagram the strip names it instead of offering measures. */
+.pg-overlay b { font-weight: 600; }
 /* And so do the modelling affordances. The Playground *runs* the diagram — the
    sandbox compiled the model as it stood when it started, so a shape added here
    would not be in what is running, and the palette offering it is the panel
@@ -3824,6 +4113,7 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .pg-facts > div {
   flex: 1 1 60px; padding: 6px 8px; border: 1px solid var(--border);
   border-radius: 6px; background: var(--bg); min-width: 0;
+  display: flex; flex-direction: column; gap: 4px;
 }
 .pg-facts b { display: block; font-size: 15px; color: var(--text); }
 .pg-facts b.bad { color: var(--danger); }
@@ -3853,7 +4143,48 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .pg-key-in { background: var(--accent); opacity: .35; }
 .pg-key-out { background: var(--ok); opacity: .45; }
 .pg-key-flight { background: var(--warn); }
-.pg-axis { display: flex; justify-content: space-between; margin: 0 8px 4px; font-size: 10.5px; color: var(--muted); }
+.pg-axis { display: flex; justify-content: space-between; gap: 6px; margin: 0 8px 4px; font-size: 10.5px; color: var(--muted); }
+
+/* The arrival stream before it runs: an area under a line, one hue, scaled to its
+   own fullest slice. It is drawn small on purpose — it sits between the timing
+   boxes and the expectations, and its job is to show the *shape* the numbers make
+   (a Poisson burst is not a takt) while the exact counts stay in the line under it
+   and in the per-slice tooltips. */
+.pg-spark { display: block; width: calc(100% - 16px); height: 34px; margin: 6px 8px 2px; }
+.pg-spark-fill { fill: var(--accent); opacity: .12; }
+.pg-spark-line { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.pg-spark-hit { fill: transparent; }
+.pg-spark-note { margin: 0 8px 6px; font-size: 11px; }
+
+/* A number with its own magnitude under it: a track along the foot of the cell or
+   the tile, filled to the value's share of the column's scale.
+   The empty part of the track is what makes it a gauge. Without it a full value
+   underlines itself and a small one reads as a stray mark; with it, one glance down
+   the column says which row is the big one. The number stays in text ink beside it,
+   so nothing here is carried by a length alone. */
+.pg-track {
+  display: block; height: 3px; margin-top: 4px; border-radius: 999px;
+  background: var(--border); overflow: hidden;
+}
+.pg-track i { display: block; height: 100%; border-radius: 999px; background: var(--accent); opacity: .55; }
+/* In a table the track is lifted out of the flow into a strip every row reserves,
+   so one number's gauge does not sit its own cell's text higher than the cells
+   beside it. */
+.pg-bottlenecks td, .pg-pools td, .pg-cases td { padding-bottom: 9px; }
+.pg-meter { position: relative; min-width: 52px; }
+.pg-meter .pg-track { position: absolute; left: 6px; right: 6px; bottom: 3px; margin: 0; }
+/* On a tile the gauges are compared with each other, so they sit on one line at the
+   foot of their tiles however many lines the number above them wrapped to. */
+.pg-facts .pg-track { margin-top: auto; }
+
+/* Where the cases came out. The end event carries the name somebody drew, which is
+   a phrase rather than an id, so it wraps where the counts beside it do not. An end
+   event the run never reached keeps its row and says so by being recessive — the
+   branch nobody took is a finding, and a row that looked like the others would let
+   a zero pass for a number. */
+.pg-ends td { padding-bottom: 9px; }
+.pg-ends td:first-child { white-space: normal; width: 99%; }
+.pg-ends tr.pg-unreached td { color: var(--muted); }
 
 /* The paths the data never took, listed rather than only shaded: on a large
    diagram a cold branch is easier to read from a list than to find by colour. */

@@ -90,27 +90,14 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Ad.Retries },
 		compile: compileAdConnectorTask,
 	},
-	{
-		present: func(st xmlServiceTask) bool { return st.MsSql != nil },
-		retries: func(st xmlServiceTask) string { return st.MsSql.Retries },
-		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
-			return compileSqlConnectorTask(b, st, retries, sqlProducts[MsSqlJobType])
-		},
-	},
-	{
-		present: func(st xmlServiceTask) bool { return st.MariaDB != nil },
-		retries: func(st xmlServiceTask) string { return st.MariaDB.Retries },
-		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
-			return compileSqlConnectorTask(b, st, retries, sqlProducts[MariaDBJobType])
-		},
-	},
-	{
-		present: func(st xmlServiceTask) bool { return st.Postgres != nil },
-		retries: func(st xmlServiceTask) string { return st.Postgres.Retries },
-		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
-			return compileSqlConnectorTask(b, st, retries, sqlProducts[PostgresJobType])
-		},
-	},
+	// The three SQL products, in their registry positions. Each is built from the
+	// product table rather than written out, so which extension element a product is
+	// read from is stated once — the way to get this wrong by hand is an entry whose
+	// `present` tests one product's element and whose `compile` names another's, which
+	// compiles a MariaDB task as if it were a SQL Server one.
+	sqlConnectorCompiler(MsSqlJobType),
+	sqlConnectorCompiler(MariaDBJobType),
+	sqlConnectorCompiler(PostgresJobType),
 	{
 		present: func(st xmlServiceTask) bool { return st.Entra != nil },
 		retries: func(st xmlServiceTask) string { return st.Entra.Retries },
@@ -481,6 +468,20 @@ var sqlProducts = map[string]sqlProduct{
 	MsSqlJobType:    {kind: "mssql connector", jobType: MsSqlJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.MsSql }},
 	MariaDBJobType:  {kind: "mariadb connector", jobType: MariaDBJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.MariaDB }},
 	PostgresJobType: {kind: "postgres connector", jobType: PostgresJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.Postgres }},
+}
+
+// sqlConnectorCompiler is the registry entry for one SQL product. All three read the
+// same fields and compile through the same function; what a product contributes is the
+// extension element it is read from, which sqlProducts already holds.
+func sqlConnectorCompiler(jobType string) connectorCompiler {
+	p := sqlProducts[jobType]
+	return connectorCompiler{
+		present: func(st xmlServiceTask) bool { return p.ext(st) != nil },
+		retries: func(st xmlServiceTask) string { return p.ext(st).Retries },
+		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+			return compileSqlConnectorTask(b, st, retries, p)
+		},
+	}
 }
 
 // sqlOps is the set of operations a SQL connector task can author. query returns
@@ -1508,13 +1509,20 @@ type jiraOp struct {
 	needsComment    bool
 	needsAssignee   bool
 	needsJQL        bool
+	// needsQuery marks search-users: the fragment of a name or an address an account is
+	// looked up by. Not a reuse of needsJQL, because the two are different languages.
+	needsQuery bool
 	// takesSummary allows summary and description (create, and an update that changes
 	// them); takesComment a comment body alongside another operation; takesFields the
-	// extra issue fields; takesSearch the search's own maxResults.
+	// extra issue fields; takesSearch a search's own maxResults.
 	takesSummary bool
 	takesComment bool
 	takesFields  bool
 	takesSearch  bool
+	// takesProject allows a project without requiring it, and without the issue type that
+	// creating an issue always pairs it with: an account search may name one to restrict
+	// itself to the accounts that project can assign.
+	takesProject bool
 	// needsResult marks an operation whose whole point is what it returns: a read that
 	// discards its answer is a call made for nothing. takesResult marks one that
 	// returns something a model may keep or discard — and, by its absence, the three
@@ -1529,7 +1537,9 @@ type jiraOp struct {
 
 // jiraOps is the operation table: the loop a process actually runs against an issue
 // tracker — open a ticket, read it, change it, move it through its workflow, say
-// something on it, hand it to somebody, and find the ones that match.
+// something on it, hand it to somebody, find the ones that match, and look up the
+// account to hand one to. It mirrors connector/jira.Ops, which the drift test
+// TestJiraOpsMatchTheConnector keeps honest.
 var jiraOps = map[string]jiraOp{
 	"create-issue":     {needsProject: true, needsSummary: true, takesSummary: true, takesFields: true, takesResult: true},
 	"get-issue":        {needsIssue: true, needsResult: true, takesResult: true},
@@ -1538,6 +1548,7 @@ var jiraOps = map[string]jiraOp{
 	"add-comment":      {needsIssue: true, needsComment: true, takesComment: true, takesResult: true},
 	"assign-issue":     {needsIssue: true, needsAssignee: true},
 	"search":           {needsJQL: true, takesSearch: true, needsResult: true, takesResult: true},
+	"search-users":     {needsQuery: true, takesProject: true, takesSearch: true, needsResult: true, takesResult: true},
 }
 
 // jiraOpNames lists the operations, sorted, for the messages that have to say what was
@@ -1581,7 +1592,8 @@ func compileJiraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		why      string
 	}{
 		{"issueKey", cn.IssueKey, spec.needsIssue, spec.needsIssue, "the issue key or id the operation addresses (e.g. OPS-42)"},
-		{"project", cn.Project, spec.needsProject, spec.needsProject, "the project key the issue is created in"},
+		{"project", cn.Project, spec.needsProject, spec.needsProject || spec.takesProject,
+			"the project key: the project an issue is created in, or the one an account search restricts itself to"},
 		{"issueType", cn.IssueType, spec.needsProject, spec.needsProject, "the issue type the issue is created as (e.g. Task)"},
 		{"summary", cn.Summary, spec.needsSummary, spec.takesSummary, "the issue's one-line summary"},
 		{"description", cn.Description, false, spec.takesSummary, "the issue's description"},
@@ -1589,7 +1601,8 @@ func compileJiraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		{"comment", cn.Comment, spec.needsComment, spec.takesComment, "the comment body"},
 		{"assignee", cn.Assignee, spec.needsAssignee, spec.needsAssignee, "the account the issue is assigned to (an accountId on Jira Cloud, a username on Data Center)"},
 		{"jql", cn.JQL, spec.needsJQL, spec.needsJQL, "the JQL query the search runs"},
-		{"maxResults", cn.MaxResults, false, spec.takesSearch, "how many issues a search may return"},
+		{"query", cn.Query, spec.needsQuery, spec.needsQuery, "the name or address fragment an account is looked up by"},
+		{"maxResults", cn.MaxResults, false, spec.takesSearch, "how many results a search may return"},
 		{"resultVariable", cn.ResultVariable, spec.needsResult, spec.takesResult, "the process variable receiving what Jira returned"},
 	}
 	for _, v := range values {
@@ -1643,6 +1656,7 @@ func compileJiraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		{"comment", cn.Comment, &cfg.Comment},
 		{"assignee", cn.Assignee, &cfg.Assignee},
 		{"jql", cn.JQL, &cfg.JQL},
+		{"query", cn.Query, &cfg.Query},
 	} {
 		if strings.TrimSpace(v.raw) == "" {
 			continue

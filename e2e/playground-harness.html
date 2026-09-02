@@ -34,19 +34,34 @@
       <bpmn:extensionElements><zeebe:taskDefinition type="scoring" /></bpmn:extensionElements>
       <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:endEvent id="done" name="Entschieden"><bpmn:incoming>f3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:exclusiveGateway id="decide" name="Entscheidung">
+      <bpmn:incoming>f3</bpmn:incoming><bpmn:outgoing>f4</bpmn:outgoing>
+      <bpmn:outgoing>f5</bpmn:outgoing><bpmn:outgoing>f6</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="done" name="Genehmigt"><bpmn:incoming>f4</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="rejected" name="Abgelehnt"><bpmn:incoming>f5</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="manual" name="Zur Handprüfung"><bpmn:incoming>f6</bpmn:incoming></bpmn:endEvent>
     <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
     <bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="score"/>
-    <bpmn:sequenceFlow id="f3" sourceRef="score" targetRef="done"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="score" targetRef="decide"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="decide" targetRef="done"/>
+    <bpmn:sequenceFlow id="f5" sourceRef="decide" targetRef="rejected"/>
+    <bpmn:sequenceFlow id="f6" sourceRef="decide" targetRef="manual"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="credit">
     <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="review_di" bpmnElement="review"><dc:Bounds x="250" y="160" width="100" height="80"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="score_di" bpmnElement="score"><dc:Bounds x="400" y="160" width="100" height="80"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="done_di" bpmnElement="done"><dc:Bounds x="550" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="decide_di" bpmnElement="decide" isMarkerVisible="true"><dc:Bounds x="550" y="175" width="50" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="done_di" bpmnElement="done"><dc:Bounds x="670" y="82" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="rejected_di" bpmnElement="rejected"><dc:Bounds x="670" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="manual_di" bpmnElement="manual"><dc:Bounds x="670" y="282" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="250" y="200"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="350" y="200"/><di:waypoint x="400" y="200"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="500" y="200"/><di:waypoint x="550" y="200"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><di:waypoint x="575" y="175"/><di:waypoint x="575" y="100"/><di:waypoint x="670" y="100"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><di:waypoint x="600" y="200"/><di:waypoint x="670" y="200"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><di:waypoint x="575" y="225"/><di:waypoint x="575" y="300"/><di:waypoint x="670" y="300"/></bpmndi:BPMNEdge>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
@@ -76,12 +91,14 @@
         duration: { count: 3, minMillis: 3600000, p50Millis: 7200000, p90Millis: 10800000,
                     maxMillis: 10800000, meanMillis: 7200000 },
         elements: {
-          review: { runs: 3, workMillis: 10800000, waitMillis: 10800000, maxWaitMillis: 7200000 },
-          score: { runs: 3, workMillis: 180000, waitMillis: 0, maxWaitMillis: 0 },
+          review: { runs: 3, workMillis: 10800000, waitMillis: 10800000, maxWaitMillis: 7200000, incidents: 0 },
+          // Two tokens parked on the scoring task, so the incidents overlay has
+          // somewhere to be hot that the other three do not.
+          score: { runs: 3, workMillis: 180000, waitMillis: 0, maxWaitMillis: 0, incidents: 2 },
         },
         pools: { clerks: { capacity: 1, served: 3, busyMillis: 10800000,
                            availableMillis: 10800000, maxQueue: 2, utilisationPercent: 100 } },
-        visits: { start: 3, review: 3, score: 3, done: 3 },
+        visits: { start: 3, review: 3, score: 3, decide: 3, done: 2, rejected: 1, manual: 0 },
         timeline: {
           widthMillis: 3600000,
           buckets: [
@@ -138,14 +155,20 @@
         { name: "utilisation at clerks", unit: "percent", before: 100, after: 62, better: false, worse: false },
       ] };
 
-      // One flow the data never took, so the coverage list has something to say.
+      // One branch the data never took, so the coverage list has something to say —
+      // and, with the other two shared unevenly, an outcome split to break down.
       const HEATMAP = {
         maxCount: 3,
         elements: [{ id: "start", count: 3 }, { id: "review", count: 3 },
-                   { id: "score", count: 3 }, { id: "done", count: 3 }],
+                   { id: "score", count: 3 }, { id: "decide", count: 3 },
+                   { id: "done", count: 2 }, { id: "rejected", count: 1 },
+                   { id: "manual", count: 0 }],
         flows: [{ from: "start", to: "review", count: 3 },
                 { from: "review", to: "score", count: 3 },
-                { from: "score", to: "done", count: 0 }],
+                { from: "score", to: "decide", count: 3 },
+                { from: "decide", to: "done", count: 2 },
+                { from: "decide", to: "rejected", count: 1 },
+                { from: "decide", to: "manual", count: 0 }],
       };
 
       const tasks = () => (phase === "parked"
@@ -154,10 +177,10 @@
       const visits = () => ({
         idle: {},
         parked: { start: 1, review: 1 },
-        done: { start: 1, review: 1, score: 1, done: 1 },
+        done: { start: 1, review: 1, score: 1, decide: 1, done: 1 },
       }[phase]);
       const theCase = () => (phase === "done"
-        ? { instanceKey: "5", state: "completed", path: ["start", "review", "score", "done"],
+        ? { instanceKey: "5", state: "completed", path: ["start", "review", "score", "decide", "done"],
             variables: { amount: "12400", decision: "approved" }, incidents: 0 }
         : { instanceKey: "5", state: "active", path: ["start", "review"],
             variables: { amount: "12400" }, incidents: 0 });
@@ -170,7 +193,7 @@
             durationMillis: 0, incidents: 1, end: "", variables: { amount: "5000", kunde: "C" } }
         : { index: i, instanceKey: String(11 + i), state: "completed", started: "2026-03-05T08:00:00Z",
             ended: "2026-03-05T09:12:00Z", durationMillis: 4320000, incidents: 0,
-            end: i % 3 === 0 ? "approved" : "rejected",
+            end: i % 3 === 0 ? "done" : "rejected",
             variables: { amount: i % 3 === 0 ? "12400" : "90", kunde: i % 3 === 0 ? "A" : "B" } }));
       let CASES = makeCases(3);
 
@@ -188,7 +211,20 @@
         if (method === "POST" && /\/cases$/.test(url)) { phase = "parked"; return theCase(); }
         if (method === "GET" && /\/tasks$/.test(url)) return tasks();
         if (method === "GET" && /\/overlay$/.test(url)) return visits();
-        if (method === "GET" && /\/cases\/\d+$/.test(url)) return theCase();
+        if (method === "GET" && /\/cases\/\d+$/.test(url)) {
+          // A case read by key is one of the batch's rows: the third one is the
+          // parked one, so opening it shows a case that is still standing somewhere.
+          const key = url.match(/\/cases\/(\d+)$/)[1];
+          const row = CASES.find((c) => c.instanceKey === key);
+          if (row) {
+            return { instanceKey: key, state: row.state, incidents: row.incidents,
+              variables: row.variables,
+              path: row.state === "completed"
+                ? ["start", "review", "score", "decide", row.end]
+                : ["start", "review"] };
+          }
+          return theCase();
+        }
         if (method === "POST" && /\/tasks\/\d+\/complete$/.test(url)) { phase = "done"; return { completed: true }; }
         if (method === "POST" && /\/run$/.test(url)) {
           return { occurrences: 1, quiescent: true, simTime: "2026-03-05T08:01:00Z", paused: false };
@@ -218,6 +254,26 @@
           };
         }
         if (method === "GET" && /\/heatmap$/.test(url)) return HEATMAP;
+        // The shape of the arrival stream. The server plans it, so the mock derives
+        // the buckets from what was asked rather than returning a fixed picture: a
+        // sparkline that ignored the mode would prove nothing about the wiring.
+        if (method === "POST" && /\/arrivals$/.test(url)) {
+          const mode = (body.arrival || {}).mode || "allAtOnce";
+          if (mode === "sequential") return { scheduled: false, cases: body.count, peak: 0, spanMillis: 0 };
+          // Everything at once has no span to spread over: one slice tall, start and
+          // end the same instant — which is what the planner reports for it too.
+          if (mode === "allAtOnce") {
+            return { scheduled: true, cases: body.count, start: "2026-03-05T08:00:00Z",
+              end: "2026-03-05T08:00:00Z", spanMillis: 0, peak: body.count,
+              buckets: Array.from({ length: 12 }, (_, i) => (i === 0 ? body.count : 0)) };
+          }
+          const buckets = Array.from({ length: 12 }, (_, i) => Math.round(body.count / 12) + (i === 5 ? 3 : 0));
+          return {
+            scheduled: true, cases: body.count,
+            start: "2026-03-05T08:00:00Z", end: "2026-03-05T17:00:00Z",
+            spanMillis: 32400000, peak: Math.max(...buckets), buckets,
+          };
+        }
         // The preview a described dataset asks for. The rows are derived from the
         // description so the spec can check that what was typed reached the server,
         // which is the only half of the generator the browser owns.

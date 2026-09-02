@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/pblumer/atlas/api/panorama"
 	"github.com/pblumer/atlas/model"
@@ -43,8 +44,11 @@ const maxStatusIncidentScan = 2000
 // operator stop believing the color.
 //
 // Runs on the run-loop goroutine, via its caller.
-func (s *Server) incidentsByDefinition() (map[uint64]int, bool, error) {
-	out := map[uint64]int{}
+func (s *Server) incidentsByDefinition() (map[uint64]incidentTally, bool, error) {
+	out := map[uint64]incidentTally{}
+	// sites accumulates by definition and then by element, so several incidents on
+	// one task are one entry with a count rather than one entry each.
+	sites := map[uint64]map[string]*panorama.IncidentSite{}
 	scanned, partial := 0, false
 	err := unlessTruncated(s.store.Incidents(func(_ uint64, v *model.IncidentValue) error {
 		if scanned++; scanned > maxStatusIncidentScan {
@@ -60,13 +64,105 @@ func (s *Server) incidentsByDefinition() (map[uint64]int, bool, error) {
 			// attribute it to, and guessing would be worse than dropping it.
 			return nil
 		}
-		out[pi.ProcessDefKey]++
+		tally := out[pi.ProcessDefKey]
+		tally.Count++
+		out[pi.ProcessDefKey] = tally
+		s.recordIncidentSite(sites, pi.ProcessDefKey, v)
 		return nil
 	}))
 	if err != nil {
 		return nil, false, err
 	}
+	for key, byElement := range sites {
+		tally := out[key]
+		tally.Sites = rankIncidentSites(byElement)
+		out[key] = tally
+	}
 	return out, partial, nil
+}
+
+// incidentTally is what one definition's unresolved incidents amount to: how many
+// there are, and where in its diagram they are parked.
+type incidentTally struct {
+	Count int
+	Sites []panorama.IncidentSite
+}
+
+// maxIncidentSites bounds how many elements one process reports. A process with
+// eleven broken tasks is not eleven findings somebody triages from a landscape
+// view; it is one finding — "this process is in trouble" — and Operations is where
+// the whole list belongs. The bound is on the answer, not on the scan, so the
+// counts above it stay right.
+const maxIncidentSites = 5
+
+// maxIncidentMessage bounds one message. A connector can return a page of HTML as
+// its error, and a panel is not where somebody reads that.
+const maxIncidentMessage = 240
+
+// recordIncidentSite attributes one incident to the element it is parked on.
+//
+// The element index in an incident is compiled-graph local, so it means nothing
+// without the definition that produced it — which is why this resolves through the
+// deployment rather than carrying the number outward. A definition this server no
+// longer holds contributes to the count and to no site: the incident is real, and
+// where it sits is something we can no longer name.
+func (s *Server) recordIncidentSite(sites map[uint64]map[string]*panorama.IncidentSite,
+	key uint64, v *model.IncidentValue) {
+	d, ok := s.deployments[key]
+	if !ok || d.cp == nil {
+		return
+	}
+	id := d.cp.ElementBpmnId(v.ElementId)
+	if id == "" {
+		return
+	}
+	byElement := sites[key]
+	if byElement == nil {
+		byElement = map[string]*panorama.IncidentSite{}
+		sites[key] = byElement
+	}
+	site := byElement[id]
+	if site == nil {
+		site = &panorama.IncidentSite{
+			ElementID:   id,
+			ElementType: d.cp.Node(v.ElementId).Type.String(),
+			Message:     truncateMessage(v.Message),
+		}
+		byElement[id] = site
+	}
+	site.Count++
+}
+
+// rankIncidentSites orders the worst first and cuts to the bound.
+//
+// Deterministic past the count, by element id, because two reads of an unchanged
+// server must produce the same document — a list that reshuffled itself would make
+// the drift journal record changes that never happened.
+func rankIncidentSites(byElement map[string]*panorama.IncidentSite) []panorama.IncidentSite {
+	ranked := make([]panorama.IncidentSite, 0, len(byElement))
+	for _, site := range byElement {
+		ranked = append(ranked, *site)
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		if ranked[i].Count != ranked[j].Count {
+			return ranked[i].Count > ranked[j].Count
+		}
+		return ranked[i].ElementID < ranked[j].ElementID
+	})
+	if len(ranked) > maxIncidentSites {
+		ranked = ranked[:maxIncidentSites]
+	}
+	return ranked
+}
+
+// truncateMessage cuts a message to the bound, marking that it was cut. A silently
+// shortened error reads as a complete one, and somebody would search for a string
+// that does not exist.
+func truncateMessage(message string) string {
+	if len(message) <= maxIncidentMessage {
+		return message
+	}
+	return message[:maxIncidentMessage] + "…"
 }
 
 // processStatus turns a definition's parked-work count into an observation.
@@ -147,4 +243,64 @@ func (s *Server) workerHoldings() (held map[string]bool, polled bool) {
 		}
 	}
 	return held, polled
+}
+
+// jobTypeStatus says what this server can honestly observe about one kind of work.
+//
+// This is the mapping ADR-0189 §6 needs and nobody had chosen, and the reason it
+// stayed unchosen is real: a job type is not a thing that can be well or unwell. It
+// is a *name for work*, and the states in §6 describe resources. So the question had
+// to be turned into one the engine can answer — "is this kind of work getting done
+// here" — and answered only where the evidence exists.
+//
+// Four answers, in the order they are checked, because the first that applies is the
+// most specific thing known:
+//
+//   - Work of this kind is parked behind incidents: **degraded**. Jobs exist, they
+//     were attempted, and they failed. That is the same reading a process gets, from
+//     the same evidence.
+//   - The engine runs this kind itself: **healthy**. It built the handler, so it
+//     knows; there is no worker to wait for and nothing outside this process to ask.
+//   - A worker has taken jobs of this kind since the server started: **healthy**.
+//     Not "a worker exists" — *this kind of work has demonstrably been done here*,
+//     which is a fact rather than an inference from a registration.
+//   - Otherwise: **unbound**, which is not a finding. The worker registry is runtime
+//     state that a restart empties, so *no worker has polled* is not evidence that
+//     none exists — and a fresh server would otherwise mark every worker-served kind
+//     as broken, which is precisely the mistake §4's severity rules exist to prevent.
+//     The queue depth rides along in the detail, so a reader can see there is work
+//     waiting without the view claiming to know why.
+//
+// The deliberate omission is a *not-ready*: "queued and nobody is serving it" is the
+// state an operator most wants, and this server cannot tell it apart from "queued
+// and the worker polls every five minutes". Saying so is the whole of the answer.
+func jobTypeStatus(taken, incidents int64, inProcess bool) (state, reason string) {
+	switch {
+	case incidents > 0:
+		return panorama.StateDegraded, fmt.Sprintf(
+			"%d job(s) of this type are parked behind an unresolved incident.", incidents)
+	case inProcess:
+		return panorama.StateHealthy, "The engine runs this job type itself."
+	case taken > 0:
+		return panorama.StateHealthy, fmt.Sprintf(
+			"A worker has taken %d job(s) of this type since this server started.", taken)
+	default:
+		return panorama.StateUnbound, "No worker has taken work of this type since this " +
+			"server started, which is not the same as none serving it: the worker registry " +
+			"is emptied by a restart."
+	}
+}
+
+// jobTypeTaken counts, per job type, how many jobs the workers seen this run have
+// pulled. Cumulative rather than in-flight on purpose: a type whose queue drained an
+// hour ago is being served, and an in-flight gauge of zero would report it as
+// unobserved every time it happened to be idle.
+func (s *Server) jobTypeTaken() map[string]int64 {
+	out := map[string]int64{}
+	for _, st := range s.workers.byName {
+		for jobType, n := range st.Types {
+			out[jobType] += n
+		}
+	}
+	return out
 }

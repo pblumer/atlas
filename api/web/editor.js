@@ -12,6 +12,7 @@ import { installDevShortcut, markDevField } from "./dev-view.js";
 import { devLang } from "./dev-lang.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
+import { attachIdCheck } from "./idcheck.js";
 import { migrateInstanceFlow } from "./migrationdialog.js";
 // Which keys a form-js schema binds — the Developer View reads it to offer a linked
 // form's fields as variables, the incident's repair form reads it to know which keys a
@@ -177,6 +178,7 @@ function calleeXML(pid, name) {
 
 let current; // active modeler/viewer, destroyed on remount
 let onLayoutKey; // document-level F8 handler for auto-layout, removed on remount
+let onBarMenuDismiss; // document-level click that closes the bar menu, removed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
 let collab; // active live collaboration session (ADR-0140), closed on remount
 // generation is bumped by cleanup() on every navigation/remount. A mount captures
@@ -202,6 +204,7 @@ export function cleanup() {
   // releases it now rather than leaving it to its TTL.
   if (playground) { try { playground.destroy(); } catch { /* ignore */ } playground = null; }
   if (onLayoutKey) { document.removeEventListener("keydown", onLayoutKey, true); onLayoutKey = null; }
+  if (onBarMenuDismiss) { document.removeEventListener("click", onBarMenuDismiss); onBarMenuDismiss = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
@@ -484,6 +487,15 @@ function editorCrumbs(project, current) {
     `<span class="crumb-current">${esc(current)}</span></nav>`;
 }
 
+// The editor bar carries two things the author acts on constantly — Save and Deploy —
+// and one menu for everything else (ADR-0229). It used to carry
+// seven buttons in one weight, which said that re-flowing the diagram and shipping it to
+// a server were the same size of act, and on a narrower window `flex-wrap` dropped a few
+// of them into a second row mid-group. Deploy is the only filled button, because it is
+// the only one here that leaves the browser; Save sits beside it because it is the one
+// pressed most; the rest are a menu, where a toggle reads as on by its check rather than
+// by a pressed button. Every control kept its id, so what each one does is still wired
+// where it was.
 export async function mountEditor(root, { api, toast, key, draftId, projectId, project }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
@@ -499,13 +511,21 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
           <button data-tab="playground" title="Run this diagram on the real engine in a throwaway sandbox — no deploy, no side effects">Playground</button>
         </div>
         <div style="flex:1"></div>
-        <button class="btn neutral sim-toggle" id="sim-toggle" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough" aria-pressed="false">&#9654; Token simulation</button>
-        <button class="btn neutral" id="vars-toggle" title="Show the variables this diagram writes">Variables</button>
-        <button class="btn neutral" id="autolayout" title="Re-flow the diagram into a clean left-to-right layout (F8)">Auto-layout</button>
         <button class="btn neutral" id="save" title="Save this diagram as a draft">Save</button>
-        <button class="btn neutral" id="export" title="Download this diagram as BPMN XML">Export XML</button>
-        <button class="btn neutral" id="docexport" title="Publish this process as a structured PDF — the diagram plus every element's documentation and notes — as a numbered version you can share (ADR-0143)">Documentation</button>
-        <button class="btn neutral" id="deploy" title="Deploy this single diagram. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
+        <button class="btn" id="deploy" title="Deploy this single diagram. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
+        <div class="dropdown">
+          <button class="icon-btn bar-more" id="bar-more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="Everything else this diagram can do">&#8943;</button>
+          <div class="dropdown-menu" id="bar-menu" hidden>
+            <div class="mlabel">View</div>
+            <button id="sim-toggle" type="button" aria-pressed="false" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough"><span class="mi-icon">&#9654;</span>Token simulation</button>
+            <button id="vars-toggle" type="button" aria-pressed="false" title="Show the variables this diagram writes"><span class="mi-icon">{}</span>Variables</button>
+            <div class="sep"></div>
+            <div class="mlabel">Diagram</div>
+            <button id="autolayout" type="button" title="Re-flow the diagram into a clean left-to-right layout (F8)"><span class="mi-icon">&#8649;</span>Auto-layout</button>
+            <button id="export" type="button" title="Download this diagram as BPMN XML"><span class="mi-icon">&#8595;</span>Export XML</button>
+            <button id="docexport" type="button" title="Publish this process as a structured PDF — the diagram plus every element's documentation and notes — as a numbered version you can share (ADR-0143)"><span class="mi-icon">&#128196;</span>Documentation</button>
+          </div>
+        </div>
       </div>
       <div class="sim-bar" id="sim-bar" hidden>
         <button class="btn play" id="sim-play" title="Play the token simulation">&#9654; Play</button>
@@ -529,6 +549,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <span class="sim-hint" id="sim-hint"></span>
         <span style="flex:1"></span>
         <span class="sim-stats" id="sim-stats"></span>
+        <button class="btn neutral" id="sim-exit" title="Stop the walkthrough and go back to editing the diagram">Exit simulation</button>
       </div>
       <div class="start-panel" id="doc-panel" hidden>
         <label class="field"><span>Title</span>
@@ -624,7 +645,26 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     toast("could not open diagram: " + e.message, "err");
   }
 
-  const rerender = wireProperties(root, modeler, api, projectId, toast);
+  // identity.draftId is the draft this editing session addresses — the id the diagram
+  // was opened under, null for one that has never been saved. It is not the same thing
+  // as the process id on the canvas: the author can retype that, and the two only
+  // agree again once the save has moved the record (ADR-0222).
+  // Save reads it to ask for a rename rather than a second draft; the Process ID field
+  // reads it to know which id is its own and therefore not a collision.
+  //
+  // fromDeployment marks the one session where Save legitimately lands on a draft that
+  // already exists: a deployed definition opened read-only and saved back as an
+  // editable draft is the same process, so the collision is the point rather than an
+  // accident — it is offered as an explicit overwrite instead of a flat refusal.
+  const identity = { draftId: draftId != null ? draftId : null, fromDeployment: draftId == null && key != null };
+  // ownId is the id this session may save onto without colliding with somebody else:
+  // the draft it opened, or — for a deployed definition being pulled back into a draft
+  // — that process's own id, where landing on the existing draft is the point and is
+  // confirmed rather than refused. Everything else is a foreign artifact.
+  const openedProcessId = ((draftKeyProcess(modeler) || {}).id || "");
+  identity.ownId = () => identity.draftId || (identity.fromDeployment ? openedProcessId : "") || "";
+
+  const rerender = wireProperties(root, modeler, api, projectId, toast, identity);
   const refreshBadges = makeImplementBadges(root, modeler);
   refreshBadges(); // reflect the initial tab for the diagram just imported
   const refreshPoolCaptions = makePoolProcessCaptions(modeler);
@@ -638,7 +678,8 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     refreshBadges();
     playground.setActive(activeTab(root) === "playground");
   });
-  wireActions(root, modeler, api, toast, projectId);
+  wireBarMenu(root);
+  wireActions(root, modeler, api, toast, projectId, identity);
   wireEditorVars(root, modeler, api);
   wireProblems(root, modeler, api, projectId);
   wireResizer(root, modeler);
@@ -945,6 +986,7 @@ function wireTokenSim(root, modeler) {
   const miInput = root.querySelector("#sim-mi");
   const hintEl = root.querySelector("#sim-hint");
   const statsEl = root.querySelector("#sim-stats");
+  const exitBtn = root.querySelector("#sim-exit");
   if (!toggle || !bar) return;
 
   const setActive = (on) => {
@@ -956,6 +998,10 @@ function wireTokenSim(root, modeler) {
   };
 
   toggle.addEventListener("click", () => setActive(!sim.isActive()));
+  // Simulation is a mode: it hides the modeling palette and the context pad, and the
+  // toggle that started it sits in the bar's overflow menu. A mode with its only exit
+  // behind a menu is a mode you can be stuck in, so the mode's own bar carries one.
+  if (exitBtn) exitBtn.addEventListener("click", () => setActive(false));
   playBtn.addEventListener("click", () => (sim.stats().playing ? sim.pause() : sim.play()));
   stepBtn.addEventListener("click", () => sim.step());
   resetBtn.addEventListener("click", () => sim.reset());
@@ -1097,6 +1143,48 @@ function wireVarsPanel(root, viewer) {
       nudge();
     });
   }
+}
+
+// wireBarMenu opens and closes the editor bar's overflow menu. The Console has a
+// delegated `.dropdown-toggle` handler in app.js that drives every other menu, and this
+// one deliberately does not use it: editor.js is mounted on its own by the e2e harnesses,
+// with no app.js in the page, so a bar that depended on that handler would be a bar the
+// harnesses cannot open. It reuses the `.dropdown-menu` *look* and carries its own
+// behaviour. Stopping propagation on the trigger keeps app.js's document handler — which
+// closes every open menu on any click it sees — from closing this one the moment it opens.
+function wireBarMenu(root) {
+  const toggle = root.querySelector("#bar-more");
+  const menu = root.querySelector("#bar-menu");
+  if (!toggle || !menu) return;
+  const setOpen = (open) => {
+    menu.hidden = !open;
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+  toggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menu.hidden) {
+      // Only one menu stands at a time, which is what app.js's closeAllMenus would have
+      // done had the click reached it. Its bookkeeping needs no fixing up: it gives up an
+      // open menu the moment that menu is hidden.
+      for (const other of document.querySelectorAll(".dropdown-menu:not([hidden])")) {
+        if (other !== menu) other.hidden = true;
+      }
+    }
+    setOpen(menu.hidden);
+  });
+  // Anything else — a menu item, the canvas, another part of the page — dismisses it.
+  // Picking an item is an action, and the menu has no business outliving it. This also
+  // catches the click that opens one of app.js's menus: that handler hides this one
+  // without knowing about the trigger's aria-expanded, and this puts it back in step.
+  onBarMenuDismiss = () => { if (!menu.hidden || toggle.getAttribute("aria-expanded") === "true") setOpen(false); };
+  document.addEventListener("click", onBarMenuDismiss);
+  // Escape closes it from the trigger as well as from inside, so the key works wherever
+  // the hand left the focus.
+  toggle.parentElement.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || menu.hidden) return;
+    setOpen(false);
+    toggle.focus();
+  });
 }
 
 // wireTabs toggles the Design/Implement tabs. Design is the descriptive view
@@ -1772,14 +1860,20 @@ function wireEditorVars(root, modeler, api) {
         }).join("");
   };
 
+  // The toggle is a row in the bar menu, so "open" is carried by a check mark and by
+  // aria-pressed rather than by the look of a held-down button.
+  const reflect = () => {
+    toggle.classList.toggle("active", !panel.hidden);
+    toggle.setAttribute("aria-pressed", panel.hidden ? "false" : "true");
+  };
   toggle.addEventListener("click", () => {
     panel.hidden = !panel.hidden;
-    toggle.classList.toggle("active", !panel.hidden);
+    reflect();
     render();
   });
   if (closeBtn) closeBtn.addEventListener("click", () => {
     panel.hidden = true;
-    toggle.classList.remove("active");
+    reflect();
   });
   filter.addEventListener("input", render);
   if (sampleBox) sampleBox.addEventListener("click", (e) => {
@@ -2192,6 +2286,65 @@ const RETRIES_FIELD = {
 function withRetries(kind) {
   if (kind.id === "mockup") return kind;
   return { ...kind, fields: [...kind.fields, { group: "Failure handling" }, RETRIES_FIELD] };
+}
+
+// sqlServiceTaskKind builds one of the three database Worker Types' catalog entries
+// (ADR-0173). The three share every field, every operation and every hint; what a
+// product contributes is its name, its tile, the extension element the compiler reads
+// for it, its placeholder syntax and whether its driver can bind a parameter by name.
+//
+// Building them rather than writing them out is the panel's half of what
+// compileSqlConnectorTask does in the compiler and sqlRegistryFromEnv does in the
+// worker: a rule stated once cannot hold for two of the three products. The Worker
+// picker's `datalist` is the kind's own id for the same reason — derived, so it cannot
+// be typed wrong for one product and right for the others.
+function sqlServiceTaskKind(p) {
+  const binding = p.named
+    ? `a JSON array binds in order, a JSON object binds by name (${p.name} supports named binding)`
+    : `as a JSON array, in order. ${p.name} has no named parameters, so an object is refused rather than silently reordered`;
+  return {
+    id: p.id, name: p.name, group: "Database",
+    desc: `Run one query or statement against a ${p.name} database on a worker`,
+    icon: p.icon,
+    // A database cylinder on the product's own colour, so the three read as one family
+    // at a glance and are still told apart. The drawImplBadges/stkind-icon CSS adds the
+    // round tile chrome, so the SVG only needs the fill and the white marks.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="${p.color}"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="${p.color}" opacity=".45"/></svg>`,
+    ext: p.ext,
+    fields: [
+      { group: "Database" },
+      {
+        key: "connector", label: "Worker", datalist: p.id, placeholder: "hr-db",
+        hint: `The configured ${p.name} Worker this statement runs on, by the name it has under Workers in the Console. Its connection string is sealed into the vault there, or read by a worker you run yourself from its own environment (ATLAS_${p.envPrefix}_<NAME>_DSN) — either way the engine never holds a database credential (ADR-0173). With the Databases mockup switched on (Console \u203a Workers, or ATLAS_${p.envPrefix}_MOCK on a worker you run yourself) the same task is answered from prepared answers in that worker's memory instead, so the model can be tried without a database (ADR-0221).`,
+      },
+      { group: "Statement" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "query", l: "Query — many rows" },
+          { v: "query-one", l: "Query one — a single row" },
+          { v: "execute", l: "Execute — insert/update/delete" },
+        ],
+      },
+      {
+        key: "statement", label: "SQL statement", rows: 6, placeholder: `SELECT id, mail FROM personen WHERE abteilung = ${p.placeholder}`,
+        hint: `Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. ${p.name} uses ${p.placeholder}-style placeholders.`,
+      },
+      {
+        key: "parametersVariable", label: "Parameters variable", placeholder: "params",
+        hint: `A process variable bound to the statement's placeholders: ${binding}. Leave empty for a statement with no placeholders.`,
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "query-one" ? "object" : v.operation === "execute" ? "number" : "array"), placeholder: "zeilen",
+        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
+      },
+      {
+        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
+        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
+      },
+    ],
+  };
 }
 
 // SERVICE_TASK_KINDS is the catalog of service-task connector kinds the modeler
@@ -2673,120 +2826,33 @@ const SERVICE_TASK_KINDS = [
       },
     ],
   },
-  {
-    id: "mssql", name: "Microsoft SQL Server", group: "Database", desc: "Run one query or statement against a SQL Server database on a worker", icon: "S",
-    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#a4373a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#a4373a" opacity=".45"/></svg>`,
-    ext: "atlas:MssqlConnector",
-    fields: [
-      { group: "Database" },
-      {
-        key: "connector", label: "Worker", datalist: "mssql", placeholder: "hr-db",
-        hint: "The configured SQL Server Worker this statement runs on, by the name it has under Workers in the Console. Its connection string is sealed into the vault there, or read by a worker you run yourself from its own environment (ATLAS_MSSQL_<NAME>_DSN) — either way the engine never holds a database credential (ADR-0173).",
-      },
-      { group: "Statement" },
-      {
-        key: "operation", label: "Operation", type: "select", reRender: true,
-        options: [
-          { v: "query", l: "Query — many rows" },
-          { v: "query-one", l: "Query one — a single row" },
-          { v: "execute", l: "Execute — insert/update/delete" },
-        ],
-      },
-      {
-        key: "statement", label: "SQL statement", rows: 6, placeholder: "SELECT id, mail FROM personen WHERE abteilung = @p1",
-        hint: "Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. SQL Server uses @p1-style placeholders.",
-      },
-      {
-        key: "parametersVariable", label: "Parameters variable", placeholder: "params",
-        hint: "A process variable bound to the statement's placeholders: a JSON array binds in order, a JSON object binds by name (SQL Server supports named binding). Leave empty for a statement with no placeholders.",
-      },
-      { group: "Output" },
-      {
-        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "query-one" ? "object" : v.operation === "execute" ? "number" : "array"), placeholder: "zeilen",
-        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
-      },
-      {
-        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
-        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
-      },
-    ],
-  },
-  {
-    id: "mariadb", name: "MariaDB", group: "Database", desc: "Run one query or statement against a MariaDB database on a worker", icon: "M",
-    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c0765a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#c0765a" opacity=".45"/></svg>`,
-    ext: "atlas:MariadbConnector",
-    fields: [
-      { group: "Database" },
-      {
-        key: "connector", label: "Worker", datalist: "mariadb", placeholder: "hr-db",
-        hint: "The configured MariaDB Worker this statement runs on, by the name it has under Workers in the Console. Its connection string is sealed into the vault there, or read by a worker you run yourself from its own environment (ATLAS_MARIADB_<NAME>_DSN) — either way the engine never holds a database credential (ADR-0173).",
-      },
-      { group: "Statement" },
-      {
-        key: "operation", label: "Operation", type: "select", reRender: true,
-        options: [
-          { v: "query", l: "Query — many rows" },
-          { v: "query-one", l: "Query one — a single row" },
-          { v: "execute", l: "Execute — insert/update/delete" },
-        ],
-      },
-      {
-        key: "statement", label: "SQL statement", rows: 6, placeholder: "SELECT id, mail FROM personen WHERE abteilung = ?",
-        hint: "Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. MariaDB uses ?-style positional placeholders.",
-      },
-      {
-        key: "parametersVariable", label: "Parameters variable", placeholder: "params",
-        hint: "A process variable bound to the statement's placeholders, as a JSON array in order. MariaDB has no named parameters, so an object is refused rather than silently reordered. Leave empty for a statement with no placeholders.",
-      },
-      { group: "Output" },
-      {
-        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "query-one" ? "object" : v.operation === "execute" ? "number" : "array"), placeholder: "zeilen",
-        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
-      },
-      {
-        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
-        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
-      },
-    ],
-  },
-  {
-    id: "postgres", name: "PostgreSQL", group: "Database", desc: "Run one query or statement against a PostgreSQL database on a worker", icon: "P",
-    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#31648c"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#31648c" opacity=".45"/></svg>`,
-    ext: "atlas:PostgresConnector",
-    fields: [
-      { group: "Database" },
-      {
-        key: "connector", label: "Worker", datalist: "postgres", placeholder: "hr-db",
-        hint: "The configured PostgreSQL Worker this statement runs on, by the name it has under Workers in the Console. Its connection string is sealed into the vault there, or read by a worker you run yourself from its own environment (ATLAS_POSTGRES_<NAME>_DSN) — either way the engine never holds a database credential (ADR-0173).",
-      },
-      { group: "Statement" },
-      {
-        key: "operation", label: "Operation", type: "select", reRender: true,
-        options: [
-          { v: "query", l: "Query — many rows" },
-          { v: "query-one", l: "Query one — a single row" },
-          { v: "execute", l: "Execute — insert/update/delete" },
-        ],
-      },
-      {
-        key: "statement", label: "SQL statement", rows: 6, placeholder: "SELECT id, mail FROM personen WHERE abteilung = $1",
-        hint: "Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. PostgreSQL uses $1-style positional placeholders.",
-      },
-      {
-        key: "parametersVariable", label: "Parameters variable", placeholder: "params",
-        hint: "A process variable bound to the statement's placeholders, as a JSON array in order. PostgreSQL has no named parameters, so an object is refused rather than silently reordered. Leave empty for a statement with no placeholders.",
-      },
-      { group: "Output" },
-      {
-        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "query-one" ? "object" : v.operation === "execute" ? "number" : "array"), placeholder: "zeilen",
-        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
-      },
-      {
-        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
-        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
-      },
-    ],
-  },
+  // The three database Worker Types (ADR-0173). They are one panel with three drivers:
+  // the operations, the fields, the row cap and the result shapes are identical, and
+  // what genuinely differs is the product's name, its tile colour, the BPMN extension
+  // element it compiles from, the placeholder syntax its statements are written in, and
+  // whether it can bind a parameter by name. Written out three times the panel had
+  // already started to drift in wording, and a field added to one of them would have
+  // reached the other two only if somebody remembered — which is the same reason the
+  // compiler serves all three from one compileSqlConnectorTask and the worker from one
+  // sqlRegistryFromEnv.
+  ...[
+    {
+      id: "mssql", name: "Microsoft SQL Server", icon: "S", color: "#a4373a", ext: "atlas:MssqlConnector",
+      placeholder: "@p1", envPrefix: "MSSQL",
+      // SQL Server is the one of the three whose driver binds by name, so an
+      // object-shaped parameters variable is accepted here and refused by the others
+      // rather than flattened into an order nobody wrote (ADR-0173).
+      named: true,
+    },
+    {
+      id: "mariadb", name: "MariaDB", icon: "M", color: "#c0765a", ext: "atlas:MariadbConnector",
+      placeholder: "?", envPrefix: "MARIADB", named: false,
+    },
+    {
+      id: "postgres", name: "PostgreSQL", icon: "P", color: "#31648c", ext: "atlas:PostgresConnector",
+      placeholder: "$1", envPrefix: "POSTGRES", named: false,
+    },
+  ].map(sqlServiceTaskKind),
   {
     id: "clio", name: "clio Event Store", group: "Messaging & events", desc: "Send, query, or read events on a clio event store", icon: "C",
     // A stacked event-stream mark on a violet tile reads "append-only event log" at a
@@ -2926,7 +2992,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "jira", name: "Jira", group: "Applications", desc: "Create, read, update, transition, comment on, assign, or search Jira issues", icon: "J",
+    id: "jira", name: "Jira", group: "Applications", desc: "Create, read, update, transition, comment on, assign, or search Jira issues, and look up the accounts to assign them to", icon: "J",
     // A check-mark inside a rounded square on Atlassian blue: the issue, ticked —
     // this connector's counterpart to REST's globe and Remedy's ticket. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2947,6 +3013,7 @@ const SERVICE_TASK_KINDS = [
           { v: "add-comment", l: "Add comment" },
           { v: "assign-issue", l: "Assign issue" },
           { v: "search", l: "Search (JQL)" },
+          { v: "search-users", l: "Search users" },
         ],
       },
       {
@@ -2958,8 +3025,10 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "project", label: "Project", placeholder: "OPS", fx: true,
-        showIf: (v) => v.operation === "create-issue",
-        hint: "The project key the issue is created in. A value that is all digits is read as a project id instead. May be a FEEL expression (fx).",
+        showIf: (v) => v.operation === "create-issue" || v.operation === "search-users",
+        hint: (v) => (v.operation === "search-users"
+          ? "Optional. Restricts the search to the accounts this project can actually assign — without it the search covers the whole site, and an account it finds may still be one Jira refuses to hand an issue to. May be a FEEL expression (fx)."
+          : "The project key the issue is created in. A value that is all digits is read as a project id instead. May be a FEEL expression (fx)."),
       },
       {
         key: "issueType", label: "Issue type", placeholder: "Task", fx: true,
@@ -2997,9 +3066,16 @@ const SERVICE_TASK_KINDS = [
         hint: "The Jira query the search runs, written exactly as in Jira's own search box. It must restrict what it matches — Jira Cloud refuses an unbounded query outright, so a query that only sorts (order by created DESC) comes back as HTTP 400; name at least a project, an assignee or a label. May be a FEEL expression (fx), so a process can search for what it is actually about — e.g. =\"project = OPS AND reporter = \" + melder.",
       },
       {
-        key: "maxResults", label: "Maximum issues", placeholder: "50",
-        showIf: (v) => v.operation === "search",
-        hint: "Caps what may land in the result variable. The connector follows Jira's paging to that many issues, so the result is the issues themselves, never one page of them. Empty uses 50; 0 reads every match.",
+        key: "query", label: "Search term", placeholder: "=antragsteller.mail", fx: true,
+        showIf: (v) => v.operation === "search-users",
+        hint: "A fragment of the account's display name or address — Jira matches it as a substring. On Jira Cloud it searches both; on Data Center it matches the username. Usually a FEEL expression (fx) naming what the process already knows about the person, e.g. =antragsteller.mail. If it finds nobody, that is not necessarily \"no such person\": Jira answers a caller it does not recognise, or one without the global \"Browse users and groups\" permission, by seeing nobody rather than by refusing — and on Cloud an address matches only as far as that account's profile visibility allows, so the display name is the term to fall back to.",
+      },
+      {
+        key: "maxResults", label: "Maximum results", placeholder: "50",
+        showIf: (v) => v.operation === "search" || v.operation === "search-users",
+        hint: (v) => (v.operation === "search-users"
+          ? "Caps what may land in the result variable. The connector follows Jira's paging to that many accounts. Empty uses 50; 0 reads every match."
+          : "Caps what may land in the result variable. The connector follows Jira's paging to that many issues, so the result is the issues themselves, never one page of them. Empty uses 50; 0 reads every match."),
       },
       {
         key: "fields", label: "Further fields", type: "map", childType: "atlas:JiraField", fx: true,
@@ -3009,17 +3085,24 @@ const SERVICE_TASK_KINDS = [
       { group: "Output" },
       {
         key: "resultVariable", label: "Result variable",
-        resultType: (v) => (v.operation === "search" ? "array" : "object"),
+        resultType: (v) => (v.operation === "search" || v.operation === "search-users" ? "array" : "object"),
         placeholder: "ticket",
-        // Three of the seven operations Jira answers with 204 No Content, so a result
+        // Three of the eight operations Jira answers with 204 No Content, so a result
         // variable there would name a value that is never written — the panel hides it
         // rather than letting an author expect one (the compiler refuses it too).
-        showIf: (v) => ["create-issue", "get-issue", "add-comment", "search"].includes(v.operation),
-        hint: (v) => v.operation === "search"
-          ? "The matched issues are written into this process variable as a JSON array — the issues themselves, not Jira's paging envelope."
-          : (v.operation === "create-issue"
-            ? "The created issue is written into this process variable, so a later task can address it as =ticket.key. Leave empty to discard it."
-            : "What Jira returned is written into this process variable (leave empty to discard it)."),
+        showIf: (v) => ["create-issue", "get-issue", "add-comment", "search", "search-users"].includes(v.operation),
+        hint: (v) => {
+          switch (v.operation) {
+            case "search-users":
+              return "The matched accounts are written into this process variable as a JSON array. FEEL lists are 1-based, so the first account's id is =konten[1].accountId — which is what Assign issue takes, and what an assignee field on Create issue takes as ={\"accountId\": konten[1].accountId}.";
+            case "search":
+              return "The matched issues are written into this process variable as a JSON array — the issues themselves, not Jira's paging envelope.";
+            case "create-issue":
+              return "The created issue is written into this process variable, so a later task can address it as =ticket.key. Leave empty to discard it.";
+            default:
+              return "What Jira returned is written into this process variable (leave empty to discard it).";
+          }
+        },
       },
     ],
   },
@@ -3948,6 +4031,7 @@ function messageFieldsHTML(modeler, med, hint) {
   const fields = current ? `
     <label class="field"><span>Message name</span>
       <input type="text" id="f-msgname" value="${esc(current.name || "")}" placeholder="payment-received"/></label>
+    <p class="muted" style="font-size:12px" id="f-msgsources"></p>
     <label class="field"><span>Correlation key (FEEL)</span>
       <textarea id="f-corrkey" rows="1" placeholder="orderId">${esc(messageCorrelationKey(current))}</textarea></label>
     <p class="muted" style="font-size:12px">Shared with every event that uses this message — a throw and a catch correlate when they use the same message and their keys evaluate equal.</p>` : "";
@@ -3960,6 +4044,48 @@ function messageFieldsHTML(modeler, med, hint) {
       </select></label>
     ${fields}
     <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+
+// fillMessageSources says whether anything on this server publishes the message name in
+// front of the author, and what.
+//
+// A model names a message and nothing else, on purpose: what feeds it is an operational
+// fact, so the same process can be started by a Jira watch, a clio subscription, a POST
+// to /api/v1/messages or another process's send task, and swapping one for another is a
+// Console change rather than a redeploy (ADR-0075/0214). The cost of that seam is
+// exactly this: a name typed one character differently here and in Console → Connectors
+// → Events is two working halves that never meet — no error anywhere, and a process that
+// never starts. The line closes the gap without closing the seam: it reports, it does not
+// bind.
+//
+// It is deliberately silent about *catchers*. A name with no inbound watch is entirely
+// normal — a throw event inside the same model, or an external system posting the
+// message, are both invisible from here — so the empty case says where watches are
+// configured rather than claiming the name is wrong.
+//
+// A failed fetch leaves the line empty, like every other server-fed hint in this panel:
+// an author who cannot reach the server is not helped by being told so twice.
+function fillMessageSources(api, el, name) {
+  if (!api || !el) return;
+  const want = (name || "").trim();
+  if (!want) return;
+  api("GET", "/api/v1/message-sources").then((list) => {
+    const mine = (list || []).filter((s) => s && s.messageName === want);
+    if (!mine.length) {
+      el.innerHTML = `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
+        + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
+        + `for a Jira or clio event, add a watch under <b>Connectors → Events</b> in the Console.</span>`;
+      return;
+    }
+    const parts = mine.map((s) => {
+      const what = s.description ? ` — ${esc(s.description)}` : "";
+      const off = s.enabled ? "" : ' <span class="pill warn">off</span>';
+      return `<li>${esc(s.kind)} <b>${esc(s.connectorName)}</b>${what}${off}</li>`;
+    }).join("");
+    el.innerHTML = `Published by ${mine.length} inbound event watch${mine.length > 1 ? "es" : ""}:`
+      + `<ul style="margin:4px 0 0 16px;padding:0">${parts}</ul>`;
+  }).catch(() => { /* no hint; the field works the same */ });
 }
 
 // messagesManagerHTML lists the model's messages for central management (add,
@@ -4076,6 +4202,18 @@ function isEventSubStart(element) {
 function definitionsOf(modeler) {
   try { if (typeof modeler.getDefinitions === "function") return modeler.getDefinitions(); } catch { /* older bpmn-js */ }
   try { return modeler.get("canvas").getRootElement().businessObject.$parent; } catch { return null; }
+}
+
+// draftKeyProcess returns the <bpmn:process> the draft is filed under. A draft's store
+// key is its process id (ADR-0021) and the server reads the *first* process in the
+// definitions (processIdentity), so for a single-process diagram that is the only one
+// and for a collaboration it is the first pool's: renaming that process renames the
+// draft, while renaming another pool's does not. Everything that treats the Process ID
+// field as an identity — the live availability check — asks this first.
+function draftKeyProcess(modeler) {
+  const defs = definitionsOf(modeler);
+  if (!defs || !defs.rootElements) return null;
+  return defs.rootElements.find((e) => /:Process$/.test((e && e.$type) || "")) || null;
 }
 
 // Messages are top-level <bpmn:message> declarations shared by reference: a throw
@@ -4854,7 +4992,7 @@ function groupifyPanel(body, ctl) {
   }
 }
 
-function wireProperties(root, modeler, api, projectId, toast) {
+function wireProperties(root, modeler, api, projectId, toast, identity) {
   // The class names this application models, offered as suggestions for a data
   // object's type (ADR-draft-process-information-model). It is a *suggestion* and
   // not a closed list on purpose: a model is routinely drawn before the vocabulary
@@ -4984,7 +5122,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       <h3>Process</h3>
       <label class="field"><span>Process name</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
       <label class="field"><span>Process ID</span><input type="text" id="f-procid" value="${esc(proc.id || "")}" placeholder="order-fulfillment"/></label>
-      <p class="muted" style="font-size:12px">Each pool deploys as its own process; the <b>Process ID</b> is that deployment's identity — instances group by it, and renaming it deploys a new process rather than a new version.</p>
+      <p class="muted" style="font-size:12px">Each pool deploys as its own process; the <b>Process ID</b> is that deployment's identity — instances group by it, and renaming it deploys a new process rather than a new version. The <i>first</i> pool's process id is also what this draft is stored under, so renaming that one moves the draft on the next Save.</p>
       ${documentationField(proc, "f-procdoc", "What this process achieves, who it serves, when it runs…")}
       <p class="muted" style="font-size:12px">Two descriptions, two subjects: the one above documents the <b>pool</b> (the participant), this one the <b>process</b> it executes. Every element inside takes its own.</p>
       ${startVarsHTML}`;
@@ -4999,6 +5137,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
       const v = (e.target.value || "").trim();
       if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast("invalid process id", "err"); } }
     });
+    // Only the pool whose process keys the draft is renaming the artifact; the others
+    // deploy under their own id and collide with nothing on disk.
+    if (identity && draftKeyProcess(modeler) === proc) {
+      attachIdCheck(body.querySelector("#f-procid"), {
+        api, kind: "drafts", noun: "draft", own: identity.ownId,
+      });
+    }
     wireDocumentation(body, modeler, element, bo);
     wireDocumentation(body, modeler, element, proc, "f-procdoc");
     if (activeTab(root) === "implement") wireStartVars(body, modeler, element, proc, savePreservingPanel);
@@ -5042,7 +5187,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <h3>Process</h3>
           <label class="field"><span>Name</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
           <label class="field"><span>Process ID</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
-          <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by. Renaming it and deploying creates a new process rather than a new version.</p>
+          <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by, and it is also what this draft is stored under &mdash; so <b>renaming it moves the draft</b> to the new id on the next Save rather than leaving a copy behind at the old one. An id another draft already holds is refused, never overwritten. Renaming it and deploying creates a new process rather than a new version.</p>
           ${documentationField(rootBo, "f-doc", "What this process achieves, who it serves, when it runs…")}
           <p class="muted" style="font-size:12px">The <b>Documentation</b> is the process's own description — the place for the summary a reader needs before following the diagram. Every element takes one too; select it to write its part.</p>
           <label class="field"><span>Version tag</span><input type="text" id="f-pver" value="${esc(rootBo.versionTag || "")}" placeholder="1.0.0"/></label>
@@ -5065,6 +5210,14 @@ function wireProperties(root, modeler, api, projectId, toast) {
           const v = (e.target.value || "").trim();
           if (v) { try { modeling.updateProperties(rootEl, { id: v }); } catch { toast("invalid process id", "err"); } }
         });
+        // The Process ID is the draft's filename on the server, so it is checked as it
+        // is typed: an id another draft already holds turns the field red here rather
+        // than coming back as a refused save (ADR-0222).
+        if (identity && draftKeyProcess(modeler) === rootBo) {
+          attachIdCheck(body.querySelector("#f-pid"), {
+            api, kind: "drafts", noun: "draft", own: identity.ownId,
+          });
+        }
         body.querySelector("#f-pver").addEventListener("change", (e) => {
           const v = (e.target.value || "").trim();
           try { modeling.updateProperties(rootEl, { versionTag: v || undefined }); } catch { /* ignore */ }
@@ -6348,17 +6501,23 @@ function wireProperties(root, modeler, api, projectId, toast) {
             // edits survive the navigation.
             fcallpid.value = pid;
             saveCall();
-            const savePath = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+            const proj = projectId ? "&projectId=" + encodeURIComponent(projectId) : "";
+            const savePath = (from) => "/api/v1/drafts?from=" + encodeURIComponent(from) + proj;
             const { xml: callerXml } = await modeler.saveXML({ format: true });
-            await api("POST", savePath, callerXml, true);
+            // The caller is saved as itself, so a Process ID retyped in this session
+            // moves its draft here too rather than forking one.
+            const saved = await api("POST", savePath(identity.draftId || ""), callerXml, true);
+            identity.draftId = saved.processId;
             if (collab && collab.markSaved) collab.markSaved();
             // Scaffold the child only if no draft already holds that id — never clobber
-            // existing work; just open it in that case.
+            // existing work; just open it in that case. from="" makes that the server's
+            // rule rather than only this check's, so a draft created between the two
+            // refuses instead of being overwritten (ADR-0222).
             const existing = await api("GET", "/api/v1/drafts").catch(() => []);
             if ((existing || []).some((d) => (d.processId || "") === pid)) {
               toast(`Opening existing draft “${pid}”`, "ok");
             } else {
-              await api("POST", savePath, calleeXML(pid, pid), true);
+              await api("POST", savePath(""), calleeXML(pid, pid), true);
               toast(`Created called process “${pid}”`, "ok");
             }
             location.hash = `#/modeler/draft/${encodeURIComponent(pid)}`;
@@ -6538,9 +6697,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
     }
     const fmsgname = body.querySelector("#f-msgname");
     if (fmsgname) {
+      fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value);
       fmsgname.addEventListener("change", () => {
         const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) med.messageRef.name = (fmsgname.value || "").trim();
+        // Renaming the message changes which watches feed it, so the line is re-read
+        // rather than left describing the name that was there a moment ago.
+        fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value);
       });
     }
     const fcorrkey = body.querySelector("#f-corrkey");
@@ -6880,30 +7043,72 @@ function wireDeployJSONEditors(container) {
   }
 }
 
-function wireActions(root, modeler, api, toast, projectId) {
+function wireActions(root, modeler, api, toast, projectId, identity) {
   // Save persists the diagram as a draft (raw XML, no compile), keyed by process
   // id, so incomplete work survives and can be reopened from the Modeler home. A
   // projectId (set when the editor was opened from a project's "Create new") files
   // the draft into that project (ADR-0034).
+  //
+  // ?from= names the draft this session opened, so the server can tell a rename from a
+  // create: retyping the Process ID moves the record instead of leaving the old draft
+  // behind as a duplicate, and a save onto an id another draft already holds comes back
+  // 409 rather than overwriting it (ADR-0222).
   const saveBtn = root.querySelector("#save");
-  saveBtn.addEventListener("click", async () => {
+
+  // saveDraft persists the diagram once. `retried` guards the one recovery below, so a
+  // repeated 409 stops rather than looping.
+  async function saveDraft(retried) {
     saveBtn.disabled = true;
     try {
       const { xml } = await modeler.saveXML({ format: true });
-      const path = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+      const path = "/api/v1/drafts?from=" + encodeURIComponent(identity.draftId || "") +
+        (projectId ? "&projectId=" + encodeURIComponent(projectId) : "");
       const d = await api("POST", path, xml, true);
       root.querySelector(".crumb-current").textContent = d.name || d.processId || "Draft";
       docTitle(`${d.name || d.processId || "Draft"} · Modeler`);
-      toast(`Saved draft “${d.name || d.processId}”`, "ok");
       // Draft is now persisted: clear the collab unsaved-work guard so a co-editor's
       // deferred change (held back to protect these edits) can sync in (ADR-0140).
       if (collab && collab.markSaved) collab.markSaved();
+      if (d.renamedFrom) {
+        // The draft moved. Everything keyed on the old id is stale — the route, the live
+        // session (ADR-0140), the project the crumbs resolved — so reopen it under the
+        // new id rather than patching each in place. What the server holds is what was
+        // just saved, so the reload costs nothing but the undo history.
+        toast(`Renamed draft “${d.renamedFrom}” → “${d.processId}”`, "ok");
+        identity.draftId = d.processId;
+        location.hash = "#/modeler/draft/" + encodeURIComponent(d.processId);
+        return;
+      }
+      toast(`Saved draft “${d.name || d.processId}”`, "ok");
+      if (identity.draftId !== d.processId) {
+        // First save of a new diagram: this session now addresses a stored draft, so the
+        // next save is a plain update and the URL points at it. replaceState rather than
+        // a navigation, so the canvas, its undo history and any live session stay put.
+        identity.draftId = d.processId;
+        identity.fromDeployment = false;
+        history.replaceState(null, "", "#/modeler/draft/" + encodeURIComponent(d.processId));
+      }
     } catch (e) {
+      // A 409 says another draft already holds this process id, and the save refused
+      // rather than overwriting it (ADR-0222). Pulling a deployed
+      // definition back into an editable draft is the one case where landing on an
+      // existing draft is the point — it is the same process — so there the overwrite
+      // is offered by name. Everywhere else the id is the author's to change and the
+      // refusal stands.
+      const proc = draftKeyProcess(modeler);
+      if (e.status === 409 && identity.fromDeployment && !retried && proc && proc.id) {
+        if (window.confirm(`${e.message}\n\nThis diagram is the deployed “${proc.id}”. Overwrite that draft with it?`)) {
+          identity.draftId = proc.id; // the retry is then a plain update of that draft
+          await saveDraft(true);
+          return;
+        }
+      }
       toast("save failed: " + e.message, "err");
     } finally {
       saveBtn.disabled = false;
     }
-  });
+  }
+  saveBtn.addEventListener("click", () => saveDraft(false));
 
   // Auto-layout re-flows the diagram: the current model is sent to the server,
   // which discards its diagram interchange and regenerates a clean left-to-right

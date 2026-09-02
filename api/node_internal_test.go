@@ -213,6 +213,7 @@ func TestBindingCatalogReportsAnUnreadableNodeIdentity(t *testing.T) {
 	}
 	s.releases, s.settings = releases, brokenSettings(t)
 	s.versions = map[string]int32{}
+	s.jobTypes = jobTypesFor(t, dir)
 
 	if _, err := s.collectBindingCatalog(httptest.NewRequest(http.MethodGet, "/", nil)); err == nil {
 		t.Fatal("an unreadable node identity produced a catalog anyway")

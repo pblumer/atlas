@@ -1716,6 +1716,7 @@ type JiraConfig struct {
 	Comment     RestExpr
 	Assignee    RestExpr
 	JQL         RestExpr
+	Query       RestExpr
 	MaxResults  int32
 	Fields      []RestKV
 	ResultVar   string
@@ -1752,6 +1753,7 @@ func (b *Builder) AddJiraConnectorTask(cfg JiraConfig) int32 {
 		JiraComment:     cfg.Comment,
 		JiraAssignee:    cfg.Assignee,
 		JiraJQL:         cfg.JQL,
+		JiraQuery:       cfg.Query,
 		JiraMaxResults:  cfg.MaxResults,
 		JiraFields:      cfg.Fields,
 		Retries:         cfg.Retries,

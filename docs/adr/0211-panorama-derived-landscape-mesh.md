@@ -3,7 +3,16 @@
 - **Status:** Accepted (amended 2026-08-31 — §11 splits P2.5c's P4 dependency per
   state instead of holding the whole stage behind it; amended 2026-09-01 — §7 lays
   the graph out in a world of its own size rather than in the viewport, and names
-  by magnification rather than by node count)
+  by magnification rather than by node count; amended 2026-09-02 — §7 lets the
+  reader arrange the landscape by hand, and sizes a node by its connectivity as well
+  as by its kind; amended 2026-09-02 — a drag moves the neighbourhood rather than
+  the landscape, and a filter keeps one hop of context around every match; amended
+  2026-09-02 — §7 gains saved views, a findings list, and a heartbeat on the nodes
+  that have one, and §4's node carries its incident count; amended 2026-09-02 — a
+  node can be drilled into, and a finding names the element the work is parked on;
+  amended 2026-09-02 — §7 gives each kind its own outline; amended 2026-09-02 — the
+  landscape draws deployment targets, so §4's unreachable and stale are producible
+  on it and what a payload declares unproducible is derived from what it drew)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -277,6 +286,256 @@ unaffected.
 >   lit half the landscape would be a worse version of it rather than a second tool.
 >   Nothing is re-laid-out and nothing is re-rendered, so the picture cannot move
 >   under the pointer while it is being read.
+
+> **Amendment (2026-09-02): the arrangement is the reader's, and size says how
+> connected a node is.**
+> Two more things §7's legibility half was missing, and both of them are about what
+> the eye does with a few hundred circles before it reads any of them.
+>
+> - **Nodes can be picked up.** The layout answers "where does this graph want to
+>   sit", which is the right first answer and never the last one: the person reading
+>   it knows things the simulation does not — that these four belong together, that
+>   this hub should be out of the way — and until now had no way to say so. Dragging
+>   a node moves it and the graph rearranges itself around it, which also makes
+>   adjacency visible in the motion rather than only in the lines. A dropped node
+>   stays dropped: this simulation settles once rather than running continuously, so
+>   releasing a node back into it would put it straight back where it started and
+>   make the whole gesture pointless. It is *pinned* instead — marked on the node,
+>   because a node that is not where the layout put it is a fact about the picture
+>   and hiding it would make the arrangement look like the simulation's own answer —
+>   and undone one node at a time or wholesale. While anything is pinned the fit is
+>   skipped, because fitting rescales every position and would slide the pins off the
+>   spots they were dropped on; that is the trade, and the arrangement is worth more
+>   than the last few percent of margin. The arrangement survives filtering and
+>   selecting, and it is not stored: nothing on this view is (§2). The same step is on
+>   the arrow keys for a focused node, because a convenience only some people can have
+>   is not one.
+>
+> - **Size carries connectivity as well as kind.** Kind alone made every process the
+>   same size, so the one that half the landscape hangs off looked exactly like a leaf
+>   — and finding it meant clicking through until the impact panel said so. A node is
+>   now drawn at its kind's floor plus however far its dependency count carries it up
+>   that kind's band, logarithmically, because the difference between one dependency
+>   and four is the one worth seeing and the difference between forty and fifty is not.
+>   The bands are closed: the largest process is smaller than the smallest application,
+>   so rank survives connectivity rather than competing with it, and size says two
+>   things at once without either overwriting the other. Containment is not counted,
+>   for the same reason §6 does not walk it — an application does not depend on the
+>   processes it holds, and counting them would make every application a hub by
+>   construction and say nothing. The reference degree is fixed rather than taken from
+>   the graph on screen, so a node does not change size when a filter removes some
+>   other node: its size describes the node, not the current screen.
+>
+> One consequence, and it was overdue: selecting a node no longer re-lays-out the
+> graph. Impact analysis is an answer *about the picture on screen*, so the picture
+> must not move while the answer is being given — and re-running a two-hundred-
+> iteration simulation to toggle two classes was costing a few hundred milliseconds
+> per click at the top of the budget.
+
+> **Amendment (2026-09-02, second): a drag is local, and a filter keeps its
+> context.**
+> Three corrections to the two changes above, each of them a defect the first
+> version shipped rather than a new idea.
+>
+> - **A drag moves the neighbourhood, not the landscape.** Dragging re-ran the
+>   layout's own physics from the picture on screen. That looks reasonable and is
+>   not: the picture has been *fitted* since it was simulated, and the fit rescales
+>   every distance — so it sits nowhere near the simulation's equilibrium, and
+>   restarting it there reorganises the whole landscape the moment a node is touched.
+>   The reader lost the arrangement they were reading in order to move one node in
+>   it. A drag now pulls only the edges that touch what is held, toward the lengths
+>   those edges had at the instant of the grab, and resolves whatever the movement
+>   ran into. Nothing else moves at all.
+> - **The gesture belongs to the graph, not to the browser.** Three things went to
+>   the browser instead: the canvas selected its own labels under a drag, a touch
+>   drag was taken for a page scroll, and a drag that crossed the canvas edge dropped
+>   the node at the boundary. Selection is off on the canvas, a node takes no
+>   `touch-action`, and the pointer is captured — but only once the gesture is a
+>   drag rather than a press, because capturing on the press retargets the
+>   compatibility mouse events behind it and the click that *selects* a node is one
+>   of them. For the same reason the press is never `preventDefault`ed.
+> - **A filter keeps one hop of context.** A match on its own is a circle in an empty
+>   field: it answers "does this exist" and nothing else, when the question somebody
+>   types a name to ask is nearly always "and what is it attached to". The filter now
+>   keeps the immediate neighbourhood around every match — one hop, because nearly
+>   everything hangs off some hub and reaching through one drags most of the graph
+>   back onto the screen. Context is marked as context, drawn more faintly and counted
+>   separately in the header: a search that presented things which do not match the
+>   search as matches would be a worse answer than the empty field it is fixing.
+>
+> Adjacency on hover (the 2026-09-01 amendment) also gained colour: a ring in the
+> accent on each neighbour, outside the circle rather than a recolouring of it,
+> because the body's own stroke is carrying §4's severity and painting over a red
+> node to say "connected" would trade a finding for a hint.
+
+> **Amendment (2026-09-02, third): a landscape somebody comes back to.**
+> §7 has been about making one look at the landscape readable. These three are about
+> the second look, and the tenth.
+>
+> - **Views can be saved.** Watching one node means filtering to it, zooming in and
+>   arranging what is around it — and a reload puts all of that back to the whole
+>   landscape. A saved view is that setup with a name on it: the filter, the
+>   direction and depth, the node being watched, the magnification and the
+>   arrangement. It is stored in **this browser**, where every other piece of
+>   remembered UI state in Atlas lives, and the panel says so: these views are not
+>   shared and do not follow anybody to another machine. A stored resource with an
+>   owner, an access rule and a sharing scope is a decision about the product; this
+>   is a way of not re-zooming, and conflating the two would have shipped the first
+>   under cover of the second.
+>
+>   What is *not* saved is the graph. The landscape is derived and changes as things
+>   are deployed, so a view is a way of looking rather than a snapshot of what was
+>   there — which is why what it stores is fractions of the world rather than
+>   coordinates, and why a view watching a node is re-centred on wherever that node
+>   is *now*. A view whose node has since gone opens and says so, rather than framing
+>   the empty space where it used to be.
+>
+> - **The findings are a list as well as a picture.** The mesh marks every node with
+>   something wrong with it, and on four hundred circles that is not the same as being
+>   able to read them: finding three red dots means hunting, and hunting is what
+>   somebody does instead of noticing. The same findings are now an index beside the
+>   picture, worst first, each with its state, its incident count and the sentence
+>   behind it, and clicking one selects and frames it. An empty list says explicitly
+>   that it is not a claim that everything is well — most nodes in a young landscape
+>   are unobserved, and §4 has always required that distinction of the colours.
+>
+>   §4's node gains **Incidents**, the count the engine already holds against a
+>   definition. It is the number behind the reason rather than a second opinion about
+>   it: two degraded processes are not equally degraded, and the count says which to
+>   look at first. It rides only on a process — an incident belongs to a token and
+>   only a process has tokens — and is absent everywhere else, because "no incidents"
+>   and "cannot have incidents" are different facts. A collapsed application sums what
+>   is parked behind all of its children rather than reporting the worst one's number.
+>
+> - **A node with a finding beats.** Motion is the one channel left once colour, size,
+>   shape and a glyph are each carrying something, and it is the channel the eye finds
+>   without being pointed at it — which is what a view somebody glances at needs. The
+>   worse the state, the *less* pulse, which is the metaphor read honestly rather than
+>   backwards: a degraded process is still working and beats quickly and twice, like
+>   something under strain; one that cannot do work beats once, slowly and heavily. A
+>   landscape of quick pulses is busy and coping; a landscape of slow ones is in
+>   trouble.
+>
+>   Each class keeps its own colour instead of both going red, because "it is broken"
+>   and "something inside it went wrong" are the two findings this view exists to tell
+>   apart. The beat is a ring of its own under the node, so the body's stroke goes on
+>   carrying §4's severity and the fill goes on carrying the kind. And it is bounded:
+>   past eighty beating nodes, and for anybody whose system asks for less movement,
+>   the rings stay and stop moving. A landscape where two hundred things are wrong is
+>   a picture of an outage, and two hundred simultaneous animations say less than a
+>   still frame while costing far more to paint.
+
+> **Amendment (2026-09-02, fourth): going into a node, and saying where it broke.**
+> Two more, and they are the same act at two altitudes: getting from "something is
+> wrong in this landscape" to "this task, this message".
+>
+> - **A node can be drilled into.** Double-clicking one reduces the landscape to it
+>   and whatever is within the depth already on screen. The complaint it answers is
+>   the one every large graph has: you find the thing you came for and it is still
+>   sitting in four hundred circles of everything else. It is the *same cut* a search
+>   makes — one walk, one idea of what a neighbour is — because two implementations
+>   of "and its neighbours" would eventually disagree, and the difference would show
+>   up as a picture that answers a slightly different question depending on how you
+>   reached it. Direction is not consulted: "what is this attached to" includes the
+>   application it sits in and the worker it calls alike.
+>
+>   A drilldown and the search box are two ways of asking the same kind of question,
+>   so only one is ever in force — entering one clears the other. Two narrowings
+>   compounding invisibly is how a picture ends up showing something nobody asked for
+>   and nobody can undo. The way out is stated in the header beside the picture it
+>   describes, and on Escape.
+>
+>   The double-click had a previous job — releasing one hand-placed node — and it
+>   moved into the panel beside the node it is about. A gesture is something you have
+>   to be told; a button on the thing itself is something you can see.
+>
+> - **A finding names the element the work is parked on.** "Three tokens are parked"
+>   says there is a problem. "Three on the service task `charge-card`, and the last
+>   one said 502 Bad Gateway" says where to go, and it costs the same read: the engine
+>   already knows which element each incident is stuck on, because that is how it
+>   resolves one. §4's node therefore carries **sites** beside its count — element id,
+>   BPMN type, how many, and the message.
+>
+>   Four rules keep it honest. The element is named by its id and type rather than by
+>   a label, because only user tasks carry a title in a compiled process and an
+>   identifier that is sometimes there is worse than one that is always there — and
+>   because it is what Operations shows, so the two name the same thing the same way.
+>   The message is the first one seen at that element, not a summary of several:
+>   inventing a combined sentence would be writing a message nobody produced. The list
+>   is the worst few and stops there, because a landscape view is where somebody
+>   decides *which* process to open, not where they triage eleven broken tasks. And a
+>   collapsed application keeps the summed count but drops the sites: an element id
+>   without the process it belongs to is not something anybody can act on, and a list
+>   of them from six processes reads as one broken diagram.
+>
+>   The model overlay gets the same answer in one field — the worst site, on the
+>   observation's detail — so a panel that says "degraded" can say where without
+>   sending anybody to a second view.
+
+> **Amendment (2026-09-02, fifth): each kind gets its own outline.**
+> Colour on this view already carries the kind *and* ADR-0189 §7's layer meaning;
+> size already carries rank and connectivity. Form was the one channel left, and a
+> landscape of four hundred identical circles was spending it on nothing — so an
+> application is a circle, a process a rounded square, a decision a triangle, a
+> worker a hexagon.
+>
+> It is also the channel that survives what the others do not: a printout, a
+> projector, and a reader who does not separate the hues. §4 already required that
+> colour never be the only channel for *severity*; this extends the same discipline
+> to kind, which had been relying on colour and size alone.
+>
+> Every shape is **inscribed in the circle the layout reserved for it** — no vertex
+> further from the centre than the radius the simulation kept clear. That is what
+> makes the change free rather than a new source of overlap: the separation guarantee
+> is stated in circles, so a shape that never leaves its circle cannot break it. The
+> shapes come out slightly smaller than the circles they replace, which is the right
+> way round; the application stays the largest thing on screen.
+>
+> Two placeholders take the rule the other way. A **restricted** node stands for
+> something real whose kind we may never learn, so it takes the one shape that is not
+> any kind's — drawing it as a process would be a guess wearing the same clothes as a
+> fact. An **unresolved** one is drawn in the silhouette of the thing that is
+> *missing*: its id names the kind, the dashes already say it is not there, and the
+> shape says what should have been.
+>
+> The legend is rendered by the same function the nodes are, so it cannot come to
+> disagree with the picture it explains.
+
+> **Amendment (2026-09-02, sixth): the landscape asks its peers.**
+> §4 had two states it could never produce — *unreachable* and *stale* — and the
+> reason was structural: everything the mesh drew was read from this server's own
+> state while the request was being served, so nothing could fail to be contacted or
+> go out of date. That was true and useless. An operator scanning the landscape for
+> trouble could not see that a whole peer had gone away.
+>
+> The landscape draws **deployment targets** now. They are asked off the run loop,
+> through the same cache and the same rules ADR-0189 §6's observation projection
+> uses, so the two surfaces cannot come to disagree about whether a peer is stale or
+> unreachable — they read one answer through one set of rules. A peer that stops
+> answering is a node with a finding on it, and it beats like any other finding.
+>
+> Three things this pins down:
+>
+> - **The reach happens off the loop, and the shape enforces it.** The collector
+>   hands back the landscape *and a closure* holding what it resolved while it was on
+>   the loop — the target list, the credential each presents. Holding the single
+>   writer across an eight-second timeout would stop every other design-time request
+>   on the server (I3), so the test asserts the loop is free while the closure runs
+>   rather than merely that it was called.
+> - **What a payload declares unproducible is derived from what it drew.** A
+>   landscape with a peer on it produces both states and declares neither; one
+>   without still declares both, and names the deployment target that would change
+>   that rather than only saying it cannot. A response that went on claiming
+>   "unreachable cannot happen here" beside a target reporting exactly that would be
+>   a contract nobody could rely on again.
+> - **No edge is derived to a target.** A promotion is an act, not a stored
+>   relationship: this server does not record which of its applications is running
+>   over there, so a line from one to a target would be an assertion nobody made. It
+>   sits beside the landscape rather than in it, which is what it is.
+>
+> A target carries its operator's name for it and nothing else — never the base URL
+> or the credential reference. Those are this operator's map of where their
+> infrastructure lives, and a landscape is opened by anybody with modeler access.
 
 ### 7. A stated size budget, and a server-side fallback
 

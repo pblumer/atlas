@@ -42,10 +42,14 @@ func TestSeverityMapsEachStateThroughOneTable(t *testing.T) {
 }
 
 // TestGraphDeclaresWhatItCannotObserve is the honesty this slice turns on. Two of
-// ADR-0189 §6's seven states need a source outside this process, and this build has
-// none — so the payload says so. Without that, an instance with nothing watching it
-// renders as uniformly healthy, and a green picture that cannot go red is worse
-// than no picture at all.
+// ADR-0189 §6's seven states need a source outside this process, and a landscape
+// that drew no peer contacted nothing — so the payload says so. Without that, an
+// instance with nothing watching it renders as uniformly healthy, and a green
+// picture that cannot go red is worse than no picture at all.
+//
+// The declaration is a property of *this* response rather than of the build: a
+// landscape that does draw a peer produces both states, and declares neither. That
+// half is pinned in TestALandscapeWithAPeerDeclaresNothingUnavailable.
 func TestGraphDeclaresWhatItCannotObserve(t *testing.T) {
 	g := DeriveGraph(Landscape{
 		Applications: []Application{app("a", "Billing")},
@@ -60,10 +64,12 @@ func TestGraphDeclaresWhatItCannotObserve(t *testing.T) {
 		if declared[state] == "" {
 			t.Fatalf("state %q is not declared unavailable: %#v", state, g.Status.Unavailable)
 		}
-		// The reason has to point somewhere. Saying "this cannot be known" is only
-		// half an answer when it *can* be known one surface over.
-		if !strings.Contains(declared[state], "observation projection") {
-			t.Errorf("%q says it cannot be produced but not where it can: %q", state, declared[state])
+		// The reason has to point somewhere, and now at the remedy for *this* view:
+		// saying "this cannot be known" is only half an answer when the thing that
+		// would make it knowable is one configuration step away.
+		if !strings.Contains(declared[state], "deployment target") {
+			t.Errorf("%q says it cannot be produced but not what would change that: %q",
+				state, declared[state])
 		}
 	}
 	// A state the server does produce must not be listed: declaring a capability
@@ -356,5 +362,168 @@ func TestAModeledButAbsentNodeIsUnwatchedRatherThanWell(t *testing.T) {
 	}
 	if ghost.Reason != "" {
 		t.Errorf("a node Atlas does not have carries a finding about it: %q", ghost.Reason)
+	}
+}
+
+// TestIncidentCountRidesOnTheNodeThatCanHaveOne. The count is what turns "degraded"
+// into something an operator can rank: two degraded processes are not equally
+// degraded, and the number behind them says which to look at first.
+//
+// It rides only on a process, and that is the point of the assertion below. An
+// incident belongs to a token and only a process has tokens, so a node without a
+// count is one that *cannot* have one — never one reported as having none. Rendering
+// those alike is how a picture claims a decision node is free of incidents it was
+// never able to hold.
+func TestIncidentCountRidesOnTheNodeThatCanHaveOne(t *testing.T) {
+	parked := proc(1, "invoice", "Invoice", "a1")
+	parked = withStatus(parked, StateDegraded, "3 token(s) are parked behind an unresolved incident.")
+	parked.Incidents = 3
+	clean := withStatus(proc(2, "dunning", "Dunning", "a1"), StateHealthy, "No work is parked in this process.")
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{parked, clean},
+	}, Options{})
+
+	if got := nodeByID(t, g, "process:1").Incidents; got != 3 {
+		t.Errorf("Incidents = %d, want 3", got)
+	}
+	// Healthy with nothing parked: absent, which is the same wire shape as a node
+	// that cannot hold one. Both are honest — neither has an incident — and the
+	// difference between them is the state, which is already on the node.
+	if got := nodeByID(t, g, "process:2").Incidents; got != 0 {
+		t.Errorf("a process with nothing parked reports Incidents = %d, want 0", got)
+	}
+	for _, id := range []string{"application:a1"} {
+		if got := nodeByID(t, g, id).Incidents; got != 0 {
+			t.Errorf("%s carries Incidents = %d; only a process holds tokens", id, got)
+		}
+	}
+
+	// The count is omitted from the wire when it is zero, so "no incidents" and
+	// "cannot have incidents" arrive as the same absence rather than as a number
+	// asserting a process's worth of nothing about a decision.
+	encoded, err := json.Marshal(nodeByID(t, g, "process:2"))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(encoded), "incidents") {
+		t.Errorf("a node with no incidents still names the field: %s", encoded)
+	}
+}
+
+// TestCollapsedApplicationSumsTheIncidentsBehindIt. A collapsed application stands
+// for every process under it, so it must report what is parked behind all of them.
+// Carrying the worst child's count would understate the outage by exactly the
+// amount somebody needs to know.
+func TestCollapsedApplicationSumsTheIncidentsBehindIt(t *testing.T) {
+	land := Landscape{Applications: []Application{app("a1", "Billing")}}
+	for i := 1; i <= 6; i++ {
+		p := withStatus(proc(uint64(i), "p", "P", "a1"), StateDegraded, "parked")
+		p.Incidents = i
+		land.Processes = append(land.Processes, p)
+	}
+
+	g := DeriveGraph(land, Options{MaxNodes: 3})
+
+	if !g.Clustered {
+		t.Fatal("Clustered = false; this test is about the collapsed shape")
+	}
+	if got := nodeByID(t, g, "application:a1").Incidents; got != 21 {
+		t.Errorf("Incidents = %d, want 21 — the sum of what all six hold", got)
+	}
+}
+
+// TestIncidentSitesRideOnlyOnTheProcessThatCanPointAtThem. Where work is parked is
+// only actionable with the process it is parked in: an element id from six collapsed
+// processes reads as one broken diagram, and the reader cannot tell which. So a
+// collapsed application keeps the summed count — the part that survives losing the
+// context — and drops the sites rather than pooling them.
+func TestIncidentSitesRideOnlyOnTheProcessThatCanPointAtThem(t *testing.T) {
+	parked := withStatus(proc(1, "invoice", "Invoice", "a1"), StateDegraded, "parked")
+	parked.Incidents = 3
+	parked.Sites = []IncidentSite{
+		{ElementID: "charge-card", ElementType: "ServiceTask", Count: 2, Message: "502 Bad Gateway"},
+		{ElementID: "notify", ElementType: "SendTask", Count: 1},
+	}
+	second := withStatus(proc(2, "dunning", "Dunning", "a1"), StateDegraded, "parked")
+	second.Incidents = 4
+	second.Sites = []IncidentSite{{ElementID: "chase", ElementType: "ServiceTask", Count: 4}}
+	land := Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{parked, second},
+	}
+
+	whole := DeriveGraph(land, Options{})
+	node := nodeByID(t, whole, "process:1")
+	if len(node.Sites) != 2 || node.Sites[0].ElementID != "charge-card" {
+		t.Fatalf("Sites = %#v, want the two the process carries, in order", node.Sites)
+	}
+	if node.Sites[0].Message != "502 Bad Gateway" {
+		t.Errorf("the message did not survive: %q", node.Sites[0].Message)
+	}
+	if got := nodeByID(t, whole, "application:a1").Sites; got != nil {
+		t.Errorf("an application carries Sites = %#v; only a process has tokens", got)
+	}
+
+	collapsed := DeriveGraph(land, Options{MaxNodes: 1})
+	if !collapsed.Clustered {
+		t.Fatal("Clustered = false; this half of the test is about the collapsed shape")
+	}
+	app := nodeByID(t, collapsed, "application:a1")
+	if app.Incidents != 7 {
+		t.Errorf("Incidents = %d, want 7 — the sum of what both hold", app.Incidents)
+	}
+	if app.Sites != nil {
+		t.Errorf("a collapsed application pooled its children's sites: %#v", app.Sites)
+	}
+
+	// And the field is absent from the wire when there is nothing to point at, so a
+	// node that cannot have sites and one that has none arrive the same way.
+	encoded, err := json.Marshal(nodeByID(t, whole, "application:a1"))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(encoded), "sites") {
+		t.Errorf("a node with no sites still names the field: %s", encoded)
+	}
+}
+
+// TestALandscapeWithAPeerDeclaresNothingUnavailable is the other half, and the one
+// that would rot silently. A payload that went on saying "unreachable cannot happen
+// here" beside a target node reporting exactly that would be a contract nobody could
+// rely on again — so the declaration is derived from what the graph actually drew.
+func TestALandscapeWithAPeerDeclaresNothingUnavailable(t *testing.T) {
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a", "Billing")},
+		Processes:    []Process{withStatus(proc(1, "p", "Invoice", "a"), StateHealthy, "No work is parked.")},
+		Targets: []Target{{
+			ID: "t1", Name: "Production", State: StateUnreachable,
+			Reason: "This peer did not answer.",
+		}},
+	}, Options{})
+
+	if len(g.Status.Unavailable) != 0 {
+		t.Errorf("a landscape drawing a peer declares %#v unavailable; it can produce both",
+			g.Status.Unavailable)
+	}
+	// Stated as an empty list rather than left nil: the renderer iterates it, and
+	// "there is nothing here this picture cannot see" is a claim worth making out
+	// loud rather than by omission.
+	if g.Status.Unavailable == nil {
+		t.Error("unavailable is null rather than an empty list")
+	}
+
+	// And the peer is on the picture with the state that made the difference, which
+	// is the whole reason the declaration changed.
+	node := nodeByID(t, g, "target:t1")
+	if node.State != StateUnreachable || node.Severity != SeverityAttention {
+		t.Errorf("the target = %q/%q, want unreachable and attention", node.State, node.Severity)
+	}
+	// Unreachable is *attention*, never critical: "I could not reach it" and "it is
+	// broken" are different findings, and a view that painted them alike loses its
+	// credibility on the first network fault.
+	if node.Reason == "" {
+		t.Error("the target carries no reason; a finding without one is not actionable")
 	}
 }

@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas Panorama node sizing e2e harness</title>
+    <!-- Drives the *real* radiusFor and degreesOf from api/web/panorama-mesh.js.
+         How big a node is drawn is arithmetic over its connectivity, and the
+         property the picture rests on — that connectivity moves a node inside its
+         kind's band and never out of it — is a claim about every degree, not about
+         the handful a rendered fixture happens to contain. So it is checked as
+         arithmetic, exhaustively, rather than sampled through the DOM. -->
+  </head>
+  <body>
+    <div id="ready">loading</div>
+    <script type="module">
+      import { radiusFor, degreesOf, shapeForNode, shapeVertices } from "/panorama-mesh.js";
+      window.radiusFor = (node, degree) => radiusFor(node, degree);
+      window.degreesOf = (graph) => [...degreesOf(graph)];
+      window.shapeForNode = (node) => shapeForNode(node);
+      window.shapeVertices = (shape, r) => shapeVertices(shape, r);
+      document.getElementById("ready").textContent = "ready";
+    </script>
+  </body>
+</html>

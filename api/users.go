@@ -204,7 +204,12 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, map[string]any{"authEnabled": s.authEnabled, "user": u.toPublic()})
 }
 
-// handleListUsers returns every account (public projection), oldest first.
+// handleListUsers returns every account (public projection), oldest first, each
+// annotated with whether somebody is signed in as it right now
+// (ADR-0228). The annotation rides along here rather than being a
+// second call the page has to make, so the roster's first paint is already
+// current; /api/v1/users/presence is the same answer without the roster, for the
+// refresh.
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	list := []publicUser{}
 	var loadErr error
@@ -219,7 +224,7 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "list users: "+loadErr.Error())
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, list)
+	httpapi.JSON(w, http.StatusOK, withPresence(list, s.sessions.presenceByUser()))
 }
 
 // handleListAssignableUsers returns the accounts a task can be assigned to — a

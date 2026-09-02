@@ -1,0 +1,1193 @@
+<title>Modeler-Kopfleiste</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+/* ============================================================
+   Seitenchrome — eigene Tokens, hell + dunkel.
+   Die Mockups darunter (.atlas) haben ihr EIGENES, festes
+   Token-Set: Atlas ist bewusst nur hell (app.css kennt weder
+   prefers-color-scheme noch data-theme). Ein Mockup, das im
+   Dark Mode mitkippt, würde das Produkt falsch zeigen.
+   ============================================================ */
+:root {
+  --ground: #e4e7ed;
+  --panel: #ffffff;
+  --panel-2: #f0f2f6;
+  --ink: #12151a;
+  --ink-soft: #3b4149;
+  --muted: #5c6169;
+  --rule: #cfd4dc;
+  --rule-soft: #dde1e8;
+  --marker: rgba(255, 221, 51, .62);
+  --marker-solid: #ffdd33;
+  --pin-ink: #4a3a00;
+  --good: #1f7a4d;
+  --good-soft: #e6f2ea;
+  --cost: #8a5a00;
+  --cost-soft: #fbf1dd;
+  --shadow-lift: 0 1px 2px rgba(16,20,26,.05), 0 8px 24px -12px rgba(16,20,26,.28);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #14171c;
+    --panel: #1c2027;
+    --panel-2: #23272f;
+    --ink: #eef0f4;
+    --ink-soft: #c3c8d0;
+    --muted: #939aa5;
+    --rule: #333944;
+    --rule-soft: #2a2f38;
+    --marker: rgba(255, 221, 51, .30);
+    --marker-solid: #ffdd33;
+    --pin-ink: #2a2100;
+    --good: #5fc98d;
+    --good-soft: #16281f;
+    --cost: #e0ab5c;
+    --cost-soft: #2a2216;
+    --shadow-lift: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.7);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #14171c;
+  --panel: #1c2027;
+  --panel-2: #23272f;
+  --ink: #eef0f4;
+  --ink-soft: #c3c8d0;
+  --muted: #939aa5;
+  --rule: #333944;
+  --rule-soft: #2a2f38;
+  --marker: rgba(255, 221, 51, .30);
+  --marker-solid: #ffdd33;
+  --pin-ink: #2a2100;
+  --good: #5fc98d;
+  --good-soft: #16281f;
+  --cost: #e0ab5c;
+  --cost-soft: #2a2216;
+  --shadow-lift: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.7);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 400 17px/1.62 "Source Serif 4", Georgia, "Times New Roman", serif;
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--marker-solid); color: #12151a; }
+
+/* ---- Raster: schmale Prosaspalte, breite Bühne für die Mockups ---- */
+.wrap {
+  display: grid;
+  grid-template-columns:
+    [full-start] minmax(20px, 1fr)
+    [stage-start] minmax(0, 1180px)
+    [stage-end] minmax(20px, 1fr) [full-end];
+  row-gap: 0;
+}
+.wrap > * { grid-column: stage; }
+.prose { max-width: 68ch; }
+
+h1, h2, h3, .eyebrow, .label, .chip, .pin, .btnrow, .meta, .spec {
+  font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+}
+h1 {
+  font-size: clamp(30px, 4.6vw, 50px);
+  line-height: 1.06;
+  font-weight: 700;
+  letter-spacing: -.022em;
+  margin: 0 0 18px;
+  text-wrap: balance;
+  max-width: 17ch;
+}
+h2 {
+  font-size: clamp(22px, 2.6vw, 30px);
+  line-height: 1.14;
+  font-weight: 700;
+  letter-spacing: -.016em;
+  margin: 0;
+  text-wrap: balance;
+}
+h3 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+p { margin: 0 0 16px; }
+p:last-child { margin-bottom: 0; }
+a { color: inherit; }
+code, .mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .84em;
+  background: var(--panel-2);
+  border: 1px solid var(--rule-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.eyebrow::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+header.page { padding: clamp(44px, 7vw, 92px) 0 8px; }
+.lede {
+  font-size: clamp(18px, 2vw, 21px);
+  line-height: 1.55;
+  color: var(--ink-soft);
+  max-width: 60ch;
+}
+
+section { padding: clamp(40px, 6vw, 74px) 0 0; }
+.sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.sec-head .tag {
+  font-family: Archivo, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.sec-head .tag.rec {
+  background: var(--good-soft);
+  border-color: transparent;
+  color: var(--good);
+}
+.thesis {
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  max-width: 62ch;
+  margin: 12px 0 26px;
+}
+
+/* ---- Breitensteuerung ---- */
+.controls {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: color-mix(in srgb, var(--ground) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 0;
+}
+.controls-in {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  font-family: Archivo, sans-serif;
+}
+.controls .label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.chips { display: flex; gap: 0; border: 1px solid var(--rule); border-radius: 7px; overflow: hidden; }
+.chip {
+  appearance: none;
+  border: 0;
+  border-right: 1px solid var(--rule);
+  background: var(--panel);
+  color: var(--ink-soft);
+  font: 600 13px/1 Archivo, sans-serif;
+  font-variant-numeric: tabular-nums;
+  padding: 8px 13px;
+  cursor: pointer;
+}
+.chip:last-child { border-right: 0; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
+.chip:focus-visible { outline: 2px solid var(--marker-solid); outline-offset: -2px; }
+.controls .hint { font: 400 14px/1.4 "Source Serif 4", serif; color: var(--muted); }
+
+/* ---- Bühne: skaliert das 1440-px-Fenster auf die Spaltenbreite ---- */
+.stage { overflow: hidden; position: relative; }
+.stage-inner { transform-origin: top left; will-change: transform; }
+.frame {
+  width: var(--fw, 1440px);
+  background: var(--a-bg);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lift);
+  border: 1px solid var(--rule);
+}
+
+.figcap {
+  font: 400 14px/1.5 "Source Serif 4", serif;
+  color: var(--muted);
+  margin-top: 12px;
+  max-width: 70ch;
+}
+.figcap b { font-family: Archivo, sans-serif; font-weight: 600; color: var(--ink-soft); }
+
+/* ---- Befundliste ---- */
+.findings { list-style: none; margin: 30px 0 0; padding: 0; display: grid; gap: 1px; background: var(--rule-soft); border: 1px solid var(--rule-soft); border-radius: 10px; overflow: hidden; }
+.findings li { background: var(--panel); padding: 16px 18px; display: grid; grid-template-columns: 26px 1fr; gap: 14px; align-items: start; }
+.findings .num {
+  width: 22px; height: 22px; border-radius: 999px;
+  background: var(--marker-solid); color: var(--pin-ink);
+  font: 700 12px/22px Archivo, sans-serif; text-align: center;
+  margin-top: 2px;
+}
+.findings b { font-family: Archivo, sans-serif; font-weight: 600; font-size: 15.5px; display: block; margin-bottom: 3px; letter-spacing: -.005em; }
+.findings span.body { font-size: 15.5px; line-height: 1.55; color: var(--ink-soft); }
+
+/* ---- Bilanz: löst / kostet ---- */
+.balance { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-top: 26px; }
+.balance div { padding-left: 14px; border-left: 3px solid var(--rule); }
+.balance .solves { border-left-color: var(--good); }
+.balance .costs { border-left-color: var(--cost); }
+.balance h3 { margin-bottom: 8px; }
+.balance .solves h3 { color: var(--good); }
+.balance .costs h3 { color: var(--cost); }
+.balance ul { margin: 0; padding-left: 18px; font-size: 15.5px; line-height: 1.55; color: var(--ink-soft); }
+.balance li { margin-bottom: 6px; }
+.balance li:last-child { margin-bottom: 0; }
+
+/* ---- Abschluss ---- */
+.verdict {
+  margin-top: 30px;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: clamp(22px, 3vw, 34px);
+}
+.verdict h3 { margin-bottom: 12px; }
+.steps { list-style: none; counter-reset: s; margin: 20px 0 0; padding: 0; }
+.steps li {
+  counter-increment: s;
+  display: grid; grid-template-columns: 30px 1fr; gap: 14px;
+  padding: 13px 0; border-top: 1px solid var(--rule-soft);
+  font-size: 15.5px; line-height: 1.55; color: var(--ink-soft);
+}
+.steps li::before {
+  content: counter(s);
+  font: 700 12px/22px Archivo, sans-serif;
+  width: 22px; height: 22px; border-radius: 999px; text-align: center;
+  background: var(--panel-2); color: var(--muted); border: 1px solid var(--rule);
+  margin-top: 2px;
+}
+.steps li b { font-family: Archivo, sans-serif; font-weight: 600; color: var(--ink); }
+footer.page { padding: 60px 0 80px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--rule); margin-top: 60px; }
+
+/* ============================================================
+   ATLAS-MOCKUP — feste Tokens, 1:1 aus api/web/app.css.
+   Wechseln bewusst NICHT mit dem Theme der Seite.
+   ============================================================ */
+.atlas {
+  --a-bg: #f3f4f6;
+  --a-surface: #ffffff;
+  --a-border: #e2e4e9;
+  --a-border-strong: #cdd0d6;
+  --a-text: #14161a;
+  --a-muted: #62666d;
+  --a-accent: #0b5cff;
+  --a-accent-hover: #0a4ad1;
+  --a-accent-soft: #eaf0ff;
+  --a-ok: #2d8a4e;
+  --a-warn: #b7791f;
+  --a-dot: #d7dae0;
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--a-text);
+  color-scheme: light;
+}
+.atlas * { box-sizing: border-box; }
+
+/* Topbar */
+.a-top {
+  height: 48px; display: flex; align-items: center; gap: 6px;
+  padding: 0 10px; background: var(--a-surface);
+  border-bottom: 1px solid var(--a-border);
+}
+.a-grid { color: var(--a-text); opacity: .55; display: grid; place-items: center; width: 32px; height: 32px; }
+.a-brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.a-mark {
+  width: 22px; height: 22px; border-radius: 6px; background: #14161a; color: #fff;
+  display: grid; place-items: center; font: 700 12px/1 system-ui;
+}
+.a-nav { display: flex; gap: 2px; margin-left: 18px; }
+.a-nav a { padding: 6px 10px; color: var(--a-text); text-decoration: none; font-size: 14px; }
+.a-nav a.on { font-weight: 600; }
+.a-top .a-spacer { flex: 1; }
+.a-org { color: var(--a-muted); font-size: 13px; }
+.a-ico { width: 32px; height: 32px; display: grid; place-items: center; color: var(--a-muted); }
+.a-avatar {
+  width: 26px; height: 26px; border-radius: 999px; background: #6b2b2b; color: #fff;
+  display: grid; place-items: center; font: 700 11px/1 system-ui; margin-left: 4px;
+}
+
+/* Editor-Leiste — Geometrie exakt wie app.css:551 */
+.a-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  min-height: 44px; padding: 0 10px;
+  border-bottom: 1px solid var(--a-border);
+  background: var(--a-bg);
+}
+.a-crumbs { display: flex; align-items: center; gap: 6px; color: var(--a-muted); font-size: 13px; margin-right: 6px; flex: 0 1 auto; min-width: 0; white-space: nowrap; }
+.a-crumbs .sep { color: var(--a-border-strong); }
+/* Vorschlag: Kopf bricht nicht mehr um, die Brotkrumen kuerzen sich stattdessen.
+   Im echten app.css stehen die Ellipsis-Regeln (557) schon da, kommen aber nie
+   zum Zug, weil nav.crumbs (562) display:flex setzt - Text in einem Flex-
+   Container ellipsiert nicht. */
+.a-bar.tidy { flex-wrap: nowrap; }
+.a-bar.tidy .a-crumbs { display: block; flex: 0 1 auto; min-width: 40px; overflow: hidden; text-overflow: ellipsis; }
+.a-bar.tidy .a-crumbs .sep { margin: 0 5px; }
+.a-bar.tidy .a-tabs, .a-bar.tidy .a-actions { flex: none; }
+.a-actions { display: flex; align-items: center; gap: 4px; }
+.a-crumbs .cur { color: var(--a-text); font-weight: 600; }
+.a-tabs { display: flex; gap: 2px; flex: none; }
+.a-tabs button {
+  background: none; border: 0; padding: 8px 12px; font: inherit; font-weight: 600;
+  color: var(--a-muted); cursor: pointer; border-bottom: 2px solid transparent;
+}
+.a-tabs button.on { color: var(--a-text); border-bottom-color: var(--a-accent); }
+.a-grow { flex: 1; min-width: 8px; }
+
+/* Buttons — 1:1 aus app.css:211 */
+.a-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px; border-radius: 6px;
+  border: 1px solid var(--a-border-strong); background: var(--a-surface);
+  color: var(--a-text); font: inherit; font-weight: 600; cursor: pointer;
+  white-space: nowrap; flex: none; position: relative;
+}
+.a-btn:hover { background: var(--a-bg); }
+.a-btn:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 1px; }
+.a-btn.primary { background: var(--a-accent); border-color: var(--a-accent); color: #fff; }
+.a-btn.primary:hover { background: var(--a-accent-hover); border-color: var(--a-accent-hover); }
+.a-btn.on { background: var(--a-accent-soft); border-color: var(--a-accent); color: var(--a-accent); }
+.a-btn.quiet { border-color: transparent; background: transparent; font-weight: 500; }
+.a-btn.quiet:hover { background: rgba(20,22,26,.06); }
+.a-btn svg { width: 15px; height: 15px; flex: none; }
+.a-btn .kbd {
+  font: 600 11px/1 ui-monospace, Menlo, monospace; color: var(--a-muted);
+  border: 1px solid var(--a-border); border-radius: 3px; padding: 3px 4px; background: var(--a-bg);
+}
+.a-btn.primary .kbd { color: #dce7ff; border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.12); }
+.a-icobtn {
+  display: inline-grid; place-items: center; width: 32px; height: 32px;
+  border-radius: 6px; border: 1px solid transparent; background: transparent;
+  color: var(--a-muted); cursor: pointer; flex: none; position: relative;
+}
+.a-icobtn:hover { background: rgba(20,22,26,.06); color: var(--a-text); }
+.a-icobtn.on { background: var(--a-accent-soft); border-color: var(--a-accent); color: var(--a-accent); }
+.a-icobtn svg { width: 16px; height: 16px; }
+.a-div { width: 1px; align-self: stretch; margin: 8px 7px; background: var(--a-border-strong); flex: none; }
+
+/* Segmentierte Gruppe (Variante A) */
+.a-seg { display: inline-flex; flex: none; }
+.a-seg .a-btn { border-radius: 0; margin-left: -1px; }
+.a-seg .a-btn:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.a-seg .a-btn:last-child { border-radius: 0 6px 6px 0; }
+.a-seg .a-btn.on { z-index: 1; }
+
+/* Speicherstatus (Variante B/C) */
+.a-status { display: inline-flex; align-items: center; gap: 7px; color: var(--a-muted); font-size: 13px; white-space: nowrap; flex: none; padding: 0 4px; }
+.a-status .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--a-warn); flex: none; }
+.a-status.saved .dot { background: var(--a-ok); }
+
+/* Menü */
+.a-menuwrap { position: relative; flex: none; }
+.a-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
+  min-width: 234px; background: var(--a-surface);
+  border: 1px solid var(--a-border-strong); border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(20,22,26,.06), 0 8px 26px -8px rgba(20,22,26,.28);
+  padding: 5px; text-align: left;
+}
+.a-menu[hidden] { display: none; }
+.a-menu button {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 8px 9px; border: 0; border-radius: 5px; background: none;
+  font: inherit; color: var(--a-text); cursor: pointer; text-align: left;
+}
+.a-menu button:hover { background: var(--a-bg); }
+.a-menu button svg { width: 15px; height: 15px; color: var(--a-muted); flex: none; }
+.a-menu button .kbd { margin-left: auto; font: 600 11px/1 ui-monospace, Menlo, monospace; color: var(--a-muted); }
+.a-menu .a-mtitle {
+  font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--a-muted); padding: 8px 9px 5px;
+}
+.a-menu hr { border: 0; border-top: 1px solid var(--a-border); margin: 5px 0; }
+
+/* Playground-Leiste */
+.a-pg {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  min-height: 44px; padding: 6px 10px; background: var(--a-surface);
+  border-bottom: 1px solid var(--a-border);
+}
+.a-pg .a-btn { padding: 6px 12px; }
+.a-hint { color: var(--a-accent); font-size: 13px; }
+.a-stats { color: var(--a-muted); font: 11.5px/1 ui-monospace, Menlo, monospace; }
+
+/* Canvas */
+.a-body { display: flex; height: 168px; background: var(--a-surface); }
+.a-side { width: 172px; padding: 12px 12px 0; border-right: 1px solid var(--a-border); flex: none; }
+.a-side.right { border-right: 0; border-left: 1px solid var(--a-border); width: 210px; display: flex; align-items: flex-start; justify-content: space-between; }
+.a-side b { font-size: 14px; }
+.a-skel { height: 26px; border-radius: 5px; background: var(--a-bg); border: 1px solid var(--a-border); margin-top: 10px; }
+.a-canvas {
+  flex: 1; position: relative; margin: 10px;
+  background:
+    radial-gradient(circle at 1px 1px, var(--a-dot) 1px, transparent 0) 0 0/16px 16px,
+    var(--a-bg);
+  border: 1px solid var(--a-border); border-radius: 6px;
+}
+.a-token {
+  position: absolute; left: 50%; top: 26px; transform: translateX(-50%);
+  width: 30px; height: 30px; border-radius: 999px;
+  background: #7ac143; border: 3px solid var(--a-accent);
+  display: grid; place-items: center; font: 700 11px/1 system-ui; color: #14161a;
+}
+/* Schwebende Werkzeugpalette (Variante B) */
+.a-palette {
+  position: absolute; left: 12px; bottom: 12px; z-index: 5;
+  display: inline-flex; align-items: center; gap: 2px; padding: 4px;
+  background: var(--a-surface); border: 1px solid var(--a-border-strong);
+  border-radius: 9px; box-shadow: 0 1px 2px rgba(20,22,26,.06), 0 6px 18px -8px rgba(20,22,26,.3);
+}
+.a-palette .a-div { align-self: center; height: 20px; margin: 0 5px; }
+.a-palette .zoom { font: 600 12px/1 system-ui; color: var(--a-muted); padding: 0 6px; font-variant-numeric: tabular-nums; }
+
+/* Marker + Pins (nur Ist-Zustand).
+   Der Textmarker liegt als Halo an jedem Knopf statt als Kasten um die Gruppe:
+   so bleiben die Knoepfe direkte Kinder der Leiste und brechen echt um. */
+.a-bar.marked { padding: 5px 10px; row-gap: 12px; }
+.a-btn.hl { box-shadow: 0 0 0 5px rgba(255, 221, 51, .62); }
+.pin {
+  position: absolute; top: -9px; right: -9px; z-index: 6;
+  width: 19px; height: 19px; border-radius: 999px;
+  background: var(--marker-solid); color: var(--pin-ink);
+  font: 700 11px/19px Archivo, sans-serif; text-align: center;
+  box-shadow: 0 0 0 2px var(--a-surface);
+}
+.pin.bl { top: auto; right: auto; bottom: -9px; left: -9px; }
+.pin.tl { right: auto; left: -9px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-play" viewBox="0 0 16 16"><path d="M4.5 2.8v10.4l8-5.2z" fill="currentColor"/></symbol>
+    <symbol id="i-vars" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.6 2C4 2 4 4.4 4 5.6 4 7 3.2 8 2 8c1.2 0 2 1 2 2.4 0 1.2 0 3.6 1.6 3.6"/><path d="M10.4 2C12 2 12 4.4 12 5.6 12 7 12.8 8 14 8c-1.2 0-2 1-2 2.4 0 1.2 0 3.6-1.6 3.6"/></symbol>
+    <symbol id="i-layout" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.2" y="6" width="4" height="4" rx="1"/><rect x="10.8" y="2" width="4" height="4" rx="1"/><rect x="10.8" y="10" width="4" height="4" rx="1"/><path d="M5.2 8h2.6v-4h3M7.8 8v4h3"/></symbol>
+    <symbol id="i-save" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.2 3.4A1.2 1.2 0 013.4 2.2h7l3.4 3.4v7a1.2 1.2 0 01-1.2 1.2H3.4a1.2 1.2 0 01-1.2-1.2z"/><path d="M4.8 2.2v3.6h5.4V2.2M4.8 13.8v-4h6.4v4"/></symbol>
+    <symbol id="i-xml" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.6 4.6L2.4 8l3.2 3.4M10.4 4.6L13.6 8l-3.2 3.4M9.2 2.8l-2.4 10.4"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 2.2h5.4l3.8 3.8v7.8a.8.8 0 01-.8.8H3.4a.8.8 0 01-.8-.8V3a.8.8 0 01.8-.8z"/><path d="M8.6 2.4V6h3.6M5.4 9h5.2M5.4 11.4h5.2"/></symbol>
+    <symbol id="i-deploy" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13.4V2.6M4.2 6.4L8 2.6l3.8 3.8"/><path d="M2.6 13.4h10.8"/></symbol>
+    <symbol id="i-more" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.4" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="12.6" cy="8" r="1.4"/></symbol>
+    <symbol id="i-share" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10.4V2.2M5 5.2L8 2.2l3 3"/><path d="M2.8 9.6v3.4a.8.8 0 00.8.8h8.8a.8.8 0 00.8-.8V9.6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7.2" cy="7.2" r="4.4"/><path d="M10.6 10.6l3 3"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2a3.8 3.8 0 00-3.8 3.8c0 3.4-1.4 4.6-1.4 4.6h10.4s-1.4-1.2-1.4-4.6A3.8 3.8 0 008 2z"/><path d="M6.9 12.8a1.3 1.3 0 002.2 0"/></symbol>
+    <symbol id="i-help" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M6.3 6.2a1.8 1.8 0 013.5.6c0 1.2-1.8 1.5-1.8 2.6"/><circle cx="8" cy="11.6" r=".7" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.4" cy="3.4" r="1.3"/><circle cx="8" cy="3.4" r="1.3"/><circle cx="12.6" cy="3.4" r="1.3"/><circle cx="3.4" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.6" cy="8" r="1.3"/><circle cx="3.4" cy="12.6" r="1.3"/><circle cx="8" cy="12.6" r="1.3"/><circle cx="12.6" cy="12.6" r="1.3"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.4 1.6"/></symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+<header class="page prose">
+  <p class="eyebrow">Design-Review · Modeler</p>
+  <h1>Sieben Knöpfe, die alle gleich laut sind</h1>
+  <p class="lede">
+    Die rechte Seite der Editor-Leiste trägt heute sieben Schaltflächen in exakt
+    derselben Gestalt: <code>class="btn neutral"</code>, weiß, gerahmt, gleiche Höhe,
+    gleiche Schriftstärke. Sie sehen aus wie eine Gruppe – aber sie sind vier
+    verschiedene Sorten Ding. Genau das liest sich als Unordnung: nicht zu viele
+    Knöpfe, sondern kein Rang zwischen ihnen.
+  </p>
+  <p class="lede">
+    Unten steht zuerst der Ist-Zustand mit fünf konkreten Befunden, dann drei
+    Entwürfe – von „vorsichtig umsortiert“ bis „radikal beruhigt“. Alle Mockups sind
+    echtes HTML mit den Tokens aus <code>api/web/app.css</code>, nicht gezeichnet.
+    Die Knöpfe reagieren; probieren Sie sie an.
+  </p>
+</header>
+
+<div class="controls">
+  <div class="controls-in">
+    <span class="label">Fensterbreite</span>
+    <div class="chips" role="group" aria-label="Fensterbreite der Mockups">
+      <button class="chip" data-w="1440" aria-pressed="true">1440 px</button>
+      <button class="chip" data-w="1180" aria-pressed="false">1180 px</button>
+      <button class="chip" data-w="1024" aria-pressed="false">1024 px</button>
+    </div>
+    <span class="hint" id="whint">Die Breite Ihres Screenshots. Ob <em>Deploy</em> hier noch in die Zeile passt, entscheidet die System-Schrift – so knapp ist es.</span>
+  </div>
+</div>
+
+<!-- ============ IST-ZUSTAND ============ -->
+<section>
+  <div class="sec-head">
+    <h2>Ist-Zustand</h2>
+    <span class="tag">editor.js : 496–510</span>
+  </div>
+  <p class="thesis">
+    Ihr Screenshot, als lebendes HTML nachgebaut – inklusive der Playground-Leiste
+    darunter, weil ein Teil des Problems erst im Zusammenspiel der beiden Zeilen sichtbar wird.
+  </p>
+
+  <div class="stage">
+    <div class="stage-inner">
+      <div class="frame atlas">
+        <div class="a-top">
+          <span class="a-grid"><svg><use href="#i-grid"/></svg></span>
+          <span class="a-brand"><span class="a-mark">A</span> Modeler</span>
+          <nav class="a-nav"><a href="#" class="on">Home</a><a href="#">Repository</a></nav>
+          <span class="a-spacer"></span>
+          <span class="a-org">Atlas Org</span>
+          <span class="a-ico"><svg width="16" height="16"><use href="#i-search"/></svg></span>
+          <span class="a-ico"><svg width="16" height="16"><use href="#i-bell"/></svg></span>
+          <span class="a-ico"><svg width="16" height="16"><use href="#i-help"/></svg></span>
+          <span class="a-avatar">PB</span>
+        </div>
+
+        <div class="a-bar marked">
+          <nav class="a-crumbs">
+            <span>Home</span><span class="sep">›</span><span>AD-Demo (gemockt)</span>
+            <span class="sep">›</span><span class="cur">AD-Demo: Eintritt (gemockt)</span>
+          </nav>
+          <div class="a-tabs">
+            <button type="button">Design</button>
+            <button type="button">Implement</button>
+            <button type="button" class="on">Playground</button>
+          </div>
+          <div class="a-grow"></div>
+          <button class="a-btn hl" type="button">
+            <svg><use href="#i-play"/></svg>Token simulation
+            <span class="pin">2</span><span class="pin bl">3</span>
+          </button>
+          <button class="a-btn hl" type="button">Variables</button>
+          <button class="a-btn hl" type="button">Auto-layout<span class="pin">5</span></button>
+          <button class="a-btn hl" type="button">Save</button>
+          <button class="a-btn hl" type="button">Export XML</button>
+          <button class="a-btn hl" type="button">Documentation<span class="pin bl">4</span></button>
+          <button class="a-btn hl" type="button">Deploy<span class="pin tl">1</span></button>
+        </div>
+
+        <div class="a-pg">
+          <button class="a-btn" type="button">+ Case</button>
+          <button class="a-btn" type="button">Step</button>
+          <button class="a-btn" type="button"><svg><use href="#i-play"/></svg>Run</button>
+          <button class="a-btn" type="button"><svg><use href="#i-clock"/></svg>+1 h</button>
+          <button class="a-btn" type="button">Discard</button>
+          <span class="a-hint">Step one occurrence at a time, or run the case to rest.</span>
+          <span class="a-grow"></span>
+          <span class="a-stats">simulated 2026-09-02 14:19 · tasks 1 min · seed 4933082882566035</span>
+        </div>
+
+        <div class="a-body">
+          <div class="a-side"><b>Run setup</b><div class="a-skel"></div><div class="a-skel"></div></div>
+          <div class="a-canvas"><span class="a-token">PA</span></div>
+          <div class="a-side right"><b>Analysis</b><span style="color:var(--a-muted)">✕</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="figcap">
+    <b>Die Leiste ist auf Kante gebaut.</b> Ob bei 1440 px alle sieben Knöpfe in die
+    Zeile passen, hängt an der System-Schrift des Betrachters – in Ihrem Screenshot
+    klebt <em>Deploy</em> am rechten Rand. Stellen Sie oben auf 1180 px: die Leiste hat
+    <code>flex-wrap: wrap</code> (<code>app.css:551</code>) und die Knöpfe sind einzelne
+    Kinder davon, es fallen also einzelne Knöpfe nach unten, mitten aus der Gruppe
+    heraus. Bei 1024 px steht die Hälfte in Zeile zwei.
+  </p>
+
+  <ol class="findings">
+    <li>
+      <span class="num">1</span>
+      <span class="body"><b>Deploy sieht aus wie Auto-layout.</b>
+      Das eine schickt ein Modell auf einen Server und ist nicht zurückzunehmen, das
+      andere schiebt Kästchen im Diagramm zurecht. Beide sind derselbe weiße Knopf.
+      Die Leiste sagt damit: alles hier ist gleich wichtig – was für keinen der sieben stimmt.</span>
+    </li>
+    <li>
+      <span class="num">2</span>
+      <span class="body"><b>Zustand und Befehl liegen im selben Topf.</b>
+      „Token simulation“ und „Variables“ schalten etwas <em>ein</em> und bleiben an;
+      die anderen fünf tun einmal etwas und sind fertig. Im Markup trägt nur
+      <code>#sim-toggle</code> ein <code>aria-pressed</code> – „Variables“ öffnet ein
+      Panel, sieht aber aus wie ein Befehl.</span>
+    </li>
+    <li>
+      <span class="num">3</span>
+      <span class="body"><b>Zwei Simulatoren direkt übereinander.</b>
+      Auf dem Playground-Tab steht „▶ Token simulation“ genau über „▶ Run“ – ein
+      gezeichneter Durchlauf über der echten Engine im Sandkasten, gleiches Dreieck,
+      14 px Abstand. Die Buttons werden nie pro Tab ausgeblendet
+      (<code>wireTabs</code> tauscht nur das Properties-Panel).</span>
+    </li>
+    <li>
+      <span class="num">4</span>
+      <span class="body"><b>Sieben Rahmen, kein Rhythmus.</b>
+      Rund 60 Zeichen Beschriftung in sieben umrandeten Kästen, alle mit
+      <code>font-weight: 600</code>. Jeder Rahmen sagt „eigenes Objekt“, also sieht das
+      Auge sieben konkurrierende Objekte und findet keinen Anker. Dazu konkurriert die
+      Gruppe mit Brotkrumen und Tabs um dieselbe 44-px-Zeile.</span>
+    </li>
+    <li>
+      <span class="num">5</span>
+      <span class="body"><b>Das Werkzeug liegt weit weg vom Werkstück.</b>
+      Auto-layout, Token simulation und Variables wirken auf die Zeichenfläche, sitzen
+      aber ganz oben rechts – quer über den Bildschirm von dem, was sie verändern.</span>
+    </li>
+  </ol>
+</section>
+
+<!-- ============ VARIANTE A ============ -->
+<section>
+  <div class="sec-head">
+    <h2>A · Geordnet</h2>
+    <span class="tag">Nur CSS + Markup</span>
+  </div>
+  <p class="thesis">
+    Nichts wird versteckt, nichts wird neu gebaut: dieselben sieben Funktionen,
+    aber nach Sorte gruppiert und mit einem Rang versehen. Die zwei Schalter werden
+    ein Segment, Auto-layout wird ein Icon, die zwei Ausgabe-Wege wandern unter
+    „Export“, Deploy wird blau.
+  </p>
+
+  <div class="stage">
+    <div class="stage-inner">
+      <div class="frame atlas">
+        <div class="a-top">
+          <span class="a-grid"><svg><use href="#i-grid"/></svg></span>
+          <span class="a-brand"><span class="a-mark">A</span> Modeler</span>
+          <nav class="a-nav"><a href="#" class="on">Home</a><a href="#">Repository</a></nav>
+          <span class="a-spacer"></span>
+          <span class="a-org">Atlas Org</span>
+          <span class="a-ico"><svg width="16" height="16"><use href="#i-search"/></svg></span>
+          <span class="a-ico"><svg width="16" height="16"><use href="#i-bell"/></svg></span>
+          <span class="a-ico"><svg width="16" height="16"><use href="#i-help"/></svg></span>
+          <span class="a-avatar">PB</span>
+        </div>
+
+        <div class="a-bar tidy">
+          <nav class="a-crumbs">
+            <span>Home</span><span class="sep">›</span><span>AD-Demo (gemockt)</span>
+            <span class="sep">›</span><span class="cur">AD-Demo: Eintritt (gemockt)</span>
+          </nav>
+          <div class="a-tabs">
+            <button type="button">Design</button>
+            <button type="button">Implement</button>
+            <button type="button" class="on">Playground</button>
+          </div>
+          <div class="a-grow"></div>
+          <div class="a-actions">
+
+            <div class="a-seg" role="group" aria-label="Ansicht">
+            <button class="a-btn" type="button" data-toggle aria-pressed="false"><svg><use href="#i-play"/></svg>Simulate</button>
+            <button class="a-btn" type="button" data-toggle aria-pressed="false"><svg><use href="#i-vars"/></svg>Variables</button>
+            </div>
+            <button class="a-icobtn" type="button" title="Auto-layout (F8)" aria-label="Auto-layout"><svg><use href="#i-layout"/></svg></button>
+            <span class="a-div"></span>
+            <button class="a-btn" type="button"><svg><use href="#i-save"/></svg>Save<span class="kbd">⌘S</span></button>
+            <div class="a-menuwrap">
+            <button class="a-btn" type="button" data-menu aria-expanded="false"><svg><use href="#i-share"/></svg>Export ▾</button>
+            <div class="a-menu" hidden>
+            <button type="button"><svg><use href="#i-xml"/></svg>BPMN XML herunterladen</button>
+            <button type="button"><svg><use href="#i-doc"/></svg>Dokumentation als PDF…</button>
+            </div>
+            </div>
+            <span class="a-div"></span>
+            <button class="a-btn primary" type="button"><svg><use href="#i-deploy"/></svg>Deploy</button>
+          </div>
+        </div>
+
+        <div class="a-pg">
+          <button class="a-btn" type="button">+ Case</button>
+          <button class="a-btn" type="button">Step</button>
+          <button class="a-btn" type="button"><svg><use href="#i-play"/></svg>Run</button>
+          <button class="a-btn" type="button"><svg><use href="#i-clock"/></svg>+1 h</button>
+          <button class="a-btn" type="button">Discard</button>
+          <span class="a-hint">Step one occurrence at a time, or run the case to rest.</span>
+          <span class="a-grow"></span>
+          <span class="a-stats">simulated 2026-09-02 14:19 · tasks 1 min · seed 4933082882566035</span>
+        </div>
+
+        <div class="a-body">
+          <div class="a-side"><b>Run setup</b><div class="a-skel"></div><div class="a-skel"></div></div>
+          <div class="a-canvas"><span class="a-token">PA</span></div>
+          <div class="a-side right"><b>Analysis</b><span style="color:var(--a-muted)">✕</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="figcap">
+    <b>Schalter sind jetzt Schalter.</b> Klicken Sie „Simulate“ oder „Variables“ – das
+    Segment rastet ein (<code>.btn.neutral.on</code> gibt es in <code>app.css:230</code> bereits).
+    „Export ▾“ öffnet ein Menü. Die Gruppe schrumpft von sieben Rahmen auf drei Blöcke –
+    und bleibt bei jeder Breite eine Zeile, weil die Knöpfe zu <em>einer</em> Einheit
+    zusammengefasst sind und stattdessen die Brotkrumen kürzen.
+  </p>
+
+  <div class="balance">
+    <div class="solves">
+      <h3>Was es löst</h3>
+      <ul>
+        <li>Befund 1: Deploy ist der einzige gefüllte Knopf – der Rang ist sofort da.</li>
+        <li>Befund 2: Schalter sitzen in einem Segment und rasten sichtbar ein.</li>
+        <li>Befund 4: drei Blöcke statt sieben Kästen, rund 40 % weniger Breite.</li>
+        <li>Kein neues Verhalten nötig – nur Klassen und Reihenfolge in <code>editor.js</code>.</li>
+      </ul>
+    </div>
+    <div class="costs">
+      <h3>Was es kostet</h3>
+      <ul>
+        <li>Befund 3 und 5 bleiben: Simulate steht weiter über „Run“, Auto-layout weiter im Kopf.</li>
+        <li>„Export XML“ und „Documentation“ kosten einen Klick mehr.</li>
+        <li>Ein Icon ohne Text für Auto-layout braucht ein verlässliches Tooltip.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VARIANTE B ============ -->
+<section>
+  <div class="sec-head">
+    <h2>B · Werkzeug ans Werkstück</h2>
+    <span class="tag rec">Empfehlung</span>
+  </div>
+  <p class="thesis">
+    Die Leiste wird nach Zuständigkeit geteilt statt nach Platz. Oben bleibt, was das
+    <em>Dokument</em> betrifft – Speichern, Weitergeben, Ausliefern. Alles, was auf die
+    <em>Zeichenfläche</em> wirkt, zieht auf die Zeichenfläche: eine schwebende Palette
+    unten links, dort wo bpmn.io auch sonst seine Werkzeuge hat. Und die Palette zeigt
+    nur, was der aktuelle Tab hergibt.
+  </p>
+
+  <div class="stage">
+    <div class="stage-inner">
+      <div class="frame atlas">
+        <div class="a-top">
+          <span class="a-grid"><svg><use href="#i-grid"/></svg></span>
+          <span class="a-brand"><span class="a-mark">A</span> Modeler</span>
+          <nav class="a-nav"><a href="#" class="on">Home</a><a href="#">Repository</a></nav>
+          <span class="a-spacer"></span>
+          <span class="a-org">Atlas Org</span>
+          <span class="a-ico"><svg width="16" height="16"><use href="#i-search"/></svg></span>
+          <span class="a-ico"><svg width="16" height="16"><use href="#i-bell"/></svg></span>
+          <span class="a-ico"><svg width="16" height="16"><use href="#i-help"/></svg></span>
+          <span class="a-avatar">PB</span>
+        </div>
+
+        <div class="a-bar tidy">
+          <nav class="a-crumbs">
+            <span>Home</span><span class="sep">›</span><span>AD-Demo (gemockt)</span>
+            <span class="sep">›</span><span class="cur">AD-Demo: Eintritt (gemockt)</span>
+          </nav>
+          <div class="a-tabs">
+            <button type="button">Design</button>
+            <button type="button">Implement</button>
+            <button type="button" class="on">Playground</button>
+          </div>
+          <div class="a-grow"></div>
+          <div class="a-actions">
+
+            <span class="a-status" title="Ungesicherte Änderungen"><span class="dot"></span>Nicht gespeichert</span>
+            <button class="a-btn" type="button"><svg><use href="#i-save"/></svg>Save<span class="kbd">⌘S</span></button>
+            <div class="a-menuwrap">
+            <button class="a-btn" type="button" data-menu aria-expanded="false"><svg><use href="#i-share"/></svg>Share ▾</button>
+            <div class="a-menu" hidden>
+            <div class="a-mtitle">Weitergeben</div>
+            <button type="button"><svg><use href="#i-xml"/></svg>BPMN XML herunterladen</button>
+            <button type="button"><svg><use href="#i-doc"/></svg>Dokumentation als PDF…</button>
+            </div>
+            </div>
+            <button class="a-btn primary" type="button"><svg><use href="#i-deploy"/></svg>Deploy</button>
+          </div>
+        </div>
+
+        <div class="a-pg">
+          <button class="a-btn" type="button">+ Case</button>
+          <button class="a-btn" type="button">Step</button>
+          <button class="a-btn" type="button"><svg><use href="#i-play"/></svg>Run</button>
+          <button class="a-btn" type="button"><svg><use href="#i-clock"/></svg>+1 h</button>
+          <button class="a-btn" type="button">Discard</button>
+          <span class="a-hint">Step one occurrence at a time, or run the case to rest.</span>
+          <span class="a-grow"></span>
+          <span class="a-stats">simulated 2026-09-02 14:19 · tasks 1 min · seed 4933082882566035</span>
+        </div>
+
+        <div class="a-body">
+          <div class="a-side"><b>Run setup</b><div class="a-skel"></div><div class="a-skel"></div></div>
+          <div class="a-canvas">
+            <span class="a-token">PA</span>
+            <div class="a-palette" role="group" aria-label="Ansicht der Zeichenfläche">
+              <button class="a-icobtn" type="button" data-toggle aria-pressed="false" title="Variablen einblenden" aria-label="Variablen einblenden"><svg><use href="#i-vars"/></svg></button>
+              <span class="a-div"></span>
+              <button class="a-icobtn" type="button" title="Verkleinern" aria-label="Verkleinern">−</button>
+              <span class="zoom">100 %</span>
+              <button class="a-icobtn" type="button" title="Vergrößern" aria-label="Vergrößern">+</button>
+            </div>
+          </div>
+          <div class="a-side right"><b>Analysis</b><span style="color:var(--a-muted)">✕</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="figcap">
+    <b>Der Playground-Tab, wie er hier steht.</b> „Simulate“ und „Auto-layout“ fehlen –
+    absichtlich: auf diesem Tab läuft die echte Engine, ein gezeichneter Token-Lauf hat
+    hier nichts zu suchen und ein Auto-Layout schon gar nicht. Auf dem Design-Tab
+    trägt dieselbe Palette vier Werkzeuge:
+  </p>
+
+  <div class="stage" style="margin-top:14px">
+    <div class="stage-inner">
+      <div class="frame atlas" style="width:var(--fw)">
+        <div class="a-bar tidy">
+          <nav class="a-crumbs">
+            <span>Home</span><span class="sep">›</span><span>AD-Demo (gemockt)</span>
+            <span class="sep">›</span><span class="cur">AD-Demo: Eintritt (gemockt)</span>
+          </nav>
+          <div class="a-tabs">
+            <button type="button" class="on">Design</button>
+            <button type="button">Implement</button>
+            <button type="button">Playground</button>
+          </div>
+          <div class="a-grow"></div>
+          <div class="a-actions">
+            <span class="a-status saved"><span class="dot"></span>Gespeichert · vor 2 Min</span>
+            <div class="a-menuwrap">
+            <button class="a-btn" type="button" data-menu aria-expanded="false"><svg><use href="#i-share"/></svg>Share ▾</button>
+            <div class="a-menu" hidden>
+            <div class="a-mtitle">Weitergeben</div>
+            <button type="button"><svg><use href="#i-xml"/></svg>BPMN XML herunterladen</button>
+            <button type="button"><svg><use href="#i-doc"/></svg>Dokumentation als PDF…</button>
+            </div>
+            </div>
+            <button class="a-btn primary" type="button"><svg><use href="#i-deploy"/></svg>Deploy</button>
+          </div>
+        </div>
+        <div class="a-body" style="height:196px">
+          <div class="a-canvas" style="margin:10px">
+            <span class="a-token">PA</span>
+            <div class="a-palette" role="group" aria-label="Werkzeuge der Zeichenfläche">
+              <button class="a-icobtn" type="button" data-toggle aria-pressed="false" title="Token-Simulation" aria-label="Token-Simulation"><svg><use href="#i-play"/></svg></button>
+              <button class="a-icobtn" type="button" data-toggle aria-pressed="false" title="Variablen einblenden" aria-label="Variablen einblenden"><svg><use href="#i-vars"/></svg></button>
+              <button class="a-icobtn" type="button" title="Auto-Layout (F8)" aria-label="Auto-Layout"><svg><use href="#i-layout"/></svg></button>
+              <span class="a-div"></span>
+              <button class="a-icobtn" type="button" title="Verkleinern" aria-label="Verkleinern">−</button>
+              <span class="zoom">100 %</span>
+              <button class="a-icobtn" type="button" title="Vergrößern" aria-label="Vergrößern">+</button>
+            </div>
+          </div>
+          <div class="a-side right"><b>Properties</b><span style="color:var(--a-muted)">✕</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="figcap">
+    Der Kopf ist auf jedem Tab identisch und ruhig: Status, <b>Save</b>, <b>Share</b>,
+    <b>Deploy</b>. Was sich pro Tab ändert, ändert sich dort, wo es wirkt.
+  </p>
+
+  <div class="balance">
+    <div class="solves">
+      <h3>Was es löst</h3>
+      <ul>
+        <li>Alle fünf Befunde. Der Kopf trägt drei Elemente statt sieben.</li>
+        <li>Befund 3 verschwindet strukturell: der gezeichnete Lauf sitzt am Diagramm, der echte in der Playground-Zeile.</li>
+        <li>Befund 5 kehrt sich um – die Werkzeuge liegen am Werkstück, wie in jedem Editor, den man sonst kennt.</li>
+        <li>Der Kopf bleibt auch bei 1024 px in einer Zeile.</li>
+      </ul>
+    </div>
+    <div class="costs">
+      <h3>Was es kostet</h3>
+      <ul>
+        <li>Die Palette überlagert die Zeichenfläche – sie braucht eine tote Ecke und darf die bpmn.io-Marke nicht verdecken.</li>
+        <li>Der Status „Nicht gespeichert“ ist <em>neu</em>: <code>editor.js</code> führt heute keinen Dirty-Flag. Ohne den zeigt der Punkt nichts Ehrliches an.</li>
+        <li>Wer Auto-layout suchte, sucht es einmalig neu. Das Tastenkürzel F8 bleibt.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VARIANTE C ============ -->
+<section>
+  <div class="sec-head">
+    <h2>C · Ruhige Leiste</h2>
+    <span class="tag">Radikal</span>
+  </div>
+  <p class="thesis">
+    Die konsequente Antwort auf „unordentlich“: im Kopf steht nur noch das Ziel der
+    Arbeit. Ein Statuswort, ein blauer Knopf, ein Dreipunkt-Menü. Alles andere ist
+    einen Klick oder ein <span class="mono">⌘K</span> entfernt – das Menü steht hier
+    offen, damit sichtbar bleibt, was darin liegt.
+  </p>
+
+  <div class="stage">
+    <div class="stage-inner">
+      <div class="frame atlas" style="padding-bottom:0">
+        <div class="a-top">
+          <span class="a-grid"><svg><use href="#i-grid"/></svg></span>
+          <span class="a-brand"><span class="a-mark">A</span> Modeler</span>
+          <nav class="a-nav"><a href="#" class="on">Home</a><a href="#">Repository</a></nav>
+          <span class="a-spacer"></span>
+          <span class="a-org">Atlas Org</span>
+          <span class="a-ico"><svg width="16" height="16"><use href="#i-search"/></svg></span>
+          <span class="a-ico"><svg width="16" height="16"><use href="#i-bell"/></svg></span>
+          <span class="a-ico"><svg width="16" height="16"><use href="#i-help"/></svg></span>
+          <span class="a-avatar">PB</span>
+        </div>
+
+        <div class="a-bar tidy" style="position:relative;z-index:20">
+          <nav class="a-crumbs">
+            <span>Home</span><span class="sep">›</span><span>AD-Demo (gemockt)</span>
+            <span class="sep">›</span><span class="cur">AD-Demo: Eintritt (gemockt)</span>
+          </nav>
+          <div class="a-tabs">
+            <button type="button">Design</button>
+            <button type="button">Implement</button>
+            <button type="button" class="on">Playground</button>
+          </div>
+          <div class="a-grow"></div>
+          <div class="a-actions">
+
+            <span class="a-status saved"><span class="dot"></span>Gespeichert · vor 2 Min</span>
+            <button class="a-btn primary" type="button"><svg><use href="#i-deploy"/></svg>Deploy</button>
+            <div class="a-menuwrap">
+            <button class="a-icobtn" type="button" data-menu aria-expanded="true" aria-label="Weitere Aktionen" style="border-color:var(--a-border-strong);background:var(--a-surface)"><svg><use href="#i-more"/></svg></button>
+            <div class="a-menu" style="min-width:266px">
+            <div class="a-mtitle">Ansicht</div>
+            <button type="button"><svg><use href="#i-play"/></svg>Token-Simulation<span class="kbd">⇧S</span></button>
+            <button type="button"><svg><use href="#i-vars"/></svg>Variablen<span class="kbd">⇧V</span></button>
+            <button type="button"><svg><use href="#i-layout"/></svg>Auto-Layout<span class="kbd">F8</span></button>
+            <hr>
+            <div class="a-mtitle">Diagramm</div>
+            <button type="button"><svg><use href="#i-save"/></svg>Speichern<span class="kbd">⌘S</span></button>
+            <button type="button"><svg><use href="#i-xml"/></svg>BPMN XML herunterladen</button>
+            <button type="button"><svg><use href="#i-doc"/></svg>Dokumentation als PDF…</button>
+            <hr>
+            <button type="button"><svg><use href="#i-search"/></svg>Alle Befehle…<span class="kbd">⌘K</span></button>
+            </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="a-pg">
+          <button class="a-btn" type="button">+ Case</button>
+          <button class="a-btn" type="button">Step</button>
+          <button class="a-btn" type="button"><svg><use href="#i-play"/></svg>Run</button>
+          <button class="a-btn" type="button"><svg><use href="#i-clock"/></svg>+1 h</button>
+          <button class="a-btn" type="button">Discard</button>
+          <span class="a-hint">Step one occurrence at a time, or run the case to rest.</span>
+          <span class="a-grow"></span>
+          <span class="a-stats">simulated 2026-09-02 14:19 · tasks 1 min · seed 4933082882566035</span>
+        </div>
+
+        <div class="a-body" style="height:320px">
+          <div class="a-side"><b>Run setup</b><div class="a-skel"></div><div class="a-skel"></div></div>
+          <div class="a-canvas"><span class="a-token">PA</span></div>
+          <div class="a-side right"><b>Analysis</b><span style="color:var(--a-muted)">✕</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="figcap">
+    <b>Zwei sichtbare Bedienelemente statt sieben.</b> Der Preis steht darunter –
+    diese Variante ist gut für jemanden, der das Werkzeug täglich benutzt, und
+    unfreundlich zu jemandem, der es zum ersten Mal öffnet.
+  </p>
+
+  <div class="balance">
+    <div class="solves">
+      <h3>Was es löst</h3>
+      <ul>
+        <li>Die Leiste ist auf jeder Fensterbreite ruhig – Umbruch ausgeschlossen.</li>
+        <li>Ein einziger Blickanker: Deploy.</li>
+        <li>Die Tastenkürzel werden sichtbar und damit erst lernbar.</li>
+      </ul>
+    </div>
+    <div class="costs">
+      <h3>Was es kostet</h3>
+      <ul>
+        <li>Auffindbarkeit. Was hinter <span class="mono">⋯</span> liegt, existiert für Gelegenheitsnutzer praktisch nicht.</li>
+        <li>Token-Simulation ist ein <em>Schalter</em>; in einem Menü verliert sie ihren An-Zustand, wenn nicht ein Häkchen mitgeführt wird.</li>
+        <li><span class="mono">⌘K</span> gibt es noch nicht – das wäre ein eigenes Stück Arbeit, nicht Teil dieses Umbaus.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EMPFEHLUNG ============ -->
+<section>
+  <div class="sec-head"><h2>Empfehlung</h2></div>
+  <div class="verdict">
+    <p style="font-size:19px;line-height:1.5;margin-bottom:18px">
+      <b style="font-family:Archivo,sans-serif;font-weight:600">B</b>, und zwar in zwei
+      Schritten. A ist keine eigene Richtung, sondern die erste Hälfte von B – dieselbe
+      Gruppierung, dasselbe blaue Deploy, nur ohne den Umzug auf die Zeichenfläche.
+      Wer bei A stehen bleibt, hat eine aufgeräumte Leiste; wer weitergeht, hat eine,
+      die auch stimmt. C ist reizvoll, aber es löst Unordnung durch Verstecken, und
+      dafür ist der Modeler zu selten in denselben Händen.
+    </p>
+    <ol class="steps">
+      <li><span><b>Schritt 1 – eine Stunde, kein Risiko.</b> Reihenfolge und Klassen in
+        <code>editor.js:496–510</code>: Segment für die zwei Schalter, Icon für
+        Auto-layout, „Export ▾“ über XML und Dokumentation, <code>class="btn"</code>
+        statt <code>btn neutral</code> für Deploy. <code>.btn.neutral.on</code> und
+        <code>.btn.dropdown-toggle</code> stehen in <code>app.css</code> schon bereit.</span></li>
+      <li><span><b>Schritt 2 – die Palette.</b> Simulate, Variables und Auto-layout aus
+        dem Kopf auf eine schwebende Palette unten links im Canvas, sichtbar nach Tab.
+        Damit fällt der Doppel-Play auf dem Playground-Tab weg – der Befund, der Ihren
+        Screenshot ausgelöst hat.</span></li>
+      <li><span><b>Unabhängig davon: <code>flex-wrap: wrap</code> überdenken.</b>
+        In <code>app.css:551</code> ist der Umbruch das, was die Leiste im engen Fenster
+        ausfransen lässt – und weil die Knöpfe einzelne Flex-Kinder sind, bricht sie
+        mitten in der Gruppe. Fasst man die Aktionen in einen Container und setzt
+        <code>nowrap</code>, rückt der Kopf stattdessen zusammen. Dazu passt ein
+        kleiner Fund nebenbei: <code>app.css:557</code> gibt den Brotkrumen bereits
+        <code>overflow: hidden</code> und <code>text-overflow: ellipsis</code>, aber
+        <code>app.css:562</code> macht dasselbe Element zu <code>display: flex</code> –
+        und in einem Flex-Container greift die Ellipse nie. Das Kürzen, das dort
+        gemeint war, findet heute nicht statt.</span></li>
+      <li><span><b>Nur wenn der Status kommt, kommt der Punkt.</b> „Nicht gespeichert“
+        setzt einen Dirty-Flag voraus, den der Editor heute nicht führt. Ohne ihn
+        lieber ganz weglassen als etwas anzeigen, das nicht stimmt.</span></li>
+    </ol>
+  </div>
+</section>
+
+<footer class="page prose">
+  <p>
+    Alle Mockups sind lauffähiges HTML mit den Tokens aus <code>api/web/app.css</code>
+    (<code>--accent #0b5cff</code>, <code>--border-strong #cdd0d6</code>, Radius 6 px,
+    Button-Padding 8/14 px) und der Geometrie aus <code>.editor-bar</code>. Die
+    Produkt-Beschriftungen sind bewusst englisch geblieben wie im Original; nur neue
+    Menüeinträge sind deutsch beschriftet, damit erkennbar ist, was neu ist.
+  </p>
+  <p>
+    Die Mockups bleiben hell, auch wenn diese Seite dunkel gerendert wird: Atlas kennt
+    weder <code>prefers-color-scheme</code> noch <code>data-theme</code>, und ein
+    mitkippendes Mockup würde das Produkt falsch zeigen.
+  </p>
+</footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // --- Fensterbreite: setzt --fw und skaliert jede Bühne auf die Spaltenbreite ---
+  var chips = document.querySelectorAll(".chip");
+  var hint = document.getElementById("whint");
+  var HINTS = {
+    "1440": "Die Breite Ihres Screenshots. Ob Deploy hier noch in die Zeile passt, entscheidet die System-Schrift – so knapp ist es.",
+    "1180": "Ein halbes Fenster auf einem großen Schirm. Der Ist-Zustand bricht hier sicher um.",
+    "1024": "Laptop im geteilten Fenster. Vergleichen Sie, welcher Entwurf in einer Zeile bleibt."
+  };
+
+  function setWidth(w) {
+    document.documentElement.style.setProperty("--fw", w + "px");
+    chips.forEach(function (c) {
+      c.setAttribute("aria-pressed", String(c.dataset.w === w));
+    });
+    if (hint && HINTS[w]) hint.textContent = HINTS[w];
+    fit();
+  }
+  chips.forEach(function (c) {
+    c.addEventListener("click", function () { setWidth(c.dataset.w); });
+  });
+
+  // Skaliert das simulierte Fenster herunter, damit die ganze Leiste sichtbar ist.
+  // Das Layout wird bei voller Breite berechnet — der Umbruch bleibt also echt.
+  function fit() {
+    document.querySelectorAll(".stage").forEach(function (stage) {
+      var inner = stage.firstElementChild;
+      if (!inner) return;
+      var frame = inner.firstElementChild;
+      if (!frame) return;
+      inner.style.transform = "none";
+      stage.style.height = "";
+      var avail = stage.clientWidth;
+      var natural = frame.offsetWidth || 1;
+      var scale = Math.min(1, avail / natural);
+      inner.style.transform = "scale(" + scale + ")";
+      stage.style.height = Math.ceil(frame.offsetHeight * scale) + "px";
+    });
+  }
+
+  if (window.ResizeObserver) {
+    var ro = new ResizeObserver(function () { fit(); });
+    document.querySelectorAll(".stage").forEach(function (s) { ro.observe(s); });
+  }
+  window.addEventListener("resize", fit);
+  window.addEventListener("load", fit);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+  setWidth("1440");
+
+  // --- Schalter in den Mockups rasten ein ---
+  document.querySelectorAll("[data-toggle]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var on = b.getAttribute("aria-pressed") === "true";
+      b.setAttribute("aria-pressed", String(!on));
+      b.classList.toggle("on", !on);
+    });
+  });
+
+  // --- Menüs ---
+  function closeAll(except) {
+    document.querySelectorAll("[data-menu]").forEach(function (t) {
+      var m = t.parentElement.querySelector(".a-menu");
+      if (!m || m === except) return;
+      m.hidden = true;
+      t.setAttribute("aria-expanded", "false");
+    });
+  }
+  document.querySelectorAll("[data-menu]").forEach(function (t) {
+    t.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var m = t.parentElement.querySelector(".a-menu");
+      if (!m) return;
+      var willOpen = m.hidden;
+      closeAll(m);
+      m.hidden = !willOpen;
+      t.setAttribute("aria-expanded", String(willOpen));
+    });
+  });
+  document.addEventListener("click", function () { closeAll(null); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeAll(null);
+  });
+})();
+</script>

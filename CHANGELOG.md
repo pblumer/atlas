@@ -204,6 +204,143 @@ _Changed_ / _Removed_ for each version.
   processes, the Problems panel can check data flow against it, and a data store can
   say which class it holds and which Worker backs it.
 
+- **See who is signed in right now.** The user list under Organization gains a
+  **Presence** column: *online* for somebody who did something in the last five minutes,
+  *idle* for a session that is open but untouched, *offline* for an account no browser is
+  reporting for. Until now the list could only say whether an account was *enabled* — the
+  same answer for the person reading the screen this second and for the one who left in
+  March ([ADR-0228](docs/adr/0228-user-presence.md)).
+
+  The distinction that makes it worth having is between the last two states, and neither
+  falls out of "when did a request last arrive". The Console polls on its own, so a tab
+  parked behind another window would look busy forever; and a session outlives the laptop
+  that was closed on it by up to twelve hours. So the browser reports two separate things
+  once a minute — that the tab is still open, and whether anybody actually touched it —
+  and the column reads both, asking the first question first: a session that has stopped
+  reporting is *offline* whatever it was doing five minutes ago.
+
+  **Nothing is stored.** Presence is read from the live sessions and from nothing else: no
+  record, no event, nothing in a backup, and no way to ask it about yesterday. A restart
+  shows nobody, which is not a gap — after a restart nobody *is* signed in. It is
+  deliberately coarse (three states, never which page or which action), administrators
+  only, the same reach as the user list it annotates. The column refreshes itself every
+  thirty seconds without reloading the page, so a half-typed user form survives it.
+
+- **An inbound event watch has an hourly budget.** A watch reads a foreign system and
+  publishes what it finds; every event can start a process, and that process can write
+  back to the system the watch reads. When it writes something the watch's own query
+  matches, the loop closes and has no natural end — and nothing looks broken from inside:
+  every instance is well-formed, every task succeeds, every message is delivered exactly
+  once. Only the *rate* tells a loop from a busy morning
+  ([ADR-0225](docs/adr/0225-inbound-watch-budget.md)).
+
+  Each watch now carries **Max events/hour** — 60 when it names none, so the protection
+  is the default rather than something to remember. A batch that would cross the ceiling
+  is refused whole and the watch switches itself off, saying so in the Console in words
+  that name the number to raise. The resume cursor stays put, so nothing is lost:
+  enabling the watch again re-reads what was refused, with a fresh window.
+
+  It is deliberately cause-agnostic, because the loop the engine fix below closed is not
+  the only shape: two processes can build one between them with no single model being
+  wrong.
+
+- **See what a mockup run asked the database.** Operations → **Mock database** shows one
+  card per SQL worker in mockup mode: every statement it was asked, in order, with the
+  values the process bound — and the ones with **no prepared answer** in red, with the
+  reason. Those are the entries an operator comes for: reading one and pasting it into
+  the answers under Workers is how a seed gets built, and until now that meant scrolling
+  the worker's log past everything else it did
+  ([ADR-0224](docs/adr/0224-sql-mock-journal.md)).
+
+  The shape is the mock directory's ([ADR-0213](docs/adr/0213-ad-mock-directory-in-the-console.md)):
+  the worker snapshots its own journal and posts it, because a worker may sit in a
+  network the server cannot dial back into. It is bounded at the crossing, keeps the
+  newest when the bound bites, and is memory on both sides — gone on restart, in no event
+  and no backup. A report that cannot be delivered is logged and dropped, and the next
+  statement re-sends the whole journal, so a Console that was unreachable catches up by
+  itself.
+
+  **Two things differ from the directory view, and both are deliberate.** There is no
+  table to browse: this mockup answers statements and executes none, so an `INSERT` does
+  not change what a later `SELECT` returns — there is no "now" to draw, only the
+  sequence. And ADR-0213 could promise that no password travels, because the mock
+  directory stores none; **this one cannot**. A journal entry carries the values a
+  process bound, and a process under test binds whatever it binds — a password hash on
+  its way into a table is a bound parameter like any other, and nothing can tell it from
+  an id. So the read is admin-only, a worker is handed the report address only while the
+  mockup is on, and none of it is durable. Values render as JSON, because a string `"7"`
+  and the number `7` being distinguishable is frequently the answer to "why did that
+  lookup find nobody".
+
+- **An example where a Jira ticket starts the process.** `examples/jira-ticket-eingang/`
+  is the Zugangsantrag's other direction: instead of Atlas writing to Jira, Jira starts
+  Atlas. A message start event waits on `jira.ticket.created`, an event watch under
+  Console → Connectors → Events publishes every issue its JQL finds under that name, and
+  the instance begins with no form at all — `issueKey`, `projectKey`, `summary`,
+  `reporter` and the whole issue arrive from the event. It then walks the chain the
+  account lookup exists for: `reporter` is a display *name*, Jira assigns to an
+  `accountId`, so `search-users` sits between them and `assign-issue` after, reading
+  `=konten[1].accountId`. The gateway's default is the branch **without** an assignment,
+  because an empty result means three different things Jira does not distinguish. The
+  examples index gained a row for it and for `jira-zugangsantrag/`, which had none.
+
+- **The database mockup is a switch in the Console.** [ADR-0221](docs/adr/0221-sql-mock-mode.md)
+  shipped mockup mode as environment variables on a worker, and named a Console switch as
+  the follow-up. This is it: **Workers → Databases** has a checkbox and a field for the
+  prepared answers, and saving restarts the supervised SQL workers holding it. Atlas keeps
+  running, and no deployment change is involved — which was the whole complaint, because a
+  variable set once at start is the wrong ceremony for a thing you flip while trying a
+  process out.
+
+  Three rules come straight from the Active Directory switch it copies. A stored "off" and
+  no record at all are **different states**: without one, whatever the server was started
+  with keeps deciding, so an existing install works exactly as it did until somebody
+  touches the switch. The answers are **content, not a path** — the Console is org-wide and
+  a path typed there belongs to whichever host runs the worker, so Atlas stores the JSON
+  and writes the file itself, named by a digest of its own content so that replacing a seed
+  actually reaches the worker. And the seed is **parsed on save**, so a typo is refused at
+  the form with its own complaint rather than discovered as a mockup that quietly answers
+  nothing.
+
+  One switch covers all three products, as the AD one covers all directories: simulating
+  SQL Server while really writing to PostgreSQL would look like a full mockup run, which is
+  the one thing it must never look like.
+
+  Two rules that were right for a real database had to move, or the switch would have been
+  a checkbox with nothing behind it. A worker record with **no secret** is now handed to
+  the worker while the mockup is on — normally its name is withheld, because a name with no
+  DSN behind it is what a SQL worker refuses to start on, and in mockup mode that would
+  leave the mockup with no name a task can address. And **creating** a database worker no
+  longer demands a connection string while the mockup is on: that is a credential for a
+  database nobody will dial, and it is exactly the state an operator is in when they turn
+  the mockup on *because* they have no database. A connection string given anyway is still
+  sealed and kept, so turning the mockup off is not a re-typing exercise.
+
+- **A message start event says whether anything feeds it.** A model names a message and
+  nothing else — what publishes it is an operational fact, so the same process can be
+  started by a Jira watch, a clio subscription, a `POST /api/v1/messages` or another
+  process's send task, and swapping one for another is a Console change rather than a
+  redeploy. The cost of that seam was that a name typed one character differently in the
+  model and in Console → Connectors → Events is two working halves that never meet: no
+  error anywhere, and a process that simply never starts. The Modeler now reads
+  `GET /api/v1/message-sources` and says, under the message name, which inbound watches
+  publish it — the connector, its kind, the JQL or subject it follows, and whether it is
+  switched off — or that none does, with where one is configured. It reports; it does not
+  bind: the model still names no source. A watch's query is configuration, so it is shown
+  only to a caller with viewer access to that connector; that a name is fed at all is
+  answered to any modeller, like the connector picker's own listing.
+
+- **A Jira task can look an account up.** An eighth Jira operation, `search-users`, turns
+  what a process knows about a person — an address, a name — into the `accountId` Jira
+  assigns an issue to ([ADR-0223](docs/adr/0223-jira-account-lookup.md)).
+  The term travels as `query` on Cloud and `username` on Data Center, decided by the
+  connector's own credential rather than by the model, and an optional project restricts
+  the search to the accounts that project can actually assign — the ones a later
+  `assign-issue` will not be refused for. The matched accounts land in the result variable
+  as a JSON array, so an assign reads `=konten[1].accountId` (FEEL lists are 1-based).
+  Before this, a model could only hard-code an opaque per-site id or call Jira through the
+  REST connector with a second copy of the credential.
+
 - **A database task can be tried without a database.** The SQL Worker Types — MS SQL
   Server, MariaDB, PostgreSQL — were the only ones that could not be exercised at all
   without the production dependency, and the database a process reads is the HR system
@@ -453,6 +590,59 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The Modeler's bar carries two buttons now, and a menu for the rest.** It ended with
+  seven, added one at a time as the editor grew — Token simulation, Variables,
+  Auto-layout, Save, Export XML, Documentation, Deploy — and every one of them was the
+  same white button. That said they were the same size of decision, which they never
+  were: Auto-layout nudges boxes, Deploy puts a definition on a server and cannot be
+  taken back ([ADR-0229](docs/adr/0229-modeler-bar-hierarchy.md)).
+
+  The bar now carries **Save** and **Deploy**, with Deploy the only filled button because
+  it is the only act there that leaves the browser. The other five moved into a **…**
+  menu beside them, grouped by what they touch: *View* (Token simulation, Variables) and
+  *Diagram* (Auto-layout, Export XML, Documentation). A toggle in a menu cannot look
+  held down, so it says it is on with a check and with `aria-pressed` — the Variables
+  toggle never announced its state at all before.
+
+  Two things that were not about any single button go with it. The bar is one row again
+  at the widths people work at: it wraps, and the buttons were direct children of it, so
+  a narrower window used to drop two or three of them into a second ragged row rather
+  than shorten anything. And the Playground tab no longer shows **▶ Token simulation**
+  directly above **▶ Run** — a drawn walkthrough with no engine
+  ([ADR-0078](docs/adr/0078-design-view-token-simulation.md)) one row above a real
+  sandboxed one ([ADR-0215](docs/adr/0215-modeler-playground.md)), same triangle, two
+  entirely different things.
+
+  One control could not simply move. Token simulation is not a command but a mode: while
+  it is on, the diagram is played rather than edited and the modeling palette is hidden.
+  Its control bar — the one that appears with the mode — now carries **Exit simulation**,
+  so leaving is one visible click rather than a trip back through the menu.
+
+  Nothing about what the controls *do* changed, and F8 still runs Auto-layout from
+  wherever focus sits. The cost is honest and worth naming: five controls are a click
+  further away, and someone opening the Modeler for the first time cannot see that they
+  exist until they open the menu.
+
+- **The three database Worker Types are one capability, and now say so everywhere.** MS
+  SQL Server, MariaDB and PostgreSQL differ in a driver name, a placeholder syntax and —
+  for SQL Server alone — the ability to bind a parameter by name
+  ([ADR-0173](docs/adr/0173-generic-sql-connector.md)); in everything an operator or an
+  author does with them they are the same kind. The engine, the compiler and the worker
+  already served all three from one code path, but the two Console surfaces and the
+  environment vocabulary did not, and both had drifted. The Worker catalog card told
+  only SQL Server's reader that Atlas supervises the worker for it, only PostgreSQL's
+  about the row cap, and none of the three that a database task can now be tried without
+  a database at all — so which facts an operator learned depended on which of the three
+  they clicked. The Modeler's properties panel repeated the same nine fields three
+  times. Both are now built from one description per surface, and two guards keep them
+  that way. The environment variables a SQL worker reads
+  (`ATLAS_<PRODUCT>_CONNECTORS`, `_<NAME>_DSN`, `_MOCK`, `_MOCK_SEED`) are spelled once,
+  by the product itself, instead of being assembled in the engine and in the worker
+  separately — the same argument `connector/envname` already won for connector names.
+  Nothing an operator sets or a model states changed; SQL Server is now called
+  *Microsoft SQL Server* on the Workers page and in the kind picker, which is what the
+  Modeler and the Worker Type registry already called it.
+
 - **The Workers list reads like a list again.** Console → Workers gave every configured
   worker up to seven action buttons and spelled out every deployed process that resolves
   through it, so a shared mail worker drew fourteen wrapped lines of links and the rows
@@ -543,6 +733,128 @@ _Changed_ / _Removed_ for each version.
   extension elements are still `<atlas:jiraConnector>` and friends.
 
 ### Fixed
+
+- **A Jira watch could get stuck on one window and hold the whole Console with it.** A
+  jira watch resumes from a `created >=` / `updated >=` clause, held a safety lag behind
+  the newest issue it saw so an issue Jira's index publishes late is still inside the
+  next window ([ADR-0214](docs/adr/0214-jira-inbound-issue-watch.md)). That is right at
+  the tip of a query. Behind a **full** page it inverted: a page that filled the bridge's
+  batch limit stopped at the limit and not at the end of the result set, and subtracting
+  the lag put the next cursor *inside the page just read*. The watch then re-read and
+  re-published the same page every tick and never reached the issue behind it — for
+  ever. A bulk import, or a bulk transition on an `updated` watch, is all it took: a few
+  hundred issues sharing one minute.
+
+  Nothing about it looked broken. The reads succeeded, the publishes were real work, and
+  the engine correctly discarded every one against its durable high-water mark — while
+  each round spent a Jira search, a run-loop batch and two fsyncs, and every Console
+  request that has to reach the run loop queued behind them. The lag now applies only to
+  a page that is not full; behind a full page the cursor lands on the newest issue's own
+  minute, which `>=` re-reads, so the read moves without skipping anything. A page whose
+  issues *all* share one minute — which no minute-granular cursor can page through —
+  steps past that minute and logs `inbound_watch.minute_overflowed` rather than re-reading
+  it for ever ([ADR-0227](docs/adr/0227-jira-read-bounds-and-progress.md)).
+
+- **A jira watch polled every two seconds instead of every minute.** ADR-0214 gives a
+  watch a `pollSeconds` of its own and a *kind's default* for one that states none —
+  60 seconds for Jira, because a site rate-limits per site and a two-second poll per
+  watch spends that budget on empty answers. The default was never implemented: a watch
+  created without an explicit cadence fell through to the bridge's own tick and was read
+  thirty times more often than intended, each time for a Jira search, a run-loop round
+  trip, and the record write below.
+
+- **Every watch rewrote its record on every tick.** The bridge recorded `lastPolledAt`
+  for each due subscription on each tick, and re-saved the resume cursor even when the
+  read had produced the one already stored. A design-time record is written with an
+  fsync of the file and one of its directory, on the run-loop goroutine — so a handful of
+  watches meant a continuous fsync stream on the single writer, in front of every request
+  that needs it. `lastPolledAt` is now written only for a watch whose cadence actually
+  reads it back, and a cursor only when it moved.
+
+- **An uncapped Jira search had no ceiling at all.** `maxResults="0"` means "read every
+  match", and the client paged until the site ran out, held every result in memory, and
+  handed the lot to the engine as one process variable to encode and fsync — so a JQL
+  that matched far more than its author believed was an out-of-memory in the server
+  rather than a failed task. The account search had a second edge: it answers with a bare
+  array, carrying no total and no page token, so a server that ignored `startAt` was read
+  for ever. An uncapped read now stops at 5000 results with an error naming the fix. It
+  fails the job — retry, then an incident — rather than truncating, because a model told
+  it read everything when it read the first 5000 is the worse outcome. A task that states
+  its own `maxResults` is untouched.
+
+- **A message start event ran the branches nobody triggered — and could feed itself
+  forever.** A start event is a trigger, and BPMN instantiates at the one that fired.
+  Atlas seeded a token at **every** root start event whatever created the instance, which
+  [ADR-0035](docs/adr/0035-message-start-events.md) recorded as a message start behaving
+  "exactly like a none start". True of a process with one start event; false of a process
+  with two — and the difference is not cosmetic. A Jira event watch
+  ([ADR-0214](docs/adr/0214-jira-inbound-issue-watch.md)) published
+  `jira.ticket.created`; the message-started instance also ran the none-start branch; that
+  branch created a Jira issue; the watch matched it; the next instance created the next
+  issue. The chain is visible in Operations — the instance for `PAT-13` holding
+  `newTicket = PAT-14`, the one for `PAT-14` holding `PAT-15` — and it stopped only when
+  the watch was deleted by hand. Nothing raised an error, because from the engine's side
+  nothing went wrong.
+
+  A trigger now instantiates at itself
+  ([ADR-0226](docs/adr/0226-start-events-are-triggers.md)):
+  the creation command carries the start event that fired, and the argument is
+  **required**, so a fourth kind of trigger cannot inherit the old behaviour by forgetting
+  it. A create nobody triggered — the API, a call activity — seeds the **none** start
+  events instead, which is what pressing Start means. A process whose only entry is a
+  message or a timer keeps ADR-0035's permissiveness and is seeded at every entry it has,
+  because an instance with no token at all is a worse answer than a permissive one.
+
+  **This changes behaviour for a deployed model with more than one root start event**: the
+  branches that used to run on every trigger now run only on their own. Nothing about the
+  recorded events changes, so recovery of an instance created before this is unaffected.
+
+- **A database connector's setup hint was written into a hidden element.** The "New
+  connector" form on Console → Workers asks the same shared description
+  ([ADR-0160](docs/adr/0160-one-connector-dialog.md)) which fields a kind uses and what
+  to say about them — and then hid the sentence it got, because the paragraph that
+  renders it carried the mail-only class. So the one line saying that a database's
+  *whole connection string* is the credential, that it is sealed into the vault, and
+  that Atlas supervises the worker for it was produced for every SQL kind and shown for
+  none; the same was true of Active Directory's. The edit dialog had always shown it,
+  which is the disagreement between two forms that ADR-0160 exists to prevent. The hint
+  now appears for any kind that has one.
+
+- **A mock database's refusal named a pattern instead of a variable.** A statement no
+  seed answers fails naming itself, its bound parameters and the seed file to add the
+  answer to ([ADR-0221](docs/adr/0221-sql-mock-mode.md)) — but it quoted the literal
+  `ATLAS_<PRODUCT>_MOCK_SEED`, leaving the reader to substitute their product. It now
+  names the variable that worker actually reads (`ATLAS_MARIADB_MOCK_SEED`, and so on),
+  which is the difference between an error you act on and one you decode.
+
+- **A rejected REST call says what the far side objected to.** A non-2xx response from a
+  REST connector task reported only `returned HTTP 400`, and threw away the body the
+  server had already sent to explain it — leaving an operator to guess which of the URL,
+  the headers, the query parameters or the body was wrong. The incident message now
+  carries an excerpt of that response: one line, collapsed and bounded, so a proxy's HTML
+  error page cannot become the incident.
+
+- **Renaming a saved diagram or form left a duplicate — or silently overwrote another
+  one.** A draft is stored under its process id and a form under the id a user task
+  binds to, but the save only ever saw the id in front of it, never which record the
+  author was editing. So retyping the Process ID and saving wrote a *second* draft and
+  left the first in place, and if something already held the new id, the save landed on
+  top of it: the artifact that was there was gone, with no warning and no question. The
+  form editor had a quieter version of the same defect — the Design pane's **ID** field
+  edited the schema and nothing else, so the chip in the toolbar went on showing the id
+  the form was really stored under, the panel showed the id the author had typed, and
+  the rename never happened (an export of that form then carried the typed id, so
+  re-importing it forked a copy). The save now names the record it is editing (`?from=`
+  for a draft, `"from"` for a form): a changed id **moves** the record, carrying its
+  application and its creator, and an id another artifact already holds is refused with
+  409 rather than overwritten. The Modeler checks the id as it is typed — the field
+  turns red and names what holds it — and the form editor's chip is now the schema's id
+  itself, dashed while a rename is unsaved, with Save asking first because a user task
+  still bound to the old id will find no form. The two places where landing on something
+  that already exists is the point rather than an accident — importing a `.bpmn`/`.form`
+  file over the artifact it came from, and pulling a deployed definition back into a
+  draft — now ask by name instead of doing it silently or refusing it
+  ([ADR-0222](docs/adr/0222-artifact-id-renames.md)).
 
 - **A task's *out* section showed variables the neighbouring branch produced.** The
   replay's in/out card inferred what an element wrote by diffing the variables it saw on

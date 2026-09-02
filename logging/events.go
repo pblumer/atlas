@@ -217,6 +217,12 @@ var (
 	// exits, so failing on an optional file is a restart loop rather than a message.
 	// Every statement then fails naming itself, which points at the missing seed.
 	SQLMockSeedUnusable = newEvent("sql_mock.seed_unusable")
+	// SQLMockReportFailed is a mock SQL worker that could not deliver its journal to
+	// the Atlas whose Console shows it. A warning, never a job failure, for the reason
+	// ADMockReportFailed is one: the statement it describes has already been answered
+	// and the job has already settled, so what is lost is one refresh of a view that
+	// the next statement sends again.
+	SQLMockReportFailed = newEvent("sql_mock.report_failed")
 	// WorkerHistoryFailed is the job-history exporter reporting that an append did not
 	// reach its clio connector, or that its buffer is dropping entries. Both are
 	// warnings rather than errors on purpose: the history is telemetry, and the engine
@@ -247,6 +253,16 @@ var (
 	BackupStreamFailed            = newEvent("backup.stream_failed")
 	FullBackupStreamFailed        = newEvent("full_backup.stream_failed")
 	ApplicationSourceStreamFailed = newEvent("application_source.stream_failed")
+)
+
+// The inbound event bridge (ADR-0075/0214).
+var (
+	// InboundWatchMinuteOverflowed reports a jira watch whose page filled the batch
+	// limit with issues that all share one minute of its cursor field. JQL compares
+	// timestamps to the minute, so no cursor can separate them: the watch steps past
+	// the minute and skips what it could not read. Warned because that is a delivery
+	// gap — and because standing still instead would silently stop the watch for good.
+	InboundWatchMinuteOverflowed = newEvent("inbound_watch.minute_overflowed")
 )
 
 // History retention (ADR-0115/0144) and the OpenSearch exporter (ADR-0114).

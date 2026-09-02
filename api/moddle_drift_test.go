@@ -227,10 +227,11 @@ func TestNonServiceTaskConnectorsAreReal(t *testing.T) {
 	}
 }
 
-// adAttrRe matches the attributes xmlAdConnector parses, e.g. `xml:"baseDN,attr"`.
-var adAttrRe = regexp.MustCompile(`xml:"([a-zA-Z]+),attr"`)
+// connectorAttrRe matches the attributes one xml*Connector struct parses, e.g.
+// `xml:"baseDN,attr"`.
+var connectorAttrRe = regexp.MustCompile(`xml:"([a-zA-Z]+),attr"`)
 
-// TestModdleKnowsEveryADAttribute guards the same round trip one level down: a
+// TestModdleKnowsEveryConnectorAttribute guards the same round trip one level down: a
 // connector *type* the moddle declares but an *attribute* it does not is the same
 // silent data loss, in a smaller box. bpmn-js drops an attribute it has no property
 // for, so opening a task and pressing Save strips exactly that one setting — and the
@@ -238,31 +239,19 @@ var adAttrRe = regexp.MustCompile(`xml:"([a-zA-Z]+),attr"`)
 //
 // It happened here: <atlas:adConnector connector="…">, the way a task names a
 // Console-configured directory (ADR-0206), was parsed by the compiler and declared
-// nowhere in the moddle. The check is scoped to this one extension rather than every
-// connector because that is what this change touched; widening it is worth doing and
-// is not a side effect of adding an operation.
-func TestModdleKnowsEveryADAttribute(t *testing.T) {
+// nowhere in the moddle.
+//
+// The list is the extensions whose attributes have since changed under this check
+// rather than every connector — widening it the rest of the way is worth doing on its
+// own. Jira joined it with the account search (ADR-0223), which
+// added the `query` attribute: an operation that adds an attribute is exactly the change
+// this guards, so covering it is the guard for that change and not a drive-by.
+func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {
 	src, err := os.ReadFile("../compiler/parse.go")
 	if err != nil {
 		t.Fatalf("read compiler/parse.go: %v", err)
 	}
-	// The struct's own body, so the pattern reads this extension's attributes only.
 	body := string(src)
-	start := strings.Index(body, "type xmlAdConnector struct {")
-	if start < 0 {
-		t.Fatal("xmlAdConnector is no longer declared in compiler/parse.go")
-	}
-	end := strings.Index(body[start:], "\n}")
-	if end < 0 {
-		t.Fatal("xmlAdConnector's declaration does not end")
-	}
-	var want []string
-	for _, m := range adAttrRe.FindAllStringSubmatch(body[start:start+end], -1) {
-		want = append(want, m[1])
-	}
-	if len(want) == 0 {
-		t.Fatal("found no attributes on xmlAdConnector; the pattern must have changed")
-	}
 
 	raw, err := os.ReadFile("web/atlas-moddle.json")
 	if err != nil {
@@ -279,30 +268,55 @@ func TestModdleKnowsEveryADAttribute(t *testing.T) {
 	if err := json.Unmarshal(raw, &moddle); err != nil {
 		t.Fatalf("decode atlas-moddle.json: %v", err)
 	}
-	declared := map[string]bool{}
-	var found bool
-	for _, ty := range moddle.Types {
-		if ty.Name != "AdConnector" {
-			continue
-		}
-		found = true
-		for _, p := range ty.Properties {
-			declared[p.Name] = true
-		}
-	}
-	if !found {
-		t.Fatal("atlas-moddle.json declares no AdConnector type")
-	}
-	var missing []string
-	for _, attr := range want {
-		if !declared[attr] {
-			missing = append(missing, attr)
-		}
-	}
-	if len(missing) > 0 {
-		sort.Strings(missing)
-		t.Errorf("atlas-moddle.json's AdConnector is missing %d attribute(s) the compiler reads: %s\n\n"+
-			"bpmn-js drops an attribute it has no property for, so a Modeler round trip silently strips it.",
-			len(missing), strings.Join(missing, ", "))
+
+	for _, tc := range []struct{ structName, moddleType string }{
+		{"xmlAdConnector", "AdConnector"},
+		{"xmlJiraConnector", "JiraConnector"},
+	} {
+		t.Run(tc.moddleType, func(t *testing.T) {
+			// The struct's own body, so the pattern reads this extension's attributes only.
+			start := strings.Index(body, "type "+tc.structName+" struct {")
+			if start < 0 {
+				t.Fatalf("%s is no longer declared in compiler/parse.go", tc.structName)
+			}
+			end := strings.Index(body[start:], "\n}")
+			if end < 0 {
+				t.Fatalf("%s's declaration does not end", tc.structName)
+			}
+			var want []string
+			for _, m := range connectorAttrRe.FindAllStringSubmatch(body[start:start+end], -1) {
+				want = append(want, m[1])
+			}
+			if len(want) == 0 {
+				t.Fatalf("found no attributes on %s; the pattern must have changed", tc.structName)
+			}
+
+			declared := map[string]bool{}
+			var found bool
+			for _, ty := range moddle.Types {
+				if ty.Name != tc.moddleType {
+					continue
+				}
+				found = true
+				for _, p := range ty.Properties {
+					declared[p.Name] = true
+				}
+			}
+			if !found {
+				t.Fatalf("atlas-moddle.json declares no %s type", tc.moddleType)
+			}
+			var missing []string
+			for _, attr := range want {
+				if !declared[attr] {
+					missing = append(missing, attr)
+				}
+			}
+			if len(missing) > 0 {
+				sort.Strings(missing)
+				t.Errorf("atlas-moddle.json's %s is missing %d attribute(s) the compiler reads: %s\n\n"+
+					"bpmn-js drops an attribute it has no property for, so a Modeler round trip silently strips it.",
+					tc.moddleType, len(missing), strings.Join(missing, ", "))
+			}
+		})
 	}
 }

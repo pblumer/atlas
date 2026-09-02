@@ -386,9 +386,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Release a user task's claim", tag: "Tasks", role: RoleUser, resp: jsonBody("Task key", tObject())}},
 
 		{"POST", "/api/v1/drafts", s.handleSaveDraft, apiOp{
-			summary: "Save a diagram draft", tag: "Drafts", role: RoleModeler, req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},
+			summary: "Save a diagram draft, keyed by its process id. ?from=<draft id> names the draft being edited (empty for a never-saved diagram): a changed process id then renames the draft instead of leaving a second copy behind, and a save onto an id another draft already holds is refused with 409 (ADR-0222). Omit ?from= for the plain upsert-by-id an import or an agent wants", tag: "Drafts", role: RoleModeler, req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},
 		{"GET", "/api/v1/drafts", s.handleListDrafts, apiOp{
 			summary: "List diagram drafts", tag: "Drafts", role: RoleModeler, resp: jsonBody("Drafts", tArray())}},
+		{"GET", "/api/v1/drafts/{id}/availability", s.handleDraftIDAvailability, apiOp{
+			summary: "Report whether a process id is free to save a draft under — the live check behind the Modeler's Process ID field, so a collision shows while the id is typed rather than at Save", tag: "Drafts", role: RoleModeler, resp: jsonBody("Availability", tObject())}},
 		{"GET", "/api/v1/drafts/{id}/xml", s.handleDraftXML, apiOp{
 			summary: "Fetch a draft's BPMN XML", tag: "Drafts", role: RoleModeler, resp: xmlBody("BPMN 2.0 XML")}},
 		{"PATCH", "/api/v1/drafts/{id}", s.handleMoveDraft, apiOp{
@@ -436,9 +438,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/forms", s.handleSaveForm, apiOp{
-			summary: "Save a form definition", tag: "Forms", role: RoleModeler, req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},
+			summary: "Save a form definition. \"from\" names the form being edited (empty for a never-saved one): a changed id then renames the form instead of leaving a second copy behind, and a save onto an id another form already holds is refused with 409 (ADR-0222). Omit \"from\" for the plain upsert-by-id an import or an agent wants", tag: "Forms", role: RoleModeler, req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},
 		{"GET", "/api/v1/forms", s.handleListForms, apiOp{
 			summary: "List form definitions", tag: "Forms", role: roleAny, resp: jsonBody("Forms", tArray())}},
+		{"GET", "/api/v1/forms/{id}/availability", s.handleFormIDAvailability, apiOp{
+			summary: "Report whether a form id is free — the live check behind the form editor's ID field, so a collision shows while the id is typed rather than at Save", tag: "Forms", role: RoleModeler, resp: jsonBody("Availability", tObject())}},
 		{"GET", "/api/v1/forms/{id}", s.handleGetForm, apiOp{
 			summary: "Fetch a form definition", tag: "Forms", role: roleAny, resp: jsonBody("Form", tObject())}},
 		{"DELETE", "/api/v1/forms/{id}", s.handleDeleteForm, apiOp{
@@ -822,6 +826,10 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/playground/sessions/{id}/generate", s.playground.HandleGeneratePreview, apiOp{
 			summary: "Preview the first cases a Playground dataset description would produce", tag: "Playground", role: RoleModeler,
 			req: jsonBody("A dataset description", tObject()), resp: jsonBody("The first generated cases", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/arrivals", s.playground.HandleArrivalProfile, apiOp{
+			summary: "Preview the shape of a Playground arrival stream: how many cases land in each slice of the time it covers",
+			tag:     "Playground", role: RoleModeler,
+			req: jsonBody("A case count and an arrival profile", tObject()), resp: jsonBody("The stream's shape", tObject())}},
 		{"POST", "/api/v1/playground/sessions/{id}/runs/csv", s.playground.HandleStartRunFromCSV, apiOp{
 			summary: "Start a Playground batch over an uploaded CSV, one case per row", tag: "Playground", role: RoleModeler,
 			resp: jsonBody("Run status", tObject())}},
@@ -929,6 +937,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Report a mock directory (used by an AD worker running in mockup mode)", tag: "Connectors", role: RoleOperator,
 			req: jsonBody("Mock directory", tObject()), status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/sql/mock-journal", s.handleSQLMockJournal, apiOp{
+			summary: "Show what a database mockup run was asked — every statement, with the values the process bound. Admin-gated: a bound parameter is whatever the process bound, and nothing can tell a password from an id", tag: "Connectors", role: RoleAdmin,
+			resp: jsonBody("Mock journals", schemaObj(map[string]any{"workers": tArray()}))}},
+		{"POST", "/api/v1/sql/mock-journal", s.handleReportSQLMockJournal, apiOp{
+			summary: "Report a mockup journal (used by a SQL worker running in mockup mode)", tag: "Connectors", role: RoleOperator,
+			req: jsonBody("Mock journal", tObject()), status: http.StatusNoContent}},
+
 		{"GET", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleListInboundSubscriptions, apiOp{
 			summary: "List a clio connector's inbound event subscriptions", tag: "Connectors", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},
 		{"POST", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleCreateInboundSubscription, apiOp{
@@ -937,6 +952,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Update an inbound event subscription", tag: "Connectors", role: RoleModeler, req: jsonBody("Subscription update", tObject()), resp: jsonBody("Updated subscription", tObject())}},
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
 			summary: "Delete an inbound event subscription", tag: "Connectors", role: RoleModeler, status: http.StatusNoContent}},
+		{"GET", "/api/v1/message-sources", s.handleListMessageSources, apiOp{
+			summary: "List every inbound event watch by the message name it publishes, so a model can be told whether its message start event has a source", tag: "Connectors", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
 
 		{"PUT", "/api/v1/connectors/{id}/members/{principalId}", s.handleSetConnectorMember, apiOp{
 			summary: "Share a connector with a user or a group, or change their role (ADR-0205); owner only", tag: "Connectors", role: RoleModeler, req: jsonBody("Member role", tObject()), resp: jsonBody("Updated connector", tObject())}},
@@ -993,6 +1010,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Turn the Active Directory mockup on or off. Admin-gated; the supervised AD worker is restarted holding the new setting, so no server restart is needed", tag: "Settings", role: RoleAdmin,
 			req:  jsonBody("ADMockRequest", tObject()),
 			resp: jsonBody("ADMock", tObject())}},
+		{"GET", "/api/v1/settings/sql-mock", s.handleGetSQLMock, apiOp{
+			summary: "The org-wide database mockup switch: whether SQL Server, MariaDB and PostgreSQL tasks are answered from seeded answers in the worker's memory instead of reaching a database, and the seed it starts from", tag: "Settings", role: roleAny,
+			resp: jsonBody("SQLMock", tObject())}},
+		{"PUT", "/api/v1/settings/sql-mock", s.handleSetSQLMock, apiOp{
+			summary: "Turn the database mockup on or off. Admin-gated; the supervised SQL workers are restarted holding the new setting, so no server restart is needed", tag: "Settings", role: RoleAdmin,
+			req:  jsonBody("SQLMockRequest", tObject()),
+			resp: jsonBody("SQLMock", tObject())}},
 		{"GET", "/api/v1/settings/registration", s.handleGetRegistration, apiOp{
 			summary: "Whether the login screen offers a self-service registration link, and its public URL (public; read before login) (ADR-0126)", tag: "System", role: roleAny,
 			resp: jsonBody("Registration config", schemaObj(map[string]any{
@@ -1023,6 +1047,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Authenticated user", tObject())}},
 		{"POST", "/api/v1/auth/logout", s.handleLogout, apiOp{
 			summary: "Log out the current session", tag: "Auth", role: roleAny, resp: jsonBody("Logout result", tObject())}},
+		{"POST", "/api/v1/auth/presence", s.handlePresenceBeacon, apiOp{
+			summary: "Report that the caller's own session is still open, and with active=true that somebody is using it (ADR-0228)", tag: "Auth", role: roleAny,
+			req:  jsonBody("Activity", schemaObj(map[string]any{"active": tBool()})),
+			resp: jsonBody("Accepted", tObject())}},
 		{"GET", "/api/v1/auth/providers", s.handleAuthProviders, apiOp{
 			summary: "List the identity providers this server offers besides the password form — empty unless an operator configured one (ADR-0210)", tag: "Auth", role: roleAny,
 			resp: jsonBody("Configured identity providers", tArray())}},
@@ -1033,7 +1061,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"GET", "/api/v1/users", s.handleListUsers, apiOp{
-			summary: "List user accounts", tag: "Users", role: RoleAdmin, resp: jsonBody("Users", tArray())}},
+			summary: "List user accounts, each with whether somebody is signed in as it right now (ADR-0228)", tag: "Users", role: RoleAdmin, resp: jsonBody("Users", tArray())}},
+		{"GET", "/api/v1/users/presence", s.handleUserPresence, apiOp{
+			summary: "Who is signed in right now: one entry per account holding a live session, online / idle / offline (ADR-0228)", tag: "Users", role: RoleAdmin,
+			resp: jsonBody("Presence", tArray())}},
 		{"GET", "/api/v1/users/assignable", s.handleListAssignableUsers, apiOp{
 			summary: "List users a task can be assigned to", tag: "Users", role: roleAny, resp: jsonBody("Assignable users", tArray())}},
 		{"GET", "/api/v1/principals", s.handleListPrincipals, apiOp{

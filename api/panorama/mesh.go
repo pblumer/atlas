@@ -36,6 +36,12 @@ const (
 	// restricted on purpose — "not here" and "not yours to see" are different
 	// findings, and an operator chasing a broken dependency needs to tell them apart.
 	KindUnresolved = "unresolved"
+	// KindTarget is a deployment target: a peer Atlas this server can promote to
+	// (ADR-0189 §6). It is the only kind on this landscape whose state comes from
+	// outside this process, and therefore the only one that can be *unreachable* or
+	// *stale* — every other node is read from local state while the request is being
+	// served, so it can neither fail to be contacted nor go out of date.
+	KindTarget = "target"
 )
 
 // Edge kinds.
@@ -137,6 +143,42 @@ type Process struct {
 	// observation applies, which is not a finding.
 	State  string
 	Reason string
+	// Incidents is how many unresolved incidents the engine holds against this
+	// definition. It is the count behind Reason rather than a second opinion about
+	// it, carried as a number so a reader can sort by it and a picture can show
+	// which of two degraded processes is the worse one.
+	Incidents int
+	// Sites are the places in this process where that work is parked.
+	Sites []IncidentSite
+}
+
+// IncidentSite is one element of a process with unresolved incidents on it.
+//
+// "Three tokens are parked" tells somebody there is a problem; "three tokens are
+// parked on the service task charge-card, and the last one said 502 Bad Gateway"
+// tells them where to go. That is the difference between a status view somebody
+// glances at and one they act on, and it costs the same read either way — the
+// engine already knows which element each incident is stuck on, because that is
+// how it resolves one.
+//
+// The element is named by its BPMN id and type rather than by a label. Only user
+// tasks carry a human title in a compiled process, so a label would be present for
+// some elements and absent for others — and an identifier that is sometimes there
+// is worse than one that is always there. It is also what the Operations view
+// shows, so the two name the same thing the same way.
+type IncidentSite struct {
+	// ElementID is the BPMN element id, which is what an operator searches the
+	// diagram for.
+	ElementID string `json:"elementId"`
+	// ElementType is the BPMN type ("ServiceTask", "CallActivity", …), so the id
+	// reads as a thing rather than as a string.
+	ElementType string `json:"elementType,omitempty"`
+	// Count is how many incidents are parked on this element.
+	Count int `json:"count"`
+	// Message is the first one seen here, not a summary of all of them: several
+	// incidents on one element usually share a cause, and inventing a combined
+	// sentence would be writing a message nobody produced. Operations has the rest.
+	Message string `json:"message,omitempty"`
 }
 
 // Landscape is everything the mesh derives from, already filtered for this caller.
@@ -145,6 +187,10 @@ type Landscape struct {
 	Processes    []Process
 	Workers      []Worker
 	Decisions    []Decision
+	// Targets are the peers this server can promote to, and what asking them
+	// produced. Filled in two halves: the collector names them on the run loop, and
+	// [ReachOut] supplies each one's state off it.
+	Targets []Target
 	// PartialStatus reports that the server stopped counting parked work before it
 	// had seen all of it. It travels with the landscape because only the collector
 	// knows it, and it must reach the payload: without it a process the scan never
@@ -235,9 +281,50 @@ type Node struct {
 	// empty when the severity is the node's own. ADR-0211 §4 requires it: a red
 	// parent that cannot say which child is red is not actionable.
 	SeverityFrom string `json:"severityFrom,omitempty"`
+	// Incidents is how many unresolved incidents the engine holds against this node.
+	// Only a process node can carry one — an incident belongs to a token, and only a
+	// process has tokens — so it is absent everywhere else rather than zero, because
+	// "no incidents" and "cannot have incidents" are different facts.
+	//
+	// It is a count, not a severity: the state above already says what class this
+	// node is in, and this says how much of it there is. A node with a count is
+	// always in a state that reports one, so the two can never disagree.
+	Incidents int `json:"incidents,omitempty"`
+	// Sites are where in the process that work is parked (see [IncidentSite]).
+	//
+	// Only a process node carries them, and a collapsed application deliberately
+	// does not: an element id without the process it belongs to is not something
+	// anybody can act on, and a list of them from six different processes would read
+	// as one broken diagram. The collapsed node keeps the summed count, which is the
+	// part that survives losing the context.
+	Sites []IncidentSite `json:"sites,omitempty"`
 	// Children is how many nodes a collapsed application stands for. Set only when
 	// the graph is clustered.
 	Children int `json:"children,omitempty"`
+}
+
+// Target is one deployment target and what this server currently knows of it.
+//
+// It carries no base URL and no credential reference: those are this operator's map
+// of where their infrastructure lives, and a landscape is opened by anybody with
+// modeler access. The name is disclosed to every caller, which is the same rule the
+// binding catalog already applies — a deployment target is org-wide infrastructure
+// with no sharing scope of its own.
+//
+// No edges are derived to it, and that absence is deliberate rather than pending. A
+// promotion is an act, not a stored relationship: this server does not record which
+// of its applications is running over there, so any line drawn from one to a target
+// would be an assertion nobody made. What it does know is that the peer exists and
+// whether it answers, and that is exactly what is drawn.
+type Target struct {
+	ID   string
+	Name string
+	// State is the observation state ReachOut resolved (ADR-0189 §6), and Reason the
+	// sentence behind it. Empty means the peer was never asked — which is not the
+	// same as unreachable, and is what a landscape derived while the loop was closing
+	// would carry.
+	State  string
+	Reason string
 }
 
 // Edge is one directed relationship between two nodes.
@@ -277,6 +364,7 @@ func processNodeID(key uint64) string     { return fmt.Sprintf("%s:%d", KindProc
 func workerNodeID(id string) string       { return KindWorker + ":" + id }
 func decisionNodeID(id string) string     { return KindDecision + ":" + id }
 func restrictedNodeID(ordinal int) string { return fmt.Sprintf("%s:%d", KindRestricted, ordinal) }
+func targetNodeID(id string) string       { return KindTarget + ":" + id }
 
 // unresolvedNodeID names what is missing *and* what kind of thing it is. A BPMN
 // process id and a worker name can be the same string while being two entirely
@@ -360,7 +448,7 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		node := Node{
 			ID: processNodeID(p.Key), Kind: KindProcess, Name: p.Name,
 			Provenance: ProvenanceDerived, ProcessID: p.ProcessID, Version: p.Version,
-			State: p.State, Reason: p.Reason,
+			State: p.State, Reason: p.Reason, Incidents: p.Incidents, Sites: p.Sites,
 		}
 		if _, ok := visibleApps[p.ApplicationID]; ok {
 			node.Application = applicationNodeID(p.ApplicationID)
@@ -484,6 +572,16 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		})
 	}
 
+	// The peers, last, and unconditionally: a target that was asked and did not
+	// answer is the finding this whole kind exists to carry, so dropping it for
+	// having no state would delete exactly the row somebody needs.
+	for _, t := range land.Targets {
+		g.Nodes = append(g.Nodes, Node{
+			ID: targetNodeID(t.ID), Kind: KindTarget, Name: t.Name,
+			Provenance: ProvenanceDerived, State: t.State, Reason: t.Reason,
+		})
+	}
+
 	// The kind tiebreak keeps the comparator total. With today's three kinds it is
 	// unreachable — contains leaves an application, calls reaches a process, and uses
 	// reaches something that is not one, so no two edges share both endpoints — and
@@ -603,11 +701,16 @@ func cluster(full Graph, visible []Process, appIDs []string, apps map[string]App
 	// collapsed children are not in the result to be pointed at — which is also why
 	// the reason says how many were collapsed instead of naming one.
 	worst := map[string]Process{}
+	// Incidents survive the collapse as a sum rather than as the worst child's count:
+	// a collapsed application stands for all of them, and reporting one child's
+	// number against the whole would understate what is parked behind it.
+	incidents := map[string]int{}
 	for _, p := range visible {
 		if _, ok := apps[p.ApplicationID]; !ok {
 			continue
 		}
 		children[p.ApplicationID]++
+		incidents[p.ApplicationID] += p.Incidents
 		if have, seen := worst[p.ApplicationID]; !seen ||
 			severityRank[severityOf(p.State)] > severityRank[severityOf(have.State)] {
 			worst[p.ApplicationID] = p
@@ -625,6 +728,7 @@ func cluster(full Graph, visible []Process, appIDs []string, apps map[string]App
 		if p, ok := worst[id]; ok && p.State != "" {
 			node.State = p.State
 			node.Reason = fmt.Sprintf("worst of %d collapsed process(es): %s", children[id], p.Reason)
+			node.Incidents = incidents[id]
 		}
 		out.Nodes = append(out.Nodes, node)
 	}

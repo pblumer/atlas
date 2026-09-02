@@ -456,17 +456,24 @@ func (c *ProcessingContext) AppendElementCommand(key uint64, intent model.Intent
 // AppendCreateInstanceCommand schedules creation of a new instance of defKey for
 // a later batch, seeded with vars (each re-scoped to the new instance when it is
 // created) and the correlationKey the created instance records (empty for a
-// timer or API start). A correlating message uses it to instantiate a
+// timer or signal start). A correlating message uses it to instantiate a
 // message-start process (ADR-0035). Deferring to a followup keeps instance
 // creation on the same command path as an API-submitted create, so its events —
 // and thus recovery — are identical however the create was triggered.
-func (c *ProcessingContext) AppendCreateInstanceCommand(defKey uint64, vars []model.VariableValue, correlationKey string) {
+//
+// startElement is the root start event that fired, and every caller here has one: a
+// trigger instantiates at itself, not at every entry the process happens to have
+// (ADR-0226). It is a required argument rather than an
+// optional one so that adding a fourth kind of trigger cannot quietly inherit the old
+// seed-everything behaviour.
+func (c *ProcessingContext) AppendCreateInstanceCommand(defKey uint64, vars []model.VariableValue, correlationKey string, startElement int32) {
 	c.p.followups = append(c.p.followups, Command{
-		ValueType: model.VTProcessInstance,
-		Intent:    model.IntentActivating,
-		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey, CorrelationKey: correlationKey}},
-		StartVars: vars,
-		SourcePos: c.lastPos,
+		ValueType:     model.VTProcessInstance,
+		Intent:        model.IntentActivating,
+		Value:         inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey, CorrelationKey: correlationKey}},
+		StartVars:     vars,
+		StartElements: []int32{startElement},
+		SourcePos:     c.lastPos,
 	})
 }
 

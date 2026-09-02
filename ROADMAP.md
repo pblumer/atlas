@@ -392,11 +392,13 @@ The control-flow basics most real models use.
   **Jira is another Worker Type in the catalog**
   ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked
   `<atlas:jiraConnector connector operation …>` performs one Atlassian Jira operation
-  through the REST API on the job path. Seven operations cover the loop a process runs
+  through the REST API on the job path. Eight operations cover the loop a process runs
   against an issue tracker — `create-issue`, `get-issue`, `update-issue`,
-  `transition-issue`, `add-comment`, `assign-issue` and `search` (JQL) — with every
+  `transition-issue`, `add-comment`, `assign-issue`, `search` (JQL) and `search-users`
+  (the account lookup that produces what an assign takes,
+  [ADR-0223](docs/adr/0223-jira-account-lookup.md)) — with every
   authored value literal-or-FEEL, and what Jira returned written into a result variable
-  for the four operations that return anything. The site URL and the credential bundle
+  for the five operations that return anything. The site URL and the credential bundle
   (`{email, apiToken}` for Jira Cloud, `{token}` for a Data Center personal access token)
   are server-registered and vault-resolved like mail/clio/Remedy, never in the model; the
   same fact decides both the authentication scheme and how an account is addressed when
@@ -994,7 +996,10 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   ([ADR-0196](docs/adr/0196-authenticated-mcp-transport.md));
   the internal service token of
   [ADR-0049](docs/adr/0049-internal-service-auth-for-mcp.md) stays as what a
-  supervised worker authenticates with.
+  supervised worker authenticates with. The roster now also says **who is signed in
+  right now** — `online` / `idle` / `offline` per account, admin-only, read from the
+  live sessions and stored nowhere, so it is presence and never an attendance history
+  ([ADR-0228](docs/adr/0228-user-presence.md)).
 - ✅ **Engine-internal encrypted secret vault**
   ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md),
   [ADR-0070](docs/adr/0070-vault-on-by-default-with-generated-key.md)): closes
@@ -1018,11 +1023,15 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   Secrets panel over the CRUD endpoints.
 - 🔲 Later: a polished "workbench" experience on top.
 
-## Milestone P — Panorama architecture & live landscape 🔲
+## Milestone P — Panorama architecture & live landscape ✅
 
 A parallel track alongside Milestone S: turn Panorama from a placeholder into a
 standards-based architecture workspace that relates declared ArchiMate 3.2 models
-to current Atlas resources without mixing runtime observations into the model. See
+to current Atlas resources without mixing runtime observations into the model.
+
+All six slices below have shipped, which is what this marker says and no more: the
+milestone's scope is done, not Panorama. What that scope deliberately left out is
+recorded in the slices themselves rather than as an open box here. See
 [ADR-0189: Panorama architecture modeling and live operational overlays](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)
 for the drawn model, its bindings, and the observation projection, and
 [ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md)
@@ -1085,24 +1094,40 @@ for the derived whole-instance mesh above them.
   All three stages are complete. Stage **c** ships the mapping, the worst-of
   aggregation with attribution, and the two states this engine can already observe
   about itself without asking anything outside it — parked work on a process and a
-  worker that cannot serve work. **unreachable** and **stale** stay unavailable on
-  the mesh, and that is now a standing property rather than a wait: P4c made both
-  producible, but only by asking a source outside this process, and the mesh draws
-  no deployment targets so it contacts nothing. Every mesh payload therefore
-  declares those two with the reason, rather than letting an unwatched instance
-  render as uniformly healthy — while the observation document, which does ask
-  peers, declares nothing unavailable.
-- 🚧 **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
+  worker that cannot serve work. **unreachable** and **stale** were unavailable on
+  the mesh for as long as it contacted nothing; it draws **deployment targets** now,
+  asked off the run loop through the same cache and the same rules the observation
+  projection uses, so a peer that stops answering is a node on the landscape with a
+  finding on it rather than a gap nobody can see. What a payload declares
+  unproducible is therefore derived from what that response actually drew: a
+  landscape with no peer on it still declares both, and names the deployment target
+  that would change it, rather than letting an unwatched instance render as
+  uniformly healthy. No edge is derived to a target — a promotion is an act, not a
+  stored relationship, and this server does not record which of its applications is
+  running over there — so it sits beside the landscape rather than in it, which is
+  what it is.
+- ✅ **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
   workers and job types, releases, local runtimes, and deployment targets. Preserve
   the distinction between an ArchiMate Application Component and an Atlas process
   application, including many-to-many mappings. The `atlas.*` key contract,
   extraction, validation, a writer that edits the document in place rather than
   reserialising it, per-principal resolution, the three HTTP routes and the binding
-  panel in the model viewer are complete, and a runtime id now resolves against
-  this server's own node descriptor (P4a). One kind still resolves as
-  **unsupported** rather than missing, because there is nothing to look it up in:
-  a job type is authored in a model rather than registered as a resource.
+  panel in the model viewer are complete; a runtime id resolves against this
+  server's own node descriptor (P4a); and a job type resolves against the
+  engine-wide job-type table (ADR-0007). That last one closed a gap whose stated
+  reason was wrong rather than provisional: this line used to say a job type is
+  authored in a model rather than registered as a resource, and the engine has kept
+  a table of them since a job's index on disk had to mean the same thing to every
+  definition — the Workers view has listed the whole table for as long as it has
+  existed. So every binding kind now resolves, and an id nothing here has is
+  **missing**, which is a finding a model can act on, rather than **unsupported**,
+  which was an admission that the resolver never looked. The *observation* of a job
+  type is a separate question and deliberately still unanswered: a job type is a
+  kind of work rather than a thing that can be well or unwell, and what "healthy"
+  would mean for one — where no worker having polled this run is not evidence that
+  none exists — is a mapping nobody has chosen. The observation document therefore
+  reports "nothing on this server observes atlas.jobType", which is true.
 - ✅ **P4 — Live Panorama:** add a stable, authenticated Atlas node descriptor and
   a separate observation projection for readiness, health, version, deployments,
   instances, jobs, and incidents. Resolve remote target status server-side with
@@ -1132,7 +1157,10 @@ for the derived whole-instance mesh above them.
   therefore declares nothing unavailable; the landscape mesh still declares those
   two, because it draws no deployment targets and so contacts nothing. A peer that
   answers also identifies its runtime, so a model binding another node's
-  `atlas.runtimeId` observes it too; and
+  `atlas.runtimeId` observes it too. The landscape mesh reaches peers now as well:
+  it draws deployment targets, so those two states are producible there too, and
+  what the payload declares unproducible is derived from what each response actually
+  drew rather than fixed for the build; and
   **d)** observations on the ArchiMate canvas as borders and badges with a text
   legend, layer colors intact. Complete: an element's worst finding is drawn as a
   border *around* it and a badge beside it, never as a fill — a layer colour says
@@ -1145,8 +1173,9 @@ for the derived whole-instance mesh above them.
 - ✅ **P5 — Landscape intelligence:** compare desired and observed deployments
   over time and optionally query Prometheus/OpenSearch for historical context.
   Dependency/impact analysis and discovered-but-unmodeled resources move forward
-  into P2.5, which derives the edges they need. P4 also unblocks the two observation
-  states P2.5c declares unavailable (unreachable, stale). Panorama remains a
+  into P2.5, which derives the edges they need. P4 unblocked the two observation
+  states P2.5c had declared unavailable (unreachable, stale), and the landscape now
+  produces them itself by drawing deployment targets. Panorama remains a
   correlation surface, not a time-series or log database. Ships in stages:
   **a)** the drift journal — what has been seen to change, and when. Complete. The
   constraint above is the whole design: a store of samples is exactly what "not a
@@ -1296,6 +1325,12 @@ dataset of up to 50 000 cases":
   **timeline** — sixty slices of simulated time with arrivals, completions and work
   in flight, folded out of the cases' own instants in the pass the report already
   makes.
+- ✅ **Four overlays, one at a time**: the diagram shaded by token counts, work time,
+  queueing time or incidents, chosen over the canvas with the scale beside it — a
+  shade means nothing until it is read against one. Only the counts exist for a
+  sequence flow, so the other three leave the flows alone rather than colouring them
+  from a different quantity; and only for the counts does zero get its own shade,
+  because only there does it mean "never reached" rather than "none here".
 - ✅ **Heat map and coverage**: per-element *and* per-sequence-flow token counts,
   shaded onto the diagram, with the parts the data never reached drawn cold and
   listed by name. Element counts come from the ADR-0080 visit counters; flows have
@@ -1340,10 +1375,15 @@ dataset of up to 50 000 cases":
   `--keep-baseline` do the same against the stored baseline; `--file` runs one from a
   JSON file being reviewed in a pull request.
   [`cmd/atlas/playgroundrun.go`](cmd/atlas/playgroundrun.go).
-- 🔲 **Still open**: the click from a results row into the replay view. Saving a
-  scenario from a CSV-driven run stays impossible on purpose — its rows are parsed on
-  the server, so the browser has nothing to store — and the generator is the answer
-  to what that was wanted for.
+- ✅ **A results row opens its case**: the diagram drops the run's aggregate and
+  draws that one case's path, numbered in the order it went through — the step number
+  is what makes it a replay rather than a second heat map, and an element a case
+  looped through carries every step it was. An unfinished case is drawn standing
+  where it stopped. It reads rather than drives: Step's controls act on the whole
+  sandbox, and offering them over a finished run would invite stepping it.
+- ✅ **Nothing left open.** Saving a scenario from a CSV-driven run stays impossible
+  on purpose — its rows are parsed on the server, so the browser has nothing to store
+  — and the described dataset is the answer to what that was wanted for.
 
 **Version history** ([ADR-0031](docs/adr/0031-diagram-version-history.md)):
 - 🔲 A **Versions** control: explicit named checkpoints (immutable snapshots)

@@ -178,6 +178,32 @@ with the counts filled in and the rest left at zero. Zero is its own shade on th
 canvas: "never reached" is a different statement from "reached least", and
 rendering them alike would answer neither question.
 
+**One overlay at a time, and zero does not always mean the same thing.** The same
+diagram answers four questions — how often each part ran, how long the work took,
+how long cases queued, and where they are stuck — and it answers one of them at a
+time. A diagram shaded by two quantities at once is two answers to a question nobody
+asked, and a reader cannot tell which colour belongs to which. The switcher sits over
+the canvas with the scale beside it, because a shade means nothing until it is read
+against one: "dark" says nothing until it says "dark is twelve days of waiting".
+
+Two things differ between the four. Only the token counts exist for a **sequence
+flow** — an edge has no work time, no queue and nothing to fail on — so the other
+three leave the flows alone rather than colouring them from a different quantity
+than the shapes, and the legend says "shapes only" where that is what it is. And only
+for the counts does **zero deserve its own shade**: there it means "the data never
+got here", which is the coverage question this map exists to answer. On the other
+three zero means "no waiting here", "no work here", "nothing failed here" — the
+ordinary case for most of a healthy diagram, and drawing it dashed and faded says
+"never reached" about a start event that every case went through. Those are simply
+left as they are, badge included.
+
+**Incidents are counted per element** for the same reason the visits are: "five
+incidents" says a run went wrong, "five incidents, all at the payout" says where.
+They are folded onto the element's existing entry rather than beside it, because a
+failing answer is still an answer — the element has a run and a work time too, and an
+overlay shading by incidents has to agree with one shading by runs about whether
+anything happened there.
+
 **Sequence flows have no counter, and no id.** The engine aggregates elements, not
 edges, so flow counts are folded out of the causal token history (ADR-0136), whose
 activation records carry the flow each token arrived on. That is one scan of the
@@ -259,6 +285,95 @@ plumbing at all: the CI runner and the Modeler send the same body to the same
 endpoint. A request carrying both a list and a description is refused rather than
 resolved — it states two different things about what is about to run, and picking
 one silently is how a run comes to mean something other than what was asked.
+
+### One case out of the run
+
+A results row opens the case it names: the diagram drops the run's aggregate and
+draws that one case's path instead. It is the last thing the analysis cannot do — a
+report says the p90 is twenty-nine hours, a rule says four cases broke it, and both
+of them leave the reader wanting the one case in front of them.
+
+The steps are **numbered in the order the case reached them**, and that number is the
+whole difference between this and a second heat map: an element a case looped through
+carries every step it was, because "3, 7" is the loop and a single count would hide
+exactly what somebody opened the case to see. An unfinished case is drawn standing
+where it stopped rather than merely visited there, which is what a stuck case is
+opened for.
+
+It **reads rather than drives**. Step mode's controls act on the whole sandbox, so
+offering them over a finished batch would invite stepping a run that is over; the
+case is a view, and the one control is the way back to the run. The strip over the
+canvas names what is on screen instead of offering measures that are not being
+drawn, and the case's detail sits *above* the report rather than instead of it — the
+reader came from the run, and going back to it should not cost them the numbers they
+were reading.
+
+### Where the cases came out
+
+"482 of 500 finished" is not the question a run is asked. The question is how many
+were approved and how many were rejected, and the report could not answer it: the
+per-case results name the end event each case stopped at, but they are read a page
+at a time, so a fold over five hundred of them was something a reader had to do by
+scrolling. The breakdown is one row per end event, over the whole run — the same
+token counts the heat map is drawn from, folded rather than sampled.
+
+Two decisions in it. **An end event nothing reached keeps its row**, marked as
+unreached rather than dropped: an outcome the data never produced is the finding,
+and a missing row hides it exactly where somebody is looking for it. And **a diagram
+with a single end event gets no table at all** — its one row would repeat the line
+above it, and a lone bar at a hundred percent is not a comparison.
+
+The share is of the outcomes reached, not of the cases, and the section header names
+that total so the denominator is on screen. It can differ from the case count in
+both directions: cases that never came out anywhere leave it short, and these are
+token counts, so a case with a parallel branch ends twice and leaves it long. Both
+are worth showing, and both would otherwise be read off the percentages as an error.
+
+Writing it uncovered a bug in the code that reads the diagram. **bpmn-js registers an
+element's external label as an element of its own, carrying the same business
+object** — so every event and gateway is in the element registry twice. The rule
+editor's "ends at…" picker had been offering each outcome twice since it was built,
+invisibly, because the second option looks exactly like the first. In a breakdown the
+same scan would have counted every outcome twice and halved every share. One helper
+now reads the registry for both, and skips labels.
+
+### The shape of the numbers, not only the numbers
+
+Two places in the panel a number alone was the wrong answer.
+
+**The arrival stream is drawn before the run.** "A stream of twenty per hour" and "one
+every three minutes" are the same rate and not the same picture: a Poisson stream is
+bursty, a takt is not, and a calendar cuts either of them into working days with
+nothing overnight. The bursts are what the pools downstream will feel, and they are
+invisible in the two boxes that describe them. So the panel draws the profile — a
+sparkline of how many cases land in each slice of the span — as soon as the timing
+changes.
+
+The shape comes **from the server**, from the same code that lays a plan's arrivals
+out. Computing it in the browser would have been less plumbing and a second
+implementation of the arithmetic: a picture drawn by anything but the planner is a
+picture of a stream nobody is going to get, and this record has already refused a
+second simulator once. The endpoint takes a *count* rather than the cases, because
+the timing does not depend on them — building fifty thousand rows to find out when
+they would arrive is paying the dataset's cost to answer a question it has no part
+in. A sequential plan is reported as having no schedule rather than as a flat line,
+because its next arrival waits on the run; that is a thing to say, not to draw.
+
+**Numbers that are compared carry a gauge.** The report's tables answer "which is the
+big one" badly — total waiting per element, utilisation per pool, and the duration of
+each case in a page of fifty are all read by scanning a column of formatted
+durations. Each of those now carries a track under it, filled to the value's share of
+its column's scale, and the four duration tiles share one scale so the spread between
+the fastest case and the slowest is a shape rather than four numbers to subtract.
+
+The rules are the same everywhere they appear. The **value stays in text** beside the
+gauge: a bar is the comparison, never the fact, and nothing here is read off a length
+alone. The **empty part of the track is drawn**, because a full bar with no track
+underlines its own number and a small one reads as a stray mark. A column is scaled
+to the **largest value in it**, so a length means something against the rows beside it
+— except utilisation, which is scaled to a full hundred, because the question there is
+how full a pool was rather than which of them was fullest, and a bar that filled at
+the busiest would read as saturated at forty percent.
 
 ### From a screen somebody reads to a check something runs
 

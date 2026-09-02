@@ -286,41 +286,185 @@
       }
     },
     {
-      "id": "a-database-task-can-be-tried-without-a-database",
+      "id": "see-who-is-signed-in-right-now",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "Try a database task without a database",
-        "de": "Einen Datenbank-Task ausprobieren, ohne eine Datenbank"
+        "en": "See who is signed in right now",
+        "de": "Sehen, wer gerade angemeldet ist"
       },
       "summary": {
-        "en": "A process that reads a database was the one kind you could not try out. The database it reads is the HR system or the ERP — which is exactly why it is interesting, and exactly why nobody wants a half-finished model pointed at it. Now a worker can answer SQL statements from a small file of prepared answers in its own memory instead. Nothing in your model changes: the same worker name, the same statement, the same parameters — only which worker picks the jobs up. So the model that runs through in the mockup is the model that later runs in production, and getting there is an environment variable rather than an edit. The prepared answers can also make a statement fail on purpose, which is how you try the case a real database hands you sooner or later: the same record inserted twice. And a statement you did not prepare an answer for does not quietly come back empty — it fails and tells you the statement and the values it was given, so you can paste them straight into the file. That refusal is the point: no rows is a real business answer, and a mockup that invents one would teach your process something untrue in the way that is hardest to notice.",
-        "de": "Ein Prozess, der aus einer Datenbank liest, war die eine Sorte, die sich nicht ausprobieren liess. Die Datenbank, aus der er liest, ist das HR- oder das ERP-System — genau deshalb ist sie interessant, und genau deshalb will niemand ein halbfertiges Modell darauf loslassen. Jetzt kann ein Worker SQL-Anweisungen stattdessen aus einer kleinen Datei mit vorbereiteten Antworten in seinem Arbeitsspeicher beantworten. Am Modell ändert sich dabei nichts: derselbe Worker-Name, dieselbe Anweisung, dieselben Parameter — nur wer die Jobs abholt, ist ein anderer. Das Modell, das im Mockup durchläuft, ist also dasselbe, das später produktiv läuft, und der Weg dorthin ist eine Umgebungsvariable und keine Änderung. Eine vorbereitete Antwort darf auch absichtlich scheitern — so probieren Sie den Fall aus, den eine echte Datenbank früher oder später liefert: derselbe Datensatz zweimal eingefügt. Und eine Anweisung, für die Sie nichts vorbereitet haben, kommt nicht still leer zurück: Sie scheitert und nennt Ihnen Anweisung und Werte, sodass Sie beides direkt in die Datei übernehmen können. Genau diese Verweigerung ist der Sinn der Sache — „keine Treffer\" ist eine echte fachliche Antwort, und ein Mockup, das sie erfindet, schiebt Ihrem Prozess eine Unwahrheit unter, und zwar in der Richtung, die am schwersten auffällt."
+        "en": "The user list under Organization now has a Presence column. Online means somebody did something in the last five minutes, idle means a session is open but untouched, offline means no browser is reporting for that account. The list could only tell you whether an account was enabled before — the same answer for the person reading the screen and for the one who left in March. The two states nobody gets right by accident are the last two: the Console polls by itself, so a tab parked behind another window would look busy forever, and a session outlives the laptop that was closed on it by up to twelve hours. So your browser reports two separate things once a minute — that the tab is open, and whether anybody actually touched it. Nothing is stored: presence is read from the live sessions and nothing else, there is no record, no event, nothing in a backup and no way to ask about yesterday, and after a restart it shows nobody, because after a restart nobody is signed in. Three states, never which page or which action, and only administrators see it.",
+        "de": "Die Benutzerliste unter Organization hat jetzt eine Spalte «Presence». Online heisst, jemand hat in den letzten fünf Minuten etwas getan; idle, dass eine Sitzung offen ist, aber unberührt; offline, dass für dieses Konto kein Browser mehr meldet. Bisher konnte die Liste nur sagen, ob ein Konto aktiviert ist — dieselbe Antwort für die Person, die gerade auf den Bildschirm schaut, wie für die, die im März gegangen ist. Die beiden letzten Zustände bekommt man nicht nebenbei richtig: Die Konsole fragt von sich aus nach, ein Tab hinter einem anderen Fenster sähe also ewig beschäftigt aus, und eine Sitzung überlebt den zugeklappten Laptop um bis zu zwölf Stunden. Deshalb meldet Ihr Browser einmal pro Minute zweierlei getrennt — dass der Tab offen ist, und ob ihn jemand angefasst hat. Gespeichert wird nichts: Die Anwesenheit wird aus den laufenden Sitzungen gelesen und aus nichts sonst, es gibt keinen Datensatz, kein Ereignis, nichts in der Sicherung und keine Möglichkeit, nach gestern zu fragen; nach einem Neustart zeigt sie niemanden, denn nach einem Neustart ist niemand angemeldet. Drei Zustände, nie welche Seite oder welche Aktion, und sehen tun es nur Administratorinnen."
+      },
+      "link": {
+        "label": "ADR-0228",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0228-user-presence.md"
+      },
+      "tags": [
+        "Organization",
+        "Security"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Console › Organization. The Users card is admin-only, and so is the Presence column.",
+          "Your own row says online: you are reading this page, which is somebody doing something.",
+          "Leave the tab open and do nothing else for five minutes. Your row turns idle — the page keeps polling, but polling is not you.",
+          "Close a browser somebody else is signed in with. Within five minutes their row turns offline, even though their session has hours left on it.",
+          "Hover a pill for the detail: when the account was last used, or when its browser last reported."
+        ],
+        "de": [
+          "Console › Organization öffnen. Die Karte «Users» ist Administratorinnen vorbehalten, die Spalte «Presence» ebenso.",
+          "Die eigene Zeile steht auf online: Sie lesen gerade diese Seite, und das ist jemand, der etwas tut.",
+          "Den Tab offen lassen und fünf Minuten nichts tun. Die Zeile wechselt auf idle — die Seite fragt weiter nach, aber Nachfragen sind nicht Sie.",
+          "Einen Browser schliessen, in dem jemand anderes angemeldet ist. Innert fünf Minuten steht die Zeile auf offline, obwohl die Sitzung noch Stunden gültig wäre.",
+          "Mit der Maus über ein Pill fahren: Dort steht, wann das Konto zuletzt benutzt wurde beziehungsweise wann sein Browser zuletzt gemeldet hat."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Organization",
+          "de": "Organisation öffnen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
+      "id": "an-inbound-event-watch-has-an-hourly-budget",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An event watch stops itself if it starts looping",
+        "de": "Eine Ereignisüberwachung stoppt sich selbst, wenn sie in eine Schleife gerät"
+      },
+      "summary": {
+        "en": "A watch reads a system and starts a process for what it finds — and that process can write back to the same system. If it writes something the watch's own query matches, it feeds itself, and nothing looks wrong: every run succeeds. Each watch now has a Max events/hour (60 unless you set it). Cross it and the watch switches itself off and says so, naming the number to raise. Nothing is lost — turning it back on re-reads what it refused.",
+        "de": "Eine Überwachung liest ein System und startet zu jedem Fund einen Prozess — und dieser Prozess kann in dasselbe System zurückschreiben. Schreibt er etwas, das die Abfrage der Überwachung selbst findet, füttert sie sich selbst, und nichts sieht falsch aus: jeder Lauf gelingt. Jede Überwachung hat jetzt ein „Max events/hour\" (60, wenn Sie nichts setzen). Wird es überschritten, schaltet sie sich ab und sagt es — samt der Zahl, die Sie erhöhen müssten. Verloren geht nichts: Beim Wiedereinschalten wird das Abgewiesene erneut gelesen."
+      },
+      "link": {
+        "label": "ADR-0225",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0225-inbound-watch-budget.md"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Connectors",
+          "de": "Konnektoren öffnen"
+        },
+        "route": "#/console/connectors"
+      }
+    },
+    {
+      "id": "see-what-a-mockup-run-asked-the-database",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See exactly what a mockup run asked your database",
+        "de": "Sehen, was ein Mockup-Lauf die Datenbank gefragt hat"
+      },
+      "summary": {
+        "en": "When you run a process against the database mockup, you now get to see what it actually asked. Operations, Mock database: one card per worker, every statement in order, and beneath each one the values the process bound to it. The interesting ones are red — those had no prepared answer, so they failed, and reading one and pasting it into the answers under Workers is how you build the seed. That loop now lives entirely in the Console instead of running through the worker's log. Two things are worth knowing before you open it. There is no table to browse: the mockup answers statements and executes none, so an INSERT does not change what a later SELECT returns; what you get is the sequence, not a snapshot of data. And the page is admin-only on purpose, because it shows the values your process bound — a password on its way into a table is a bound parameter like any other, and nothing can tell it apart from an id. Nothing here is stored: restart the worker and its journal is empty, restart Atlas and the view is.",
+        "de": "Wenn Sie einen Prozess gegen den Datenbank-Mockup laufen lassen, sehen Sie jetzt, was er tatsächlich gefragt hat. Betrieb, Mock database: pro Worker eine Karte, jede Anweisung in ihrer Reihenfolge, und darunter die Werte, die der Prozess gebunden hat. Interessant sind die roten — für die gab es keine hinterlegte Antwort, sie sind gescheitert, und eine davon zu lesen und in die Antworten unter Workers zu übernehmen ist der Weg, wie die Startdatei entsteht. Diese Schleife läuft jetzt vollständig in der Konsole statt über das Worker-Log. Zwei Dinge sollten Sie vorher wissen. Es gibt keine Tabelle zum Blättern: Der Mockup beantwortet Anweisungen und führt keine aus, ein INSERT ändert also nicht, was ein späteres SELECT liefert — Sie bekommen die Abfolge, keine Momentaufnahme von Daten. Und die Seite ist bewusst Administratoren vorbehalten, denn sie zeigt die gebundenen Werte: Ein Passwort auf dem Weg in eine Tabelle ist ein gebundener Parameter wie jeder andere, und nichts kann ihn von einer Id unterscheiden. Gespeichert wird nichts: Worker-Neustart leert das Journal, Atlas-Neustart die Ansicht."
+      },
+      "link": {
+        "label": "ADR-0224",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0224-sql-mock-journal.md"
+      },
+      "tags": [
+        "Operations",
+        "Databases",
+        "Testing"
+      ],
+      "tutorial": {
+        "en": [
+          "Turn the mockup on under Organization › Workers, the Databases card, and press Example for a seed if you have none.",
+          "Start a process with a database task — examples/mssql-eintrittsmeldung.bpmn does the job.",
+          "Open Operations › Mock database. The statements your process ran are there, newest last, with the values it bound.",
+          "Now start one with input your seed does not answer for. That statement turns up in red with its reason.",
+          "Copy it into the Databases card's answers, save, and run it again — the red entry is gone."
+        ],
+        "de": [
+          "Schalten Sie den Mockup unter Organisation › Workers auf der Karte Databases ein und drücken Sie Example, falls Sie noch keinen Seed haben.",
+          "Starten Sie einen Prozess mit einem Datenbank-Task — examples/mssql-eintrittsmeldung.bpmn genügt.",
+          "Öffnen Sie Betrieb › Mock database. Dort stehen die Anweisungen Ihres Prozesses, neueste zuletzt, mit den gebundenen Werten.",
+          "Starten Sie dann eine Instanz mit Eingaben, für die nichts hinterlegt ist. Diese Anweisung erscheint rot samt Grund.",
+          "Übernehmen Sie sie in die Antworten auf der Karte Databases, speichern, nochmal starten — der rote Eintrag ist weg."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Mock database",
+          "de": "Mock database öffnen"
+        },
+        "route": "#/operations/sql-mock"
+      }
+    },
+    {
+      "id": "an-example-where-a-jira-ticket-starts-the-process",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An example where a Jira ticket starts the process",
+        "de": "Ein Beispiel, in dem ein Jira-Ticket den Prozess startet"
+      },
+      "summary": {
+        "en": "The Jira demo folder gained its other direction. Until now Atlas wrote to Jira; here a new ticket starts an Atlas process — no form, no button. The process comments on the ticket to confirm it arrived, looks up the account of whoever reported it, and assigns the ticket to them. Everything it needs (issue key, project, summary, reporter) comes from the ticket itself. The README walks through the event watch in the Console, what the process receives, and the three things that look like a defect and are not — including why it takes about two minutes.",
+        "de": "Der Jira-Beispielordner hat jetzt auch die Gegenrichtung. Bisher schrieb Atlas nach Jira; hier startet ein neues Ticket einen Atlas-Prozess — ohne Formular, ohne Knopfdruck. Der Prozess quittiert den Eingang im Ticket, schlägt das Konto des Melders nach und weist ihm das Ticket zu. Alles, was er dafür braucht (Vorgangsschlüssel, Projekt, Titel, Melder), kommt aus dem Ticket selbst. Das README führt durch die Ereignisüberwachung in der Console, zeigt, was der Prozess bekommt, und nennt die drei Dinge, die wie ein Defekt aussehen und keiner sind — darunter, warum es etwa zwei Minuten dauert."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Connectors"
+      ]
+    },
+    {
+      "id": "the-database-mockup-is-a-switch-in-the-console",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Turn the database mockup on from the Console",
+        "de": "Den Datenbank-Mockup aus der Konsole einschalten"
+      },
+      "summary": {
+        "en": "Trying a process that reads a database used to mean editing a unit file and restarting the server. Now it is a checkbox: Workers, the Databases card, save. The SQL workers restart holding it and Atlas keeps running. The same card takes the prepared answers — choose a file, paste them, or press Example — and there is no path to type anywhere, because Atlas stores them and puts them where the worker will find them. They are checked as you save, so a typo comes back with the seed's own complaint instead of turning into a mockup that quietly answers nothing. One switch covers SQL Server, MariaDB and PostgreSQL together: simulating one while really writing to another would look like a full mockup run, and that is the one thing it must never look like. While it is on you can also add a database worker with no connection string at all — just the name your task states — which is exactly the situation you are in when you turn the mockup on because you have no database yet. Give a connection string anyway and it is still kept safe, so switching back is not a re-typing exercise.",
+        "de": "Einen Prozess auszuprobieren, der aus einer Datenbank liest, hiess bisher: Unit-Datei bearbeiten und Server neu starten. Jetzt ist es ein Häkchen — Workers, Karte Databases, speichern. Die SQL-Worker starten damit neu, Atlas läuft weiter. Dieselbe Karte nimmt die hinterlegten Antworten entgegen: Datei auswählen, einfügen oder Example drücken. Einen Pfad geben Sie nirgends an, denn Atlas speichert die Antworten und legt sie dem Worker hin. Beim Speichern werden sie geprüft, ein Tippfehler kommt also mit der Fehlermeldung des Seeds zurück, statt sich in einen Mockup zu verwandeln, der stillschweigend nichts beantwortet. Ein Schalter gilt für SQL Server, MariaDB und PostgreSQL gemeinsam: eines zu simulieren und gleichzeitig wirklich in ein anderes zu schreiben sähe aus wie ein vollständiger Mockup-Lauf, und genau danach darf es nie aussehen. Solange er an ist, können Sie ausserdem einen Datenbank-Worker ganz ohne Verbindungszeichenfolge anlegen — nur mit dem Namen, den Ihre Aufgabe nennt. Das ist genau die Lage, in der Sie sind, wenn Sie den Mockup einschalten, weil Sie noch keine Datenbank haben. Geben Sie doch eine an, bleibt sie sicher verwahrt, damit das Zurückschalten kein Neutippen ist."
       },
       "link": {
         "label": "ADR-0221",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0221-sql-mock-mode.md"
       },
       "tags": [
-        "Workers",
+        "Console",
         "Databases",
         "Testing"
       ],
       "tutorial": {
         "en": [
-          "Open the handbook, chapter Test & simulate, section “Trying a database without a database” — it carries the seed file to copy.",
-          "Save that file, then start a worker with ATLAS_MSSQL_CONNECTORS=hr-db, ATLAS_MSSQL_MOCK=1 and ATLAS_MSSQL_MOCK_SEED pointing at it.",
-          "Deploy examples/mssql-eintrittsmeldung.bpmn and start an instance with kuerzel set to whatever your seed answers for.",
-          "Watch it under Operations › Workers: the mssql worker is there, and its log warns that no database is being written.",
-          "Now start one with a kuerzel your seed does not answer for, and read the incident — it names the statement and the values, ready to paste into the seed."
+          "Go to Console › Workers and find the Databases card, below Active Directory.",
+          "Tick “Answer database tasks from a mockup”, press Example to load a small seed, and Save.",
+          "Still on that page, add a worker of kind SQL Server named hr-db — leave the connection string empty; while the mockup is on it is not needed.",
+          "Deploy examples/mssql-eintrittsmeldung.bpmn and start an instance with kuerzel set to abo, which the example seed answers for.",
+          "Watch it in Operations: the row is in the person variable and the process ran through, with no database anywhere.",
+          "Now start one with a kuerzel the seed does not answer for and read the incident — it names the statement and the values, ready to paste into the answers."
         ],
         "de": [
-          "Öffnen Sie das Handbuch, Kapitel Testen & Simulieren, Abschnitt „Eine Datenbank ausprobieren, ohne eine Datenbank\" — dort steht die Startdatei zum Kopieren.",
-          "Speichern Sie die Datei und starten Sie einen Worker mit ATLAS_MSSQL_CONNECTORS=hr-db, ATLAS_MSSQL_MOCK=1 und ATLAS_MSSQL_MOCK_SEED auf diese Datei.",
-          "Deployen Sie examples/mssql-eintrittsmeldung.bpmn und starten Sie eine Instanz mit einem kuerzel, für das Ihre Startdatei eine Antwort hat.",
-          "Schauen Sie unter Betrieb › Workers zu: Dort läuft der mssql-Worker, und sein Log warnt, dass keine Datenbank geschrieben wird.",
-          "Starten Sie dann eine mit einem kuerzel, für das nichts hinterlegt ist, und lesen Sie den Incident — er nennt Anweisung und Werte, fertig zum Übernehmen."
+          "Gehen Sie zu Console › Workers und suchen Sie die Karte Databases, unterhalb von Active Directory.",
+          "Setzen Sie das Häkchen bei „Answer database tasks from a mockup\", drücken Sie Example für einen kleinen Seed und speichern Sie.",
+          "Legen Sie auf derselben Seite einen Worker der Art SQL Server namens hr-db an — die Verbindungszeichenfolge lassen Sie leer, solange der Mockup an ist braucht es keine.",
+          "Deployen Sie examples/mssql-eintrittsmeldung.bpmn und starten Sie eine Instanz mit kuerzel = abo, wofür der Beispiel-Seed eine Antwort hat.",
+          "Schauen Sie unter Betrieb zu: Die Zeile steht in der Variablen person, der Prozess ist durchgelaufen — ganz ohne Datenbank.",
+          "Starten Sie dann eine mit einem kuerzel, für das nichts hinterlegt ist, und lesen Sie den Incident: Er nennt Anweisung und Werte, fertig zum Übernehmen."
         ]
       },
       "try": {
@@ -328,160 +472,36 @@
           "en": "Open Workers",
           "de": "Worker öffnen"
         },
-        "route": "#/operations/workers"
+        "route": "#/console/workers"
       }
     },
     {
-      "id": "the-console-can-check-a-database-connector",
+      "id": "a-message-start-event-says-whether-anything-feeds-it",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "Check a database connection before a process needs it",
-        "de": "Eine Datenbankverbindung prüfen, bevor ein Prozess sie braucht"
+        "en": "A message start event now shows what feeds it",
+        "de": "Ein Nachrichten-Start zeigt jetzt, wer ihn speist"
       },
       "summary": {
-        "en": "A database connector is configured with a single connection string, and that string is sealed away the moment you save it — so a typo in it was invisible from then on, and the first thing to notice was a task that stopped and waited. The connector form now has a Test connection button for SQL Server, MariaDB and PostgreSQL, next to the one mail already had. It works on what you have just typed, before anything is stored, and it works afterwards on a connector that used to run and no longer does — which is the case that actually brings people to that dialog. The answer says what it proved rather than just OK: it names the database that answered and reminds you that connecting is not the same as being allowed to read the tables your task names. That distinction is worth the extra sentence, because reading OK as “the task will work” is how the next surprise arrives as an incident instead of as a message.",
-        "de": "Ein Datenbank-Worker wird mit einer einzigen Verbindungszeichenfolge eingerichtet, und die wird beim Speichern weggeschlossen — ein Tippfehler darin war ab da unsichtbar, und das Erste, was ihn bemerkte, war eine Aufgabe, die stehen blieb. Das Formular hat jetzt auch für SQL Server, MariaDB und PostgreSQL einen Knopf „Test connection\", so wie ihn Mail schon hatte. Er prüft, was Sie gerade getippt haben, bevor etwas gespeichert ist — und er prüft später einen Worker, der einmal lief und jetzt nicht mehr, was der Fall ist, der Menschen überhaupt in diesen Dialog führt. Die Antwort sagt, was sie belegt hat, statt nur „OK\": Sie nennt die Datenbank, die geantwortet hat, und erinnert daran, dass eine Verbindung noch keine Leseberechtigung auf die Tabellen ist, die Ihre Aufgabe nennt. Dieser Satz lohnt sich, denn „OK\" als „die Aufgabe wird laufen\" zu lesen ist der Weg, auf dem die nächste Überraschung als Incident ankommt statt als Meldung."
-      },
-      "link": {
-        "label": "ADR-0220",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0220-checking-a-database-connector.md"
-      },
-      "tags": [
-        "Console",
-        "Databases",
-        "Workers"
-      ],
-      "tutorial": {
-        "en": [
-          "Go to Console › Connectors and add a connector of kind SQL Server (or open an existing one with Edit).",
-          "Paste the connection string into Connection string — for an existing connector it is already sealed, so leave the credential reference as it is.",
-          "Press Test connection. Nothing is saved by pressing it.",
-          "Read the answer: it names the database and the login that answered, never the password, and says plainly that no statement was run."
-        ],
-        "de": [
-          "Gehen Sie zu Console › Connectors und legen Sie einen Connector der Art SQL Server an (oder öffnen Sie einen bestehenden mit Edit).",
-          "Fügen Sie die Verbindungszeichenfolge unter Connection string ein — bei einem bestehenden Connector ist sie bereits versiegelt, lassen Sie die Referenz einfach stehen.",
-          "Drücken Sie „Test connection\". Durch das Drücken wird nichts gespeichert.",
-          "Lesen Sie die Antwort: Sie nennt Datenbank und Login, die geantwortet haben, nie das Passwort — und sagt deutlich, dass keine Anweisung ausgeführt wurde."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Connectors",
-          "de": "Connectors öffnen"
-        },
-        "route": "#/console/connectors"
-      }
-    },
-    {
-      "id": "a-jira-issue-can-start-a-process",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A new Jira ticket can start a process",
-        "de": "Ein neues Jira-Ticket kann einen Prozess starten"
-      },
-      "summary": {
-        "en": "Until now a process could write to Jira but never hear from it. A Jira connector now has an Events tab: give it a Jira query and a message name, and every issue the query finds starts the processes waiting for that message — and wakes the instances waiting on it. Atlas asks Jira on a schedule, so nothing has to reach your server from the internet. A new watch starts from now, so pointing one at a project with years of tickets does not start a process for each of them. The process receives the issue key, project, type, summary, status and reporter, and the whole issue for anything else. Watching changed tickets instead of new ones is the same setting, moved one field over.",
-        "de": "Bisher konnte ein Prozess nach Jira schreiben, aber nie von Jira hören. Ein Jira-Konnektor hat jetzt einen Reiter „Events\": Sie hinterlegen eine Jira-Abfrage und einen Nachrichtennamen, und jeder gefundene Vorgang startet die Prozesse, die auf diese Nachricht warten — und weckt die Instanzen, die daran hängen. Atlas fragt Jira in einem Takt ab; es muss also nichts aus dem Internet Ihren Server erreichen. Eine neue Überwachung beginnt ab jetzt: Sie auf ein Projekt mit jahrelanger Historie zu richten startet nicht pro Alt-Ticket einen Prozess. Der Prozess bekommt Vorgangsschlüssel, Projekt, Typ, Titel, Status und Melder — und den ganzen Vorgang für alles Weitere. Geänderte statt neuer Tickets zu überwachen ist dieselbe Einstellung, ein Feld weiter."
-      },
-      "link": {
-        "label": "ADR-0214",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0214-jira-inbound-issue-watch.md"
-      },
-      "tags": [
-        "Connectors",
-        "Operations"
-      ]
-    },
-    {
-      "id": "the-jira-kind-can-be-supervised",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Atlas can run the Jira worker for you again",
-        "de": "Atlas kann den Jira-Worker wieder selbst betreiben"
-      },
-      "summary": {
-        "en": "Asking Atlas to run a Jira worker did not start one — it stopped the server from starting at all, with a message saying there is no such kind. Jira could therefore only be served by a worker you launched yourself, never by one Atlas supervises, which is the one the Workers view shows; so it looked like a worker that simply was not there. It starts now, and a check was added so the next connector cannot ship in the same state.",
-        "de": "Atlas zu bitten, einen Jira-Worker zu betreiben, startete keinen — es verhinderte, dass der Server überhaupt startet, mit der Meldung, es gebe diese Art nicht. Jira konnte deshalb nur von einem Worker bedient werden, den Sie selbst starten, nie von einem, den Atlas beaufsichtigt — und genau den zeigt die Worker-Ansicht. Es sah also aus wie ein Worker, den es schlicht nicht gibt. Er startet jetzt, und eine Prüfung sorgt dafür, dass der nächste Konnektor nicht im selben Zustand ausgeliefert wird."
+        "en": "A process that starts on a message only names the message — deliberately, so the same process can be triggered by a Jira watch today and something else tomorrow without touching the model. The catch was that a name typed slightly differently in the model and in Connectors → Events left two halves that never meet: nothing fails, the process just never starts. The Modeler now writes it under the message name — which watches publish it, on which connector, and whether one is switched off — or tells you none does and where to add one.",
+        "de": "Ein Prozess, der auf eine Nachricht startet, nennt nur die Nachricht — mit Absicht, damit ihn heute eine Jira-Überwachung und morgen etwas anderes auslösen kann, ohne das Modell anzufassen. Der Haken: Ein Name, der im Modell und unter „Connectors → Events\" leicht verschieden getippt ist, ergibt zwei Hälften, die sich nie treffen — nichts schlägt fehl, der Prozess startet einfach nie. Der Modeler schreibt es jetzt unter den Nachrichtennamen: welche Überwachungen ihn veröffentlichen, auf welchem Konnektor, und ob eine abgeschaltet ist — oder dass es keine gibt und wo Sie eine anlegen."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Workers",
+        "Modeler",
         "Connectors"
-      ]
-    },
-    {
-      "id": "mock-any-rest-api-from-its-openapi-document",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Try a REST task before the API behind it exists",
-        "de": "Einen REST-Task ausprobieren, bevor es die API dahinter gibt"
-      },
-      "summary": {
-        "en": "A REST task names the address it calls, so trying a process out meant calling the real system — often one that is production, or not built yet. Hand Atlas the API's OpenAPI file instead: `atlas mock-openapi --spec petstore.yaml` stands up a fake version of that API in one command, answering with the example responses the file itself contains. Only the address in your task changes; everything else about the model stays as it will run for real. A caller can ask the fake API for a specific error to walk the failure path, and it refuses anything the file does not describe rather than inventing an answer. `/__mock/calls` shows exactly what your process sent it.",
-        "de": "Ein REST-Task trägt die Adresse, die er aufruft, im Modell — einen Prozess auszuprobieren hiess deshalb bisher, das echte System aufzurufen, das oft produktiv ist oder noch gar nicht existiert. Stattdessen genügt jetzt die OpenAPI-Datei der Schnittstelle: `atlas mock-openapi --spec petstore.yaml` stellt mit einem Befehl eine Attrappe dieser API hin, die mit den Beispielantworten aus der Datei selbst antwortet. Im Modell ändert sich nur die Adresse; alles andere bleibt so, wie es später wirklich läuft. Wer will, kann die Attrappe gezielt um einen Fehler bitten, um den Fehlerpfad durchzuspielen — und sie verweigert alles, was die Datei nicht beschreibt, statt sich eine Antwort auszudenken. Unter `/__mock/calls` steht, was der Prozess tatsächlich geschickt hat."
-      },
-      "link": {
-        "label": "ADR-0217",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0217-openapi-mock-server.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ]
-    },
-    {
-      "id": "see-the-mock-active-directory",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See the mock Active Directory",
-        "de": "Das simulierte Active Directory ansehen"
-      },
-      "summary": {
-        "en": "Mockup mode lets an Active Directory process run without a domain controller, but until now the directory it wrote to was invisible: the account a joiner created could only be found by reading the worker's log, and the starting entries on the Active Directory card — the template every forest begins from, never written back — were the natural place to look for it and never had it. Operations › Mock directory now shows the directory itself: one card per worker, one tree per LDAP URL, every entry with its attributes, and underneath it the list of operations the mockup performed. It refreshes while you click through a process. Nothing about it is permanent — restarting the worker empties its forests and they start from the seed again — and no password is ever shown, because the mockup stores none.",
-        "de": "Im Mockup-Modus läuft ein Active-Directory-Prozess ohne Domain Controller — nur war das Verzeichnis, in das er schrieb, bisher unsichtbar: Das Konto, das ein Joiner angelegt hat, ließ sich nur im Log des Workers finden, und der Startbestand auf der Karte «Active Directory» — die Vorlage, aus der jedes Verzeichnis beginnt und die nie zurückgeschrieben wird — war der naheliegende Ort, an dem es nie stand. Betrieb › Mock directory zeigt jetzt das Verzeichnis selbst: pro Worker eine Karte, pro LDAP-URL ein Baum, zu jedem Eintrag seine Attribute und darunter die ausgeführten Operationen. Die Ansicht aktualisiert sich, während Sie einen Prozess durchklicken. Dauerhaft ist nichts davon — ein Neustart des Workers leert seine Verzeichnisse, und sie beginnen wieder beim Startbestand — und ein Passwort erscheint nie, weil das Mockup keines speichert."
-      },
-      "link": {
-        "label": "ADR-0213",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0213-ad-mock-directory-in-the-console.md"
-      },
-      "tags": [
-        "Operations",
-        "Workers"
       ],
-      "tutorial": {
-        "en": [
-          "Organization › Workers → the Active Directory card → switch on “Serve Active Directory tasks against a mockup” and save. The AD worker restarts.",
-          "Optionally paste or upload starting entries (LDIF or DSML) on the same card — a leaver needs an account to disable.",
-          "Run a process with an Active Directory task, or start one from Tasks › Start.",
-          "Open Operations › Mock directory: the worker's forests are there, with the entry the task just created."
-        ],
-        "de": [
-          "Organisation › Workers → Karte «Active Directory» → «Serve Active Directory tasks against a mockup» einschalten und speichern. Der AD-Worker startet neu.",
-          "Optional auf derselben Karte einen Startbestand einfügen oder hochladen (LDIF oder DSML) — ein Leaver braucht ein Konto, das er deaktivieren kann.",
-          "Einen Prozess mit einer Active-Directory-Aufgabe starten, etwa über Aufgaben › Start.",
-          "Betrieb › Mock directory öffnen: Dort stehen die Verzeichnisse des Workers, mit dem Eintrag, den die Aufgabe gerade angelegt hat."
-        ]
-      },
       "try": {
         "label": {
-          "en": "Open Mock directory",
-          "de": "Mock directory öffnen"
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
         },
-        "route": "#/operations/ad-mock"
+        "route": "#/modeler"
       }
     }
   ]

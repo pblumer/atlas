@@ -169,42 +169,72 @@ func TestRunSQLJobReadsTheResolvedDetail(t *testing.T) {
 	}
 }
 
-// Mock mode: the worker serves SQL tasks from its own memory. Two variables replace
-// the connection strings — the names it answers to, and the file of seeded answers —
-// so a model that reads a database runs end to end without one.
+// Mock mode, for every product. The worker serves SQL tasks from its own memory: two
+// variables replace the connection strings — the names it answers to, and the file of
+// seeded answers — so a model that reads a database runs end to end without one.
+//
+// Each of these runs for all three products. Mock mode is one code path (ADR-0221) and
+// the only thing that differs is the variable prefix, which is exactly the kind of
+// difference a single-product test cannot see: a product whose variables were spelled
+// differently would have a mockup mode that quietly does nothing.
+
+// sqlProducts are the three, for the tests that must hold for all of them.
+func sqlProducts(t *testing.T) []sqldb.Product {
+	t.Helper()
+	var out []sqldb.Product
+	for _, name := range sqldb.ProductNames() {
+		p, ok := sqldb.ProductByName(name)
+		if !ok {
+			t.Fatalf("ProductByName(%q) missing", name)
+		}
+		out = append(out, p)
+	}
+	if len(out) < 3 {
+		t.Fatalf("got %d SQL products, want at least the three; a table this test read as empty would pass every case vacuously", len(out))
+	}
+	return out
+}
+
+// A mock worker needs no connection string at all: the names it serves and a seed
+// file are the whole configuration.
 func TestASQLWorkerInMockModeNeedsNoConnectionString(t *testing.T) {
-	seed := filepath.Join(t.TempDir(), "seed.json")
-	if err := os.WriteFile(seed, []byte(`{"answers":[
-	  {"statement":"SELECT id, mail FROM personen WHERE id = @p1","params":[42],"columns":["id","mail"],"rows":[[42,"arno@example.com"]]}
+	for _, p := range sqlProducts(t) {
+		t.Run(p.Name, func(t *testing.T) {
+			stmt := "SELECT id, mail FROM personen WHERE id = " + p.Placeholder
+			seed := filepath.Join(t.TempDir(), "seed.json")
+			if err := os.WriteFile(seed, []byte(`{"answers":[
+	  {"statement":"`+stmt+`","params":[42],"columns":["id","mail"],"rows":[[42,"arno@example.com"]]}
 	]}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	built, err := BuiltinConnectors(envMap(map[string]string{
-		"ATLAS_MSSQL_CONNECTORS": "hr-db",
-		"ATLAS_MSSQL_MOCK":       "1",
-		"ATLAS_MSSQL_MOCK_SEED":  seed,
-	}), "mssql")
-	if err != nil {
-		t.Fatalf("BuiltinConnectors: %v", err)
-	}
-	h, ok := built.Handlers[compiler.MsSqlJobType]
-	if !ok {
-		t.Fatal("mock mode registered no SQL Server handler")
-	}
-	out, err := h.Run(context.Background(), Job{Connector: &ConnectorPayload{Kind: "mssql", Fields: map[string]any{
-		"connector": "hr-db", "product": "mssql", "operation": "query-one",
-		"statement": "SELECT id, mail FROM personen WHERE id = @p1",
-		"params":    []any{42}, "resultVariable": "person",
-	}}})
-	if err != nil {
-		t.Fatalf("a mock job failed: %v", err)
-	}
-	person, ok := out["person"].(map[string]any)
-	if !ok {
-		t.Fatalf("person = %#v, want the seeded row", out["person"])
-	}
-	if person["mail"] != "arno@example.com" {
-		t.Errorf("mail = %#v, want the seeded address", person["mail"])
+				t.Fatal(err)
+			}
+			built, err := BuiltinConnectors(envMap(map[string]string{
+				p.ConnectorsEnv(): "hr-db",
+				p.MockEnv():       "1",
+				p.MockSeedEnv():   seed,
+			}), p.Name)
+			if err != nil {
+				t.Fatalf("BuiltinConnectors: %v", err)
+			}
+			h, ok := built.Handlers[p.JobType]
+			if !ok {
+				t.Fatalf("mock mode registered no %s handler", p.Name)
+			}
+			out, err := h.Run(context.Background(), Job{Connector: &ConnectorPayload{Kind: p.Name, Fields: map[string]any{
+				"connector": "hr-db", "product": p.Name, "operation": "query-one",
+				"statement": stmt,
+				"params":    []any{42}, "resultVariable": "person",
+			}}})
+			if err != nil {
+				t.Fatalf("a mock job failed: %v", err)
+			}
+			person, ok := out["person"].(map[string]any)
+			if !ok {
+				t.Fatalf("person = %#v, want the seeded row", out["person"])
+			}
+			if person["mail"] != "arno@example.com" {
+				t.Errorf("mail = %#v, want the seeded address", person["mail"])
+			}
+		})
 	}
 }
 
@@ -212,57 +242,74 @@ func TestASQLWorkerInMockModeNeedsNoConnectionString(t *testing.T) {
 // almost certainly a half-finished mockup setup, and silence would leave the operator
 // believing they had one — the same refusal the AD mock makes.
 func TestASQLSeedWithoutMockModeIsRefused(t *testing.T) {
-	_, err := BuiltinConnectors(envMap(map[string]string{
-		"ATLAS_MSSQL_CONNECTORS": "hr-db",
-		"ATLAS_MSSQL_HR_DB_DSN":  "sqlserver://x",
-		"ATLAS_MSSQL_MOCK_SEED":  "/tmp/nope.json",
-	}), "mssql")
-	if err == nil || !strings.Contains(err.Error(), "ATLAS_MSSQL_MOCK") {
-		t.Fatalf("error = %v, want one naming ATLAS_MSSQL_MOCK", err)
+	for _, p := range sqlProducts(t) {
+		t.Run(p.Name, func(t *testing.T) {
+			_, err := BuiltinConnectors(envMap(map[string]string{
+				p.ConnectorsEnv(): "hr-db",
+				p.DSNEnv("hr-db"): "sqlserver://x",
+				p.MockSeedEnv():   "/tmp/nope.json",
+			}), p.Name)
+			if err == nil || !strings.Contains(err.Error(), p.MockEnv()) {
+				t.Fatalf("error = %v, want one naming %s", err, p.MockEnv())
+			}
+		})
 	}
 }
 
 // An unreadable seed starts an unseeded mock rather than taking the worker down. The
 // supervisor restarts a child that exits, so refusing here is a restart loop over an
 // optional file — the outage the AD mock's seed handling already learned. Every
-// statement then fails naming itself, which points at the missing seed rather than
-// hiding it.
+// statement then fails naming itself and the product's own seed variable, which points
+// at the missing seed rather than hiding it.
 func TestAnUnreadableSQLSeedStartsAnUnseededMock(t *testing.T) {
-	built, err := BuiltinConnectors(envMap(map[string]string{
-		"ATLAS_MSSQL_CONNECTORS": "hr-db",
-		"ATLAS_MSSQL_MOCK":       "yes",
-		"ATLAS_MSSQL_MOCK_SEED":  filepath.Join(t.TempDir(), "absent.json"),
-	}), "mssql")
-	if err != nil {
-		t.Fatalf("BuiltinConnectors: %v", err)
-	}
-	h := built.Handlers[compiler.MsSqlJobType]
-	if h == nil {
-		t.Fatal("no handler was registered")
-	}
-	_, err = h.Run(context.Background(), Job{Connector: &ConnectorPayload{Kind: "mssql", Fields: map[string]any{
-		"connector": "hr-db", "product": "mssql", "operation": "query",
-		"statement": "SELECT 1", "resultVariable": "rows",
-	}}})
-	if err == nil || !strings.Contains(err.Error(), "nothing is seeded") {
-		t.Fatalf("error = %v, want the unseeded-statement refusal", err)
+	for _, p := range sqlProducts(t) {
+		t.Run(p.Name, func(t *testing.T) {
+			built, err := BuiltinConnectors(envMap(map[string]string{
+				p.ConnectorsEnv(): "hr-db",
+				p.MockEnv():       "yes",
+				p.MockSeedEnv():   filepath.Join(t.TempDir(), "absent.json"),
+			}), p.Name)
+			if err != nil {
+				t.Fatalf("BuiltinConnectors: %v", err)
+			}
+			h := built.Handlers[p.JobType]
+			if h == nil {
+				t.Fatal("no handler was registered")
+			}
+			_, err = h.Run(context.Background(), Job{Connector: &ConnectorPayload{Kind: p.Name, Fields: map[string]any{
+				"connector": "hr-db", "product": p.Name, "operation": "query",
+				"statement": "SELECT 1", "resultVariable": "rows",
+			}}})
+			if err == nil || !strings.Contains(err.Error(), "nothing is seeded") {
+				t.Fatalf("error = %v, want the unseeded-statement refusal", err)
+			}
+			// The refusal has to name the variable this product's operator actually
+			// sets, not a pattern they have to fold themselves.
+			if !strings.Contains(err.Error(), p.MockSeedEnv()) {
+				t.Errorf("error = %v, want it to name %s", err, p.MockSeedEnv())
+			}
+		})
 	}
 }
 
 // A malformed seed is an operator's typo in a file they wrote, so it is reported with
 // the file named — not degraded into a mock that silently answers nothing.
 func TestAMalformedSQLSeedIsReported(t *testing.T) {
-	seed := filepath.Join(t.TempDir(), "seed.json")
-	if err := os.WriteFile(seed, []byte(`{"answers":[{"columns":["id"]}]}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	_, err := BuiltinConnectors(envMap(map[string]string{
-		"ATLAS_MSSQL_CONNECTORS": "hr-db",
-		"ATLAS_MSSQL_MOCK":       "1",
-		"ATLAS_MSSQL_MOCK_SEED":  seed,
-	}), "mssql")
-	if err == nil || !strings.Contains(err.Error(), "needs a statement") {
-		t.Fatalf("error = %v, want the seed's own complaint", err)
+	for _, p := range sqlProducts(t) {
+		t.Run(p.Name, func(t *testing.T) {
+			seed := filepath.Join(t.TempDir(), "seed.json")
+			if err := os.WriteFile(seed, []byte(`{"answers":[{"columns":["id"]}]}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := BuiltinConnectors(envMap(map[string]string{
+				p.ConnectorsEnv(): "hr-db",
+				p.MockEnv():       "1",
+				p.MockSeedEnv():   seed,
+			}), p.Name)
+			if err == nil || !strings.Contains(err.Error(), "needs a statement") {
+				t.Fatalf("error = %v, want the seed's own complaint", err)
+			}
+		})
 	}
 }
 
@@ -270,31 +317,39 @@ func TestAMalformedSQLSeedIsReported(t *testing.T) {
 // database this worker does not hold gets the unresolved-connector error it would get
 // against a real one, rather than a mock inventing a database.
 func TestMockModeAnswersOnlyItsConfiguredNames(t *testing.T) {
-	built, err := BuiltinConnectors(envMap(map[string]string{
-		"ATLAS_MSSQL_CONNECTORS": "hr-db",
-		"ATLAS_MSSQL_MOCK":       "1",
-	}), "mssql")
-	if err != nil {
-		t.Fatalf("BuiltinConnectors: %v", err)
-	}
-	_, err = built.Handlers[compiler.MsSqlJobType].Run(context.Background(), Job{Connector: &ConnectorPayload{Kind: "mssql", Fields: map[string]any{
-		"connector": "other-db", "product": "mssql", "operation": "query",
-		"statement": "SELECT 1", "resultVariable": "rows",
-	}}})
-	if err == nil || !strings.Contains(err.Error(), "other-db") {
-		t.Fatalf("error = %v, want one naming the unconfigured database", err)
+	for _, p := range sqlProducts(t) {
+		t.Run(p.Name, func(t *testing.T) {
+			built, err := BuiltinConnectors(envMap(map[string]string{
+				p.ConnectorsEnv(): "hr-db",
+				p.MockEnv():       "1",
+			}), p.Name)
+			if err != nil {
+				t.Fatalf("BuiltinConnectors: %v", err)
+			}
+			_, err = built.Handlers[p.JobType].Run(context.Background(), Job{Connector: &ConnectorPayload{Kind: p.Name, Fields: map[string]any{
+				"connector": "other-db", "product": p.Name, "operation": "query",
+				"statement": "SELECT 1", "resultVariable": "rows",
+			}}})
+			if err == nil || !strings.Contains(err.Error(), "other-db") {
+				t.Fatalf("error = %v, want one naming the unconfigured database", err)
+			}
+		})
 	}
 }
 
 // Mock mode with nothing named parks like every other unconfigured kind: the model
 // names a database, so a mock with no names has nothing a task could address.
 func TestMockModeWithNoNamesParks(t *testing.T) {
-	built, err := BuiltinConnectors(envMap(map[string]string{"ATLAS_MSSQL_MOCK": "1"}), "mssql")
-	if err != nil {
-		t.Fatalf("BuiltinConnectors: %v", err)
-	}
-	if len(built.Unconfigured) != 1 || built.Unconfigured[0] != "mssql" {
-		t.Errorf("Unconfigured = %v, want [mssql]", built.Unconfigured)
+	for _, p := range sqlProducts(t) {
+		t.Run(p.Name, func(t *testing.T) {
+			built, err := BuiltinConnectors(envMap(map[string]string{p.MockEnv(): "1"}), p.Name)
+			if err != nil {
+				t.Fatalf("BuiltinConnectors: %v", err)
+			}
+			if len(built.Unconfigured) != 1 || built.Unconfigured[0] != p.Name {
+				t.Errorf("Unconfigured = %v, want [%s]", built.Unconfigured, p.Name)
+			}
+		})
 	}
 }
 

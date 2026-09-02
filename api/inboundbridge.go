@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -62,11 +63,17 @@ func (s *Server) pollInbound(ctx context.Context) {
 
 	now := s.inboundNow()
 	for _, sb := range subs {
-		if !inboundDue(sb.rec, now) {
+		if !inboundDue(sb.kind, sb.rec, now) {
 			continue // this watch has its own cadence and it has not elapsed
 		}
 		subID := sb.rec.ID
-		s.do(func() { s.markInboundPolled(subID, now.Unix()) })
+		if inboundCadence(sb.kind, sb.rec) > 0 {
+			// Only a watch that paces itself ever reads LastPolledAt back. Recording it
+			// for one that is read on every tick would be two fsyncs on the single writer
+			// per tick per watch, for a value nothing consults — design-time state written
+			// at run-loop rates, in front of every request that has to reach the loop.
+			s.do(func() { s.markInboundPolled(subID, now.Unix()) })
+		}
 		if sb.rec.StartFromTip && !sb.rec.Primed {
 			s.primeInbound(ctx, sb) // skip the backlog to the tip, publishing nothing
 			continue
@@ -92,11 +99,21 @@ func (s *Server) pollInbound(ctx context.Context) {
 			}
 		}
 		name := sb.rec.MessageName
+		published := false
 		s.do(func() {
+			// The ceiling is charged in the same run-loop hop as the publish, so a watch
+			// cannot be read as inside its budget and publish outside it.
+			if !s.chargeInboundBudget(subID, len(pubs), now) {
+				return
+			}
 			for _, p := range pubs {
 				s.proc.PublishInbound(p.sourceID, p.seq, name, p.key, p.vars...)
 			}
+			published = true
 		})
+		if !published {
+			continue // over the ceiling: the watch is off and the cursor stays put
+		}
 		// A correlated message can start or advance an instance straight into a
 		// connector task, so the driving happens off the run loop (ADR-0157 step 6).
 		// The cursor only advances once that succeeded; otherwise it is left where it
@@ -104,7 +121,10 @@ func (s *Server) pollInbound(ctx context.Context) {
 		if err := s.drive(); err != nil {
 			continue
 		}
-		if cursor != "" {
+		// A watch sitting at the tip re-reads its window and hands back the cursor it
+		// already carries; so does one whose page cannot be drained. Writing an unchanged
+		// value is two more fsyncs on the run loop that move nothing.
+		if cursor != "" && cursor != sb.rec.LastEventID {
 			s.do(func() { s.advanceInboundCursor(subID, cursor) })
 		}
 	}
@@ -119,19 +139,39 @@ func (s *Server) inboundNow() time.Time {
 	return time.Now()
 }
 
-// inboundDue reports whether a watch's own cadence has elapsed. A watch with no cadence
-// of its own is read on every tick, which is what every clio subscription did before
-// this existed and still does.
+// jiraDefaultPoll is the cadence a jira watch is read at when it states none of its own
+// — the kind's default ADR-0214 decided on. A Jira site rate-limits per *site*, so every
+// watch on it spends one budget; at the bridge's own two-second tick a handful of watches
+// spend that budget entirely on empty answers, and pay for each with a run-loop round
+// trip and a Jira search. A minute is the latency the record accepts in exchange.
+const jiraDefaultPoll = 60 * time.Second
+
+// inboundCadence is how often a watch is read: its own pollSeconds, or its kind's
+// default when it states none — which is what the field has always documented itself to
+// mean. Zero means "every tick", which is what a clio read is cheap enough for and what
+// every clio subscription has always had.
+func inboundCadence(kind string, rec inboundSubscription) time.Duration {
+	if rec.PollSeconds > 0 {
+		return time.Duration(rec.PollSeconds) * time.Second
+	}
+	if kind == connectorKindJira {
+		return jiraDefaultPoll
+	}
+	return 0
+}
+
+// inboundDue reports whether a watch's cadence has elapsed.
 //
 // The cadence is per watch rather than per bridge because the two sources want opposite
 // things from it: a clio read is local and cheap, and a two-second tick is the latency
 // budget it was chosen for; a Jira site rate-limits per site, and spending that budget
 // on empty answers every two seconds is not what it is for.
-func inboundDue(rec inboundSubscription, now time.Time) bool {
-	if rec.PollSeconds <= 0 {
+func inboundDue(kind string, rec inboundSubscription, now time.Time) bool {
+	every := inboundCadence(kind, rec)
+	if every <= 0 {
 		return true
 	}
-	return now.Unix()-rec.LastPolledAt >= int64(rec.PollSeconds)
+	return now.Unix()-rec.LastPolledAt >= int64(every.Seconds())
 }
 
 // markInboundPolled records when a watch was last read, so its cadence advances even
@@ -144,6 +184,70 @@ func (s *Server) markInboundPolled(subID string, at int64) {
 	}
 	rec.LastPolledAt = at
 	_ = s.inboundSubs.Save(rec)
+}
+
+// defaultInboundPerHour is the ceiling a watch gets when it names none: how many events
+// it may publish in one hour before the guard switches it off.
+//
+// Sixty is one a minute sustained, which is generous for a watch whose every event
+// starts a process and cheap to raise per watch when a project really is that busy. The
+// number it is protecting against is not close: the reported Jira loop published one
+// every ten seconds and would have run until somebody noticed.
+const defaultInboundPerHour = 60
+
+// inboundBudgetWindow is the span the ceiling is counted over. An hour is long enough
+// that a burst of real work does not trip it and short enough that a watch switched off
+// yesterday is not still paying for it.
+const inboundBudgetWindow = time.Hour
+
+// inboundBudget is a watch's ceiling: its own, or the default when it names none.
+func inboundBudget(rec inboundSubscription) int {
+	if rec.MaxPerHour > 0 {
+		return rec.MaxPerHour
+	}
+	return defaultInboundPerHour
+}
+
+// chargeInboundBudget books n events against a watch's hourly ceiling and reports
+// whether they may be published.
+//
+// A watch can feed itself: a process started by an event writes to the system the watch
+// reads, the watch matches what it wrote, and the loop has no natural end. That is not
+// a hypothetical — a Jira watch published jira.ticket.created, the started instance
+// created a Jira issue, the watch matched it, and it ran until the watch was deleted by
+// hand (ADR-0225). The engine fix for that particular loop
+// (ADR-0226) closed the shape it took; this closes the class,
+// including the one two processes can build between them, where no single model is
+// wrong.
+//
+// A batch that would cross the ceiling is refused whole and the watch is switched off,
+// rather than published up to the line. Publishing part of a batch would advance nothing
+// an operator can reason about, and a runaway that is merely throttled is still a
+// runaway. The cursor does not advance either, so re-enabling re-reads what was refused.
+//
+// It runs on the run-loop goroutine, which owns the store (invariant I3).
+func (s *Server) chargeInboundBudget(subID string, n int, now time.Time) bool {
+	rec, ok, err := s.inboundSubs.Get(subID)
+	if err != nil || !ok {
+		return false
+	}
+	if now.Unix()-rec.WindowStart >= int64(inboundBudgetWindow.Seconds()) {
+		rec.WindowStart = now.Unix()
+		rec.PublishedInWindow = 0
+	}
+	ceiling := inboundBudget(rec)
+	if rec.PublishedInWindow+n > ceiling {
+		rec.Enabled = false
+		rec.DisabledReason = fmt.Sprintf(
+			"switched off by the loop guard: this watch tried to publish more than %d events in an hour. "+
+				"That is usually a watch matching what its own processes write. Check the query, then raise "+
+				"the hourly limit and enable it again.", ceiling)
+		_ = s.inboundSubs.Save(rec)
+		return false
+	}
+	rec.PublishedInWindow += n
+	_ = s.inboundSubs.Save(rec)
+	return true
 }
 
 // inboundPrimeBatch is the page size the priming path reads while skipping a
@@ -251,6 +355,13 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 func (s *Server) advanceInboundCursor(subID, lastEventID string) {
 	rec, ok, err := s.inboundSubs.Get(subID)
 	if err != nil || !ok {
+		return
+	}
+	if rec.LastEventID == lastEventID {
+		// A cursor that has not moved is not an advance. The record is already read
+		// here, so refusing the write costs nothing and saves two fsyncs on the run
+		// loop — which is the whole of the steady state for a watch sitting at its
+		// tip, and for one whose window it cannot get past.
 		return
 	}
 	rec.LastEventID = lastEventID

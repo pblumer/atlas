@@ -910,6 +910,12 @@ const (
 	// outbox's shape — the worker sends, because a server cannot dial into every
 	// network a worker sits in.
 	adMockViewURLEnv = "ATLAS_AD_MOCK_VIEW_URL"
+	// sqlMockViewURLEnv is where a mock SQL worker posts the journal it answered. It
+	// is spelled out here rather than imported from the worker package for the reason
+	// the drivers are kept out of this one (ADR-0173/ADR-0220): importing `worker` to
+	// reach one string would link three database drivers into a package that never
+	// opens a database. A test holds the two spellings together instead.
+	sqlMockViewURLEnv = "ATLAS_SQL_MOCK_VIEW_URL"
 	// adDirEnvPrefix and adConnectorsEnv are where a supervised AD worker reads the
 	// directories an operator configured (ADR-0206) — the
 	// same names an operator sets by hand for an external worker, because there is no

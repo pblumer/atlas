@@ -184,6 +184,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/playground/sessions/{id}/overlay":                  "per-element counts of an author's sandbox run",
 	"GET /api/v1/playground/sessions/{id}/heatmap":                  "element and flow counts of an author's sandbox run",
 	"POST /api/v1/playground/sessions/{id}/generate":                "previews the dataset an author is describing in their sandbox",
+	"POST /api/v1/playground/sessions/{id}/arrivals":                "previews the arrival stream an author is describing in their sandbox",
 	"POST /api/v1/playground/sessions/{id}/verdict":                 "judges an author's sandbox run against their expectations",
 	"POST /api/v1/playground/sessions/{id}/compare":                 "sets an author's sandbox run beside an earlier one",
 
@@ -221,8 +222,14 @@ var mcpOmittedRoutes = map[string]string{
 	// job's own result and atlas_workers' log, both of which say it in the terms the
 	// model is written in; a forest dump is an operator's picture, and an admin-gated
 	// one (ADR-0213).
-	"POST /api/v1/ad/mock-directory":    "worker reporting the mock forest it holds, not an agent action",
-	"GET /api/v1/ad/mock-directory":     "an operator's view of a mocked directory; an agent reads what a job did from the job",
+	"POST /api/v1/ad/mock-directory": "worker reporting the mock forest it holds, not an agent action",
+	"GET /api/v1/ad/mock-directory":  "an operator's view of a mocked directory; an agent reads what a job did from the job",
+
+	// The mock database's journal, omitted for the same two reasons as the directory
+	// above it — and the read for a third: it carries the values a process bound, which
+	// is the widest thing this surface could hand out on a hunch.
+	"POST /api/v1/sql/mock-journal":     "worker reporting the mockup run it answered, not an agent action",
+	"GET /api/v1/sql/mock-journal":      "an operator's view of a mockup run; an agent reads what a job did from the job",
 	"POST /api/v1/workers/{id}/restart": "restarts an operating-system process; an operator action, deliberately not an agent one",
 	"GET /api/v1/checkpoints":           "admin recovery-checkpoint status, not an agent action",
 	"POST /api/v1/checkpoints":          "admin on-demand checkpoint/compaction, not an agent action",
@@ -366,6 +373,13 @@ var mcpOmittedRoutes = map[string]string{
 	"PATCH /api/v1/inbound-subscriptions/{id}":           "connector infrastructure is admin config",
 	"DELETE /api/v1/inbound-subscriptions/{id}":          "connector infrastructure is admin config",
 	"POST /api/v1/connectors/{id}/provision-clio-key":    "connector infrastructure is admin config",
+	// Which inbound watches publish a message name. It reads the same connector
+	// configuration as the family above, and the blind spot it exists to close is not
+	// one an agent has: a person authoring in the Console cannot see whether a
+	// Console-configured watch feeds the name they typed, while an agent that wants a
+	// process to run publishes the message itself with atlas_publish_message and never
+	// depends on a watch existing at all.
+	"GET /api/v1/message-sources": "the Modeler's authoring aid over watch configuration; an agent publishes a message itself rather than needing one to exist",
 
 	// Repository: package management, an admin/UI concern.
 	"GET /api/v1/repository/packages":               "repository management is a UI concern",
@@ -456,6 +470,14 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/documentation/{id}":                      "pruning published history is a human decision, not an agent action",
 	"POST /api/v1/processes/{processId}/documentation/prune": "retention over published history is a human decision, not an agent action",
 
+	// Artifact id availability (ADR-0222): a keystroke-level
+	// probe that colours the Modeler's ID field while it is being typed. An agent
+	// does not type; it saves, and the save itself is the authority — it refuses a
+	// colliding id with a 409 that names what is in the way. Exposing the probe would
+	// only invite an agent to ask first and then race the answer.
+	"GET /api/v1/drafts/{id}/availability": "a live check for a field being typed; an agent learns the same thing from the save's 409",
+	"GET /api/v1/forms/{id}/availability":  "a live check for a field being typed; an agent learns the same thing from the save's 409",
+
 	// Secrets: credential storage; an agent must never read or write it.
 	"GET /api/v1/secrets":           "credential storage is not an agent capability",
 	"PUT /api/v1/secrets/{name}":    "credential storage is not an agent capability",
@@ -479,6 +501,15 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/settings/ad-mock": "the AD mockup switch is a Console concern; its state shows in atlas_workers",
 	"PUT /api/v1/settings/ad-mock": "whether this instance writes to a real directory is an operator decision, not an agent action",
 
+	// The database mockup switch (ADR-0221), which is the AD one applied to the SQL
+	// worker types and omitted for the same two reasons. The write decides whether
+	// every SQL task on this instance reaches a real database — an operator's call
+	// about their data, and the one with the widest blast radius of any switch here.
+	// The state is not hidden from an agent either way: a mocked worker says so in the
+	// log atlas_workers returns, beside what it answered.
+	"GET /api/v1/settings/sql-mock": "the database mockup switch is a Console concern; its state shows in atlas_workers",
+	"PUT /api/v1/settings/sql-mock": "whether this instance writes to a real database is an operator decision, not an agent action",
+
 	// Self-service registration config (ADR-0126): a login-screen/admin concern,
 	// not an agent action.
 	"GET /api/v1/settings/registration":    "registration config is a Console/login concern, not an agent action",
@@ -486,10 +517,16 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/settings/registration": "registration config is a Console/login concern, not an agent action",
 
 	// Auth + user administration: security surface, deliberately off-limits.
-	"POST /api/v1/auth/login":           "auth flow is not an agent capability",
-	"POST /api/v1/auth/logout":          "auth flow is not an agent capability",
-	"GET /api/v1/auth/me":               "auth flow is not an agent capability",
-	"GET /api/v1/auth/providers":        "what the login screen offers a browser; an agent holds a credential already",
+	"POST /api/v1/auth/login":    "auth flow is not an agent capability",
+	"POST /api/v1/auth/logout":   "auth flow is not an agent capability",
+	"GET /api/v1/auth/me":        "auth flow is not an agent capability",
+	"GET /api/v1/auth/providers": "what the login screen offers a browser; an agent holds a credential already",
+	// Presence (ADR-0228). The beacon is a browser saying its own tab
+	// is open, and an agent holds a token rather than a session, so there is nothing
+	// for it to stamp. Reading who is signed in is account administration, and where
+	// a colleague is sitting is the last thing an agent should be able to fan out.
+	"POST /api/v1/auth/presence":        "a browser reporting its own tab; an agent holds no session to be present in",
+	"GET /api/v1/users/presence":        "who is signed in is user administration, and not an agent capability",
 	"GET /api/v1/settings/oidc-mapping": "who the identity provider's groups make an administrator here is not an agent decision",
 	"PUT /api/v1/settings/oidc-mapping": "who the identity provider's groups make an administrator here is not an agent decision",
 	"GET /api/v1/users":                 "user administration is not an agent capability",

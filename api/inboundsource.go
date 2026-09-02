@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/jira"
+	"github.com/pblumer/atlas/logging"
 )
 
 // The inbound bridge (ADR-0075) was a clio reader with the generic parts factored out
@@ -203,7 +205,47 @@ func (s jiraSource) Read(ctx context.Context, rec inboundSubscription, limit int
 		// stepping it somewhere arbitrary. The marks still make a re-read harmless.
 		return out, "", nil
 	}
-	return out, newest.Add(-jiraLag(rec)).UTC().Format(jiraCursorLayout), nil
+	// A page that filled the bridge's cap stopped at the cap, not at the end of the
+	// result set — which is what decides whether the safety lag may apply.
+	return out, jiraNextCursor(rec, newest, len(issues) >= limit), nil
+}
+
+// jiraNextCursor is where the watch resumes, and the one rule it may not break is that
+// a full page moves it.
+//
+// The lag holds the cursor deliberately behind the newest issue seen, so an issue the
+// search index publishes late is still inside the next window; its own mark makes that
+// re-read free (ADR-0214). That is right at the tip, where a page is short because there
+// is nothing more to read. It is wrong behind a *full* page: there the read stopped at
+// the bridge's cap with more issues behind it, and a cursor held back into the page just
+// read asks the next poll for the same issues again. Nothing then ever advances — the
+// watch re-reads and re-publishes one page every tick, spends the site's whole API
+// budget doing it, and never reaches the issue behind the page. That is not a slow
+// watch, it is a stopped one, and it is indistinguishable from a busy Atlas because the
+// publishes are real work that the engine correctly discards.
+func jiraNextCursor(rec inboundSubscription, newest time.Time, full bool) string {
+	at := newest
+	if !full {
+		at = at.Add(-jiraLag(rec))
+	}
+	cursor := at.UTC().Format(jiraCursorLayout)
+	if !full || cursor != strings.TrimSpace(rec.LastEventID) {
+		return cursor
+	}
+	// The residual case the cursor's granularity cannot express: a full page whose
+	// issues all share one minute, read from a cursor that is already that minute. JQL
+	// compares to the minute, so no cursor separates them and time paging cannot drain
+	// the page however often it is retried. Step past the minute instead. It skips the
+	// issues in that one minute beyond the cap, which is why it is logged rather than
+	// done quietly — but a watch that cannot move skips every issue after it, for ever.
+	logging.Warn(logging.InboundWatchMinuteOverflowed,
+		"a jira watch read a full page of issues that all share one minute; stepping the cursor past it, "+
+			"which skips the issues in that minute beyond the batch limit. Narrow the watch's jql or raise the batch limit.",
+		slog.String("subscription", rec.ID),
+		slog.String("messageName", rec.MessageName),
+		slog.String("cursorField", jiraCursorField(rec)),
+		slog.String("minute", cursor))
+	return at.Add(time.Minute).UTC().Format(jiraCursorLayout)
 }
 
 func (s jiraSource) Prime(ctx context.Context, rec inboundSubscription) (string, bool, error) {

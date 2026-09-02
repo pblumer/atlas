@@ -1,10 +1,10 @@
 {
   "id": "atlas.jira-issues",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kind": "connector",
   "title": "Jira Issues",
   "author": "Atlas core",
-  "description": "Create, read, update, transition, comment on, assign or search Atlassian Jira issues through a server-registered instance. The operation and its values are authored in the model; the site URL and the credential live on the server, resolved from the vault (ADR-0201). A transition may be named by the button Jira shows — its id is resolved first — and a search follows Jira's paging to the authored maximum.",
+  "description": "Create, read, update, transition, comment on, assign or search Atlassian Jira issues — and look up the accounts to assign them to — through a server-registered instance. The operation and its values are authored in the model; the site URL and the credential live on the server, resolved from the vault (ADR-0201). A transition may be named by the button Jira shows — its id is resolved first — and a search follows Jira's paging to the authored maximum. An account search answers with the accounts themselves, so a process can turn an address into the accountId an assign takes.",
   "engineCompat": ">=0.10",
   "template": {
     "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
@@ -22,12 +22,13 @@
           { "name": "Transition issue", "value": "transition-issue" },
           { "name": "Add comment", "value": "add-comment" },
           { "name": "Assign issue", "value": "assign-issue" },
-          { "name": "Search (JQL)", "value": "search" }
+          { "name": "Search (JQL)", "value": "search" },
+          { "name": "Search users", "value": "search-users" }
         ] },
       { "label": "Issue (read/update/transition/comment/assign)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:issueKey" },
         "description": "Issue key (OPS-42) or numeric id. Usually a FEEL expression naming what an earlier Create issue wrote, e.g. =ticket.key." },
-      { "label": "Project (create)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:project" },
-        "description": "Project key. A value that is all digits is read as a project id instead." },
+      { "label": "Project (create/search users)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:project" },
+        "description": "Project key. A value that is all digits is read as a project id instead. On Search users it is optional and restricts the search to the accounts that project can actually assign." },
       { "label": "Issue type (create)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:issueType" },
         "description": "Issue type by the name Jira shows (Task, Bug, Story) — or, if all digits, by its id." },
       { "label": "Summary (create/update)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:summary" } },
@@ -41,10 +42,12 @@
         "description": "An accountId on Jira Cloud, a username on Data Center. Which one is decided by the connector's credential, not by this value." },
       { "label": "JQL (search)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:jql" },
         "description": "The query, written exactly as in Jira's own search box. It must restrict what it matches: Jira Cloud refuses an unbounded query, so one that only sorts is answered with an HTTP 400 rather than with every issue." },
-      { "label": "Maximum issues (search)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:maxResults" },
+      { "label": "Search term (search users)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:query" },
+        "description": "A fragment of the account's display name or address, matched as a substring. Jira Cloud searches both; Data Center matches the username. The connector picks the right parameter from its own credential. An empty result is not necessarily \"no such person\": a caller Jira does not recognise, or one without the global Browse users and groups permission, is answered by seeing nobody rather than by refusing, and on Cloud an address matches only as far as that account's profile visibility allows." },
+      { "label": "Maximum results (search/search users)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:maxResults" },
         "description": "Caps what may reach the result variable; the connector pages up to it. Empty uses 50, 0 reads every match." },
-      { "label": "Result variable (create/read/comment/search)", "type": "String", "value": "ticket", "binding": { "type": "property", "name": "atlas:resultVariable" },
-        "description": "Receives what Jira returned. Update, transition and assign answer with no content, and the compiler refuses a result variable on them." }
+      { "label": "Result variable (create/read/comment/search/search users)", "type": "String", "value": "ticket", "binding": { "type": "property", "name": "atlas:resultVariable" },
+        "description": "Receives what Jira returned; a search writes a JSON array. FEEL lists are 1-based, so an account search's first hit is =konten[1].accountId. Update, transition and assign answer with no content, and the compiler refuses a result variable on them." }
     ]
   }
 }

@@ -771,18 +771,21 @@ type ConnectorTaskDetail struct {
 	// Connector (above) names the server-registered Jira instance — its base URL and
 	// credential live in the managed connector store and the vault, never in a model.
 	// JiraOp is the interned operation ("create-issue"|"get-issue"|"update-issue"|
-	// "transition-issue"|"add-comment"|"assign-issue"|"search"), and it decides which
-	// of the rest are populated; the compiler refuses a value on an operation that
-	// does not use it, so a field can never be quietly ignored at call time.
+	// "transition-issue"|"add-comment"|"assign-issue"|"search"|"search-users"), and it
+	// decides which of the rest are populated; the compiler refuses a value on an
+	// operation that does not use it, so a field can never be quietly ignored at call
+	// time.
 	//
-	// JiraIssue addresses one issue by key or id (every operation but create and
-	// search). JiraProject, JiraIssueType, JiraSummary and JiraDescription are the
+	// JiraIssue addresses one issue by key or id (every operation but create and the two
+	// searches). JiraProject, JiraIssueType, JiraSummary and JiraDescription are the
 	// created issue's core fields — summary and description also carry an update.
 	// JiraTransition names the workflow transition to perform, by id or by the name
 	// shown in Jira; JiraComment is a comment body (its own operation, and optionally
 	// alongside a transition); JiraAssignee is the account the issue is handed to.
-	// JiraJQL is a search's query and JiraMaxResults the cap on what may land in the
-	// result variable — the compiler has already applied the default, so the runtime
+	// JiraJQL is an issue search's query and JiraQuery an account search's term — a
+	// fragment of a display name or an address, which JiraProject may restrict to the
+	// accounts one project can assign. JiraMaxResults caps what either search may land in
+	// the result variable — the compiler has already applied the default, so the runtime
 	// interprets nothing (I5).
 	//
 	// JiraFields are extra issue fields as name/literal-or-FEEL pairs (create, update
@@ -801,6 +804,7 @@ type ConnectorTaskDetail struct {
 	JiraComment     RestExpr
 	JiraAssignee    RestExpr
 	JiraJQL         RestExpr
+	JiraQuery       RestExpr
 	JiraMaxResults  int32
 	JiraFields      []RestKV
 }

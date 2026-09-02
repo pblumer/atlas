@@ -10,8 +10,16 @@ import (
 // the combination mock mode actually builds.
 func mockClient(t *testing.T, answers ...MockAnswer) (*Client, *MockDatabase) {
 	t.Helper()
-	m := NewMockDatabase(answers...)
-	c := OpenMock(mustProduct(t, "mssql"), m)
+	return mockClientOf(t, "mssql", answers...)
+}
+
+// mockClientOf is the same for a named product. Mock mode is one code path for all
+// three (ADR-0221), so what differs between them is worth stating per product rather
+// than assuming: the driver behind the pool, and the seed variable the refusal names.
+func mockClientOf(t *testing.T, product string, answers ...MockAnswer) (*Client, *MockDatabase) {
+	t.Helper()
+	m := NewMockDatabase(mustProduct(t, product), answers...)
+	c := OpenMock(m)
 	t.Cleanup(func() { _ = c.Close() })
 	return c, m
 }
@@ -110,16 +118,25 @@ func TestMockMatchesNamedParameters(t *testing.T) {
 // answered with no rows: an empty result is a business answer, and a process that
 // branches on it would branch on something the mock invented.
 func TestMockRefusesAnUnseededStatement(t *testing.T) {
-	c, _ := mockClient(t, MockAnswer{Statement: "SELECT 1", Columns: []string{"n"}, Rows: [][]any{{1}}})
-	_, err := c.Query(context.Background(), "SELECT mail FROM personen WHERE id = @p1", []any{int64(42)}, 0)
-	if err == nil {
-		t.Fatal("an unseeded statement returned rows; a mock that guesses teaches a model to be wrong")
-	}
-	// The message has to carry what to seed, or the operator is left diffing.
-	for _, want := range []string{"SELECT mail FROM personen WHERE id = @p1", "42", mockSeedEnvHint} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q does not name %q", err, want)
-		}
+	// Every product refuses the same way and names its *own* seed variable. A message
+	// quoting a pattern like ATLAS_<PRODUCT>_MOCK_SEED leaves the reader to apply the
+	// substitution in their head, which is exactly where "I set the variable and it
+	// still says it is missing" comes from.
+	for _, product := range ProductNames() {
+		t.Run(product, func(t *testing.T) {
+			c, _ := mockClientOf(t, product, MockAnswer{Statement: "SELECT 1", Columns: []string{"n"}, Rows: [][]any{{1}}})
+			_, err := c.Query(context.Background(), "SELECT mail FROM personen WHERE id = @p1", []any{int64(42)}, 0)
+			if err == nil {
+				t.Fatal("an unseeded statement returned rows; a mock that guesses teaches a model to be wrong")
+			}
+			// The message has to carry what to seed, or the operator is left diffing.
+			seedVar := mustProduct(t, product).MockSeedEnv()
+			for _, want := range []string{"SELECT mail FROM personen WHERE id = @p1", "42", seedVar} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not name %q", err, want)
+				}
+			}
+		})
 	}
 }
 
@@ -327,7 +344,7 @@ func TestMockSeededValuesNarrowToDriverTypes(t *testing.T) {
 // server to address. The database/sql seam still asks for a driver, so it says so
 // rather than returning a connection to nothing.
 func TestMockHasNoConnectionString(t *testing.T) {
-	m := NewMockDatabase()
+	m := NewMockDatabase(mustProduct(t, "mssql"))
 	d := m.Driver()
 	if _, err := d.Open("sqlserver://somewhere"); err == nil {
 		t.Error("the mock driver opened a connection string")

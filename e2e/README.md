@@ -53,7 +53,23 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   description rather than five hundred rows built in the browser; the mode lays the
   editor out in three columns and a strip, with the strip absent until there are cases
   to put in it and the cases read a page at a time from the server rather than held in
-  the browser; and stopping a batch leaves what it did readable.
+  the browser; the **overlay switcher** shades the diagram by one measure at a time,
+  changing the badges with it, keeping the flows out of the three measures an edge has
+  no value for, and leaving a zero alone except where zero means "never reached"; a
+  **results row opens its case** on the diagram, numbered in the order it went through
+  and standing where an unfinished one stopped, with the strip naming it and the way
+  back putting the run back; the **timing draws the stream it describes** before the
+  run — from the server, so the picture is the planner's own arithmetic — redrawing on
+  the count, the mode and the calendar alike, saying so rather than drawing a line for
+  a sequential plan or a CSV whose size the browser does not know, and doing it without
+  a render, so the box being typed in keeps its caret; the report's **numbers carry
+  their own magnitude**, with the four duration tiles on one scale, waiting scaled to
+  the worst element, utilisation to a full hundred, and each case's duration to the
+  slowest on its page; the run is **broken down by the outcome each case reached**,
+  ordered by size, keeping the row of an end event nothing reached and marking it as
+  such — and offering each outcome *once*, which is the regression guard for a
+  registry scan that used to see an element's external label as a second copy of it;
+  and stopping a batch leaves what it did readable.
 
   And the **scenario half**: the checkboxes an author ticks become the expectations a
   build exits on, resolved against the run that happened rather than the dataset in
@@ -155,6 +171,37 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   difference *and say so* on the section rather than presenting it as the element's own
   work. Drives the real `mountInstanceReplay` against a mock `api` serving both shapes of
   timeline (`?legacy=1` for the unattributed one).
+
+- **`id-check.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
+  the **live id-availability check** on an artifact's ID field. A draft is stored under
+  its process id and a form under the id a user task binds to, so saving onto an id
+  something else already holds is refused — and a refusal at Save is too late, because
+  the author has typed the id and moved on. Drives the real `idcheck.js` against a mock
+  `api`: an id another draft holds turns the field red, names the holder and sets
+  `aria-invalid`; a collision the author may not see is reported without naming it; a
+  free id clears the mark; the artifact's own id is never *asked* about, so a panel that
+  re-renders on every selection does not pepper the server; and a burst of keystrokes
+  asks exactly one question.
+
+- **`form-identity.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
+  the **form editor's single identity**, on the state that reported the bug — a form
+  stored as `form-mtjs4` whose schema had drifted to `frm_jira_ticket_new`, so the
+  toolbar chip and the properties panel showed different ids and the rename had never
+  happened. Both must open on the stored id; retyping the panel's **ID** must move the
+  chip with it and mark the rename unsaved; and Save must ask before renaming (a user
+  task binds to that id) and send the record it is editing, so the save moves the form
+  instead of leaving a second one behind. Drives the real `mountFormEditor` — the actual
+  vendored form-js properties panel — against a mock `api` that captures the save.
+
+- **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
+  **who is signed in**, in the Users card under Organization. The column must render the
+  three states from what the roster carries, and keep itself current *without* reloading
+  the page — an administrator half-way through a user form must still have it, and what
+  they typed in it, thirty seconds later. The other half is the tab's own report: the
+  activity flag may be set by a keystroke and never by the app's own polling, and with
+  enforcement off there is no session to be present in, so nothing is reported and the
+  column is absent. Drives the real app shell against a routed mock, with Playwright's
+  clock driving both intervals — the timing is part of what is being tested.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 

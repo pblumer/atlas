@@ -1,6 +1,7 @@
 package panorama
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -17,7 +18,24 @@ import (
 // That is ADR-0147's rule — a per-area service holds a loop and takes every other
 // dependency explicitly — and it is also what keeps this package free of the
 // server object it would otherwise have to import.
-type LandscapeCollector func(r *http.Request) (Landscape, error)
+// It also hands back the part of the landscape that cannot be read from local
+// state — see [ReachOut] — or nil when there is none.
+type LandscapeCollector func(r *http.Request) (Landscape, ReachOut, error)
+
+// ReachOut completes a landscape with what only a call outside this process can
+// tell it: whether the peers this server can promote to are answering.
+//
+// It is a closure the collector hands back rather than a second collector, and that
+// shape is the whole point. Whatever it needs from the run loop — the target list,
+// the credential each one presents — it captured while it was *on* the loop; what
+// it does with them happens off it. A remote call must never hold the single writer
+// (I3), and a landscape view that could is a landscape view that stops every other
+// design-time request while somebody's peer times out.
+//
+// It never fails. A peer that cannot be reached is a finding about that peer, not
+// an error about the landscape: one server rebooting must not blank a picture of
+// four hundred nodes.
+type ReachOut func(ctx context.Context, land *Landscape)
 
 // Mesh serves Panorama's derived landscape altitude (ADR-0211). It is a separate
 // service from [Service] deliberately: Service owns stored ArchiMate documents,
@@ -47,6 +65,7 @@ func NewMesh(loop *runloop.Loop, collect LandscapeCollector, overlays OverlayCol
 func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	var (
 		land     Landscape
+		reach    ReachOut
 		overlays []Overlay
 		err      error
 		// ran distinguishes "the collector reported nothing" from "the collector
@@ -58,7 +77,7 @@ func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	)
 	m.loop.Do(func() {
 		ran = true
-		if land, err = m.collect(r); err != nil {
+		if land, reach, err = m.collect(r); err != nil {
 			return
 		}
 		// The comparison is additive: a landscape is worth showing even when the
@@ -75,6 +94,12 @@ func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "collect landscape: "+err.Error())
 		return
+	}
+	// Asking the peers happens here, off the loop and before the derivation, for the
+	// reason [ReachOut] gives: the loop is the single writer, and a network call is
+	// the one thing that must never be done while holding it.
+	if reach != nil {
+		reach(r.Context(), &land)
 	}
 	// Derived off the loop: this is pure CPU over a snapshot the loop already
 	// produced, and holding the single-writer goroutine through it would make every
