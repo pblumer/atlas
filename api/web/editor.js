@@ -178,6 +178,7 @@ function calleeXML(pid, name) {
 
 let current; // active modeler/viewer, destroyed on remount
 let onLayoutKey; // document-level F8 handler for auto-layout, removed on remount
+let onBarMenuDismiss; // document-level click that closes the bar menu, removed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
 let collab; // active live collaboration session (ADR-0140), closed on remount
 // generation is bumped by cleanup() on every navigation/remount. A mount captures
@@ -203,6 +204,7 @@ export function cleanup() {
   // releases it now rather than leaving it to its TTL.
   if (playground) { try { playground.destroy(); } catch { /* ignore */ } playground = null; }
   if (onLayoutKey) { document.removeEventListener("keydown", onLayoutKey, true); onLayoutKey = null; }
+  if (onBarMenuDismiss) { document.removeEventListener("click", onBarMenuDismiss); onBarMenuDismiss = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
@@ -485,6 +487,15 @@ function editorCrumbs(project, current) {
     `<span class="crumb-current">${esc(current)}</span></nav>`;
 }
 
+// The editor bar carries two things the author acts on constantly — Save and Deploy —
+// and one menu for everything else (ADR-draft-modeler-bar-hierarchy). It used to carry
+// seven buttons in one weight, which said that re-flowing the diagram and shipping it to
+// a server were the same size of act, and on a narrower window `flex-wrap` dropped a few
+// of them into a second row mid-group. Deploy is the only filled button, because it is
+// the only one here that leaves the browser; Save sits beside it because it is the one
+// pressed most; the rest are a menu, where a toggle reads as on by its check rather than
+// by a pressed button. Every control kept its id, so what each one does is still wired
+// where it was.
 export async function mountEditor(root, { api, toast, key, draftId, projectId, project }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
@@ -500,13 +511,21 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
           <button data-tab="playground" title="Run this diagram on the real engine in a throwaway sandbox — no deploy, no side effects">Playground</button>
         </div>
         <div style="flex:1"></div>
-        <button class="btn neutral sim-toggle" id="sim-toggle" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough" aria-pressed="false">&#9654; Token simulation</button>
-        <button class="btn neutral" id="vars-toggle" title="Show the variables this diagram writes">Variables</button>
-        <button class="btn neutral" id="autolayout" title="Re-flow the diagram into a clean left-to-right layout (F8)">Auto-layout</button>
         <button class="btn neutral" id="save" title="Save this diagram as a draft">Save</button>
-        <button class="btn neutral" id="export" title="Download this diagram as BPMN XML">Export XML</button>
-        <button class="btn neutral" id="docexport" title="Publish this process as a structured PDF — the diagram plus every element's documentation and notes — as a numbered version you can share (ADR-0143)">Documentation</button>
-        <button class="btn neutral" id="deploy" title="Deploy this single diagram. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
+        <button class="btn" id="deploy" title="Deploy this single diagram. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
+        <div class="dropdown">
+          <button class="icon-btn bar-more" id="bar-more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="Everything else this diagram can do">&#8943;</button>
+          <div class="dropdown-menu" id="bar-menu" hidden>
+            <div class="mlabel">View</div>
+            <button id="sim-toggle" type="button" aria-pressed="false" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough"><span class="mi-icon">&#9654;</span>Token simulation</button>
+            <button id="vars-toggle" type="button" aria-pressed="false" title="Show the variables this diagram writes"><span class="mi-icon">{}</span>Variables</button>
+            <div class="sep"></div>
+            <div class="mlabel">Diagram</div>
+            <button id="autolayout" type="button" title="Re-flow the diagram into a clean left-to-right layout (F8)"><span class="mi-icon">&#8649;</span>Auto-layout</button>
+            <button id="export" type="button" title="Download this diagram as BPMN XML"><span class="mi-icon">&#8595;</span>Export XML</button>
+            <button id="docexport" type="button" title="Publish this process as a structured PDF — the diagram plus every element's documentation and notes — as a numbered version you can share (ADR-0143)"><span class="mi-icon">&#128196;</span>Documentation</button>
+          </div>
+        </div>
       </div>
       <div class="sim-bar" id="sim-bar" hidden>
         <button class="btn play" id="sim-play" title="Play the token simulation">&#9654; Play</button>
@@ -530,6 +549,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <span class="sim-hint" id="sim-hint"></span>
         <span style="flex:1"></span>
         <span class="sim-stats" id="sim-stats"></span>
+        <button class="btn neutral" id="sim-exit" title="Stop the walkthrough and go back to editing the diagram">Exit simulation</button>
       </div>
       <div class="start-panel" id="doc-panel" hidden>
         <label class="field"><span>Title</span>
@@ -658,6 +678,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     refreshBadges();
     playground.setActive(activeTab(root) === "playground");
   });
+  wireBarMenu(root);
   wireActions(root, modeler, api, toast, projectId, identity);
   wireEditorVars(root, modeler, api);
   wireProblems(root, modeler, api);
@@ -891,6 +912,7 @@ function wireTokenSim(root, modeler) {
   const miInput = root.querySelector("#sim-mi");
   const hintEl = root.querySelector("#sim-hint");
   const statsEl = root.querySelector("#sim-stats");
+  const exitBtn = root.querySelector("#sim-exit");
   if (!toggle || !bar) return;
 
   const setActive = (on) => {
@@ -902,6 +924,10 @@ function wireTokenSim(root, modeler) {
   };
 
   toggle.addEventListener("click", () => setActive(!sim.isActive()));
+  // Simulation is a mode: it hides the modeling palette and the context pad, and the
+  // toggle that started it sits in the bar's overflow menu. A mode with its only exit
+  // behind a menu is a mode you can be stuck in, so the mode's own bar carries one.
+  if (exitBtn) exitBtn.addEventListener("click", () => setActive(false));
   playBtn.addEventListener("click", () => (sim.stats().playing ? sim.pause() : sim.play()));
   stepBtn.addEventListener("click", () => sim.step());
   resetBtn.addEventListener("click", () => sim.reset());
@@ -1043,6 +1069,48 @@ function wireVarsPanel(root, viewer) {
       nudge();
     });
   }
+}
+
+// wireBarMenu opens and closes the editor bar's overflow menu. The Console has a
+// delegated `.dropdown-toggle` handler in app.js that drives every other menu, and this
+// one deliberately does not use it: editor.js is mounted on its own by the e2e harnesses,
+// with no app.js in the page, so a bar that depended on that handler would be a bar the
+// harnesses cannot open. It reuses the `.dropdown-menu` *look* and carries its own
+// behaviour. Stopping propagation on the trigger keeps app.js's document handler — which
+// closes every open menu on any click it sees — from closing this one the moment it opens.
+function wireBarMenu(root) {
+  const toggle = root.querySelector("#bar-more");
+  const menu = root.querySelector("#bar-menu");
+  if (!toggle || !menu) return;
+  const setOpen = (open) => {
+    menu.hidden = !open;
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+  toggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menu.hidden) {
+      // Only one menu stands at a time, which is what app.js's closeAllMenus would have
+      // done had the click reached it. Its bookkeeping needs no fixing up: it gives up an
+      // open menu the moment that menu is hidden.
+      for (const other of document.querySelectorAll(".dropdown-menu:not([hidden])")) {
+        if (other !== menu) other.hidden = true;
+      }
+    }
+    setOpen(menu.hidden);
+  });
+  // Anything else — a menu item, the canvas, another part of the page — dismisses it.
+  // Picking an item is an action, and the menu has no business outliving it. This also
+  // catches the click that opens one of app.js's menus: that handler hides this one
+  // without knowing about the trigger's aria-expanded, and this puts it back in step.
+  onBarMenuDismiss = () => { if (!menu.hidden || toggle.getAttribute("aria-expanded") === "true") setOpen(false); };
+  document.addEventListener("click", onBarMenuDismiss);
+  // Escape closes it from the trigger as well as from inside, so the key works wherever
+  // the hand left the focus.
+  toggle.parentElement.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || menu.hidden) return;
+    setOpen(false);
+    toggle.focus();
+  });
 }
 
 // wireTabs toggles the Design/Implement tabs. Design is the descriptive view
@@ -1718,14 +1786,20 @@ function wireEditorVars(root, modeler, api) {
         }).join("");
   };
 
+  // The toggle is a row in the bar menu, so "open" is carried by a check mark and by
+  // aria-pressed rather than by the look of a held-down button.
+  const reflect = () => {
+    toggle.classList.toggle("active", !panel.hidden);
+    toggle.setAttribute("aria-pressed", panel.hidden ? "false" : "true");
+  };
   toggle.addEventListener("click", () => {
     panel.hidden = !panel.hidden;
-    toggle.classList.toggle("active", !panel.hidden);
+    reflect();
     render();
   });
   if (closeBtn) closeBtn.addEventListener("click", () => {
     panel.hidden = true;
-    toggle.classList.remove("active");
+    reflect();
   });
   filter.addEventListener("input", render);
   if (sampleBox) sampleBox.addEventListener("click", (e) => {

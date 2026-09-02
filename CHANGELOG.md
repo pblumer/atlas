@@ -400,6 +400,39 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The Modeler's bar carries two buttons now, and a menu for the rest.** It ended with
+  seven, added one at a time as the editor grew — Token simulation, Variables,
+  Auto-layout, Save, Export XML, Documentation, Deploy — and every one of them was the
+  same white button. That said they were the same size of decision, which they never
+  were: Auto-layout nudges boxes, Deploy puts a definition on a server and cannot be
+  taken back ([ADR-draft-modeler-bar-hierarchy](docs/adr/draft-modeler-bar-hierarchy.md)).
+
+  The bar now carries **Save** and **Deploy**, with Deploy the only filled button because
+  it is the only act there that leaves the browser. The other five moved into a **…**
+  menu beside them, grouped by what they touch: *View* (Token simulation, Variables) and
+  *Diagram* (Auto-layout, Export XML, Documentation). A toggle in a menu cannot look
+  held down, so it says it is on with a check and with `aria-pressed` — the Variables
+  toggle never announced its state at all before.
+
+  Two things that were not about any single button go with it. The bar is one row again
+  at the widths people work at: it wraps, and the buttons were direct children of it, so
+  a narrower window used to drop two or three of them into a second ragged row rather
+  than shorten anything. And the Playground tab no longer shows **▶ Token simulation**
+  directly above **▶ Run** — a drawn walkthrough with no engine
+  ([ADR-0078](docs/adr/0078-design-view-token-simulation.md)) one row above a real
+  sandboxed one ([ADR-0215](docs/adr/0215-modeler-playground.md)), same triangle, two
+  entirely different things.
+
+  One control could not simply move. Token simulation is not a command but a mode: while
+  it is on, the diagram is played rather than edited and the modeling palette is hidden.
+  Its control bar — the one that appears with the mode — now carries **Exit simulation**,
+  so leaving is one visible click rather than a trip back through the menu.
+
+  Nothing about what the controls *do* changed, and F8 still runs Auto-layout from
+  wherever focus sits. The cost is honest and worth naming: five controls are a click
+  further away, and someone opening the Modeler for the first time cannot see that they
+  exist until they open the menu.
+
 - **The three database Worker Types are one capability, and now say so everywhere.** MS
   SQL Server, MariaDB and PostgreSQL differ in a driver name, a placeholder syntax and —
   for SQL Server alone — the ability to bind a parameter by name

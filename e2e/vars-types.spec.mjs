@@ -16,6 +16,13 @@
 // would be worse than the blank the panel had before.
 import { test, expect } from "@playwright/test";
 
+// The Modeler's bar carries Save and Deploy; everything else lives behind the "…" menu
+// (ADR-draft-modeler-bar-hierarchy). Open it before reaching for one of those controls.
+const openBarMenu = async (page) => {
+  await page.locator("#bar-more").click();
+  await expect(page.locator("#bar-menu")).toBeVisible();
+};
+
 const open = async (page, opts) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -23,6 +30,7 @@ const open = async (page, opts) => {
   await page.goto("/vars-types-harness.html");
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
   await page.evaluate((o) => window.__mount(o), opts || {});
+  await openBarMenu(page);
   await page.locator("#vars-toggle").click();
   await expect(page.locator('#vars-list .var-row[data-var="kundennr"]')).toBeVisible();
 };

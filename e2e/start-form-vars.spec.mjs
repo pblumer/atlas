@@ -6,6 +6,13 @@
 // the drag payload) so a variable can be dropped into a property field.
 import { test, expect } from "@playwright/test";
 
+// The Modeler's bar carries Save and Deploy; everything else lives behind the "…" menu
+// (ADR-draft-modeler-bar-hierarchy). Open it before reaching for one of those controls.
+const openBarMenu = async (page) => {
+  await page.locator("#bar-more").click();
+  await expect(page.locator("#bar-menu")).toBeVisible();
+};
+
 test.beforeEach(async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -14,6 +21,7 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
   await page.evaluate(() => window.__mount());
   // Open the Variables panel; its render also fires the lazy form-schema fetch.
+  await openBarMenu(page);
   await page.locator("#vars-toggle").click();
 });
 
