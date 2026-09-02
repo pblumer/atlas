@@ -580,3 +580,54 @@ func TestBuilderAddDataOutputAssociation(t *testing.T) {
 		t.Errorf("start associations = %d, want 0", len(got))
 	}
 }
+
+// itemDefinitionBPMN declares its data-object types the way the BPMN specification
+// intends and the way the Modeler writes them: an <itemDefinition> at definitions
+// level, referenced by itemSubjectRef. The structureRef carries the real name; the
+// id is only the reference handle, so a class name that is not a valid XML id still
+// travels.
+const itemDefinitionBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <itemDefinition id="ItemDefinition_Order" structureRef="Order"/>
+  <itemDefinition id="ItemDefinition_Line_item" structureRef="Line item"/>
+  <itemDefinition id="Bare"/>
+  <process id="p" isExecutable="true">
+    <dataObject id="DO_order" name="order" itemSubjectRef="ItemDefinition_Order"/>
+    <dataObject id="DO_line" name="line" itemSubjectRef="ItemDefinition_Line_item"/>
+    <dataObject id="DO_bare" name="bare" itemSubjectRef="Bare"/>
+    <dataObject id="DO_direct" name="direct" itemSubjectRef="Claim"/>
+    <startEvent id="s"/><endEvent id="e"/><sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestDataObjectItemSubjectRefResolvesThroughItemDefinition pins how a declared
+// type is read. BPMN's itemSubjectRef is a *reference* to an <itemDefinition>, and
+// that is what a modeling tool writes — so the compiler resolves it, taking the
+// definition's structureRef as the type name. A reference naming no itemDefinition
+// keeps working as the name itself, which is what every hand-written model and
+// every Atlas fixture does.
+func TestDataObjectItemSubjectRefResolvesThroughItemDefinition(t *testing.T) {
+	cp, err := compiler.Parse(1, 1, strings.NewReader(itemDefinitionBPMN))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	byName := map[string]string{}
+	for _, do := range cp.DataObjects() {
+		byName[cp.Intern(do.Name)] = cp.Intern(do.ItemType)
+	}
+	tests := []struct{ object, want string }{
+		{"order", "Order"},
+		// The id is a handle; the structureRef is the name, so a class called "Line
+		// item" survives a reference id that could not contain a space.
+		{"line", "Line item"},
+		// An itemDefinition with no structureRef says nothing more than its own id.
+		{"bare", "Bare"},
+		// And a reference that names no itemDefinition is the type name itself — the
+		// shorthand every hand-written model uses.
+		{"direct", "Claim"},
+	}
+	for _, tt := range tests {
+		if got := byName[tt.object]; got != tt.want {
+			t.Errorf("data object %q: ItemType = %q, want %q", tt.object, got, tt.want)
+		}
+	}
+}

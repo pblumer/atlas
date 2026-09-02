@@ -784,9 +784,17 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		}
 		// Still on the run loop, where the connector store and the registries may be
 		// read (I3), and with every pool of a collaboration already registered.
+		// The information model of the application this deploy files under, resolved
+		// once for every pool: what a data object's itemSubjectRef points at. An
+		// application with no model resolves to an unmodeled vocabulary, and the type
+		// checks then say nothing (ADR-draft-process-information-model).
+		vocab, vocabErr := s.infomodel.VocabularyOnLoop(projectID)
 		for _, d := range deployed {
 			if dep, ok := s.deployments[d.Key]; ok && dep.cp != nil {
 				resp.Warnings = append(resp.Warnings, s.connectorWarnings(dep.cp)...)
+				if vocabErr == nil {
+					resp.Warnings = append(resp.Warnings, dataFlowWarnings(dep.cp, vocab)...)
+				}
 			}
 		}
 	})

@@ -188,7 +188,7 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), docs)
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), docs)
 }
 
 // Deployable is one executable process compiled from a model, plus the display
@@ -219,6 +219,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 	resolveErr := buildErrorResolver(defs)
 	resolveEsc := buildEscalationResolver(defs)
 	resolveOp := buildOperationResolver(defs)
+	resolveItem := buildItemTypeResolver(defs)
 	poolName := participantNames(defs)
 
 	var out []Deployable
@@ -226,7 +227,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		if len(proc.StartEvents) == 0 {
 			continue // black-box pool: nothing to run
 		}
-		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, docs)
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, docs)
 		if err != nil {
 			return nil, err
 		}
@@ -285,7 +286,7 @@ func parseNamed(key uint64, version int32, r io.Reader, processId string, gated 
 		if proc.Id != processId {
 			continue
 		}
-		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), docs)
+		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), docs)
 		if err == nil {
 			return cp, nil, nil
 		}
@@ -534,7 +535,7 @@ func buildEscalationResolver(defs xmlDefinitions) func(ownerId, escalationRef st
 // resolveError (shared across a collaboration's processes). docs is the model-wide
 // element-id → <bpmn:documentation> index (elementDocumentation), likewise shared: it is
 // keyed by BPMN element id, and this process only ever looks up its own.
-func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), docs map[string]string) (*CompiledProcess, error) {
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), resolveItemType func(string) string, docs map[string]string) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
 	b.SetDocumentation(docs[proc.Id]) // the process's own prose; "" interns to -1 (ADR-0025)
 	// isExecutable defaults to true when the attribute is absent (BPMN convention;
@@ -642,7 +643,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			continue // already have a logical object of this name; this is another view
 		}
 		seededObj[name] = true
-		b.AddDataObject(name, d.ItemSubjectRef, d.DataState.Name, d.IsCollection)
+		b.AddDataObject(name, resolveItemType(d.ItemSubjectRef), d.DataState.Name, d.IsCollection)
 	}
 
 	// Wire data-output associations now that every activity node is registered
@@ -1039,13 +1040,29 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 // (bpmn:, zeebe:) are handled transparently by encoding/xml.
 
 type xmlDefinitions struct {
-	Processes     []xmlProcess      `xml:"process"`
-	Messages      []xmlMessage      `xml:"message"`
-	Signals       []xmlSignal       `xml:"signal"`
-	Errors        []xmlError        `xml:"error"`
-	Escalations   []xmlEscalation   `xml:"escalation"`
-	Interfaces    []xmlInterface    `xml:"interface"`
-	Collaboration *xmlCollaboration `xml:"collaboration"`
+	Processes       []xmlProcess        `xml:"process"`
+	ItemDefinitions []xmlItemDefinition `xml:"itemDefinition"`
+	Messages        []xmlMessage        `xml:"message"`
+	Signals         []xmlSignal         `xml:"signal"`
+	Errors          []xmlError          `xml:"error"`
+	Escalations     []xmlEscalation     `xml:"escalation"`
+	Interfaces      []xmlInterface      `xml:"interface"`
+	Collaboration   *xmlCollaboration   `xml:"collaboration"`
+}
+
+// A BPMN <itemDefinition> declares a data structure a data object can be typed
+// with. Atlas reads two things off it: its id, which is what an itemSubjectRef
+// references, and its structureRef, which names the structure — the class in the
+// application's information model (ADR-draft-process-information-model).
+//
+// The indirection is worth carrying rather than reading the reference as the name
+// directly, because the id is an XML id and the name is not: a class called "Line
+// item" cannot be an id, and the shorthand `itemSubjectRef="Line item"` a
+// hand-written model might use is not valid BPMN. The structureRef has no such
+// constraint, so the definition is what makes an arbitrary class name expressible.
+type xmlItemDefinition struct {
+	Id           string `xml:"id,attr"`
+	StructureRef string `xml:"structureRef,attr"`
 }
 
 // A BPMN <interface> groups <operation>s (the WSDL-style service-interface model). Atlas
@@ -1060,6 +1077,40 @@ type xmlInterface struct {
 type xmlOperation struct {
 	Id           string `xml:"id,attr"`
 	InMessageRef string `xml:"inMessageRef"`
+}
+
+// buildItemTypeResolver maps a data object's itemSubjectRef onto the type name it
+// means: the referenced <itemDefinition>'s structureRef, its id when it declares
+// none, and — when the reference names no itemDefinition at all — the reference
+// itself.
+//
+// That last case is not a fallback for broken models; it is the shorthand every
+// hand-written Atlas model and fixture uses, and it stays supported. What the
+// indirection adds is the ability for a *tool* to write the reference the
+// specification actually asks for, which is also the only form the bpmn-js moddle
+// will round-trip: an unresolvable itemSubjectRef is dropped on export, so a model
+// edited in the Modeler would silently lose its types without this.
+func buildItemTypeResolver(defs xmlDefinitions) func(string) string {
+	if len(defs.ItemDefinitions) == 0 {
+		return func(ref string) string { return ref }
+	}
+	byID := make(map[string]string, len(defs.ItemDefinitions))
+	for _, it := range defs.ItemDefinitions {
+		if it.Id == "" {
+			continue
+		}
+		if it.StructureRef != "" {
+			byID[it.Id] = it.StructureRef
+			continue
+		}
+		byID[it.Id] = it.Id
+	}
+	return func(ref string) string {
+		if name, ok := byID[ref]; ok {
+			return name
+		}
+		return ref
+	}
 }
 
 // A collaboration groups participant pools. Each participant references the

@@ -405,23 +405,28 @@ func (s *Service) HandleSchema(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, projection)
 }
 
-// ClassesOnLoop returns the classes of every model an application owns, keyed by
-// class name — what a deploy resolves `itemSubjectRef` against. It runs inside an
-// existing loop turn, so callers must already hold one.
-func (s *Service) ClassesOnLoop(applicationID string) (map[string]Class, error) {
+// VocabularyOnLoop is what an application's information models say, flattened for
+// resolution — what a deploy and the Problems panel resolve `itemSubjectRef`
+// against. It runs inside an existing loop turn, so callers must already hold one.
+//
+// An application with no model yields an *unmodeled* vocabulary rather than an
+// empty one, and the difference is deliberate: the checks that need a vocabulary
+// say nothing at all against it, so an instance that has not started modeling does
+// not get a warning on every data object it has.
+func (s *Service) VocabularyOnLoop(applicationID string) (*Vocabulary, error) {
+	if strings.TrimSpace(applicationID) == "" {
+		return NewVocabulary(nil), nil
+	}
 	models, err := s.store.ForApplication(applicationID)
 	if err != nil {
 		return nil, err
 	}
-	out := map[string]Class{}
-	// Newest first from the store, so an older model does not shadow a newer one's
-	// class of the same name.
-	for i := len(models) - 1; i >= 0; i-- {
-		for _, c := range models[i].Classes {
-			out[c.Name] = c
-		}
+	// The store lists newest first; NewVocabulary lets a later entry win a name
+	// clash, so reverse to make the newest model the one that wins.
+	for i, j := 0, len(models)-1; i < j; i, j = i+1, j-1 {
+		models[i], models[j] = models[j], models[i]
 	}
-	return out, nil
+	return NewVocabulary(models), nil
 }
 
 const notFound = "no such information model"

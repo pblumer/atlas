@@ -2,6 +2,54 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "a-data-object-s-declared-type-now-means-something",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Atlas now checks what your process does with its data",
+        "de": "Atlas prüft jetzt, was Ihr Prozess mit seinen Daten macht"
+      },
+      "summary": {
+        "en": "A data object on a diagram could always say which type it is, and nothing ever checked it — the word was decoration. Now it is looked up in the information model of the application the process belongs to, and three kinds of mistake surface while you model instead of after a token has run. A type nothing has modelled is named. A task that writes into a field the class does not have is named, along with the class and the field, and so is a write that tries to reach inside a plain value or a list of fixed choices, which have nothing inside to write to. And the one worth the whole feature: a task that reads a data object no task before it fills. That last check does not need a modelled type at all — it reads the diagram — and it is careful about what it claims: a loop whose writing step comes round before the reading one is left alone, while a task that reads what it will only write when it finishes is flagged, because on the first pass it reads nothing. None of this refuses a deployment. You draw a process before the vocabulary it uses exists, and being told at deploy is the point; being stopped would not be. The Modeler also has the Type field this always needed, which offers the classes your application has modelled. Adding it turned up something worth knowing: the type was quietly being lost whenever a diagram written by hand or by an agent was opened here and saved again. That is fixed, and models that were written the short way keep working.",
+        "de": "Ein Datenobjekt im Diagramm konnte immer schon sagen, welchen Typ es hat, und geprüft hat das nie jemand — das Wort war Dekoration. Jetzt wird es im Informationsmodell der Applikation nachgeschlagen, zu der der Prozess gehört, und drei Arten von Fehler zeigen sich beim Modellieren statt erst, nachdem ein Token gelaufen ist. Ein Typ, den niemand modelliert hat, wird benannt. Eine Aufgabe, die in ein Feld schreibt, das die Klasse nicht hat, wird benannt — mit Klasse und Feld — und ebenso ein Schreibvorgang, der in einen einfachen Wert oder in eine feste Werteliste hineingreifen will, in denen es nichts zu beschreiben gibt. Und der, für den sich das Ganze lohnt: eine Aufgabe, die ein Datenobjekt liest, das keine Aufgabe davor gefüllt hat. Diese Prüfung braucht gar keinen modellierten Typ — sie liest das Diagramm — und sie ist vorsichtig mit dem, was sie behauptet: eine Schleife, deren schreibender Schritt vor dem lesenden herumkommt, bleibt unbehelligt, während eine Aufgabe, die liest, was sie erst beim Abschliessen schreibt, gemeldet wird, denn im ersten Durchlauf liest sie nichts. Nichts davon verweigert ein Deployment. Man zeichnet einen Prozess, bevor das Vokabular dazu existiert; beim Deploy darauf hingewiesen zu werden ist der Sinn, aufgehalten zu werden wäre es nicht. Der Modeler hat ausserdem das Feld „Type\", das dafür immer gefehlt hat — es schlägt die Klassen vor, die Ihre Applikation modelliert hat. Beim Einbauen kam etwas heraus, das man wissen sollte: Der Typ ging still verloren, sobald ein von Hand oder von einem Agenten geschriebenes Diagramm hier geöffnet und wieder gespeichert wurde. Das ist behoben, und kurz geschriebene Modelle laufen unverändert weiter."
+      },
+      "link": {
+        "label": "ADR-0053",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0053-first-class-data-objects.md"
+      },
+      "tags": [
+        "Data",
+        "Modeling",
+        "Validation"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data › Model and give your application a class — an Order with an id and a total, say.",
+          "Open a process of the same application in the Modeler, select a data object and set its Type to Order; the field suggests the classes you modelled.",
+          "Give a task a data output association to that object and set its Target member to a field the class does not have, e.g. amount.",
+          "Watch the Problems bar at the bottom: it names the task, the class and the field. Click the finding to jump to the element.",
+          "Now delete the association and leave only a task that reads the object — the panel tells you nothing writes it.",
+          "Deploy anyway. It succeeds, and the same sentences come back as deploy warnings."
+        ],
+        "de": [
+          "Öffnen Sie Data › Model und geben Sie Ihrer Applikation eine Klasse — etwa eine Order mit id und total.",
+          "Öffnen Sie im Modeler einen Prozess derselben Applikation, wählen Sie ein Datenobjekt und setzen Sie „Type\" auf Order; das Feld schlägt Ihre modellierten Klassen vor.",
+          "Geben Sie einer Aufgabe eine Data Output Association auf dieses Objekt und tragen Sie als Zielfeld eines ein, das die Klasse nicht hat, z. B. amount.",
+          "Schauen Sie in die Problems-Leiste unten: Sie nennt Aufgabe, Klasse und Feld. Ein Klick auf den Befund springt zum Element.",
+          "Löschen Sie jetzt die Assoziation und lassen Sie nur eine Aufgabe stehen, die das Objekt liest — die Leiste sagt Ihnen, dass es niemand schreibt.",
+          "Deployen Sie trotzdem. Es gelingt, und dieselben Sätze kommen als Deploy-Warnungen zurück."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Data öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "atlas-can-now-say-what-the-data-in-a-process-actually-is",
       "version": "Unreleased",
       "date": null,
@@ -381,35 +429,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "sign-in-with-your-identity-provider",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Sign in with your identity provider",
-        "de": "Anmelden mit Ihrem Identitätsanbieter"
-      },
-      "summary": {
-        "en": "Atlas can now hand the sign-in to an OpenID Connect provider — Entra ID, Keycloak, Google, any compliant one. People press a button on the login screen, authenticate where they already do, and come back signed in; multi-factor and password rules become the provider's job, and an account that is closed there stops working here. A first sign-in creates an account linked to the provider's subject with the user role and nothing else, so a new person can see their own tasks and nothing more until an administrator says otherwise. Nothing changes unless you configure a provider: with no issuer set, Atlas makes no outbound connection and the local password stays the only way in. It stays available in any case, on purpose — a provider that is unreachable must not lock an administrator out of their own instance.",
-        "de": "Atlas kann die Anmeldung jetzt an einen OpenID-Connect-Anbieter übergeben — Entra ID, Keycloak, Google, jeden konformen. Die Person drückt auf der Anmeldemaske eine Schaltfläche, authentisiert sich dort, wo sie es ohnehin tut, und kommt angemeldet zurück; Zweitfaktor und Passwortregeln werden zur Sache des Anbieters, und ein dort geschlossenes Konto hört hier auf zu funktionieren. Die erste Anmeldung legt ein Konto an, verknüpft mit dem Subjekt des Anbieters, mit der Rolle «user» und sonst nichts — eine neue Person sieht ihre eigenen Aufgaben und bis auf Weiteres nichts anderes. Ohne konfigurierten Anbieter ändert sich gar nichts: Atlas baut dann keine ausgehende Verbindung auf, und das lokale Passwort bleibt der einzige Weg hinein. Es bleibt in jedem Fall erhalten, mit Absicht — ein nicht erreichbarer Anbieter darf keine Administratorin aus ihrer eigenen Installation aussperren."
-      },
-      "link": {
-        "label": "ADR-0210",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0210-federated-authentication.md"
-      },
-      "tags": [
-        "Security",
-        "Console"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organization öffnen"
-        },
-        "route": "#/console/org"
       }
     }
   ]

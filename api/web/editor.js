@@ -606,12 +606,12 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   try {
     if (draftId != null) {
       const xml = await api("GET", `/api/v1/drafts/${encodeURIComponent(draftId)}/xml`);
-      await modeler.importXML(typeof xml === "string" ? xml : String(xml));
+      await modeler.importXML(repairItemDefinitions(typeof xml === "string" ? xml : String(xml)));
     } else if (key == null) {
       await modeler.importXML(blankXML());
     } else {
       const xml = await api("GET", `/api/v1/processes/${key}/xml`);
-      await modeler.importXML(typeof xml === "string" ? xml : String(xml));
+      await modeler.importXML(repairItemDefinitions(typeof xml === "string" ? xml : String(xml)));
     }
     modeler.get("canvas").zoom("fit-viewport");
     const pbo = rootProcess(modeler);
@@ -640,7 +640,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   });
   wireActions(root, modeler, api, toast, projectId);
   wireEditorVars(root, modeler, api);
-  wireProblems(root, modeler, api);
+  wireProblems(root, modeler, api, projectId);
   wireResizer(root, modeler);
   wireTokenSim(root, modeler);
 
@@ -671,6 +671,69 @@ function unsupportedReason(bo) {
   return null;
 }
 
+// A data object's declared type is BPMN's itemSubjectRef, and it is a *reference*
+// to an <itemDefinition> rather than a name — which the moddle enforces in the one
+// way that matters: a reference it cannot resolve is dropped on export. A model
+// carrying the shorthand `itemSubjectRef="Order"` with no matching <itemDefinition>
+// therefore loses its types the moment it is opened here and saved, silently. These
+// three functions are what keeps that from happening
+// (ADR-draft-process-information-model).
+
+// itemTypeOf reads the declared type off a <dataObject>: the referenced
+// definition's structureRef, its id when it declares none. The compiler resolves
+// the same two ways round.
+function itemTypeOf(dataObject) {
+  const ref = dataObject && dataObject.itemSubjectRef;
+  if (!ref) return "";
+  if (typeof ref === "string") return ref; // a raw attribute, if a moddle ever keeps one
+  return ref.structureRef || ref.id || "";
+}
+
+// itemDefinitionId is the reference handle for a type name. The name itself cannot
+// be the id — an XML id may not contain a space, and a class may well be called
+// "Line item" — so the id is derived and the name travels in structureRef.
+function itemDefinitionId(name) {
+  return "ItemDefinition_" + name.replace(/[^A-Za-z0-9_-]/g, "_");
+}
+
+// ensureItemDefinition returns the <itemDefinition> for a type name, creating it at
+// definitions level if this model has none yet. Reused rather than duplicated, so
+// two data objects of the same type share one definition.
+function ensureItemDefinition(modeler, name) {
+  const defs = modeler.get("canvas").getRootElement().businessObject.$parent;
+  defs.rootElements = defs.rootElements || [];
+  const existing = defs.rootElements.find(
+    (el) => el.$type === "bpmn:ItemDefinition" && (el.structureRef || el.id) === name);
+  if (existing) return existing;
+  const created = modeler.get("moddle").create("bpmn:ItemDefinition", {
+    id: itemDefinitionId(name), structureRef: name,
+  });
+  created.$parent = defs;
+  defs.rootElements.push(created);
+  return created;
+}
+
+// repairItemDefinitions rewrites a model's XML *before* it is imported, declaring an
+// <itemDefinition> for every itemSubjectRef that names none. Without it the moddle
+// drops those references on import and the export loses them — so a diagram
+// authored by hand, by an agent, or by an older Atlas would quietly come back
+// untyped after somebody opened it. It is a repair rather than a rewrite: a model
+// that already declares its definitions passes through untouched.
+function repairItemDefinitions(xml) {
+  const refs = [...xml.matchAll(/itemSubjectRef="([^"]+)"/g)].map((m) => m[1]);
+  if (!refs.length) return xml;
+  const declared = new Set([...xml.matchAll(/<(?:\w+:)?itemDefinition\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
+  const missing = [...new Set(refs)].filter((r) => !declared.has(r));
+  if (!missing.length) return xml;
+  const open = xml.match(/<((?:\w+:)?definitions)\b[^>]*>/);
+  if (!open) return xml;
+  const prefix = open[1].includes(":") ? open[1].split(":")[0] + ":" : "";
+  const inserted = missing
+    .map((name) => `<${prefix}itemDefinition id="${name}" structureRef="${name}" />`)
+    .join("");
+  return xml.slice(0, open.index + open[0].length) + inserted + xml.slice(open.index + open[0].length);
+}
+
 // wireProblems drives the Problems panel (ADR-0026): the bottom bar becomes a
 // toggle that opens a filterable, element-linked list of the compiler's findings.
 // Validation is the real compiler run behind POST /api/v1/validate — never a
@@ -679,7 +742,15 @@ function unsupportedReason(bo) {
 // warnings included. It re-validates (debounced) as the diagram is edited, on
 // import, and on demand, so a modeling smell like a disconnected end event is
 // explained continuously rather than only at deploy time.
-function wireProblems(root, modeler, api) {
+//
+// applicationId is the process application the draft is filed under, and passing it
+// widens what the panel can say: a data object's declared type resolves against
+// *that* application's information model, so the panel reports a type nothing
+// models, a write targeting a member the class does not have, and a read no writer
+// precedes (ADR-draft-process-information-model). A draft filed nowhere has no
+// vocabulary to resolve against and gets the compiler's findings alone — the same
+// answer as before, rather than a quieter or a noisier one.
+function wireProblems(root, modeler, api, applicationId) {
   const bar = root.querySelector("#problems-bar");
   const listEl = root.querySelector("#prob-list");
   const countEl = root.querySelector("#prob-count");
@@ -803,7 +874,10 @@ function wireProblems(root, modeler, api) {
     try { ({ xml } = await modeler.saveXML({ format: true })); } catch { problems = unsupported; render(); return; }
     const mine = ++seq;
     let res;
-    try { res = await api("POST", "/api/v1/validate", xml, true); } catch { problems = unsupported; render(); return; }
+    const path = applicationId
+      ? `/api/v1/validate?applicationId=${encodeURIComponent(applicationId)}`
+      : "/api/v1/validate";
+    try { res = await api("POST", path, xml, true); } catch { problems = unsupported; render(); return; }
     if (mine !== seq) return; // a newer validate has superseded this one
     const server = Array.isArray(res.problems) ? res.problems : [];
     // Keep the compiler's authoritative findings and add a per-element warning for each
@@ -4781,6 +4855,25 @@ function groupifyPanel(body, ctl) {
 }
 
 function wireProperties(root, modeler, api, projectId, toast) {
+  // The class names this application models, offered as suggestions for a data
+  // object's type (ADR-draft-process-information-model). It is a *suggestion* and
+  // not a closed list on purpose: a model is routinely drawn before the vocabulary
+  // it names exists, so typing a class that is not modeled yet has to stay possible
+  // — the Problems panel says so, and a deploy is never refused for it.
+  let modeledClasses = [];
+  if (projectId) {
+    (async () => {
+      try {
+        const models = await api("GET", `/api/v1/infomodel/models?applicationId=${encodeURIComponent(projectId)}`);
+        const names = new Set();
+        for (const m of models || []) {
+          const full = await api("GET", `/api/v1/infomodel/models/${encodeURIComponent(m.id)}`);
+          for (const c of (full && full.classes) || []) names.add(c.name);
+        }
+        modeledClasses = [...names].sort();
+      } catch { /* no vocabulary: the field stays a plain text input */ }
+    })();
+  }
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
   const nameEl = root.querySelector("#p-name");
@@ -5095,12 +5188,18 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <select id="f-pointsto">${names.map((n) => `<option value="${esc(n.id)}" ${n.name === curName ? "selected" : ""}>${esc(n.name)}</option>`).join("")}</select></label>
           <p class="muted" style="font-size:12px">Point this box at an existing data object to show <b>the same object in several places</b> — one logical object, so you can put it next to each activity without long arrows across the diagram.</p>`;
       }
+      const itemType = itemTypeOf(bo.dataObjectRef);
+      const unresolved = itemType && modeledClasses.length && !modeledClasses.includes(itemType);
       html += `<h3>Data object</h3>
+        <label class="field"><span>Type <span class="muted">(optional)</span></span>
+          <input type="text" id="f-itemtype" list="f-itemtype-list" value="${esc(itemType)}" placeholder="Order"/></label>
+        <datalist id="f-itemtype-list">${modeledClasses.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
+        ${unresolved ? `<p class="muted" style="font-size:12px; color:#b26a00">No class called <b>${esc(itemType)}</b> is modelled in this application yet — the Problems panel lists it, and a deploy is not refused for it.</p>` : ""}
         <label class="field"><span>Data state</span>
           <input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/></label>
         <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>Collection (a list of items)</span></label>
         ${pointsTo}
-        <p class="muted" style="font-size:12px">A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
+        <p class="muted" style="font-size:12px">The <b>Type</b> is the class this datum is, from the application's information model under <b>Data</b> — BPMN's <code>itemSubjectRef</code>. It is what lets two processes agree that their <code>order</code> is the same kind of thing, and what a write to a member of this object is checked against. A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
     }
 
     // A data association is the arrow between an activity and a data object — it is
@@ -5595,6 +5694,21 @@ function wireProperties(root, modeler, api, projectId, toast) {
         if (!v) { show(element); return; } // empty is not a valid id → revert to the current one
         try { modeling.updateProperties(element, { id: v }); }
         catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+      });
+    }
+
+    // The type lives on the underlying <dataObject>, not on the reference — the same
+    // place the compiler reads it from, and the same reason the name is written
+    // through to it above: the reference is a view of the object, not the object.
+    const fitemtype = body.querySelector("#f-itemtype");
+    if (fitemtype && bo.dataObjectRef) {
+      fitemtype.addEventListener("change", (e) => {
+        const v = (e.target.value || "").trim();
+        try {
+          const def = v ? ensureItemDefinition(modeler, v) : undefined;
+          modeling.updateModdleProperties(element, bo.dataObjectRef, { itemSubjectRef: def });
+        } catch { /* stale */ }
+        show(element); // re-render so the "not modelled yet" note appears or clears
       });
     }
 

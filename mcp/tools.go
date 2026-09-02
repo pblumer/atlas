@@ -45,7 +45,8 @@ func keyArg(desc string) map[string]any {
 // forms, decisions, task completion) are appended from authoringTools.
 func defaultTools() []Tool {
 	tools := append(runtimeTools(), authoringTools()...)
-	return append(tools, collabTools()...)
+	tools = append(tools, collabTools()...)
+	return append(tools, infomodelTools()...)
 }
 
 // runtimeTools are the deploy/instance/inspect tools.

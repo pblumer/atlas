@@ -200,7 +200,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"key": tInteger(), "processId": tString(), "version": tInteger(), "deployments": tArray(),
 			}))}},
 		{"POST", "/api/v1/validate", s.handleValidate, apiOp{
-			summary: "Validate a BPMN model without deploying — a dry-run compile returning structured problems (errors and warnings) and the engine version, for the Modeler's Problems panel (ADR-0026)", tag: "Deployments", role: RoleModeler,
+			summary: "Validate a BPMN model without deploying — a dry-run compile returning structured problems (errors and warnings) and the engine version, for the Modeler's Problems panel (ADR-0026). Pass ?applicationId= to also resolve each data object's itemSubjectRef against that application's information model and check its member writes and read order (ADR-draft-process-information-model)", tag: "Deployments", role: RoleModeler,
 			req: xmlBody("BPMN 2.0 XML"),
 			resp: jsonBody("Validation problems and the engine version that produced them", schemaObj(map[string]any{
 				"version": tString(), "problems": tArray(),

@@ -14,6 +14,41 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A data object's declared type now means something.** BPMN's `itemSubjectRef` —
+  the slot where a data object says what kind of thing it is — resolves against the
+  owning application's information model, at deploy and in the Modeler's Problems
+  panel ([ADR-draft-process-information-model](docs/adr/draft-process-information-model.md),
+  slice 3). Three findings follow from it: a type nothing models, a write targeting a
+  member the class has no attribute for, and the one
+  [ADR-0053](docs/adr/0053-first-class-data-objects.md) named as the whole point of
+  having a type — *"task Approve reads `order`, and nothing upstream produces it"*.
+
+  The member check walks dotted paths (`customer.name`, ADR-0060's named follow-up)
+  and refuses one that would cross a primitive or an enumeration, which has no
+  members to write inside. The read-order check needs no information model at all —
+  it is reachability over the compiled graph — and is deliberately conservative: a
+  loop whose writer precedes its reader is not flagged, while an activity reading
+  what it will only write on its own completion is. **None of these refuses a
+  deploy.** A model is routinely drawn before the vocabulary it names exists, exactly
+  as it is deployed before its connectors do (ADR-0158).
+
+  The Modeler gained the **Type** field this slot always needed, suggesting the
+  application's modeled classes while still accepting one that is not modeled yet.
+  Adding it uncovered a silent data-loss bug and fixes it: `itemSubjectRef` is a
+  *reference* in the bpmn moddle, not a string, and a reference the moddle cannot
+  resolve is dropped on export — so a model carrying the shorthand
+  `itemSubjectRef="Order"` came back **untyped** after being opened and saved. Missing
+  declarations are now repaired on import and written as proper `<itemDefinition>`
+  elements, which the compiler resolves through; the shorthand keeps working
+  everywhere it already did, and a class name that is not a valid XML id (`Line item`)
+  becomes expressible for the first time.
+
+  The information model is also an MCP surface now, because an agent authoring BPMN
+  meets this gap first: `atlas_infomodel_subset` states the rules before it writes,
+  and the model can be listed, read, created, saved, projected to a JSON Schema and
+  deleted. `atlas_data_objects` answers the question from the other side — which
+  running instances are carrying an Order right now.
+
 - **Atlas can now say what the data in a process actually *is*.** A new top-level
   **Data** area holds a **process information model**: a UML class-diagram subset,
   owned by a process application and shared by every process in it

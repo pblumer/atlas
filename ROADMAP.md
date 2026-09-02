@@ -143,9 +143,26 @@ The control-flow basics most real models use.
   **Data** area: *Model* is the class canvas (drag, connect, a properties panel, a
   problems bar), *Instances* the same subject one altitude down — every data object
   the running instances carry, grouped by declared type, marking which of those types
-  is actually modeled. Next: **slice 3**, resolving `itemSubjectRef` against the model
-  at deploy time with data-flow findings in the Problems panel (ADR-0026); then the
-  instance object diagram, and data stores bound to a class and a Worker.
+  is actually modeled. **Slice 3 landed**: the type slot now *resolves*. A data
+  object's `itemSubjectRef` is looked up in the owning application's information
+  model at deploy and in the Problems panel's dry run, and three checks follow from
+  it — a declared type nothing models, a write targeting a member the class has no
+  attribute for (ADR-0060's named follow-up, walked through dotted paths and refused
+  where it would cross a primitive or an enumeration), and ADR-0053's headline
+  example: *"reads `order`, and nothing upstream produces it"*. That last one needs
+  no vocabulary at all — it is reachability over the compiled graph, deliberately
+  conservative, so a loop whose writer precedes its reader is not flagged and an
+  activity reading what it will only write on completion is. Findings reach the
+  Modeler's Problems panel (which now names the application it is asking about) and
+  a deploy's warnings; **none of them refuses a deploy** — a model is routinely drawn
+  before the vocabulary it names exists. The Modeler gained the **Type** field the
+  slot needed, suggesting the application's modeled classes, and with it a fix for a
+  silent data-loss bug: `itemSubjectRef` is a *reference* in the bpmn moddle, so a
+  model carrying the shorthand `itemSubjectRef="Order"` lost its types on any round
+  trip through the Modeler. Declarations are now repaired on import and written as
+  proper `<itemDefinition>`s, which the compiler resolves through — so a class name
+  that is not a valid XML id (`Line item`) is expressible for the first time. Next:
+  the instance **object diagram**, and **data stores** bound to a class and a Worker.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🚧 **Conformance tests against a curated BPMN model set** — the
   [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN

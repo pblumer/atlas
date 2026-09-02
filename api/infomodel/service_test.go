@@ -327,27 +327,45 @@ func TestServiceRejectsMalformedRequests(t *testing.T) {
 	fx.putModel(t, "0000000000000000000000000000dead", classesBody(), http.StatusNotFound)
 }
 
-// TestClassesOnLoop covers the read a deploy will use to resolve itemSubjectRef:
-// every class an application owns, by name, newest model winning a clash.
-func TestClassesOnLoop(t *testing.T) {
+// TestVocabularyOnLoop covers the read a deploy uses to resolve itemSubjectRef:
+// every class an application owns, by name, with the inherited attributes folded
+// in — and the distinction between an application that models nothing and one that
+// simply has no class of that name.
+func TestVocabularyOnLoop(t *testing.T) {
 	fx := newFixture(t)
 	fx.create(t, "app-1", "Sales")
 	body := classesBody()
 	body["revision"] = 1
 	fx.putModel(t, testModelID, body, http.StatusOK)
 
-	classes, err := fx.service.ClassesOnLoop("app-1")
+	vocab, err := fx.service.VocabularyOnLoop("app-1")
 	if err != nil {
-		t.Fatalf("ClassesOnLoop: %v", err)
+		t.Fatalf("VocabularyOnLoop: %v", err)
 	}
-	if _, ok := classes["Order"]; !ok {
-		t.Fatalf("Order is missing: %v", classes)
+	if !vocab.Modeled() {
+		t.Fatal("an application with a model reports itself unmodeled")
 	}
-	if got := classes["Order"].Identity; len(got) != 1 || got[0] != "id" {
+	order, ok := vocab.Class("Order")
+	if !ok {
+		t.Fatal("Order is missing")
+	}
+	if got := order.Identity; len(got) != 1 || got[0] != "id" {
 		t.Errorf("Order identity = %v, want [id]", got)
 	}
-	if other, err := fx.service.ClassesOnLoop("app-2"); err != nil || len(other) != 0 {
-		t.Errorf("another application sees %v (err %v)", other, err)
+
+	// Another application, and no application at all, both model nothing — so the
+	// type checks stay silent rather than warning about every data object.
+	for _, id := range []string{"app-2", ""} {
+		other, err := fx.service.VocabularyOnLoop(id)
+		if err != nil {
+			t.Fatalf("VocabularyOnLoop(%q): %v", id, err)
+		}
+		if other.Modeled() {
+			t.Errorf("application %q reports itself modeled", id)
+		}
+		if _, ok := other.Class("Order"); ok {
+			t.Errorf("application %q sees another's classes", id)
+		}
 	}
 }
 

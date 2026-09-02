@@ -270,9 +270,9 @@ func TestServiceStoreFailures(t *testing.T) {
 			http.StatusInternalServerError)
 
 		var err error
-		fx.service.loop.Do(func() { _, err = fx.service.ClassesOnLoop("app-1") })
+		fx.service.loop.Do(func() { _, err = fx.service.VocabularyOnLoop("app-1") })
 		if err == nil {
-			t.Error("ClassesOnLoop on a missing store: want an error")
+			t.Error("VocabularyOnLoop on a missing store: want an error")
 		}
 	})
 }
