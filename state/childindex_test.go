@@ -3,6 +3,8 @@ package state
 import (
 	"testing"
 
+	"github.com/cockroachdb/pebble"
+
 	"github.com/pblumer/atlas/model"
 )
 
@@ -211,5 +213,58 @@ func TestPointReadsRefuseACorruptRecord(t *testing.T) {
 		return nil
 	}); err == nil {
 		t.Error("ActiveProcessInstancesDesc over a corrupt record returned no error")
+	}
+}
+
+// TestChildIndexBackfillRefusesACorruptStore covers the migration's failure path: a
+// store whose active family holds an undecodable record must fail to open rather
+// than open with a half-built index. A partially seeded index is the worst outcome
+// available — it looks complete, and the caller it silently omits is a child that
+// outlives its parent.
+func TestChildIndexBackfillRefusesACorruptStore(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := s.InjectCorruptProcessInstance(5); err != nil {
+		t.Fatalf("InjectCorruptProcessInstance: %v", err)
+	}
+	// Re-arm this migration alone: the earlier backfills keep their markers, so the
+	// scan under test is the one that meets the corrupt record.
+	if err := s.db.Delete(keyMeta(metaChildIndexV1), pebble.Sync); err != nil {
+		t.Fatalf("clear marker: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	s2, err := Open(dir)
+	if err == nil {
+		_ = s2.Close()
+		t.Fatal("Open succeeded over a corrupt record; want the backfill to refuse")
+	}
+}
+
+// TestCorruptDataObjectReadsFail covers the decode-failure paths of the two
+// data-object reads the instance Data view depends on. A trail missing its middle
+// reads as a value that never passed through a state it did, so an unreadable
+// record has to surface as an error rather than be skipped.
+func TestCorruptDataObjectReadsFail(t *testing.T) {
+	s := openStore(t)
+	const scope = uint64(3)
+
+	if err := s.InjectCorruptDataObject(scope, "order"); err != nil {
+		t.Fatalf("InjectCorruptDataObject: %v", err)
+	}
+	if err := s.DataObjectsOfScope(scope, func(*model.DataObjectValue) error { return nil }); err == nil {
+		t.Error("DataObjectsOfScope over a corrupt object returned no error")
+	}
+
+	if err := s.InjectCorruptDataObjectSnapshot(scope, 1, 1); err != nil {
+		t.Fatalf("InjectCorruptDataObjectSnapshot: %v", err)
+	}
+	if err := s.DataObjectSnapshotHistory(scope, func(int64, uint64, *model.DataObjectValue) error { return nil }); err == nil {
+		t.Error("DataObjectSnapshotHistory over a corrupt snapshot returned no error")
 	}
 }

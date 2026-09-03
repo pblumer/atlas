@@ -171,3 +171,33 @@ func TestSearchInstancesDuringShutdown(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
 	}
 }
+
+// TestListAndTimelineDuringShutdown covers the other two handlers converted to the
+// off-loop read path. Each takes its view through the loop, so once the loop is
+// gone there is nothing to answer from — and an empty list or an empty timeline
+// would read as a true answer about the instance rather than as "ask again".
+func TestListAndTimelineDuringShutdown(t *testing.T) {
+	srv, closeSrv := newOffLoopServer(t)
+	closeSrv()
+
+	for _, tc := range []struct {
+		name    string
+		handler func(http.ResponseWriter, *http.Request)
+		req     *http.Request
+	}{
+		{"list", srv.handleListInstances, httptest.NewRequest("GET", "/api/v1/instances", nil)},
+		{"timeline", srv.handleInstanceTimeline, httptest.NewRequest("GET", "/api/v1/instances/1/timeline", nil)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := tc.req
+			if tc.name == "timeline" {
+				req.SetPathValue("key", "1")
+			}
+			w := httptest.NewRecorder()
+			tc.handler(w, req)
+			if w.Code != http.StatusServiceUnavailable {
+				t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+			}
+		})
+	}
+}
