@@ -5149,24 +5149,100 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
 
 
 function wireProperties(root, modeler, api, projectId, toast, identity) {
-  // The class names this application models, offered as suggestions for a data
-  // object's type (ADR-0230). It is a *suggestion* and
-  // not a closed list on purpose: a model is routinely drawn before the vocabulary
-  // it names exists, so typing a class that is not modeled yet has to stay possible
-  // — the Problems panel says so, and a deploy is never refused for it.
-  let modeledClasses = [];
+  // The classes this application models (ADR-0230), which a data object's Type points
+  // at. Names alone were enough to *suggest* one; showing the reader what they have
+  // pointed at takes the class itself — its kind, its attributes, its business key —
+  // and which model it lives in, so the panel can link there and create there.
+  //
+  // It stays a suggestion and not a closed list on purpose: a model is routinely
+  // drawn before the vocabulary it names exists, so typing a class nothing models yet
+  // has to remain possible. The Problems panel says so, and a deploy is never refused
+  // for it.
+  let vocab = { classes: [], models: [], loaded: false };
+  const classNamed = (name) => vocab.classes.find((c) => c.name === name) || null;
+
+  // A <datalist> is invisible: nothing on the field says a vocabulary exists at all,
+  // so the one link this whole feature turns on was made by remembering a class name
+  // and typing it correctly. The picker says what has been modelled, and each option
+  // carries the business key — the fact that tells two similarly named classes apart,
+  // and the thing somebody is actually trying to recall.
+  //
+  // It fills the field rather than being the field. The value stays free text because
+  // it has to (ADR-0230): a diagram is routinely drawn before its vocabulary exists.
+  function classPickerHTML(current) {
+    if (!vocab.classes.length) return "";
+    const byModel = new Map();
+    for (const c of vocab.classes) {
+      if (!byModel.has(c.modelId)) byModel.set(c.modelId, { name: c.modelName, classes: [] });
+      byModel.get(c.modelId).classes.push(c);
+    }
+    const groups = [...byModel.values()].map((g) =>
+      `<optgroup label="${esc(g.name)}">${g.classes.map((c) => {
+        const key = (c.identity || []).join(", ");
+        return `<option value="${esc(c.name)}"${c.name === current ? " selected" : ""}>${esc(c.name)}${
+          key ? ` · key ${esc(key)}` : ""}</option>`;
+      }).join("")}</optgroup>`).join("");
+    return `<div class="field-actions">
+      <select id="f-itemtype-pick" title="The classes this application models">
+        <option value="">Pick from the information model…</option>${groups}</select></div>`;
+  }
+
+  // What the type points at, drawn rather than named. A class name read back as text
+  // says nothing about whether it is the right class; its business key and its members
+  // do — and until now they were in another application of the console, so checking
+  // meant leaving the diagram.
+  function classCardHTML(c) {
+    const stereo = c.stereotype || "businessObject";
+    const rows = stereo === "enumeration"
+      ? (c.literals || []).map((l) => `<li><span class="n">${esc(l)}</span></li>`)
+      : (c.attributes || []).map((a) => {
+        const isKey = (c.identity || []).includes(a.name);
+        const mult = a.multiplicity && a.multiplicity !== "1" ? ` [${a.multiplicity}]` : "";
+        return `<li${isKey ? ' class="key"' : ""}><span class="n">${isKey ? "⚿ " : ""}${esc(a.name)}</span>` +
+          `<span class="t">${esc(a.type || "")}${esc(mult)}</span></li>`;
+      });
+    const empty = stereo === "enumeration" ? "no literals yet" : "no attributes yet";
+    return `<div class="im-card">
+      <div class="im-card-head">
+        <span class="im-card-stereo">«${esc(stereo)}»</span>
+        <b class="im-card-name">${esc(c.name)}</b>
+        <span style="flex:1"></span>
+        <a class="im-card-open" href="#/data/m/${encodeURIComponent(c.modelId)}" target="_blank" rel="noopener"
+           title="Open ${esc(c.modelName)} in the information model">Open ↗</a>
+      </div>
+      <ul class="im-card-attrs">${rows.join("") || `<li class="none">${empty}</li>`}</ul>
+    </div>`;
+  }
+  async function loadVocabulary() {
+    const models = await api("GET", `/api/v1/infomodel/models?applicationId=${encodeURIComponent(projectId)}`);
+    const classes = [];
+    const seen = new Set();
+    const loaded = [];
+    for (const m of models || []) {
+      const full = await api("GET", `/api/v1/infomodel/models/${encodeURIComponent(m.id)}`);
+      loaded.push({ id: m.id, name: (full && full.name) || m.name || m.id });
+      for (const c of (full && full.classes) || []) {
+        // First model wins a name it shares with another: the type is a bare string,
+        // so two models offering the same class name cannot be told apart by one — and
+        // showing the first is at least stable rather than dependent on fetch order.
+        if (seen.has(c.name)) continue;
+        seen.add(c.name);
+        classes.push({ ...c, modelId: m.id, modelName: (full && full.name) || m.name || m.id });
+      }
+    }
+    classes.sort((a, b) => a.name.localeCompare(b.name));
+    vocab = { classes, models: loaded, loaded: true };
+  }
+  // Held so a panel rendered before the fetch lands can re-render when it does. A
+  // picker that is empty because the answer has not arrived is worse than no picker:
+  // it says the application models nothing.
+  let vocabReady = null;
   if (projectId) {
-    (async () => {
-      try {
-        const models = await api("GET", `/api/v1/infomodel/models?applicationId=${encodeURIComponent(projectId)}`);
-        const names = new Set();
-        for (const m of models || []) {
-          const full = await api("GET", `/api/v1/infomodel/models/${encodeURIComponent(m.id)}`);
-          for (const c of (full && full.classes) || []) names.add(c.name);
-        }
-        modeledClasses = [...names].sort();
-      } catch { /* no vocabulary: the field stays a plain text input */ }
-    })();
+    vocabReady = loadVocabulary().catch(() => {
+      // No vocabulary reachable: the field stays a plain text input, which is exactly
+      // what it was before there was an information model to read.
+      vocab = { classes: [], models: [], loaded: true };
+    });
   }
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
@@ -5482,12 +5558,24 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           <p class="muted" style="font-size:12px">Point this box at an existing data object to show <b>the same object in several places</b> — one logical object, so you can put it next to each activity without long arrows across the diagram.</p>`;
       }
       const itemType = itemTypeOf(bo.dataObjectRef);
-      const unresolved = itemType && modeledClasses.length && !modeledClasses.includes(itemType);
+      // A panel rendered before the fetch lands re-renders when it does. An empty
+      // picker reads as "this application models nothing", which is a different and
+      // wrong answer to "not yet".
+      if (!vocab.loaded && vocabReady) {
+        vocabReady.then(() => { try { show(element); } catch { /* the panel moved on */ } });
+      }
+      const known = classNamed(itemType);
+      const unresolved = itemType && vocab.loaded && !known;
       html += `<h3>Data object</h3>
-        <label class="field"><span>Type <span class="muted">(optional)</span></span>
+        <label class="field"><span>Type <span class="muted">(the class this datum is)</span></span>
           <input type="text" id="f-itemtype" list="f-itemtype-list" value="${esc(itemType)}" placeholder="Order"/></label>
-        <datalist id="f-itemtype-list">${modeledClasses.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
-        ${unresolved ? `<p class="muted" style="font-size:12px; color:#b26a00">No class called <b>${esc(itemType)}</b> is modelled in this application yet — the Problems panel lists it, and a deploy is not refused for it.</p>` : ""}
+        <datalist id="f-itemtype-list">${vocab.classes.map((c) => `<option value="${esc(c.name)}"></option>`).join("")}</datalist>
+        ${classPickerHTML(itemType)}
+        ${known ? classCardHTML(known) : ""}
+        ${unresolved ? `<p class="im-nomatch">No class called <b>${esc(itemType)}</b> is modelled in this
+          application yet — the Problems panel lists it, and a deploy is not refused for it.
+          ${vocab.models.length ? `<button type="button" class="btn ghost small" id="f-itemtype-create"
+            data-name="${esc(itemType)}">+ Model it now</button>` : ""}</p>` : ""}
         <label class="field"><span>Data state</span>
           <input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/></label>
         <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>Collection (a list of items)</span></label>
@@ -5994,14 +6082,79 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // place the compiler reads it from, and the same reason the name is written
     // through to it above: the reference is a view of the object, not the object.
     const fitemtype = body.querySelector("#f-itemtype");
+    const setItemType = (v) => {
+      try {
+        const def = v ? ensureItemDefinition(modeler, v) : undefined;
+        modeling.updateModdleProperties(element, bo.dataObjectRef, { itemSubjectRef: def });
+      } catch { /* stale */ }
+      show(element); // re-render so the class card, or the note, appears or clears
+    };
     if (fitemtype && bo.dataObjectRef) {
-      fitemtype.addEventListener("change", (e) => {
-        const v = (e.target.value || "").trim();
+      fitemtype.addEventListener("change", (e) => setItemType((e.target.value || "").trim()));
+    }
+    // The picker fills the field and then goes through the same one write, so picking
+    // a class and typing its name are the same edit rather than two paths that can
+    // come to differ.
+    const ftypepick = body.querySelector("#f-itemtype-pick");
+    if (ftypepick && bo.dataObjectRef) {
+      ftypepick.addEventListener("change", (e) => {
+        const v = e.target.value;
+        if (!v) return;
+        if (fitemtype) fitemtype.value = v;
+        setItemType(v);
+      });
+    }
+
+    // "Model it now": the type names a class nothing models yet, and the remedy was to
+    // leave the diagram, find the model, add the class, and come back. It is added
+    // where it belongs and the panel then shows it, so the round closes here.
+    const fcreate = body.querySelector("#f-itemtype-create");
+    if (fcreate) {
+      fcreate.addEventListener("click", async () => {
+        const name = fcreate.dataset.name;
+        let target = vocab.models[0];
+        if (vocab.models.length > 1) {
+          const { openPickModal } = await import("./pickmodal.js");
+          const picked = await openPickModal({
+            title: `Model ${name}`,
+            label: "Information model",
+            options: vocab.models.map((m) => ({ value: m.id, label: m.name })),
+            hint: `${name} is added as a business object with no attributes yet. Open the model to give it its business key.`,
+            okLabel: "Add class",
+          });
+          if (!picked) return;
+          target = vocab.models.find((m) => m.id === picked.option.value);
+        }
+        if (!target) return;
+        fcreate.disabled = true;
         try {
-          const def = v ? ensureItemDefinition(modeler, v) : undefined;
-          modeling.updateModdleProperties(element, bo.dataObjectRef, { itemSubjectRef: def });
-        } catch { /* stale */ }
-        show(element); // re-render so the "not modelled yet" note appears or clears
+          // Read, append, write back against the revision it was read at — the same
+          // optimistic write the class canvas does, so two authors cannot silently
+          // overwrite one another.
+          const doc = await api("GET", `/api/v1/infomodel/models/${encodeURIComponent(target.id)}`);
+          const classes = (doc && doc.classes) || [];
+          if (!classes.some((c) => c.name === name)) {
+            // Placed where the canvas would place it rather than on top of the last
+            // one, so a model grown from here is still readable when it is opened.
+            const n = classes.length;
+            classes.push({
+              id: `new-${Math.random().toString(36).slice(2, 10)}`, name,
+              stereotype: "businessObject", attributes: [], identity: [],
+              x: 40 + (n % 4) * 260, y: 40 + Math.floor(n / 4) * 200,
+            });
+            await api("PUT", `/api/v1/infomodel/models/${encodeURIComponent(target.id)}`, {
+              name: doc.name, documentation: doc.documentation || "", classes,
+              associations: doc.associations || [], stores: doc.stores || [], revision: doc.revision,
+            });
+          }
+          await loadVocabulary();
+          toast(`${name} added to ${target.name} — open it to give it its business key`, "ok");
+        } catch (err) {
+          fcreate.disabled = false;
+          toast(err && err.message ? err.message : `could not add ${name}`, "err");
+          return;
+        }
+        show(element);
       });
     }
 

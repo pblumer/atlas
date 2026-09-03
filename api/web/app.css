@@ -2421,6 +2421,40 @@ tr[hidden] { display: none; }
 .pgroup-body > *:first-child { margin-top: 0; }
 .pgroup-body > p { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--muted); }
 
+/* The class a data object's Type points at, shown in the Modeler's own panel
+   (ADR-0230). Deliberately a card and not the canvas's SVG box: loading a diagram
+   bundle to draw one static rectangle is not a trade worth making, and what a reader
+   needs from it — the kind, the members, which one is the business key — is text.
+   The visual language is the canvas's, so the two read as the same thing. */
+.im-card {
+  border: 1px solid var(--border); border-radius: 7px; overflow: hidden;
+  background: var(--bg); margin: 2px 0 4px;
+}
+.im-card-head {
+  display: flex; align-items: baseline; gap: 7px; padding: 7px 10px 6px;
+  background: color-mix(in srgb, var(--accent-soft) 60%, var(--bg));
+  border-bottom: 1px solid var(--border);
+}
+.im-card-stereo { font: 10px/1.4 system-ui, sans-serif; color: var(--muted); letter-spacing: .02em; }
+.im-card-name { font: 600 13px/1.4 system-ui, sans-serif; color: var(--text); }
+.im-card-open { font: 11px/1.4 system-ui, sans-serif; color: var(--accent); text-decoration: none; flex: none; }
+.im-card-open:hover { text-decoration: underline; }
+.im-card-attrs { list-style: none; margin: 0; padding: 6px 10px 8px; }
+.im-card-attrs li { display: flex; gap: 8px; font: 12px/1.7 ui-monospace, monospace; }
+.im-card-attrs li .n { color: var(--text); }
+/* The business key is the fact the whole model turns on — what makes two of these the
+   same one — so it is marked here exactly as the canvas marks it. */
+.im-card-attrs li.key .n { font-weight: 700; }
+.im-card-attrs li .t { color: var(--muted); }
+.im-card-attrs li.none { color: var(--muted); font: italic 11.5px/1.6 system-ui, sans-serif; }
+
+/* A type nothing models yet. Stated rather than refused: a diagram is routinely drawn
+   before the vocabulary it names exists. */
+.im-nomatch {
+  margin: 6px 0 0; font: 12px/1.55 system-ui, sans-serif; color: #b26a00;
+}
+.im-nomatch .btn { margin-left: 4px; vertical-align: baseline; }
+
 /* A derived, read-only property (e.g. Decision ID, set by the decision picker):
    dimmed with a dashed border and a small "derived" tag beside the label, so it
    reads as computed rather than a blank to fill by hand. */
