@@ -1,6 +1,6 @@
 # ADR-0217: A mock REST API served from an OpenAPI document
 
-- **Status:** Accepted (amended 2026-09-03 — see the amendment below, from running it against published documents)
+- **Status:** Accepted (amended 2026-09-03 — see the amendment below: what published documents taught it, and reading one made of many files)
 - **Date:** 2026-09-01
 - **Deciders:** Atlas maintainers
 
@@ -147,12 +147,35 @@ of refusing — and both are fixed:
   `$ref`s into a tree of others. The mock read each unresolved reference as an empty
   object and served 290 operations that answered nothing — a mock that looks like it
   works. `$ref` is now followed at the path-item, operation and response level as it
-  already was inside schemas, and a reference outside the file is refused at load with
-  the reason and the remedy (bundle it into one file).
+  already was inside schemas.
 
-Following file references, rather than refusing them, stays a follow-up: it is a real
-convenience for a document published that way, and it is a feature with its own
-questions (what a relative path may reach) rather than a correctness gap.
+### Reading a document made of many files
+
+Refusing that document was the first fix, and it was the wrong stopping point: a tree of
+files is how most large APIs are published, so refusing it means the mock does not work
+for the documents most worth mocking. `LoadFile` now reads them.
+
+The rule the whole thing rests on: **a reference resolves against the directory of the
+file it is written in**, not against the entry document. `paths/foo.yml` saying
+`../shared/thing.yml` means one directory up from `paths/`, and the same string in a
+file two levels down means something else. Each file is parsed once and kept, so a
+reference back into the entry document is the document already in hand rather than a
+second copy — and the record of which references are currently open is keyed by the file
+and pointer they resolve to, because two files may each define `#/Thing` and treating
+the second as a cycle would answer null for a schema that is perfectly good.
+
+**What may be read is bounded, and that is a security decision rather than a tidiness
+one.** This mock serves what it reads and authenticates nobody, so a document that could
+name any path would be a way to put a file from the host onto an open port. References
+may therefore not leave the entry document's own directory; `--spec-root` widens that
+deliberately, for the layout whose shared parts sit beside the document rather than
+below it. A URL is refused outright — this reads files, not the network — and the number
+of files is capped, for the generated or symlinked tree nobody meant to hand over.
+
+Verified against published multi-file documents: the reference chains in
+`getkin/kin-openapi`'s fixtures, which climb out of a subdirectory, back into the entry
+document, and down into a third file, resolve to the same values that library resolves
+them to.
 
 ## Pros and cons of the options
 

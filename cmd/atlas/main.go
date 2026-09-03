@@ -1179,6 +1179,7 @@ func runMockOpenAPI(args []string) error {
 	specPath := fs.String("spec", "", "path to the OpenAPI 3 document (JSON or YAML) to mock — required")
 	addr := fs.String("addr", ":8009", "HTTP listen address for the mock API")
 	basePath := fs.String("base-path", "", `serve the document's paths under this prefix instead of the path in its first server URL ("/" serves them at the root)`)
+	specRoot := fs.String("spec-root", "", "directory the document's $refs to other files may read (default: the document's own directory)")
 	id := fs.String("id", defaultWorkerID(), "name this mock reports itself under")
 	quiet := fs.Bool("quiet", false, "do not print one line per served call")
 	if err := fs.Parse(args); err != nil {
@@ -1187,7 +1188,15 @@ func runMockOpenAPI(args []string) error {
 	if strings.TrimSpace(*specPath) == "" {
 		return errors.New("--spec is required: the OpenAPI document to mock")
 	}
-	spec, err := openapimock.LoadFile(*specPath)
+	// A document published as a tree of files is read, with each reference resolved
+	// against the directory of the file it is written in. What may be read is bounded:
+	// this mock serves what it reads and authenticates nobody, so the default root is
+	// the document's own directory and widening it is the operator's decision.
+	root := *specRoot
+	if strings.TrimSpace(root) == "" {
+		root = filepath.Dir(*specPath)
+	}
+	spec, err := openapimock.LoadFileUnder(*specPath, root)
 	if err != nil {
 		return err
 	}
@@ -1204,12 +1213,24 @@ func runMockOpenAPI(args []string) error {
 	return runMockServer(*addr, mock.Handler())
 }
 
+// plural renders a count with its noun: "1 file", "5 files".
+func plural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
 // printMockOpenAPIBanner tells the operator what was loaded and what to do with it.
 // Like the Remedy mock's, it is a human-facing hint written straight to stderr: a mock
 // is a dev aid, and stays out of the structured logging pipeline the server uses.
 func printMockOpenAPIBanner(w io.Writer, spec *openapimock.Spec, mock *openapimock.Server, specPath, addr, base string) {
+	from := specPath
+	if spec.Files > 0 {
+		from = fmt.Sprintf("%s and %s", specPath, plural(spec.Files, "file"))
+	}
 	fmt.Fprintf(w, "atlas mock-openapi: %s — %d operations from %s, listening on %s\n",
-		spec.Name(), len(spec.Operations), specPath, addr)
+		spec.Name(), len(spec.Operations), from, addr)
 	// The routes are the thing an operator needs in front of them, but a large
 	// document would bury the rest of the banner, so a long list is cut short and the
 	// journal below answers what was actually called.

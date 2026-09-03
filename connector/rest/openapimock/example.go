@@ -3,6 +3,8 @@ package openapimock
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -48,15 +50,49 @@ var formatValues = map[string]string{
 	"uuid":          "00000000-0000-0000-0000-000000000000",
 }
 
-// generator builds example values from the schemas of one document.
+// maxSpecFiles bounds a document published as a tree of files. Each file is read once
+// and cached, so a legitimate tree — even DigitalOcean's — is far below this; the bound
+// is for the generated or symlinked one nobody meant to hand over.
+const maxSpecFiles = 256
+
+// documents reads and caches the files a split document is made of.
 //
-// active holds the $refs on the current path. A schema that refers to itself — a tree
-// node, a pet with a parent pet — is ordinary and must not recurse forever; the second
-// visit yields null, which says "there is a field here" without pretending to know how
-// deep the real data goes.
+// root is the directory a $ref may not climb out of. It matters because this mock has
+// no authentication and serves what it reads: a document reaching for /etc/passwd would
+// otherwise put it on an open port. The default is the entry document's own directory,
+// and widening it is a deliberate act (--spec-root).
+type documents struct {
+	root   string
+	byPath map[string]map[string]any
+}
+
+// generator builds example values from the schemas of a document, following references
+// into the other files that document is made of.
+//
+// doc and path are the document currently being walked and where it came from; a $ref
+// resolves relative to *that* file's directory, not the entry document's, which is the
+// rule a tree of files stands or falls on. path is empty for a document handed over as
+// bytes, which therefore cannot reach any file at all.
+//
+// active holds the refs on the current path, keyed by the file and pointer they resolve
+// to rather than by the ref as written — two files may each define #/Thing, and reading
+// the second as a cycle would answer null for a schema that is perfectly fine. A schema
+// that genuinely refers to itself — a tree node, a pet with a parent pet — must not
+// recurse forever; the second visit yields null, which says "there is a field here"
+// without pretending to know how deep the real data goes.
 type generator struct {
 	doc    map[string]any
+	path   string
+	files  *documents
 	active map[string]bool
+}
+
+// dir is the directory the current document's references resolve against.
+func (g *generator) dir() string {
+	if g.path == "" {
+		return ""
+	}
+	return filepath.Dir(g.path)
 }
 
 // value builds the example for one schema node.
@@ -71,15 +107,19 @@ func (g *generator) value(node any, depth int) (any, error) {
 		return nil, nil
 	}
 	if ref, ok := schema["$ref"].(string); ok {
-		if g.active[ref] {
+		key := g.refKey(ref)
+		if g.active[key] {
 			return nil, nil
 		}
-		target, err := g.resolve(ref)
+		target, leave, err := g.enter(ref)
 		if err != nil {
 			return nil, err
 		}
-		g.active[ref] = true
-		defer delete(g.active, ref)
+		g.active[key] = true
+		defer func() {
+			delete(g.active, key)
+			leave()
+		}()
 		return g.value(target, depth+1)
 	}
 	for _, key := range []string{"const", "example", "default"} {
@@ -189,19 +229,59 @@ func (g *generator) merge(members []any, depth int) (any, error) {
 	return merged, nil
 }
 
-// resolve follows a local JSON pointer into the document. A `$ref` this mock cannot
-// follow is an error at load time, where a person is watching, rather than a null at
-// request time in the middle of a demo.
-func (g *generator) resolve(ref string) (any, error) {
-	if !strings.HasPrefix(ref, "#/") {
-		// A document split across a tree of files is how most large APIs are
-		// published, and this mock reads the one file it was given. Loading it anyway
-		// would serve every operation in it with an empty body, which looks like a
-		// working mock and is not one.
-		return nil, fmt.Errorf("$ref %q: this mock reads one file, so only local refs (#/…) resolve — bundle the document into a single file first", ref)
+// enter resolves a reference and returns the node it names, together with a function
+// that puts the previous document back. A reference into another file switches the
+// document being walked for as long as the caller is inside it, because everything
+// found there resolves against *its* directory.
+//
+// A `$ref` this mock cannot follow is an error at load time, where a person is
+// watching, rather than a null at request time in the middle of a demo.
+func (g *generator) enter(ref string) (any, func(), error) {
+	stay := func() {}
+	file, pointer, _ := strings.Cut(ref, "#")
+	if file == "" {
+		node, err := walkPointer(g.doc, pointer, ref)
+		return node, stay, err
 	}
-	var node any = g.doc
-	for _, token := range strings.Split(strings.TrimPrefix(ref, "#/"), "/") {
+	if strings.Contains(file, "://") {
+		return nil, stay, fmt.Errorf("$ref %q: this mock reads files, not URLs — fetch the document first", ref)
+	}
+	if g.files == nil || g.files.root == "" {
+		return nil, stay, fmt.Errorf("$ref %q: this document was not read from a file, so there is no directory to resolve it against", ref)
+	}
+	path := filepath.Clean(filepath.Join(g.dir(), filepath.FromSlash(file)))
+	doc, err := g.files.load(path, ref)
+	if err != nil {
+		return nil, stay, err
+	}
+	node, err := walkPointer(doc, pointer, ref)
+	if err != nil {
+		return nil, stay, err
+	}
+	prevDoc, prevPath := g.doc, g.path
+	g.doc, g.path = doc, path
+	return node, func() { g.doc, g.path = prevDoc, prevPath }, nil
+}
+
+// refKey identifies what a reference resolves to — the file and the pointer — so the
+// same pointer written in two different files is two different things.
+func (g *generator) refKey(ref string) string {
+	file, pointer, _ := strings.Cut(ref, "#")
+	if file == "" {
+		return g.path + "#" + pointer
+	}
+	return filepath.Clean(filepath.Join(g.dir(), filepath.FromSlash(file))) + "#" + pointer
+}
+
+// walkPointer follows a JSON pointer into a document. An empty pointer names the whole
+// document, which is what a bare `$ref: other.yml` asks for.
+func walkPointer(doc any, pointer, ref string) (any, error) {
+	pointer = strings.TrimPrefix(pointer, "/")
+	if pointer == "" {
+		return doc, nil
+	}
+	node := doc
+	for _, token := range strings.Split(pointer, "/") {
 		token = strings.ReplaceAll(token, "~1", "/")
 		token = strings.ReplaceAll(token, "~0", "~")
 		mapping, ok := node.(map[string]any)
@@ -215,6 +295,31 @@ func (g *generator) resolve(ref string) (any, error) {
 	return node, nil
 }
 
+// load reads one of the files a document is made of, or returns the copy it already
+// read. Every path is checked against the root before it is opened.
+func (d *documents) load(path, ref string) (map[string]any, error) {
+	if doc, ok := d.byPath[path]; ok {
+		return doc, nil
+	}
+	rel, err := filepath.Rel(d.root, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, fmt.Errorf("$ref %q: %s is outside the spec's directory %s — pass --spec-root to say what may be read", ref, path, d.root)
+	}
+	if len(d.byPath) >= maxSpecFiles {
+		return nil, fmt.Errorf("$ref %q: too many files (%d already read); this does not look like one document", ref, len(d.byPath))
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("$ref %q: %w", ref, err)
+	}
+	doc, err := decode(data)
+	if err != nil {
+		return nil, fmt.Errorf("$ref %q: %s: %w", ref, path, err)
+	}
+	d.byPath[path] = doc
+	return doc, nil
+}
+
 // maxRefHops bounds a chain of references that point at each other. A document whose
 // refs form a loop is not servable, and following it is not a way to find that out.
 const maxRefHops = 8
@@ -222,23 +327,44 @@ const maxRefHops = 8
 // deref follows a node that may itself be a $ref, leaving anything else alone, and
 // follows a chain of them. Path items, operations, responses and named examples are all
 // places a document commonly refs something that is not a schema.
-func (g *generator) deref(node any) (any, error) {
+//
+// The returned function puts back every document the chain stepped into. The caller
+// holds it until it is done reading what came back: a response resolved out of another
+// file has its own schemas to follow, and they resolve against that file.
+func (g *generator) deref(node any) (any, func(), error) {
+	var leaves []func()
+	// The returned function is safe to call twice: an error path here has already put
+	// the documents back, and the caller's deferred call must not do it again.
+	left := false
+	leave := func() {
+		if left {
+			return
+		}
+		left = true
+		for i := len(leaves) - 1; i >= 0; i-- {
+			leaves[i]()
+		}
+	}
 	for hops := 0; ; hops++ {
 		mapping, ok := node.(map[string]any)
 		if !ok {
-			return node, nil
+			return node, leave, nil
 		}
 		ref, ok := mapping["$ref"].(string)
 		if !ok {
-			return node, nil
+			return node, leave, nil
 		}
 		if hops >= maxRefHops {
-			return nil, fmt.Errorf("$ref %q: the references point in a circle", ref)
+			leave()
+			return nil, leave, fmt.Errorf("$ref %q: the references point in a circle", ref)
 		}
-		var err error
-		if node, err = g.resolve(ref); err != nil {
-			return nil, err
+		next, back, err := g.enter(ref)
+		if err != nil {
+			leave()
+			return nil, leave, err
 		}
+		leaves = append(leaves, back)
+		node = next
 	}
 }
 

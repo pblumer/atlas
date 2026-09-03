@@ -226,7 +226,7 @@ func TestLoadRefusesWhatItCannotServe(t *testing.T) {
 		"no paths":               {"openapi: 3.0.0\ninfo: {title: x, version: '1'}\n", "no paths"},
 		"relative path":          {"openapi: 3.0.0\npaths:\n  pets:\n    get: {responses: {}}\n", "must start with"},
 		"unknown ref":            {"openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        '200':\n          content:\n            application/json:\n              schema: {$ref: '#/components/schemas/Nope'}\n", "#/components/schemas/Nope"},
-		"remote ref":             {"openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        '200':\n          content:\n            application/json:\n              schema: {$ref: 'other.yaml#/Pet'}\n", "only local"},
+		"a url":                  {"openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        '200':\n          content:\n            application/json:\n              schema: {$ref: 'https://example.com/spec.yaml#/Pet'}\n", "files, not URLs"},
 		"bad status":             {"openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        okay: {description: x}\n", "status"},
 		"operation is not a map": {"openapi: 3.0.0\npaths:\n  /x:\n    get: 7\n", "get"},
 	}
@@ -502,7 +502,8 @@ func TestLoadAcceptsAMediaTypeThatDescribesNothing(t *testing.T) {
 // The cases below come from running the mock against real published documents —
 // Swagger's own Petstore, Asana, Stripe, DocuSign, Kubernetes and DigitalOcean. Two of
 // them served something wrong rather than refusing, which is the one thing this mock
-// must not do (ADR-0217).
+// must not do (ADR-0217). DigitalOcean's — a document split across a tree of files — is
+// read rather than refused since; see multifile_test.go.
 
 func TestLoadFollowsRefsToPathItemsOperationsAndResponses(t *testing.T) {
 	// A large document routinely factors its operations and responses out into
@@ -550,28 +551,6 @@ components:
 	for _, op := range spec.Operations {
 		if len(op.Responses) != 1 || len(op.Responses[0].Body) == 0 {
 			t.Errorf("%s %s answers nothing: %+v", op.Method, op.Path, op.Responses)
-		}
-	}
-}
-
-func TestLoadRefusesADocumentSplitAcrossFiles(t *testing.T) {
-	// DigitalOcean's published document is one file of $refs into a tree of others.
-	// Loading it and serving 290 operations that answer nothing is worse than refusing:
-	// the mock looks like it works.
-	_, err := openapimock.Load([]byte(`
-openapi: 3.0.0
-info: {title: DO, version: '2.0'}
-paths:
-  /v2/droplets:
-    get:
-      $ref: 'resources/droplets/droplets_list.yml'
-`))
-	if err == nil {
-		t.Fatal("want a refusal for a multi-file document")
-	}
-	for _, want := range []string{"resources/droplets/droplets_list.yml", "one file"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q, want it to mention %q", err, want)
 		}
 	}
 }
