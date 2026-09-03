@@ -111,3 +111,71 @@ func TestRunMockServerReportsAnUnusableAddress(t *testing.T) {
 		t.Error("want an error for an address that cannot be bound")
 	}
 }
+
+func TestMockOpenAPIBannerNamesWhatItCannotGenerate(t *testing.T) {
+	// Found against Swagger's own Petstore, which describes every response as JSON and
+	// XML: the XML half is dropped, and the person starting the mock is told.
+	spec, err := openapimock.Load([]byte(`
+openapi: 3.0.0
+info: {title: Petstore, version: '1'}
+paths:
+  /pet:
+    get:
+      responses:
+        '200':
+          description: a pet
+          content:
+            application/json: {schema: {type: object}}
+            application/xml: {schema: {type: object}}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	printMockOpenAPIBanner(&out, spec, openapimock.New(spec), "petstore.yaml", ":8009", "http://127.0.0.1:8009")
+	if got := out.String(); !strings.Contains(got, "no body for GET /pet 200 application/xml") {
+		t.Errorf("banner does not name the dropped media type:\n%s", got)
+	}
+}
+
+// writeSplitSpec writes a two-file document and returns the entry file's path.
+func writeSplitSpec(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "spec", "resources"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"spec/root.yaml":        "openapi: 3.0.0\ninfo: {title: Split, version: '1'}\npaths:\n  /x:\n    get: {$ref: 'resources/op.yml'}\n  /y:\n    get: {$ref: '../outside.yml'}\n",
+		"spec/resources/op.yml": "operationId: getX\nresponses:\n  '200': {description: ok}\n",
+		"outside.yml":           "operationId: getY\nresponses:\n  '200': {description: ok}\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(name)), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return filepath.Join(dir, "spec", "root.yaml")
+}
+
+func TestRunMockOpenAPIKeepsRefsInsideTheSpecsDirectory(t *testing.T) {
+	// The default root is the document's own directory. A document reaching past it is
+	// refused before the port is bound, and the message says which flag says otherwise.
+	err := runMockOpenAPI([]string{"--spec", writeSplitSpec(t)})
+	if err == nil || !strings.Contains(err.Error(), "--spec-root") {
+		t.Errorf("err = %v, want the refusal to name --spec-root", err)
+	}
+}
+
+func TestMockOpenAPIBannerCountsTheFilesItRead(t *testing.T) {
+	entry := writeSplitSpec(t)
+	spec, err := openapimock.LoadFileUnder(entry, filepath.Dir(filepath.Dir(entry)))
+	if err != nil {
+		t.Fatalf("LoadFileUnder: %v", err)
+	}
+	var out bytes.Buffer
+	printMockOpenAPIBanner(&out, spec, openapimock.New(spec), "root.yaml", ":8009", "http://127.0.0.1:8009")
+	if got := out.String(); !strings.Contains(got, "from root.yaml and 2 files") {
+		t.Errorf("banner does not say what it read:\n%s", got)
+	}
+}
