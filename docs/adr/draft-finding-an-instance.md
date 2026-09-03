@@ -1,4 +1,4 @@
-# ADR-DRAFT: Finding an instance — a key lookup, a per-definition index, and a read view
+# ADR-DRAFT: Finding an instance — a key lookup and a per-definition index
 
 - **Status:** Accepted
 - **Date:** 2026-09-03
@@ -6,60 +6,61 @@
 
 ## Context and problem statement
 
-An operator's most common question about a running system is about **one instance**:
-"where is MT-1998?", "what happened to the instance this ticket names?". Atlas's
-answer to it cost, in every case, a walk of every instance in the engine.
+An operator's most common question about a running system is about **one
+instance**: "where is MT-1998?", "what happened to the instance this ticket
+names?". Atlas's answer to it read through every instance in the engine.
 
-Three surfaces made that walk:
+[ADR-0239](0239-off-loop-queries.md) took the first half of that problem away.
+The instance search and the instance listing no longer run inside `s.do`, so a
+walk over the whole population does not hold the single writer any more, and
+`Server.readOffLoop` makes that the shape every growing query has. What it did
+not change — and says so — is that these queries still **walk**:
 
-- `GET /api/v1/instances/search?q=` scanned the live instance family and then the
-  whole terminal history, reading every scope's variables on the way — and it did
-  it **inside `s.do`**, on the single-writer run loop. At a few hundred thousand
-  instances that is millions of decodes during which the processor folds no
-  commands at all. A search did not just take a long time; it stopped the engine
-  for as long as it took.
-- `GET /api/v1/instances?process=<key>` filtered **after** the scan, so listing a
-  version with three instances cost the same walk as listing the busiest one.
-- The finished half was collected in full and then `sort.Slice`d by completion
-  time in memory, so the cost of showing the ten most recent completions was the
-  size of the whole history.
+- `GET /api/v1/instances?process=<key>` filters *after* the scan, so listing a
+  version with three instances still costs a walk of every instance in the store.
+- The finished half is collected whole and `sort.Slice`d by completion time in
+  memory, so showing the ten most recent completions costs the size of the whole
+  history.
+- `GET /api/v1/instances/search?q=` walks both families and reads every scope's
+  variables, "a full scan with no value index (v1)".
+- The live view's instance panel then fetches all of a version's instances, with
+  every variable on every row, and renders one card each, on a 1.5 second poll.
 
-The live view's instance panel then fetched all of a version's instances — with
-every variable on every row — and rendered one card each, on a 1.5 second poll.
+Off the loop, a walk costs latency and I/O instead of the engine's throughput —
+better, but at a few hundred thousand instances an operator still waits, and the
+panel still ships and renders the whole population.
 
-None of this is a defect in the handlers; it is the absence of an index. The state
-store keys process instances by instance key (`pi:<piKey>`, `piHist:<piKey>`) and
-variables by scope (`var:<scopeKey>:<name>`). There is no index from a definition
-to its instances, none from a completion time to an instance, and none from a
-variable value to anything. Every question that is not "this exact instance key"
-therefore degrades to a scan.
+The state store keys process instances by instance key (`pi:<piKey>`,
+`piHist:<piKey>`) and variables by scope (`var:<scopeKey>:<name>`). There is no
+index from a definition to its instances, none from a completion time to an
+instance, and none from a variable value to anything. Every question that is not
+"this exact instance key" therefore degrades to a walk.
 
 The question this record answers: **what does Atlas index, and what does it
 decline to index, so that finding an instance costs the answer rather than the
-store — without breaking the single-writer model or the one-`applyToState` rule?**
+store?**
 
 ## Decision drivers
 
 - **The common case must be a point read.** "I have the key" and "I have the
   business value" are the two ways an operator arrives. Neither should be
   proportional to the instance count.
-- **Never scan on the run loop (I3).** A read whose cost grows with the store must
-  not occupy the single writer. ADR-0157 moved handlers off the loop and
-  `state.ReadView` exists precisely so an off-loop read is still *consistent*.
 - **Derived state is folded, not computed (I4/I6).** Any index must be maintained
   in `applyToState` from the event alone, so replay rebuilds it identically.
 - **Don't index what cannot be sought.** An ordered key-value store answers
   equality and prefix. Substring and full text are not accelerable by it, and
-  pretending otherwise is how a "fast" search quietly becomes a scan again.
+  pretending otherwise is how a "fast" search quietly becomes a walk again.
 - **An upgraded store must not read empty.** A missing counter reads low; a
   missing index reads *nothing*, which is worse — a list that silently shows zero
   instances is believed.
+- **Build on ADR-0239, don't fork it.** The read surface lives on state's
+  `queries` type, so a query written once serves both `*Store` and `*ReadView`.
 
 ## Considered options
 
-1. **Leave the scans, cap harder.** Lower the page caps and accept that a search
-   is slow. Rejected: the cap bounds the *response*, never the read, and the read
-   is what holds the loop.
+1. **Leave the walks; ADR-0239 already made them cheap enough.** Rejected: it
+   removed the *engine-wide* cost, not the operator's wait, and not the panel's
+   payload. A page that takes ten seconds is still a page nobody uses.
 2. **Index by definition, and page by cursor (chosen for the listing).** Two
    valueless column families maintained in the fold; the operator's actual
    navigation ("this version's instances, newest first") becomes a bounded range
@@ -75,20 +76,14 @@ store — without breaking the single-writer model or the one-`applyToState` rul
 
 ## Decision outcome
 
-Chosen: **option 2, plus a point-read path and a read view — three layers, each
+Chosen: **option 2, plus a point-read path — two layers on top of ADR-0239, each
 answering a different shape of the question.**
 
 **A bare instance key is a point read.** `?q=` that is nothing but digits is
 resolved against `pi:<key>` and then `piHist:<key>` and returns that one instance
-with its whole variable set. Two reads, no scan, live or finished. A number that
+with its whole variable set. Two reads, no walk, live or finished. A number that
 resolves to no instance falls through to the content search, so `3098` still finds
 `zip=3098`.
-
-**Reads happen off the run loop, against a `state.ReadView`.** The handler visits
-the loop once, briefly, to take a Pebble snapshot and copy the deployment labels
-it will need; everything after that runs on the request goroutine. A search no
-longer stalls the processor, and what it reports is one coherent state rather than
-a state that moved underneath it mid-scan.
 
 **Two new column families index instances by their definition:**
 
@@ -109,20 +104,28 @@ the order the operator reads history in; with it in the key that order is a
 backwards range scan instead of sorting the whole history in memory. It is a pair
 with the instance key because completion order is not key order — an instance
 started first can finish last — which is also why the paging cursor for that half
-carries both.
+carries both. That is exactly what ADR-0239's `CompletedProcessInstancesDesc`
+cannot offer: the history family is in key order, so a bounded scan of it is
+newest-*started*, not newest-*finished*.
+
+The reads are `queries` methods, so `*Store` and `*ReadView` both have them and
+the handlers reach them through `readOffLoop` like every other growing query.
 
 **`GET /api/v1/instances` gains `?state=active|finished` and `?before=<cursor>`.**
 Scoped with `?process=`, each half is a bounded page off its own index and the
 response carries `X-Instances-Next-Cursor`, mirroring the task inbox's newest-first
-paging. Unscoped, the endpoint behaves exactly as before: capped, unpaged, and a
+paging. Unscoped, the endpoint behaves as ADR-0239 left it: capped, unpaged, and a
 full family walk — there is no index to page, and saying so is better than
 pretending. `?before=` without `?process=` is refused rather than ignored, because
 a silently dropped paging parameter is how a client loops over the same page
-forever.
+forever. `state=all` and `state=completed` are accepted spellings: callers wrote
+them while the parameter was a no-op, and they now do what those callers meant.
 
 **`GET /api/v1/instances/search` gains `?process=`**, which scopes the content
-walk to one definition's index. The content search itself is still a walk — of
-that version, not of the engine — and is still capped.
+walk to one definition's index and lets it stop as soon as the result cap is met —
+that index is newest-first, so the rows it keeps are the rows reading on would have
+left standing. The unscoped content search is still a walk of everything, and is
+still capped afterwards.
 
 **A one-time backfill seeds both families** from the instances and history a store
 already holds, marked in `cfMeta` like the ADR-0080 and ADR-0083 counters before
@@ -132,18 +135,15 @@ it, in one atomic synced batch so a crash mid-migration leaves nothing.
 
 - **Positive:** a version's instances cost the page, not the store. The finished
   half comes back in completion order without an in-memory sort. An instance key
-  is O(1) whatever the engine holds. No search occupies the run loop. The live
-  panel fetches one page per half instead of every instance, and reaches the rest
-  through the cursor and the search box.
+  is O(1) whatever the engine holds. The live panel fetches one page per half
+  instead of every instance, and reaches the rest through the cursor and the
+  search box.
 - **Positive:** the operator is told what they are looking at — "80 of 150", not
   "80" — so a page is never mistaken for the whole truth.
 - **Negative / trade-offs accepted:** two more index entries per instance
-  lifecycle (one on activation, one on completion, both valueless). A read view
-  held open for the length of a request holds back compaction of everything
-  written since — bounded by the request, and the reason `Close` is deferred at
-  the point the view is taken. An off-loop read is consistent but very slightly
-  stale, which for an operator surface polling at 1.5 seconds is not a
-  distinction that exists.
+  lifecycle (one on activation, one on completion, both valueless). `cfChildByParent`
+  took 0x23 first, so these are 0x24 and 0x25 — a column family byte is an on-disk
+  contract, and the one already merged keeps its number.
 - **Negative:** unscoped `?state=finished` still walks and sorts the whole
   history. Adding a global completion-ordered family would fix it; it is not
   added because every surface that lists history is scoped to a version, and an
@@ -159,10 +159,9 @@ it, in one atomic synced batch so a crash mid-migration leaves nothing.
 
 ## Pros and cons of the options
 
-### Option 1 — cap harder
-- Good: no new state, no migration.
-- Bad: bounds the response, not the read. The run loop keeps paying for the scan,
-  which is the actual failure.
+### Option 1 — leave the walks
+- Good: no new state, no migration; ADR-0239 already removed the engine-wide cost.
+- Bad: the operator still waits, and the panel still ships the whole population.
 
 ### Option 2 — per-definition indexes with cursor paging
 - Good: matches how operators actually navigate (by version, newest first). Small,
@@ -184,8 +183,9 @@ it, in one atomic synced batch so a crash mid-migration leaves nothing.
 
 ## Links
 
-- builds on ADR-0157 (handlers off the run loop) and the `state.ReadView` it
-  introduced
+- builds on [ADR-0239](0239-off-loop-queries.md), which moved these same queries
+  off the run loop and gave state the shared `queries` read surface these indexes
+  are written against
 - follows the derived-index pattern of ADR-0080 and ADR-0083 (per-definition
   counters, folded and backfilled) and ADR-0146 (the due-date purge index)
 - mirrors the newest-first cursor paging the task inbox uses

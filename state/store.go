@@ -30,8 +30,12 @@ import (
 // metaLastApplied keys the highest log position folded into the store.
 const metaLastApplied = "last_applied_position"
 
-// Store wraps a Pebble database.
+// Store wraps a Pebble database. It embeds [queries], so every read the store
+// serves is the same code a [ReadView] serves — see that type's comment for why
+// there are two ways in.
 type Store struct {
+	queries
+
 	db *pebble.DB
 	// freeBatch caches one indexed batch for reuse across transactions. The
 	// store is single-writer (invariant I3), so at most one transaction is live
@@ -49,7 +53,7 @@ func Open(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{db: db}
+	s := &Store{queries: queries{r: db}, db: db}
 	// The runtime aggregate counters (ADR-0080) are derived state added after the
 	// fact. A live store persists across restarts and replays only the tail, so the
 	// counters would read zero for instances that already exist. Seed them once from
@@ -72,6 +76,14 @@ func Open(dir string) (*Store, error) {
 	if err := s.backfillRuntimeTotalsIfNeeded(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill runtime totals: %w", err)
+	}
+	// The reverse call-activity link index is a later addition still. Children that
+	// already exist recorded their parent on their own record but never wrote the
+	// index, and without it a cancel of their caller would leave them running — so
+	// it is seeded once from those records.
+	if err := s.backfillChildIndexIfNeeded(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: backfill child index: %w", err)
 	}
 	// The by-definition instance indexes are later still. Unlike a counter, a missing
 	// index does not read low — it reads *empty*, so a store upgraded into this
@@ -120,8 +132,8 @@ func (s *Store) recycle(b *pebble.Batch) error {
 
 // LastAppliedPosition returns the highest log position folded into committed
 // state, or 0 if none has been applied yet (genesis).
-func (s *Store) LastAppliedPosition() (uint64, error) {
-	raw, ok, err := getCopy(s.db, keyMeta(metaLastApplied))
+func (q queries) LastAppliedPosition() (uint64, error) {
+	raw, ok, err := getCopy(q.r, keyMeta(metaLastApplied))
 	if err != nil || !ok {
 		return 0, err
 	}
@@ -133,23 +145,16 @@ func (s *Store) LastAppliedPosition() (uint64, error) {
 
 // ElementInstancesOfProcess calls fn with the key of every element instance
 // belonging to the given process instance, via the elByProc index.
-func (s *Store) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64) error) error {
-	return elementInstancesOfProcess(s.db, procKey, fn)
-}
-
-// elementInstancesOfProcess is [Store.ElementInstancesOfProcess] over any reader,
-// shared with a [ReadView] so an instance listing that counts an instance's live
-// element instances can do it off the run loop.
-func elementInstancesOfProcess(r iterReader, procKey uint64, fn func(elKey uint64) error) error {
-	return scanPrefixWith(r, elByProcPrefix(procKey), func(k, _ []byte) error {
+func (q queries) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64) error) error {
+	return q.scanPrefix(elByProcPrefix(procKey), func(k, _ []byte) error {
 		return fn(trailingKey(k))
 	})
 }
 
 // ActivatableJobs calls fn with the key of every open job of the given type,
 // via the jobActivatable index — the worker-polling access pattern.
-func (s *Store) ActivatableJobs(jobType int32, fn func(jobKey uint64) error) error {
-	return s.scanPrefix(jobActivatablePrefix(jobType), func(k, _ []byte) error {
+func (q queries) ActivatableJobs(jobType int32, fn func(jobKey uint64) error) error {
+	return q.scanPrefix(jobActivatablePrefix(jobType), func(k, _ []byte) error {
 		return fn(trailingKey(k))
 	})
 }
@@ -161,7 +166,7 @@ func (s *Store) ActivatableJobs(jobType int32, fn func(jobKey uint64) error) err
 // paging from the newest downward surfaces the tasks an operator most likely wants
 // first while still bounding the scan. Worker polling keeps using ActivatableJobs
 // (oldest-first, FIFO) — this is a read-side ordering only.
-func (s *Store) ActivatableJobsDesc(jobType int32, before uint64, fn func(jobKey uint64) error) error {
+func (q queries) ActivatableJobsDesc(jobType int32, before uint64, fn func(jobKey uint64) error) error {
 	lo := jobActivatablePrefix(jobType)
 	hi := prefixEnd(lo)
 	if before != 0 {
@@ -169,7 +174,7 @@ func (s *Store) ActivatableJobsDesc(jobType int32, before uint64, fn func(jobKey
 		// `before` — the natural cursor for "the next older page".
 		hi = keyJobActivatable(jobType, before)
 	}
-	return s.scanRangeDesc(lo, hi, func(k, _ []byte) error {
+	return q.scanRangeDesc(lo, hi, func(k, _ []byte) error {
 		return fn(trailingKey(k))
 	})
 }
@@ -178,8 +183,8 @@ func (s *Store) ActivatableJobsDesc(jobType int32, before uint64, fn func(jobKey
 // ok=false if it holds none. It is the read-side counterpart of Tx.JobOfElement,
 // used to resolve one instance's open jobs through the element→job reverse index
 // rather than scanning the global activatable index.
-func (s *Store) JobOfElement(elKey uint64) (uint64, bool, error) {
-	raw, ok, err := getCopy(s.db, keyJobByElement(elKey))
+func (q queries) JobOfElement(elKey uint64) (uint64, bool, error) {
+	raw, ok, err := getCopy(q.r, keyJobByElement(elKey))
 	if err != nil || !ok {
 		return 0, false, err
 	}
@@ -191,8 +196,8 @@ func (s *Store) JobOfElement(elKey uint64) (uint64, bool, error) {
 // slice. It backs the read side of the operator complete/fail affordance (listing
 // the jobs an instance is parked on); worker polling still uses the type-scoped
 // ActivatableJobs.
-func (s *Store) AllActivatableJobs(fn func(jobKey uint64) error) error {
-	return s.scanPrefix([]byte{byte(cfJobActivatable)}, func(k, _ []byte) error {
+func (q queries) AllActivatableJobs(fn func(jobKey uint64) error) error {
+	return q.scanPrefix([]byte{byte(cfJobActivatable)}, func(k, _ []byte) error {
 		return fn(trailingKey(k))
 	})
 }
@@ -200,10 +205,10 @@ func (s *Store) AllActivatableJobs(fn func(jobKey uint64) error) error {
 // DueTimers calls fn for every timer whose due date is at or before now, in due
 // order. Because the due date is the index prefix, this is a range scan from the
 // start of the timer family up to now — no scheduler structure, no full scan.
-func (s *Store) DueTimers(now int64, fn func(timerKey uint64, v *model.TimerValue) error) error {
+func (q queries) DueTimers(now int64, fn func(timerKey uint64, v *model.TimerValue) error) error {
 	lo := []byte{byte(cfTimer)}
 	hi := prefixEnd(appendOrderedInt64([]byte{byte(cfTimer)}, now))
-	return s.scanRange(lo, hi, func(k, raw []byte) error {
+	return q.scanRange(lo, hi, func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTTimer, raw)
 		if err != nil {
 			return err
@@ -217,8 +222,8 @@ func (s *Store) DueTimers(now int64, fn func(timerKey uint64, v *model.TimerValu
 // continuing a waiting element (ADR-0051). It is a full scan of the timer family,
 // used only when a definition is (re)deployed (off the hot path), so arming can be
 // idempotent and can supersede a prior version's schedule.
-func (s *Store) StartTimers(fn func(timerKey uint64, v *model.TimerValue) error) error {
-	return s.scanPrefix([]byte{byte(cfTimer)}, func(k, raw []byte) error {
+func (q queries) StartTimers(fn func(timerKey uint64, v *model.TimerValue) error) error {
+	return q.scanPrefix([]byte{byte(cfTimer)}, func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTTimer, raw)
 		if err != nil {
 			return err
@@ -234,8 +239,8 @@ func (s *Store) StartTimers(fn func(timerKey uint64, v *model.TimerValue) error)
 // GetJob returns the committed job for key, reporting whether it was present.
 // Unlike Tx.GetJob it reads outside a transaction, for queries such as a worker
 // runner pulling activatable jobs.
-func (s *Store) GetJob(key uint64) (*model.JobValue, bool, error) {
-	raw, ok, err := getCopy(s.db, keyJob(key))
+func (q queries) GetJob(key uint64) (*model.JobValue, bool, error) {
+	raw, ok, err := getCopy(q.r, keyJob(key))
 	if err != nil || !ok {
 		return nil, ok, err
 	}
@@ -249,8 +254,8 @@ func (s *Store) GetJob(key uint64) (*model.JobValue, bool, error) {
 // GetIncident returns the committed incident on an element instance, or nil if
 // there is none. It reads outside a transaction, for the resolve endpoint's
 // existence check (ADR-0061).
-func (s *Store) GetIncident(elKey uint64) (*model.IncidentValue, error) {
-	raw, ok, err := getCopy(s.db, keyIncident(elKey))
+func (q queries) GetIncident(elKey uint64) (*model.IncidentValue, error) {
+	raw, ok, err := getCopy(q.r, keyIncident(elKey))
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -265,8 +270,8 @@ func (s *Store) GetIncident(elKey uint64) (*model.IncidentValue, error) {
 // whether it was present. Like GetJob it reads outside a transaction, for
 // consumers such as the in-process DMN worker resolving the decision an
 // activatable business-rule job belongs to.
-func (s *Store) GetElementInstance(key uint64) (*model.ElementInstanceValue, bool, error) {
-	return decodeElementInstance(getCopy(s.db, keyElementInstance(key)))
+func (q queries) GetElementInstance(key uint64) (*model.ElementInstanceValue, bool, error) {
+	return decodeElementInstance(getCopy(q.r, keyElementInstance(key)))
 }
 
 // decodeElementInstance turns a raw get into an element instance. It is shared by
@@ -284,8 +289,8 @@ func decodeElementInstance(raw []byte, ok bool, err error) (*model.ElementInstan
 }
 
 // ActiveProcessInstanceCount returns how many process instances are live.
-func (s *Store) ActiveProcessInstanceCount() (int, error) {
-	return s.countPrefix([]byte{byte(cfProcessInstance)})
+func (q queries) ActiveProcessInstanceCount() (int, error) {
+	return q.countPrefix([]byte{byte(cfProcessInstance)})
 }
 
 // IncidentCount returns how many unresolved incidents exist — how many tokens are
@@ -296,15 +301,15 @@ func (s *Store) ActiveProcessInstanceCount() (int, error) {
 // resolution), so a maintained number would drift while a scan cannot. The family
 // holds one key per stuck token, which is the population an operator is expected to
 // keep near zero.
-func (s *Store) IncidentCount() (int, error) {
-	return s.countPrefix([]byte{byte(cfIncident)})
+func (q queries) IncidentCount() (int, error) {
+	return q.countPrefix([]byte{byte(cfIncident)})
 }
 
 // DefInstanceCount returns how many instances of one definition are live, read
 // from the maintained per-definition counter in O(1) rather than scanning every
 // instance (ADR-0080).
-func (s *Store) DefInstanceCount(procDefKey uint64) (int, error) {
-	raw, ok, err := getCopy(s.db, keyDefInstanceCount(procDefKey))
+func (q queries) DefInstanceCount(procDefKey uint64) (int, error) {
+	raw, ok, err := getCopy(q.r, keyDefInstanceCount(procDefKey))
 	if err != nil || !ok {
 		return 0, err
 	}
@@ -329,24 +334,24 @@ func (s *Store) DefInstanceCount(procDefKey uint64) (int, error) {
 // their own, and the ADR-0131 checkpoint cadence forces one every few minutes, so the
 // backlog is bounded in a running engine. Even un-compacted it stays cheaper than the
 // scan it replaces.
-func (s *Store) TotalActiveInstances() (int64, error) {
-	return s.sumCounters([]byte{byte(cfDefInstanceCount)})
+func (q queries) TotalActiveInstances() (int64, error) {
+	return q.sumCounters([]byte{byte(cfDefInstanceCount)})
 }
 
 // TotalLiveTokens is how many element instances hold live tokens across every definition,
 // summed from the maintained per-definition-element counters (ADR-0080). Bounded by the
 // number of deployed *elements* — design-time size, not runtime population — for the same
 // reason as [Store.TotalActiveInstances].
-func (s *Store) TotalLiveTokens() (int64, error) {
-	return s.sumCounters([]byte{byte(cfElementTokenCount)})
+func (q queries) TotalLiveTokens() (int64, error) {
+	return q.sumCounters([]byte{byte(cfElementTokenCount)})
 }
 
 // sumCounters adds up every merge counter in a family. A counter whose value is too short
 // to decode reads as zero rather than failing the whole sum: one unreadable key should
 // cost a slightly low gauge, not a broken scrape.
-func (s *Store) sumCounters(prefix []byte) (int64, error) {
+func (q queries) sumCounters(prefix []byte) (int64, error) {
 	var total int64
-	err := s.scanPrefix(prefix, func(_, raw []byte) error {
+	err := q.scanPrefix(prefix, func(_, raw []byte) error {
 		total += decodeCounter(raw)
 		return nil
 	})
@@ -359,8 +364,8 @@ func (s *Store) sumCounters(prefix []byte) (int64, error) {
 // DefCompletedCount returns how many instances of one definition have finished
 // (completed or terminated), from the maintained counter in O(1) rather than scanning
 // the history (ADR-0083).
-func (s *Store) DefCompletedCount(procDefKey uint64) (int, error) {
-	raw, ok, err := getCopy(s.db, keyDefCompletedCount(procDefKey))
+func (q queries) DefCompletedCount(procDefKey uint64) (int, error) {
+	raw, ok, err := getCopy(q.r, keyDefCompletedCount(procDefKey))
 	if err != nil || !ok {
 		return 0, err
 	}
@@ -369,8 +374,8 @@ func (s *Store) DefCompletedCount(procDefKey uint64) (int, error) {
 
 // DefLastActivity returns the unix-nano timestamp of a definition's most recent
 // instance lifecycle event (0 if it has had none), read in O(1) (ADR-0083).
-func (s *Store) DefLastActivity(procDefKey uint64) (int64, error) {
-	raw, ok, err := getCopy(s.db, keyDefLastActivity(procDefKey))
+func (q queries) DefLastActivity(procDefKey uint64) (int64, error) {
+	raw, ok, err := getCopy(q.r, keyDefLastActivity(procDefKey))
 	if err != nil || !ok {
 		return 0, err
 	}
@@ -380,8 +385,8 @@ func (s *Store) DefLastActivity(procDefKey uint64) (int64, error) {
 // ElementLiveTokens calls fn with each of a definition's elements that currently
 // holds live tokens and how many — one prefix scan over the per-element token
 // counters, so it is O(elements), not O(instances) (ADR-0080).
-func (s *Store) ElementLiveTokens(procDefKey uint64, fn func(elementId int32, count int64) error) error {
-	return s.scanPrefix(runtimeCountPrefix(cfElementTokenCount, procDefKey), func(k, raw []byte) error {
+func (q queries) ElementLiveTokens(procDefKey uint64, fn func(elementId int32, count int64) error) error {
+	return q.scanPrefix(runtimeCountPrefix(cfElementTokenCount, procDefKey), func(k, raw []byte) error {
 		return fn(elementIdFromCountKey(k), decodeCounter(raw))
 	})
 }
@@ -390,8 +395,8 @@ func (s *Store) ElementLiveTokens(procDefKey uint64, fn func(elementId int32, co
 // cumulative visit count — the aggregate heatmap, read in O(elements) from the
 // maintained per-element visit counter instead of summing every instance's visit
 // history (ADR-0080, aggregating ADR-0022).
-func (s *Store) ElementVisitTotals(procDefKey uint64, fn func(elementId int32, count int64) error) error {
-	return s.scanPrefix(runtimeCountPrefix(cfElementVisitAgg, procDefKey), func(k, raw []byte) error {
+func (q queries) ElementVisitTotals(procDefKey uint64, fn func(elementId int32, count int64) error) error {
+	return q.scanPrefix(runtimeCountPrefix(cfElementVisitAgg, procDefKey), func(k, raw []byte) error {
 		return fn(elementIdFromCountKey(k), decodeCounter(raw))
 	})
 }
@@ -481,19 +486,19 @@ func (s *Store) backfillRuntimeCountersIfNeeded() error {
 
 // OpenJobs is how many jobs are currently waiting for a worker, engine-wide, read from
 // the maintained counter rather than by scanning the job family (ADR-0142).
-func (s *Store) OpenJobs() (int64, error) { return s.runtimeTotal(rtOpenJobs) }
+func (q queries) OpenJobs() (int64, error) { return q.runtimeTotal(rtOpenJobs) }
 
 // PendingTimers is how many timers are currently waiting to fire, engine-wide.
-func (s *Store) PendingTimers() (int64, error) { return s.runtimeTotal(rtPendingTimers) }
+func (q queries) PendingTimers() (int64, error) { return q.runtimeTotal(rtPendingTimers) }
 
 // MessageSubscriptions is how many message subscriptions are currently waiting to
 // correlate, engine-wide.
-func (s *Store) MessageSubscriptions() (int64, error) { return s.runtimeTotal(rtMessageSubscriptions) }
+func (q queries) MessageSubscriptions() (int64, error) { return q.runtimeTotal(rtMessageSubscriptions) }
 
 // runtimeTotal reads one engine-wide live-entity counter. An unset counter is zero, not
 // an error: a store that has never opened one of these has none open.
-func (s *Store) runtimeTotal(kind runtimeTotalKind) (int64, error) {
-	raw, ok, err := getCopy(s.db, keyRuntimeTotal(kind))
+func (q queries) runtimeTotal(kind runtimeTotalKind) (int64, error) {
+	raw, ok, err := getCopy(q.r, keyRuntimeTotal(kind))
 	if err != nil || !ok {
 		return 0, err
 	}
@@ -556,6 +561,51 @@ func (s *Store) backfillRuntimeTotalsIfNeeded() error {
 // from metaRuntimeCountersV1 so a store that already ran the ADR-0080 backfill still
 // seeds these.
 const metaSummaryCountersV1 = "summary_counters_v1"
+
+// metaChildIndexV1 marks that the reverse call-activity link index has been seeded
+// from pre-existing child instances — a one-time migration, with its own marker so a
+// store that already ran the earlier backfills still gets this one.
+const metaChildIndexV1 = "child_index_v1"
+
+// backfillChildIndexIfNeeded builds the childByParent index for children that were
+// created before the index existed.
+//
+// A child records its own parent, so the information was never lost — only the
+// direction the engine reads was missing. Without this seeding, cancelling a caller
+// deployed before the upgrade would silently leave its child running, which is worse
+// than the slow scan the index replaces. Runs once, at open, over the active family
+// only: a finished child has no live link to record.
+func (s *Store) backfillChildIndexIfNeeded() error {
+	if _, ok, err := getCopy(s.db, keyMeta(metaChildIndexV1)); err != nil || ok {
+		return err
+	}
+	type link struct{ parent, child uint64 }
+	var links []link
+	if err := s.scanPrefix([]byte{byte(cfProcessInstance)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		if pi := v.(*model.ProcessInstanceValue); pi.ParentElementInstanceKey != 0 {
+			links = append(links, link{parent: pi.ParentElementInstanceKey, child: trailingKey(k)})
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	b := s.db.NewBatch()
+	defer b.Close()
+	for _, l := range links {
+		if err := b.Set(keyChildByParent(l.parent, l.child), nil, nil); err != nil {
+			return err
+		}
+	}
+	if err := b.Set(keyMeta(metaChildIndexV1), []byte{1}, nil); err != nil {
+		return err
+	}
+	return b.Commit(pebble.Sync)
+}
 
 // backfillSummaryCountersIfNeeded seeds the per-definition finished-instance count and
 // last-activity timestamp from current state the first time a store gains them. It
@@ -710,15 +760,8 @@ func (s *Store) InjectCorruptDataObjectSnapshot(scope uint64, ts int64, pos uint
 // ActiveProcessInstances calls fn with the key and value of every live process
 // instance, via the process-instance column family — the operator "list running
 // instances" access pattern.
-func (s *Store) ActiveProcessInstances(fn func(key uint64, v *model.ProcessInstanceValue) error) error {
-	return scanActiveProcessInstances(s.db, fn)
-}
-
-// scanActiveProcessInstances is [Store.ActiveProcessInstances] over any reader, so
-// the live store and a [ReadView] share one implementation rather than growing two
-// that can drift.
-func scanActiveProcessInstances(r iterReader, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
-	return scanPrefixWith(r, []byte{byte(cfProcessInstance)}, func(k, raw []byte) error {
+func (q queries) ActiveProcessInstances(fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	return q.scanPrefix([]byte{byte(cfProcessInstance)}, func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTProcessInstance, raw)
 		if err != nil {
 			return err
@@ -731,14 +774,8 @@ func scanActiveProcessInstances(r iterReader, fn func(key uint64, v *model.Proce
 // instance that has reached a terminal state, via the history column family —
 // the operator "list finished instances" access pattern (ADR-0017). Each value
 // carries its terminal State and CompletedAt.
-func (s *Store) CompletedProcessInstances(fn func(key uint64, v *model.ProcessInstanceValue) error) error {
-	return scanCompletedProcessInstances(s.db, fn)
-}
-
-// scanCompletedProcessInstances is [Store.CompletedProcessInstances] over any
-// reader, shared with a [ReadView] for the same reason as its live counterpart.
-func scanCompletedProcessInstances(r iterReader, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
-	return scanPrefixWith(r, []byte{byte(cfProcessInstanceHistory)}, func(k, raw []byte) error {
+func (q queries) CompletedProcessInstances(fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	return q.scanPrefix([]byte{byte(cfProcessInstanceHistory)}, func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTProcessInstance, raw)
 		if err != nil {
 			return err
@@ -754,14 +791,12 @@ func scanCompletedProcessInstances(r iterReader, fn func(key uint64, v *model.Pr
 // with three running instances costs three reads whether the engine holds a
 // thousand instances or a million.
 //
-// The caller stops a page by returning a sentinel from fn, exactly as the task
-// inbox pages ActivatableJobsDesc; the key of the last row it kept is the cursor
-// for the next (older) page.
-func (s *Store) ActiveInstancesOfDefDesc(procDefKey, before uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
-	return activeInstancesOfDefDesc(s.db, procDefKey, before, fn)
-}
-
-func activeInstancesOfDefDesc(r iterReader, procDefKey, before uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+// It is the definition-scoped counterpart of [queries.ActiveProcessInstancesDesc],
+// and it takes a cursor rather than only a limit because a version's list is paged
+// rather than truncated. The caller stops a page by returning a sentinel from fn,
+// exactly as the task inbox pages ActivatableJobsDesc; the key of the last row it
+// kept is the cursor for the next (older) page.
+func (q queries) ActiveInstancesOfDefDesc(procDefKey, before uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
 	lo := instanceByDefPrefix(procDefKey)
 	hi := prefixEnd(lo)
 	if before != 0 {
@@ -769,9 +804,36 @@ func activeInstancesOfDefDesc(r iterReader, procDefKey, before uint64, fn func(k
 		// `before` — the natural cursor for "the next older page".
 		hi = keyInstanceByDef(procDefKey, before)
 	}
-	return scanRangeDescWith(r, lo, hi, func(k, _ []byte) error {
+	return q.instancesOfDefDesc(lo, hi, keyProcessInstance, fn)
+}
+
+// FinishedInstancesOfDefDesc calls fn with every finished instance of one
+// definition in DESCENDING completion order — most recently finished first —
+// starting just below the (beforeCompletedAt, beforeKey) cursor; a zero cursor
+// starts from the most recent. It is the history counterpart of
+// [queries.ActiveInstancesOfDefDesc], and it gets that order from the index key
+// rather than by sorting the history in memory — which is what
+// [queries.CompletedProcessInstancesDesc] cannot do, since the history family is
+// in key order and an instance started first can finish last.
+//
+// The cursor is a pair for that same reason. fn receives the value, whose
+// CompletedAt together with the key forms the cursor for the next page.
+func (q queries) FinishedInstancesOfDefDesc(procDefKey uint64, beforeCompletedAt int64, beforeKey uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	lo := instanceDoneByDefPrefix(procDefKey)
+	hi := prefixEnd(lo)
+	if beforeCompletedAt != 0 || beforeKey != 0 {
+		hi = keyInstanceDoneByDef(procDefKey, beforeCompletedAt, beforeKey)
+	}
+	return q.instancesOfDefDesc(lo, hi, keyProcessInstanceHistory, fn)
+}
+
+// instancesOfDefDesc walks one of the by-definition indexes backwards and hands fn
+// the record each entry names. The two indexes differ only in their key range and
+// in which family holds the record, so the walk itself is written once.
+func (q queries) instancesOfDefDesc(lo, hi []byte, recordKey func(uint64) []byte, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	return q.scanRangeDesc(lo, hi, func(k, _ []byte) error {
 		key := trailingKey(k)
-		raw, ok, err := getCopy(r, keyProcessInstance(key))
+		raw, ok, err := getCopy(q.r, recordKey(key))
 		if err != nil || !ok {
 			// An index entry whose record is gone is skipped rather than reported: the
 			// pair is written in one batch, so this can only be a store that predates
@@ -786,38 +848,46 @@ func activeInstancesOfDefDesc(r iterReader, procDefKey, before uint64, fn func(k
 	})
 }
 
-// FinishedInstancesOfDefDesc calls fn with every finished instance of one
-// definition in DESCENDING completion order — most recently finished first —
-// starting just below the (beforeCompletedAt, beforeKey) cursor; a zero cursor
-// starts from the most recent. It is the history counterpart of
-// [Store.ActiveInstancesOfDefDesc], and it gets that order from the index key
-// rather than by sorting the history in memory.
+// ActiveProcessInstancesDesc calls fn with live process instances in descending key
+// order — newest first, since keys are allocated in creation order — and stops after
+// limit of them, reporting whether more remained.
 //
-// The cursor is a pair because completion order is not key order: an instance
-// started first can finish last. fn receives the value, whose CompletedAt together
-// with the key forms the cursor for the next page.
-func (s *Store) FinishedInstancesOfDefDesc(procDefKey uint64, beforeCompletedAt int64, beforeKey uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
-	return finishedInstancesOfDefDesc(s.db, procDefKey, beforeCompletedAt, beforeKey, fn)
+// It is the bounded form of [queries.ActiveProcessInstances], for the read paths that
+// only ever show the newest page: collecting every instance and sorting afterwards
+// costs O(instances) in time and memory to display O(limit) rows, which is the shape
+// ADR-0080 removed from the runtime views. A limit of zero or less scans nothing.
+func (q queries) ActiveProcessInstancesDesc(limit int, fn func(key uint64, v *model.ProcessInstanceValue) error) (more bool, err error) {
+	return q.instancesDesc(cfProcessInstance, limit, fn)
 }
 
-func finishedInstancesOfDefDesc(r iterReader, procDefKey uint64, beforeCompletedAt int64, beforeKey uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
-	lo := instanceDoneByDefPrefix(procDefKey)
-	hi := prefixEnd(lo)
-	if beforeCompletedAt != 0 || beforeKey != 0 {
-		hi = keyInstanceDoneByDef(procDefKey, beforeCompletedAt, beforeKey)
+// CompletedProcessInstancesDesc is [queries.ActiveProcessInstancesDesc] over the
+// terminal-history family: finished instances, newest first, bounded.
+func (q queries) CompletedProcessInstancesDesc(limit int, fn func(key uint64, v *model.ProcessInstanceValue) error) (more bool, err error) {
+	return q.instancesDesc(cfProcessInstanceHistory, limit, fn)
+}
+
+func (q queries) instancesDesc(cf columnFamily, limit int, fn func(key uint64, v *model.ProcessInstanceValue) error) (more bool, err error) {
+	if limit <= 0 {
+		return false, nil
 	}
-	return scanRangeDescWith(r, lo, hi, func(k, _ []byte) error {
-		key := trailingKey(k)
-		raw, ok, err := getCopy(r, keyProcessInstanceHistory(key))
-		if err != nil || !ok {
-			return err // as above: only reachable on a store awaiting its backfill
+	prefix := []byte{byte(cf)}
+	n := 0
+	scanErr := q.scanRangeDesc(prefix, prefixEnd(prefix), func(k, raw []byte) error {
+		if n >= limit {
+			more = true
+			return errScanWindowFull
 		}
-		v, err := model.DecodeValue(model.VTProcessInstance, raw)
-		if err != nil {
-			return err
+		v, derr := model.DecodeValue(model.VTProcessInstance, raw)
+		if derr != nil {
+			return derr
 		}
-		return fn(key, v.(*model.ProcessInstanceValue))
+		n++
+		return fn(trailingKey(k), v.(*model.ProcessInstanceValue))
 	})
+	if errors.Is(scanErr, errScanWindowFull) {
+		return more, nil
+	}
+	return more, scanErr
 }
 
 // errScanWindowFull halts a bounded scan once its per-tick cap is reached; it never
@@ -830,11 +900,11 @@ var errScanWindowFull = errors.New("state: scan window full")
 // a bounded, resumable window so one tick never scans the whole history family on the
 // run loop (ADR-0115, honoring the ADR-0085 no-full-scan rule). When the scan reaches
 // the end, more is false and the caller restarts from genesis.
-func (s *Store) CompletedProcessInstancesFrom(startKey uint64, limit int, fn func(key uint64, v *model.ProcessInstanceValue) error) (next uint64, more bool, err error) {
+func (q queries) CompletedProcessInstancesFrom(startKey uint64, limit int, fn func(key uint64, v *model.ProcessInstanceValue) error) (next uint64, more bool, err error) {
 	lo := keyProcessInstanceHistory(startKey)
 	hi := prefixEnd([]byte{byte(cfProcessInstanceHistory)})
 	n := 0
-	scanErr := s.scanRange(lo, hi, func(k, raw []byte) error {
+	scanErr := q.scanRange(lo, hi, func(k, raw []byte) error {
 		if n >= limit {
 			more = true
 			return errScanWindowFull
@@ -866,11 +936,11 @@ func (s *Store) CompletedProcessInstancesFrom(startKey uint64, limit int, fn fun
 // sweep's candidate set (ADR-0146): a range scan bounded by now, so a tick costs what is
 // due rather than what the history holds — the property the key-order scan lacked, and
 // the one ADR-0085 built the due-timer index for. An idle server pays one empty scan.
-func (s *Store) DueHistoryExpiries(now int64, limit int, fn func(dueDate int64, piKey uint64) error) (more bool, err error) {
+func (q queries) DueHistoryExpiries(now int64, limit int, fn func(dueDate int64, piKey uint64) error) (more bool, err error) {
 	lo := []byte{byte(cfHistoryExpiry)}
 	hi := prefixEnd(appendOrderedInt64([]byte{byte(cfHistoryExpiry)}, now))
 	n := 0
-	scanErr := s.scanRange(lo, hi, func(k, _ []byte) error {
+	scanErr := q.scanRange(lo, hi, func(k, _ []byte) error {
 		if n >= limit {
 			more = true
 			return errScanWindowFull
@@ -892,8 +962,8 @@ func (s *Store) DueHistoryExpiries(now int64, limit int, fn func(dueDate int64, 
 
 // Incidents calls fn with the element-instance key and value of every unresolved
 // incident — the operator "list incidents" access pattern (ADR-0061).
-func (s *Store) Incidents(fn func(elementKey uint64, v *model.IncidentValue) error) error {
-	return s.scanPrefix([]byte{byte(cfIncident)}, func(k, raw []byte) error {
+func (q queries) Incidents(fn func(elementKey uint64, v *model.IncidentValue) error) error {
+	return q.scanPrefix([]byte{byte(cfIncident)}, func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTIncident, raw)
 		if err != nil {
 			return err
@@ -903,15 +973,15 @@ func (s *Store) Incidents(fn func(elementKey uint64, v *model.IncidentValue) err
 }
 
 // ActiveElementInstanceCount returns how many element instances are live.
-func (s *Store) ActiveElementInstanceCount() (int, error) {
-	return s.countPrefix([]byte{byte(cfElementInstance)})
+func (q queries) ActiveElementInstanceCount() (int, error) {
+	return q.countPrefix([]byte{byte(cfElementInstance)})
 }
 
 // ActiveElementInstances calls fn with the key and value of every live element
 // instance. Each carries the BPMN element (as a compiled-graph index) it sits on,
 // which the live diagram overlay maps back to a diagram element.
-func (s *Store) ActiveElementInstances(fn func(key uint64, v *model.ElementInstanceValue) error) error {
-	return s.scanPrefix([]byte{byte(cfElementInstance)}, func(k, raw []byte) error {
+func (q queries) ActiveElementInstances(fn func(key uint64, v *model.ElementInstanceValue) error) error {
+	return q.scanPrefix([]byte{byte(cfElementInstance)}, func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTElementInstance, raw)
 		if err != nil {
 			return err
@@ -929,12 +999,12 @@ func (s *Store) ActiveElementInstances(fn func(key uint64, v *model.ElementInsta
 // instance-key prefix per instance, a definition-wide scan can report the same
 // element index once per instance — the caller sums the counts. Pebble folds
 // the merge deltas for each key, so raw carries the current total for that key.
-func (s *Store) ElementVisitHistory(procDefKey, instanceFilter uint64, fn func(elementId int32, count int64) error) error {
+func (q queries) ElementVisitHistory(procDefKey, instanceFilter uint64, fn func(elementId int32, count int64) error) error {
 	prefix := elementVisitDefPrefix(procDefKey)
 	if instanceFilter != 0 {
 		prefix = elementVisitInstancePrefix(procDefKey, instanceFilter)
 	}
-	return s.scanPrefix(prefix, func(k, raw []byte) error {
+	return q.scanPrefix(prefix, func(k, raw []byte) error {
 		return fn(elementIdFromVisitKey(k), decodeCounter(raw))
 	})
 }
@@ -944,8 +1014,8 @@ func (s *Store) ElementVisitHistory(procDefKey, instanceFilter uint64, fn func(e
 // order they occurred (the replay timeline). Because the key sorts by timestamp
 // then position, a definition-wide scan yields a monotonic sequence. The caller
 // resolves the receiver element index to a diagram id via the compiled process.
-func (s *Store) MessageFlowHistory(receiverDefKey uint64, fn func(ts int64, pos uint64, v *model.MessageFlowValue) error) error {
-	return s.scanPrefix(messageFlowDefPrefix(receiverDefKey), func(k, raw []byte) error {
+func (q queries) MessageFlowHistory(receiverDefKey uint64, fn func(ts int64, pos uint64, v *model.MessageFlowValue) error) error {
+	return q.scanPrefix(messageFlowDefPrefix(receiverDefKey), func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTMessageFlow, raw)
 		if err != nil {
 			return err
@@ -960,8 +1030,8 @@ func (s *Store) MessageFlowHistory(receiverDefKey uint64, fn func(ts int64, pos 
 // step-by-step replay timeline, ADR-0046). Because the key sorts by timestamp
 // then position, an instance-wide scan yields a monotonic sequence. The caller
 // resolves the element index to a diagram id via the instance's compiled process.
-func (s *Store) ElementStepHistory(piKey uint64, fn func(ts int64, pos uint64, elementId int32) error) error {
-	return s.scanPrefix(elementStepInstancePrefix(piKey), func(k, raw []byte) error {
+func (q queries) ElementStepHistory(piKey uint64, fn func(ts int64, pos uint64, elementId int32) error) error {
+	return q.scanPrefix(elementStepInstancePrefix(piKey), func(k, raw []byte) error {
 		return fn(timestampFromStepKey(k), positionFromStepKey(k), int32(binary.BigEndian.Uint32(raw)))
 	})
 }
@@ -986,8 +1056,8 @@ type ElementReplayValue struct {
 }
 
 // ElementReplayHistory scans causal token lifecycle facts in deterministic order.
-func (s *Store) ElementReplayHistory(piKey uint64, fn func(ts int64, pos uint64, v ElementReplayValue) error) error {
-	return s.scanPrefix(elementReplayInstancePrefix(piKey), func(k, raw []byte) error {
+func (q queries) ElementReplayHistory(piKey uint64, fn func(ts int64, pos uint64, v ElementReplayValue) error) error {
+	return q.scanPrefix(elementReplayInstancePrefix(piKey), func(k, raw []byte) error {
 		v, err := decodeElementReplay(raw)
 		if err != nil {
 			return err
@@ -1005,8 +1075,8 @@ func (s *Store) ElementReplayHistory(piKey uint64, fn func(ts int64, pos uint64,
 // each element and each sequence flow carried a token. Doing it as one iteration
 // matters: a scan per case over fifty thousand cases is fifty thousand
 // iterators, and the caller wanted a single number per element.
-func (s *Store) AllElementReplay(fn func(piKey uint64, ts int64, pos uint64, v ElementReplayValue) error) error {
-	return s.scanPrefix([]byte{byte(cfElementReplay)}, func(k, raw []byte) error {
+func (q queries) AllElementReplay(fn func(piKey uint64, ts int64, pos uint64, v ElementReplayValue) error) error {
+	return q.scanPrefix([]byte{byte(cfElementReplay)}, func(k, raw []byte) error {
 		v, err := decodeElementReplay(raw)
 		if err != nil {
 			return err
@@ -1034,8 +1104,8 @@ func decodeElementReplay(raw []byte) (ElementReplayValue, error) {
 // and the variable's new state in the order they occurred (ADR-0048). Because the
 // key sorts by timestamp then position, a scope-wide scan yields a monotonic
 // sequence a caller folds by position to reconstruct the variables as of any step.
-func (s *Store) VariableSnapshotHistory(scopeKey uint64, fn func(ts int64, pos uint64, v *model.VariableValue) error) error {
-	return s.scanPrefix(variableSnapshotScopePrefix(scopeKey), func(k, raw []byte) error {
+func (q queries) VariableSnapshotHistory(scopeKey uint64, fn func(ts int64, pos uint64, v *model.VariableValue) error) error {
+	return q.scanPrefix(variableSnapshotScopePrefix(scopeKey), func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTVariable, raw)
 		if err != nil {
 			return err
@@ -1052,8 +1122,8 @@ func (s *Store) VariableSnapshotHistory(scopeKey uint64, fn func(ts int64, pos u
 // and element-step timelines, so a business rule task's decision reasoning lines up
 // with the step at which it ran. Used to surface how a decision was made to
 // operators, both live and after the instance has finished.
-func (s *Store) DecisionEvaluationHistory(scopeKey uint64, fn func(ts int64, pos uint64, v *model.DecisionEvaluationValue) error) error {
-	return s.scanPrefix(decisionEvaluationScopePrefix(scopeKey), func(k, raw []byte) error {
+func (q queries) DecisionEvaluationHistory(scopeKey uint64, fn func(ts int64, pos uint64, v *model.DecisionEvaluationValue) error) error {
+	return q.scanPrefix(decisionEvaluationScopePrefix(scopeKey), func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTDecisionEvaluation, raw)
 		if err != nil {
 			return err
@@ -1070,8 +1140,8 @@ func (s *Store) DecisionEvaluationHistory(scopeKey uint64, fn func(ts int64, pos
 // decision timelines — so the "who changed it" trail lines up with the step at which
 // each override happened. It surfaces to operators both live and after the instance
 // has finished, since the records are append-only history.
-func (s *Store) VariableAuditHistory(piKey uint64, fn func(ts int64, pos uint64, v *model.VariableAuditValue) error) error {
-	return s.scanPrefix(variableAuditScopePrefix(piKey), func(k, raw []byte) error {
+func (q queries) VariableAuditHistory(piKey uint64, fn func(ts int64, pos uint64, v *model.VariableAuditValue) error) error {
+	return q.scanPrefix(variableAuditScopePrefix(piKey), func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTVariableAudit, raw)
 		if err != nil {
 			return err
@@ -1086,8 +1156,8 @@ func (s *Store) VariableAuditHistory(piKey uint64, fn func(ts int64, pos uint64,
 // Like VariableAuditHistory the key sorts by timestamp then position, so the trail lines
 // up with the step at which each intervention happened, and it surfaces both live and
 // after the instance has finished since the records are append-only history.
-func (s *Store) OperatorActionHistory(piKey uint64, fn func(ts int64, pos uint64, v *model.OperatorActionValue) error) error {
-	return s.scanPrefix(operatorActionScopePrefix(piKey), func(k, raw []byte) error {
+func (q queries) OperatorActionHistory(piKey uint64, fn func(ts int64, pos uint64, v *model.OperatorActionValue) error) error {
+	return q.scanPrefix(operatorActionScopePrefix(piKey), func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTOperatorAction, raw)
 		if err != nil {
 			return err
@@ -1104,8 +1174,8 @@ func (s *Store) OperatorActionHistory(piKey uint64, fn func(ts int64, pos uint64
 // DecisionEvaluationHistory, which folds a single instance's evaluations. The scan
 // order is scope then timestamp then position; a caller that only aggregates by
 // decision id does not depend on it.
-func (s *Store) EachDecisionEvaluation(fn func(scopeKey uint64, ts int64, v *model.DecisionEvaluationValue) error) error {
-	return s.scanPrefix([]byte{byte(cfDecisionEvaluation)}, func(k, raw []byte) error {
+func (q queries) EachDecisionEvaluation(fn func(scopeKey uint64, ts int64, v *model.DecisionEvaluationValue) error) error {
+	return q.scanPrefix([]byte{byte(cfDecisionEvaluation)}, func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTDecisionEvaluation, raw)
 		if err != nil {
 			return err
@@ -1114,21 +1184,46 @@ func (s *Store) EachDecisionEvaluation(fn func(scopeKey uint64, ts int64, v *mod
 	})
 }
 
+// ActiveProcessInstance returns the live process instance for key and whether one
+// exists, as a point read of the active family alone.
+//
+// It is deliberately narrower than [queries.ProcessInstance], which also answers
+// from history: a caller asking "may I cancel this?" must not be told yes about an
+// instance that already finished. Existence checks used to walk the whole active
+// family looking for one key — O(instances) to answer a question a single lookup
+// answers, and on the run loop at that.
+func (q queries) ActiveProcessInstance(key uint64) (*model.ProcessInstanceValue, bool, error) {
+	raw, ok, err := getCopy(q.r, keyProcessInstance(key))
+	if err != nil || !ok {
+		return nil, false, err
+	}
+	v, err := model.DecodeValue(model.VTProcessInstance, raw)
+	if err != nil {
+		return nil, false, err
+	}
+	return v.(*model.ProcessInstanceValue), true, nil
+}
+
+// ChildInstancesOfParent calls fn with the process instance key of every live child
+// a call-activity element instance started (ADR-0076), via the childByParent index.
+//
+// The alternative — the one this replaced — is a walk of every live instance
+// comparing ParentElementInstanceKey, which the engine performed *per call
+// activity* when tearing one down. Cancelling a parent holding many children was
+// therefore quadratic in the instance population.
+func (q queries) ChildInstancesOfParent(callElKey uint64, fn func(childPiKey uint64) error) error {
+	return q.scanPrefix(childByParentPrefix(callElKey), func(k, _ []byte) error {
+		return fn(trailingKey(k))
+	})
+}
+
 // ProcessInstance returns the process instance for key and whether it was found,
 // looking first in the active family and then in the terminal-history family
 // (ADR-0017). It lets a query resolve an instance's definition whether it is
 // still running or already finished — the lookup the single-process replay uses.
-func (s *Store) ProcessInstance(key uint64) (*model.ProcessInstanceValue, bool, error) {
-	return processInstanceOf(s.db, key)
-}
-
-// processInstanceOf is [Store.ProcessInstance] over any reader — two point reads,
-// no scan, whatever the store holds. It is what answers a search for a bare
-// instance key, and it is shared with a [ReadView] so that search can run off the
-// run loop against a consistent view.
-func processInstanceOf(r reader, key uint64) (*model.ProcessInstanceValue, bool, error) {
+func (q queries) ProcessInstance(key uint64) (*model.ProcessInstanceValue, bool, error) {
 	for _, k := range [][]byte{keyProcessInstance(key), keyProcessInstanceHistory(key)} {
-		raw, ok, err := getCopy(r, k)
+		raw, ok, err := getCopy(q.r, k)
 		if err != nil {
 			return nil, false, err
 		}
@@ -1147,8 +1242,8 @@ func processInstanceOf(r reader, key uint64) (*model.ProcessInstanceValue, bool,
 // VariablesOfScope calls fn with every variable owned by the given scope, via
 // the variable column family. Used to build a FEEL evaluation scope and to
 // surface an instance's variables to operators.
-func (s *Store) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
-	return s.scanPrefix(variablePrefix(scope), func(_, raw []byte) error {
+func (q queries) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
+	return q.scanPrefix(variablePrefix(scope), func(_, raw []byte) error {
 		return decodeVariable(raw, fn)
 	})
 }
@@ -1175,16 +1270,16 @@ func decodeVariable(raw []byte, fn func(v *model.VariableValue) error) error {
 // It is the [Reader]-level [VisibleVariables] under a name that reads better at a
 // call site holding a *Store; the walk itself lives there, shared with the worker
 // workers.
-func (s *Store) VisibleVariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
-	return VisibleVariables(s, scope, fn)
+func (q queries) VisibleVariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
+	return VisibleVariables(q, scope, fn)
 }
 
 // CompensablesOfScope calls fn with every completed compensable activity retained
 // under the given scope, in completion order (ADR-0103). Used to surface a scope's
 // pending compensations to operators and by tests to assert the index is cleaned when
 // a scope tears down. Mirrors VariablesOfScope (committed reads only).
-func (s *Store) CompensablesOfScope(scope uint64, fn func(v *model.CompensableValue) error) error {
-	return s.scanPrefix(compensableScopePrefix(scope), func(_, raw []byte) error {
+func (q queries) CompensablesOfScope(scope uint64, fn func(v *model.CompensableValue) error) error {
+	return q.scanPrefix(compensableScopePrefix(scope), func(_, raw []byte) error {
 		v, err := model.DecodeValue(model.VTCompensable, raw)
 		if err != nil {
 			return err
@@ -1197,8 +1292,8 @@ func (s *Store) CompensablesOfScope(scope uint64, fn func(v *model.CompensableVa
 // via the data-object column family — the current value of each. Used to surface
 // an instance's data to operators and, later, to build a FEEL scope for data
 // associations (ADR-0053). Mirrors VariablesOfScope.
-func (s *Store) DataObjectsOfScope(scope uint64, fn func(v *model.DataObjectValue) error) error {
-	return s.scanPrefix(dataObjectPrefix(scope), func(_, raw []byte) error {
+func (q queries) DataObjectsOfScope(scope uint64, fn func(v *model.DataObjectValue) error) error {
+	return q.scanPrefix(dataObjectPrefix(scope), func(_, raw []byte) error {
 		v, err := model.DecodeValue(model.VTDataObject, raw)
 		if err != nil {
 			return err
@@ -1213,8 +1308,8 @@ func (s *Store) DataObjectsOfScope(scope uint64, fn func(v *model.DataObjectValu
 // by timestamp then position, a scope-wide scan yields a monotonic sequence a
 // caller folds by position — the event-sourced data-state timeline and the basis
 // for lineage. Mirrors VariableSnapshotHistory (ADR-0048).
-func (s *Store) DataObjectSnapshotHistory(scopeKey uint64, fn func(ts int64, pos uint64, v *model.DataObjectValue) error) error {
-	return s.scanPrefix(dataObjectSnapshotScopePrefix(scopeKey), func(k, raw []byte) error {
+func (q queries) DataObjectSnapshotHistory(scopeKey uint64, fn func(ts int64, pos uint64, v *model.DataObjectValue) error) error {
+	return q.scanPrefix(dataObjectSnapshotScopePrefix(scopeKey), func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTDataObject, raw)
 		if err != nil {
 			return err
@@ -1223,23 +1318,32 @@ func (s *Store) DataObjectSnapshotHistory(scopeKey uint64, fn func(ts int64, pos
 	})
 }
 
-func (s *Store) countPrefix(prefix []byte) (int, error) {
+func (q queries) countPrefix(prefix []byte) (int, error) {
 	count := 0
-	err := s.scanPrefix(prefix, func(_, _ []byte) error {
+	err := q.scanPrefix(prefix, func(_, _ []byte) error {
 		count++
 		return nil
 	})
 	return count, err
 }
 
-func (s *Store) scanPrefix(prefix []byte, fn func(k, v []byte) error) error {
-	return s.scanRange(prefix, prefixEnd(prefix), fn)
-}
+// queries is the read-only surface of the store: every scan, every point read,
+// with no way to mutate anything. It exists once and is embedded twice — by
+// [Store], reading the live database, and by [ReadView], reading a consistent
+// snapshot — so a query is written once and serves either.
+//
+// The split is what lets a long read run *off* the run loop. A query that scans
+// a whole column family is O(instances); run on the loop it holds the engine's
+// single writer for its whole duration, which is how one operator search made a
+// 500k-instance server stop answering anything at all (ADR-0080 removed the
+// scans from the runtime views for exactly this reason; ADR-0239
+// finishes the job for the ones that must still scan). A caller that takes a
+// ReadView and scans it touches no run-loop state, so the engine keeps
+// processing commands while the scan runs.
+type queries struct{ r iterReader }
 
-// scanPrefixWith scans one prefix against any pebble reader — the live database or
-// a read view — so both share one iteration path.
-func scanPrefixWith(r iterReader, prefix []byte, fn func(k, v []byte) error) error {
-	return scanRangeWith(r, prefix, prefixEnd(prefix), fn)
+func (q queries) scanPrefix(prefix []byte, fn func(k, v []byte) error) error {
+	return q.scanRange(prefix, prefixEnd(prefix), fn)
 }
 
 // iterReader is the slice of pebble both the database and a snapshot provide.
@@ -1248,8 +1352,8 @@ type iterReader interface {
 	NewIter(o *pebble.IterOptions) (*pebble.Iterator, error)
 }
 
-func (s *Store) scanRange(lo, hi []byte, fn func(k, v []byte) error) error {
-	return scanRangeWith(s.db, lo, hi, fn)
+func (q queries) scanRange(lo, hi []byte, fn func(k, v []byte) error) error {
+	return scanRangeWith(q.r, lo, hi, fn)
 }
 
 func scanRangeWith(r iterReader, lo, hi []byte, fn func(k, v []byte) error) error {
@@ -1268,14 +1372,8 @@ func scanRangeWith(r iterReader, lo, hi []byte, fn func(k, v []byte) error) erro
 
 // scanRangeDesc is scanRange in reverse — it walks [lo, hi) from the highest key
 // down to the lowest, so a caller can page a key-ordered index newest-first.
-func (s *Store) scanRangeDesc(lo, hi []byte, fn func(k, v []byte) error) error {
-	return scanRangeDescWith(s.db, lo, hi, fn)
-}
-
-// scanRangeDescWith is scanRangeDesc over any reader, so the live store and a
-// [ReadView] page the same index the same way.
-func scanRangeDescWith(r iterReader, lo, hi []byte, fn func(k, v []byte) error) error {
-	iter, err := r.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
+func (q queries) scanRangeDesc(lo, hi []byte, fn func(k, v []byte) error) error {
+	iter, err := q.r.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
 	if err != nil {
 		return err
 	}

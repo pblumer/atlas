@@ -166,3 +166,57 @@ func TestBackfillSummaryCountersDecodeErrors(t *testing.T) {
 		})
 	}
 }
+
+// TestChildIndexBackfillSeedsExistingChildren covers the upgrade path for the
+// reverse call-activity index: a store written before the index existed holds
+// children that record their parent but have no index entry, and a cancel of their
+// caller would then leave them running. Opening the store must seed the index once
+// from those records.
+//
+// The marker is deleted to re-arm the migration, the same way the counter backfills
+// above are exercised.
+func TestChildIndexBackfillSeedsExistingChildren(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	const parentEl, childPi = uint64(4242), uint64(99)
+	tx := s.NewTransaction()
+	if err := tx.PutProcessInstance(childPi, &model.ProcessInstanceValue{
+		ProcessDefKey:            1,
+		ParentElementInstanceKey: parentEl,
+	}); err != nil {
+		t.Fatalf("PutProcessInstance: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	// Make the store look like one written before the index existed: no index entry,
+	// and the migration marker cleared so the next open runs it.
+	if err := s.db.Delete(keyChildByParent(parentEl, childPi), pebble.Sync); err != nil {
+		t.Fatalf("clear index entry: %v", err)
+	}
+	if err := s.db.Delete(keyMeta(metaChildIndexV1), pebble.Sync); err != nil {
+		t.Fatalf("clear marker: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	s2, err := Open(dir)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer s2.Close()
+	var got []uint64
+	if err := s2.ChildInstancesOfParent(parentEl, func(k uint64) error {
+		got = append(got, k)
+		return nil
+	}); err != nil {
+		t.Fatalf("ChildInstancesOfParent: %v", err)
+	}
+	if len(got) != 1 || got[0] != childPi {
+		t.Errorf("index after backfill = %v, want [%d]", got, childPi)
+	}
+}

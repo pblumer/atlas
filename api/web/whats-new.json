@@ -239,8 +239,8 @@
         "de": "Die Frage, mit der man meistens kommt, betrifft eine einzelne Instanz: Wo ist MT-1998, was ist mit der aus diesem Ticket passiert? Bisher las jede Art, sie zu stellen, jede Instanz der Engine durch — auf einer stark genutzten Version dauerte die Suche also lange und hielt dabei auch noch die Engine auf. Ein in das Suchfeld eingefügter Instanzschlüssel kommt jetzt sofort zurück, egal wie viele Instanzen es gibt, laufend oder längst beendet. Die Suche über Variableninhalte bleibt auf die Version beschränkt, die Sie gerade ansehen. Und die Instanzliste neben dem Diagramm lädt nicht mehr alles: Sie zeigt eine Seite, sagt dazu, woraus diese Seite stammt („80 von 150\"), und lässt Sie nachladen oder gezielt nach der einen suchen."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0239",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0239-off-loop-queries.md"
       },
       "tags": [
         "Operations",

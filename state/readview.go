@@ -29,6 +29,12 @@ type Reader interface {
 // run loop (the store's owner), use it off the loop, close it when the work is
 // done — the same lifetime as the job it was taken for.
 type ReadView struct {
+	// queries is the whole read surface, bound to the snapshot: a ReadView answers
+	// every query a *Store does, from the same code, as of one moment. That is what
+	// makes it usable for an operator query and not only for a job handler's two
+	// reads — see [queries].
+	queries
+
 	snap *pebble.Snapshot
 }
 
@@ -37,24 +43,18 @@ type ReadView struct {
 // This is deliberately not called Snapshot: [Store.Snapshot] already means the
 // on-disk backup checkpoint (ADR-0107), and conflating a durable copy of the whole
 // store with an in-memory read view would be a genuinely dangerous ambiguity.
-func (s *Store) ReadView() *ReadView { return &ReadView{snap: s.db.NewSnapshot()} }
+func (s *Store) ReadView() *ReadView {
+	snap := s.db.NewSnapshot()
+	return &ReadView{queries: queries{r: snap}, snap: snap}
+}
 
 // Close releases the view. A view left open holds back the compaction of
 // everything written since it was taken, so it must not outlive the work it was
 // taken for.
 func (v *ReadView) Close() error { return v.snap.Close() }
 
-// GetElementInstance implements [Reader] against the view.
-func (v *ReadView) GetElementInstance(key uint64) (*model.ElementInstanceValue, bool, error) {
-	return decodeElementInstance(getCopy(v.snap, keyElementInstance(key)))
-}
-
-// VariablesOfScope implements [Reader] against the view.
-func (v *ReadView) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
-	return scanPrefixWith(v.snap, variablePrefix(scope), func(_, raw []byte) error {
-		return decodeVariable(raw, fn)
-	})
-}
+// Both methods [Reader] requires — GetElementInstance and VariablesOfScope — come
+// from the embedded [queries], so *ReadView satisfies Reader without restating them.
 
 // maxScopeDepth bounds a scope-chain walk, a defensive guard against a cyclic or
 // corrupt FlowScopeKey chain. Real nesting (activity-local scopes over subprocess
@@ -131,46 +131,4 @@ func LocalVariablesMap(r Reader, scope uint64) (map[string]model.VariableValue, 
 		return nil, err
 	}
 	return vars, nil
-}
-
-// ProcessInstance resolves an instance key against the view, looking in the live
-// family and then the terminal history — [Store.ProcessInstance] as of the moment
-// the view was taken. It is two point reads, which is what lets an operator paste
-// an instance key into the search box and get an answer whose cost does not depend
-// on how many instances exist.
-func (v *ReadView) ProcessInstance(key uint64) (*model.ProcessInstanceValue, bool, error) {
-	return processInstanceOf(v.snap, key)
-}
-
-// ActiveProcessInstances walks the live process instances in the view —
-// [Store.ActiveProcessInstances] against a consistent snapshot, so a scan that
-// runs off the run loop sees one coherent state rather than a moving one.
-func (v *ReadView) ActiveProcessInstances(fn func(key uint64, pi *model.ProcessInstanceValue) error) error {
-	return scanActiveProcessInstances(v.snap, fn)
-}
-
-// CompletedProcessInstances walks the terminal history in the view, the history
-// counterpart of [ReadView.ActiveProcessInstances].
-func (v *ReadView) CompletedProcessInstances(fn func(key uint64, pi *model.ProcessInstanceValue) error) error {
-	return scanCompletedProcessInstances(v.snap, fn)
-}
-
-// ElementInstancesOfProcess walks one instance's element instances in the view —
-// how the instance listing counts the tokens a running instance holds.
-func (v *ReadView) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64) error) error {
-	return elementInstancesOfProcess(v.snap, procKey, fn)
-}
-
-// ActiveInstancesOfDefDesc pages one definition's live instances newest-first in
-// the view — [Store.ActiveInstancesOfDefDesc] against a consistent snapshot, which
-// is what lets the operations list be served without occupying the run loop for
-// the length of a page.
-func (v *ReadView) ActiveInstancesOfDefDesc(procDefKey, before uint64, fn func(key uint64, pi *model.ProcessInstanceValue) error) error {
-	return activeInstancesOfDefDesc(v.snap, procDefKey, before, fn)
-}
-
-// FinishedInstancesOfDefDesc is the history counterpart of
-// [ReadView.ActiveInstancesOfDefDesc].
-func (v *ReadView) FinishedInstancesOfDefDesc(procDefKey uint64, beforeCompletedAt int64, beforeKey uint64, fn func(key uint64, pi *model.ProcessInstanceValue) error) error {
-	return finishedInstancesOfDefDesc(v.snap, procDefKey, beforeCompletedAt, beforeKey, fn)
 }

@@ -12,32 +12,6 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// errListTruncated stops a bounded list scan once the page cap is reached. It is a
-// sentinel to break the scan early, not a failure.
-var errListTruncated = errors.New("list page full")
-
-// unlessTruncated maps a bounded-scan result to a real error: the page-full sentinel
-// (a deliberate early stop) becomes nil, any other error passes through. It lets the
-// capped list handlers report a genuine scan failure without treating truncation as one.
-func unlessTruncated(err error) error {
-	if errors.Is(err, errListTruncated) {
-		return nil
-	}
-	return err
-}
-
-const (
-	// maxInstanceListDefault and maxInstanceListMax bound how many active and how many
-	// completed instances GET /api/v1/instances returns (each capped independently),
-	// so the endpoint can never try to enrich and serialize hundreds of thousands of
-	// rows — the shape that made the operations page unreachable during the reported
-	// flood. Raise per request with ?limit= (up to the max); narrow to one definition
-	// with ?process=. The overview reads per-definition counts from
-	// /api/v1/instances/summary instead, so the cap does not skew its tallies.
-	maxInstanceListDefault = 1000
-	maxInstanceListMax     = 10000
-)
-
 // instanceListQuery is a parsed GET /api/v1/instances request.
 //
 // Two shapes, and the difference is where the work happens. Unscoped, the endpoint
@@ -157,18 +131,6 @@ func formatInstanceCursor(state string, r instanceResp) string {
 	return strconv.FormatInt(r.CompletedAt, 10) + "." + strconv.FormatUint(r.Key, 10)
 }
 
-// instanceLister is the read surface the listing needs. Both *state.Store and
-// *state.ReadView satisfy it; the handler passes a view, so the reading happens off
-// the run loop against one consistent state (I3, ADR-0157).
-type instanceLister interface {
-	ActiveInstancesOfDefDesc(procDefKey, before uint64, fn func(key uint64, pi *model.ProcessInstanceValue) error) error
-	FinishedInstancesOfDefDesc(procDefKey uint64, beforeCompletedAt int64, beforeKey uint64, fn func(key uint64, pi *model.ProcessInstanceValue) error) error
-	ActiveProcessInstances(fn func(key uint64, pi *model.ProcessInstanceValue) error) error
-	CompletedProcessInstances(fn func(key uint64, pi *model.ProcessInstanceValue) error) error
-	ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64) error) error
-	VariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error
-}
-
 // instancePage is one answer: the rows, whether the page was capped, and where the
 // next page resumes.
 type instancePage struct {
@@ -178,9 +140,9 @@ type instancePage struct {
 }
 
 // listInstances builds a page against a read view. It never reads loop-owned state
-// — the definition labels were copied on the loop and handed in — so the scan runs
-// on the request goroutine.
-func listInstances(rv instanceLister, defs instanceDefs, q instanceListQuery) (instancePage, error) {
+// — [Server.readOffLoop] copied the definition labels on the loop and handed them
+// in — so the scan runs on the request goroutine.
+func listInstances(rv *state.ReadView, defs defIndex, q instanceListQuery) (instancePage, error) {
 	var page instancePage
 
 	// fill turns one instance record into a row: its definition labels, its live
@@ -291,23 +253,17 @@ func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	var (
-		rv   *state.ReadView
-		defs instanceDefs
-	)
-	s.do(func() {
-		rv = s.store.ReadView()
-		defs = s.snapshotInstanceDefs()
+	var page instancePage
+	scanErr := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+		page, err = listInstances(rv, defs, q)
+		return err
 	})
-	if rv == nil { // the run loop is closing: nothing ran, and there is no answer
-		httpapi.Error(w, http.StatusServiceUnavailable, "server is shutting down")
+	switch {
+	case errors.Is(scanErr, errLoopClosing):
+		httpapi.Error(w, http.StatusServiceUnavailable, scanErr.Error())
 		return
-	}
-	defer func() { _ = rv.Close() }()
-
-	page, err := listInstances(rv, defs, q)
-	if err != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "list instances: "+err.Error())
+	case scanErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())
 		return
 	}
 	if page.truncated {

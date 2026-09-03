@@ -1490,12 +1490,7 @@ func terminateChildInstance(c *ProcessingContext, callElKey uint64, elemType uin
 	if elemType != uint8(compiler.TypeCallActivity) {
 		return
 	}
-	var children []uint64
-	c.ForEachActiveProcessInstance(func(piKey uint64, pi *model.ProcessInstanceValue) {
-		if pi.ParentElementInstanceKey == callElKey {
-			children = append(children, piKey)
-		}
-	})
+	children := c.ChildInstancesOf(callElKey)
 	for _, ck := range children {
 		if pi := c.GetProcessInstance(ck); pi != nil {
 			c.AppendProcessInstanceCommand(ck, model.IntentTerminating, *pi)

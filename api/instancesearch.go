@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"sort"
 	"strconv"
@@ -85,44 +86,8 @@ func instanceKeyQuery(q string) (uint64, bool) {
 	return key, true
 }
 
-// instanceDefInfo is the deployment metadata an instance row is labelled with.
-type instanceDefInfo struct {
-	ProcessID  string
-	Version    int32
-	VersionTag string
-}
-
-// instanceDefs is a copy of that metadata for every deployment, taken on the run
-// loop so a scan that enriches rows with it can run *off* the loop. The
-// deployments map itself is loop-owned state (I3) and must not be read from a
-// handler goroutine; this small copy can be, and there are as many entries as
-// there are deployed versions, not as there are instances.
-type instanceDefs map[uint64]instanceDefInfo
-
-// snapshotInstanceDefs copies the deployment metadata. Call it on the run loop.
-func (s *Server) snapshotInstanceDefs() instanceDefs {
-	defs := make(instanceDefs, len(s.deployments))
-	for key, d := range s.deployments {
-		info := instanceDefInfo{ProcessID: d.ProcessID, Version: d.Version}
-		if d.cp != nil {
-			info.VersionTag = d.cp.VersionTag()
-		}
-		defs[key] = info
-	}
-	return defs
-}
-
-// enrich labels a row with its definition's id, version and version tag. A row
-// whose definition is gone (deleted after the instance ran) keeps its keys and
-// simply carries no labels.
-func (defs instanceDefs) enrich(r *instanceResp) {
-	if d, ok := defs[r.ProcessDefKey]; ok {
-		r.ProcessID, r.Version, r.VersionTag = d.ProcessID, d.Version, d.VersionTag
-	}
-}
-
 // newInstanceRow builds the response row for an instance, without its variables.
-func newInstanceRow(key uint64, v *model.ProcessInstanceValue, defs instanceDefs) instanceResp {
+func newInstanceRow(key uint64, v *model.ProcessInstanceValue, defs defIndex) instanceResp {
 	r := instanceResp{
 		Key:           key,
 		ProcessDefKey: v.ProcessDefKey,
@@ -134,7 +99,11 @@ func newInstanceRow(key uint64, v *model.ProcessInstanceValue, defs instanceDefs
 		CorrelationKey: v.CorrelationKey,
 		Variables:      []variableView{},
 	}
-	defs.enrich(&r)
+	// A row whose definition is gone (deleted after the instance ran) keeps its keys
+	// and simply carries no labels.
+	if d, ok := defs[r.ProcessDefKey]; ok {
+		r.ProcessID, r.Version, r.VersionTag = d.ProcessID, d.Version, d.VersionTag()
+	}
 	return r
 }
 
@@ -142,7 +111,7 @@ func newInstanceRow(key uint64, v *model.ProcessInstanceValue, defs instanceDefs
 // whole variable set — the operator asked for the instance, not for whichever
 // variables a needle happened to match. Two point reads and one prefix scan of a
 // single scope, so its cost is the instance's size and not the store's.
-func lookupInstanceByKey(rv *state.ReadView, defs instanceDefs, key uint64) (instanceResp, bool, error) {
+func lookupInstanceByKey(rv *state.ReadView, defs defIndex, key uint64) (instanceResp, bool, error) {
 	pi, ok, err := rv.ProcessInstance(key)
 	if err != nil || !ok {
 		return instanceResp{}, false, err
@@ -165,11 +134,11 @@ func lookupInstanceByKey(rv *state.ReadView, defs instanceDefs, key uint64) (ins
 // than every instance in it. Unscoped it is still a full scan: without a value
 // index there is nothing to seek to, which is why the result is capped.
 //
-// It touches no loop-owned state: the view and the definition labels were both
-// taken on the run loop and handed here, which is what lets the walk — the
-// expensive part, and the part whose cost grows with the store — run off the loop
-// without breaking the single-writer invariant (I3, ADR-0157).
-func searchInstances(rv *state.ReadView, defs instanceDefs, defKey uint64, raw string, pred varQuery) ([]instanceResp, error) {
+// It touches no loop-owned state: [Server.readOffLoop] took the view and copied
+// the definition labels on the loop and handed both here, which is what lets the
+// walk — the expensive part, and the part whose cost grows with the store — run
+// off the loop without breaking the single-writer invariant (I3, ADR-0239).
+func searchInstances(rv *state.ReadView, defs defIndex, defKey uint64, raw string, pred varQuery) ([]instanceResp, error) {
 	// A bare instance key is answered without scanning anything. It only wins when
 	// the key actually resolves — and, under a scope, when it resolves to *this*
 	// definition; an ordinary number falls through to the content search below.
@@ -252,11 +221,9 @@ func searchInstances(rv *state.ReadView, defs instanceDefs, defKey uint64, raw s
 // variables are retained, same as the instances list. Content results are capped at
 // maxInstanceSearchResults.
 //
-// The handler visits the run loop once, briefly, to take a read view and copy the
-// definition labels; the reading itself happens on this goroutine against that
-// view. The search therefore no longer stalls the processor for the length of a
-// scan, and what it reports is one consistent state rather than a state that moved
-// underneath it.
+// The reading runs off the run loop through [Server.readOffLoop], so a search no
+// longer stalls the processor for the length of a walk and what it reports is one
+// consistent state rather than a state that moved underneath it.
 func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	var defKey uint64
@@ -274,23 +241,18 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 		httpapi.JSON(w, http.StatusOK, []instanceResp{})
 		return
 	}
-	var (
-		rv   *state.ReadView
-		defs instanceDefs
-	)
-	s.do(func() {
-		rv = s.store.ReadView()
-		defs = s.snapshotInstanceDefs()
+	out := []instanceResp{}
+	scanErr := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+		var err error
+		out, err = searchInstances(rv, defs, defKey, raw, pred)
+		return err
 	})
-	if rv == nil { // the run loop is closing: nothing ran, and there is no answer
-		httpapi.Error(w, http.StatusServiceUnavailable, "server is shutting down")
+	switch {
+	case errors.Is(scanErr, errLoopClosing):
+		httpapi.Error(w, http.StatusServiceUnavailable, scanErr.Error())
 		return
-	}
-	defer func() { _ = rv.Close() }()
-
-	out, err := searchInstances(rv, defs, defKey, raw, pred)
-	if err != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "search instances: "+err.Error())
+	case scanErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "search instances: "+scanErr.Error())
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, out)
