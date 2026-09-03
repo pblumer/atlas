@@ -491,7 +491,7 @@ function editorCrumbs(project, current) {
 }
 
 // The editor bar carries what the author reaches for constantly and a menu for the rest
-// (ADR-0229, revised in one part by ADR-draft-modeler-variables-on-the-bar). It used to
+// (ADR-0229, revised in one part by ADR-0240). It used to
 // carry seven buttons in one weight, which said that re-flowing the diagram and shipping
 // it to a server were the same size of act, and on a narrower window `flex-wrap` dropped
 // a few of them into a second row mid-group.

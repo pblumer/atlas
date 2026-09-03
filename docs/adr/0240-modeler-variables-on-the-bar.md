@@ -1,4 +1,4 @@
-# ADR-DRAFT: Variables stays on the Modeler's bar, as a pressed button with a shortcut
+# ADR-0240: Variables stays on the Modeler's bar, as a pressed button with a shortcut
 
 - **Status:** Accepted
 - **Date:** 2026-09-02

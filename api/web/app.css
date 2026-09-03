@@ -241,7 +241,7 @@ ol.steps li { margin: 6px 0; }
 /* A button that holds a state rather than firing once. The look is drawn from
    `aria-pressed`, so what a screen reader is told and what the eye sees cannot drift
    apart — there is no second class to keep in step
-   (ADR-draft-modeler-variables-on-the-bar).
+   (ADR-0240).
    `.on` is the older, class-driven spelling of the same thing. */
 .btn.neutral.on, .btn.toggle[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .btn.toggle[aria-pressed="false"] { color: var(--muted); }

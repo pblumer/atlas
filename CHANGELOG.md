@@ -1025,7 +1025,7 @@ _Changed_ / _Removed_ for each version.
   same white button. That said they were the same size of decision, which they never
   were: Auto-layout nudges boxes, Deploy puts a definition on a server and cannot be
   taken back ([ADR-0229](docs/adr/0229-modeler-bar-hierarchy.md),
-  [ADR-draft-modeler-variables-on-the-bar](docs/adr/draft-modeler-variables-on-the-bar.md)).
+  [ADR-0240](docs/adr/0240-modeler-variables-on-the-bar.md)).
 
   The bar now carries **Variables**, **Save** and **Deploy**, with Deploy the only filled
   button because it is the only act there that leaves the browser. Token simulation,
