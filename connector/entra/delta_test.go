@@ -50,7 +50,7 @@ func deltaResult(t *testing.T, v any) (ids []string, deltaLink string) {
 
 // A delta query is one result across every page, exactly like a listing — and it ends by
 // handing back the cursor a next run resumes from. Following the pages and capturing that
-// @odata.deltaLink is the connector's job, not something a process models with a loop.
+// @odata.deltaLink is the worker's job, not something a process models with a loop.
 func TestDeltaUsersFollowsPagesAndCapturesTheCursor(t *testing.T) {
 	const next1 = "https://graph.microsoft.com/v1.0/users/delta?$skiptoken=A"
 	const delta = "https://graph.microsoft.com/v1.0/users/delta?$deltatoken=Z"
@@ -101,7 +101,7 @@ func TestDeltaUsersResumesFromTheCursor(t *testing.T) {
 }
 
 // A deletion is a change a leaver flow is watching for. Graph reports it as an item
-// carrying an @removed annotation, so the connector passes the page through as-is rather
+// carrying an @removed annotation, so the worker passes the page through as-is rather
 // than filtering removed objects out — dropping them would hide the very change.
 func TestDeltaPassesRemovedObjectsThrough(t *testing.T) {
 	const delta = "https://graph.microsoft.com/v1.0/users/delta?$deltatoken=Z"

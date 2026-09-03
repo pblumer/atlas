@@ -2,7 +2,7 @@ package mcp_test
 
 // The Worker-oriented HTTP aliases added by ADR-0203 are design-time
 // infrastructure configuration. They intentionally mirror the existing
-// connector administration surface and are not MCP capabilities in this slice.
+// worker administration surface and are not MCP capabilities in this slice.
 // Keep the omission explicit so the HTTP↔MCP drift guard still forces a conscious
 // decision if these routes become agent-facing later.
 func init() {

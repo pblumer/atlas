@@ -241,7 +241,7 @@ func TestGoConnDirSync(t *testing.T) {
 // A server that answers without a DirSync control did not honour the request — most
 // often the bind account cannot replicate directory changes. Returning the entries
 // anyway would hand the process a full directory it believes to be a change set, so
-// the connector refuses instead.
+// the worker refuses instead.
 func TestGoConnDirSyncWithoutTheControl(t *testing.T) {
 	d := startTestDirectory(t, &testDirectory{searchDN: "cn=Arno,dc=x"})
 	conn, err := NewDialer().Dial(d.URL, "cn=svc,dc=x", "pw", false)
@@ -292,7 +292,7 @@ func TestGoConnDirSyncError(t *testing.T) {
 
 // TestGoConnSearch drives the real go-ldap adapter's search against the test
 // directory: the base and the filter cross the wire and the entry comes back in the
-// connector's shape. The Conn fake the worker tests use never reaches this code.
+// worker's shape. The Conn fake the worker tests use never reaches this code.
 func TestGoConnSearch(t *testing.T) {
 	d := startTestDirectory(t, &testDirectory{
 		searchDN:    "cn=Vertrieb,ou=groups,dc=x",
@@ -331,7 +331,7 @@ func TestGoConnSearchUnpagedAndCapped(t *testing.T) {
 	}
 	defer conn.Close()
 
-	// No page size, no filter: the connector's own "(objectClass=*)" goes out.
+	// No page size, no filter: the worker's own "(objectClass=*)" goes out.
 	entries, err := conn.Search(SearchRequest{BaseDN: "dc=x"})
 	if err != nil {
 		t.Fatalf("Search: %v", err)

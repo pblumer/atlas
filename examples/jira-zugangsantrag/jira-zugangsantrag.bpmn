@@ -33,11 +33,11 @@
   begruendung und kommentar in den Formularen Pflichtfelder und nicht optional.
 
   Der Uebergangsname (transitionFertig) steht bewusst im Startformular, nicht im
-  Modell: Der Konnektor loest einen Uebergang nach dem Namen auf, den Jira auf dem
+  Modell: Der Worker loest einen Uebergang nach dem Namen auf, den Jira auf dem
   Knopf zeigt, und der ist pro Workflow verschieden. So laeuft dasselbe Modell
   gegen jedes Projekt.
 
-  Voraussetzung: ein Konnektor namens "jira" unter Console -> Connectors. Siehe
+  Voraussetzung: ein Worker namens "jira" unter Console -> Workers. Siehe
   README.md; zuerst jira-verbindungstest.bpmn laufen lassen.
 
   BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=200, Ablehnungszweig bei y=340.
@@ -50,7 +50,7 @@
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_jira_zugangsantrag" targetNamespace="http://atlas/examples">
   <process id="proc_jira_zugangsantrag" name="Zugangsantrag mit Freigabe (Jira)" isExecutable="true">
-    <documentation>Legt einen Zugangsantrag als Jira-Vorgang an, holt eine menschliche Freigabe in Atlas ein und schaltet den Vorgang weiter oder vermerkt die Ablehnung. Startvariablen kommen aus dem Formular za-antrag; der Konnektor heisst "jira".</documentation>
+    <documentation>Legt einen Zugangsantrag als Jira-Vorgang an, holt eine menschliche Freigabe in Atlas ein und schaltet den Vorgang weiter oder vermerkt die Ablehnung. Startvariablen kommen aus dem Formular za-antrag; der Worker heisst "jira".</documentation>
 
     <startEvent id="start" name="Antrag eingegangen">
       <extensionElements>
@@ -60,7 +60,7 @@
     </startEvent>
 
     <serviceTask id="anlegen" name="Jira-Vorgang anlegen">
-      <documentation>Jira-Konnektor, create-issue. Projekt und Vorgangstyp kommen als FEEL aus dem Startformular, damit dasselbe Modell gegen jedes Projekt laeuft. resultVariable schreibt die Antwort ({id, key, self}) nach "ticket"; alle spaeteren Schritte adressieren den Vorgang als =ticket.key. Das Label atlas-demo ist eine FEEL-Liste und bleibt eine Liste — der Konnektor entscheidet die JSON-Form an der Art des Werts, nicht am Aussehen seines Textes.</documentation>
+      <documentation>Jira-Worker, create-issue. Projekt und Vorgangstyp kommen als FEEL aus dem Startformular, damit dasselbe Modell gegen jedes Projekt laeuft. resultVariable schreibt die Antwort ({id, key, self}) nach "ticket"; alle spaeteren Schritte adressieren den Vorgang als =ticket.key. Das Label atlas-demo ist eine FEEL-Liste und bleibt eine Liste — der Worker entscheidet die JSON-Form an der Art des Werts, nicht am Aussehen seines Textes.</documentation>
       <extensionElements>
         <atlas:jiraConnector connector="jira" operation="create-issue"
           project="=jiraProjekt"
@@ -92,7 +92,7 @@
     </exclusiveGateway>
 
     <serviceTask id="abschliessen" name="Vorgang abschliessen">
-      <documentation>Jira-Konnektor, transition-issue. Der Uebergang wird mit dem Namen angegeben, den Jira auf dem Knopf zeigt — der Konnektor loest dessen id vorher auf, damit das Modell nicht an einer Workflow-Konfiguration haengt. Der Kommentar reist im selben Aufruf mit: Jira traegt ihn als Notiz am Uebergang ein, das spart einen zweiten Task. Diese Operation gibt nichts zurueck (204), deshalb hat sie bewusst keine resultVariable — der Compiler wuerde eine auch abweisen.</documentation>
+      <documentation>Jira-Worker, transition-issue. Der Uebergang wird mit dem Namen angegeben, den Jira auf dem Knopf zeigt — der Worker loest dessen id vorher auf, damit das Modell nicht an einer Workflow-Konfiguration haengt. Der Kommentar reist im selben Aufruf mit: Jira traegt ihn als Notiz am Uebergang ein, das spart einen zweiten Task. Diese Operation gibt nichts zurueck (204), deshalb hat sie bewusst keine resultVariable — der Compiler wuerde eine auch abweisen.</documentation>
       <extensionElements>
         <atlas:jiraConnector connector="jira" operation="transition-issue"
           issueKey="=ticket.key"
@@ -104,7 +104,7 @@
     </serviceTask>
 
     <serviceTask id="ablehnen" name="Ablehnung vermerken">
-      <documentation>Jira-Konnektor, add-comment. Bewusst kein Uebergang: Eine Ablehnung schliesst den Vorgang nicht, sie haelt fest, warum nicht freigegeben wurde, und laesst ihn fuer einen Menschen offen. Welcher Uebergang eine Ablehnung in einem fremden Jira-Workflow waere, weiss dieses Modell ohnehin nicht.</documentation>
+      <documentation>Jira-Worker, add-comment. Bewusst kein Uebergang: Eine Ablehnung schliesst den Vorgang nicht, sie haelt fest, warum nicht freigegeben wurde, und laesst ihn fuer einen Menschen offen. Welcher Uebergang eine Ablehnung in einem fremden Jira-Workflow waere, weiss dieses Modell ohnehin nicht.</documentation>
       <extensionElements>
         <atlas:jiraConnector connector="jira" operation="add-comment"
           issueKey="=ticket.key"

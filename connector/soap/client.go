@@ -1,11 +1,11 @@
 // Package soap integrates a SOAP / Web Services (WSDL) endpoint as a service-task
-// connector: a BPMN SOAP connector task invokes an operation — reading identities
+// worker: a BPMN SOAP task invokes an operation — reading identities
 // (import) or provisioning accounts (outbound) — against a model-authored web-service
 // endpoint through the job path (ADR-0165), the same seam the rest package uses for a
 // generic HTTP call (ADR-0067). It inherits the job protocol's durability and
 // non-blocking properties (ADR-0007):
 //
-//   - A SOAP connector task creates a job carrying the reserved
+//   - A SOAP task creates a job carrying the reserved
 //     [compiler.SoapJobType]. The processor never performs the outbound call itself,
 //     so it stays allocation-free (invariant I1) and free of any HTTP/XML dependency.
 //   - The in-process [Handler] — a job worker — pulls those jobs, wraps the authored
@@ -17,7 +17,7 @@
 // Like REST, a SOAP task authors its endpoint, operation, and request body in the
 // model; credentials are never authored there — authentication (basic/bearer/apiKey)
 // names a server-side secret the worker resolves at runtime (ADR-0041/0067), so a
-// credential never appears in a BPMN file. The connector is deliberately generic — a
+// credential never appears in a BPMN file. The worker is deliberately generic — a
 // WSDL-based client for legacy SOAP services: it does not bind a WSDL at deploy time
 // but wraps the model-authored operation payload in a SOAP 1.1 or 1.2 envelope,
 // carries the SOAPAction, and turns a SOAP Fault (faultcode/faultstring, or the 1.2
@@ -26,7 +26,7 @@
 // Delivery is at-least-once (a crash between "the service accepted the call" and "job
 // completed" replays the request); a provisioning operation should therefore be
 // idempotent on the service side, or correlate on a business key carried in the body,
-// exactly as any other connector's retried call must (ADR-0007/0149).
+// exactly as any other worker's retried call must (ADR-0007/0149).
 package soap
 
 import (
@@ -41,7 +41,7 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
-// Request is one SOAP call a connector task makes. Endpoint is the resolved service
+// Request is one SOAP call a task makes. Endpoint is the resolved service
 // URL; Operation is the operation name (used in diagnostics); Action is the SOAPAction
 // (a header for 1.1, a Content-Type parameter for 1.2); Version is "1.1" or "1.2";
 // Body is the XML payload placed inside the envelope's <soap:Body> (the operation's
@@ -79,8 +79,8 @@ type HTTPClient struct {
 	http *http.Client
 }
 
-// NewHTTPClient builds a SOAP HTTP client bounded by the shared connector call budget
-// (nettimeout.HTTPClient), like the REST connector: the worker runs on the run-loop
+// NewHTTPClient builds a SOAP HTTP client bounded by the shared worker call budget
+// (nettimeout.HTTPClient), like the REST worker: the worker runs on the run-loop
 // goroutine, so an unbounded call would stall the whole engine (ADR-0149).
 func NewHTTPClient() *HTTPClient {
 	return &HTTPClient{http: nettimeout.HTTPClient()}

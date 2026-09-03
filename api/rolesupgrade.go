@@ -17,7 +17,7 @@ import (
 // Hence: an account that predates the model keeps exactly what it had, spelled out
 // as the three roles that say it, and narrowing is then an operator's deliberate
 // act on a screen. That is the opposite of what ADR-0205 chose for ownerless
-// connectors, and the difference is the point — there the old behaviour was a hole
+// workers, and the difference is the point — there the old behaviour was a hole
 // that a grandfathering rule would have left open, here it is a documented,
 // accepted risk (R-04) on installations that are running work.
 
@@ -70,7 +70,7 @@ func (s *Server) upgradeLegacyRoles(now int64) error {
 	}
 	// A standing OAuth approval carries its own snapshot of the person's roles
 	// (ADR-0200), and the maintenance that keeps it honest is exactly this: a role
-	// change rewrites it. Skipping that would leave somebody's connector able to do
+	// change rewrites it. Skipping that would leave somebody's worker able to do
 	// less than they can, for a change they never made.
 	if err := s.refreshGrantRoles(upgraded); err != nil {
 		return err

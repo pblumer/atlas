@@ -57,7 +57,7 @@ const (
 type SuperviseSpec struct {
 	ID    string
 	Kinds []string
-	// Connectors are built-in connector kinds this worker serves (--connector on the
+	// Workers are built-in Worker Types this worker serves (--connector on the
 	// child). A worker may serve these, model-authored job types, or both.
 	Connectors []string
 }
@@ -79,7 +79,7 @@ type child struct {
 	spec SuperviseSpec
 	args []string
 	// env adds to the environment the child inherits, evaluated at every spawn so a
-	// connector added in the Console is picked up by pressing Restart rather than by
+	// worker added in the Console is picked up by pressing Restart rather than by
 	// restarting Atlas. nil means the child inherits this process's environment
 	// unchanged, which is every worker an operator configured by hand.
 	env func() []string
@@ -211,8 +211,8 @@ func (s *supervisor) supervise(c *child) {
 func (s *supervisor) runOnce(c *child, stop <-chan struct{}) error {
 	cmd := exec.Command(s.exe, c.args...)
 	// The child inherits this process's environment and is handed the configuration
-	// for the connector kinds it serves on top of it. Reading it here rather than at
-	// registration is what makes the console's Restart button pick up a connector
+	// for the Worker Types it serves on top of it. Reading it here rather than at
+	// registration is what makes the console's Restart button pick up a worker
 	// added since the server started.
 	var extra []string
 	if c.env != nil {
@@ -263,7 +263,7 @@ func (s *supervisor) runOnce(c *child, stop <-chan struct{}) error {
 }
 
 // exitNothingToServe is the status `atlas worker` leaves when it holds no handler at
-// all — a mail worker on a server with no mail connector configured yet. It is a
+// all — a mail worker on a server with no mail worker configured yet. It is a
 // state, not a crash, and the distinction is the whole reason the worker spends an
 // exit code on it: restarting such a worker only re-runs it into the same emptiness,
 // which is a backoff loop that never converges and a console full of red.
@@ -388,13 +388,13 @@ func (s *supervisor) restart(id string) error {
 }
 
 // refresh restarts every supervised worker whose configuration has changed since it
-// was spawned. An operator who adds a mail connector in the Console means for it to
+// was spawned. An operator who adds a mail worker in the Console means for it to
 // work, and the worker holding the old set would leave them pressing Restart to find
 // out why it does not.
 //
 // It restarts on a *difference*, not on the fact that something was saved: editing a
-// clio connector must not cycle the mail worker, and neither must saving a mail
-// connector without changing anything the worker holds. Nothing is restarted before
+// clio worker must not cycle the mail worker, and neither must saving a mail
+// worker without changing anything the worker holds. Nothing is restarted before
 // its first start, so this cannot fight the initial launch.
 //
 // It runs OFF the run loop, because reading a worker's configuration goes onto it.

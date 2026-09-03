@@ -13,7 +13,7 @@ import (
 )
 
 // clioWriteBPMN is a Start → clio write-events service task → End process. The task
-// bears an <atlas:clioConnector> extension naming the server-registered connector
+// bears an <atlas:clioConnector> extension naming the server-registered worker
 // "events", so it appends to whatever clio instance the operator configures under
 // that name (ADR-0036).
 const clioWriteBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -33,10 +33,10 @@ const clioWriteBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524
 
 // TestServerExecutesClioConnector is the end-to-end proof of the clio wiring: a
 // deployed clio write task parks (raising an incident) until an operator configures
-// the "events" connector in the Console, then a new instance appends to the
-// configured clio instance (a fake here) and runs to completion — the clio connector
+// the "events" worker in the Console, then a new instance appends to the
+// configured clio instance (a fake here) and runs to completion — the clio worker
 // worker is driven on the run loop exactly like the temis and DMN workers, and its
-// endpoint token is resolved from the connector store.
+// endpoint token is resolved from the worker store.
 func TestServerExecutesClioConnector(t *testing.T) {
 	var calls int32
 	var gotSubject, gotAuth string
@@ -58,7 +58,7 @@ func TestServerExecutesClioConnector(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// The connector's token is a reference resolved from the environment (ADR-0041).
+	// The worker's token is a reference resolved from the environment (ADR-0041).
 	t.Setenv("ATLAS_CONNECTOR_EVENTS_CRED_TOKEN", "s3cr3t")
 
 	srv, _ := newValidateServer(t)
@@ -88,35 +88,35 @@ func TestServerExecutesClioConnector(t *testing.T) {
 		return len(r.Incidents)
 	}
 
-	// No connector yet → the write task can't run, so a new instance raises an incident.
+	// No worker yet → the write task can't run, so a new instance raises an incident.
 	runInstance()
 	if incidents() == 0 {
-		t.Fatal("before configuring the connector: want an incident (clio write can't run)")
+		t.Fatal("before configuring the worker: want an incident (clio write can't run)")
 	}
 
-	// Configure the "events" connector in the Console → a new instance now appends.
+	// Configure the "events" worker in the Console → a new instance now appends.
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"events","kind":"clio","endpoint":"`+ts.URL+`","credentialsRef":"events_cred"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 	before := incidents()
 	callsBefore := atomic.LoadInt32(&calls)
 	runInstance()
 	if atomic.LoadInt32(&calls) == callsBefore {
-		t.Fatal("after configuring the connector: clio was never called")
+		t.Fatal("after configuring the worker: clio was never called")
 	}
 	if gotSubject != "/orders/new" {
 		t.Errorf("event subject = %q, want /orders/new (clio subjects are absolute)", gotSubject)
 	}
 	if gotAuth != "Bearer s3cr3t" {
-		t.Errorf("Authorization = %q, want the token resolved from the connector ref", gotAuth)
+		t.Errorf("Authorization = %q, want the token resolved from the worker ref", gotAuth)
 	}
 	if incidents() != before {
-		t.Fatalf("after configuring the connector: incidents changed %d→%d, want the write to execute", before, incidents())
+		t.Fatalf("after configuring the worker: incidents changed %d→%d, want the write to execute", before, incidents())
 	}
 }
 
-// TestBuildClioClients covers the managed-connector → client build: only enabled
+// TestBuildClioClients covers the configured-worker → client build: only enabled
 // records of kind "clio" with a non-empty endpoint become clients, and the token is
 // resolved from the credential reference.
 func TestBuildClioClients(t *testing.T) {
@@ -136,7 +136,7 @@ func TestBuildClioClients(t *testing.T) {
 		t.Fatalf("clients = %d, want 1 (only the enabled clio record)", len(clients))
 	}
 	if _, ok := clients["on"]; !ok {
-		t.Errorf("clients = %v, want the 'on' connector", clients)
+		t.Errorf("clients = %v, want the 'on' worker", clients)
 	}
 }
 
@@ -149,8 +149,8 @@ func TestBuildClioClientsLoadError(t *testing.T) {
 	}
 }
 
-// TestClioConnectorListNoSecret proves a configured clio connector lists without its
-// secret material (only the reference), like every managed connector.
+// TestClioConnectorListNoSecret proves a configured clio worker lists without its
+// secret material (only the reference), like every managed worker.
 func TestClioConnectorListNoSecret(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	h := srv.Handler()
@@ -159,13 +159,13 @@ func TestClioConnectorListNoSecret(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, post)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("create clio connector: %d %s", rec.Code, rec.Body)
+		t.Fatalf("create clio worker: %d %s", rec.Code, rec.Body)
 	}
 	list := httptest.NewRequest(http.MethodGet, "/api/v1/connectors", nil)
 	lrec := httptest.NewRecorder()
 	h.ServeHTTP(lrec, list)
 	body := lrec.Body.String()
 	if !strings.Contains(body, `"kind":"clio"`) || strings.Contains(body, "token") {
-		t.Fatalf("connector list = %s, want the clio record and no secret", body)
+		t.Fatalf("worker list = %s, want the clio record and no secret", body)
 	}
 }

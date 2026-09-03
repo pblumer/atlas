@@ -11,7 +11,7 @@ import (
 // The OAuth clients an operator has registered (ADR-0200).
 //
 // A client here is an application allowed to ask a person for access — a hosted
-// MCP connector above all. It is not a credential a machine authenticates with on
+// MCP worker above all. It is not a credential a machine authenticates with on
 // its own: holding the client secret lets you *start* an authorization, not reach
 // anything. What reaches anything is the token a person's approval produces, and
 // that is a grant (oauthgrantstore.go).

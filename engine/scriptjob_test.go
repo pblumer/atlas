@@ -29,7 +29,7 @@ func scriptJobProcess(t *testing.T, key uint64) (*compiler.CompiledProcess, int3
 // through the engine: on activation it creates a job carrying the reserved
 // PowerShell job type and parks, and completing that job — what the script worker
 // does in production — drives the token onward, exactly like a service or
-// connector task (ADR-0047). It exercises the behavior without the worker.
+// task (ADR-0047). It exercises the behavior without the worker.
 func TestScriptJobTaskJobLifecycle(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)

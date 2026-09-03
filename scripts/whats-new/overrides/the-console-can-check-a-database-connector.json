@@ -14,13 +14,13 @@
   },
   "tutorial": {
     "en": [
-      "Go to Console › Connectors and add a connector of kind SQL Server (or open an existing one with Edit).",
+      "Go to Console › Workers and add a connector of kind SQL Server (or open an existing one with Edit).",
       "Paste the connection string into Connection string — for an existing connector it is already sealed, so leave the credential reference as it is.",
       "Press Test connection. Nothing is saved by pressing it.",
       "Read the answer: it names the database and the login that answered, never the password, and says plainly that no statement was run."
     ],
     "de": [
-      "Gehen Sie zu Console › Connectors und legen Sie einen Connector der Art SQL Server an (oder öffnen Sie einen bestehenden mit Edit).",
+      "Gehen Sie zu Console › Workers und legen Sie einen Connector der Art SQL Server an (oder öffnen Sie einen bestehenden mit Edit).",
       "Fügen Sie die Verbindungszeichenfolge unter Connection string ein — bei einem bestehenden Connector ist sie bereits versiegelt, lassen Sie die Referenz einfach stehen.",
       "Drücken Sie „Test connection\". Durch das Drücken wird nichts gespeichert.",
       "Lesen Sie die Antwort: Sie nennt Datenbank und Login, die geantwortet haben, nie das Passwort — und sagt deutlich, dass keine Anweisung ausgeführt wurde."
@@ -28,9 +28,9 @@
   },
   "try": {
     "label": {
-      "en": "Open Connectors",
-      "de": "Connectors öffnen"
+      "en": "Open Workers",
+      "de": "Workers öffnen"
     },
-    "route": "#/console/connectors"
+    "route": "#/console/workers"
   }
 }

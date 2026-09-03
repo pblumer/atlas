@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:restConnector> extension is an HTTP-REST
-// connector task (ADR-0067): it calls the model-authored URL via the job path
+// task (ADR-0067): it calls the model-authored URL via the job path
 // rather than delegating to an external service-task worker.
 const restConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -57,7 +57,7 @@ func TestParseRestConnectorTask(t *testing.T) {
 	}
 }
 
-// A REST connector task with no method defaults to GET, and no result variable is
+// A REST task with no method defaults to GET, and no result variable is
 // allowed (the response is discarded).
 func TestParseRestConnectorDefaults(t *testing.T) {
 	const noMethod = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -89,7 +89,7 @@ func TestParseRestConnectorDefaults(t *testing.T) {
 }
 
 func TestParseRestConnectorErrors(t *testing.T) {
-	// A REST connector task missing its url fails to compile.
+	// A REST task missing its url fails to compile.
 	const missingURL = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas.dev/schema/1.0">
   <bpmn:process id="p">
@@ -105,7 +105,7 @@ func TestParseRestConnectorErrors(t *testing.T) {
   </bpmn:process>
 </bpmn:definitions>`
 	if _, err := Parse(1, 1, strings.NewReader(missingURL)); err == nil {
-		t.Fatal("Parse: want an error for a rest connector task missing url, got nil")
+		t.Fatal("Parse: want an error for a rest task missing url, got nil")
 	}
 
 	// An unsupported HTTP method fails to compile.
@@ -128,7 +128,7 @@ func TestParseRestConnectorErrors(t *testing.T) {
 	}
 }
 
-// A REST connector task carries request headers, query parameters, and
+// A REST task carries request headers, query parameters, and
 // authentication (ADR-0067). Headers/query compile to canonical JSON objects; auth
 // compiles to a JSON object that references a server-side secret, never a value.
 func TestParseRestConnectorHeadersQueryAuth(t *testing.T) {

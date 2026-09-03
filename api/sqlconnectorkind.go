@@ -15,7 +15,7 @@ import (
 // A SQL database an operator configures in the Console, and how its connection string
 // reaches the worker that uses it.
 //
-// [ADR-0173] decided the opposite of this: a SQL connector is worker-only, and its DSN
+// [ADR-0173] decided the opposite of this: a SQL worker is worker-only, and its DSN
 // lives in the worker's environment because the engine must never hold a database
 // credential. That decision stands for every worker somebody else runs — an external
 // worker still reads its own environment and is handed nothing from here. What this
@@ -91,17 +91,17 @@ func (s *Server) sqlCredentialProblemLocked(p *createConnectorParams) string {
 	if p.CredentialsRef != "" || s.sqlMockEnabledLocked() {
 		return ""
 	}
-	return "a SQL connector requires a connectionString to seal, or a credentialsRef naming one already in the vault"
+	return "a SQL worker requires a connectionString to seal, or a credentialsRef naming one already in the vault"
 }
 
-// sqlDSNRef is the vault key a connector's connection string is sealed under when the
+// sqlDSNRef is the vault key a worker's connection string is sealed under when the
 // operator pastes one into the Console instead of naming a key themselves. It is
-// derived from the record id rather than the name so that renaming a connector cannot
-// orphan its secret, and so two connectors can never collide on one key.
+// derived from the record id rather than the name so that renaming a worker cannot
+// orphan its secret, and so two workers can never collide on one key.
 func sqlDSNRef(id string) string { return "sql/" + id + "/dsn" }
 
 // redactedSQLTarget derives the address half of a connection string, for the Console
-// to show which database a connector points at. A connector whose whole configuration
+// to show which database a worker points at. A worker whose whole configuration
 // is one secret would otherwise be an opaque name, and "is this the test database or
 // the production one" is exactly the question an operator needs answered before they
 // point a process at it.
@@ -148,7 +148,7 @@ func (s *Server) sqlWorkerEnvByName(kind string) []string {
 // whose DSN the operator set directly on the host wins: overriding it would let a
 // stale vault entry silently beat an explicit choice.
 //
-// It reads the connector store and the vault, so it runs on the run-loop goroutine
+// It reads the worker store and the vault, so it runs on the run-loop goroutine
 // (their owner), like mailWorkerEnv and entraWorkerEnv do.
 func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 	// The variable names are the product's own (sqldb.Product), not assembled here:
@@ -217,7 +217,7 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 		}
 		recs, err := s.connectors.LoadAll()
 		if err != nil {
-			logging.Warn(logging.WorkerSupervisorFailed, "could not read the connector store for a supervised SQL worker",
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the worker store for a supervised SQL worker",
 				slog.String("product", p.Name), slog.String("error", err.Error()))
 			return
 		}
@@ -235,7 +235,7 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 			// credential — the mail/Entra collision, refused here for the same reason.
 			if first, dup := taken[envKey]; dup {
 				logging.Warn(logging.WorkerSupervisorFailed,
-					"two SQL connectors share one environment name; the second is not handed to the supervised worker",
+					"two SQL workers share one environment name; the second is not handed to the supervised worker",
 					slog.String("connector", c.Name), slog.String("collidesWith", first))
 				continue
 			}
@@ -262,14 +262,14 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 			if dsn == "" {
 				// A record whose secret is not set yet (or was deleted) is left out
 				// rather than handed over empty: the worker then simply does not build
-				// that database, and the Console shows the connector as
+				// that database, and the Console shows the worker as
 				// configured-not-working instead of a job failing mid-run.
 				//
 				// Its name must be left out of CONNECTORS too, and that is not
 				// cosmetic: a name the worker is told to serve with no DSN behind it is
 				// precisely the misconfiguration it refuses to start on. Adding the
-				// name here would turn "this connector has no secret yet" — the state
-				// every connector passes through while it is being set up — into a
+				// name here would turn "this worker has no secret yet" — the state
+				// every worker passes through while it is being set up — into a
 				// worker that will not boot.
 				continue
 			}
@@ -284,7 +284,7 @@ func (s *Server) sqlWorkerEnv(p sqldb.Product) []string {
 	return append(env, connectorsVar+"="+strings.Join(names, ","))
 }
 
-// sqlConnectorProblem reports why a configured SQL connector is not usable, so the
+// sqlConnectorProblem reports why a configured SQL worker is not usable, so the
 // Console can say "stored but not working" instead of leaving it to a task that parks
 // (ADR-0158). The engine builds no client for these kinds, so unlike the managed kinds
 // there is no registry to miss from — what can be checked is the record itself and
@@ -305,10 +305,10 @@ func (s *Server) sqlConnectorProblem(kind, name string) (string, bool) {
 			continue
 		}
 		if !c.Enabled {
-			return "the connector is disabled", true
+			return "the worker is disabled", true
 		}
 		if strings.TrimSpace(s.resolveConnectorSecret(c.CredentialsRef)) == "" {
-			return "no connection string is stored for this connector", true
+			return "no connection string is stored for this worker", true
 		}
 		return "", false
 	}
@@ -322,13 +322,13 @@ func (s *Server) sqlConnectorProblem(kind, name string) (string, bool) {
 // never executes them — links none of them. A check therefore cannot call sql.Open
 // here; it is handed in by whoever assembles the binary, which for the single binary
 // (ADR-0011) is the same process that runs workers. An embedder who wires nothing gets
-// a check that says it cannot run, which is honest, rather than a connector reported
+// a check that says it cannot run, which is honest, rather than a worker reported
 // broken because a driver was absent.
 //
 // [ADR-0173]: https://github.com/pblumer/atlas/blob/main/docs/adr/0173-generic-sql-connector.md
 type SQLProbe func(ctx context.Context, product sqldb.Product, dsn string) error
 
-// WithSQLProbe gives this server a way to check a SQL connector's connection string
+// WithSQLProbe gives this server a way to check a SQL worker's connection string
 // (ADR-0220). Pass worker.ProbeSQL, which opens the
 // product's driver and pings it.
 //
@@ -341,7 +341,7 @@ func WithSQLProbe(p SQLProbe) Option { return func(s *Server) { s.sqlProbe = p }
 //
 // What is being dialled is the operator's own database with the operator's own
 // credential, at the moment they ask — not process work. The engine already holds this
-// connection string for a Console-managed connector (ADR-0188 decided that, so the
+// connection string for a Console-managed worker (ADR-0188 decided that, so the
 // supervised worker can be handed it), so what is new here is only the dial, on a
 // click, from the process the operator is already talking to. ADR-0173's promise —
 // that no *model* and no external worker's credential passes through the engine — is
@@ -352,7 +352,7 @@ func WithSQLProbe(p SQLProbe) Option { return func(s *Server) { s.sqlProbe = p }
 func (s *Server) checkSQLConnector(ctx context.Context, product sqldb.Product, dsn string) (bool, string) {
 	if s.sqlProbe == nil {
 		return false, "This server cannot check a database connection: it was built without a database driver. " +
-			"The connector still works on a worker that has one."
+			"The worker still works on a worker that has one."
 	}
 	if err := s.sqlProbe(ctx, product, dsn); err != nil {
 		return false, err.Error()

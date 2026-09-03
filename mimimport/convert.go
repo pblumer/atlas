@@ -369,7 +369,7 @@ func classifyLeaf(local string) (kind, jobType string, status Status, detail str
 		return "serviceTask", "mim-powershell", StatusPreserved, "PowerShell activity kept in atlas:mimSource; wire a PowerShell worker"
 	case strings.Contains(l, "resource"), strings.Contains(l, "create"), strings.Contains(l, "update"),
 		strings.Contains(l, "delete"), strings.Contains(l, "group"), strings.Contains(l, "provision"):
-		return "serviceTask", "mim-resource", StatusPreserved, "resource operation kept in atlas:mimSource; map to a target-system connector"
+		return "serviceTask", "mim-resource", StatusPreserved, "resource operation kept in atlas:mimSource; map to a target-system worker"
 	case strings.Contains(l, "code"):
 		return "serviceTask", "mim-code", StatusPreserved, "WF CodeActivity kept in atlas:mimSource; reimplement as a worker"
 	default:

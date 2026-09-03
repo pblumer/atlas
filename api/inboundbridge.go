@@ -41,7 +41,7 @@ func (s *Server) inboundBridge(every time.Duration) {
 }
 
 // pendingSub is one enabled subscription resolved for a poll: its record, the reader
-// for its connector's kind, that kind's name (which composes the engine's source id),
+// for its worker's kind, that kind's name (which composes the engine's source id),
 // and its compiled correlation-key expression (nil when the subscription is keyless).
 type pendingSub struct {
 	rec    inboundSubscription
@@ -115,7 +115,7 @@ func (s *Server) pollInbound(ctx context.Context) {
 			continue // over the ceiling: the watch is off and the cursor stays put
 		}
 		// A correlated message can start or advance an instance straight into a
-		// connector task, so the driving happens off the run loop (ADR-0157 step 6).
+		// task, so the driving happens off the run loop (ADR-0157 step 6).
 		// The cursor only advances once that succeeded; otherwise it is left where it
 		// was and the events are re-read next tick, which the engine dedupes.
 		if err := s.drive(); err != nil {
@@ -146,6 +146,14 @@ func (s *Server) inboundNow() time.Time {
 // trip and a Jira search. A minute is the latency the record accepts in exchange.
 const jiraDefaultPoll = 60 * time.Second
 
+// googleDefaultPoll is the cadence a Google watch is read at when it states none of its
+// own. Google bills and rate-limits per project, and both reads are whole-collection
+// reads — a row watch returns the entire range every time, a folder watch a page of the
+// folder — so the bridge's own two-second tick would spend a day's quota on answers that
+// say nothing changed. A minute is the latency the record accepts in exchange, and it is
+// a knob on the watch for the folder somebody really does need read faster.
+const googleDefaultPoll = 60 * time.Second
+
 // inboundCadence is how often a watch is read: its own pollSeconds, or its kind's
 // default when it states none — which is what the field has always documented itself to
 // mean. Zero means "every tick", which is what a clio read is cheap enough for and what
@@ -154,8 +162,11 @@ func inboundCadence(kind string, rec inboundSubscription) time.Duration {
 	if rec.PollSeconds > 0 {
 		return time.Duration(rec.PollSeconds) * time.Second
 	}
-	if kind == connectorKindJira {
+	switch kind {
+	case connectorKindJira:
 		return jiraDefaultPoll
+	case connectorKindGoogleSheets:
+		return googleDefaultPoll
 	}
 	return 0
 }
@@ -290,8 +301,8 @@ func (s *Server) markInboundPrimed(subID, lastEventID string, primed bool) {
 	_ = s.inboundSubs.Save(rec)
 }
 
-// resolveInboundSubs loads the enabled subscriptions whose connector is an enabled
-// clio connector with a live client, compiling each correlation key. It reads the
+// resolveInboundSubs loads the enabled subscriptions whose worker is an enabled
+// clio worker with a live client, compiling each correlation key. It reads the
 // stores, so it runs on the run-loop goroutine.
 func (s *Server) resolveInboundSubs() []pendingSub {
 	recs, err := s.inboundSubs.LoadAll()
@@ -315,7 +326,7 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 		if !ok || !c.Enabled {
 			continue
 		}
-		// The connector's kind is the discriminator: a watch record carries no kind of
+		// The worker's kind is the discriminator: a watch record carries no kind of
 		// its own, so a clio subscription written before jira watches existed needs no
 		// migration to keep meaning what it meant (ADR-0214).
 		var src inboundSource
@@ -332,8 +343,21 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 				continue
 			}
 			src = jiraSource{client: client, now: s.inboundNow}
+		case connectorKindGoogleSheets:
+			client, ok := s.googleSheetsRegistry.Client(c.Name)
+			if !ok {
+				continue
+			}
+			// Which of the two Google watches this is follows from the target the
+			// subscription names, which the create endpoint has already held to exactly
+			// one (ADR-0234).
+			if strings.TrimSpace(r.FolderID) != "" {
+				src = driveFolderSource{client: client, now: s.inboundNow}
+			} else {
+				src = sheetRowSource{client: client}
+			}
 		default:
-			continue // a kind with no inbound half; its connector is outbound only
+			continue // a kind with no inbound half; its worker is outbound only
 		}
 		var compiled *expr.Compiled
 		if strings.TrimSpace(r.CorrelationKey) != "" {
@@ -424,7 +448,7 @@ func eventVars(fields map[string]any) []model.VariableValue {
 }
 
 // inboundVarKind maps an expr value kind to the stored variable kind (mirrors the
-// connector workers' mapping so the enums evolve independently).
+// workers' mapping so the enums evolve independently).
 func inboundVarKind(k expr.ValueKind) model.VarKind {
 	switch k {
 	case expr.KindBool:

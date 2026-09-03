@@ -15,16 +15,16 @@ import (
 )
 
 // ProcessLookup resolves a process-definition key to its compiled process. The worker
-// uses it to find the connector name, operation and authored values a Jira job belongs
+// uses it to find the worker name, operation and authored values a Jira job belongs
 // to, so one handler serves every deployed process.
 type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
-// Handler builds a job handler that performs a Jira connector task. Register it with a
+// Handler builds a job handler that performs a Jira worker task. Register it with a
 // [job.Runner] under the reserved [compiler.JiraJobTypeIndex] via HandleWithOutput; the
 // runner then pulls activatable Jira jobs, and for each the handler resolves the task's
-// connector and authored values from the compiled process — evaluating any FEEL value
+// worker and authored values from the compiled process — evaluating any FEEL value
 // over the variables the task sees, up its scope chain (the fx toggle, ADR-0067/0068) —
-// resolves the named connector's client from reg, performs the one operation, and
+// resolves the named worker's client from reg, performs the one operation, and
 // (when the task names a result variable and Jira returned something) returns what Jira
 // answered as that variable to be written back on completion.
 //
@@ -70,7 +70,7 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Output
 // processInstanceKey — which is what puts a traceable back-reference into an issue.
 const builtinProcessInstanceKey = "processInstanceKey"
 
-// resolveValue turns an authored connector value into a string: a literal verbatim, or
+// resolveValue turns an authored worker value into a string: a literal verbatim, or
 // a FEEL expression evaluated over the scope's variables and coerced to its string
 // form. A FEEL null — an absent variable or a failed evaluation — becomes the empty
 // string, matching the engine's null-propagating contract (as the REST and SharePoint

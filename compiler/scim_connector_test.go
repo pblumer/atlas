@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// A service task bearing an <atlas:scimConnector> extension is a SCIM 2.0 connector
+// A service task bearing an <atlas:scimConnector> extension is a SCIM 2.0 worker
 // task (ADR-0153): it performs a resource operation against the model-authored SCIM
 // service provider via the job path rather than delegating to an external
 // service-task worker.

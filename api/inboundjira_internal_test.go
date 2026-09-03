@@ -30,7 +30,7 @@ func (f *fakeJiraClient) Do(_ context.Context, req jira.Request) (any, error) {
 	return page, nil
 }
 
-// jiraIssue builds the shape the connector's search returns.
+// jiraIssue builds the shape the worker's search returns.
 func jiraIssue(id, key, created, updated string) map[string]any {
 	var issue map[string]any
 	_ = json.Unmarshal([]byte(`{

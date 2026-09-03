@@ -147,7 +147,7 @@ func TestValidateReportsAnUnresolvedType(t *testing.T) {
 
 // TestDeployWarnsAboutDataFlow pins that the same findings reach a deploy — and
 // that they are warnings: a model is routinely deployed before the vocabulary it
-// names exists, exactly as it is deployed before its connectors do.
+// names exists, exactly as it is deployed before its workers do.
 func TestDeployWarnsAboutDataFlow(t *testing.T) {
 	ts := newTestServer(t)
 	appID := newApplicationWithOrderClass(t, ts)

@@ -5,7 +5,7 @@ import (
 )
 
 // inboundSubscription is an operator-configured inbound event binding for a clio
-// connector (ADR-0075): the bridge watches WatchedSubject on the connector's clio
+// worker (ADR-0075): the bridge watches WatchedSubject on the worker's clio
 // instance and republishes each new event as an Atlas message named MessageName,
 // correlated on CorrelationKey (a FEEL expression over the event body; empty =
 // keyless), so the event both starts message-start processes and wakes waiting
@@ -15,7 +15,7 @@ import (
 // high-water mark (ADR-0075), not by this cursor, so losing it re-reads harmlessly.
 type inboundSubscription struct {
 	ID             string `json:"id"`
-	ConnectorID    string `json:"connectorId"`    // FK → a kind:"clio" connector record
+	ConnectorID    string `json:"connectorId"`    // FK → a kind:"clio" worker record
 	WatchedSubject string `json:"watchedSubject"` // clio subject path, e.g. "orders/new"
 	Recursive      bool   `json:"recursive"`      // include the subject's subtree
 	MessageName    string `json:"messageName"`    // published Atlas message name
@@ -33,8 +33,8 @@ type inboundSubscription struct {
 	Primed       bool `json:"primed,omitempty"`
 
 	// The fields below belong to a jira watch (ADR-0214). Which set applies is decided
-	// by the *connector's* kind, not by a discriminator stored here: resolveInboundSubs
-	// already loads the connector record, so the kind it names is the discriminator and
+	// by the *worker's* kind, not by a discriminator stored here: resolveInboundSubs
+	// already loads the worker record, so the kind it names is the discriminator and
 	// a record written before these existed needs no migration.
 
 	// JQL is the query a jira watch follows, written exactly as in Jira's own search
@@ -55,6 +55,34 @@ type inboundSubscription struct {
 	// bridge's ticker is shared and fast; a Jira site rate-limits per site, and
 	// spending that budget on empty answers every two seconds is not what it is for.
 	PollSeconds int `json:"pollSeconds,omitempty"`
+
+	// The fields below belong to a Google watch (ADR-0234).
+	// Which of the two it is follows from which target it names — a subscription names
+	// exactly one, and the create endpoint refuses both or neither.
+
+	// SpreadsheetID is a *row watch*: the spreadsheet whose new rows are published.
+	// WatchRange is the A1 range read on each poll (normalized to a default when the
+	// operator names none) and HeaderRow makes the range's first row the column names,
+	// so the event's fields carry each row by name and a correlation key can say
+	// `Antragsnummer` rather than index into a list.
+	//
+	// Its sequence is the row's own absolute number, which rises with every append and
+	// never rises twice for the same row — so the mark stays the watch's scalar one.
+	// The hole this leaves is stated in the record and in the Console: deleting a row
+	// renumbers the tail, and a later append landing on a delivered number is not
+	// delivered again. The sheets people watch are the append-only ones.
+	SpreadsheetID string `json:"spreadsheetId,omitempty"`
+	WatchRange    string `json:"watchRange,omitempty"`
+	HeaderRow     bool   `json:"headerRow,omitempty"`
+	// FolderID is a *file watch*: the Drive folder whose files are published, which is
+	// the drop folder people already use as a queue. It has no sequence of its own —
+	// files.list is a query and its order is an index's — so, exactly as for Jira, the
+	// mark is scoped per file id and the sequence is the file's own timestamp.
+	// CursorField ("created", the default, or "modified") selects which, and LagSeconds
+	// holds the cursor behind the newest file so one indexed late is still inside the
+	// next window.
+	FolderID string `json:"folderId,omitempty"`
+
 	// LastPolledAt is when this watch was last read, in unix seconds. It is what makes
 	// PollSeconds a cadence rather than a wish, and like LastEventID it is
 	// best-effort: losing it re-reads, which the marks make harmless.
@@ -83,7 +111,7 @@ type inboundSubscription struct {
 }
 
 // inboundSubStore is a durable store for inbound subscriptions, one JSON file per id
-// under a directory — the same sidecar approach as the connector store
+// under a directory — the same sidecar approach as the worker store
 // (ADR-0019/0041). It is owned solely by the server's run-loop goroutine, so it needs
 // no locking, and it holds no secret material.
 

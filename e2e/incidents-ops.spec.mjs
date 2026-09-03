@@ -134,14 +134,14 @@ test.describe("correcting the variables", () => {
   });
 });
 
-test.describe("reconfiguring the connector", () => {
-  test("names the connector on the incident and opens it prefilled", async ({ page }) => {
+test.describe("reconfiguring the worker", () => {
+  test("names the worker on the incident and opens it prefilled", async ({ page }) => {
     await open(page);
     await page.evaluate(() => window.__mountLive(window.__STUCK));
     const row = page.locator("#var-panel .inc-row");
     await expect(row).toHaveCount(1);
 
-    // "no connector registered as X" is unactionable until you know which integration
+    // "no worker registered as X" is unactionable until you know which integration
     // X is — so the row says so, on the incident itself (ADR-0160).
     await expect(row.locator(".inc-conn")).toContainText("mail");
     await expect(row.locator(".inc-conn")).toContainText("Patrick Blumer");
@@ -154,7 +154,7 @@ test.describe("reconfiguring the connector", () => {
     await expect(modal.locator("#conn-endpoint")).toHaveValue("smtp.office365.com:587");
     await expect(modal.locator("#conn-credref")).toHaveValue("o365_pw");
     await expect(modal.locator("#conn-provider")).toHaveValue("smtp");
-    await expect(modal).toContainText("Task_pay is parked on this connector");
+    await expect(modal).toContainText("Task_pay is parked on this worker");
     await expect(modal.locator(".conn-problem")).toContainText("connection refused");
 
     // And it can be checked before anything is written.
@@ -180,7 +180,7 @@ test.describe("reconfiguring the connector", () => {
     await modal.locator("[data-conn-extra]").click();
     await expect(page.locator(".conn-modal")).toHaveCount(0);
 
-    // The connector was changed, and the parked job handed one more attempt against
+    // The worker was changed, and the parked job handed one more attempt against
     // the new configuration — one action, not a trip to the Console and back. The
     // fields preview does not use are left out of the patch rather than sent empty;
     // clearing them is the server's rule about the provider, not the form's.
@@ -218,17 +218,17 @@ test.describe("reconfiguring the connector", () => {
     await expect(row.locator(".inc-conn")).toContainText("not configured");
     // Nothing to open: the fix is to create one, and that lives in the Console.
     await expect(row.locator("[data-fix-conn]")).toHaveCount(0);
-    await expect(row.locator('a[href="#/console/connectors"]')).toContainText("Configure");
+    await expect(row.locator('a[href="#/console/workers"]')).toContainText("Configure");
     expect(page.__errors).toEqual([]);
   });
 
-  test("the replay offers the same connector fix", async ({ page }) => {
+  test("the replay offers the same worker fix", async ({ page }) => {
     await open(page);
     await page.evaluate(() => window.__mountReplay());
     const details = page.locator("#tab-details");
     await expect(details.locator(".vp-incidents .inc-row")).toHaveCount(1);
 
-    // One incident vocabulary across both diagrams (ADR-0151) — the connector included.
+    // One incident vocabulary across both diagrams (ADR-0151) — the worker included.
     await expect(details.locator(".inc-conn")).toContainText("Patrick Blumer");
     await details.locator("[data-fix-conn]").click();
     await expect(page.locator(".conn-modal")).toBeVisible();

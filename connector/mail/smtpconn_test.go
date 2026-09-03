@@ -12,7 +12,7 @@ import (
 
 // fakeSMTP is a submission server with just enough of the protocol for a real
 // net/smtp client to greet, authenticate, and hand over a message. It exists so the
-// transport and the connector check are exercised against something that answers in
+// transport and the worker check are exercised against something that answers in
 // SMTP rather than against a stubbed function — the failures worth catching here
 // (a rejected credential, a refused recipient) are answers, not call arguments.
 type fakeSMTP struct {
@@ -151,7 +151,7 @@ func TestSMTPSendOverTheWire(t *testing.T) {
 	case !sawAuth:
 		t.Error("the server saw no AUTH, want the configured credential presented")
 	case from != "bot@example.com":
-		t.Errorf("MAIL FROM = %q, want the connector's sender", from)
+		t.Errorf("MAIL FROM = %q, want the worker's sender", from)
 	case strings.Join(rcpts, ",") != "a@example.com,quiet@example.com":
 		t.Errorf("envelope = %v, want To + Bcc", rcpts)
 	case !strings.Contains(data, "Subject: Hallo"):
@@ -161,7 +161,7 @@ func TestSMTPSendOverTheWire(t *testing.T) {
 	}
 }
 
-// TestSMTPProbeChecksWithoutSending is the connector check's whole premise: it walks
+// TestSMTPProbeChecksWithoutSending is the worker check's whole premise: it walks
 // the same path a send walks, and stops before the message.
 func TestSMTPProbeChecksWithoutSending(t *testing.T) {
 	srv := newFakeSMTP(t)

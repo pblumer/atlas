@@ -5,7 +5,7 @@ import "testing"
 // TestConnectorCompilersRegistry pins the connector-flavor registry that
 // registerJobWorkerTask iterates: every entry is fully populated, and each present
 // predicate fires for exactly its own extension so a job-worker task compiles to the
-// intended connector flavor.
+// intended worker flavor.
 func TestConnectorCompilersRegistry(t *testing.T) {
 	if len(connectorCompilers) == 0 {
 		t.Fatal("connectorCompilers is empty")
@@ -35,6 +35,7 @@ func TestConnectorCompilersRegistry(t *testing.T) {
 		{Entra: &xmlEntraConnector{}},
 		{Ldif: &xmlLdifConnector{}},
 		{Jira: &xmlJiraConnector{}},
+		{GoogleSheets: &xmlGoogleSheetsConnector{}},
 	}
 	if len(cases) != len(connectorCompilers) {
 		t.Fatalf("cases = %d, connectorCompilers = %d; keep them in step", len(cases), len(connectorCompilers))
@@ -47,7 +48,7 @@ func TestConnectorCompilersRegistry(t *testing.T) {
 			}
 		}
 	}
-	// A plain service task (no extension) matches no connector flavor, so it falls
+	// A plain service task (no extension) matches no worker flavor, so it falls
 	// through to the plain external-worker path.
 	for j, cc := range connectorCompilers {
 		if cc.present(xmlServiceTask{}) {

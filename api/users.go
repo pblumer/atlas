@@ -464,7 +464,7 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		} else {
 			// Roles changed but the account stands: rewrite what its grants may do
 			// rather than dropping them, so an administrative edit does not knock a
-			// person's connector over.
+			// person's worker over.
 			s.setUserGrantRoles(id, updated.Roles)
 		}
 		// Roles and the disabled flag are the two fields that change what an account

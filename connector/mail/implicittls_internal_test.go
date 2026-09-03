@@ -15,7 +15,7 @@ import (
 )
 
 // TestUsesImplicitTLS pins the transport decision. It is made by port because the
-// connector configuration carries no TLS mode, and getting it wrong does not fail
+// worker configuration carries no TLS mode, and getting it wrong does not fail
 // cleanly — it hangs until the deadline.
 func TestUsesImplicitTLS(t *testing.T) {
 	for _, tc := range []struct {

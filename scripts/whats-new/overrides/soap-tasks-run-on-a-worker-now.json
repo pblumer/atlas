@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Workers",
+    "Connectors"
+  ],
+  "title": {
+    "en": "Web service calls moved out of the engine",
+    "de": "Web-Service-Aufrufe sind aus der Engine ausgezogen"
+  },
+  "summary": {
+    "en": "A SOAP call went out from the process that runs the engine, so a slow web service held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the credential your task references is handed to that worker, exactly as it already is for REST.",
+    "de": "Ein SOAP-Aufruf ging bisher aus dem Prozess hinaus, der die Engine ausführt — ein langsamer Web-Service hielt also Arbeit auf, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Das Credential, das Ihr Task referenziert, wird an diesen Worker übergeben — genau wie bei REST schon."
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Worker öffnen"
+    },
+    "route": "#/console/workers"
+  }
+}

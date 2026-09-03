@@ -1,4 +1,4 @@
-// End-to-end coverage for the Web Scraping Connector's authoring: ADR-0190's feed
+// End-to-end coverage for the Web Scraping Worker's authoring: ADR-0190's feed
 // formats and ADR-0231's per-item fields.
 // It drives the real bpmn-js modeler and Atlas properties panel so format/maxItems
 // must survive the moddle round trip, and switching to a feed mode must remove the

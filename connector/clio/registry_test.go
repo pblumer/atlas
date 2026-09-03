@@ -198,21 +198,21 @@ func TestMintKeyErrors(t *testing.T) {
 	}
 }
 
-// TestRegistryReplace swaps the whole set of registered connectors at once.
+// TestRegistryReplace swaps the whole set of registered workers at once.
 func TestRegistryReplace(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register("stale", &fakeClient{})
 	a := &fakeClient{}
 	reg.Replace(map[string]Client{"fresh": a})
 	if _, ok := reg.Client("stale"); ok {
-		t.Error("after Replace, stale connector still resolves")
+		t.Error("after Replace, stale worker still resolves")
 	}
 	if got, ok := reg.Client("fresh"); !ok || got != a {
 		t.Errorf("Client(fresh) = %v,%v, want the replacement", got, ok)
 	}
 	reg.Replace(nil) // a nil map clears the registry
 	if _, ok := reg.Client("fresh"); ok {
-		t.Error("after Replace(nil), a connector still resolves")
+		t.Error("after Replace(nil), a worker still resolves")
 	}
 }
 

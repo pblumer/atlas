@@ -21,8 +21,8 @@ func TestRegistrationNameFallsBackToSomethingTruthful(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{"a name it gave", "Some Connector", "https://c.example.com/cb", "Some Connector", false},
-		{"trimmed", "  Some Connector  ", "https://c.example.com/cb", "Some Connector", false},
+		{"a name it gave", "Some Worker", "https://c.example.com/cb", "Some Worker", false},
+		{"trimmed", "  Some Worker  ", "https://c.example.com/cb", "Some Worker", false},
 		{"no name: the host it registered", "", "https://c.example.com/cb", "c.example.com", false},
 		{"no name and no host", "", "https://", "", true},
 		{"a name that would not fit on the screen", strings.Repeat("s", maxClientNameRunes+1), "https://c.example.com/cb", "", true},

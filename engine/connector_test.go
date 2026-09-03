@@ -8,9 +8,9 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// TestConnectorTaskJobLifecycle drives a connector task through the engine: on
-// activation it creates a job (carrying the reserved connector job type) and
-// waits, and completing that job — the connector worker's job in production —
+// TestConnectorTaskJobLifecycle drives a task through the engine: on
+// activation it creates a job (carrying the reserved worker job type) and
+// waits, and completing that job — the worker's job in production —
 // drives the token onward, exactly like a service task (ADR-0036). It exercises
 // the behavior in the engine package itself, without the clio worker.
 func TestConnectorTaskJobLifecycle(t *testing.T) {
@@ -37,15 +37,15 @@ func TestConnectorTaskJobLifecycle(t *testing.T) {
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle: %v", err)
 	}
-	// The connector task created a job and parked on it.
+	// The task created a job and parked on it.
 	if pi := activeProcs(t, h.store); pi != 1 {
-		t.Fatalf("after activation: active=%d, want 1 (parked on the connector job)", pi)
+		t.Fatalf("after activation: active=%d, want 1 (parked on the worker job)", pi)
 	}
 
 	jobType := cp.ConnectorTask(cp.Node(ct).Detail).JobType
 	jobKey := singleActivatableJob(t, h.store, jobType)
 
-	// Completing the job (what the connector worker does on success) finishes it.
+	// Completing the job (what the worker does on success) finishes it.
 	p.CompleteJob(jobKey)
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle (after complete): %v", err)

@@ -377,6 +377,24 @@ func cancelExpiryTimer(c *ProcessingContext, piKey uint64, expiryDue int64) {
 	})
 }
 
+// isEventSubTrigger reports whether ei is an armed event-subprocess trigger rather than
+// an activity of its own (ADR-0082). A trigger's ElementId is the *handler container*
+// node — that is how its behavior reads the trigger detail off the handler — so every
+// piece of generic per-activity work keyed off ElementId would otherwise run twice, once
+// on the trigger and once on the handler the trigger activates.
+//
+// For the handler's data associations and zeebe:ioMapping (ADR-0058/0059/0068) the first
+// of those runs is not merely redundant, it is wrong, and it fails silently: a trigger is
+// armed when its scope is *entered*, so the input mapping evaluated at instance creation,
+// against a scope where the main flow had not yet written anything, and the output mapping
+// promoted that null into the parent scope the moment the trigger fired — overwriting the
+// very variable the handler was about to read. The mappings belong to the handler run
+// (activateEventSubHandler), which activates as an ordinary subprocess and applies them
+// at the moment its values exist.
+func isEventSubTrigger(ei *model.ElementInstanceValue) bool {
+	return ei.BpmnElementType == uint8(compiler.TypeEventSubProcessStart)
+}
+
 // handleElementActivating emits the Activated lifecycle event, runs the
 // element-type behavior, then arms any boundary events attached to this element
 // (a no-op for a node with none).
@@ -394,13 +412,16 @@ func handleElementActivating(c *ProcessingContext) {
 	}
 	// Read the activity's data-input associations into process variables before its
 	// behavior runs, so the activity's own FEEL (e.g. a script task's expression)
-	// sees them (ADR-0059).
-	applyDataInputAssociations(c, ei)
-	// Then evaluate its zeebe:ioMapping inputs into its activity-local scope, so the
-	// behavior (and any worker) reads the mapped locals resolving up the scope chain
-	// (ADR-0068). Runs after data-input associations so a mapping can read them.
-	if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
-		applyInputMappings(c, c.cmd.Key, ei)
+	// sees them (ADR-0059), then evaluate its zeebe:ioMapping inputs into its
+	// activity-local scope, so the behavior (and any worker) reads the mapped locals
+	// resolving up the scope chain (ADR-0068). The mappings run second so one can read
+	// an association's result. An armed event-subprocess trigger runs neither: see
+	// isEventSubTrigger.
+	if !isEventSubTrigger(ei) {
+		applyDataInputAssociations(c, ei)
+		if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
+			applyInputMappings(c, c.cmd.Key, ei)
+		}
 	}
 	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
 	armBoundaryEvents(c, c.cmd.Key, ei)
@@ -484,14 +505,17 @@ func handleElementCompleting(c *ProcessingContext) {
 	// Write the activity's data-output associations before it completes, so a data
 	// object it produces is in state before any outgoing flow activates the next
 	// element (ADR-0058). Any element type may carry associations, so this is a
-	// single shared point rather than per-behavior logic.
-	applyDataOutputAssociations(c, ei)
+	// single shared point rather than per-behavior logic. An armed event-subprocess
+	// trigger is the one exception: see isEventSubTrigger.
+	if !isEventSubTrigger(ei) {
+		applyDataOutputAssociations(c, ei)
+	}
 	// Promote the activity's zeebe:ioMapping outputs to the parent scope, then drop
 	// its activity-local scope, before it completes and any outgoing flow activates
 	// the next element — so downstream FEEL sees the promoted values and never the
 	// dropped locals (ADR-0068). Gated so a mapping-free activity keeps the pre-0068
 	// behaviour with no scope-drop scan.
-	if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
+	if !isEventSubTrigger(ei) && hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
 		// A call activity's output mappings are applied against the child instance's
 		// variables when the child completes (resumeCaller), not against this
 		// element's local scope, so the generic promotion is skipped for it — but its
@@ -1959,7 +1983,7 @@ func (timerCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei
 }
 
 // mockupTaskBehavior: a service task the engine simulates itself (ADR-0120),
-// instead of dispatching a job to an external worker or connector. On activation it
+// instead of dispatching a job to an external worker. On activation it
 // writes the optional FEEL result (the input→output "script", e.g. a simulated REST
 // response) and arms a one-shot timer for a random duration, then waits. When the
 // timer fires the task completes — unless the fail draw selects failure, in which
@@ -3293,13 +3317,13 @@ func (businessRuleTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 	completeAndTakeFlows(c, key, ei)
 }
 
-// connectorTaskBehavior: delegate to a server-registered connector (e.g. a clio
+// connectorTaskBehavior: delegate to a server-registered worker (e.g. a clio
 // event store). The engine treats it exactly like a service task — create a job
-// on activation and wait — but the job carries the connector's reserved job type,
-// so the in-process connector worker (package clio) picks it up, performs the
+// on activation and wait — but the job carries the worker's reserved job type,
+// so the in-process worker (package clio) picks it up, performs the
 // outbound call off the hot path after fsync, and completes it. Keeping the call
 // on the worker side, not in a behavior, keeps the processor allocation-free (I1)
-// and the connector's network I/O out of applyToState (I4). See ADR-0036.
+// and the worker's network I/O out of applyToState (I4). See ADR-0036.
 type connectorTaskBehavior struct{}
 
 func (connectorTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -3313,7 +3337,7 @@ func (connectorTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 		Retries:            detail.Retries,
 	})
 	c.NotifyJobAvailable(detail.JobType)
-	// Stays Activated until the connector worker completes the job.
+	// Stays Activated until the worker completes the job.
 }
 
 func (connectorTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -3410,24 +3434,14 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 		// down as it recurs (ADR-0054). An unresolvable FEEL schedule raises an
 		// incident and parks instead of firing immediately (ADR-0064).
 		armOneShotTimer(c, key, ei, d.Schedule)
-	case compiler.BoundaryMessage:
-		c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
-			ProcessInstanceKey: ei.ProcessInstanceKey,
-			ElementInstanceKey: key,
-			MessageName:        d.MessageName,
-			CorrelationKey:     evalCorrelationKey(c, d.CorrelationKey, ei.ProcessInstanceKey),
-		})
-	case compiler.BoundarySignal:
-		// A name-only subscription (no correlation key). A later broadcast of the
-		// name drives this boundary instance to Completing exactly as a correlating
-		// message does — the fire path (interrupt-or-take-flow) is shared (ADR-0088).
-		c.AppendSignalSubscriptionEvent(key, model.IntentSubscriptionCreated, model.SignalSubscriptionValue{
-			ProcessInstanceKey: ei.ProcessInstanceKey,
-			ElementInstanceKey: key,
-			SignalName:         d.SignalName,
-			ProcessDefKey:      ei.ProcessDefKey,
-			ElementId:          ei.ElementId,
-		})
+	case compiler.BoundaryMessage, compiler.BoundarySignal:
+		// Both open a subscription and wait. A message subscription correlates on a key
+		// evaluated over the instance's variables; a signal subscription is name-only, and
+		// a broadcast of the name drives this boundary instance to Completing exactly as a
+		// correlating message does — the fire path (interrupt-or-take-flow) is shared
+		// (ADR-0088). OnCompleting re-opens the subscription through the same function when
+		// the boundary is non-interrupting, so it stays armed for the next occurrence.
+		openBoundarySubscription(c, key, ei, d)
 	case compiler.BoundaryError:
 		// An error boundary opens nothing — it is inert, armed only to be *found* by
 		// propagateError walking the scope chain when an error is thrown, then driven to
@@ -3465,10 +3479,50 @@ func (boundaryEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *
 		return
 	}
 	d := c.process(ei.ProcessDefKey).BoundaryEvent(c.process(ei.ProcessDefKey).Node(ei.ElementId).Detail)
+	// A non-interrupting message or signal boundary is a repeating reminder, not a
+	// one-shot: BPMN keeps it armed for as long as its host runs, so every later
+	// message or broadcast takes its outgoing flow again. Fire it the way a recurring
+	// timer boundary fires (fireRecurringBoundary, ADR-0054) — spawn the reminder token
+	// and re-open the subscription, without ever completing the element instance
+	// (ADR-draft-repeating-non-interrupting-boundary-events).
+	//
+	// Completing it and arming a fresh instance would look equivalent and is not: the
+	// replacement is only a queued command while the rest of the batch runs, so a host
+	// completing in that window would disarm the boundary that no longer exists and
+	// miss the one about to, leaving an armed instance counted against a scope that has
+	// already drained — an instance that can never finish. Staying armed has no window.
+	if !d.Interrupting && (d.Kind == compiler.BoundaryMessage || d.Kind == compiler.BoundarySignal) {
+		takeOutgoingFlows(c, ei)
+		openBoundarySubscription(c, key, ei, d)
+		return
+	}
 	if d.Interrupting {
 		interruptHost(c, ei.AttachedToKey, key)
 	}
 	completeAndTakeFlows(c, key, ei)
+}
+
+// openBoundarySubscription opens the message or signal subscription a boundary event
+// waits on, keyed by the boundary's own element instance. Arming and re-arming share it,
+// so a re-armed non-interrupting boundary waits on exactly what a freshly armed one does.
+// The subscription is created by an event, so replay rebuilds it (I4/I6).
+func openBoundarySubscription(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, d *compiler.BoundaryEventDetail) {
+	if d.Kind == compiler.BoundarySignal {
+		c.AppendSignalSubscriptionEvent(key, model.IntentSubscriptionCreated, model.SignalSubscriptionValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ElementInstanceKey: key,
+			SignalName:         d.SignalName,
+			ProcessDefKey:      ei.ProcessDefKey,
+			ElementId:          ei.ElementId,
+		})
+		return
+	}
+	c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		MessageName:        d.MessageName,
+		CorrelationKey:     evalCorrelationKey(c, d.CorrelationKey, ei.ProcessInstanceKey),
+	})
 }
 
 // endEventBehavior: a none end event completes and, if it was the last active

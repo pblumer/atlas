@@ -38,7 +38,7 @@ func remedyRegistryFromEnv(env func(string) string) (*remedy.Registry, []string,
 			{"ENDPOINT", endpoint}, {"USERNAME", user}, {"PASSWORD", password},
 		} {
 			if want.v == "" {
-				return nil, nil, fmt.Errorf("worker: remedy connector %q is missing its %s: set %s%s", name, want.what, key, want.what)
+				return nil, nil, fmt.Errorf("worker: remedy worker %q is missing its %s: set %s%s", name, want.what, key, want.what)
 			}
 		}
 		reg.Register(name, remedy.NewHTTPClient(remedy.Connector{
@@ -60,7 +60,7 @@ func remedyRegistryFromEnv(env func(string) string) (*remedy.Registry, []string,
 // about what a resolved Remedy task means — only about which credentials are in reach.
 func RunRemedyJob(ctx context.Context, j Job, reg *remedy.Registry) (map[string]any, error) {
 	if j.Connector == nil {
-		return nil, fmt.Errorf("remedy: the job carried no resolved connector detail; is this server offloading the remedy kind?")
+		return nil, fmt.Errorf("remedy: the job carried no resolved worker detail; is this server offloading the remedy kind?")
 	}
 	raw, err := json.Marshal(j.Connector.Fields)
 	if err != nil {

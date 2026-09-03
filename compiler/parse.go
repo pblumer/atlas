@@ -31,13 +31,13 @@ var scriptJobTypes = map[string]string{
 	"javascript": JsJobType,
 }
 
-// restMethods is the set of HTTP methods a REST connector task may use. The set
+// restMethods is the set of HTTP methods a REST task may use. The set
 // is validated at deploy time (invariant I5) so the runtime worker never has to.
 var restMethods = map[string]bool{
 	"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true, "HEAD": true,
 }
 
-// normalizeHTTPMethod upper-cases a REST connector's method (defaulting to GET
+// normalizeHTTPMethod upper-cases a REST worker's method (defaulting to GET
 // when omitted) and rejects anything outside restMethods.
 func normalizeHTTPMethod(m string) (string, error) {
 	if m == "" {
@@ -50,7 +50,7 @@ func normalizeHTTPMethod(m string) (string, error) {
 	return up, nil
 }
 
-// httpKVMap turns a REST connector's header or query-parameter child elements into
+// httpKVMap turns a REST worker's header or query-parameter child elements into
 // a {name:value} map, trimming names and skipping rows with an empty name (an
 // incomplete row the author hasn't filled in). A duplicated name is an error, so a
 // silent last-wins collision can't hide a modeling mistake. kind names the field
@@ -67,7 +67,7 @@ func httpKVList(taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
 			continue
 		}
 		if seen[name] {
-			return nil, fmt.Errorf("compiler: rest connector task %q has a duplicate %s %q", taskID, kind, name)
+			return nil, fmt.Errorf("compiler: rest task %q has a duplicate %s %q", taskID, kind, name)
 		}
 		seen[name] = true
 		val, err := restValue(taskID, kind+" "+name, kv.Value)
@@ -85,14 +85,14 @@ func httpKVList(taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
 // instance's variables at call time; otherwise it is a literal used verbatim. what
 // names the field for error messages.
 func restValue(taskID, what, raw string) (RestExpr, error) {
-	return connectorValue(taskID, "rest connector", what, raw)
+	return connectorValue(taskID, "rest worker", what, raw)
 }
 
-// connectorValue is the shared literal-or-FEEL toggle for the HTTP-based connectors
+// connectorValue is the shared literal-or-FEEL toggle for the HTTP-based workers
 // (REST, SCIM): a value with a leading '=' is a FEEL expression compiled once at
 // deploy time (invariant I5) and evaluated over the instance's variables at call
-// time; otherwise it is a literal used verbatim. kind names the connector for
-// diagnostics ("rest connector"/"scim connector") and what names the field.
+// time; otherwise it is a literal used verbatim. kind names the worker for
+// diagnostics ("rest worker"/"scim worker") and what names the field.
 func connectorValue(taskID, kind, what, raw string) (RestExpr, error) {
 	trimmed := strings.TrimSpace(raw)
 	if !strings.HasPrefix(trimmed, "=") {
@@ -109,29 +109,29 @@ func connectorValue(taskID, kind, what, raw string) (RestExpr, error) {
 	return RestExpr{Expr: e}, nil
 }
 
-// restAuth reads a REST connector's authentication config from its extension.
+// restAuth reads a REST worker's authentication config from its extension.
 func restAuth(taskID string, c *xmlRestConnector) (RestAuth, error) {
 	// oauth2 is REST-only: the client-credentials grant needs a token endpoint and a
 	// client id, and only <atlas:restConnector> carries those attributes (ADR-0152).
-	// Every other scheme is shared with the SCIM connector via connectorAuth.
+	// Every other scheme is shared with the SCIM worker via connectorAuth.
 	if strings.ToLower(strings.TrimSpace(c.AuthType)) == "oauth2" {
 		return restOAuth2(taskID, c)
 	}
-	return connectorAuth(taskID, "rest connector", c.AuthType, c.AuthUsername, c.AuthApiKeyName, c.AuthSecret)
+	return connectorAuth(taskID, "rest worker", c.AuthType, c.AuthUsername, c.AuthApiKeyName, c.AuthSecret)
 }
 
-// restOAuth2 builds a REST connector task's client-credentials config (ADR-0152):
+// restOAuth2 builds a REST task's client-credentials config (ADR-0152):
 // the token endpoint and client id are model data; the client secret is a reference
 // (secrets live server-side, ADR-0041). Scope is optional.
 func restOAuth2(taskID string, c *xmlRestConnector) (RestAuth, error) {
 	if strings.TrimSpace(c.AuthTokenURL) == "" {
-		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no tokenUrl", taskID)
+		return RestAuth{}, fmt.Errorf("compiler: rest task %q uses oauth2 auth but names no tokenUrl", taskID)
 	}
 	if strings.TrimSpace(c.AuthClientID) == "" {
-		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no clientId", taskID)
+		return RestAuth{}, fmt.Errorf("compiler: rest task %q uses oauth2 auth but names no clientId", taskID)
 	}
 	if strings.TrimSpace(c.AuthSecret) == "" {
-		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no client secret reference", taskID)
+		return RestAuth{}, fmt.Errorf("compiler: rest task %q uses oauth2 auth but names no client secret reference", taskID)
 	}
 	return RestAuth{
 		Type:      "oauth2",
@@ -142,11 +142,11 @@ func restOAuth2(taskID string, c *xmlRestConnector) (RestAuth, error) {
 	}, nil
 }
 
-// connectorAuth builds an HTTP-based connector task's authentication config from its
+// connectorAuth builds an HTTP-based task's authentication config from its
 // authType and credential-reference fields, shared by REST and SCIM. authType selects
 // the scheme; an unknown scheme is rejected, and a scheme that needs a secret
 // reference must name one (secrets live server-side, ADR-0041, so the model always
-// references rather than carries them). kind names the connector for diagnostics.
+// references rather than carries them). kind names the worker for diagnostics.
 func connectorAuth(taskID, kind, authType, username, apiKeyName, secret string) (RestAuth, error) {
 	t := strings.ToLower(strings.TrimSpace(authType))
 	switch t {
@@ -751,33 +751,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			b.AddDataOutputAssociation(ids[ownerId], name, valExpr, state, strings.TrimSpace(a.Assignment.To))
 		}
 	}
-	for _, st := range proc.ServiceTasks {
-		wireDataOut(st.Id, st.DataOut)
-	}
-	for _, st := range proc.ScriptTasks {
-		wireDataOut(st.Id, st.DataOut)
-	}
-	for _, brt := range proc.BusinessRuleTasks {
-		wireDataOut(brt.Id, brt.DataOut)
-	}
-	for _, ut := range proc.UserTasks {
-		wireDataOut(ut.Id, ut.DataOut)
-	}
-	for _, t := range proc.Tasks {
-		wireDataOut(t.Id, t.DataOut)
-	}
-	for _, t := range proc.ManualTasks {
-		wireDataOut(t.Id, t.DataOut)
-	}
-	for _, rt := range proc.ReceiveTasks {
-		wireDataOut(rt.Id, rt.DataOut)
-	}
-	for _, st := range proc.SendTasks {
-		if strings.TrimSpace(st.MessageRef) != "" {
-			continue // a message-kind send task is a throw, not an activity (ADR-0112)
-		}
-		wireDataOut(st.Id, st.DataOut)
-	}
+	// Every scope, recursively — like wireScopeIO below, and for the same reason: a
+	// data association is drawn on the activity, and an activity may sit in any scope
+	// the model nests. Walking only the process root's element lists dropped every
+	// association inside a subprocess at compile time, with no error and no warning:
+	// the model deployed, ran, and quietly wrote nothing.
+	forEachDataAssociated(&proc.xmlFlowContent, func(ownerId string, out []xmlDataOutputAssociation, _ []xmlDataInputAssociation) {
+		wireDataOut(ownerId, out)
+	})
 
 	// Wire data-input associations: a sourceRef names the data object read (resolved
 	// like an output target, its state ignored on a read); a targetRef is the process
@@ -813,33 +794,9 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			b.AddDataInputAssociation(ids[ownerId], name, variable, valExpr)
 		}
 	}
-	for _, st := range proc.ServiceTasks {
-		wireDataIn(st.Id, st.DataIn)
-	}
-	for _, st := range proc.ScriptTasks {
-		wireDataIn(st.Id, st.DataIn)
-	}
-	for _, brt := range proc.BusinessRuleTasks {
-		wireDataIn(brt.Id, brt.DataIn)
-	}
-	for _, ut := range proc.UserTasks {
-		wireDataIn(ut.Id, ut.DataIn)
-	}
-	for _, t := range proc.Tasks {
-		wireDataIn(t.Id, t.DataIn)
-	}
-	for _, t := range proc.ManualTasks {
-		wireDataIn(t.Id, t.DataIn)
-	}
-	for _, rt := range proc.ReceiveTasks {
-		wireDataIn(rt.Id, rt.DataIn)
-	}
-	for _, st := range proc.SendTasks {
-		if strings.TrimSpace(st.MessageRef) != "" {
-			continue // a message-kind send task is a throw, not an activity (ADR-0112)
-		}
-		wireDataIn(st.Id, st.DataIn)
-	}
+	forEachDataAssociated(&proc.xmlFlowContent, func(ownerId string, _ []xmlDataOutputAssociation, in []xmlDataInputAssociation) {
+		wireDataIn(ownerId, in)
+	})
 
 	// Wire generic zeebe:ioMapping input/output mappings (ADR-0068). Each source is a
 	// FEEL expression compiled once at deploy time (invariant I5); an empty target or
@@ -1341,7 +1298,7 @@ type xmlFlowContent struct {
 	ReceiveTasks []xmlReceiveTask `xml:"receiveTask"`
 
 	// A send task is a service task under a different BPMN label (ADR-0112): it creates a
-	// job and waits, carrying the same taskDefinition, connector extensions, and activity
+	// job and waits, carrying the same taskDefinition, worker extensions, and activity
 	// sub-elements. It parses into the very same shape, so xmlSendTask is an alias.
 	SendTasks []xmlSendTask `xml:"sendTask"`
 
@@ -1363,6 +1320,59 @@ type xmlFlowContent struct {
 	// LaneSets partition this scope's flow nodes into organizational lanes (ADR-0121).
 	// Lanes are metadata with no execution effect; resolveLanes records each node's lane.
 	LaneSets []xmlLaneSet `xml:"laneSet"`
+}
+
+// forEachDataAssociated calls fn once for every activity in the scope tree rooted at c
+// that may carry data associations (ADR-0058/0059), handing it the activity's BPMN id
+// and its <dataOutputAssociation>/<dataInputAssociation> lists. It recurses into every
+// nested scope — an embedded subprocess (a <transaction> among them, folded in before
+// this runs), an event subprocess, an ad-hoc subprocess — because an association is
+// drawn on the activity, and the activity may sit in any of them.
+//
+// It is the data-association twin of wireScopeIO's walk, and the two must stay in step:
+// they once did not, and the shape of that failure is worth remembering. I/O mappings
+// recursed and data associations did not, so an activity inside a subprocess kept its
+// zeebe:ioMapping and silently lost its associations. Nothing rejected the model — it
+// deployed, started, and ran to the end writing nothing into the data object.
+//
+// Only the eight activity kinds whose XML shape carries the two elements are visited;
+// a subprocess and a call activity do not parse them today, so they are containers here
+// and nothing else. A send task naming a message is skipped: it compiles to a throw
+// event, not an activity (ADR-0112), so there is no activity node to wire onto.
+func forEachDataAssociated(c *xmlFlowContent, fn func(ownerId string, out []xmlDataOutputAssociation, in []xmlDataInputAssociation)) {
+	for _, st := range c.ServiceTasks {
+		fn(st.Id, st.DataOut, st.DataIn)
+	}
+	for _, st := range c.ScriptTasks {
+		fn(st.Id, st.DataOut, st.DataIn)
+	}
+	for _, brt := range c.BusinessRuleTasks {
+		fn(brt.Id, brt.DataOut, brt.DataIn)
+	}
+	for _, ut := range c.UserTasks {
+		fn(ut.Id, ut.DataOut, ut.DataIn)
+	}
+	for _, t := range c.Tasks {
+		fn(t.Id, t.DataOut, t.DataIn)
+	}
+	for _, t := range c.ManualTasks {
+		fn(t.Id, t.DataOut, t.DataIn)
+	}
+	for _, rt := range c.ReceiveTasks {
+		fn(rt.Id, rt.DataOut, rt.DataIn)
+	}
+	for _, st := range c.SendTasks {
+		if strings.TrimSpace(st.MessageRef) != "" {
+			continue // a message-kind send task is a throw, not an activity (ADR-0112)
+		}
+		fn(st.Id, st.DataOut, st.DataIn)
+	}
+	for i := range c.SubProcesses {
+		forEachDataAssociated(&c.SubProcesses[i].xmlFlowContent, fn)
+	}
+	for i := range c.AdHocSubProcesses {
+		forEachDataAssociated(&c.AdHocSubProcesses[i].xmlFlowContent, fn)
+	}
 }
 
 // xmlLaneSet is a <laneSet> — a set of sibling lanes partitioning a process or subprocess scope.
@@ -1761,7 +1771,7 @@ type xmlIntermediateCatchEvent struct {
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
 	// Link, when present, makes this a link catch event: the landing point of a link throw
-	// with the same name in the same scope — an off-page connector / goto (ADR-0133). A
+	// with the same name in the same scope — an off-page worker / goto (ADR-0133). A
 	// pointer so an absent one is nil.
 	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
 	// Conditional, when present, makes this a conditional catch event: it waits until its
@@ -1793,7 +1803,7 @@ type xmlIntermediateThrowEvent struct {
 	// on its outgoing flow (ADR-0125). A pointer so an absent one is nil.
 	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
 	// Link, when present, makes this a link throw event: a goto to the link catch of the same
-	// name in the same scope — an off-page connector (ADR-0133). A pointer so an absent one is nil.
+	// name in the same scope — an off-page worker (ADR-0133). A pointer so an absent one is nil.
 	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
 }
 
@@ -1987,24 +1997,24 @@ type xmlServiceTask struct {
 	// from the element that carries it. A service task never shows a form to a human in
 	// the normal course of things, so there is no ambiguity to resolve.
 	Form xmlFormDefinition `xml:"extensionElements>formDefinition"`
-	// Clio, when present, marks this service task a clio connector task (ADR-0036).
+	// Clio, when present, marks this service task a clio task (ADR-0036).
 	// The pointer is nil when the <atlas:clioConnector> extension is absent.
 	Clio *xmlClioConnector `xml:"extensionElements>clioConnector"`
-	// Rest, when present, marks this service task an HTTP-REST connector task
+	// Rest, when present, marks this service task an HTTP-REST task
 	// (ADR-0067). The pointer is nil when the <atlas:restConnector> extension is
 	// absent.
 	Rest *xmlRestConnector `xml:"extensionElements>restConnector"`
-	// Mail, when present, marks this service task an outbound mail connector task
+	// Mail, when present, marks this service task an outbound mail task
 	// (ADR-0079). The pointer is nil when the <atlas:mailConnector> extension is
 	// absent.
 	Mail *xmlMailConnector `xml:"extensionElements>mailConnector"`
-	// User, when present, marks this service task a user-provisioning connector task
+	// User, when present, marks this service task a user-provisioning task
 	// (ADR-0123). The pointer is nil when the <atlas:userConnector> extension is absent.
 	User *xmlUserConnector `xml:"extensionElements>userConnector"`
-	// Csv, when present, marks this service task a CSV-to-JSON connector task
+	// Csv, when present, marks this service task a CSV-to-JSON task
 	// (ADR-0139). The pointer is nil when the <atlas:csvConnector> extension is absent.
 	Csv *xmlCsvConnector `xml:"extensionElements>csvConnector"`
-	// SharePoint, when present, marks this service task a SharePoint connector task
+	// SharePoint, when present, marks this service task a SharePoint task
 	// (ADR-0141). The pointer is nil when the <atlas:sharepointConnector> extension is
 	// absent. Read it through sharePointConn, not directly — the Modeler writes the
 	// tag with a capital P (see SharePointCamel).
@@ -2019,31 +2029,31 @@ type xmlServiceTask struct {
 	// task. Accepting both spellings keeps hand-authored and Modeler-authored models
 	// working; sharePointConn normalizes them.
 	SharePointCamel *xmlSharePointConnector `xml:"extensionElements>sharePointConnector"`
-	// Remedy, when present, marks this service task a BMC Remedy connector task
+	// Remedy, when present, marks this service task a BMC Remedy task
 	// (ADR-0106). The pointer is nil when the <atlas:remedyConnector> extension is
 	// absent.
 	Remedy *xmlRemedyConnector `xml:"extensionElements>remedyConnector"`
-	// WebScrape, when present, marks this service task a web-scraping connector task
+	// WebScrape, when present, marks this service task a web-scraping task
 	// (ADR-0118). The pointer is nil when the <atlas:webscrapeConnector> extension is
 	// absent.
 	WebScrape *xmlWebScrapeConnector `xml:"extensionElements>webscrapeConnector"`
-	// Scim, when present, marks this service task a SCIM 2.0 connector task
+	// Scim, when present, marks this service task a SCIM 2.0 task
 	// (ADR-0153): it performs a resource operation against a model-authored SCIM
 	// service provider through the job path.
 	Scim *xmlScimConnector `xml:"extensionElements>scimConnector"`
-	// Ldap, when present, marks this service task a generic LDAP connector task
+	// Ldap, when present, marks this service task a generic LDAP task
 	// (ADR-0154): it performs a directory operation against a model-authored LDAP
 	// server through the job path.
 	Ldap *xmlLdapConnector `xml:"extensionElements>ldapConnector"`
-	// Soap, when present, marks this service task a SOAP / Web Services (WSDL) connector
+	// Soap, when present, marks this service task a SOAP / Web Services (WSDL) worker
 	// task (ADR-0165): it invokes a SOAP operation against a model-authored web-service
 	// endpoint through the job path.
 	Soap *xmlSoapConnector `xml:"extensionElements>soapConnector"`
-	// Ad, when present, marks this service task an Active Directory connector task
+	// Ad, when present, marks this service task an Active Directory task
 	// (ADR-0166): it performs an AD-specific provisioning operation against a
 	// model-authored server through the job path.
 	Ad *xmlAdConnector `xml:"extensionElements>adConnector"`
-	// MsSql, MariaDB and Postgres each mark this service task a SQL connector task of
+	// MsSql, MariaDB and Postgres each mark this service task a SQL task of
 	// that product (ADR-0173): one statement against a database a *worker* is
 	// configured for. They share a shape and differ only in the driver behind them,
 	// which is what decides the placeholder syntax a statement must use. They are the
@@ -2051,17 +2061,20 @@ type xmlServiceTask struct {
 	MsSql    *xmlSqlConnector `xml:"extensionElements>mssqlConnector"`
 	MariaDB  *xmlSqlConnector `xml:"extensionElements>mariadbConnector"`
 	Postgres *xmlSqlConnector `xml:"extensionElements>postgresConnector"`
-	// Entra, when present, marks this service task a Microsoft Entra ID connector
+	// Entra, when present, marks this service task a Microsoft Entra ID worker
 	// task (ADR-0172): one directory lifecycle operation through Graph, against a
 	// tenant a *worker* holds the app credential for.
 	Entra *xmlEntraConnector `xml:"extensionElements>entraConnector"`
-	// Ldif, when present, marks this service task a directory-file connector task
+	// Ldif, when present, marks this service task a directory-file task
 	// (ADR-0171): LDIF or DSML entries read from, or written to, a variable.
 	Ldif *xmlLdifConnector `xml:"extensionElements>ldifConnector"`
-	// Jira, when present, marks this service task a Jira connector task
+	// Jira, when present, marks this service task a Jira task
 	// (ADR-0201): one issue-tracker operation against a
 	// server-registered Jira instance.
 	Jira *xmlJiraConnector `xml:"extensionElements>jiraConnector"`
+	// GoogleSheets, when present, marks this service task a Google Sheets task: one
+	// spreadsheet operation against a Worker an operator configured.
+	GoogleSheets *xmlGoogleSheetsConnector `xml:"extensionElements>googleSheetsConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
 	// absent.
@@ -2073,7 +2086,7 @@ type xmlServiceTask struct {
 	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
-// sharePointConn returns the task's SharePoint connector extension under either
+// sharePointConn returns the task's SharePoint worker extension under either
 // spelling (see SharePointCamel), or nil when the task carries none. Every reader
 // must go through it so both hand-authored and Modeler-authored models compile.
 func (st xmlServiceTask) sharePointConn() *xmlSharePointConnector {
@@ -2084,21 +2097,21 @@ func (st xmlServiceTask) sharePointConn() *xmlSharePointConnector {
 }
 
 // xmlSendTask is a <sendTask>: a job-creating activity identical in shape and execution to
-// a service task (ADR-0112) — same taskDefinition, connector extensions, I/O mappings,
+// a service task (ADR-0112) — same taskDefinition, worker extensions, I/O mappings,
 // multi-instance, and data associations. It is a type alias so both parse and every
 // per-activity wiring loop treat the two identically; only the compiled node type differs.
 type xmlSendTask = xmlServiceTask
 
-// A clio connector task's parameters, carried on a service task as an
+// A clio task's parameters, carried on a service task as an
 // <atlas:clioConnector connector="..." operation="..." .../> extension element.
-// connector names a server-registered connector (its endpoint and credentials live
+// worker names a server-registered worker (its endpoint and credentials live
 // in the server config, never in the model). operation is "write" (default),
 // "query", or "read", selecting which of the remaining attributes apply:
 //   - write: subject and eventType — the clio coordinates the appended event
 //     (the instance's variables) lands under.
 //   - query: resultVariable receives the result; either query (a run_query string)
 //     or subject (with the optional reduceSpec projection, a get_state read).
-//   - read: subject's events (up to limit; 0 = the connector's default) are read
+//   - read: subject's events (up to limit; 0 = the worker's default) are read
 //     into resultVariable as a JSON array.
 type xmlClioConnector struct {
 	Connector      string `xml:"connector,attr"`
@@ -2109,12 +2122,12 @@ type xmlClioConnector struct {
 	ReduceSpec     string `xml:"reduceSpec,attr"`
 	Limit          string `xml:"limit,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
-	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
 
-// An HTTP-REST connector task's parameters, carried on a service task as an
+// An HTTP-REST task's parameters, carried on a service task as an
 // <atlas:restConnector> extension element (ADR-0067). method is the HTTP method;
 // url is the full request URL, authored in the model; resultVariable, if set, is
 // the process variable the JSON response is written back into. Header and
@@ -2137,7 +2150,7 @@ type xmlRestConnector struct {
 	AuthScope      string      `xml:"authScope,attr"`
 	Headers        []xmlHTTPKV `xml:"httpHeader"`
 	QueryParams    []xmlHTTPKV `xml:"queryParam"`
-	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2162,7 +2175,7 @@ type xmlScimConnector struct {
 	AuthUsername   string `xml:"authUsername,attr"`
 	AuthApiKeyName string `xml:"authApiKeyName,attr"`
 	AuthSecret     string `xml:"authSecret,attr"`
-	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2186,13 +2199,13 @@ type xmlSoapConnector struct {
 	AuthUsername   string `xml:"authUsername,attr"`
 	AuthApiKeyName string `xml:"authApiKeyName,attr"`
 	AuthSecret     string `xml:"authSecret,attr"`
-	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
 
 // xmlAdConnector is the <atlas:adConnector> extension on a service task (ADR-0166).
-// connector names a directory configured in the Console, which is how a task should
+// worker names a directory configured in the Console, which is how a task should
 // address one (ADR-0206); the url/bindDN/bindSecret trio
 // below is the older, model-authored form and still compiles.
 // url is the server (ldaps://host:636 for a password set); bindDN/bindSecret
@@ -2202,7 +2215,7 @@ type xmlSoapConnector struct {
 // entryVariable names the create-user attribute object; newPassword is the
 // set-password value. url/bindDN/dn/memberDN/newPassword carry literal-or-FEEL values.
 type xmlAdConnector struct {
-	// Connector names a directory an operator configured in the Console, the way every
+	// Worker names a directory an operator configured in the Console, the way every
 	// other credential-bearing kind is addressed (ADR-0206).
 	// It replaces url/bindDN/bindSecret, which stay accepted so models written before
 	// this keep compiling — a task carries one shape or the other, never both.
@@ -2233,15 +2246,15 @@ type xmlAdConnector struct {
 	ResultVariable string `xml:"resultVariable,attr"`
 	MaxEntries     string `xml:"maxEntries,attr"`
 	ObjectSecurity string `xml:"objectSecurity,attr"`
-	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
 
-// xmlSqlConnector is the extension a SQL connector task carries, under whichever of
+// xmlSqlConnector is the extension a SQL task carries, under whichever of
 // <atlas:mssqlConnector>, <atlas:mariadbConnector> or <atlas:postgresConnector> names
 // its product (ADR-0173). The three share this shape exactly; only the element name,
-// and so the driver, differs. connector names the database the worker holds the DSN
+// and so the driver, differs. worker names the database the worker holds the DSN
 // for — there is deliberately no url and no credential attribute, because the
 // connection string never enters the engine. operation is query / query-one / execute. statement is the
 // SQL text and is *literal only*: it carries no fx toggle, so no process value can
@@ -2254,7 +2267,7 @@ type xmlSqlConnector struct {
 	ParametersVariable string `xml:"parametersVariable,attr"`
 	ResultVariable     string `xml:"resultVariable,attr"`
 	MaxRows            string `xml:"maxRows,attr"`
-	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2270,13 +2283,13 @@ type xmlLdifConnector struct {
 	Operation      string `xml:"operation,attr"`
 	Source         string `xml:"source,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
-	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
 
 // xmlEntraConnector is the <atlas:entraConnector> extension on a service task
-// (ADR-0172). connector names the tenant the worker holds the app credential for —
+// (ADR-0172). worker names the tenant the worker holds the app credential for —
 // there is deliberately no tenantId, clientId or secret attribute, because none of
 // them enters the engine. operation is the lifecycle step; userId and groupId address
 // the objects (literal-or-FEEL); attributesVariable names the variable holding the
@@ -2306,7 +2319,7 @@ type xmlEntraConnector struct {
 	Search             string `xml:"search,attr"`
 	AdvancedQuery      string `xml:"advancedQuery,attr"`
 	DeltaLink          string `xml:"deltaLink,attr"`
-	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2341,21 +2354,21 @@ type xmlLdapConnector struct {
 	// plus private key) for a TLS client-certificate bind. Like bindSecret it is a
 	// reference, never a value (ADR-0041).
 	ClientCertSecret string `xml:"clientCertSecret,attr"`
-	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
 
-// xmlHTTPKV is one name/value pair in a REST connector's headers or query
+// xmlHTTPKV is one name/value pair in a REST worker's headers or query
 // parameters (an <atlas:httpHeader> or <atlas:queryParam> child element).
 type xmlHTTPKV struct {
 	Name  string `xml:"name,attr"`
 	Value string `xml:"value,attr"`
 }
 
-// An outbound mail connector task's parameters, carried on a service task as an
+// An outbound mail task's parameters, carried on a service task as an
 // <atlas:mailConnector connector="..." to="..." .../> extension element (ADR-0079).
-// connector names a server-registered mail provider (its host and credentials live
+// worker names a server-registered mail provider (its host and credentials live
 // on the server, never in the model). to (required) is a comma-separated recipient
 // list; cc, bcc and from are optional; subject and body are the message. Every field
 // value is literal or, with a leading '=', a FEEL expression evaluated over the
@@ -2372,14 +2385,14 @@ type xmlMailConnector struct {
 	// which stays the plain-text alternative; blank means the message is text-only,
 	// exactly as before the field existed.
 	BodyHtml string `xml:"bodyHtml,attr"`
-	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
 
 // xmlUserConnector is the <atlas:userConnector> extension of a user-provisioning
-// connector task (ADR-0123). Operation selects the action; the remaining
-// attributes are literal-or-FEEL values, like the mail connector's fields.
+// task (ADR-0123). Operation selects the action; the remaining
+// attributes are literal-or-FEEL values, like the mail worker's fields.
 type xmlUserConnector struct {
 	Operation   string `xml:"operation,attr"`
 	Username    string `xml:"username,attr"`
@@ -2387,12 +2400,12 @@ type xmlUserConnector struct {
 	DisplayName string `xml:"displayName,attr"`
 	Roles       string `xml:"roles,attr"`
 	Password    string `xml:"password,attr"`
-	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
 
-// A CSV-to-JSON connector task's parameters, carried on a service task as an
+// A CSV-to-JSON task's parameters, carried on a service task as an
 // <atlas:csvConnector source="..." delimiter="," .../> extension element (ADR-0139).
 // source names the process variable holding the raw CSV text (default "csvText");
 // delimiter is the single-character field separator (default ","); hasHeader is
@@ -2414,7 +2427,7 @@ type xmlCsvConnector struct {
 }
 
 // The file formats and directions a csvConnector can author. They are spelled here
-// as well as in connector/csvimport because the compiler cannot import the connector
+// as well as in connector/csvimport because the compiler cannot import the worker
 // (the dependency runs the other way); TestCsvFormatsMatchTheConnector guards the seam.
 const (
 	csvimportFormatCSV        = "csv"
@@ -2435,7 +2448,7 @@ func csvFormatAndOperation(taskID, rawFormat, rawOp string) (string, string, err
 	switch format {
 	case csvimportFormatCSV, csvimportFormatFixedWidth, csvimportFormatAVP:
 	default:
-		return "", "", fmt.Errorf("compiler: csv connector task %q has an unknown format %q (want %s, %s, or %s)",
+		return "", "", fmt.Errorf("compiler: csv task %q has an unknown format %q (want %s, %s, or %s)",
 			taskID, rawFormat, csvimportFormatAVP, csvimportFormatCSV, csvimportFormatFixedWidth)
 	}
 	op := strings.ToLower(strings.TrimSpace(rawOp))
@@ -2443,7 +2456,7 @@ func csvFormatAndOperation(taskID, rawFormat, rawOp string) (string, string, err
 		op = csvimportOperationRead
 	}
 	if op != csvimportOperationRead && op != csvimportOperationWrite {
-		return "", "", fmt.Errorf("compiler: csv connector task %q has an unknown operation %q (want %s or %s)",
+		return "", "", fmt.Errorf("compiler: csv task %q has an unknown operation %q (want %s or %s)",
 			taskID, rawOp, csvimportOperationRead, csvimportOperationWrite)
 	}
 	return format, op, nil
@@ -2454,12 +2467,12 @@ func csvFormatAndOperation(taskID, rawFormat, rawOp string) (string, string, err
 //
 // An entry is "name" or "name:width". The width is required for fixed-width, where a
 // field is found by position and there is nothing else to find it by, and rejected
-// for the other formats — an authored width the connector would ignore is an author
+// for the other formats — an authored width the worker would ignore is an author
 // believing something untrue. An empty result means "derive the columns" (ADR-0139).
 func splitCSVColumns(taskID, format, s string) ([]string, []int32, error) {
 	if strings.TrimSpace(s) == "" {
 		if format == csvimportFormatFixedWidth {
-			return nil, nil, fmt.Errorf("compiler: csv connector task %q reads a fixed-width file, so it must list its columns as name:width", taskID)
+			return nil, nil, fmt.Errorf("compiler: csv task %q reads a fixed-width file, so it must list its columns as name:width", taskID)
 		}
 		return nil, nil, nil
 	}
@@ -2480,18 +2493,18 @@ func splitCSVColumns(taskID, format, s string) ([]string, []int32, error) {
 		var width int32
 		switch {
 		case hasWidth && format != csvimportFormatFixedWidth:
-			return nil, nil, fmt.Errorf("compiler: csv connector task %q gives column %q a width, which only a fixed-width file uses", taskID, name)
+			return nil, nil, fmt.Errorf("compiler: csv task %q gives column %q a width, which only a fixed-width file uses", taskID, name)
 		case hasWidth:
 			n, err := strconv.Atoi(strings.TrimSpace(rawWidth))
 			if err != nil {
-				return nil, nil, fmt.Errorf("compiler: csv connector task %q has a non-numeric width for column %q", taskID, name)
+				return nil, nil, fmt.Errorf("compiler: csv task %q has a non-numeric width for column %q", taskID, name)
 			}
 			if n <= 0 {
-				return nil, nil, fmt.Errorf("compiler: csv connector task %q gives column %q a width of %d; a fixed-width column occupies at least one character", taskID, name, n)
+				return nil, nil, fmt.Errorf("compiler: csv task %q gives column %q a width of %d; a fixed-width column occupies at least one character", taskID, name, n)
 			}
 			width = int32(n)
 		case format == csvimportFormatFixedWidth:
-			return nil, nil, fmt.Errorf("compiler: csv connector task %q reads a fixed-width file, so column %q needs a width (name:width)", taskID, name)
+			return nil, nil, fmt.Errorf("compiler: csv task %q reads a fixed-width file, so column %q needs a width (name:width)", taskID, name)
 		}
 		names = append(names, name)
 		widths = append(widths, width)
@@ -2510,9 +2523,9 @@ func csvHasHeader(attr string) bool {
 	return s == "" || strings.EqualFold(s, "true")
 }
 
-// A SharePoint connector task's parameters, carried on a service task as an
+// A SharePoint task's parameters, carried on a service task as an
 // <atlas:sharepointConnector connector="..." site="..." list="..."> extension
-// element (ADR-0141). connector names a server-registered SharePoint provider (its
+// element (ADR-0141). worker names a server-registered SharePoint provider (its
 // Graph base and OAuth credential live on the server, never in the model). site
 // (required) addresses the SharePoint site ("host,/sites/path" or a site id); list
 // (required) is the list name or id the item is created in; resultVariable, if set,
@@ -2525,23 +2538,23 @@ type xmlSharePointConnector struct {
 	List           string      `xml:"list,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"itemField"`
-	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
 
-// A BMC Remedy connector task's parameters, carried on a service task as an
+// A BMC Remedy task's parameters, carried on a service task as an
 // <atlas:remedyConnector connector="..." form="..." resultVariable="..."> extension
 // element with <atlas:remedyField name="..." value="..."/> children (ADR-0106).
-// connector names a server-registered Remedy instance (its base URL and credentials
+// worker names a server-registered Remedy instance (its base URL and credentials
 // live on the server, never in the model). form is the Remedy form the entry is
 // created in (e.g. "HPD:IncidentInterface_Create"); each field is one entry value;
 // resultVariable, if set, receives the created entry's id. form and every field value
 // is literal or, with a leading '=', a FEEL expression over the instance's variables
 // at call time (the fx toggle, ADR-0067).
-// A Jira connector task's parameters, carried on a service task as an
+// A Jira task's parameters, carried on a service task as an
 // <atlas:jiraConnector connector="..." operation="..." .../> extension element
-// (ADR-0201). connector names a server-registered Jira instance (its
+// (ADR-0201). worker names a server-registered Jira instance (its
 // base URL and credential live on the server, never in the model) and operation is the
 // issue-tracker operation the task performs.
 //
@@ -2572,6 +2585,46 @@ type xmlJiraConnector struct {
 	MaxResults     string      `xml:"maxResults,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"jiraField"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// A Google Sheets task's parameters, carried on a service task as an
+// <atlas:googleSheetsConnector connector="..." operation="..." .../> extension element
+// (ADR-0235). The connector attribute names the Worker (whose
+// credential lives on the server, never in the model) and operation is the spreadsheet
+// operation the task performs. Element and attribute keep the pre-ADR-0203 spelling
+// their siblings carry: both are authored in deployed models.
+//
+// Which of the remaining attributes apply is decided by the operation, and only by it:
+// spreadsheet addresses an existing file by id or by its URL (everything but
+// create-spreadsheet); sheet is a tab title (added, deleted, or a new file's first
+// tab); range is A1 notation for the four cell-level operations and may name its own
+// sheet; title and folder are what a new spreadsheet is called and where it is put;
+// values is what write-range and append-row write; columns names the fields and the
+// order a list of objects is projected through; valueInput chooses whether a written
+// value is interpreted as typed ("user", the default) or stored verbatim ("raw");
+// header makes a read answer with objects keyed by the range's first row.
+//
+// spreadsheet, sheet, range, title, folder and values are each literal or, with a
+// leading '=', a FEEL expression evaluated over the variables the task sees at call
+// time (the fx toggle, ADR-0067). columns, valueInput and header are not: each decides
+// the shape of the call rather than its content, and a shape that could differ on
+// every token is not a shape.
+type xmlGoogleSheetsConnector struct {
+	Connector      string `xml:"connector,attr"`
+	Operation      string `xml:"operation,attr"`
+	Spreadsheet    string `xml:"spreadsheet,attr"`
+	Sheet          string `xml:"sheet,attr"`
+	Range          string `xml:"range,attr"`
+	Title          string `xml:"title,attr"`
+	Folder         string `xml:"folder,attr"`
+	Values         string `xml:"values,attr"`
+	Columns        string `xml:"columns,attr"`
+	ValueInput     string `xml:"valueInput,attr"`
+	Header         string `xml:"header,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
@@ -2582,12 +2635,12 @@ type xmlRemedyConnector struct {
 	Form           string      `xml:"form,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"remedyField"`
-	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
 
-// A web-scraping connector task's parameters, carried on a service task as an
+// A web-scraping task's parameters, carried on a service task as an
 // <atlas:webscrapeConnector> extension (ADR-0118/0190,
 // ADR-0231). url and resultVariable are always
 // required. format is a structural literal (html by default, rss, or atom); maxItems
@@ -2613,7 +2666,7 @@ type xmlWebScrapeConnector struct {
 	Retries        string           `xml:"retries,attr"`
 }
 
-// One <atlas:scrapeField> child of a web-scraping connector task: the object key its
+// One <atlas:scrapeField> child of a web-scraping task: the object key its
 // value lands under, the optional CSS selector evaluated within the matched item
 // (empty = the item element itself), and the optional attribute read from it (empty =
 // that element's text).
@@ -2708,7 +2761,7 @@ type xmlBusinessRuleTask struct {
 	Form          xmlFormDefinition    `xml:"extensionElements>formDefinition"`
 	Inputs        []xmlDecisionInput   `xml:"extensionElements>decisionInput"`
 	InputMappings []xmlZeebeIOMapInput `xml:"extensionElements>ioMapping>input"`
-	// TemisConnector, when present, marks this a central (connector) decision
+	// TemisConnector, when present, marks this a central (worker) decision
 	// evaluated by a remote temis service rather than the embedded library
 	// (ADR-0050). The pointer is nil when the <atlas:temisConnector> extension is
 	// absent, i.e. the decision is evaluated locally.
@@ -2720,7 +2773,7 @@ type xmlBusinessRuleTask struct {
 }
 
 // xmlTemisConnector is the <atlas:temisConnector connector="..."/> extension that
-// routes a business rule task to a server-registered temis connector for central
+// routes a business rule task to a server-registered temis worker for central
 // evaluation (ADR-0050).
 type xmlTemisConnector struct {
 	Connector string `xml:"connector,attr"`

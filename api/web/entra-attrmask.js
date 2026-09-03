@@ -1,5 +1,5 @@
 // entra-attrmask.js — a per-operation "attribute capture mask" for the Microsoft
-// Entra ID connector (ADR-0172). It replaces the raw `attributes` JSON textarea
+// Entra ID Worker Type (ADR-0172). It replaces the raw `attributes` JSON textarea
 // for the body-carrying operations with a small form of the important fields, plus
 // a "Weitere Attribute (JSON)" escape hatch for anything the mask does not name.
 //

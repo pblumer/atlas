@@ -85,7 +85,7 @@ func TestBuiltinConnectorsRegistersADWithoutConfiguration(t *testing.T) {
 	if _, ok := got.Handlers[compiler.AdJobType]; !ok {
 		t.Errorf("no handler for %s; have %v", compiler.AdJobType, got.Handlers)
 	}
-	// AD resolves no connector *names*, so it reports none to the Workers view.
+	// AD resolves no worker *names*, so it reports none to the Workers view.
 	if len(got.Names) != 0 {
 		t.Errorf("names = %v, want none for a model-authored server", got.Names)
 	}
@@ -189,7 +189,7 @@ func TestADResolvedDetailRoundTripsEveryField(t *testing.T) {
 
 func TestRunADJobErrors(t *testing.T) {
 	if _, err := RunADJob(context.Background(), Job{}, &recordingDialer{}, adSecretFromEnv(envMap(nil)), nil); err == nil {
-		t.Error("a job with no connector detail must fail")
+		t.Error("a job with no worker detail must fail")
 	}
 	// A dial that fails, fails the job.
 	_, err := RunADJob(context.Background(), adJob(map[string]any{
@@ -277,7 +277,7 @@ func TestRunLdifJob(t *testing.T) {
 
 func TestRunLdifJobErrors(t *testing.T) {
 	if _, err := runLdif(context.Background(), Job{}); err == nil {
-		t.Error("a job with no connector detail must fail")
+		t.Error("a job with no worker detail must fail")
 	}
 	if _, err := runLdif(context.Background(), Job{Connector: &ConnectorPayload{
 		Kind: "ldif", Fields: map[string]any{"format": "ldif", "source": "kaputt", "resultVariable": "r"},
@@ -291,7 +291,7 @@ func TestRunLdifJobErrors(t *testing.T) {
 // process can be run end to end before anybody is allowed near the real forest.
 
 // Without the switch nothing changes: the worker dials a real directory, which is the
-// only default a connector may have.
+// only default a worker may have.
 func TestADWithoutMockModeDialsARealDirectory(t *testing.T) {
 	dialer, mock, err := adDialerFromEnv(envMap(nil))
 	if err != nil {
@@ -313,7 +313,7 @@ func TestADMockModeServesAJobWithoutADirectory(t *testing.T) {
 		t.Fatalf("adDialerFromEnv: %v", err)
 	}
 	if mock == nil {
-		t.Fatal("ATLAS_AD_MOCK=1 did not put the connector into mock mode")
+		t.Fatal("ATLAS_AD_MOCK=1 did not put the worker into mock mode")
 	}
 	if _, err := RunADJob(context.Background(), adJob(map[string]any{
 		"url": "ldaps://dc.example.com:636", "operation": "create-user",
@@ -333,7 +333,7 @@ func TestADMockModeServesAJobWithoutADirectory(t *testing.T) {
 
 // A seed file is how a mock directory holds the accounts a process expects to find:
 // a leaver has nothing to disable in an empty forest. It is read with the same
-// parser the directory-file connector uses, so LDIF means one thing in Atlas.
+// parser the directory-file worker uses, so LDIF means one thing in Atlas.
 func TestADMockModeSeedsFromAnLDIFFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "forest.ldif")
 	if err := os.WriteFile(path, []byte("dn: cn=Arno,ou=users,dc=example,dc=com\ncn: Arno\nuserAccountControl: 512\n"), 0o600); err != nil {
@@ -442,7 +442,7 @@ func TestADMockSwitchIsRefusedWhenItIsNotAYesOrNo(t *testing.T) {
 	}
 }
 
-// A DSML seed works too, because the directory-file connector reads both and a mock
+// A DSML seed works too, because the directory-file worker reads both and a mock
 // directory should not be the one place in Atlas where LDIF is the only file format.
 func TestADMockModeSeedsFromDSML(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "forest.dsml")
@@ -653,7 +653,7 @@ func TestMockModeKeepsTwoNamedDirectoriesApart(t *testing.T) {
 		t.Fatalf("adDialerFromEnv: %v", err)
 	}
 	if mock == nil {
-		t.Fatal("ATLAS_AD_MOCK=1 did not put the connector into mock mode")
+		t.Fatal("ATLAS_AD_MOCK=1 did not put the worker into mock mode")
 	}
 
 	create := func(connector string) error {

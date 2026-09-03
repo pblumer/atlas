@@ -1,17 +1,18 @@
-// The connector configuration dialog, in one place (ADR-0160). A connector is
-// reconfigured from two very different places — Organization › Connectors, where an
-// operator is administering integrations, and an incident, where a token is parked
-// *because* this connector did not work — and both need the same fields, the same
-// per-kind rules about which of them apply, and the same "check it before you save"
-// button. So the dialog lives here and both call it.
+// The worker configuration dialog, in one place (ADR-0160). A configured worker is
+// reconfigured from two very different places — Console › Workers, where an operator
+// is administering integrations, and an incident, where a token is parked *because*
+// this worker did not work — and both need the same fields, the same per-type rules
+// about which of them apply, and the same "check it before you save" button. So the
+// dialog lives here and both call it.
 //
-// It edits an existing record only. Creating a connector is a different act (it picks
-// a kind and a name, and the name is the binding every model references, ADR-0036/
-// 0041), and it keeps its inline form in the Console; what the two share is the shape
-// of a kind's fields, exported as connectorShape so the rules cannot drift apart.
+// It edits an existing record only. Creating a worker is a different act (it picks a
+// Worker Type and a name, and the name is the binding every model references,
+// ADR-0036/0041), and it keeps its inline form in the Console; what the two share is
+// the shape of a Worker Type's fields, exported as workerShape so the rules cannot
+// drift apart.
 //
 // Deleting one lives here too (ADR-0163). It is not a dialog on the same record, but
-// it asks the same kind of question — what does this connector's configuration mean
+// it asks the same kind of question — what does this worker's configuration mean
 // for the models that resolve through it — and putting it here is what makes it
 // reachable from a test at all: app.js boots the whole console on import, so anything
 // left in it is only ever exercised by hand.
@@ -19,14 +20,14 @@
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-// connectorCreateBody builds the POST /api/v1/connectors body from the add form.
+// workerCreateBody builds the POST /api/v1/connectors body from the add form.
 //
 // It lives here rather than in app.js for the reason the delete flow does: app.js
 // boots the whole console on import and cannot be exercised in isolation, and this is
 // a part worth exercising. "Which fields does this create carry" is a decision, not a
 // transcription — the form keeps every field in the DOM and only *hides* the ones a
 // kind does not use, so a hidden field still has a value and FormData still reports it.
-export function connectorCreateBody(form) {
+export function workerCreateBody(form) {
   const f = form instanceof FormData ? form : new FormData(form);
   const get = (k) => String(f.get(k) || "").trim();
   const body = {
@@ -37,19 +38,19 @@ export function connectorCreateBody(form) {
     credentialsRef: get("credentialsRef"),
   };
   if (body.kind === "mail") body.provider = get("provider") || "smtp";
-  // A connection string is a SQL connector's whole configuration and belongs to no
+  // A connection string is a SQL worker's whole configuration and belongs to no
   // other kind, so the gate is the kind — not whether the field happens to hold
   // something. Asking only "is it non-empty" is what let a DSN typed for a kind picked
   // earlier, or one a password manager put into a type="password" input nobody can
   // see, refuse a jira create with a message about databases.
-  if (connectorShape(body.kind, body.provider).sql) {
+  if (workerShape(body.kind, body.provider).sql) {
     const conn = get("connectionString");
     if (conn) body.connectionString = conn;
   }
   return body;
 }
 
-// connectorShape says which fields a connector of this kind and provider actually
+// workerShape says which fields a worker of this type and provider actually
 // uses, and what to call them. It is the one description of that: a native mail
 // provider and SharePoint default their API base and authenticate with a vault
 // credential bundle, SMTP needs a host:port it can dial, the preview transport dials
@@ -73,7 +74,7 @@ const SQL_DSN_EXAMPLES = {
   postgres: "postgres://atlas:PASSWORT@db.example.com:5432/hr?sslmode=require",
 };
 
-export function connectorShape(kind, provider) {
+export function workerShape(kind, provider) {
   const mail = kind === "mail";
   const preview = mail && provider === "preview";
   const native = mail && provider !== "smtp" && !preview;
@@ -83,6 +84,9 @@ export function connectorShape(kind, provider) {
   // it with, neither derivable from the other.
   const jira = kind === "jira";
   const entra = kind === "entra";
+  // Google Sheets is SharePoint's shape: Google's API bases are the same for everyone,
+  // so there is no endpoint to author — the credential bundle *is* the configuration.
+  const googlesheets = kind === "googlesheets";
   // Active Directory is Remedy's shape: an LDAP URL to dial and a bind account to dial
   // it with, neither derivable from the other. It is the newest kind to stop carrying
   // its directory in the model (ADR-0206).
@@ -93,7 +97,7 @@ export function connectorShape(kind, provider) {
   const sql = kind === "postgres" || kind === "mariadb" || kind === "mssql";
   // Kinds that default their API base and authenticate with a credential bundle
   // instead of dialing a host:port. Remedy is not one: it needs both.
-  const bundle = native || sharepoint || entra || sql;
+  const bundle = native || sharepoint || entra || sql || googlesheets;
   return {
     mail,
     sql,
@@ -101,17 +105,17 @@ export function connectorShape(kind, provider) {
     // none. Both the create form and the edit dialog read it from here, so the two
     // cannot disagree about what a SQL Server DSN looks like.
     dsnPlaceholder: SQL_DSN_EXAMPLES[kind] || "",
-    // Which kinds can be checked without saving. A mail connector connects and
-    // authenticates; a SQL connector dials its connection string. The rest have no
+    // Which types can be checked without saving. A mail worker connects and
+    // authenticates; a SQL worker dials its connection string. The rest have no
     // check yet, and the server says so by name rather than silently doing nothing.
     test: mail || sql,
     provider: mail,
     endpoint: !bundle && !preview,
-    // A mail connector always has a sender: it is the default From address, and the
+    // A mail worker always has a sender: it is the default From address, and the
     // preview transport frames the message exactly as it would be sent, so it needs
     // one too.
     sender: mail,
-    // A SQL connector is created by pasting the connection string, which the server
+    // A SQL worker is created by pasting the connection string, which the server
     // seals into the vault and replaces with a reference — so the reference is one of
     // two ways in, not the only one, and the form must not insist on it.
     credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad ? "required" : "optional")),
@@ -121,6 +125,8 @@ export function connectorShape(kind, provider) {
         : (remedy ? "https://helix.example.com:8008" : (jira ? "https://acme.atlassian.net" : "https://temis.internal"))),
     credRefLabel: ad
       ? "Credential reference (vault {bindDN, password})"
+      : googlesheets
+      ? "Credential reference (vault Google auth bundle)"
       : jira
       ? "Credential reference (vault {email, apiToken} or {token})"
       : remedy
@@ -130,6 +136,8 @@ export function connectorShape(kind, provider) {
           : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)"))),
     credRefPlaceholder: ad
       ? "ad_prod_bind (vault {bindDN, password})"
+      : googlesheets
+      ? "google_sheets_auth (vault JSON bundle)"
       : jira
       ? "jira_acme (vault {email, apiToken} or {token})"
       : remedy
@@ -137,8 +145,10 @@ export function connectorShape(kind, provider) {
       : (sql ? kind + "_hr_dsn (a vault key holding the whole connection string)"
         : (entra ? "entra_blumer (vault {tenantId, clientId, clientSecret})"
           : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token")))),
-    hint: ad
-      ? "The directory's <b>LDAP URL</b> and a vault bundle holding the service account: <code>{\"bindDN\": \"cn=svc-atlas,ou=Dienstkonten,dc=example,dc=com\", \"password\": \"\u2026\"}</code>. Use <b>ldaps://</b> unless you enable StartTLS \u2014 Active Directory refuses to set a password over an unencrypted channel, so an <code>ldap://</code> directory works for everything except the one thing a joiner needs. A model names this connector and says nothing else about the directory."
+    hint: googlesheets
+      ? "The credential reference names a JSON auth bundle in the vault \u2014 never a secret value. A <b>service account</b> is the normal shape: <code>{\"method\": \"serviceAccount\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\"}</code>, copied out of the JSON key file Google hands out. A service account owns nothing by itself: <b>share each spreadsheet or folder with its address</b>, exactly as you would with a colleague, or it will read a 403 where you see a document."
+      : ad
+      ? "The directory's <b>LDAP URL</b> and a vault bundle holding the service account: <code>{\"bindDN\": \"cn=svc-atlas,ou=Dienstkonten,dc=example,dc=com\", \"password\": \"\u2026\"}</code>. Use <b>ldaps://</b> unless you enable StartTLS \u2014 Active Directory refuses to set a password over an unencrypted channel, so an <code>ldap://</code> directory works for everything except the one thing a joiner needs. A model names this worker and says nothing else about the directory."
       : sql
       ? "The <b>whole connection string</b> is the credential \u2014 it is sealed into the vault and the record keeps only a reference, so the Console can never show it back. Atlas supervises a worker for this kind, and it picks the database up as soon as you save; no restart and no start parameter. To replace a connection string later, overwrite its vault key under <b>Secrets</b>."
       : (!mail
@@ -158,25 +168,25 @@ const PROVIDERS = [
   ["preview", "Preview (in-app outbox)"],
 ];
 
-// editConnectorFlow opens the dialog on an existing connector, PATCHes what changed,
+// editWorkerFlow opens the dialog on an existing worker, PATCHes what changed,
 // and reports what the operator chose. `intro` is the caller's reason for opening it
-// (an incident says which task is parked on this connector); `extraLabel`, when given,
+// (an incident says which task is parked on this worker); `extraLabel`, when given,
 // adds a second confirm button — the incident's "Save & retry", which saves and then
 // wants the job tried again.
 //
 // Resolves {saved, extra} after a successful save, or null when nothing was written
 // (cancelled, or the save failed and was reported). `okToast` is the success message;
 // pass "" when the caller reports the outcome of the whole action instead.
-export async function editConnectorFlow({ api, toast, connector, intro = "", extraLabel = "", okToast = "Connector updated" }) {
-  const choice = await askConnector({ api, connector, intro, extraLabel });
+export async function editWorkerFlow({ api, toast, worker, intro = "", extraLabel = "", okToast = "Worker updated" }) {
+  const choice = await askWorker({ api, worker, intro, extraLabel });
   if (!choice) return null;
   try {
-    await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(connector.id), choice.patch);
+    await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(worker.id), choice.patch);
   } catch (e) {
     const msg = e && e.message ? e.message : String(e);
-    // Managing connectors is admin-only when auth is on (ADR-0041); say that rather
+    // Managing workers is admin-only when auth is on (ADR-0041); say that rather
     // than leaving a bare 403 to be read as "the change was wrong".
-    toast(/403|forbidden/i.test(msg) ? "Changing a connector needs an admin account" : "Could not save the connector: " + msg, "warn");
+    toast(/403|forbidden/i.test(msg) ? "Changing a worker needs an admin account" : "Could not save the worker: " + msg, "warn");
     return null;
   }
   // A caller that follows the save with something else (the incident's retry) says so
@@ -185,22 +195,22 @@ export async function editConnectorFlow({ api, toast, connector, intro = "", ext
   return { saved: true, extra: choice.extra };
 }
 
-// askConnector renders the dialog and resolves to {patch, extra}, or null. The fields
+// askWorker renders the dialog and resolves to {patch, extra}, or null. The fields
 // re-shape as the provider changes, because "which of these do I have to fill in" is a
 // property of the provider and finding that out from a rejected save is a worse way to
 // learn it.
-function askConnector({ api, connector, intro, extraLabel }) {
+function askWorker({ api, worker, intro, extraLabel }) {
   return new Promise((resolve) => {
-    const c = connector || {};
+    const c = worker || {};
     const ov = document.createElement("div");
     ov.className = "modal-ov";
     ov.innerHTML = `
       <div class="modal confirm-modal conn-modal" role="dialog" aria-modal="true" aria-labelledby="conn-edit-title">
-        <div class="modal-head"><h2 id="conn-edit-title">Connector &middot; ${esc(c.name || "")}</h2></div>
+        <div class="modal-head"><h2 id="conn-edit-title">Worker &middot; ${esc(c.name || "")}</h2></div>
         <div class="modal-body">
           ${intro ? `<p class="inc-modal-msg">${esc(intro)}</p>` : ""}
           ${c.problem ? `<p class="conn-problem"><b>Not usable right now:</b> ${esc(c.problem)}</p>` : ""}
-          <p class="muted" style="margin:0 0 10px">The name is what every model references, so it is fixed here — changing it would leave those tasks looking for a connector that no longer exists. Everything else takes effect at once; a parked task retries against the new configuration.</p>
+          <p class="muted" style="margin:0 0 10px">The name is what every model references, so it is fixed here — changing it would leave those tasks looking for a worker that no longer exists. Everything else takes effect at once; a parked task retries against the new configuration.</p>
           <div class="conn-fields">
             <label class="field"><span>Kind</span><input value="${esc(c.kind || "")}" disabled/></label>
             <label class="field conn-f-provider"><span>Provider</span><select id="conn-provider">
@@ -210,14 +220,14 @@ function askConnector({ api, connector, intro, extraLabel }) {
             <label class="field conn-f-sender" style="flex:1 1 200px"><span>Sender</span><input id="conn-sender" value="${esc(c.sender || "")}" placeholder="bot@example.com"/></label>
             <label class="field conn-f-credref" style="flex:1 1 200px"><span class="conn-credref-label">Token reference</span><input id="conn-credref" value="${esc(c.credentialsRef || "")}"/></label>
           </div>
-          <label class="conn-enabled"><input type="checkbox" id="conn-enabled"${c.enabled ? " checked" : ""}/> <span>Enabled — a disabled connector is skipped, and its tasks park</span></label>
+          <label class="conn-enabled"><input type="checkbox" id="conn-enabled"${c.enabled ? " checked" : ""}/> <span>Enabled — a disabled worker is skipped, and its tasks park</span></label>
           <p class="muted conn-hint" style="margin:8px 0 0;font-size:12.5px"></p>
           <p class="conn-test-result" style="margin:8px 0 0;font-size:12.5px" hidden></p>
         </div>
         <div class="modal-foot">
           <button class="btn neutral" data-conn-cancel title="Close without saving">Cancel</button>
           <button class="btn neutral conn-f-test" data-conn-test title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
-          <button class="btn${extraLabel ? " neutral" : ""}" data-conn-save title="Save the connector changes">Save</button>
+          <button class="btn${extraLabel ? " neutral" : ""}" data-conn-save title="Save the worker changes">Save</button>
           ${extraLabel ? `<button class="btn" data-conn-extra title="Save the changes and retry the parked task">${esc(extraLabel)}</button>` : ""}
         </div>
       </div>`;
@@ -230,7 +240,7 @@ function askConnector({ api, connector, intro, extraLabel }) {
     const enabledIn = ov.querySelector("#conn-enabled");
     const testOut = ov.querySelector(".conn-test-result");
 
-    const shape = () => connectorShape(c.kind, c.kind === "mail" ? providerSel.value : c.provider);
+    const shape = () => workerShape(c.kind, c.kind === "mail" ? providerSel.value : c.provider);
     const sync = () => {
       const sh = shape();
       const show = (sel, on) => { const el = ov.querySelector(sel); if (el) el.style.display = on ? "" : "none"; };
@@ -254,10 +264,10 @@ function askConnector({ api, connector, intro, extraLabel }) {
       testOut.textContent = "Checking…";
       btn.disabled = true;
       try {
-        // A SQL connector is checked through the vault reference it already has: the
+        // A SQL worker is checked through the vault reference it already has: the
         // dialog never shows a connection string back, so there is nothing typed here
         // to check instead. Which is the case that matters — an operator opens this
-        // dialog because a connector *stopped* working.
+        // dialog because a worker *stopped* working.
         const res = await api("POST", "/api/v1/connectors/test", {
           name: c.name, kind: c.kind, provider: providerSel.value,
           endpoint: endpointIn.value.trim(), sender: senderIn.value.trim(),
@@ -276,7 +286,7 @@ function askConnector({ api, connector, intro, extraLabel }) {
     // The patch carries every field this kind and provider actually use — the server
     // re-runs the kind's full validation on the resulting record (ADR-0160), so it has
     // to see what the operator is looking at. A field the shape hides is *omitted*,
-    // not sent empty: a SharePoint connector's endpoint is an optional override of the
+    // not sent empty: a SharePoint worker's endpoint is an optional override of the
     // Graph API base that the dialog does not offer, and sending "" for it would
     // silently delete it. Where a value genuinely has to go (switching to the preview
     // transport, which dials nothing) the server clears it, because that is a rule
@@ -302,19 +312,19 @@ function askConnector({ api, connector, intro, extraLabel }) {
   });
 }
 
-// connectorUsageHTML says what a connector is *for*, read off the deployed models
+// workerUsageHTML says what a worker is *for*, read off the deployed models
 // rather than remembered: the processes whose tasks resolve through it, and how many
 // instances are running on them. It is what makes Delete a decision rather than a
 // click (ADR-0163) — and it is the same set the server refuses the delete with, so
 // the row and the refusal cannot tell different stories.
 //
-// It is a *count*, with the list one click behind it in openConnectorUsage. Inline,
+// It is a *count*, with the list one click behind it in openWorkerUsage. Inline,
 // the list was the row: a mail worker twenty-one deployed definitions reference drew
 // fourteen wrapped lines of links, and the endpoint, the status pill and the actions
 // beside them were pushed apart by it — on the one row where something is actually
 // wrong, that is the row you cannot read. The numbers are what a scan needs; which
 // processes is what a decision needs, and a decision has a click to spare.
-export function connectorUsageHTML(usedBy) {
+export function workerUsageHTML(usedBy) {
   if (!usedBy || !usedBy.length) {
     return `<div class="muted conn-usage">Referenced by no deployed process</div>`;
   }
@@ -334,7 +344,7 @@ export function connectorUsageHTML(usedBy) {
 }
 
 // usageCounts reduces the raw list to the three numbers the row has room for: how many
-// deployed definitions resolve through the connector, how many distinct processes those
+// deployed definitions resolve through the worker, how many distinct processes those
 // are, and how many instances are running on them.
 function usageCounts(usedBy) {
   return {
@@ -370,16 +380,16 @@ function groupUsage(usedBy) {
   return groups;
 }
 
-// openConnectorUsage opens the list the row's count stands for: every deployed process
-// that resolves through this connector, grouped by process, each version linking to its
+// openWorkerUsage opens the list the row's count stands for: every deployed process
+// that resolves through this worker, grouped by process, each version linking to its
 // Operations page and carrying the elements whose tasks resolve through it and the
 // instances running on it right now.
 //
 // It reads what is already on the record — the same usedBy the row counted and the same
 // set the delete refusal names — so it opens instantly and cannot disagree with either.
 // Returns the overlay so a caller (or a test) can close it.
-export function openConnectorUsage({ connector }) {
-  const c = connector || {};
+export function openWorkerUsage({ worker }) {
+  const c = worker || {};
   const usedBy = c.usedBy || [];
   const groups = groupUsage(usedBy);
   const { defs, procs, live } = usageCounts(usedBy);
@@ -424,7 +434,7 @@ export function openConnectorUsage({ connector }) {
       </div>
       <div class="modal-foot">
         <span class="muted small">Deleting this worker parks these tasks with
-          &ldquo;no connector registered as ${esc(c.name || "")}&rdquo; until one of the same name
+          &ldquo;no worker registered as ${esc(c.name || "")}&rdquo; until one of the same name
           and kind exists again.</span>
         <button type="button" class="btn" data-usage-done title="Close this dialog">Done</button>
       </div>
@@ -461,17 +471,17 @@ export function openConnectorUsage({ connector }) {
   return ov;
 }
 
-// deleteConnectorFlow asks, then deletes — and when the server refuses because deployed
-// models still reference the connector (ADR-0163), asks the *second* question with the
+// deleteWorkerFlow asks, then deletes — and when the server refuses because deployed
+// models still reference the worker (ADR-0163), asks the *second* question with the
 // answer in hand: these processes, this many instances running, their tasks will park
-// with "no connector registered" until it exists again. Resolves true when the
-// connector was actually deleted, so the caller reloads only then.
+// with "no worker registered" until it exists again. Resolves true when the
+// worker was actually deleted, so the caller reloads only then.
 //
 // Two prompts rather than one pre-flight check: the usage shown on the row may be
 // stale by the time the button is pressed, and the server is the one that decides.
-export async function deleteConnectorFlow({ api, connector }) {
-  const c = connector || {};
-  if (!window.confirm(`Delete connector "${c.name}"?`)) return false;
+export async function deleteWorkerFlow({ api, worker }) {
+  const c = worker || {};
+  if (!window.confirm(`Delete worker "${c.name}"?`)) return false;
   const url = "/api/v1/connectors/" + encodeURIComponent(c.id);
   try {
     await api("DELETE", url);
@@ -483,7 +493,7 @@ export async function deleteConnectorFlow({ api, connector }) {
       u.activeInstances ? ` (${u.activeInstances} running)` : ""} \u2014 ${(u.elements || []).join(", ")}`).join("\n");
     if (!window.confirm(
       `"${c.name}" is referenced by ${used.length} deployed process${used.length === 1 ? "" : "es"}:\n\n${lines}\n\n` +
-      `Deleting it parks those tasks with "no connector registered as ${c.name}" until a connector of the same name and kind exists again.\n\nDelete anyway?`)) {
+      `Deleting it parks those tasks with "no worker registered as ${c.name}" until a worker of the same name and Worker Type exists again.\n\nDelete anyway?`)) {
       return false;
     }
     await api("DELETE", url + "?force=true");

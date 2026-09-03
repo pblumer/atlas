@@ -12,7 +12,7 @@ import (
 	"github.com/pblumer/atlas/connector/clio"
 )
 
-// budgetFixture deploys the message-start process, configures a clio connector and one
+// budgetFixture deploys the message-start process, configures a clio worker and one
 // watch on it, and returns the server, the subscription id and the fake reader whose
 // events the watch republishes.
 func budgetFixture(t *testing.T, watch string) (*Server, string, *fakeClioReader) {
@@ -26,7 +26,7 @@ func budgetFixture(t *testing.T, watch string) (*Server, string, *fakeClioReader
 	}
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"events","kind":"clio","endpoint":"http://x"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 	var conn connector
 	_ = json.Unmarshal(cb, &conn)

@@ -199,7 +199,7 @@ func (s *Server) loadCallOverrides() error {
 }
 
 // handleSetCallOverride sets (or replaces) the per-server target override for a called
-// process id (ADR-0105). Admin-gated, like connector config. The override is persisted
+// process id (ADR-0105). Admin-gated, like worker config. The override is persisted
 // durably before it is applied to the processor (I2), both on the run-loop goroutine.
 func (s *Server) handleSetCallOverride(w http.ResponseWriter, r *http.Request) {
 	pid := r.PathValue("processId")

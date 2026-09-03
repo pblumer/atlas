@@ -9,7 +9,7 @@ import (
 )
 
 // TestSendMailBoundedUsesTheSharedBudget pins the wiring: the SMTP client sends
-// through the bounded path, with the shared connector budget, rather than
+// through the bounded path, with the shared worker budget, rather than
 // net/smtp's unbounded SendMail.
 func TestSendMailBoundedUsesTheSharedBudget(t *testing.T) {
 	if nettimeout.Default == 0 {

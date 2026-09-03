@@ -18,19 +18,19 @@ import (
 )
 
 // The community repository (ADR-0081) distributes reusable building blocks —
-// connectors, service tasks, and script tasks — as one shareable unit: an
+// workers, service tasks, and script tasks — as one shareable unit: an
 // element-template payload (ADR-0027) wrapped in a manifest. This first slice
 // ships a curated, bundled catalog (compiled into the binary, no network) that
 // the Modeler can browse and install; a remote registry is a follow-up.
 //
-// The load-bearing rule is the trust split: a data-only artifact (a connector or
+// The load-bearing rule is the trust split: a data-only artifact (a worker or
 // service task) is safe to install directly, but a script task carries
 // executable code (ADR-0047's largest attack surface), so installing one is gated
 // behind the admin role and the Modeler imports it as a reviewable draft rather
 // than auto-enabling it. And, as everywhere, no secret value ever travels in a
 // shared artifact — only references (ADR-0041/0067/0069).
 
-// Package kinds. A connector and a service task are pure data (property bindings
+// Package kinds. A worker and a service task are pure data (property bindings
 // the compiler already runs); a script task carries a script body.
 const (
 	packageKindConnector   = "connector"
@@ -111,7 +111,7 @@ func repositoryChecksum(template json.RawMessage) (string, error) {
 
 // secretKeyPattern matches object keys that would name a credential value. A
 // *reference* key (one ending in "ref", e.g. credentialsRef) is allowed — that is
-// exactly how a connector points at a server-held secret without embedding it.
+// exactly how a worker points at a server-held secret without embedding it.
 var secretKeyPattern = regexp.MustCompile(`(?i)(password|passwd|secret|token|api[_-]?key|private[_-]?key|passphrase)`)
 
 // validatePackage checks a package is well-formed and safe to serve or install:
@@ -158,7 +158,7 @@ func validatePackage(p repositoryPackage) error {
 // scanForSecrets walks a decoded template and rejects any object key that names a
 // credential value while carrying a non-empty literal string. A reference (a key
 // ending in "ref") and a FEEL/placeholder expression (starting with "=" or
-// containing "${" / "{{") are allowed, so legitimate connector wiring passes while
+// containing "${" / "{{") are allowed, so legitimate worker wiring passes while
 // a hard-coded token does not. It is a best-effort guard, not a cryptographic one —
 // signing is a named ADR-0081 follow-up.
 func scanForSecrets(v any) error {
@@ -284,7 +284,7 @@ func (s *Server) handleGetRepositoryPackage(w http.ResponseWriter, r *http.Reque
 }
 
 // handleInstallRepositoryPackage installs a catalog package into this server's
-// template store. A data-only package (connector or service task) installs
+// template store. A data-only package (worker or service task) installs
 // directly; a script task carries code, so it is gated behind the admin role and
 // the response flags that the Modeler should import it as a reviewable draft
 // rather than enabling it silently (ADR-0081 trust split).

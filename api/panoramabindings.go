@@ -12,7 +12,7 @@ import (
 // collectBindingCatalog gathers the Atlas resources a Panorama document's bindings
 // resolve against (ADR-0189 §4), filtered for the caller.
 //
-// Run-loop goroutine only: it reads the project, connector, release and target
+// Run-loop goroutine only: it reads the project, worker, release and target
 // stores and the deployment registry.
 //
 // A map that is present but empty means "looked, holds none"; a map left absent

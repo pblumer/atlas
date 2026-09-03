@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.__errors = errors;
-  await page.goto("/connector-placement-harness.html");
+  await page.goto("/worker-placement-harness.html");
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
   await page.evaluate(() => window.__mount());
   await page.locator('[data-tab="implement"]').click();

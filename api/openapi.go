@@ -138,7 +138,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"lines": tArray(),
 			}))}},
 		{"GET", "/api/v1/backup", s.handleBackup, apiOp{
-			summary: "Download a backup of all design-time data (projects, drafts, deployments, forms, decisions, connectors) as a gzip tar; excludes user accounts, the vault key, and runtime state (admin-only when auth is on) (ADR-0107)", tag: "System", role: RoleAdmin,
+			summary: "Download a backup of all design-time data (projects, drafts, deployments, forms, decisions, workers) as a gzip tar; excludes user accounts, the vault key, and runtime state (admin-only when auth is on) (ADR-0107)", tag: "System", role: RoleAdmin,
 			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar archive of the design-time data directory"}}},
 		{"POST", "/api/v1/restore", s.handleRestore, apiOp{
 			summary: "Restore design-time data from an uploaded backup archive; overwrites matching artifacts, skips anything outside the design-time allowlist, and needs a restart for deployed processes to take effect (admin-only when auth is on) (ADR-0107)", tag: "System", role: RoleAdmin,
@@ -194,7 +194,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"POST", "/api/v1/deployments", s.handleDeploy, apiOp{
-			summary: "Deploy a BPMN model; the response carries warnings for references that will not resolve at runtime (an unconfigured connector)", tag: "Deployments", role: RoleModeler,
+			summary: "Deploy a BPMN model; the response carries warnings for references that will not resolve at runtime (an unconfigured worker)", tag: "Deployments", role: RoleModeler,
 			req: xmlBody("BPMN 2.0 XML"),
 			resp: jsonBody("Deployed processes", schemaObj(map[string]any{
 				"key": tInteger(), "processId": tString(), "version": tInteger(), "deployments": tArray(),
@@ -334,7 +334,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "The Workers view: every job type with its queue depth, in-flight count and incidents, and every worker seen this run (ADR-0157)", tag: "Incidents", role: RoleOperator,
 			resp: jsonBody("Workers and job-type queues", tObject())}},
 		{"GET", "/api/v1/workers/{id}/history", s.handleWorkerHistory, apiOp{
-			summary: "One worker's job history from the configured clio connector, newest first (admin-only; empty when no history connector is configured)", tag: "Incidents", role: RoleAdmin,
+			summary: "One Worker Instance's job history from the configured clio worker, newest first (admin-only; empty when no job history is configured)", tag: "Incidents", role: RoleAdmin,
 			resp: jsonBody("Worker job history", tObject())}},
 		{"GET", "/api/v1/workers/{id}/jobs", s.handleWorkerJobs, apiOp{
 			summary: "One worker's recent jobs: what it was handed, what it returned, and what failed (admin-only; a bounded in-memory tail, emptied by a restart)", tag: "Incidents", role: RoleAdmin,
@@ -911,69 +911,69 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List available Worker Types and where this server runs them", tag: "Workers", role: roleAny,
 			resp: jsonBody("Worker Type placements", schemaObj(map[string]any{"kinds": tArray()}))}},
 
-		// Legacy connector names remain compatibility aliases during the ADR-0203
+		// The legacy /connectors routes remain compatibility aliases during the ADR-0203
 		// migration. They bind to the same handlers and stores, so no second source
 		// of truth is introduced.
 		{"GET", "/api/v1/connectors", s.handleListConnectors, apiOp{
-			summary: "List managed connector instances (deprecated: use GET /api/v1/configured-workers)", tag: "Connectors", role: roleAny, deprecated: true, resp: jsonBody("Connectors", tArray())}},
+			summary: "List managed workers (deprecated: use GET /api/v1/configured-workers)", tag: "Workers", role: roleAny, deprecated: true, resp: jsonBody("Workers", tArray())}},
 		{"POST", "/api/v1/connectors", s.handleCreateConnector, apiOp{
-			summary: "Create a managed connector instance (deprecated: use POST /api/v1/configured-workers)", tag: "Connectors", role: RoleModeler, deprecated: true, req: jsonBody("Connector", tObject()), resp: jsonBody("Created connector", tObject())}},
+			summary: "Create a managed worker (deprecated: use POST /api/v1/configured-workers)", tag: "Workers", role: RoleModeler, deprecated: true, req: jsonBody("Worker", tObject()), resp: jsonBody("Created worker", tObject())}},
 		{"PATCH", "/api/v1/connectors/{id}", s.handleUpdateConnector, apiOp{
-			summary: "Update a managed connector instance (deprecated: use PATCH /api/v1/configured-workers/{id})", tag: "Connectors", role: RoleModeler, deprecated: true, req: jsonBody("Connector update", tObject()), resp: jsonBody("Updated connector", tObject())}},
+			summary: "Update a managed worker (deprecated: use PATCH /api/v1/configured-workers/{id})", tag: "Workers", role: RoleModeler, deprecated: true, req: jsonBody("Worker update", tObject()), resp: jsonBody("Updated worker", tObject())}},
 		{"DELETE", "/api/v1/connectors/{id}", s.handleDeleteConnector, apiOp{
-			summary: "Delete a managed connector instance (deprecated: use DELETE /api/v1/configured-workers/{id})", tag: "Connectors", role: RoleModeler, deprecated: true, status: http.StatusNoContent}},
+			summary: "Delete a managed worker (deprecated: use DELETE /api/v1/configured-workers/{id})", tag: "Workers", role: RoleModeler, deprecated: true, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/connector-kinds", s.handleConnectorKinds, apiOp{
-			summary: "List connector kinds (deprecated: use GET /api/v1/worker-types)", tag: "Connectors", role: roleAny, deprecated: true,
-			resp: jsonBody("Connector kind placements", schemaObj(map[string]any{"kinds": tArray()}))}},
+			summary: "List Worker Types (deprecated: use GET /api/v1/worker-types)", tag: "Workers", role: roleAny, deprecated: true,
+			resp: jsonBody("Worker Type placements", schemaObj(map[string]any{"kinds": tArray()}))}},
 
 		{"POST", "/api/v1/connectors/test", s.handleTestConnector, apiOp{
-			summary: "Check a connector without saving it — a mail connector connects and authenticates (or sends a test message to \"to\"), a SQL connector dials its connection string", tag: "Connectors", role: RoleModeler,
-			req: jsonBody("Connector check", tObject()), resp: jsonBody("Check result", tObject())}},
+			summary: "Check a worker without saving it — a mail worker connects and authenticates (or sends a test message to \"to\"), a SQL worker dials its connection string", tag: "Workers", role: RoleModeler,
+			req: jsonBody("Worker check", tObject()), resp: jsonBody("Check result", tObject())}},
 
 		{"GET", "/api/v1/mail/outbox", s.handleMailOutbox, apiOp{
-			summary: "List the messages the preview mail provider delivered, newest first (?limit=)", tag: "Connectors", role: RoleOperator, resp: jsonBody("Outbox", tObject())}},
+			summary: "List the messages the preview mail provider delivered, newest first (?limit=)", tag: "Workers", role: RoleOperator, resp: jsonBody("Outbox", tObject())}},
 		{"POST", "/api/v1/mail/outbox", s.handleDeliverMailOutbox, apiOp{
-			summary: "Deliver a framed message into the preview outbox (used by a mail worker running a preview connector)", tag: "Connectors", role: RoleOperator,
+			summary: "Deliver a framed message into the preview outbox (used by a mail worker running the preview provider)", tag: "Workers", role: RoleOperator,
 			req: jsonBody("Outbox message", tObject()), status: http.StatusNoContent}},
 		{"DELETE", "/api/v1/mail/outbox", s.handleClearMailOutbox, apiOp{
-			summary: "Empty the preview mail outbox", tag: "Connectors", role: RoleOperator, status: http.StatusNoContent}},
+			summary: "Empty the preview mail outbox", tag: "Workers", role: RoleOperator, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/ad/mock-directory", s.handleADMockDirectory, apiOp{
-			summary: "Show the mock Active Directories this server's workers hold — one forest per LDAP URL, with what a mockup run put in them", tag: "Connectors", role: RoleAdmin,
+			summary: "Show the mock Active Directories this server's workers hold — one forest per LDAP URL, with what a mockup run put in them", tag: "Workers", role: RoleAdmin,
 			resp: jsonBody("Mock directories", schemaObj(map[string]any{"workers": tArray()}))}},
 		{"POST", "/api/v1/ad/mock-directory", s.handleReportADMockDirectory, apiOp{
-			summary: "Report a mock directory (used by an AD worker running in mockup mode)", tag: "Connectors", role: RoleOperator,
+			summary: "Report a mock directory (used by an AD worker running in mockup mode)", tag: "Workers", role: RoleOperator,
 			req: jsonBody("Mock directory", tObject()), status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/sql/mock-journal", s.handleSQLMockJournal, apiOp{
-			summary: "Show what a database mockup run was asked — every statement, with the values the process bound. Admin-gated: a bound parameter is whatever the process bound, and nothing can tell a password from an id", tag: "Connectors", role: RoleAdmin,
+			summary: "Show what a database mockup run was asked — every statement, with the values the process bound. Admin-gated: a bound parameter is whatever the process bound, and nothing can tell a password from an id", tag: "Workers", role: RoleAdmin,
 			resp: jsonBody("Mock journals", schemaObj(map[string]any{"workers": tArray()}))}},
 		{"POST", "/api/v1/sql/mock-journal", s.handleReportSQLMockJournal, apiOp{
-			summary: "Report a mockup journal (used by a SQL worker running in mockup mode)", tag: "Connectors", role: RoleOperator,
+			summary: "Report a mockup journal (used by a SQL worker running in mockup mode)", tag: "Workers", role: RoleOperator,
 			req: jsonBody("Mock journal", tObject()), status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleListInboundSubscriptions, apiOp{
-			summary: "List a clio connector's inbound event subscriptions", tag: "Connectors", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},
+			summary: "List a clio worker's inbound event subscriptions", tag: "Workers", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},
 		{"POST", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleCreateInboundSubscription, apiOp{
-			summary: "Create an inbound event subscription for a clio connector", tag: "Connectors", role: RoleModeler, req: jsonBody("Subscription", tObject()), resp: jsonBody("Created subscription", tObject())}},
+			summary: "Create an inbound event subscription for a clio worker", tag: "Workers", role: RoleModeler, req: jsonBody("Subscription", tObject()), resp: jsonBody("Created subscription", tObject())}},
 		{"PATCH", "/api/v1/inbound-subscriptions/{id}", s.handleUpdateInboundSubscription, apiOp{
-			summary: "Update an inbound event subscription", tag: "Connectors", role: RoleModeler, req: jsonBody("Subscription update", tObject()), resp: jsonBody("Updated subscription", tObject())}},
+			summary: "Update an inbound event subscription", tag: "Workers", role: RoleModeler, req: jsonBody("Subscription update", tObject()), resp: jsonBody("Updated subscription", tObject())}},
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
-			summary: "Delete an inbound event subscription", tag: "Connectors", role: RoleModeler, status: http.StatusNoContent}},
+			summary: "Delete an inbound event subscription", tag: "Workers", role: RoleModeler, status: http.StatusNoContent}},
 		{"GET", "/api/v1/message-sources", s.handleListMessageSources, apiOp{
-			summary: "List every inbound event watch by the message name it publishes, so a model can be told whether its message start event has a source", tag: "Connectors", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
+			summary: "List every inbound event watch by the message name it publishes, so a model can be told whether its message start event has a source", tag: "Workers", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
 
 		{"PUT", "/api/v1/connectors/{id}/members/{principalId}", s.handleSetConnectorMember, apiOp{
-			summary: "Share a connector with a user or a group, or change their role (ADR-0205); owner only", tag: "Connectors", role: RoleModeler, req: jsonBody("Member role", tObject()), resp: jsonBody("Updated connector", tObject())}},
+			summary: "Share a worker with a user or a group, or change their role (ADR-0205); owner only", tag: "Workers", role: RoleModeler, req: jsonBody("Member role", tObject()), resp: jsonBody("Updated worker", tObject())}},
 		{"DELETE", "/api/v1/connectors/{id}/members/{principalId}", s.handleRemoveConnectorMember, apiOp{
-			summary: "Withdraw a user's or a group's access to a connector (ADR-0205); owner only", tag: "Connectors", role: RoleModeler, resp: jsonBody("Updated connector", tObject())}},
+			summary: "Withdraw a user's or a group's access to a worker (ADR-0205); owner only", tag: "Workers", role: RoleModeler, resp: jsonBody("Updated worker", tObject())}},
 		{"PUT", "/api/v1/connectors/{id}/visibility", s.handleSetConnectorVisibility, apiOp{
-			summary: "Seal a connector again, or open it to its member list (ADR-0205); owner only", tag: "Connectors", role: RoleModeler, req: jsonBody("Visibility", tObject()), resp: jsonBody("Updated connector", tObject())}},
+			summary: "Seal a worker again, or open it to its member list (ADR-0205); owner only", tag: "Workers", role: RoleModeler, req: jsonBody("Visibility", tObject()), resp: jsonBody("Updated worker", tObject())}},
 		{"PUT", "/api/v1/connectors/{id}/owner/{userId}", s.handleTransferConnector, apiOp{
-			summary: "Hand a connector to another account (ADR-0205); owner only", tag: "Connectors", role: RoleModeler, resp: jsonBody("Updated connector", tObject())}},
+			summary: "Hand a worker to another account (ADR-0205); owner only", tag: "Workers", role: RoleModeler, resp: jsonBody("Updated worker", tObject())}},
 		{"POST", "/api/v1/connectors/{id}/provision-clio-key", s.handleProvisionClioKey, apiOp{
-			summary: "Mint a scoped clio key (admin token supplied once) and seal it as this connector's credential", tag: "Connectors", role: RoleAdmin, req: jsonBody("Provision request", tObject()), resp: jsonBody("Provisioned credential", tObject())}},
+			summary: "Mint a scoped clio key (admin token supplied once) and seal it as this worker's credential", tag: "Workers", role: RoleAdmin, req: jsonBody("Provision request", tObject()), resp: jsonBody("Provisioned credential", tObject())}},
 
 		{"GET", "/api/v1/repository/packages", s.handleListRepository, apiOp{
 			summary: "Browse the repository catalog (filter by ?kind and ?q)", tag: "Repository", role: RoleModeler, resp: jsonBody("Catalog packages", tArray())}},

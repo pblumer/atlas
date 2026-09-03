@@ -15,19 +15,21 @@ import (
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/envname"
+	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/rest"
 	"github.com/pblumer/atlas/connector/script"
+	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/logging"
 )
 
-// Connector kinds this worker can serve out of process (ADR-0168).
+// Worker Types this worker can serve out of process (ADR-0168).
 //
-// A connector job arrives already resolved: the engine found the task's detail in
+// A worker job arrives already resolved: the engine found the task's detail in
 // the compiled process and evaluated it against the instance's variables, because it
 // is the only one who can, and what travels is plain values. So the code here does
 // only the work itself — for CSV, parsing — and needs nothing from the engine but
@@ -43,7 +45,7 @@ import (
 // Credentials are read from the environment rather than taken as flags because argv
 // is readable by anyone who can list processes.
 
-// BuiltinConnectors returns handlers for the named connector kinds, keyed by the job
+// BuiltinConnectors returns handlers for the named Worker Types, keyed by the job
 // type each serves. env looks up this worker's configuration; pass os.Getenv outside
 // of tests.
 //
@@ -64,10 +66,27 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.CsvImportJobType] = ExecFunc(runCSV)
 		case "ldif":
 			built.Handlers[compiler.LdifJobType] = ExecFunc(runLdif)
+		case "ldap":
+			// Nothing to configure, and nothing to report as a held worker name: an
+			// LDAP task authors its own server (ADR-0154), so what this worker needs
+			// is a way to bind — the secret references the models name, resolved from
+			// its own environment — rather than a directory somebody registered here.
+			//
+			// The pool is the one piece of state worth keeping: ADR-0154 pooled binds
+			// because they are expensive, and a worker that dialled per job would give
+			// that back the moment the work moved out of the engine. Nothing closes it
+			// explicitly — idle connections expire on the pool's own TTL, and a worker
+			// process ending releases the rest — which is why it needs no lifecycle
+			// hook here that no other kind has.
+			pool := ldap.NewPool(ldap.NewDialer(), ldap.PoolOptions{})
+			secret := ldapSecretFromEnv(env)
+			built.Handlers[compiler.LdapJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunLdapJob(ctx, j, pool, secret)
+			})
 		case "webscrape":
 			// Nothing to configure: the reach is the worker's network position, not a
 			// credential, so there is no environment to read and nothing to report as
-			// a held connector name.
+			// a held worker name.
 			client := webscrape.NewHTTPClient()
 			built.Handlers[compiler.WebScrapeJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return runWebScrape(ctx, j, client)
@@ -99,13 +118,25 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.RestJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return runREST(ctx, j, client, secret)
 			})
+		case "soap":
+			// REST's branch exactly, and for REST's reason: the authored auth arrives
+			// with the job and the secret behind its reference is read here, from this
+			// process's own environment, under the same ATLAS_CONNECTOR_<REF>_TOKEN
+			// name the engine uses.
+			client := soap.NewHTTPClient()
+			secret := soap.SecretResolver(func(ref string) string {
+				return env(envname.ConnectorToken(ref))
+			})
+			built.Handlers[compiler.SoapJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return runSoap(ctx, j, client, secret)
+			})
 		case "mail":
 			reg, names, err := mailRegistryFromEnv(env)
 			if err != nil {
 				return Connectors{}, err
 			}
 			if reg == nil {
-				// Told to serve mail, holding no connector to send through. Not an
+				// Told to serve mail, holding no worker to send through. Not an
 				// error: this worker very likely serves other kinds too, and killing
 				// those because no mailbox is configured yet is how a server started
 				// with nothing configured — the case the opt-out default is for —
@@ -184,6 +215,28 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.EntraJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunEntraJob(ctx, j, reg)
 			})
+		case "clio":
+			reg, names, err := clioRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve clio, holding no event store to reach. Not an error,
+				// for the reason mail's and Remedy's identical branches do not error:
+				// this worker very likely serves other kinds, and a store nobody has
+				// configured yet must park its tasks rather than take down the kinds
+				// that are configured.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			// One kind, three job types: write, query and read are the same connector
+			// and the same registry, and the resolved job says which of them it is.
+			for _, jobType := range []string{compiler.ClioWriteJobType, compiler.ClioQueryJobType, compiler.ClioReadJobType} {
+				built.Handlers[jobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+					return RunClioJob(ctx, j, reg)
+				})
+			}
 		case "remedy":
 			reg, names, err := remedyRegistryFromEnv(env)
 			if err != nil {
@@ -237,7 +290,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			if reg == nil {
 				// Told to serve this product, holding no database — the state every
 				// server starts in. Parks like mail and Entra above rather than
-				// failing; a connector configured in the Console brings it back.
+				// failing; a worker configured in the Console brings it back.
 				built.Unconfigured = append(built.Unconfigured, kind)
 				continue
 			}
@@ -276,11 +329,11 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 }
 
 // Connectors is what a worker was configured to serve: the handlers, keyed by the
-// job type each answers, and the connector *names* this worker holds credentials
+// job type each answers, and the worker *names* this worker holds credentials
 // for.
 //
 // The names are reported to the engine on every poll, because they are the half of
-// "can this connector be served" that only the worker knows — once a kind is
+// "can this worker be served" that only the worker knows — once a kind is
 // offloaded the engine holds no credential for it and cannot read another process's
 // environment. The Workers view subtracts them from what deployed models reference
 // to show the names configured nowhere (ADR-0168).
@@ -306,19 +359,19 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "csv", "entra", "jira", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "webscrape"}
+	return []string{"ad", "clio", "csv", "entra", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "soap", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.
 const mailEnvPrefix = "ATLAS_MAIL_"
 
-// mailOutboxURLEnv is where a preview connector delivers what it framed: the API of
-// the Atlas whose Operations › Outbox the operator is watching. A preview connector
+// mailOutboxURLEnv is where a preview worker delivers what it framed: the API of
+// the Atlas whose Operations › Outbox the operator is watching. A preview worker
 // is the one mail provider that produces something only the engine can show, so it is
 // the one that needs an address back (ADR-0150/0168).
 const mailOutboxURLEnv = mailEnvPrefix + "OUTBOX_URL"
 
-// mailRegistryFromEnv builds the mail connectors this worker holds.
+// mailRegistryFromEnv builds the mail workers this worker holds.
 // ATLAS_MAIL_CONNECTORS lists the names, and each name contributes its own
 // configuration under ATLAS_MAIL_<NAME>_.
 //
@@ -336,7 +389,7 @@ const mailOutboxURLEnv = mailEnvPrefix + "OUTBOX_URL"
 func mailRegistryFromEnv(env func(string) string) (*mail.Registry, []string, error) {
 	names := splitAndTrim(env(mailEnvPrefix + "CONNECTORS"))
 	if len(names) == 0 {
-		// No connector to send through. The caller decides what that means — see the
+		// No worker to send through. The caller decides what that means — see the
 		// "mail" arm of BuiltinConnectors — because it depends on what else this
 		// worker was asked to serve.
 		return nil, nil, nil
@@ -352,7 +405,7 @@ func mailRegistryFromEnv(env func(string) string) (*mail.Registry, []string, err
 	return reg, names, nil
 }
 
-// mailClientFromEnv builds one connector's client from its environment.
+// mailClientFromEnv builds one worker's client from its environment.
 func mailClientFromEnv(env func(string) string, name string) (mail.Client, error) {
 	key := mailEnvPrefix + envFold(name) + "_"
 	if provider := strings.TrimSpace(env(key + "PROVIDER")); provider != "" {
@@ -365,13 +418,13 @@ func mailClientFromEnv(env func(string) string, name string) (mail.Client, error
 			Outbox:   previewSink(env),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("worker: mail connector %q: %w", name, err)
+			return nil, fmt.Errorf("worker: mail worker %q: %w", name, err)
 		}
 		return client, nil
 	}
 	endpoint := env(key + "ENDPOINT")
 	if endpoint == "" {
-		return nil, fmt.Errorf("worker: mail connector %q has no endpoint: set %sENDPOINT", name, key)
+		return nil, fmt.Errorf("worker: mail worker %q has no endpoint: set %sENDPOINT", name, key)
 	}
 	return mail.NewSMTPClient(mail.Connector{
 		Endpoint: endpoint,
@@ -381,8 +434,8 @@ func mailClientFromEnv(env func(string) string, name string) (mail.Client, error
 	}), nil
 }
 
-// previewSink is where this worker's preview connectors deliver, or nil when it was
-// told no address — in which case [mail.NewProviderClient] refuses the connector at
+// previewSink is where this worker's preview workers deliver, or nil when it was
+// told no address — in which case [mail.NewProviderClient] refuses the worker at
 // startup, naming it, rather than letting a preview task discover at send time that
 // its message went nowhere.
 func previewSink(env func(string) string) mail.Sink {
@@ -394,7 +447,7 @@ func previewSink(env func(string) string) mail.Sink {
 }
 
 // httpOutbox is a [mail.Sink] that posts a framed message to an Atlas server's
-// preview outbox. It is the whole of what a preview connector needs from out here:
+// preview outbox. It is the whole of what a preview worker needs from out here:
 // the framing is [mail.PreviewClient]'s and is identical in both processes, so what a
 // preview run proves about a message stays true wherever it ran.
 type httpOutbox struct {
@@ -431,18 +484,18 @@ func (o *httpOutbox) Deliver(m mail.OutboxMessage) error {
 	return nil
 }
 
-// envFold turns a connector name into the environment-variable form of itself:
+// envFold turns a worker name into the environment-variable form of itself:
 // upper case, with anything that cannot appear in a variable name becoming an
 // underscore. It is applied the one way, and the error messages quote the result, so
 // an operator sets exactly the variable that was looked for.
 //
 // "The one way" is [envname.Key], shared with the engine that renders these
-// variables and with the connectors that name them when a reference resolves to
+// variables and with the workers that name them when a reference resolves to
 // nothing — the property only holds if all three fold identically.
 func envFold(name string) string { return envname.Key(name) }
 
 // splitAndTrim reads a comma-separated list, dropping blanks so a trailing comma
-// does not become a nameless connector.
+// does not become a nameless worker.
 func splitAndTrim(s string) []string {
 	var out []string
 	for _, p := range strings.Split(s, ",") {
@@ -461,7 +514,7 @@ func splitAndTrim(s string) []string {
 // resolved mail task means — only about which credentials are in reach.
 func RunMailJob(ctx context.Context, j Job, reg *mail.Registry) (map[string]any, error) {
 	if j.Connector == nil {
-		return nil, fmt.Errorf("mail: the job carried no resolved connector detail; is this server offloading the mail kind?")
+		return nil, fmt.Errorf("mail: the job carried no resolved worker detail; is this server offloading the mail kind?")
 	}
 	raw, err := json.Marshal(j.Connector.Fields)
 	if err != nil {
@@ -481,7 +534,7 @@ func RunMailJob(ctx context.Context, j Job, reg *mail.Registry) (map[string]any,
 // means.
 func runCSV(_ context.Context, j Job) (map[string]any, error) {
 	if j.Connector == nil {
-		return nil, fmt.Errorf("csv: the job carried no resolved connector detail; is this server offloading the csv kind?")
+		return nil, fmt.Errorf("csv: the job carried no resolved worker detail; is this server offloading the csv kind?")
 	}
 	raw, err := json.Marshal(j.Connector.Fields)
 	if err != nil {
@@ -505,7 +558,7 @@ func runCSV(_ context.Context, j Job) (map[string]any, error) {
 // read's entries or a write's file look like.
 func runLdif(_ context.Context, j Job) (map[string]any, error) {
 	if j.Connector == nil {
-		return nil, fmt.Errorf("ldif: the job carried no resolved connector detail; is this server offloading the ldif kind?")
+		return nil, fmt.Errorf("ldif: the job carried no resolved worker detail; is this server offloading the ldif kind?")
 	}
 	raw, err := json.Marshal(j.Connector.Fields)
 	if err != nil {
@@ -527,7 +580,7 @@ func runLdif(_ context.Context, j Job) (map[string]any, error) {
 // about what a selector or an attribute means.
 func runWebScrape(ctx context.Context, j Job, client webscrape.Client) (map[string]any, error) {
 	if j.Connector == nil {
-		return nil, fmt.Errorf("webscrape: the job carried no resolved connector detail; is this server offloading the webscrape kind?")
+		return nil, fmt.Errorf("webscrape: the job carried no resolved worker detail; is this server offloading the webscrape kind?")
 	}
 	raw, err := json.Marshal(j.Connector.Fields)
 	if err != nil {
@@ -544,7 +597,7 @@ func runWebScrape(ctx context.Context, j Job, client webscrape.Client) (map[stri
 	if res.ResultVariable == "" {
 		return nil, nil // the task writes nothing back
 	}
-	// The items travel as a plain list, built by the connector rather than here, so an
+	// The items travel as a plain list, built by the worker rather than here, so an
 	// offloaded scrape stores what the in-process path would have stored — strings for
 	// HTML, {title, link, description, published} objects for a feed.
 	return map[string]any{res.ResultVariable: webscrape.Items(res)}, nil
@@ -579,7 +632,7 @@ func runScript(ctx context.Context, j Job, exec script.Exec) (map[string]any, er
 // [rest.Run] with the in-process path; only whose secret store is in reach differs.
 func runREST(ctx context.Context, j Job, client rest.Client, secret rest.SecretResolver) (map[string]any, error) {
 	if j.Connector == nil {
-		return nil, fmt.Errorf("rest: the job carried no resolved connector detail; is this server offloading the rest kind?")
+		return nil, fmt.Errorf("rest: the job carried no resolved worker detail; is this server offloading the rest kind?")
 	}
 	raw, err := json.Marshal(j.Connector.Fields)
 	if err != nil {
@@ -601,6 +654,39 @@ func runREST(ctx context.Context, j Job, client rest.Client, secret rest.SecretR
 	return map[string]any{res.ResultVariable: res.Body}, nil
 }
 
+// runSoap performs a resolved SOAP job. It is runREST's shape because the two kinds
+// have one: everything about the call travels resolved, and the credential behind the
+// task's authSecret is read here, from this worker's own environment.
+func runSoap(ctx context.Context, j Job, client soap.Client, secret soap.SecretResolver) (map[string]any, error) {
+	if j.Connector == nil {
+		return nil, fmt.Errorf("soap: the job carried no resolved worker detail; is this server offloading the soap kind?")
+	}
+	raw, err := json.Marshal(j.Connector.Fields)
+	if err != nil {
+		return nil, err
+	}
+	var task soap.Job
+	if err := json.Unmarshal(raw, &task); err != nil {
+		return nil, fmt.Errorf("soap: cannot read the resolved detail: %w", err)
+	}
+	res, err := soap.Run(ctx, task, client, secret)
+	if err != nil {
+		return nil, err
+	}
+	// Through Result.Variables rather than the raw body, so an offloaded call writes
+	// what an in-engine one writes — and a task naming no result variable completes
+	// with nothing rather than with an empty object.
+	vars := res.Variables()
+	if len(vars) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]any, len(vars))
+	for _, v := range vars {
+		out[v.Name] = variableValue(v)
+	}
+	return out, nil
+}
+
 // announceADMock says once, at startup, that this worker writes to no directory, and
 // then says what it does instead — one line per simulated operation.
 //
@@ -616,7 +702,7 @@ func announceADMock(mock *ad.MockDirectory, seed string) {
 		attrs = append(attrs, slog.String("seed", seed))
 	}
 	logging.Warn(logging.ADMockEnabled,
-		"the ad connector is in mock mode: operations are simulated in this worker's memory and reach no domain controller",
+		"the ad worker is in mock mode: operations are simulated in this worker's memory and reach no domain controller",
 		attrs...)
 	mock.Observe(func(op ad.MockOperation) {
 		logging.Info(logging.ADMockPerformed, "ad mock directory",

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// twoDecisionBPMN has one central (connector) business rule task and one local
+// twoDecisionBPMN has one central (worker) business rule task and one local
 // one, so the compiler's mode selection and the deploy-time gate can be checked
 // side by side.
 const twoDecisionBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
@@ -31,7 +31,7 @@ const twoDecisionBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/201005
 </definitions>`
 
 // TestTemisConnectorParses proves an <atlas:temisConnector> business rule task
-// compiles to a central decision — the temis-connector job type and the connector
+// compiles to a central decision — the temis job type and the worker
 // name — while a plain business rule task stays local, and that the two modes are
 // authored identically otherwise (decision id, result variable, input mappings).
 func TestTemisConnectorParses(t *testing.T) {
@@ -57,12 +57,12 @@ func TestTemisConnectorParses(t *testing.T) {
 		t.Fatalf("expected both a central and a local business rule task, got central=%v local=%v", central, local)
 	}
 
-	// Central: temis-connector job type + the connector name recorded.
+	// Central: the temis job type + the worker name recorded.
 	if central.JobType != TemisDecisionJobTypeIndex {
 		t.Errorf("central job type = %d, want TemisDecisionJobTypeIndex %d", central.JobType, TemisDecisionJobTypeIndex)
 	}
 	if got := cp.Intern(central.Connector); got != "risk-service" {
-		t.Errorf("central connector = %q, want risk-service", got)
+		t.Errorf("central worker = %q, want risk-service", got)
 	}
 	if cp.Intern(central.ResultVar) != "risk" {
 		t.Errorf("central result var = %q, want risk", cp.Intern(central.ResultVar))
@@ -71,12 +71,12 @@ func TestTemisConnectorParses(t *testing.T) {
 		t.Errorf("central input mappings = %+v, want one Amount mapping", central.InputMappings)
 	}
 
-	// Local: DMN job type, no connector.
+	// Local: DMN job type, no worker.
 	if local.JobType != DMNJobTypeIndex {
 		t.Errorf("local job type = %d, want DMNJobTypeIndex %d", local.JobType, DMNJobTypeIndex)
 	}
 	if local.Connector != -1 {
-		t.Errorf("local connector = %d, want -1 (local)", local.Connector)
+		t.Errorf("local worker = %d, want -1 (local)", local.Connector)
 	}
 
 	// The deploy-time local-model gate sees only the local decision; the central
@@ -87,7 +87,7 @@ func TestTemisConnectorParses(t *testing.T) {
 	}
 }
 
-// TestTemisConnectorEmptyNameRejected fails a temisConnector with no connector
+// TestTemisConnectorEmptyNameRejected fails a temisConnector with no worker
 // name at parse (deploy) time rather than at runtime.
 func TestTemisConnectorEmptyNameRejected(t *testing.T) {
 	const bad = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">

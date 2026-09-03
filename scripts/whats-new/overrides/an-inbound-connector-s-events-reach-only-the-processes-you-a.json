@@ -1,7 +1,7 @@
 {
   "tags": [
     "Security",
-    "Connectors"
+    "Workers"
   ],
   "title": {
     "en": "Incoming events reach only the processes you allow",
@@ -13,9 +13,9 @@
   },
   "try": {
     "label": {
-      "en": "Open Connectors",
-      "de": "Konnektoren öffnen"
+      "en": "Open Workers",
+      "de": "Workers öffnen"
     },
-    "route": "#/console/connectors"
+    "route": "#/console/workers"
   }
 }

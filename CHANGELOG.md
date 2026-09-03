@@ -12,7 +12,176 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **SOAP tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 4).
+  A call to somebody else's web service no longer happens on the loop that owns the
+  partition's state. `soap` joins the kinds Atlas offloads and supervises by itself.
+
+  It is REST's slice with an envelope around it, and that is the whole argument: the
+  endpoint, the SOAPAction and the body are model data and travel resolved with the
+  job, while the credential behind the task's `authSecret` is a vault **reference**
+  that is resolved where it is used. `soapWorkerEnv` is `restWorkerEnv` with a
+  different job type — the two collectors are now one function called twice rather
+  than two that drift, and a test holds that neither picks up the other kind's tasks.
+
+  Both halves go through one `soap.Resolve`/`soap.Run` pair; the in-process handler
+  was rewritten onto it, and the result travels through `soap.Result` so a task naming
+  no result variable completes with nothing rather than with an empty object.
+
+  Three kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `temis`.
+
+- **LDAP tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 3).
+  A bind, a search or a modify against a directory somebody else operates no longer
+  happens on the loop that owns the partition's state. `ldap` joins the kinds Atlas
+  offloads and supervises by itself, so a fresh install gets it without configuring
+  anything.
+
+  It is Active Directory's handover exactly (ADR-0182), because the two kinds share a
+  shape: an LDAP task authors its own server and bind DN, so those travel with the
+  job, while its bind password and client certificate are vault **references** — and a
+  reference is resolved where it is used. `ldapWorkerEnv` renders the references the
+  deployed models actually name, resolved through the vault, under the
+  `ATLAS_CONNECTOR_<REF>_TOKEN` names the worker already reads. Both flavours are
+  covered: a certificate reference nothing answers to is a bind that cannot present an
+  identity, which is no better an outcome than a missing password.
+
+  The worker keeps the connection pool ADR-0154 introduced, so relocating the work
+  does not give back the reason binds were pooled in the first place. And both halves
+  now go through one `ldap.Resolve`/`ldap.Run` pair — the in-process handler was
+  rewritten onto it — so an offloaded search and an in-engine one cannot drift about
+  what an LDAP task means.
+
+  Four kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `soap`,
+  `temis`.
+
+- **A non-interrupting message or signal boundary event now fires every time, not once**
+  ([ADR-draft-repeating-non-interrupting-boundary-events](docs/adr/draft-repeating-non-interrupting-boundary-events.md),
+  refining [ADR-0040](docs/adr/0040-boundary-events.md)). Non-interrupting is how a model
+  says *reminder*: fire beside the host activity and leave it running. For as long as the
+  host runs, every occurrence should fire it again — and a recurring **timer** boundary
+  already did ([ADR-0054](docs/adr/0054-date-cycle-timers-for-catch-and-boundary.md)),
+  as does a non-interrupting event-subprocess trigger
+  ([ADR-0082](docs/adr/0082-event-subprocesses.md)).
+
+  A **message** or **signal** boundary did not. Taking its outgoing flow completed the
+  boundary's element instance, and its subscription retired with it, so the second message
+  correlated to nothing: no incident, no log line, nothing for the sender to see. Two
+  constructions a modeller reasonably reads as interchangeable disagreed about whether
+  "non-interrupting" means "repeatedly".
+
+  It now fires the way a recurring timer boundary fires — take the outgoing flow, re-open
+  the subscription, never complete the element instance. Staying armed rather than
+  completing and arming a replacement is deliberate: a replacement is only a queued
+  command for the rest of the batch, and a boundary instance is counted against its
+  scope, so a host completing in that window would leave an armed instance holding open a
+  scope that has already drained.
+
+  This changes behaviour for deployed models: one that relied on hearing the message once
+  will now hear it each time. The old behaviour was a defect and gave no way to depend on
+  it deliberately; a model that wants exactly one firing has the interrupting flag, or a
+  guard on the reminder branch. The escalation and conditional boundary kinds are
+  untouched — they arm inert and are *found* rather than waiting on a subscription, which
+  is a separate question.
+
+- **clio tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 2).
+  Writing an event, folding a subject's state, reading its history: three round trips
+  to an event store somebody else operates, all of them on the loop that owns the
+  partition's state. clio joins the kinds Atlas offloads and supervises by itself.
+
+  It is Remedy's handover with an event store in place of an ITSM instance — the
+  endpoint is a connector record, the token a vault reference behind it, and
+  `clioWorkerEnv` renders the stores the engine has configured. One difference is
+  deliberate: a store with **no** token is still handed over, because clio can be
+  reached without one and dropping it would leave a working instance unserved.
+
+  A clio write also carries something no other kind does — the event **body**, which is
+  the task's input mappings or the variables it sees. That is engine state, so it is
+  resolved in the engine and travels in the payload beside the idempotency key that
+  de-duplicates a retry. Both halves now go through one `clio.Run`: the in-process
+  handlers were rewritten to call it, so an offloaded write and an in-engine one cannot
+  disagree about what a clio task means.
+
+  Five kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `ldap`,
+  `soap`, `temis`.
+
+- **REST and LDIF tasks no longer run on the engine's own loop**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md),
+  finishing [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md)). ADR-0164 decided
+  two years ago that a side-effecting service task belongs on a worker, and then chose
+  deprecation over a ban for one stated reason: a connector task could not run on a
+  worker yet. ADR-0168 closed that, and the worker halves have landed kind by kind
+  since — but the *default* never moved, so a fresh install still made outbound HTTP
+  calls from the processor's own process. `rest` and `ldif` now join the kinds Atlas
+  offloads and supervises by itself.
+
+  REST needed what Active Directory needed: its endpoint travels with the job, but its
+  `authSecret` is a vault reference, and a reference is resolved where it is used — on
+  a supervised worker, a child process with no vault. The engine now renders exactly
+  the references its deployed models name into that child's environment, under the
+  `ATLAS_CONNECTOR_<REF>_TOKEN` names the worker already reads. Only what is deployed
+  travels: the running models' secrets, not the vault.
+
+  What is still in the engine is now a list rather than a condition — `clio`,
+  `sharepoint`, `scim`, `ldap`, `soap` and `temis` each need a worker half, one slice
+  each, and the record names them. Beside them stands the closed list of what stays
+  in-engine on purpose: FEEL, local DMN, the mockup task, timers, user tasks, and user
+  provisioning (which mutates Atlas's own store and has no endpoint to reach).
+  `--in-process-connectors` keeps working and now says at startup that it puts every
+  integration back on the run loop.
+
 ### Added
+
+- **Google Sheets as a Worker Type, and a spreadsheet or a Drive folder as an event
+  source.** A lot of the data a process runs on lives in a spreadsheet somebody
+  maintains by hand — the applicant list, the budget lines, the tracking table the team
+  actually looks at. Atlas could not reach one at all, and not for want of a package:
+  Google needs a signed JWT-bearer assertion, which the generic REST Worker Type's
+  bearer/basic/apiKey surface cannot produce, so the gap was structural.
+
+  Everything a person reads about it says **Worker**, per ADR-0203. The old spelling
+  survives only where changing it would break something: the `connector/` package path,
+  the `connector="…"` attribute and the `<atlas:googleSheetsConnector>` element (both
+  authored in deployed models, and the guard that stops bpmn-js silently dropping an
+  extension only recognizes `*Connector` elements), and the `"connector"` key in the
+  offload payload.
+
+  **Outbound** ([ADR-0235](docs/adr/0235-google-sheets-worker.md))
+  is eight operations that are steps a process takes: create a spreadsheet, add a tab,
+  read a range, write one, append rows, clear a range, delete a tab, move the file to
+  the trash. `values` takes the three shapes a process actually holds — a list of rows,
+  a flat list of cells, or a list of objects projected through the task's `columns`; a
+  list of objects with no columns is refused at deploy rather than written in an order
+  nobody chose. A read with `header` answers with objects keyed by the first row, which
+  is the shape a multi-instance subprocess iterates. `delete-spreadsheet` **trashes
+  rather than purges**: a process that deletes the wrong file is a bad afternoon either
+  way, but only one of the two is survivable. The credential — a service account's key,
+  or a refresh token — lives in the vault behind a Worker name, never in a model.
+
+  **Inbound** ([ADR-0234](docs/adr/0234-google-inbound-watch.md))
+  is the two intake channels people already have. A **row watch** publishes each new row
+  of a spreadsheet as an Atlas message — the "a Google Form writes its responses into a
+  sheet" case — and a **folder watch** publishes each file put into a Drive folder,
+  because the folder is a queue people already use. Both ride the existing inbound
+  bridge, so an event starts or wakes a process through ordinary message correlation,
+  and Atlas polls rather than exposing anything to the internet. A row's sequence is its
+  own row number, which is monotonic for appends; a file has none, so its mark is scoped
+  per file id exactly as a Jira issue's is (ADR-0214).
+
+  Two things are stated rather than hidden. Delivery is at-least-once and a spreadsheet
+  has no idempotency key, so a retried append can duplicate a row — a process that
+  cannot tolerate that needs a marker column it reads first. And a row watch loses rows
+  if rows are *deleted* from the watched range, because a row's only identity is its
+  place; the sheets people watch are the append-only ones.
+
+- **The Google service-account grant is now shared machinery.** `connector/oauth2` had
+  named it "the one such case" a caller supplies its own `Fetcher` for. A second caller
+  needs it, and two copies of a JWT signer is the duplication that package was
+  extracted to end, so it moved into `oauth2.ServiceAccount` and the mail Worker Type
+  delegates to it.
 
 - **Importing a UML class diagram: reading what somebody else drew.** A data model is
   normally drawn in a UML tool — Enterprise Architect, Papyrus, Visual Paradigm — long
@@ -703,6 +872,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Everything a person reads now says Worker.** The Console's *Connectors* page was
+  renamed to *Workers* by an adapter that rewrote the rendered DOM after the fact
+  ([ADR-0203](docs/adr/0203-worker-execution-model.md), slice 2). It patched the
+  handful of strings it knew about and only on that one route, so the old word stayed
+  everywhere it had not been told about: the row menu offered *Configure connector*,
+  a delete asked "Delete connector?", an incident said the model named a connector,
+  and a deploy refused a model with `ad connector task … needs a connector`.
+
+  The adapter is gone. `#/console/workers` is a real route the Console renders itself
+  (the old `#/console/connectors` redirects to it, so a bookmark still lands), and the
+  vocabulary is now the source's own — in the Console, the Modeler, the handbook,
+  `atlas --help`, the OpenAPI summaries, every deploy and incident message, the
+  example models and the comments in this tree. A **Worker Type** is a capability, a
+  **Worker** is one configured target of it, and a **Worker Instance** is a process
+  leasing its jobs.
+
+  **Nothing on the wire moved.** A deployed model, a running worker and a scripted
+  deployment all keep working unchanged: the `connector="…"` BPMN attribute and the
+  `atlas:*Connector` extension elements, the `connector/` package paths, `atlas worker
+  --connector`, `--offload-connectors` / `--in-process-connectors` /
+  `--supervise-connector`, the `ATLAS_*_CONNECTORS` and `ATLAS_CONNECTOR_<REF>_TOKEN`
+  variables, the `connectors` field a worker registration carries, and the
+  `/api/v1/connectors` routes. Renaming those is a separate slice with its own
+  compatibility window
+  ([the migration plan](docs/architecture/worker-execution-migration.md), slice 6).
+
+  Three words that read the same are somebody else's and were left alone: BPMN's
+  **off-page connector** (link events), an AI client's **custom connector** (MCP), and
+  Microsoft Identity Manager's **connector** in the MIM comparison. Records written
+  before ADR-0203 — the decision records, and the release notes above — keep their
+  wording, because they are dated accounts of what was true when they were written.
+
 - **The Modeler's bar carries two buttons now, and a menu for the rest.** It ended with
   seven, added one at a time as the editor grew — Token simulation, Variables,
   Auto-layout, Save, Export XML, Documentation, Deploy — and every one of them was the
@@ -866,6 +1067,34 @@ _Changed_ / _Removed_ for each version.
   `e2e/infomodel-import.spec.mjs` drives the real Console — a click has to open a file
   dialog, and a chosen file has to produce the report — which is the crude assertion
   that would have caught this and did not exist.
+
+- **A data association drawn inside a subprocess was thrown away at compile time.** A
+  `<dataInputAssociation>` or `<dataOutputAssociation>` is drawn on the *activity*, and
+  an activity may sit in any scope a model nests — an ordinary subprocess, an event
+  subprocess, an ad-hoc. The compiler wired I/O mappings by walking the whole scope tree
+  and wired data associations by walking only the process root's element lists. So an
+  activity inside a subprocess kept its `zeebe:ioMapping` and silently lost its
+  associations.
+
+  Nothing said so. The model validated, deployed, started, ran through the activity and
+  finished, and the data object it was drawn as writing stayed empty — the read variable
+  `null` — with no error, no warning and no incident. The two walks are now one function
+  with a comment saying they must stay in step.
+
+- **An event subprocess with a `zeebe:ioMapping` overwrote the variable it was meant to
+  update, with `null`, the first time it fired.** An armed event-subprocess trigger is an
+  element instance whose element id is the *handler container* — that is how it finds the
+  message or timer it waits on. The generic per-activity work is keyed off the element
+  id, so the trigger also ran the handler's input and output mappings as if it were the
+  handler.
+
+  The timing is what made it fatal. A trigger arms when its scope is *entered* — at
+  instance creation for a root-level one — so the input mapping evaluated against a scope
+  where the main flow had not yet written anything, and the output mapping promoted that
+  `null` into the parent scope the moment a message arrived. The handler then read the
+  register the trigger had just destroyed. Data associations on the handler had the same
+  problem. The trigger now runs neither; the handler run applies both, at the moment its
+  values exist.
 
 - **A data object whose declaration went missing took the whole deploy down with it.**
   A data object is two elements: the `<dataObject>` that declares it and carries its

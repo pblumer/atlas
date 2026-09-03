@@ -38,7 +38,7 @@ import (
 // (ADR-0036, and ADR-0179 for the whole argument). So the history goes there: no new storage in Atlas, no new invariant
 // surface, no second backup path, and retention becomes the operator's own policy in
 // their own store rather than another flag here. It is opt-in by naming a clio
-// connector on the command line — an operator who names none keeps the ring and
+// worker on the command line — an operator who names none keeps the ring and
 // nothing else changes.
 //
 // **It must never slow a job down.** That is the lesson mail taught (ADR-0168): the
@@ -71,14 +71,14 @@ const (
 // persistently unreachable clio is noticed rather than swallowed.
 const historyBuffer = 1024
 
-// historyWriteTimeout bounds one append. It is not the connector call budget
+// historyWriteTimeout bounds one append. It is not the worker call budget
 // (ADR-0149): nothing waits on this, so the only thing the timeout protects is the
 // drain loop's ability to keep moving.
 const historyWriteTimeout = 10 * time.Second
 
-// historyExporter appends settled job runs to a clio connector.
+// historyExporter appends settled job runs to a clio worker.
 type historyExporter struct {
-	// connector is the clio connector's name, read off this server's command line and
+	// worker is the clio worker's name, read off this server's command line and
 	// from nowhere else — the same rule the supervisor follows.
 	connector string
 	scope     string
@@ -86,13 +86,13 @@ type historyExporter struct {
 	// dropped counts what the buffer could not take. It is reported rather than
 	// hidden: a history with a silent gap is worse than one that says where it is.
 	dropped atomic.Uint64
-	// client resolves the connector on the run loop, because clientreg.Registry has
+	// client resolves the worker on the run loop, because clientreg.Registry has
 	// no lock of its own and a rebuild swaps its map wholesale. Once per batch, not
 	// once per event.
 	client func() (clio.Client, bool)
 }
 
-// newHistoryExporter builds an exporter for a named connector. A blank name means an
+// newHistoryExporter builds an exporter for a named worker. A blank name means an
 // operator asked for no history, and nil is what every call site then checks for.
 func newHistoryExporter(connector, scope string, client func() (clio.Client, bool)) *historyExporter {
 	if strings.TrimSpace(connector) == "" {
@@ -146,7 +146,7 @@ func (e *historyExporter) run(quit <-chan struct{}) {
 				// misconfiguration visible without drowning the log.
 				e.dropped.Add(1)
 			} else if err := e.write(client, run); err != nil {
-				logging.Warn(logging.WorkerHistoryFailed, "could not append a job run to the history connector",
+				logging.Warn(logging.WorkerHistoryFailed, "could not append a job run to the history worker",
 					slog.String("connector", e.connector), slog.String("error", err.Error()))
 			}
 			// A gap is worth one line each time it grows by a buffer's worth: enough to
@@ -244,7 +244,7 @@ func (s *Server) historyOf(ctx context.Context, worker string) ([]map[string]any
 	}
 	client, ok := s.history.client()
 	if !ok {
-		return nil, false, fmt.Errorf("the history connector %q is not configured on this server", s.history.connector)
+		return nil, false, fmt.Errorf("the history worker %q is not configured on this server", s.history.connector)
 	}
 	events, err := client.ReadEvents(ctx, clio.ReadEventsRequest{
 		Subject: historySubjectRoot + historyWorkerSegment(worker),
@@ -298,7 +298,7 @@ func (s *Server) handleWorkerHistory(w http.ResponseWriter, r *http.Request) {
 		// flag turns it on is more use than a 404 that leaves an operator guessing.
 		httpapi.JSON(w, http.StatusOK, map[string]any{
 			"worker": r.PathValue("id"), "jobs": []map[string]any{}, "configured": false,
-			"note": "no job history is configured; name a clio connector with --worker-history to keep one",
+			"note": "no job history is configured; name a clio worker with --worker-history to keep one",
 		})
 		return
 	}
