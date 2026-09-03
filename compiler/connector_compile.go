@@ -1421,6 +1421,18 @@ func compileWebScrapeConnectorTask(b *Builder, st xmlServiceTask, retries int32)
 	if err != nil {
 		return 0, err
 	}
+	fields, err := webScrapeFields(st.Id, cn.Fields)
+	if err != nil {
+		return 0, err
+	}
+	absoluteLinks, err := webScrapeFlag(st.Id, "absoluteLinks", cn.AbsoluteLinks)
+	if err != nil {
+		return 0, err
+	}
+	plainText, err := webScrapeFlag(st.Id, "plainText", cn.PlainText)
+	if err != nil {
+		return 0, err
+	}
 	hasSelector := strings.TrimSpace(cn.Selector) != ""
 	hasAttribute := strings.TrimSpace(cn.Attribute) != ""
 	switch format {
@@ -1428,12 +1440,26 @@ func compileWebScrapeConnectorTask(b *Builder, st xmlServiceTask, retries int32)
 		if !hasSelector {
 			return 0, fmt.Errorf("compiler: webscrape connector task %q needs a selector for html format", st.Id)
 		}
+		// With fields, each one states its own attribute; a task-level attribute would
+		// have nothing left to mean, so it is refused rather than silently dropped.
+		if hasAttribute && len(fields) > 0 {
+			return 0, fmt.Errorf("compiler: webscrape connector task %q has both an attribute and scrapeField children; each field carries its own attribute", st.Id)
+		}
+		if plainText {
+			return 0, fmt.Errorf("compiler: webscrape connector task %q format %q does not use plainText, which strips markup from a feed entry's description", st.Id, format.String())
+		}
 	case WebScrapeFormatRSS, WebScrapeFormatAtom:
 		if hasSelector {
 			return 0, fmt.Errorf("compiler: webscrape connector task %q format %q does not use a selector", st.Id, format.String())
 		}
 		if hasAttribute {
 			return 0, fmt.Errorf("compiler: webscrape connector task %q format %q does not use an attribute", st.Id, format.String())
+		}
+		if len(fields) > 0 {
+			return 0, fmt.Errorf("compiler: webscrape connector task %q format %q returns feed entries and does not use scrapeField children", st.Id, format.String())
+		}
+		if absoluteLinks {
+			return 0, fmt.Errorf("compiler: webscrape connector task %q format %q does not use absoluteLinks; a feed's link is already absolute", st.Id, format.String())
 		}
 	}
 	url, err := restValue(st.Id, "url", cn.Url)
@@ -1448,14 +1474,59 @@ func compileWebScrapeConnectorTask(b *Builder, st xmlServiceTask, retries int32)
 		}
 	}
 	return b.AddWebScrapeExtractionTask(WebScrapeExtractionConfig{
-		Url:       url,
-		Selector:  selector,
-		Attribute: strings.TrimSpace(cn.Attribute),
-		Format:    format,
-		MaxItems:  maxItems,
-		Result:    strings.TrimSpace(cn.ResultVariable),
-		Retries:   retries,
+		Url:           url,
+		Selector:      selector,
+		Attribute:     strings.TrimSpace(cn.Attribute),
+		Format:        format,
+		MaxItems:      maxItems,
+		Fields:        fields,
+		AbsoluteLinks: absoluteLinks,
+		PlainText:     plainText,
+		Result:        strings.TrimSpace(cn.ResultVariable),
+		Retries:       retries,
 	}), nil
+}
+
+// webScrapeFields validates one task's authored field list. A name is required and
+// unique — it is the object key the value lands under, so an unnamed or duplicated
+// field would silently drop a value the author asked for
+// (ADR-0231).
+func webScrapeFields(taskID string, fields []xmlScrapeField) ([]WebScrapeFieldConfig, error) {
+	if len(fields) == 0 {
+		return nil, nil
+	}
+	out := make([]WebScrapeFieldConfig, 0, len(fields))
+	seen := make(map[string]bool, len(fields))
+	for _, f := range fields {
+		name := strings.TrimSpace(f.Name)
+		if name == "" {
+			return nil, fmt.Errorf("compiler: webscrape connector task %q has a scrapeField without a name", taskID)
+		}
+		if seen[name] {
+			return nil, fmt.Errorf("compiler: webscrape connector task %q has two scrapeFields named %q", taskID, name)
+		}
+		seen[name] = true
+		out = append(out, WebScrapeFieldConfig{
+			Name:      name,
+			Selector:  strings.TrimSpace(f.Selector),
+			Attribute: strings.TrimSpace(f.Attribute),
+		})
+	}
+	return out, nil
+}
+
+// webScrapeFlag reads one structural boolean attribute. Anything but true/false (in
+// any case) is refused: a typo silently meaning false is how a setting an author
+// deliberately switched on never reaches the worker.
+func webScrapeFlag(taskID, attr, raw string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "false":
+		return false, nil
+	case "true":
+		return true, nil
+	default:
+		return false, fmt.Errorf("compiler: webscrape connector task %q has a non-boolean %s %q (want true or false)", taskID, attr, raw)
+	}
 }
 
 func webScrapeFormat(taskID, raw string) (WebScrapeFormat, error) {

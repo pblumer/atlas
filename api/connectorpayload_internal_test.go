@@ -162,10 +162,33 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 			// (ADR-0190) and decide what the worker *does*: without the format it
 			// fetches the feed as HTML and applies a CSS selector to XML.
 			name:    "webscrape-feed",
-			element: `<atlas:webscrapeConnector url="https://example.com/rss" format="rss" maxItems="15" resultVariable="schlagzeilen"/>`,
+			element: `<atlas:webscrapeConnector url="https://example.com/rss" format="rss" maxItems="15" plainText="true" resultVariable="schlagzeilen"/>`,
 			jobType: compiler.WebScrapeJobType,
 			want:    "webscrape",
-			fields:  map[string]any{"url": "https://example.com/rss", "format": "rss", "maxItems": float64(15)},
+			fields: map[string]any{
+				"url": "https://example.com/rss", "format": "rss", "maxItems": float64(15),
+				"plainText": true,
+			},
+		},
+		{
+			// A structured HTML scrape. The field list decides the result's *shape*:
+			// a worker that receives the item selector without the fields returns the
+			// items' text as strings, and the model reads .zins off a string
+			// (ADR-0231).
+			name: "webscrape-fields",
+			element: `<atlas:webscrapeConnector url="https://example.com/zinsen" selector="tr.row" absoluteLinks="true" resultVariable="zinsen">` +
+				`<atlas:scrapeField name="laufzeit" selector="td.term"/>` +
+				`<atlas:scrapeField name="link" selector="a" attribute="href"/>` +
+				`</atlas:webscrapeConnector>`,
+			jobType: compiler.WebScrapeJobType,
+			want:    "webscrape",
+			fields: map[string]any{
+				"url": "https://example.com/zinsen", "selector": "tr.row", "absoluteLinks": true,
+				"fields": []any{
+					map[string]any{"name": "laufzeit", "selector": "td.term"},
+					map[string]any{"name": "link", "selector": "a", "attribute": "href"},
+				},
+			},
 		},
 		{
 			name:    "entra",
@@ -207,7 +230,9 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 				t.Errorf("payload kind = %q, want %q: the worker dispatches on this", got.Kind, tc.want)
 			}
 			for k, want := range tc.fields {
-				if got.Fields[k] != want {
+				// DeepEqual, not ==: a payload field can be a list (a scrape's item
+				// fields), and comparing those with == panics rather than failing.
+				if !reflect.DeepEqual(got.Fields[k], want) {
 					t.Errorf("field %q = %#v, want %#v", k, got.Fields[k], want)
 				}
 			}

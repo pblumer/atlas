@@ -12,7 +12,12 @@
   node can be drilled into, and a finding names the element the work is parked on;
   amended 2026-09-02 — §7 gives each kind its own outline; amended 2026-09-02 — the
   landscape draws deployment targets, so §4's unreachable and stale are producible
-  on it and what a payload declares unproducible is derived from what it drew)
+  on it and what a payload declares unproducible is derived from what it drew; amended
+  2026-09-02 — §10 gains the landscape's own export, which has only one class, and
+  the mesh payload carries the observation time that export has to render; amended
+  2026-09-02 — §6's impact answer gains a severity breakdown, the names of the
+  nodes in it, and a ranking of every node's radius, and states why "is this the
+  only way" is not a question this graph can be asked)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -537,6 +542,54 @@ unaffected.
 > or the credential reference. Those are this operator's map of where their
 > infrastructure lives, and a landscape is opened by anybody with modeler access.
 
+> **Amendment (2026-09-02): the impact answer says how bad and which, and the
+> landscape ranks its radii without being asked about a node first.**
+> The answer above was a count and a highlight, and both leave out what somebody
+> acts on. Three additions, and one deliberate non-addition:
+>
+> - **How bad.** The radius is broken down by §4's severity classes: "twelve depend
+>   on this — one critical, one attention, ten OK" is a different morning from twelve
+>   quiet ones, and the count is identical in both. It is stated as triage and never
+>   as cause. A node's class is what that node reports about itself; that three of a
+>   worker's dependents are critical may be the worker's fault, may be why the worker
+>   looks busy, or may be unrelated — and a panel that inferred causation from
+>   adjacency would be wrong the first time anybody checked, which is once.
+> - **Which.** The impacted nodes are named, worst first, direct before transitive
+>   within a class. This is the findings list's argument applied to the impact
+>   answer: on four hundred circles, "twelve depend on this" means finding twelve lit
+>   dots, and hunting is what somebody does instead of noticing. Direct and
+>   transitive are kept apart because they are different facts — the direct
+>   dependents are the ones whose owners get told.
+> - **Which node, out of all of them.** Impact analysis needed a selection, which
+>   assumes the reader already suspects the right node; before a change, or on an
+>   instance somebody has just been handed, that assumption is exactly backwards. The
+>   walk therefore runs from every node and the results are ranked. It is O(N·E) over
+>   the graph already in the browser, which §7's budget bounds — past it the payload
+>   arrives collapsed to applications, so N is a few dozen precisely where it would
+>   have cost the most. The ranking follows the direction and depth controls rather
+>   than fixing its own question: two blast-radius numbers on one page measured
+>   differently would be worse than one.
+>
+> **What is deliberately not built is "is this the only way".** The obvious next
+> question — of the twelve, how many would *stop* rather than merely be affected,
+> because this node is their only path — has one answer on this graph, for every
+> node, always: yes. Every edge §1 derives names exactly one resolved provider. A
+> call activity resolves through the deployment overrides to a single process, a
+> service task names a single worker, a business-rule task a single decision; where
+> the resolution fails the mesh draws *unresolved* rather than a second candidate.
+> There is no fan-out to alternatives anywhere in the derivation, so "does this
+> dependent have another way" is a label that never varies — and a label that never
+> varies teaches a reader that the distinction exists when it does not. It becomes a
+> real question the day the landscape derives something with more than one provider,
+> and not before.
+>
+> One correctness fix travels with this, found while ranking every node: asking about
+> a **restricted placeholder itself** used to report zero dependents and call the
+> answer complete. Arriving at a boundary and standing on one are different — the
+> nodes that point at a placeholder are in this caller's own picture, so they are
+> walked — and "nothing depends on this" is the single claim §6 says a boundary must
+> never be allowed to make. It now reports them, as a floor.
+
 ### 7. A stated size budget, and a server-side fallback
 
 The mesh declares a **supported node/edge budget**, verified by a browser performance
@@ -601,6 +654,56 @@ Two export classes, and they are not interchangeable:
 The timestamp is not decoration. An undated "all green" picture circulates inside an
 organization long after it stopped being true, and is believed because it looks like
 evidence.
+
+> **Amendment (2026-09-02): the derived landscape has one export class, and the
+> artifact carries its own provenance.**
+> The two classes above were written for the drawn views, where the distinction is
+> real: an ArchiMate view exists because somebody placed elements on it, and a
+> picture of that structure discloses only what they authored. The derived landscape
+> has no such half. Its structure is *read off this server's resources* rather than
+> drawn, and every node on it carries an observation state — so there is no version
+> of this picture that is a model export, and offering a "structure only" variant
+> would only produce a landscape that hides what it knows. **Every export of the
+> mesh is a live export.**
+>
+> What that costs is nothing, because the redaction is *inherited rather than
+> re-applied*: what is written to the file is the picture the server already built
+> for this principal — scope-filtered, with §3's restricted placeholders where a
+> scope cut a path — serialized in the browser from the SVG on screen. There is no
+> export endpoint to authorize, no second walk over an unfiltered graph, and
+> therefore nothing that could disclose more than the screen it came from. That is
+> the argument §6's impact analysis already makes for running on the delivered
+> graph, applied to the artifact rather than to the answer.
+>
+> What §10 demands in exchange is that the file stand alone, and that is the whole
+> of the design:
+>
+> - **The observation time comes from the server**, on the mesh payload, and is
+>   rendered into the image. The browser's clock dates the *save*, not the reading,
+>   and the two are the same number only if nobody left the tab open. A payload
+>   without one says so in the artifact rather than substituting a plausible time —
+>   "old" and "unknown" are different, and only the second one is true there.
+> - **Everything the picture is not showing travels inside it**: which landscape
+>   this is (the whole of it, filtered by a term, drilled into a node), how many of
+>   its nodes were drawn, how many are hidden by the reader's access, whether it is
+>   collapsed over the size budget, whether counting parked work stopped at its
+>   bound, and which of §4's states this build cannot produce at all. Beside the
+>   canvas all of that is in the legend; a file pasted into a ticket has no beside.
+> - **The key travels too.** A hexagon nobody can name is a shape rather than a
+>   worker. It is drawn from the same list the on-screen legend renders, which is
+>   drawn by the functions that drew the nodes, so a third rendering cannot come to
+>   explain a picture it no longer matches.
+> - **The artifact is the whole landscape at full extent, not the viewport.** Pan and
+>   zoom are reading aids; a file cropped to where somebody had scrolled would drop
+>   nodes and say nothing about having dropped them.
+> - **It is inert and self-contained.** The theme's custom properties are resolved to
+>   literals so the file renders where nobody has Atlas's stylesheet; the styling is
+>   harvested from the live stylesheet rather than restated for exports, because a
+>   second copy would drift and a drifted export is wrong in a way only its recipient
+>   can see; and every script and event handler is stripped, because an exported file
+>   is opened by people who did not make it. The heartbeat is stilled — an animation
+>   rasterizes at whatever phase the encoder caught, and severity is carried by the
+>   ring, the badge and its glyph regardless.
 
 ### 11. Delivery position
 

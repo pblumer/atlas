@@ -458,7 +458,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		// resources per requesting principal, never stored, and never mixed into the
 		// ArchiMate documents above. Its status block declares which of ADR-0189 §6's
 		// observation states this build cannot produce, so a consumer knows what the
-		// absence of a finding is worth.
+		// absence of a finding is worth, and observedAt says when the landscape was
+		// read — a consumer that renders this picture into a file has to put that
+		// date in the file (ADR-0211 §10), and only the server can supply it.
 		{"GET", "/api/v1/panorama/mesh", s.panoramaMesh.HandleGraph, apiOp{
 			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Derived landscape graph", tObject())}},

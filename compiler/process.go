@@ -467,7 +467,9 @@ type UserTaskDetail struct {
 //     fetch (literal-or-FEEL, like REST); ScrapeSelector is the CSS selector whose
 //     matches are extracted; ScrapeAttribute names the HTML attribute to read from
 //     each match (-1 → each match's text content); ResultVar receives the extracted
-//     values as a JSON array (ADR-0118).
+//     values as a JSON array (ADR-0118). With ScrapeFields set, the selector picks
+//     items instead and each match becomes an object of those fields
+//     (ADR-0231).
 //
 // Unused fields for a given kind are -1 (Intern maps that back to ""); Limit is 0
 // when unset. No kind carries its body in the detail: where a payload is a variable
@@ -558,10 +560,20 @@ type ConnectorTaskDetail struct {
 	// keep their semantics. ScrapeMaxItems is the deterministic first-N bound (0 =
 	// unlimited). Feed modes return structured entries and never inspect selector or
 	// attribute at runtime.
-	ScrapeSelector  RestExpr
-	ScrapeAttribute int32
-	ScrapeFormat    WebScrapeFormat
-	ScrapeMaxItems  int32
+	//
+	// ScrapeFields, when non-empty, changes what one HTML match *is*: the selector
+	// picks items and every match becomes an object carrying these fields, each read
+	// by its own field-relative selector and attribute (ADR-0231).
+	// A field list and ScrapeAttribute are mutually exclusive. ScrapeAbsoluteLinks
+	// resolves href/src reads against the fetched document's final URL (HTML only);
+	// ScrapePlainText strips markup from a feed entry's description (feeds only).
+	ScrapeSelector      RestExpr
+	ScrapeAttribute     int32
+	ScrapeFormat        WebScrapeFormat
+	ScrapeMaxItems      int32
+	ScrapeFields        []ScrapeField
+	ScrapeAbsoluteLinks bool
+	ScrapePlainText     bool
 	// User-provisioning connector fields (JobType == UserConnectorJobType, ADR-0123).
 	// UserOp is the interned operation ("create" | "set-password" | "disable").
 	// UserName identifies the account; UserEmail/UserDisplayName/UserRoles/UserPassword
@@ -852,6 +864,19 @@ type RestExpr struct {
 type RestKV struct {
 	Name string
 	Val  RestExpr
+}
+
+// ScrapeField is one named field of a structured HTML scrape
+// (ADR-0231): Name is the key the extracted value
+// gets in the item's object, Selector an optional CSS selector evaluated *within* the
+// matched item (-1 → the item element itself), and Attribute the optional attribute
+// read from the element it resolves to (-1 → that element's text). All three are
+// interned structural literals, never FEEL: a field list is the result's shape, and a
+// shape that varies per instance is not a shape.
+type ScrapeField struct {
+	Name      int32
+	Selector  int32
+	Attribute int32
 }
 
 // ScriptJobTaskDetail is the per-script-job-task data a behavior needs at
