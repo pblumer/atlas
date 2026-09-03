@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "scim-tasks-run-on-a-worker-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "User provisioning moved out of the engine",
+        "de": "User-Provisionierung ist aus der Engine ausgezogen"
+      },
+      "summary": {
+        "en": "Creating a user at an identity provider, looking one up, searching for one — until now Atlas did all of it from the process that runs the engine, so a slow provider held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the credential your task references is handed to that worker, exactly as it already is for REST and SOAP.",
+        "de": "Einen Benutzer beim Identity Provider anlegen, einen nachschlagen, nach einem suchen — bisher machte Atlas all das im Prozess, der die Engine ausführt, sodass ein langsamer Provider Arbeit aufhielt, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Das Credential, das Ihr Task referenziert, wird an diesen Worker übergeben — genau wie bei REST und SOAP schon."
+      },
+      "link": {
+        "label": "ADR-0233",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "sharepoint-tasks-run-on-a-worker-now",
       "version": "Unreleased",
       "date": null,
@@ -317,27 +346,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "example-capturing-mortgage-rates-daily",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A worked example: capturing a rate table every morning",
-        "de": "Ein durchgespieltes Beispiel: eine Zinstabelle jeden Morgen erfassen"
-      },
-      "summary": {
-        "en": "The new example reads a bank's mortgage rates once a day and turns each table row into a record. It also answers the two questions every scraping process runs into: how to address the table you mean when six of them look alike (by what it contains, not by where it sits), and what should happen on the day the page is rebuilt and the selector matches nothing — here a branch that ends visibly, rather than a run that files an empty row and lets weeks pass unnoticed. The step that writes the rows away is deliberately left simulated, so the process runs end to end before a credential exists.",
-        "de": "Das neue Beispiel liest einmal täglich die Hypothekarzinsen einer Bank und macht aus jeder Tabellenzeile einen Datensatz. Es beantwortet nebenbei die zwei Fragen, auf die jeder Scraping-Prozess stösst: wie man die gemeinte Tabelle adressiert, wenn sechs davon gleich aussehen (über ihren Inhalt, nicht über ihre Position), und was am Tag passieren soll, an dem die Seite umgebaut ist und der Selektor nichts mehr trifft — hier ein Zweig, der sichtbar endet, statt eines Laufs, der eine leere Zeile ablegt und wochenlang unbemerkt bleibt. Der Schritt, der die Zeilen wegschreibt, ist bewusst simuliert: So läuft der Prozess vollständig durch, bevor es ein Credential gibt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Examples"
-      ]
     }
   ]
 }

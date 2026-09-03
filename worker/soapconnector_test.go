@@ -139,3 +139,21 @@ func TestRunSoapJobWithoutAResolvedDetail(t *testing.T) {
 		t.Fatal("a job with no connector payload was accepted")
 	}
 }
+
+// A payload whose field carries the wrong JSON type is reported as a payload this
+// worker cannot read. Reachable rather than theoretical: a worker leases from
+// whichever Atlas is in front of it, so a field whose shape changed between the two
+// arrives exactly this way — and a zero Job would POST to an empty endpoint.
+func TestRunSoapJobRefusesAPayloadItCannotRead(t *testing.T) {
+	job := Job{Connector: &ConnectorPayload{Kind: "soap", Fields: map[string]any{
+		"endpoint": "https://example.com/svc", "operation": []any{"not", "a", "string"},
+	}}}
+
+	_, err := runSoap(context.Background(), job, &recordingSoapClient{}, nil)
+	if err == nil {
+		t.Fatal("a payload with a mistyped field was accepted")
+	}
+	if !strings.Contains(err.Error(), "cannot read the resolved detail") {
+		t.Errorf("error = %v, want it to say the resolved detail could not be read", err)
+	}
+}
