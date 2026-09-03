@@ -196,3 +196,61 @@ func TestTemisRegistryFromEnvRefusesANamedServiceWithNoURL(t *testing.T) {
 		t.Errorf("error = %v, want it to name the variable an operator must set", err)
 	}
 }
+
+// CompletingExecFunc has to stand in both places, and this is the reason the ladder
+// is worth having rather than a second Handlers map: a worker dispatches on Exec, so
+// a completing handler must satisfy it — and when it does, the decision half is
+// simply dropped rather than mis-sent.
+func TestCompletingExecFuncSatisfiesBothShapes(t *testing.T) {
+	want := Outcome{
+		Variables: map[string]any{"zins": 1.13},
+		Decision:  &DecisionReport{DecisionID: "Hypothekarzins"},
+	}
+	f := CompletingExecFunc(func(context.Context, Job) (Outcome, error) { return want, nil })
+
+	// As the wider shape: both halves.
+	got, err := f.RunCompleting(context.Background(), Job{})
+	if err != nil {
+		t.Fatalf("RunCompleting: %v", err)
+	}
+	if got.Decision == nil || got.Decision.DecisionID != "Hypothekarzins" {
+		t.Errorf("outcome = %+v, want the decision carried through", got)
+	}
+
+	// As a plain Exec: the variables, and nothing that would need a field the
+	// completion does not have.
+	var asExec Exec = f
+	vars, err := asExec.Run(context.Background(), Job{})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if vars["zins"] != 1.13 {
+		t.Errorf("variables = %#v, want the same variables the wider shape returns", vars)
+	}
+}
+
+// runHandler picks the shape: a handler that can report a decision is asked for one,
+// and one that cannot is not — which is what keeps every existing kind untouched by
+// the widening.
+func TestRunHandlerAsksForTheWidestShapeAHandlerImplements(t *testing.T) {
+	completing := CompletingExecFunc(func(context.Context, Job) (Outcome, error) {
+		return Outcome{Decision: &DecisionReport{DecisionID: "Hypothekarzins"}}, nil
+	})
+	if out, err := runHandler(context.Background(), completing, Job{}); err != nil || out.Decision == nil {
+		t.Errorf("out=%+v err=%v, want the decision from a completing handler", out, err)
+	}
+
+	plain := ExecFunc(func(context.Context, Job) (map[string]any, error) {
+		return map[string]any{"zins": 1.13}, nil
+	})
+	out, err := runHandler(context.Background(), plain, Job{})
+	if err != nil {
+		t.Fatalf("runHandler: %v", err)
+	}
+	if out.Decision != nil {
+		t.Errorf("decision = %+v, want none: an ordinary handler evaluates no decision", out.Decision)
+	}
+	if out.Variables["zins"] != 1.13 {
+		t.Errorf("variables = %#v, want what the ordinary handler returned", out.Variables)
+	}
+}
