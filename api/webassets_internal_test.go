@@ -83,34 +83,65 @@ func TestTheConsoleNavPointsAtRoutesTheRouterServes(t *testing.T) {
 	}
 }
 
-// TestVendoredBundleMatchesItsRecordedChecksum.
+// TestVendoredBundlesMatchTheirRecordedChecksums.
 //
-// ATLAS-VENDORED.txt says "Do not edit archimate-viewer.js by hand" and records
-// the SHA-256 that the documented esbuild command produces. Until now that was a
-// claim nothing checked, so a hand-edit — or a rebuild somebody forgot to record —
-// would have been invisible, and the recipe in that file would slowly stop
-// describing the file beside it.
+// Each ATLAS-VENDORED.txt says "Do not edit <bundle> by hand" and records the
+// SHA-256 that the documented esbuild command produces. Until now that was a claim
+// nothing checked, so a hand-edit — or a rebuild somebody forgot to record — would
+// have been invisible, and the recipe in that file would slowly stop describing the
+// file beside it.
 //
-// This cannot rebuild the bundle: that needs npm, which a buildless binary
-// deliberately does not have at test time (ADR-0012). What it can do is hold the
+// This cannot rebuild the bundles: that needs npm, which a buildless binary
+// deliberately does not have at test time (ADR-0012). What it can do is hold each
 // file to the number its own documentation states, which catches every way the two
 // drift apart except a rebuild whose author also updated the record — and that one
 // is the case where they agree.
-func TestVendoredBundleMatchesItsRecordedChecksum(t *testing.T) {
-	bundle, err := fs.ReadFile(webFS, "web/vendor/archimate/archimate-viewer.js")
+//
+// It walks the vendor directories rather than naming the bundles, so a second
+// vendored bundle is covered by existing in the tree rather than by somebody
+// remembering to add it here. A directory that carries a record is held to it; a
+// directory with no record at all is out of scope here, because the sum to pin it to
+// would have to be invented rather than read off a documented rebuild.
+func TestVendoredBundlesMatchTheirRecordedChecksums(t *testing.T) {
+	records, err := fs.Glob(webFS, "web/vendor/*/ATLAS-VENDORED.txt")
 	if err != nil {
-		t.Fatalf("read bundle: %v", err)
+		t.Fatalf("glob: %v", err)
 	}
-	notes, err := fs.ReadFile(webFS, "web/vendor/archimate/ATLAS-VENDORED.txt")
-	if err != nil {
-		t.Fatalf("read vendoring notes: %v", err)
+	if len(records) == 0 {
+		t.Fatal("no ATLAS-VENDORED.txt found; this guard would pass vacuously")
 	}
 
-	sum := fmt.Sprintf("%x", sha256.Sum256(bundle))
-	if !strings.Contains(string(notes), sum) {
-		t.Errorf("archimate-viewer.js hashes to %s, which ATLAS-VENDORED.txt does not record.\n"+
-			"Either the bundle was edited by hand — which that file forbids — or it was "+
-			"rebuilt without recording the new checksum. Rebuild with the command in "+
-			"ATLAS-VENDORED.txt and put this sum in it.", sum)
+	recorded := regexp.MustCompile(`(?m)^SHA-256 ([^\s:]+):\s*\n\s*([0-9a-f]{64})`)
+	checked := 0
+	for _, rec := range records {
+		notes, err := fs.ReadFile(webFS, rec)
+		if err != nil {
+			t.Fatalf("read %s: %v", rec, err)
+		}
+		sums := recorded.FindAllStringSubmatch(string(notes), -1)
+		if len(sums) == 0 {
+			t.Errorf("%s records no SHA-256, so nothing holds the bundle beside it to its recipe.\n"+
+				"Add a \"SHA-256 <file>:\" line with the sum the documented rebuild produces.", rec)
+			continue
+		}
+		for _, m := range sums {
+			name, want := m[1], m[2]
+			file := path.Join(path.Dir(rec), name)
+			bundle, err := fs.ReadFile(webFS, file)
+			if err != nil {
+				t.Errorf("%s records a sum for %s, which is not embedded: %v", rec, name, err)
+				continue
+			}
+			checked++
+			if got := fmt.Sprintf("%x", sha256.Sum256(bundle)); got != want {
+				t.Errorf("%s hashes to %s, which %s does not record.\n"+
+					"Either the bundle was edited by hand — which that file forbids — or it was "+
+					"rebuilt without recording the new checksum. Rebuild with the command in "+
+					"that file and put this sum in it.", file, got, rec)
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no vendored bundle was checked against a recorded sum")
 	}
 }

@@ -15,30 +15,34 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/infomodel-harness.html");
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
   await page.evaluate(() => window.__mount());
-  await expect(page.locator(".im-class").first()).toBeVisible();
+  await expect(page.locator(".uml-class").first()).toBeVisible();
 });
 
 // Addressed by the name on the group, not by matching label text: "Order" is a
 // prefix of "OrderStatus", and a locator that cannot tell them apart is a locator
 // that will silently pass on the wrong box.
-const box = (page, name) => page.locator(`.im-class[data-name="${name}"]`);
+//
+// It resolves to the diagram-js element rather than to the drawing inside it,
+// because diagram-js lays a hit rectangle over every shape — which is what makes a
+// click select for a real user, and what a click aimed at the drawing bounces off.
+const box = (page, name) => page.locator(`.djs-element:has(.uml-class[data-name="${name}"])`);
 
 test("a class reads as UML: its kind, its members, and which of them identify it", async ({ page }) => {
-  await expect(page.locator(".im-class")).toHaveCount(4);
+  await expect(page.locator(".uml-class")).toHaveCount(4);
 
   const order = box(page, "Order");
-  await expect(order.locator(".im-stereo")).toHaveText("«businessObject»");
+  await expect(order.locator(".uml-stereo")).toHaveText("«businessObject»");
   // The business key is marked on the box, because it is the fact the whole model
   // turns on — what makes Order#ORD-1 the same order in two processes.
-  await expect(order.locator(".im-attr.key .im-attr-name")).toHaveText("⚿ id");
+  await expect(order.locator(".uml-attr.key .uml-attr-name")).toHaveText("⚿ id");
   // A non-default multiplicity is shown; "exactly one" is the unstated default.
-  await expect(order.locator(".im-attr-mult")).toHaveText(" [0..1]");
+  await expect(order.locator(".uml-attr-mult")).toHaveText(" [0..1]");
 
   // An enumeration carries literals where the others carry attributes.
   const status = box(page, "OrderStatus");
-  await expect(status.locator(".im-stereo")).toHaveText("«enumeration»");
-  await expect(status.locator(".im-literal")).toHaveCount(2);
-  await expect(status.locator(".im-attr")).toHaveCount(0);
+  await expect(status.locator(".uml-stereo")).toHaveText("«enumeration»");
+  await expect(status.locator(".uml-literal")).toHaveCount(2);
+  await expect(status.locator(".uml-attr")).toHaveCount(0);
 });
 
 test("the canvas refuses what the server would refuse, in the server's words", async ({ page }) => {
@@ -47,7 +51,7 @@ test("the canvas refuses what the server would refuse, in the server's words", a
   await page.locator('.im-connect[data-kind="composition"]').click();
   await box(page, "Address").click();
   // Every class the matrix rules out fades, so the canvas offers only what is legal.
-  await expect(box(page, "Customer")).toHaveClass(/unreachable/);
+  await expect(box(page, "Customer").locator(".uml-class")).toHaveClass(/unreachable/);
   await box(page, "Customer").click();
 
   const toasts = await page.evaluate(() => window.__toasts);
@@ -56,13 +60,13 @@ test("the canvas refuses what the server would refuse, in the server's words", a
   // The refusal teaches the notation rather than only saying no.
   expect(toasts[0].msg).toContain("no existence of its own");
   // And nothing was drawn.
-  await expect(page.locator(".im-edge")).toHaveCount(1);
+  await expect(page.locator(".uml-edge")).toHaveCount(1);
 });
 
 test("an enumeration cannot be related to at all", async ({ page }) => {
   await page.locator('.im-connect[data-kind="association"]').click();
   await box(page, "Order").click();
-  await expect(box(page, "OrderStatus")).toHaveClass(/unreachable/);
+  await expect(box(page, "OrderStatus").locator(".uml-class")).toHaveClass(/unreachable/);
   await box(page, "OrderStatus").click();
   const toasts = await page.evaluate(() => window.__toasts);
   expect(toasts[0].msg).toContain("closed set of values");
@@ -73,13 +77,34 @@ test("a legal relationship is drawn, and the panel states how to read it", async
   await box(page, "Order").click();
   await box(page, "Address").click();
 
-  await expect(page.locator(".im-edge")).toHaveCount(2);
+  await expect(page.locator(".uml-edge")).toHaveCount(2);
   // Selecting it lands on the relationship panel, which names both ends.
   await expect(page.locator(".im-reading")).toHaveText("Order → Address");
   // A composition is marked at the whole — the end the ownership belongs to.
-  const drawn = page.locator(".im-line.composition");
-  await expect(drawn).toHaveAttribute("marker-start", "url(#im-diamond-filled)");
+  const drawn = page.locator(".uml-edge.composition .uml-edge-line");
+  await expect(drawn).toHaveAttribute("marker-start", "url(#uml-diamond-solid)");
   await expect(page.locator("#im-save")).toBeEnabled();
+});
+
+test("a relationship is picked off the drawing, and stays picked while it is edited", async ({ page }) => {
+  // A line is the one thing diagram-js draws no outline for, so which relationship
+  // you are editing has to be said on the drawing or it is only said in the panel.
+  const edge = page.locator(".djs-element:has(.uml-edge)");
+  await edge.click();
+  await expect(page.locator(".im-reading")).toHaveText("Customer → Order");
+  await expect(edge).toHaveClass(/selected/);
+  // The ends carry the role and the multiplicity: "1 customer places 0..* orders" is
+  // the sentence the diagram is drawn to say.
+  await expect(page.locator(".uml-end-label")).toHaveText(["customer 1", "orders 0..*"]);
+
+  // Typing in the panel re-renders, and reconciling rebuilds every line — so the
+  // selection has to survive that, or the first keystroke deselects what is being
+  // renamed and the panel closes under the cursor.
+  await page.locator("#im-a-name").fill("bestellt");
+  await expect(page.locator(".uml-edge-label")).toHaveText("bestellt");
+  await expect(page.locator(".im-reading")).toHaveText("Customer → Order");
+  await expect(page.locator(".djs-element:has(.uml-edge)")).toHaveClass(/selected/);
+  expect(page.__errors).toEqual([]);
 });
 
 test("a generalization has no roles, because is-a is not counted", async ({ page }) => {
@@ -102,7 +127,7 @@ test("editing a class updates the drawing, and a rename retypes what referred to
   await expect(page.locator(".im-attrs input[type=checkbox]")).toHaveCount(3);
   await page.locator("#im-c-stereo").selectOption("valueType");
   await expect(page.locator(".im-attrs input[type=checkbox]")).toHaveCount(0);
-  await expect(box(page, "Order").locator(".im-attr.key")).toHaveCount(0);
+  await expect(box(page, "Order").locator(".uml-attr.key")).toHaveCount(0);
 });
 
 // The order of a class's attributes is not a view setting: a class box reads top to
@@ -112,7 +137,7 @@ test("editing a class updates the drawing, and a rename retypes what referred to
 // the box, and is what gets saved.
 test("an attribute can be moved, and the box and the document follow", async ({ page }) => {
   const order = box(page, "Order");
-  const names = () => order.locator(".im-attr-name");
+  const names = () => order.locator(".uml-attr-name");
   await expect(names()).toHaveText(["⚿ id", "placedOn", "total"]);
 
   await order.click();
@@ -126,7 +151,7 @@ test("an attribute can be moved, and the box and the document follow", async ({ 
   await expect(page.locator('tr[data-attr="1"] [data-f="name"]')).toBeFocused();
   // And the key is still the key: reordering moves an attribute, it does not
   // redeclare identity.
-  await expect(order.locator(".im-attr.key .im-attr-name")).toHaveText("⚿ id");
+  await expect(order.locator(".uml-attr.key .uml-attr-name")).toHaveText("⚿ id");
 
   await page.locator("#im-save").click();
   await expect.poll(() => page.evaluate(() => window.__saved)).toBeTruthy();
@@ -156,12 +181,12 @@ test("a row is dragged only by its grip", async ({ page }) => {
 
 test("an enumeration's literals reorder the same way", async ({ page }) => {
   const status = box(page, "OrderStatus");
-  await expect(status.locator(".im-literal")).toHaveText(["draft", "approved"]);
+  await expect(status.locator(".uml-literal")).toHaveText(["draft", "approved"]);
 
   await status.click();
   await page.locator('tr[data-lit="1"] [data-f="literal"]').focus();
   await page.keyboard.press("Alt+ArrowUp");
-  await expect(status.locator(".im-literal")).toHaveText(["approved", "draft"]);
+  await expect(status.locator(".uml-literal")).toHaveText(["approved", "draft"]);
 });
 
 test("a move past either end is refused rather than wrapping", async ({ page }) => {
@@ -169,7 +194,7 @@ test("a move past either end is refused rather than wrapping", async ({ page }) 
   await order.click();
   await page.locator('tr[data-attr="0"] [data-f="name"]').focus();
   await page.keyboard.press("Alt+ArrowUp"); // already first
-  await expect(order.locator(".im-attr-name")).toHaveText(["⚿ id", "placedOn", "total"]);
+  await expect(order.locator(".uml-attr-name")).toHaveText(["⚿ id", "placedOn", "total"]);
   // Nothing moved, so nothing was edited: the model is still clean.
   await expect(page.locator("#im-dirty")).toBeHidden();
 });
@@ -219,7 +244,7 @@ test("the JSON Schema projection is shown as derived, and says what it dropped",
 });
 
 test("the panel states that this is a subset, and what it does not author", async ({ page }) => {
-  await page.locator(".im-svg").click({ position: { x: 700, y: 470 } });
+  await page.locator(".djs-container svg").click({ position: { x: 4, y: 4 } });
   await expect(page.locator(".im-note")).toContainText("This is a subset of UML");
   await expect(page.locator(".im-note li")).toHaveCount(3);
   await expect(page.locator(".im-note")).toContainText("Where a datum lives is the data store's question");
@@ -230,17 +255,17 @@ test("the panel states that this is a subset, and what it does not author", asyn
 // thing BPMN's <dataStoreReference> gestures at and then says nothing about. It is
 // declared once per application here, and named by every process that reaches it.
 test.describe("data stores", () => {
-  const store = (page) => page.locator('.im-store[data-name="Orders"]');
+  const store = (page) => page.locator('.djs-element:has(.uml-store[data-name="Orders"])');
 
   test("a store is drawn as a store, and says what it holds", async ({ page }) => {
     await expect(store(page)).toBeVisible();
     // Not a class box: the one mistake to prevent is reading it as one. A class says
     // what an Order is; a store says where Orders are kept.
-    await expect(store(page).locator(".im-store-body")).toHaveCount(1);
-    await expect(store(page).locator(".im-store-name")).toHaveText("Orders");
-    await expect(store(page).locator(".im-store-sub")).toHaveText("«read» Order");
+    await expect(store(page).locator(".uml-store-body")).toHaveCount(1);
+    await expect(store(page).locator(".uml-store-name")).toHaveText("Orders");
+    await expect(store(page).locator(".uml-store-sub")).toHaveText("«read» Order");
     // The line to the class it keeps is an annotation, not an association.
-    await expect(page.locator(".im-store-line")).toHaveCount(1);
+    await expect(page.locator(".uml-store-link")).toHaveCount(1);
   });
 
   test("the panel offers only classes a store can keep", async ({ page }) => {
@@ -258,12 +283,12 @@ test.describe("data stores", () => {
 
   test("adding a store puts it on the canvas and selects it", async ({ page }) => {
     await page.locator('[data-add="store"]').click();
-    await expect(page.locator(".im-store")).toHaveCount(2);
+    await expect(page.locator(".uml-store")).toHaveCount(2);
     await expect(page.locator(".im-panel h3")).toHaveText("Data store");
     await page.locator("#im-s-name").fill("Invoices");
-    await expect(page.locator('.im-store[data-name="Invoices"]')).toBeVisible();
+    await expect(page.locator('.djs-element:has(.uml-store[data-name="Invoices"])')).toBeVisible();
     // A store with no class yet says so rather than claiming to hold something.
-    await expect(page.locator('.im-store[data-name="Invoices"] .im-store-sub')).toHaveText("holds nothing yet");
+    await expect(page.locator('.djs-element:has(.uml-store[data-name="Invoices"]) .uml-store-sub')).toHaveText("holds nothing yet");
 
     await page.locator("#im-save").click();
     const saved = await page.evaluate(() => window.__saved);
@@ -275,7 +300,7 @@ test.describe("data stores", () => {
   });
 
   test("the subset states that writing through a store is not authored", async ({ page }) => {
-    await page.locator(".im-svg").click({ position: { x: 700, y: 500 } });
+    await page.locator(".djs-container svg").click({ position: { x: 4, y: 4 } });
     await expect(page.locator(".im-note")).toContainText("Writing through a data store");
   });
 });

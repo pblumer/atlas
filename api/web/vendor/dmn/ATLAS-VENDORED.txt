@@ -33,3 +33,6 @@ Do not edit dmn-modeler.js by hand. To rebuild (reproducible, offline):
 
 assets/ also holds the dmn-js diagram/drd/decision-table/literal-expression CSS
 and the dmn icon font, copied from dmn-js@17.10.0/dist/assets.
+
+SHA-256 dmn-modeler.js:
+32f92ea2849af47c8405ca43d40741d2f3222cc21a822d85ad1e15bb1fbdae4c

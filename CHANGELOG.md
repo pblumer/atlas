@@ -1914,6 +1914,47 @@ _Changed_ / _Removed_ for each version.
   really writing to another is a half-state whose whole risk is that it looks like a full
   mockup run.
 
+### Changed
+
+- **The class canvas is a real diagram canvas.** **Data › Information model** now draws
+  on diagram-js — the same library the BPMN modeller runs on — so a class box has a
+  selection outline you can see, moves with the rest of what you selected, and stays put
+  when you type. Marquee-select a group of classes, drag the sheet to pan, scroll to
+  zoom, nudge a box with the arrow keys, and undo a move you did not mean with Ctrl+Z.
+
+  None of that was missing on purpose. The canvas it replaces was hand-rolled SVG plus a
+  pointer-drag, which is a diagram library with everything hard left out: no selection
+  model, no undo, no zoom, no keyboard. Writing those is not the interesting part of a
+  class diagram — how a class, a data store and the four association kinds are drawn is,
+  and Atlas still owns exactly that, plus which of them the subset permits between which.
+
+  The drawing is now **reconciled rather than redrawn**. The editor re-renders on every
+  keystroke, and a redraw would have thrown away the zoom, the selection and the undo
+  stack on each character — so an edit updates the shapes that changed and leaves the
+  view alone.
+
+  It edits locally, which is the one place it parts company with the Panorama canvas
+  beside it ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)). That canvas never
+  creates anything: the server owns the document and the view is re-read. An information
+  model is a working copy with an explicit **Save**, which is what lets you draw three
+  classes and two relationships and *then* decide — and what makes an undo stack mean
+  anything at all. The rules still refuse whatever the served subset refuses; they just
+  refuse it at the point of drawing rather than at the point of writing, and say the same
+  sentence either way.
+
+  Honest cost: the binary now carries **two copies of diagram-js**, one for each canvas.
+  Merging them into a single bundle that exports both viewers is the named follow-up in
+  the record; it was left out of this change so this change would not touch Panorama's
+  shipped canvas.
+
+- **Every vendored bundle is held to the checksum its own recipe records,** not just the
+  first one that was. `ATLAS-VENDORED.txt` says "do not edit this by hand" and records
+  the SHA-256 the documented rebuild produces; the guard that checked that named one
+  bundle, so a second one arrived uncovered. It now walks the vendor directories, which
+  is how it immediately found that the DMN Modeler bundle recorded no sum at all — a
+  hand-edit or a forgotten rebuild there would have been invisible. That sum is recorded
+  now.
+
 ## [0.4.0] — 2026-08-26
 
 This release is about connectors you can actually run. `--supervise-connector` gives
