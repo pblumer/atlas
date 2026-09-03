@@ -27,6 +27,17 @@
      disappears as a ring on a tinted circle while this does not. Kept out of the
      dense views for the same reason it is used here. */
   --mesh-attention: #d97706;
+  /* The landscape's neutral ink, and deliberately not --border-strong. Same
+     argument as the amber above, in the other direction: --border-strong is a
+     hairline between two panels a hand's width from the eye, where anything darker
+     would draw attention a border has no business drawing. The same value on a
+     canvas is a node that is *there* and cannot be seen — and the nodes it happens
+     to fall on are the unremarkable ones, so a landscape drawn in it shows its
+     findings sharply and its structure barely at all. These two carry the outlines
+     and the edges instead; they are the darkest values that still read as quiet
+     beside a status mark. */
+  --mesh-ink: #8b9099;
+  --mesh-line: #adb2ba;
   --ok: #2d8a4e;
   --topbar-h: 48px;
   --radius: 8px;
@@ -3470,7 +3481,30 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 /* Export sits at the end of the head, pushed away from the search box: it acts on
    the picture as a whole, and a button that saves a file should not be adjacent to
    the one that narrows what would be in it. */
-.mesh-export { margin-left: auto; display: inline-flex; gap: 6px; }
+/* Which vocabulary the picture is drawn in (ADR-0211 §8). Beside the picture, not
+   in the answer column: it changes the drawing rather than what is being said about
+   it. */
+.mesh-notation { margin-left: auto; font-size: 13px; color: var(--muted); }
+.mesh-notation-pick {
+  height: 28px; padding: 0 6px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text);
+}
+/* The type a projection calls this node, under its name. C4's own idiom, and
+   ArchiMate's corner icon written out — an icon at this zoom is a smudge. It follows
+   the name's own reveal rule, so it appears when the name does. */
+.mesh-type { font-size: 11px; fill: var(--muted); pointer-events: none; }
+.mesh-application .mesh-type { font-size: 15px; }
+/* What the projection drops. Collapsed by default and never absent: a projection
+   that hides its loss is the failure §8's theme ban exists to prevent, and one that
+   shouts it every time is one nobody reads twice. */
+.mesh-projection { font-size: 13px; }
+.mesh-projection summary { cursor: pointer; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.mesh-projection summary .muted { font-size: 11px; }
+.mesh-projection > p { margin: 6px 0 4px; }
+.mesh-loss { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
+.mesh-loss li { margin: 2px 0; }
+.mesh-export { display: inline-flex; gap: 6px; }
 .mesh-export button {
   height: 28px; padding: 0 10px; font-size: 13px; line-height: 1;
   border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
@@ -3518,10 +3552,17 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    landscape is already on screen and dragging is deliberately inert. */
 .mesh-canvas.mesh-zoomed { cursor: grab; }
 .mesh-canvas.mesh-zoomed:active { cursor: grabbing; }
+/* The zoom controls float over the canvas, which means they are also *in front of*
+   it: a node under them takes no pointer, so it cannot be selected or dragged. The
+   fitted view now holds this corner clear (see fitView), and the panel itself passes
+   pointers through everywhere except on its own buttons, so the gaps between them
+   stop being dead canvas too. */
 .mesh-zoom {
   position: absolute; right: 10px; bottom: 10px; display: flex; gap: 4px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px;
+  pointer-events: none;
 }
+.mesh-zoom button { pointer-events: auto; }
 .mesh-zoom button {
   min-width: 30px; height: 26px; padding: 0 8px; font-size: 14px; line-height: 1;
   border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
@@ -3529,8 +3570,8 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 }
 .mesh-zoom button:hover { border-color: var(--border-strong); }
 .mesh-zoom button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.mesh-edge { stroke: var(--border-strong); stroke-width: 1.5; }
-.mesh-edge-contains { stroke-dasharray: 4 4; opacity: 0.7; }
+.mesh-edge { stroke: var(--mesh-line); stroke-width: 1.6; }
+.mesh-edge-contains { stroke-dasharray: 4 4; opacity: 0.75; }
 /* Labels (ADR-0211 §7's legibility half). A few hundred names on one canvas is a
    wall of text with circles behind it, so most names are revealed rather than
    painted: the element is always in the DOM — screen readers and the node's
@@ -3671,7 +3712,11 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
    filter keeps one hop of neighbourhood around every match. Those are context rather
    than results, and are drawn as such: a search that presented things which do not
    match the search as matches would be a worse answer than the empty field. */
-.mesh-context { opacity: 0.55; }
+/* Context, not a result: this node is on screen because something next to it
+   matched. Faint enough that the answer still reads as the answer, and no fainter —
+   context nobody can make out is not context, it is a smudge that makes the picture
+   look broken. */
+.mesh-context { opacity: 0.75; }
 
 /* Impact analysis (ADR-0211 §6). The canvas and the panel are one answer: the
    highlight says which, the panel says how many and whether the count is a floor. */
@@ -3833,7 +3878,12 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
 line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 /* Dimmed rather than hidden: the rest of the landscape stays visible as context,
    so an impact set reads as a part of the whole rather than as the whole. */
-.mesh-dimmed { opacity: 0.22; }
+/* Outside the impact set. It was 0.22, which on white is nearly gone: the answer
+   stood out because everything else had been erased, and a reader could no longer
+   see what the highlighted nodes were highlighted *against*. An impact set is a
+   part of a whole, and the whole has to stay legible for the part to mean
+   anything. */
+.mesh-dimmed { opacity: 0.42; }
 @media (max-width: 900px) {
   .mesh-body { flex-direction: column; }
   .mesh-side { width: 100%; }

@@ -1123,6 +1123,14 @@ for the derived whole-instance mesh above them.
   is deliberately absent is "is this the only way": every derived edge names exactly
   one resolved provider, so that distinction would be a label with one answer, and a
   label that never varies teaches a reader it exists when it does not.
+  **The landscape can also be read in ArchiMate 3.2's or C4's vocabulary** — a
+  read-only projection under ADR-0211 §8's four constraints, extended there from a
+  projection of a model to one of the derived landscape: nothing becomes authorable,
+  the mapping is one versioned table per notation, a kind the notation has no element
+  for keeps its derived shape rather than being dressed as one, and the loss is
+  listed beside the picture *and* inside the export. What travels with every
+  projected file is the sentence that makes it honest — Atlas's own resources in
+  somebody else's vocabulary, and nothing here was modelled.
 - ✅ **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
   workers and job types, releases, local runtimes, and deployment targets. Preserve
