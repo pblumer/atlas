@@ -130,8 +130,8 @@
           const c = url.match(/\/connectors\/([\w-]+)$/);
           if (c) {
             window.__connPatches.push({ id: c[1], body });
-            workers = connectors.map((x) => (x.id === c[1] ? { ...x, ...body, problem: "" } : x));
-            return connectors.find((x) => x.id === c[1]);
+            workers = workers.map((x) => (x.id === c[1] ? { ...x, ...body, problem: "" } : x));
+            return workers.find((x) => x.id === c[1]);
           }
           return {};
         }

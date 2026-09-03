@@ -218,7 +218,7 @@ test.describe("reconfiguring the worker", () => {
     await expect(row.locator(".inc-conn")).toContainText("not configured");
     // Nothing to open: the fix is to create one, and that lives in the Console.
     await expect(row.locator("[data-fix-conn]")).toHaveCount(0);
-    await expect(row.locator('a[href="#/console/connectors"]')).toContainText("Configure");
+    await expect(row.locator('a[href="#/console/workers"]')).toContainText("Configure");
     expect(page.__errors).toEqual([]);
   });
 
