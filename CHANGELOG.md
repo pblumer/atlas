@@ -1048,6 +1048,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The Data area's Import button did nothing at all.** Its click handler called a
+  helper that a change to the Console had removed in the meantime — the picker for
+  which application a new model belongs to, which became a dialog rather than a
+  numbered `window.prompt`. Git merged both changes without a word, because neither
+  touched the other's lines. The result was a reference error thrown inside an async
+  listener: no file dialog, no message, nothing on the page to say what had happened
+  ([ADR-0232](docs/adr/0232-uml-model-import.md)).
+
+  The flow now uses the same dialog as the rest of the Console, and it asks for the
+  file **first** — a browser will not open a file picker from a task that no longer
+  counts as a user gesture, and a dialog in front of it costs exactly that. With one
+  writable application there is nothing to ask and the picker is skipped.
+
+  It also moved out of `app.js` into `api/web/infomodel-import.js`, for the reason
+  `pickmodal.js` and `connectordialog.js` did: `app.js` boots the whole Console on
+  import, so anything left inside it is only ever exercised by hand. The new
+  `e2e/infomodel-import.spec.mjs` drives the real Console — a click has to open a file
+  dialog, and a chosen file has to produce the report — which is the crude assertion
+  that would have caught this and did not exist.
+
 - **A data association drawn inside a subprocess was thrown away at compile time.** A
   `<dataInputAssociation>` or `<dataOutputAssociation>` is drawn on the *activity*, and
   an activity may sit in any scope a model nests — an ordinary subprocess, an event
