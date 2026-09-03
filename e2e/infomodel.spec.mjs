@@ -99,10 +99,79 @@ test("editing a class updates the drawing, and a rename retypes what referred to
   // Switching a business object to a value type takes its business key with it: a
   // value has no identity of its own to declare.
   await box(page, "Order").click();
-  await expect(page.locator(".im-attrs input[type=checkbox]")).toHaveCount(2);
+  await expect(page.locator(".im-attrs input[type=checkbox]")).toHaveCount(3);
   await page.locator("#im-c-stereo").selectOption("valueType");
   await expect(page.locator(".im-attrs input[type=checkbox]")).toHaveCount(0);
   await expect(box(page, "Order").locator(".im-attr.key")).toHaveCount(0);
+});
+
+// The order of a class's attributes is not a view setting: a class box reads top to
+// bottom, so which attribute comes first is a statement about the class. A business
+// key belongs where a reader looks for it. `attributes` is already an ordered array
+// in the document, so moving a row is a model edit — it dirties the model, redraws
+// the box, and is what gets saved.
+test("an attribute can be moved, and the box and the document follow", async ({ page }) => {
+  const order = box(page, "Order");
+  const names = () => order.locator(".im-attr-name");
+  await expect(names()).toHaveText(["⚿ id", "placedOn", "total"]);
+
+  await order.click();
+  // Alt+Down on the field being edited, so reordering needs no pointer and does not
+  // take the author out of the row they are working in.
+  await page.locator('tr[data-attr="0"] [data-f="name"]').focus();
+  await page.keyboard.press("Alt+ArrowDown");
+
+  await expect(names()).toHaveText(["placedOn", "⚿ id", "total"]);
+  // The caret followed the row it was in, not the position it left.
+  await expect(page.locator('tr[data-attr="1"] [data-f="name"]')).toBeFocused();
+  // And the key is still the key: reordering moves an attribute, it does not
+  // redeclare identity.
+  await expect(order.locator(".im-attr.key .im-attr-name")).toHaveText("⚿ id");
+
+  await page.locator("#im-save").click();
+  await expect.poll(() => page.evaluate(() => window.__saved)).toBeTruthy();
+  const saved = await page.evaluate(() => window.__saved);
+  const cls = saved.classes.find((c) => c.name === "Order");
+  expect(cls.attributes.map((a) => a.name)).toEqual(["placedOn", "id", "total"]);
+  expect(cls.identity).toEqual(["id"]);
+});
+
+test("a row is dragged only by its grip", async ({ page }) => {
+  const order = box(page, "Order");
+  await order.click();
+  // The grip is what carries the drag. Were the whole row draggable, selecting a
+  // word inside a name field would drag the attribute instead of the text.
+  const row = page.locator('tr[data-attr="0"]');
+  await expect(row).toHaveJSProperty("draggable", false);
+  await page.locator('tr[data-attr="0"] .im-grip').hover();
+  await page.mouse.down();
+  await expect(row).toHaveJSProperty("draggable", true);
+  await page.mouse.up();
+
+  await page.locator('tr[data-attr="0"] [data-f="name"]').hover();
+  await page.mouse.down();
+  await expect(row).toHaveJSProperty("draggable", false);
+  await page.mouse.up();
+});
+
+test("an enumeration's literals reorder the same way", async ({ page }) => {
+  const status = box(page, "OrderStatus");
+  await expect(status.locator(".im-literal")).toHaveText(["draft", "approved"]);
+
+  await status.click();
+  await page.locator('tr[data-lit="1"] [data-f="literal"]').focus();
+  await page.keyboard.press("Alt+ArrowUp");
+  await expect(status.locator(".im-literal")).toHaveText(["approved", "draft"]);
+});
+
+test("a move past either end is refused rather than wrapping", async ({ page }) => {
+  const order = box(page, "Order");
+  await order.click();
+  await page.locator('tr[data-attr="0"] [data-f="name"]').focus();
+  await page.keyboard.press("Alt+ArrowUp"); // already first
+  await expect(order.locator(".im-attr-name")).toHaveText(["⚿ id", "placedOn", "total"]);
+  // Nothing moved, so nothing was edited: the model is still clean.
+  await expect(page.locator("#im-dirty")).toBeHidden();
 });
 
 test("saving sends local handles for new shapes and lets the server name them", async ({ page }) => {

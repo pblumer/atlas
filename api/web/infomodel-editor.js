@@ -388,6 +388,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     const findings = state.validation.findings.filter((f) => f.classId === c.id);
     const attrRows = (c.attributes || []).map((a, i) => `
       <tr data-attr="${i}">
+        <td class="im-grip" title="Drag to reorder — the order is the order the class box reads in"
+            aria-label="Reorder">⠿</td>
         <td><input class="im-in" data-f="name" value="${esc(a.name)}" placeholder="name"/></td>
         <td><select class="im-in" data-f="type">
           ${subset.primitives.map((p) => `<option value="${esc(p.type)}"${p.type === a.type ? " selected" : ""}>${esc(p.label)}</option>`).join("")}
@@ -426,8 +428,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           <div class="im-panel-head"><h4>Attributes</h4>
             <button type="button" class="btn ghost small" data-act="add-attr">+ Attribute</button></div>
           <table class="im-attrs"><thead><tr>
-            <th>Name</th><th>Type</th><th>Card.</th><th title="Business key">⚿</th><th></th>
-          </tr></thead><tbody>${attrRows || `<tr><td colspan="5" class="muted">No attributes yet.</td></tr>`}</tbody></table>
+            <th></th><th>Name</th><th>Type</th><th>Card.</th><th title="Business key">⚿</th><th></th>
+          </tr></thead><tbody>${attrRows || `<tr><td colspan="6" class="muted">No attributes yet.</td></tr>`}</tbody></table>
           ${kind.hasIdentity ? `<p class="im-hint-text"><b>The business key</b> is what makes two of these the
             same one — <code>Order#ORD-1</code> in this process and in the next. It is the part BPMN has no
             equivalent for, and what a data store and a cross-process lookup will resolve against.</p>` : ""}
@@ -437,6 +439,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             <button type="button" class="btn ghost small" data-act="add-literal">+ Literal</button></div>
           <table class="im-attrs"><tbody>
             ${(c.literals || []).map((lit, i) => `<tr data-lit="${i}">
+              <td class="im-grip" title="Drag to reorder" aria-label="Reorder">⠿</td>
               <td><input class="im-in" data-f="literal" value="${esc(lit)}" placeholder="approved"/></td>
               <td><button type="button" class="icon-btn" data-act="del-literal" title="Remove">✕</button></td>
             </tr>`).join("") || `<tr><td class="muted">No literals yet.</td></tr>`}
@@ -720,6 +723,119 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   sideEl.addEventListener("input", onSideEdit);
   sideEl.addEventListener("change", onSideEdit);
   sideEl.addEventListener("click", onSideClick);
+
+  // ---- reordering attributes and literals -----------------------------------
+  // The order is not a view setting. A class box reads top to bottom, and which
+  // attribute comes first is a statement about the class — a business key usually
+  // belongs at the top, the way a reader expects to find it. `attributes` and
+  // `literals` are already ordered arrays in the document, so moving a row is a
+  // model edit like any other: it marks the model dirty and the canvas redraws.
+  //
+  // Only the grip starts a drag. Making the whole row draggable would take the
+  // pointer away from the text inputs inside it, so selecting a word in a name
+  // would drag the attribute instead.
+
+  // listAt answers which list a row belongs to and what it is indexed by, so the
+  // drag, the drop and the keyboard move all read one description of the table.
+  const listAt = (row) => {
+    const c = selectedClass();
+    if (!c || !row) return null;
+    if (row.dataset.attr !== undefined) {
+      return { list: c.attributes || [], index: Number(row.dataset.attr), attr: "attr" };
+    }
+    if (row.dataset.lit !== undefined) {
+      return { list: c.literals || [], index: Number(row.dataset.lit), attr: "lit" };
+    }
+    return null;
+  };
+
+  // move takes the entry at `from` and puts it at `to`, closing the gap it left.
+  // A move onto its own position is not an edit, so it does not dirty the model.
+  const move = (list, from, to) => {
+    if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return false;
+    list.splice(to, 0, list.splice(from, 1)[0]);
+    markDirty();
+    render();
+    return true;
+  };
+
+  let dragging = null; // { attr, index } while a row is in flight
+
+  sideEl.addEventListener("pointerdown", (e) => {
+    const row = e.target.closest("tr[data-attr], tr[data-lit]");
+    if (row) row.draggable = !!e.target.closest(".im-grip");
+  });
+
+  sideEl.addEventListener("dragstart", (e) => {
+    const row = e.target.closest("tr[data-attr], tr[data-lit]");
+    const at = listAt(row);
+    if (!at) return;
+    dragging = { attr: at.attr, index: at.index };
+    row.classList.add("im-dragging");
+    // Firefox starts no drag at all without data on the transfer.
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", String(at.index)); } catch { /* not settable here */ }
+    }
+  });
+
+  sideEl.addEventListener("dragover", (e) => {
+    if (!dragging) return;
+    const row = e.target.closest("tr[data-attr], tr[data-lit]");
+    const at = listAt(row);
+    if (!at || at.attr !== dragging.attr) return;
+    e.preventDefault(); // without this the drop never fires
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    // The line marks the edge the row would land against, which is the half of the
+    // hovered row the pointer is in — the same gesture every list reorder uses.
+    const box = row.getBoundingClientRect();
+    const after = e.clientY > box.top + box.height / 2;
+    for (const r of sideEl.querySelectorAll(".im-drop-before, .im-drop-after")) {
+      r.classList.remove("im-drop-before", "im-drop-after");
+    }
+    row.classList.add(after ? "im-drop-after" : "im-drop-before");
+  });
+
+  sideEl.addEventListener("drop", (e) => {
+    if (!dragging) return;
+    const row = e.target.closest("tr[data-attr], tr[data-lit]");
+    const at = listAt(row);
+    if (!at || at.attr !== dragging.attr) return;
+    e.preventDefault();
+    const box = row.getBoundingClientRect();
+    const after = e.clientY > box.top + box.height / 2;
+    // Dropping *after* a row that sits above the dragged one lands on that row's
+    // index; below it, the gap the dragged row leaves has already shifted it up.
+    let to = at.index + (after ? 1 : 0);
+    if (dragging.index < to) to -= 1;
+    const from = dragging.index;
+    dragging = null;
+    move(at.list, from, to);
+  });
+
+  sideEl.addEventListener("dragend", () => {
+    dragging = null;
+    for (const r of sideEl.querySelectorAll(".im-dragging, .im-drop-before, .im-drop-after")) {
+      r.classList.remove("im-dragging", "im-drop-before", "im-drop-after");
+    }
+  });
+
+  // Alt+Up / Alt+Down move the row a field is in, so reordering is reachable
+  // without a pointer — and without leaving the field being edited.
+  sideEl.addEventListener("keydown", (e) => {
+    if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    const at = listAt(e.target.closest("tr[data-attr], tr[data-lit]"));
+    if (!at) return;
+    const to = at.index + (e.key === "ArrowUp" ? -1 : 1);
+    if (to < 0 || to >= at.list.length) return;
+    e.preventDefault();
+    const field = e.target.dataset && e.target.dataset.f;
+    if (!move(at.list, at.index, to)) return;
+    // render() replaced the row, so put the caret back where the author left it.
+    const moved = sideEl.querySelector(`tr[data-${at.attr}="${to}"]`);
+    const focus = moved && (field ? moved.querySelector(`[data-f="${field}"]`) : moved.querySelector(".im-in"));
+    if (focus) focus.focus();
+  });
 
   // renderSchema shows the derived contract beside the drawing. It is read-only and
   // says what it dropped — a JSON document is a tree and a class model is a graph,

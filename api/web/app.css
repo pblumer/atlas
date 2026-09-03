@@ -4520,6 +4520,19 @@ table.im-attrs { width: 100%; border-collapse: collapse; font-size: 12px; }
   background: var(--bg); color: var(--text);
 }
 .im-attrs .im-key-cell { text-align: center; width: 24px; }
+
+/* Reordering an attribute or a literal. The grip is the only thing that starts a
+   drag, so the text inputs beside it keep their own selection; the drop line marks
+   the edge the row will land against. */
+.im-attrs .im-grip {
+  width: 16px; padding: 2px 0 2px 2px; cursor: grab; user-select: none;
+  color: var(--muted); font-size: 11px; line-height: 1; text-align: center;
+}
+.im-attrs .im-grip:active { cursor: grabbing; }
+.im-attrs tr:hover .im-grip { color: var(--text); }
+.im-attrs tr.im-dragging { opacity: .45; }
+.im-attrs tr.im-drop-before td { box-shadow: inset 0 2px 0 0 var(--accent); }
+.im-attrs tr.im-drop-after td { box-shadow: inset 0 -2px 0 0 var(--accent); }
 .im-end { border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px 2px; margin-bottom: 10px; }
 .im-end legend { font: 600 11px/1.5 system-ui, sans-serif; color: var(--muted); padding: 0 4px; }
 .im-note { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; font: 12px/1.55 system-ui, sans-serif; color: var(--muted); }

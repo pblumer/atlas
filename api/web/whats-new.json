@@ -2,6 +2,24 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "a-class-s-attributes-can-be-put-in-the-order-you-want-to-rea",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A class's attributes can be put in the order you want to read them in.",
+        "de": "A class's attributes can be put in the order you want to read them in."
+      },
+      "summary": {
+        "en": "Grab a row by its grip and move it, or press Alt+↑ / Alt+↓ in the field you are editing.",
+        "de": "Grab a row by its grip and move it, or press Alt+↑ / Alt+↓ in the field you are editing."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "importing-a-uml-class-diagram-reading-what-somebody-else-dre",
       "version": "Unreleased",
       "date": null,
@@ -458,35 +476,6 @@
           "de": "Organisation öffnen"
         },
         "route": "#/console/org"
-      }
-    },
-    {
-      "id": "an-inbound-event-watch-has-an-hourly-budget",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "An event watch stops itself if it starts looping",
-        "de": "Eine Ereignisüberwachung stoppt sich selbst, wenn sie in eine Schleife gerät"
-      },
-      "summary": {
-        "en": "A watch reads a system and starts a process for what it finds — and that process can write back to the same system. If it writes something the watch's own query matches, it feeds itself, and nothing looks wrong: every run succeeds. Each watch now has a Max events/hour (60 unless you set it). Cross it and the watch switches itself off and says so, naming the number to raise. Nothing is lost — turning it back on re-reads what it refused.",
-        "de": "Eine Überwachung liest ein System und startet zu jedem Fund einen Prozess — und dieser Prozess kann in dasselbe System zurückschreiben. Schreibt er etwas, das die Abfrage der Überwachung selbst findet, füttert sie sich selbst, und nichts sieht falsch aus: jeder Lauf gelingt. Jede Überwachung hat jetzt ein „Max events/hour\" (60, wenn Sie nichts setzen). Wird es überschritten, schaltet sie sich ab und sagt es — samt der Zahl, die Sie erhöhen müssten. Verloren geht nichts: Beim Wiedereinschalten wird das Abgewiesene erneut gelesen."
-      },
-      "link": {
-        "label": "ADR-0225",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0225-inbound-watch-budget.md"
-      },
-      "tags": [
-        "Workers",
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/console/workers"
       }
     }
   ]

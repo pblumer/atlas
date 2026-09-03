@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A class's attributes can be put in the order you want to read them in.** Grab a row
+  by its grip and move it, or press Alt+↑ / Alt+↓ in the field you are editing. An
+  «enumeration»'s literals move the same way.
+
+  The order is not a view setting, which is why it is a model edit and not a sort: a
+  class box reads top to bottom, so which attribute comes first is a statement about the
+  class — and a business key belongs where a reader looks for it, not wherever it
+  happened to be added. `attributes` and `literals` were already ordered arrays in the
+  document, so nothing about the stored model changes; what was missing was any way to
+  say the order.
+
+  Only the grip starts a drag. Were the whole row draggable, selecting a word inside an
+  attribute's name would drag the attribute instead of the text. Moving a row leaves the
+  business key alone: it names attributes, and an attribute keeps its name wherever it
+  sits.
+
 - **Importing a UML class diagram: reading what somebody else drew.** A data model is
   normally drawn in a UML tool — Enterprise Architect, Papyrus, Visual Paradigm — long
   before anybody opens Atlas, and until now the only way to get it in was to retype it
