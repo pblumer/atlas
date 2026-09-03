@@ -14,6 +14,25 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A variable named after one of your data objects is now flagged.** The new rule
+  `variable.shadows-data-object` raises a warning where the two collide: draw a data
+  object `Kunde`, have a task write its result into a variable `Kunde` — or read the
+  object back into a variable of the same name — and the diagram shows one thing while
+  the instance holds two.
+
+  They are not two views of one value. A data object carries the declared type, the data
+  state and the recorded history of every write; a variable carries a value. They live in
+  separate records, are written by separate events, and **writing one never changes the
+  other** — a data association *copies*, evaluating its expression once. And only one of
+  them answers to the name: FEEL is bound from the variables alone, so `Kunde` in a
+  condition, a mapping or a connector payload always means the variable, even in a model
+  whose whole point is the object. The two then drift apart under one name, and every
+  expression quietly means just one of them.
+
+  A warning rather than a refusal: it is legal, and wanting one name for one idea is
+  reasonable. The panel says which write collides and why it matters; renaming either
+  side clears it.
+
 - **Data stores: saying where a class is kept.** BPMN has a `<dataStoreReference>` —
   the box on the diagram meaning "this outlives the process" — and says nothing about
   what it holds or what keeps it. Atlas did not even parse it. It does now, and a
@@ -733,6 +752,34 @@ _Changed_ / _Removed_ for each version.
   extension elements are still `<atlas:jiraConnector>` and friends.
 
 ### Fixed
+
+- **A data object whose declaration went missing took the whole deploy down with it.**
+  A data object is two elements: the `<dataObject>` that declares it and carries its
+  type, and the `<dataObjectReference>` that puts it on the canvas with its name, its
+  data state and its shape. Only the second is drawn, so only the second is visibly
+  there — and a model can reach Atlas having lost the first. The box still reads
+  `Kunde [received]` to everybody looking at it, and it names nothing the engine can
+  find.
+
+  Two things then went wrong, neither of them the modeller's doing. The deploy was
+  refused with `dataObjectRef "DataObject_0s4i37q" is unknown` — an id nobody had ever
+  typed, attached to no shape, with nothing to do about it. And a type set in the
+  properties panel had nowhere to be written, so it vanished on the next save without
+  a word.
+
+  Both are fixed from opposite ends. **The compiler lets the reference stand in for
+  its own declaration**: a data object's identity is its name, the name is on the
+  reference, and nothing about such a model is in doubt — the same fallback a
+  `<dataStoreReference>` naming no root element already gets. Only the declared type
+  is genuinely lost, so the object is seeded without one rather than with a guess.
+  **The Modeler repairs the model on the way in**, declaring what the dangling
+  reference implies, which is where the type gets somewhere to live again. That repair
+  now runs beside the one for `itemSubjectRef`, and for the same reason: the bpmn
+  moddle drops a reference it cannot resolve, so a model that arrives dangling comes
+  back from the next save having lost more than it arrived with.
+
+  The message left for a reference that names nothing at all no longer claims to be
+  about a data *output* association when it is a read that failed.
 
 - **An application you had just created was missing from the dialog that asked which
   application to use.** Creating an information model, creating or importing an

@@ -97,6 +97,16 @@ const (
 	// finds out by reading the variable list and wondering, which is exactly the kind of
 	// quiet wrong answer a deploy check exists to prevent.
 	RuleDottedTarget = "variable.dotted-target"
+	// RuleVariableShadowsDataObject marks a model that writes a variable under the name
+	// of one of its own data objects. A warning, not an error: it is legal, and one
+	// name for one idea is a reasonable thing to want. But the two are not one thing.
+	// A data object carries a type, a data state and a recorded history; a variable
+	// carries a value. They live in separate records and are written by separate
+	// events, and a FEEL expression can see only the variable — an object is readable
+	// solely through a data input association, which copies it into a variable. So a
+	// write to either leaves the other as it was, and two things drift apart under one
+	// name while every expression in the model quietly means just one of them.
+	RuleVariableShadowsDataObject = "variable.shadows-data-object"
 )
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
@@ -146,6 +156,7 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkLoopBounds(cp)...)
 	ps = append(ps, checkLoopCounterMappings(cp)...)
 	ps = append(ps, checkDottedTargets(cp)...)
+	ps = append(ps, checkVariableShadowsDataObject(cp)...)
 	return ps
 }
 
@@ -690,6 +701,25 @@ func checkDottedTargets(cp *CompiledProcess) []Problem {
 				"structure, build the structure in the expression and write that (FEEL: context put(…)).",
 			describeNode(cp, id), what, name, root)))
 	}
+	forEachVariableWrite(cp, report)
+	return ps
+}
+
+// forEachVariableWrite calls report for every place a node names a *process variable*
+// it writes: the I/O mappings, a loop's input element and output collection, and the
+// result of the work itself wherever the node type keeps it.
+//
+// Two rules walk this list, and a node kind added to one and forgotten in the other is
+// the kind of gap nobody notices — a new connector's result variable silently exempt
+// from both checks — so the walk is written once and the rules differ only in what
+// they do with each name.
+//
+// Data associations are deliberately not here. An output association's <to> is a
+// *member path* inside the object (ADR-0058), not a variable at all; an input
+// association's <to> is a variable, but it is the one write site where naming it after
+// the object is the whole point of the question, so the shadowing rule reports it
+// itself with a message about that rather than the generic one.
+func forEachVariableWrite(cp *CompiledProcess, report func(id int32, what, name string)) {
 	for id := range cp.nodes {
 		elementID, n := int32(id), &cp.nodes[id]
 		for _, m := range cp.IOInputs(elementID) {
@@ -728,6 +758,64 @@ func checkDottedTargets(cp *CompiledProcess) []Problem {
 			}
 		}
 	}
+}
+
+// checkVariableShadowsDataObject reports a variable written under the name of one of
+// the process's own data objects (RuleVariableShadowsDataObject).
+//
+// The trap is that the two look like one thing on the diagram and are two everywhere
+// else. `order` the data object has a declared type, a data state and a recorded
+// history of every write; `order` the variable has a value. Nothing links them: a
+// data-output association *copies* into the object, evaluating its expression once,
+// and a data-input association copies back out. Write either afterwards and the other
+// keeps what it had.
+//
+// And only one of them answers to the name. A FEEL expression is bound from the
+// variables alone, so `order` in a condition, a mapping or a connector's payload is
+// always the variable — even in a model whose whole point is the object. Somebody
+// reading the diagram sees one `order`; the engine has two, and every expression
+// silently means the same one of them.
+func checkVariableShadowsDataObject(cp *CompiledProcess) []Problem {
+	objects := cp.DataObjects()
+	if len(objects) == 0 {
+		return nil
+	}
+	names := make(map[string]bool, len(objects))
+	for i := range objects {
+		if n := cp.Intern(objects[i].Name); n != "" {
+			names[n] = true
+		}
+	}
+	var ps []Problem
+	for id := range cp.nodes {
+		elementID := int32(id)
+		// A data input association names the object it reads *and* the variable it
+		// reads it into, so it can say the specific thing instead of the general one.
+		for _, a := range cp.DataInputAssociations(elementID) {
+			v := cp.Intern(a.Variable)
+			if v == "" || !names[v] || cp.Intern(a.DataObject) != v {
+				continue
+			}
+			ps = append(ps, problem(cp, elementID, SeverityWarning, RuleVariableShadowsDataObject, fmt.Sprintf(
+				"reads the data object %q into a variable also called %q. That leaves two %q in the "+
+					"instance — the object, which keeps the type, the data state and the history, and a "+
+					"copy of its value taken at this moment. Only the variable is visible to FEEL, so "+
+					"every expression from here on means the copy, and a later write to either leaves "+
+					"the other behind. Read it into a differently named variable.", v, v, v)))
+		}
+	}
+	forEachVariableWrite(cp, func(elementID int32, what, name string) {
+		if name == "" || !names[name] {
+			return
+		}
+		ps = append(ps, problem(cp, elementID, SeverityWarning, RuleVariableShadowsDataObject, fmt.Sprintf(
+			"writes %s to %q, and this process has a data object called %q as well. They are two "+
+				"separate things: the data object carries the type, the data state and the recorded "+
+				"history, the variable carries a value, and writing one never changes the other. A FEEL "+
+				"expression sees only variables, so %q in an expression always means this one. Give one "+
+				"of them another name, or write the object through a data output association.",
+			what, name, name, name)))
+	})
 	return ps
 }
 

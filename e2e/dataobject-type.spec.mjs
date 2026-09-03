@@ -84,6 +84,28 @@ test("a type a tool wrote in its own namespace reads as the name, not the GUID",
   expect(page.__errors).toEqual([]);
 });
 
+test("a data object that lost its declaration is repaired on the way in", async ({ page }) => {
+  // A data object is two elements: the <dataObject> that declares it and carries its
+  // type, and the <dataObjectReference> that puts it on the canvas with its name, its
+  // data state and its shape. Only the second is drawn, so a model can arrive having
+  // lost the first — a box that reads "Kunde [received]" to anybody looking at it and
+  // names nothing the engine can find. It was refused at deploy over an id nobody had
+  // typed, and a type set in the panel had nowhere to be written and vanished on save.
+  const xml = await page.evaluate(() => window.__xml());
+  expect(xml).toMatch(/<bpmn:dataObject[^>]*id="DataObject_0s4i37q"[^>]*name="Kunde"/);
+  expect(xml).toMatch(/<bpmn:dataObjectReference[^>]*id="Ref_kunde"[^>]*dataObjectRef="DataObject_0s4i37q"/);
+
+  // And with the declaration back, the type has somewhere to live: setting it lands
+  // on the data object and survives the round trip, like any other.
+  await selectDataObject(page, "Ref_kunde");
+  await expect(page.locator("#f-itemtype")).toHaveValue("");
+  await page.locator("#f-itemtype").fill("Customer");
+  await page.locator("#f-itemtype").dispatchEvent("change");
+  const after = await page.evaluate(() => window.__xml());
+  expect(after).toMatch(/<bpmn:dataObject[^>]*id="DataObject_0s4i37q"[^>]*itemSubjectRef="ItemDefinition_Customer"/);
+  expect(page.__errors).toEqual([]);
+});
+
 test("clearing the type removes the attribute rather than emptying it", async ({ page }) => {
   await selectDataObject(page, "Ref_claim");
   await page.locator("#f-itemtype").fill("");

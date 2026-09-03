@@ -2,6 +2,24 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "a-variable-named-after-one-of-your-data-objects-is-now-flagg",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A variable named after one of your data objects is now flagged.",
+        "de": "A variable named after one of your data objects is now flagged."
+      },
+      "summary": {
+        "en": "The new rule variable.shadows-data-object raises a warning where the two collide: draw a data object Kunde, have a task write its result into a variable Kunde — or read the object back into a variable of the same name — and the diagram shows one thing while the instance holds two.",
+        "de": "The new rule variable.shadows-data-object raises a warning where the two collide: draw a data object Kunde, have a task write its result into a variable Kunde — or read the object back into a variable of the same name — and the diagram shows one thing while the instance holds two."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "data-stores-saying-where-a-class-is-kept",
       "version": "Unreleased",
       "date": null,
@@ -473,35 +491,6 @@
           "de": "Worker öffnen"
         },
         "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "a-message-start-event-says-whether-anything-feeds-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A message start event now shows what feeds it",
-        "de": "Ein Nachrichten-Start zeigt jetzt, wer ihn speist"
-      },
-      "summary": {
-        "en": "A process that starts on a message only names the message — deliberately, so the same process can be triggered by a Jira watch today and something else tomorrow without touching the model. The catch was that a name typed slightly differently in the model and in Connectors → Events left two halves that never meet: nothing fails, the process just never starts. The Modeler now writes it under the message name — which watches publish it, on which connector, and whether one is switched off — or tells you none does and where to add one.",
-        "de": "Ein Prozess, der auf eine Nachricht startet, nennt nur die Nachricht — mit Absicht, damit ihn heute eine Jira-Überwachung und morgen etwas anderes auslösen kann, ohne das Modell anzufassen. Der Haken: Ein Name, der im Modell und unter „Connectors → Events\" leicht verschieden getippt ist, ergibt zwei Hälften, die sich nie treffen — nichts schlägt fehl, der Prozess startet einfach nie. Der Modeler schreibt es jetzt unter den Nachrichtennamen: welche Überwachungen ihn veröffentlichen, auf welchem Konnektor, und ob eine abgeschaltet ist — oder dass es keine gibt und wo Sie eine anlegen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]
