@@ -60,9 +60,20 @@
       // Every write the editor makes, in order — window.__writes is the test's evidence
       // that a Cancel left the server alone.
       window.__writes = [];
+
+      // ?stall=form holds every fetch of the form definition open — answered neither
+      // with a form nor with an error — until the test releases it. That is the failure
+      // the modal has to report rather than sit on: a request that hangs leaves
+      // "Loading form&hellip;" on screen with a disabled Send beside it.
+      let holding = new URL(location.href).searchParams.get("stall") === "form";
+      const held = [];
+      window.__releaseForm = () => { holding = false; held.splice(0).forEach((r) => r(FORM)); };
+
       const api = async (method, url, body) => {
         if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
-        if (method === "GET" && /\/forms\/bestellung$/.test(url)) return FORM;
+        if (method === "GET" && /\/forms\/bestellung$/.test(url)) {
+          return holding ? new Promise((resolve) => held.push(resolve)) : FORM;
+        }
         if (method === "GET" && /\/forms$/.test(url)) return [{ id: FORM.id, name: FORM.name }];
         if (method === "GET" && /\/instances$/.test(url)) return [];
         if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };

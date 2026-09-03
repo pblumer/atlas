@@ -79,6 +79,40 @@ func TestSearchInstancesViaTool(t *testing.T) {
 	}
 }
 
+// TestSearchInstancesScopedViaTool: the optional process argument narrows the
+// search to one definition — the same scoping the console uses, and what lets the
+// server read that definition's index rather than every instance.
+func TestSearchInstancesScopedViaTool(t *testing.T) {
+	atlas := newAtlas(t)
+	key := deployAndStartInstance(t, atlas, map[string]any{"key": 1, "variables": map[string]any{"customer": "acme"}})
+
+	search := func(id int, args map[string]any) []struct {
+		Key uint64 `json:"key"`
+	} {
+		t.Helper()
+		text, isErr := toolText(t, result(t, run(t, atlas, callTool(id, "atlas_search_instances", args))[0]))
+		if isErr {
+			t.Fatalf("search %v = %q", args, text)
+		}
+		var hits []struct {
+			Key uint64 `json:"key"`
+		}
+		if err := json.Unmarshal([]byte(text), &hits); err != nil {
+			t.Fatalf("decode %q: %v", text, err)
+		}
+		return hits
+	}
+
+	// The instance's own definition is key 1 (atlas_create_instance was given it).
+	if hits := search(4, map[string]any{"q": "customer=acme", "process": "1"}); len(hits) != 1 || hits[0].Key != key {
+		t.Fatalf("scoped search = %+v, want the one instance %d", hits, key)
+	}
+	// A definition that holds nothing returns nothing rather than everything.
+	if hits := search(5, map[string]any{"q": "customer=acme", "process": "999999"}); len(hits) != 0 {
+		t.Fatalf("search scoped to an unrelated definition = %+v, want none", hits)
+	}
+}
+
 // TestSearchInstancesRequiresQ rejects a search with no query as a tool error.
 func TestSearchInstancesRequiresQ(t *testing.T) {
 	atlas := newAtlas(t)

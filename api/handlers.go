@@ -232,9 +232,15 @@ type runtimeIncident struct {
 }
 
 type runtimeResp struct {
-	Instances int              `json:"instances"`
-	Tokens    int              `json:"tokens"`
-	Elements  []runtimeElement `json:"elements"`
+	Instances int `json:"instances"`
+	// Finished is how many of this definition's instances have ended, from the O(1)
+	// per-definition counter (ADR-0083). It rides here because the live view already
+	// polls this endpoint and needs a real total to say what its (paged) instance
+	// list was drawn from — a panel that reports the size of its own page as the
+	// total is read as the whole truth.
+	Finished int              `json:"finished"`
+	Tokens   int              `json:"tokens"`
+	Elements []runtimeElement `json:"elements"`
 	// Incidents is why a token is not moving (ADR-0061). Without it a parked token
 	// renders exactly like one that is legitimately waiting, which is the reading an
 	// operator then gives it — "the task is still open" — while the engine has in fact
@@ -1051,12 +1057,10 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 			protected = true
 			return
 		}
-		scanErr = s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
-			if v.ProcessDefKey == key {
-				running++
-			}
-			return nil
-		})
+		// The per-definition live count is maintained on the write path (ADR-0083),
+		// so the refusal check is a single counter read. It used to walk every
+		// active instance in the engine to count one definition's.
+		running, scanErr = s.store.DefInstanceCount(key)
 		if scanErr != nil || running > 0 {
 			return
 		}
@@ -1270,6 +1274,14 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			return len(resp.Incidents) >= maxRuntimeIncidents
 		}
 
+		// The definition's finished-instance total, on both branches: the live view
+		// reads it to label its paged instance list, and that label must not change
+		// meaning when the operator isolates a single instance on the diagram. It is
+		// one counter read (ADR-0083), not a scan.
+		if resp.Finished, scanErr = s.store.DefCompletedCount(key); scanErr != nil {
+			return
+		}
+
 		if instanceFilter == 0 {
 			// Aggregate over the whole definition: read the maintained per-element
 			// and per-definition counters (ADR-0080). This is O(elements), never a
@@ -1299,11 +1311,17 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			// Isolating one instance on the diagram (a deliberate single-instance
-			// action, not the default view): the overlay walks instances filtered to
-			// this one. Making this path sublinear too is a follow-up to ADR-0080 (the
-			// aggregate default view above is what mattered for scale).
-			if scanErr = s.store.ActiveElementInstances(func(elKey uint64, v *model.ElementInstanceValue) error {
-				if v.ProcessDefKey != key || v.ProcessInstanceKey != instanceFilter {
+			// action, not the default view). The elByProc index lists exactly this
+			// instance's element instances, so the overlay costs the tokens *it*
+			// holds rather than every token in the engine — the follow-up ADR-0080
+			// left open. The definition check stays: an instance key from another
+			// definition must draw nothing on this diagram.
+			if scanErr = s.store.ElementInstancesOfProcess(instanceFilter, func(elKey uint64) error {
+				v, ok, err := s.store.GetElementInstance(elKey)
+				if err != nil || !ok {
+					return err
+				}
+				if v.ProcessDefKey != key {
 					return nil
 				}
 				if e := get(v.ElementId); e != nil {
@@ -1330,12 +1348,15 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 					}
 					return nil
 				}); scanErr == nil {
-					scanErr = s.store.ActiveProcessInstances(func(piKey uint64, v *model.ProcessInstanceValue) error {
-						if v.ProcessDefKey == key && piKey == instanceFilter {
-							resp.Instances++
-						}
-						return nil
-					})
+					// Filtered to one instance: ask for that instance, do not walk
+					// the family looking for it (ADR-0080's rule, applied to the one
+					// scan its own view had left).
+					pi, ok, err := s.store.ActiveProcessInstance(instanceFilter)
+					if err != nil {
+						scanErr = err
+					} else if ok && pi.ProcessDefKey == key {
+						resp.Instances++
+					}
 				}
 			}
 		}
@@ -1416,13 +1437,17 @@ func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Reque
 				return e
 			}
 			scan(func() error {
-				return s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
-					if v.ProcessDefKey != pd.Key {
+				// Per-element live tokens for this pool come from the maintained
+				// counters (ADR-0080), like the single-process runtime view above.
+				// Walking every element instance in the engine — once per pool — was
+				// O(tokens × pools) on the run loop for a number already counted.
+				return s.store.ElementLiveTokens(pd.Key, func(elementId int32, count int64) error {
+					if count == 0 {
 						return nil
 					}
-					if e := get(v.ElementId); e != nil {
-						e.Tokens++
-						resp.Tokens++
+					if e := get(elementId); e != nil {
+						e.Tokens += int(count)
+						resp.Tokens += int(count)
 					}
 					return nil
 				})
@@ -1436,12 +1461,15 @@ func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Reque
 				})
 			})
 			scan(func() error {
-				return s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
-					if v.ProcessDefKey == pd.Key {
-						resp.Instances++
-					}
-					return nil
-				})
+				// The pool's live instance count is a maintained counter (ADR-0083),
+				// so a collaboration with N pools costs N point reads rather than N
+				// walks of the whole instance family.
+				n, err := s.store.DefInstanceCount(pd.Key)
+				if err != nil {
+					return err
+				}
+				resp.Instances += n
+				return nil
 			})
 			scan(func() error {
 				return s.store.MessageFlowHistory(pd.Key, func(ts int64, pos uint64, v *model.MessageFlowValue) error {
@@ -1502,6 +1530,61 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		scanErr       error
 		resp          = instanceTimelineResp{InstanceKey: key, Steps: []timelineStep{}, Frames: []timelineFrame{}}
 	)
+
+	// The reverse call-activity link map (a child instance records the call activity
+	// that started it, ADR-0076) is the one part of a replay whose cost grows with the
+	// *whole* instance population rather than with this instance: there is no index
+	// from parent to child, so finding this instance's children means walking both
+	// instance families. That walk is built here, off the run loop, before the fold
+	// below takes the loop — otherwise opening one replay stops the engine for as long
+	// as the walk takes, which at a large population is exactly the stall ADR-0080
+	// removed from the runtime views.
+	//
+	// Deciding whether the map is needed at all costs two per-instance reads repeated
+	// from the fold (the instance and its migration history). That is cheap, and it
+	// buys skipping the walk entirely for a definition that calls no other process.
+	var childByParent map[uint64]uint64
+	linkErr := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+		pi, ok, err := rv.ProcessInstance(key)
+		if err != nil || !ok {
+			return err
+		}
+		var migrations []migrationBoundary
+		if err := rv.OperatorActionHistory(key, func(_ int64, pos uint64, v *model.OperatorActionValue) error {
+			if v.Kind == model.OperatorActionMigrate {
+				migrations = append(migrations, migrationBoundary{pos: pos, from: v.FromProcessDefKey})
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		ver := newVersionAt(migrations, pi.ProcessDefKey, func(defKey uint64) *compiler.CompiledProcess {
+			return defs[defKey].cp
+		})
+		if !ver.anyHasCallActivities() {
+			return nil
+		}
+		childByParent = map[uint64]uint64{}
+		link := func(childKey uint64, v *model.ProcessInstanceValue) error {
+			if v.ParentElementInstanceKey != 0 {
+				childByParent[v.ParentElementInstanceKey] = childKey
+			}
+			return nil
+		}
+		if err := rv.ActiveProcessInstances(link); err != nil {
+			return err
+		}
+		return rv.CompletedProcessInstances(link)
+	})
+	switch {
+	case errors.Is(linkErr, errLoopClosing):
+		httpapi.Error(w, http.StatusServiceUnavailable, linkErr.Error())
+		return
+	case linkErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "read instance timeline: "+linkErr.Error())
+		return
+	}
+
 	s.do(func() {
 		pi, ok, err := s.store.ProcessInstance(key)
 		if err != nil {
@@ -1601,25 +1684,8 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			return nil
 		})
 		resp.Migrated = ver.migrated()
-		// Reverse call-activity link: a child instance records the call-activity element
-		// instance that started it (ParentElementInstanceKey, ADR-0076). Build the map
-		// once — only if this definition actually has call activities — so a call
-		// activity's step can carry its childInstanceKey and the replay can drill in.
-		// Covers active and completed children (the child usually outlives the caller's
-		// step but may already be done).
-		var childByParent map[uint64]uint64
-		if scanErr == nil && ver.anyHasCallActivities() {
-			childByParent = map[uint64]uint64{}
-			link := func(childKey uint64, v *model.ProcessInstanceValue) error {
-				if v.ParentElementInstanceKey != 0 {
-					childByParent[v.ParentElementInstanceKey] = childKey
-				}
-				return nil
-			}
-			if scanErr = s.store.ActiveProcessInstances(link); scanErr == nil {
-				scanErr = s.store.CompletedProcessInstances(link)
-			}
-		}
+		// childByParent was built off the loop above; nil means this instance's
+		// definitions call no other process, so no step can carry a drill-in link.
 		// Variable snapshots are scope-aware: the process-instance (root) scope plus
 		// each embedded subprocess scope of this instance, so a subprocess's local
 		// variables (its input mappings) are visible in the replay, labeled by their
@@ -2862,16 +2928,25 @@ func (s *Server) handleDataObjectsAcrossInstances(w http.ResponseWriter, r *http
 				return nil
 			}
 		}
-		if scanErr = s.store.ActiveProcessInstances(collect("active")); scanErr != nil {
+		// Newest instance first, so a sweep that hits a bound keeps the rows an
+		// operator is most likely to be looking for — and *scanned* newest first, so
+		// reaching that bound costs the bound rather than the whole population. Both
+		// families are read descending and merged: taking the newest N of each and
+		// sorting yields exactly the newest N of the two together.
+		var moreActive, moreDone bool
+		if moreActive, scanErr = s.store.ActiveProcessInstancesDesc(dataObjectsScanLimit, collect("active")); scanErr != nil {
 			return
 		}
 		if history {
-			if scanErr = s.store.CompletedProcessInstances(collect("")); scanErr != nil {
+			if moreDone, scanErr = s.store.CompletedProcessInstancesDesc(dataObjectsScanLimit, collect("")); scanErr != nil {
 				return
 			}
 		}
-		// Newest instance first, so a sweep that hits a bound keeps the rows an
-		// operator is most likely to be looking for.
+		// An instance the scan never reached is as much a truncation as a row it
+		// reached and did not report, so the bound feeds the same flag — and it does
+		// so whether or not the row loop below also stops early.
+		unscanned := moreActive || moreDone
+		resp.Truncated = unscanned
 		sort.Slice(rows, func(a, b int) bool { return rows[a].key > rows[b].key })
 
 		// The vocabulary is per application and the sweep crosses them, so it is
@@ -2891,7 +2966,7 @@ func (s *Server) handleDataObjectsAcrossInstances(w http.ResponseWriter, r *http
 
 		for _, row := range rows {
 			if len(resp.Objects) >= dataObjectsAcrossInstancesLimit || resp.Scanned >= dataObjectsScanLimit {
-				resp.Truncated = len(rows) > resp.Scanned
+				resp.Truncated = unscanned || len(rows) > resp.Scanned
 				break
 			}
 			resp.Scanned++
@@ -3014,9 +3089,6 @@ func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request)
 	httpapi.JSON(w, http.StatusOK, out)
 }
 
-// handleListInstances lists process instances — live ones (with their current
-// token count) followed by finished ones from the history index, most recently
-// completed first (ADR-0017). It is the operator "instances" view.
 // errListTruncated stops a bounded list scan once the page cap is reached. It is a
 // sentinel to break the scan early, not a failure.
 var errListTruncated = errors.New("list page full")
@@ -3042,125 +3114,6 @@ const (
 	maxInstanceListDefault = 1000
 	maxInstanceListMax     = 10000
 )
-
-func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
-	limit := maxInstanceListDefault
-	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
-		n, err := strconv.Atoi(q)
-		if err != nil || n <= 0 {
-			httpapi.Error(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
-			return
-		}
-		limit = n
-	}
-	if limit > maxInstanceListMax {
-		limit = maxInstanceListMax
-	}
-	var (
-		filterDef uint64
-		hasFilter bool
-	)
-	if q := strings.TrimSpace(r.URL.Query().Get("process")); q != "" {
-		n, err := strconv.ParseUint(q, 10, 64)
-		if err != nil {
-			httpapi.Error(w, http.StatusBadRequest, "invalid process key")
-			return
-		}
-		filterDef, hasFilter = n, true
-	}
-	active := []instanceResp{}
-	done := []instanceResp{}
-	truncated := false
-	var scanErr error
-	s.do(func() {
-		// Attach the definition's id/version and the scope's variables to a row.
-		enrich := func(r *instanceResp, key uint64) error {
-			if d, ok := s.deployments[r.ProcessDefKey]; ok {
-				r.ProcessID = d.ProcessID
-				r.Version = d.Version
-				if d.cp != nil {
-					r.VersionTag = d.cp.VersionTag()
-				}
-			}
-			return s.store.VariablesOfScope(key, func(vv *model.VariableValue) error {
-				r.Variables = append(r.Variables, toVariableView(vv))
-				return nil
-			})
-		}
-
-		err := s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
-			if hasFilter && v.ProcessDefKey != filterDef {
-				return nil
-			}
-			if len(active) >= limit {
-				truncated = true
-				return errListTruncated // page full: stop enriching further rows
-			}
-			elements := 0
-			if err := s.store.ElementInstancesOfProcess(key, func(uint64) error {
-				elements++
-				return nil
-			}); err != nil {
-				return err
-			}
-			r := instanceResp{
-				Key:              key,
-				ProcessDefKey:    v.ProcessDefKey,
-				ElementInstances: elements,
-				State:            "active",
-				CreatedAt:        v.CreatedAt,
-				CorrelationKey:   v.CorrelationKey,
-				Variables:        []variableView{},
-			}
-			if err := enrich(&r, key); err != nil {
-				return err
-			}
-			active = append(active, r)
-			return nil
-		})
-		if err != nil && !errors.Is(err, errListTruncated) {
-			scanErr = err
-			return
-		}
-
-		err = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
-			if hasFilter && v.ProcessDefKey != filterDef {
-				return nil
-			}
-			if len(done) >= limit {
-				truncated = true
-				return errListTruncated
-			}
-			r := instanceResp{
-				Key:            key,
-				ProcessDefKey:  v.ProcessDefKey,
-				State:          v.State.String(),
-				CreatedAt:      v.CreatedAt,
-				CompletedAt:    v.CompletedAt,
-				CorrelationKey: v.CorrelationKey,
-				Variables:      []variableView{},
-			}
-			if err := enrich(&r, key); err != nil {
-				return err
-			}
-			done = append(done, r)
-			return nil
-		})
-		scanErr = unlessTruncated(err)
-	})
-	if scanErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())
-		return
-	}
-	// Finished instances: most recently completed first.
-	sort.Slice(done, func(i, j int) bool { return done[i].CompletedAt > done[j].CompletedAt })
-	if truncated {
-		// Signal that the page was capped so a client can page with ?process=/?limit=
-		// rather than assume it received every instance.
-		w.Header().Set("X-Instances-Truncated", "true")
-	}
-	httpapi.JSON(w, http.StatusOK, append(active, done...))
-}
 
 type instanceSummaryRow struct {
 	ProcessDefKey     uint64 `json:"processDefKey"`
@@ -3201,144 +3154,6 @@ func (s *Server) handleInstancesSummary(w http.ResponseWriter, _ *http.Request) 
 			})
 		}
 	})
-	httpapi.JSON(w, http.StatusOK, out)
-}
-
-// maxInstanceSearchResults caps a variable search so a single query can't return
-// an unbounded response on a large deployment. The search is a full scan (v1, no
-// index); the cap keeps the answer size and scan cost bounded — active instances
-// first, then finished ones most-recently-completed first, so the newest matches
-// survive truncation.
-const maxInstanceSearchResults = 200
-
-// varQuery is a parsed instance-variable search. Two shapes: a structured
-// name=value match (variable name exact, value substring) when the query
-// contains "="; otherwise a free-text substring over variable names and values.
-// All comparisons are case-insensitive.
-type varQuery struct {
-	structured bool
-	name       string // lower-cased variable name; structured only
-	needle     string // lower-cased substring (value in structured, term in free-text)
-}
-
-// parseVarQuery interprets a raw ?q= value. ok is false for a blank query (the
-// caller returns an empty result set rather than scanning everything). A query
-// like "=value" with no name degrades to free text — an empty exact name can
-// never match, so treating it structurally would be a silent dead end.
-func parseVarQuery(q string) (varQuery, bool) {
-	q = strings.TrimSpace(q)
-	if q == "" {
-		return varQuery{}, false
-	}
-	if i := strings.IndexByte(q, '='); i >= 0 {
-		if name := strings.TrimSpace(q[:i]); name != "" {
-			return varQuery{
-				structured: true,
-				name:       strings.ToLower(name),
-				needle:     strings.ToLower(strings.TrimSpace(q[i+1:])),
-			}, true
-		}
-	}
-	return varQuery{needle: strings.ToLower(q)}, true
-}
-
-// match reports whether a variable satisfies the query.
-func (p varQuery) match(v variableView) bool {
-	if p.structured {
-		return strings.ToLower(v.Name) == p.name && strings.Contains(strings.ToLower(v.Value), p.needle)
-	}
-	return strings.Contains(strings.ToLower(v.Name), p.needle) || strings.Contains(strings.ToLower(v.Value), p.needle)
-}
-
-// handleSearchInstances finds process instances by the content of their
-// variables — the operator "which instance had customerType=Business?" surface.
-// It reuses the same live+history scan as handleListInstances, but keeps only
-// instances with a variable matching ?q= and, on each row, only the matching
-// variables (so the UI can highlight them). A blank query returns an empty list,
-// not every instance. This is a full scan with no value index (v1): finished
-// instances are searchable only while their scope's variables are retained, same
-// as the instances list. Results are capped at maxInstanceSearchResults.
-func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
-	pred, ok := parseVarQuery(r.URL.Query().Get("q"))
-	if !ok {
-		httpapi.JSON(w, http.StatusOK, []instanceResp{})
-		return
-	}
-	active := []instanceResp{}
-	done := []instanceResp{}
-	var scanErr error
-	s.do(func() {
-		// matchingVars returns the scope's variables that satisfy the query, or
-		// nil if none do (so the caller can drop the instance).
-		matchingVars := func(key uint64) ([]variableView, error) {
-			var hits []variableView
-			err := s.store.VariablesOfScope(key, func(vv *model.VariableValue) error {
-				if view := toVariableView(vv); pred.match(view) {
-					hits = append(hits, view)
-				}
-				return nil
-			})
-			return hits, err
-		}
-		enrichDef := func(r *instanceResp) {
-			if d, ok := s.deployments[r.ProcessDefKey]; ok {
-				r.ProcessID = d.ProcessID
-				r.Version = d.Version
-				if d.cp != nil {
-					r.VersionTag = d.cp.VersionTag()
-				}
-			}
-		}
-
-		scanErr = s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
-			hits, err := matchingVars(key)
-			if err != nil || len(hits) == 0 {
-				return err
-			}
-			r := instanceResp{
-				Key:            key,
-				ProcessDefKey:  v.ProcessDefKey,
-				State:          "active",
-				CreatedAt:      v.CreatedAt,
-				CorrelationKey: v.CorrelationKey,
-				Variables:      hits,
-			}
-			enrichDef(&r)
-			active = append(active, r)
-			return nil
-		})
-		if scanErr != nil {
-			return
-		}
-
-		scanErr = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
-			hits, err := matchingVars(key)
-			if err != nil || len(hits) == 0 {
-				return err
-			}
-			r := instanceResp{
-				Key:            key,
-				ProcessDefKey:  v.ProcessDefKey,
-				State:          v.State.String(),
-				CreatedAt:      v.CreatedAt,
-				CompletedAt:    v.CompletedAt,
-				CorrelationKey: v.CorrelationKey,
-				Variables:      hits,
-			}
-			enrichDef(&r)
-			done = append(done, r)
-			return nil
-		})
-	})
-	if scanErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "search instances: "+scanErr.Error())
-		return
-	}
-	sort.Slice(done, func(i, j int) bool { return done[i].CompletedAt > done[j].CompletedAt })
-	out := append(active, done...)
-	if len(out) > maxInstanceSearchResults {
-		out = out[:maxInstanceSearchResults]
-	}
 	httpapi.JSON(w, http.StatusOK, out)
 }
 
@@ -3426,12 +3241,7 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 	)
 	var driveNeeded bool
 	s.do(func() {
-		scanErr = s.store.ActiveProcessInstances(func(k uint64, _ *model.ProcessInstanceValue) error {
-			if k == key {
-				found = true
-			}
-			return nil
-		})
+		_, found, scanErr = s.store.ActiveProcessInstance(key)
 		if scanErr != nil || !found {
 			return
 		}
@@ -3506,12 +3316,18 @@ func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.R
 		stats     statsResp
 	)
 	var driveNeeded bool
-	s.do(func() {
-		if _, ok := s.deployments[key]; !ok {
-			return
+	// Two phases on purpose. Selecting is a read whose cost is the *whole* active
+	// family — a definition with ten instances among a hundred thousand is still a
+	// hundred-thousand-row walk — so it runs off the run loop. Cancelling is a write
+	// and must be on it, but it is bounded by the batch limit. An instance that
+	// finishes between the two is harmless: cancelling a key that is no longer live
+	// is the same no-op the explicit-keys mode already relies on.
+	opErr = s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+		if _, ok := defs[key]; !ok {
+			return nil
 		}
 		found = true
-		err := s.store.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
+		err := rv.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
 			if v.ProcessDefKey != key {
 				return nil
 			}
@@ -3522,15 +3338,19 @@ func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.R
 			return nil
 		})
 		if err != nil && !errors.Is(err, errCancelBatchFull) {
-			opErr = err
-			return
+			return err
 		}
 		remaining = errors.Is(err, errCancelBatchFull) // hit the cap → more may remain
-		for _, k := range keys {
-			s.proc.CancelInstance(k)
-		}
-		driveNeeded = true
+		return nil
 	})
+	if opErr == nil && found && len(keys) > 0 {
+		s.do(func() {
+			for _, k := range keys {
+				s.proc.CancelInstance(k)
+			}
+		})
+		driveNeeded = true
+	}
 	if driveNeeded {
 		if opErr = s.drive(); opErr == nil {
 			s.do(func() { stats, opErr = s.readStats() })
@@ -3677,18 +3497,22 @@ func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstances
 		stats     statsResp
 	)
 	var driveNeeded bool
-	s.do(func() {
-		if _, ok := s.deployments[req.ProcessDefKey]; !ok {
-			return
+	// Selecting runs off the run loop and terminating on it — see the same split in
+	// [Server.handleCancelInstancesOfProcess]. With a query this read is the heavier
+	// of the two by far: it reads every candidate's variables, which is the instances
+	// search's cost with a definition filter in front of it.
+	opErr = s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+		if _, ok := defs[req.ProcessDefKey]; !ok {
+			return nil
 		}
 		found = true
-		err := s.store.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
+		err := rv.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
 			if v.ProcessDefKey != req.ProcessDefKey {
 				return nil
 			}
 			if hasQuery {
 				matched := false
-				if verr := s.store.VariablesOfScope(k, func(vv *model.VariableValue) error {
+				if verr := rv.VariablesOfScope(k, func(vv *model.VariableValue) error {
 					if pred.match(toVariableView(vv)) {
 						matched = true
 					}
@@ -3707,15 +3531,19 @@ func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstances
 			return nil
 		})
 		if err != nil && !errors.Is(err, errCancelBatchFull) {
-			opErr = err
-			return
+			return err
 		}
 		remaining = errors.Is(err, errCancelBatchFull)
-		for _, k := range keys {
-			s.proc.CancelInstance(k)
-		}
-		driveNeeded = true
+		return nil
 	})
+	if opErr == nil && found && len(keys) > 0 {
+		s.do(func() {
+			for _, k := range keys {
+				s.proc.CancelInstance(k)
+			}
+		})
+		driveNeeded = true
+	}
 	if driveNeeded {
 		if opErr = s.drive(); opErr == nil {
 			s.do(func() { stats, opErr = s.readStats() })

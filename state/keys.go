@@ -45,6 +45,9 @@ const (
 	cfHistoryExpiry          columnFamily = 0x20 // histExp:<purgeDueDate>:<piKey> → nil (ADR-0146)
 	cfRuntimeTotal           columnFamily = 0x21 // rtTotal:<kind> → int64 engine-wide live count (merge, ADR-0142)
 	cfOperatorAction         columnFamily = 0x22 // opAct:<piKey>:<ts>:<pos> → OperatorActionValue (ADR-0159)
+	cfChildByParent          columnFamily = 0x23 // childByParent:<callElKey>:<childPiKey> → nil (ADR-0238)
+	cfInstanceByDef          columnFamily = 0x24 // piByDef:<procDefKey>:<piKey> → nil
+	cfInstanceDoneByDef      columnFamily = 0x25 // piDoneByDef:<procDefKey>:<completedAt>:<piKey> → nil
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -145,6 +148,23 @@ func keyElByProc(procKey, elKey uint64) []byte {
 	return appendBE64(elByProcPrefix(procKey), elKey)
 }
 
+// keyChildByParent keys the reverse call-activity link: the child process instance
+// a call-activity element instance started (ADR-0076). The child records its parent
+// on its own record; this index records the other direction, so "which instance did
+// this call activity start?" is a prefix scan of one element's children instead of a
+// walk of every live instance.
+//
+// The child key is part of the key rather than the value so the entry is
+// self-describing and the write needs no read-modify-write.
+func keyChildByParent(callElKey, childPiKey uint64) []byte {
+	return appendBE64(childByParentPrefix(callElKey), childPiKey)
+}
+
+// childByParentPrefix scans one call-activity element instance's children.
+func childByParentPrefix(callElKey uint64) []byte {
+	return appendBE64([]byte{byte(cfChildByParent)}, callElKey)
+}
+
 // keyIncident keys an incident by the element instance it is attached to — one
 // activity holds at most one job, so at most one incident (ADR-0061).
 func keyIncident(elKey uint64) []byte {
@@ -180,6 +200,39 @@ func keyTimer(dueDate int64, key uint64) []byte {
 
 func keyProcessInstance(key uint64) []byte {
 	return appendBE64([]byte{byte(cfProcessInstance)}, key)
+}
+
+// instanceByDefPrefix is the live-instances-of-a-definition index slice. The
+// instance key is the trailing component, so a definition's running instances are
+// one range scan in key (creation) order — and, walked backwards, newest first.
+//
+// It exists because the alternative is a full scan of every instance in the store
+// to answer "show me this version's instances", which is what made the operations
+// view cost the whole deployment rather than the one version being looked at.
+func instanceByDefPrefix(procDefKey uint64) []byte {
+	return appendBE64([]byte{byte(cfInstanceByDef)}, procDefKey)
+}
+
+// keyInstanceByDef keys one live instance under its definition. The entry has no
+// value: the definition key and the instance key are the key, and the instance's
+// own record holds everything a reader wants.
+func keyInstanceByDef(procDefKey, piKey uint64) []byte {
+	return appendBE64(instanceByDefPrefix(procDefKey), piKey)
+}
+
+// instanceDoneByDefPrefix is the finished-instances-of-a-definition index slice.
+func instanceDoneByDefPrefix(procDefKey uint64) []byte {
+	return appendBE64([]byte{byte(cfInstanceDoneByDef)}, procDefKey)
+}
+
+// keyInstanceDoneByDef keys one finished instance under its definition by
+// completion time, then instance key. Completion time leads because "most
+// recently finished first" is the order the operations list shows history in;
+// with it in the key that order is a backwards range scan instead of sorting the
+// whole history in memory. The instance key breaks ties, so two instances that
+// finish in the same nanosecond both keep an entry.
+func keyInstanceDoneByDef(procDefKey uint64, completedAt int64, piKey uint64) []byte {
+	return appendBE64(appendOrderedInt64(instanceDoneByDefPrefix(procDefKey), completedAt), piKey)
 }
 
 func keyProcessInstanceHistory(key uint64) []byte {

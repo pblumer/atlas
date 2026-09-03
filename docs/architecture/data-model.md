@@ -173,9 +173,15 @@ timer:<dueDate>:<timerKey>       → TimerValue                 (sorted by due d
 msgSub:<msgName>:<corrKey>       → SubscriptionValue
 var:<scopeKey>:<name>            → bytes
 incident:<incidentKey>           → IncidentValue
+pi:<procInstKey>                 → ProcessInstanceValue       (live instances)
+piHist:<procInstKey>             → ProcessInstanceValue       (terminal history, ADR-0017)
+piByDef:<procDefKey>:<piKey>     → nil                        (a version's live instances)
+piDoneByDef:<procDefKey>:<completedAt>:<piKey> → nil          (a version's history, in completion order)
 ```
 
 The timer index shows the pattern: because `dueDate` is the prefix, "which timers are due now" is a range scan from the start up to `now` — no full scan, no separate scheduler structure. The `jobActivatable` index lets a worker find open jobs of a type with a prefix scan.
+
+The two `…ByDef` indexes are the same idea for the operator's question. Without them, "show me this version's instances" is a walk of every instance in the store filtered by definition, and "the ten most recently finished" is that walk plus an in-memory sort. With the definition key as the prefix each is a bounded range scan, and putting `completedAt` ahead of the instance key in the history index makes *completion order* the scan order — walked backwards, it is "most recently finished first" without sorting anything. Both entries are valueless: the key is the whole fact, and the instance's own record holds the rest.
 
 ## Why this model holds together
 

@@ -187,11 +187,18 @@ func withProjectID(path string, args map[string]any) string {
 	return path
 }
 
-// searchInstancesPath builds the instance-search path for a variable query,
-// escaping the raw query string into the ?q= parameter the endpoint parses
-// (name=value, name exact and value substring, or free text over names/values).
-func searchInstancesPath(q string) string {
-	return "/api/v1/instances/search?q=" + url.QueryEscape(q)
+// searchInstancesPath builds the instance-search path for a query, escaping the
+// raw query string into the ?q= parameter the endpoint parses (a bare instance
+// key, name=value with the name exact and the value a substring, or free text over
+// names/values). A non-empty process key narrows the search to that definition,
+// which is also what lets the server read that definition's index instead of every
+// instance.
+func searchInstancesPath(q, process string) string {
+	path := "/api/v1/instances/search?q=" + url.QueryEscape(q)
+	if process != "" {
+		path += "&process=" + url.QueryEscape(process)
+	}
+	return path
 }
 
 // resolveIncidentBody builds the resolve request body {retries} from the tool

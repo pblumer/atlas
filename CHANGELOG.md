@@ -33,6 +33,66 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **A data object can be pointed at a class you can see.** The **Type** of a data object
+  in the Modeler is the link the whole information model turns on — it is what lets two
+  processes agree that their `order` is the same kind of thing, and what a write to a
+  member of it is checked against. It was made by remembering a class name and typing it
+  into a box labelled *optional*, with the modelled classes hidden in a `<datalist>` that
+  nothing on the field mentioned.
+
+  The field now offers **the classes this application models**, grouped by the model they
+  live in and each carrying its business key — the fact that tells two similarly named
+  classes apart, and the thing you are actually trying to recall. It fills a free-text
+  field rather than replacing it: a diagram is routinely drawn before the vocabulary it
+  names exists, and typing a class nothing models yet has to stay possible
+  ([ADR-0230](docs/adr/0230-process-information-model.md)).
+
+  Below it, **the class itself is shown** — its kind, its members with their types and
+  cardinalities, and its business key marked exactly as the class canvas marks it — with
+  a link that opens the model in a new tab. Reading a name back tells you nothing about
+  whether it is the right class; its business key does, and that was one application of
+  the console away.
+
+  And when the type names a class nothing models yet, **Model it now** adds it where it
+  belongs instead of sending you off to do it by hand. It is added as a business object
+  with no attributes and no business key: those are the author's to choose, and guessing
+  them would be worse than leaving them open.
+
+- **A data object's value opens as formatted JSON.** In an instance's **Data** tab, a
+  structured value showed as `{3 fields}` and the whole of it was reachable only as a
+  tooltip — unreadable past a few lines, impossible to scroll, select or copy from, and
+  absent altogether on a touch device. The summary is now a button, and it opens the
+  same pretty-printed, syntax-highlighted window the **Variables** tab opens, with the
+  same Copy JSON. A data object is variable-shaped by design
+  ([ADR-0053](docs/adr/0053-first-class-data-objects.md)), so the two tabs
+  should answer "what is actually in there" with one surface.
+
+  Every write in the state trail opens too, and each window says which write it is
+  showing — a trail of four `{3 fields}` is unreadable if every window is titled the
+  same. Scalars are left alone: a string is already whole in its cell, and a button
+  around it would promise a second reading that does not exist.
+
+- **The class diagram's properties panel is the Modeler's panel.** Selecting a class, a
+  data store or a relationship under **Data › Information model** now gives you the same
+  panel the BPMN Modeler does: a header naming what is selected — its kind in small
+  type, its own name in bold, a type chip beside it — and collapsible property groups
+  below, each with a chevron and a filled dot when it carries content. Fields look like
+  fields do everywhere else in Atlas.
+
+  It is the same panel because it is the **same code**, not a lookalike. The Modeler had
+  grown the shape first, as a function inside `editor.js` that turns a rendered panel's
+  sections into groups. That is exactly the kind of thing worth having once: a copy
+  drifts from its model the first time either side is touched, and then two panels a
+  person uses in one sitting disagree about what a group is. It moved to
+  `api/web/pgroup.js`, and both panels call it.
+
+  What the two panels do *not* share is which groups start open, because the honest
+  answer differs. A BPMN element has a dozen sections and opening one of them is the
+  point, so only **General** starts open. A class has three, and one of them is its
+  attributes — the attributes *are* the class, so hiding them behind a click on every
+  selection would be worse than having no groups at all. So the class panel opens
+  everything, and collapsing is there for when a long attribute list is in the way.
+
 - **Central decisions run on a worker now — and the last in-process kind is gone**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 7).
   A call to a decision service somebody else operates no longer happens on the loop
@@ -229,6 +289,61 @@ _Changed_ / _Removed_ for each version.
   integration back on the run loop.
 
 ### Added
+
+- **Finding one instance among a few hundred thousand.** An operator's most common
+  question is about a single instance — "where is MT-1998?", "what happened to the
+  instance this ticket names?" — and Atlas answered every version of it by reading
+  through every instance in the engine.
+  [ADR-0239](docs/adr/0239-off-loop-queries.md) took the first half of that away:
+  those queries no longer hold the engine's single writer while they run. They still
+  *walked*, though, and off the loop a walk still costs the operator the wait —
+  `?process=` filtered after the scan, so listing a version with three instances cost
+  a walk of every instance in the store; the finished half was collected whole and
+  sorted in memory to show the ten most recent completions; and the search was, in
+  its own words, "a full scan with no value index".
+  ([ADR-0241](docs/adr/0241-finding-an-instance.md))
+
+  **A bare instance key is now a point read.** Paste a key into the search box and
+  it resolves against the live record and then the history — two reads, no walk,
+  and the whole instance with all its variables comes back. A number that is not an
+  instance key falls through to the content search, so `3098` still finds
+  `zip=3098`.
+
+  **Instances are indexed by their definition.** Two new column families —
+  `piByDef:<procDefKey>:<piKey>` and `piDoneByDef:<procDefKey>:<completedAt>:<piKey>`
+  — are maintained in `applyToState` alongside the records they index, so replay
+  rebuilds them (I4/I6) and an existing store is seeded once at open, the same way
+  the ADR-0080/0083 counters were. `GET /api/v1/instances?process=` now reads them:
+  a version's instances cost the page rather than the store, and history comes back
+  most-recently-finished first without sorting anything in memory — which the
+  history family's own key order cannot give you, since an instance started first
+  can finish last.
+
+  **The listing pages.** `?state=active|finished` returns one half and, when the
+  page is capped, hands back `X-Instances-Next-Cursor` for the next (older) one —
+  the same newest-first cursor paging the task inbox uses. The finished cursor
+  carries the completion time as well as the key, for that same reason. `?before=`
+  without `?process=` is refused rather than ignored: a silently dropped paging
+  parameter is how a client loops over one page forever. `state=all` and
+  `state=completed` keep working — callers wrote them back when the parameter was
+  ignored, and they now do what those callers meant. `GET
+  /api/v1/instances/search` takes `?process=` too, scoping a content search to one
+  version's index and letting it stop as soon as the cap is met.
+
+  **The live view's instance panel stops loading everything.** It used to fetch
+  every instance of the version, with every variable on every row, on a 1.5-second
+  poll, and render one card each. It now asks for one page per half, says what it
+  is showing out of what exists ("80 of 150" — a page reported as a total is
+  believed), walks the cursor on **Load more**, and carries a search box: an
+  instance key, or `name=value` over that version's variables. `GET
+  /processes/{key}/runtime` gained a `finished` count so that total costs nothing.
+
+  Still a walk, deliberately: an unscoped content search, and an unscoped
+  `?state=finished`. An ordered key-value store answers equality and prefix, not
+  substring — the record says what a variable-value index would have to look like
+  (declarative, resolved at deploy time, exact and prefix only) and why full text
+  over cold history belongs in the OpenSearch export (ADR-0114) rather than in a
+  new engine index.
 
 - **A class's attributes can be put in the order you want to read them in.** Grab a row
   by its grip and move it, or press Alt+↑ / Alt+↓ in the field you are editing. An
@@ -1015,19 +1130,29 @@ _Changed_ / _Removed_ for each version.
   before ADR-0203 — the decision records, and the release notes above — keep their
   wording, because they are dated accounts of what was true when they were written.
 
-- **The Modeler's bar carries two buttons now, and a menu for the rest.** It ended with
-  seven, added one at a time as the editor grew — Token simulation, Variables,
+- **The Modeler's bar carries three controls now, and a menu for the rest.** It ended
+  with seven, added one at a time as the editor grew — Token simulation, Variables,
   Auto-layout, Save, Export XML, Documentation, Deploy — and every one of them was the
   same white button. That said they were the same size of decision, which they never
   were: Auto-layout nudges boxes, Deploy puts a definition on a server and cannot be
-  taken back ([ADR-0229](docs/adr/0229-modeler-bar-hierarchy.md)).
+  taken back ([ADR-0229](docs/adr/0229-modeler-bar-hierarchy.md),
+  [ADR-0240](docs/adr/0240-modeler-variables-on-the-bar.md)).
 
-  The bar now carries **Save** and **Deploy**, with Deploy the only filled button because
-  it is the only act there that leaves the browser. The other five moved into a **…**
-  menu beside them, grouped by what they touch: *View* (Token simulation, Variables) and
-  *Diagram* (Auto-layout, Export XML, Documentation). A toggle in a menu cannot look
-  held down, so it says it is on with a check and with `aria-pressed` — the Variables
-  toggle never announced its state at all before.
+  The bar now carries **Variables**, **Save** and **Deploy**, with Deploy the only filled
+  button because it is the only act there that leaves the browser. Token simulation,
+  Auto-layout, Export XML and Documentation moved into a **…** menu beside them, where a
+  toggle says it is on with a check and with `aria-pressed`.
+
+  **Variables stayed on the bar, as a proper two-state button** — tinted while the panel
+  is open, muted while it is shut, and separated from Save and Deploy by a rule, because
+  what the bar *shows* and what the bar *does* are different kinds of thing. It is the one
+  control here that is neither an act nor a mode but a reading aid, consulted briefly and
+  often while writing something else, and a menu taxes that every time. It answers **F4**
+  now, alongside Auto-layout's F8 — and unlike F8 it works while a field has focus, since
+  the moment you most want to know what a variable is called is while typing the
+  expression that uses it. Its pressed look is drawn straight from `aria-pressed`, so what
+  a screen reader is told and what you see cannot drift apart; the toggle never announced
+  its state at all before.
 
   Two things that were not about any single button go with it. The bar is one row again
   at the widths people work at: it wraps, and the buttons were direct children of it, so
@@ -1044,7 +1169,7 @@ _Changed_ / _Removed_ for each version.
   so leaving is one visible click rather than a trip back through the menu.
 
   Nothing about what the controls *do* changed, and F8 still runs Auto-layout from
-  wherever focus sits. The cost is honest and worth naming: five controls are a click
+  wherever focus sits. The cost is honest and worth naming: four controls are a click
   further away, and someone opening the Modeler for the first time cannot see that they
   exist until they open the menu.
 
@@ -1158,6 +1283,27 @@ _Changed_ / _Removed_ for each version.
   extension elements are still `<atlas:jiraConnector>` and friends.
 
 ### Fixed
+
+- **"Loading form…" could stand there for good.** Deploy & run opens the process's
+  start form in a modal (ADR-0028), and the modal waited on two things — the vendored
+  form-js viewer and the form definition — with a deadline on neither. A request that
+  hangs instead of failing is an ordinary thing in the wild (a stalled asset, a proxy
+  holding the connection, a server that stops answering), and it left the placeholder
+  on screen for the rest of the session: no error, no way to retry, and a disabled
+  **Send** beside it. Reported from a running server, where the start form of a
+  process being deployed never appeared.
+
+  A stall is now a failure somebody can act on. Both halves of the load carry a
+  deadline, the message names which half did not arrive, and a **Try again** costs
+  nothing — whatever did arrive in the meantime is in the browser's cache. The
+  memoized viewer import no longer remembers a failure either: one bad fetch used to
+  fail every later form in the tab, leaving a page reload as the only way back.
+  Cancelling while it loads now also drops the late arrival rather than building a
+  live form into a container already detached.
+
+  `e2e/deploy-start-form-stall.spec.mjs` holds a definition, then the bundle, open —
+  the modal has to report it, offer the retry, and render the form when the retry
+  arrives, having deployed nothing throughout.
 
 - **The Data area's Import button did nothing at all.** Its click handler called a
   helper that a change to the Console had removed in the meantime — the picker for

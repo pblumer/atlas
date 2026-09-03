@@ -52,6 +52,78 @@ test("a type nothing models is marked, and is still allowed to stand", async ({ 
   await expect(page.locator("#p-body")).not.toContainText("No class called");
 });
 
+// What the field is for is the link between a data object and the class it is, and
+// that link used to be made by remembering a name and typing it: the vocabulary was in
+// an invisible <datalist>, and nothing said what the name you typed actually meant.
+test("the classes the application models are offered, with what tells them apart", async ({ page }) => {
+  await selectDataObject(page, "Ref_order");
+  const pick = page.locator("#f-itemtype-pick");
+  await expect(pick).toBeVisible();
+  // The business key rides along, because it is the fact that tells two similarly
+  // named classes apart and the thing somebody is trying to recall.
+  const labels = await pick.locator("option").evaluateAll((els) => els.map((e) => e.textContent.trim()));
+  expect(labels).toEqual(["Pick from the information model…", "Customer", "Order · key id"]);
+  // Grouped by the model they live in, so a name says where it comes from.
+  await expect(pick.locator("optgroup")).toHaveAttribute("label", "Sales data");
+
+  // Picking one is the same edit as typing it: one write, not two paths.
+  await selectDataObject(page, "Ref_note");
+  await expect(page.locator("#f-itemtype")).toHaveValue("");
+  await page.locator("#f-itemtype-pick").selectOption("Customer");
+  await expect(page.locator("#f-itemtype")).toHaveValue("Customer");
+  const xml = await page.evaluate(() => window.__xml());
+  expect(xml).toMatch(/<bpmn:dataObject[^>]*id="DO_note"[^>]*itemSubjectRef="ItemDefinition_Customer"/);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the class the type points at is shown, so it can be checked without leaving", async ({ page }) => {
+  await selectDataObject(page, "Ref_order");
+  const card = page.locator(".im-card");
+  await expect(card.locator(".im-card-name")).toHaveText("Order");
+  await expect(card.locator(".im-card-stereo")).toHaveText("«businessObject»");
+  await expect(card.locator(".im-card-attrs li")).toHaveCount(2);
+  // The business key is marked here exactly as the canvas marks it: it is what makes
+  // two of these the same one, and the reason to check the class at all.
+  await expect(card.locator("li.key .n")).toHaveText("⚿ id");
+  await expect(card.locator("li").nth(1)).toContainText("number [0..1]");
+  // And a way back to where it is authored, in a new tab — the diagram has unsaved
+  // work in it, so this must not navigate away from it.
+  const open = card.locator(".im-card-open");
+  await expect(open).toHaveAttribute("href", "#/data/m/m1");
+  await expect(open).toHaveAttribute("target", "_blank");
+
+  // A class with no business key shows its members and no key mark.
+  await selectDataObject(page, "Ref_note");
+  await page.locator("#f-itemtype-pick").selectOption("Customer");
+  await expect(page.locator(".im-card .im-card-name")).toHaveText("Customer");
+  await expect(page.locator(".im-card li.key")).toHaveCount(0);
+});
+
+test("a type nothing models yet can be modelled from here", async ({ page }) => {
+  await selectDataObject(page, "Ref_claim");
+  await expect(page.locator("#p-body")).toContainText("No class called");
+  await expect(page.locator(".im-card")).toHaveCount(0);
+
+  // The remedy used to be: leave the diagram, find the model, add the class, come back.
+  await page.locator("#f-itemtype-create").click();
+  await expect(page.locator(".im-card .im-card-name")).toHaveText("Claim");
+  await expect(page.locator("#p-body")).not.toContainText("No class called");
+
+  // It was written to the model, as a business object with nothing invented for it:
+  // the business key is the author's to choose, and guessing one would be worse than
+  // leaving it open.
+  const puts = await page.evaluate(() => window.__put);
+  expect(puts).toHaveLength(1);
+  expect(puts[0].revision).toBe(3); // written against the revision it was read at
+  const added = puts[0].classes.find((c) => c.name === "Claim");
+  expect(added.stereotype).toBe("businessObject");
+  expect(added.attributes).toEqual([]);
+  expect(added.identity).toEqual([]);
+  // Placed where the canvas would place it, not on top of the class before it.
+  expect(added.x).toBe(560);
+  expect(page.__errors).toEqual([]);
+});
+
 test("setting the type lands in the exported XML, on the data object itself", async ({ page }) => {
   await selectDataObject(page, "Ref_note");
   await expect(page.locator("#f-itemtype")).toHaveValue("");

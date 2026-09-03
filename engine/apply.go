@@ -50,6 +50,13 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				tx.IncDefInstanceCount(v.process.ProcessDefKey),
 				tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp),
 			)
+			// A child started by a call activity is indexed under the element instance
+			// that started it, so tearing that element down finds its child by lookup
+			// rather than by walking every live instance. The link comes off this
+			// event's own record, so replay rebuilds the index identically (I4/I6).
+			if err == nil && v.process.ParentElementInstanceKey != 0 {
+				err = tx.PutChildByParent(v.process.ParentElementInstanceKey, h.Key)
+			}
 			if err == nil && v.process.CorrelationKey != "" {
 				err = tx.IncrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
 			}
@@ -77,11 +84,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// and last-activity stamped, so the summary reads both in O(1) (ADR-0083).
 			err := firstErr(
 				tx.PutProcessInstanceHistory(h.Key, &hist),
-				tx.DeleteProcessInstance(h.Key),
+				tx.DeleteProcessInstance(h.Key, v.process.ProcessDefKey),
 				tx.DecDefInstanceCount(v.process.ProcessDefKey),
 				tx.IncDefCompletedCount(v.process.ProcessDefKey),
 				tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp),
 			)
+			// The child is finished, so its reverse link goes with its active record —
+			// the index holds live children only, which is what the teardown asks it for.
+			if err == nil && v.process.ParentElementInstanceKey != 0 {
+				err = tx.DeleteChildByParent(v.process.ParentElementInstanceKey, h.Key)
+			}
 			// A definition-declared history TTL schedules the record's hard delete: index the
 			// finished instance by the purge due date the terminal event carries, so retention
 			// selects candidates by asking what is due instead of walking the whole history

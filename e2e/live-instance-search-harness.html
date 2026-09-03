@@ -1,0 +1,155 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas live instance search e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js live view against a mock `api` holding more
+         instances than one page. The panel must ask for a page per half (?state=&limit=)
+         rather than the whole set, say what it is showing out of what exists, walk the
+         cursor on "Load more", and reach anything off the page through the search box —
+         which is a point read for a bare instance key and a scoped variable search
+         otherwise. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+      .djs-palette, .token-legend { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountLive } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000;
+      const ns = (ms) => ms * 1e6;
+
+      const DEF = 7;
+      const ACTIVE = 120;   // more than one panel page, so paging is real
+      const FINISHED = 30;
+      window.__DEF = DEF;
+      window.__ACTIVE = ACTIVE;
+      window.__TOTAL = ACTIVE + FINISHED;
+      // Every list/search URL the panel asks for, so a test can assert it asked for a
+      // page rather than for everything.
+      window.__requests = [];
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_ls" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="identitaet" name="Identitäts-Lebenszyklus" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Angelegt"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="Task_review" name="Eintritt verbuchen">
+      <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="End_1" name="Gelöscht"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Task_review"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Task_review" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="identitaet">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Task_review_di" bpmnElement="Task_review"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="440" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="440" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // Instance keys descend from the newest, mirroring the engine's monotonic keys.
+      const mk = (i, state) => ({
+        key: 900000 + i,
+        processDefKey: DEF,
+        state,
+        createdAt: ns(T + i * 1000),
+        completedAt: state === "active" ? 0 : ns(T + 500000 + i * 1000),
+        variables: [
+          { name: "identityId", value: `MT-${1000 + i}`, kind: "string" },
+          { name: "zustand", value: state === "active" ? "ERFASST" : "ARCHIVIERT", kind: "string" },
+        ],
+      });
+      // Newest first, which is the order the server's indexes yield.
+      const activeRows = Array.from({ length: ACTIVE }, (_, i) => mk(ACTIVE - 1 - i, "active"));
+      const doneRows = Array.from({ length: FINISHED }, (_, i) => mk(ACTIVE + FINISHED - 1 - i, "completed"));
+
+      // page slices a half the way the server does: newest first, `limit` rows, and a
+      // cursor naming where the next call resumes.
+      const page = (rows, limit, before, cursorOf) => {
+        let from = 0;
+        if (before) {
+          const at = rows.findIndex((r) => cursorOf(r) === before);
+          from = at < 0 ? rows.length : at + 1;
+        }
+        const slice = rows.slice(from, from + limit);
+        const more = from + limit < rows.length;
+        return { slice, more, cursor: more && slice.length ? cursorOf(slice[slice.length - 1]) : "" };
+      };
+      const activeCursor = (r) => String(r.key);
+      const doneCursor = (r) => `${r.completedAt}.${r.key}`;
+
+      const listResponse = (url) => {
+        const p = new URL(url, location.origin).searchParams;
+        const state = p.get("state");
+        const limit = Number(p.get("limit") || 1000);
+        const before = p.get("before") || "";
+        const half = state === "finished" ? doneRows : activeRows;
+        const cursorOf = state === "finished" ? doneCursor : activeCursor;
+        const { slice, more, cursor } = page(half, limit, before, cursorOf);
+        const headers = new Headers();
+        if (more) {
+          headers.set("X-Instances-Truncated", "true");
+          if (cursor) headers.set("X-Instances-Next-Cursor", cursor);
+        }
+        return { data: slice, headers };
+      };
+
+      const api = async (method, url, body) => {
+        if (method !== "GET") return {};
+        if (url === "/api/v1/processes") {
+          return [{ key: DEF, processId: "identitaet", name: "Identitäts-Lebenszyklus", version: 2 }];
+        }
+        if (/\/processes\/\d+\/xml$/.test(url)) return XML;
+        if (url.startsWith("/api/v1/instances/search")) {
+          window.__requests.push(url);
+          const p = new URL(url, location.origin).searchParams;
+          const q = (p.get("q") || "").trim();
+          const all = activeRows.concat(doneRows);
+          // A bare instance key is a point read; anything else matches variable content.
+          const byKey = all.find((r) => String(r.key) === q);
+          if (byKey) return [byKey];
+          const needle = q.toLowerCase();
+          return all.filter((r) => r.variables.some((v) =>
+            `${v.name}=${v.value}`.toLowerCase().includes(needle) || v.value.toLowerCase().includes(needle)));
+        }
+        if (url.startsWith("/api/v1/instances?")) {
+          window.__requests.push(url);
+          return listResponse(url).data;
+        }
+        if (url === "/api/v1/tasks") return [];
+        if (url.includes("/runtime")) {
+          return {
+            instances: ACTIVE, finished: FINISHED, tokens: ACTIVE,
+            incidents: [], incidentsTruncated: false,
+            elements: [
+              { elementId: "Start_1", type: "bpmn:StartEvent", tokens: 0, visits: ACTIVE, incidents: 0 },
+              { elementId: "Task_review", type: "bpmn:UserTask", tokens: ACTIVE, visits: ACTIVE, incidents: 0 },
+            ],
+          };
+        }
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        return {};
+      };
+
+      const apiRaw = async (method, url, body) => {
+        if (method === "GET" && url.startsWith("/api/v1/instances?")) {
+          window.__requests.push(url);
+          return listResponse(url);
+        }
+        return { data: await api(method, url, body), headers: new Headers() };
+      };
+
+      window.__mountLive = () => mountLive(view, { api, apiRaw, toast: noop, key: DEF });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

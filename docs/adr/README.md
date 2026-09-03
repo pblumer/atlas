@@ -291,6 +291,10 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0235](0235-google-sheets-worker.md) | Google Sheets as a Worker Type — a spreadsheet is a process data source | Proposed |
 | [0236](0236-repeating-non-interrupting-boundary-events.md) | A non-interrupting message or signal boundary event stays armed | Accepted |
 | [0237](0237-class-canvas-on-diagram-js.md) | The class canvas on diagram-js | Proposed |
+| [0238](0238-child-instance-index.md) | A reverse index from call activity to child instance | Proposed |
+| [0239](0239-off-loop-queries.md) | Read-only queries run off the run loop, on a consistent view | Proposed |
+| [0240](0240-modeler-variables-on-the-bar.md) | Variables stays on the Modeler's bar, as a pressed button with a shortcut | Accepted |
+| [0241](0241-finding-an-instance.md) | Finding an instance — a key lookup and a per-definition index | Accepted |
 
 ## Status values
 

@@ -1,4 +1,4 @@
-// The UML class canvas, on diagram-js (ADR-draft-class-canvas-on-diagram-js).
+// The UML class canvas, on diagram-js (ADR-0237).
 //
 // What Atlas owns here is the part that is Atlas's: how a class, a data store and
 // the four association kinds are drawn, and what the subset permits between them.

@@ -109,7 +109,7 @@ func TestProcessInstancePutGetDelete(t *testing.T) {
 	}
 	tx.Close()
 
-	commit(t, s, func(tx *state.Tx) error { return tx.DeleteProcessInstance(key) })
+	commit(t, s, func(tx *state.Tx) error { return tx.DeleteProcessInstance(key, pi.ProcessDefKey) })
 
 	tx2 := s.NewTransaction()
 	defer tx2.Close()

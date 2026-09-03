@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Identitäts-Lebenszyklus — eine Prozessinstanz je Mitarbeiter-Identität.
+
+  Eine Instanz lebt so lange wie die Identität selbst (Eintritt bis Löschung) und
+  hält zwei Dinge gleichzeitig sichtbar:
+
+    * Spur A (obere Achse) ist der Lebenszyklus der Identität. Jeder Zustand ist
+      ein Receive-Task — der Token steht also *in* dem Kästchen, das den aktuellen
+      Zustand benennt. Ein Blick auf das Diagramm genügt.
+    * Spur B (untere Achse) ist der Ereignis-Hub. Er läuft endlos parallel und
+      verbucht Service-Ereignisse (Bestellung, Inbetriebnahme, Störung, Kündigung,
+      Dekommissionierung) sowie Stammdaten-Mutationen.
+
+  Warum der Hub eine Schleife im Wurzel-Scope ist und kein Ereignis-Subprozess:
+  Daten-Assoziationen werden vom Compiler nur für Aktivitäten im Wurzel-Scope
+  verdrahtet, und ein nicht-unterbrechender Boundary-Event feuert genau einmal.
+  Die Schleife ist die einzige Konstruktion, die sich beliebig oft wiederholt
+  *und* das gemeinsame Register schreiben darf. Siehe README.md.
+
+  Zustand liegt an zwei Orten, mit Absicht:
+    * Datenobjekt "identitaet": Stammdaten als Wert, Lebenszyklus als BPMN-
+      Datenzustand (ERFASST/AKTIV/AUSTRITT/GESPERRT/ARCHIVIERT). Atlas führt
+      darüber eine lückenlose Historie mit Zeitstempel und schreibendem Element.
+    * Datenobjekt "services" (Collection): das Produkt-Register — je Service
+      id, Name, Status und seit wann.
+  Zusätzlich spiegeln die Variablen "zustand" und "serviceUebersicht" beides in
+  durchsuchbarer Form (atlas_search_instances findet Teilstrings im Wert).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_identitaet_lebenszyklus" targetNamespace="http://atlas/identity">
+
+  <!-- Alle Nachrichten korrelieren auf die Identitäts-Nummer aus SAP/CIS.
+       Damit adressiert jedes Quellsystem-Ereignis genau eine Instanz. -->
+  <message id="Msg_eintritt" name="identitaet-eintritt">
+    <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
+  </message>
+  <message id="Msg_mutation" name="identitaet-mutation">
+    <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
+  </message>
+  <message id="Msg_austritt" name="identitaet-austritt">
+    <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
+  </message>
+  <message id="Msg_loeschfrist" name="identitaet-loeschfrist">
+    <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
+  </message>
+  <message id="Msg_service" name="service-ereignis">
+    <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
+  </message>
+
+  <process id="identitaet-lebenszyklus" name="Identitäts-Lebenszyklus" isExecutable="true">
+    <documentation>Eine Instanz je Identität aus SAP/CIS. Startvariablen: identityId (Personalnummer, korreliert alle Nachrichten), nachname, vorname, orgEinheit, funktion, eintritt. Spur A führt den Lebenszyklus als Kette von Receive-Tasks (Tokenposition = Zustand), Spur B verbucht in einer Endlosschleife Service-Ereignisse und Mutationen. Das Terminate-Ende in Spur A beendet mit der Identität auch den Hub.</documentation>
+
+    <!-- Datenobjekte: Wert = Stammdaten bzw. Register, Zustand = Lebenszyklus. -->
+    <dataObject id="DO_identitaet" name="identitaet"/>
+    <dataObject id="DO_services" name="services" isCollection="true"/>
+
+    <!-- Je Schreibzugriff eine Referenz; der Datenzustand der Referenz ist der
+         Lebenszyklus-Zustand, in den der Schreibvorgang die Identität versetzt. -->
+    <dataObjectReference id="Ref_ident_erfasst" name="identitaet" dataObjectRef="DO_identitaet">
+      <dataState name="ERFASST"/>
+    </dataObjectReference>
+    <dataObjectReference id="Ref_ident_aktiv" name="identitaet" dataObjectRef="DO_identitaet">
+      <dataState name="AKTIV"/>
+    </dataObjectReference>
+    <dataObjectReference id="Ref_ident_austritt" name="identitaet" dataObjectRef="DO_identitaet">
+      <dataState name="AUSTRITT"/>
+    </dataObjectReference>
+    <dataObjectReference id="Ref_ident_archiviert" name="identitaet" dataObjectRef="DO_identitaet">
+      <dataState name="ARCHIVIERT"/>
+    </dataObjectReference>
+    <dataObjectReference id="Ref_ident_lesen" name="identitaet" dataObjectRef="DO_identitaet"/>
+    <dataObjectReference id="Ref_ident_mutiert" name="identitaet" dataObjectRef="DO_identitaet">
+      <dataState name="AKTIV"/>
+    </dataObjectReference>
+    <dataObjectReference id="Ref_svc_init" name="services" dataObjectRef="DO_services"/>
+    <dataObjectReference id="Ref_svc_lesen_ereignis" name="services" dataObjectRef="DO_services"/>
+    <dataObjectReference id="Ref_svc_schreiben_ereignis" name="services" dataObjectRef="DO_services"/>
+    <dataObjectReference id="Ref_svc_lesen_austritt" name="services" dataObjectRef="DO_services"/>
+    <dataObjectReference id="Ref_svc_schreiben_austritt" name="services" dataObjectRef="DO_services"/>
+    <dataObjectReference id="Ref_svc_lesen_ueb_austritt" name="services" dataObjectRef="DO_services"/>
+    <dataObjectReference id="Ref_svc_lesen_ueb_archiv" name="services" dataObjectRef="DO_services"/>
+    <dataObjectReference id="Ref_svc_lesen_archiv" name="services" dataObjectRef="DO_services"/>
+    <dataObjectReference id="Ref_svc_schreiben_archiv" name="services" dataObjectRef="DO_services"/>
+
+    <!-- ================= Spur A: Lebenszyklus der Identität ================= -->
+
+    <startEvent id="start" name="Identität angelegt (SAP/CIS)">
+      <documentation>Startet mit den Stammdaten aus SAP/CIS. Der Anlagezeitpunkt in der Quelle ist der Beginn der Identität — nicht der Eintrittstag, der kann Wochen später liegen.</documentation>
+    </startEvent>
+
+    <scriptTask id="s_stammdaten" name="Stammdaten übernehmen">
+      <documentation>Schreibt die Startvariablen als Wert in das Datenobjekt "identitaet" und versetzt es in den Datenzustand ERFASST. Legt gleichzeitig das leere Service-Register an — ohne diese Initialisierung wäre es null, und context put auf null ergibt in FEEL wieder null (still, ohne Fehler).</documentation>
+      <extensionElements>
+        <zeebe:script expression="= &quot;ERFASST&quot;" resultVariable="zustand"/>
+      </extensionElements>
+      <dataOutputAssociation id="doa_stamm_ident">
+        <targetRef>Ref_ident_erfasst</targetRef>
+        <assignment><from>= {id: identityId, nachname: nachname, vorname: vorname, orgEinheit: orgEinheit, funktion: funktion, eintritt: eintritt}</from></assignment>
+      </dataOutputAssociation>
+      <dataOutputAssociation id="doa_stamm_svc">
+        <targetRef>Ref_svc_init</targetRef>
+        <assignment><from>= []</from></assignment>
+      </dataOutputAssociation>
+    </scriptTask>
+
+    <parallelGateway id="gw_split" name="Lebenszyklus / Ereignis-Hub">
+      <documentation>Teilt die Instanz in zwei dauerhaft nebenläufige Token: den Lebenszyklus (oben) und den Ereignis-Hub (unten). Beide leben im Wurzel-Scope, weil nur dort Daten-Assoziationen auf die Datenobjekte greifen.</documentation>
+    </parallelGateway>
+
+    <receiveTask id="rt_erfasst" name="Erfasst — wartet auf Eintritt" messageRef="Msg_eintritt">
+      <documentation>Zustand ERFASST: die Identität existiert in SAP/CIS, der Mitarbeiter hat aber noch nicht angefangen. Services dürfen bereits bestellt werden (Vorab-Provisionierung) — der Hub verbucht sie unabhängig von dieser Spur. Wartet auf die Nachricht identitaet-eintritt.</documentation>
+    </receiveTask>
+
+    <scriptTask id="s_aktivieren" name="Eintritt verbuchen">
+      <documentation>Setzt den Datenzustand auf AKTIV, ohne die Stammdaten zu verändern: die Ausgabe-Assoziation trägt bewusst kein assignment — ein zustandsreiner Übergang behält den aktuellen Wert.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= &quot;AKTIV&quot;" resultVariable="zustand"/>
+      </extensionElements>
+      <dataOutputAssociation id="doa_aktiv">
+        <targetRef>Ref_ident_aktiv</targetRef>
+      </dataOutputAssociation>
+    </scriptTask>
+
+    <receiveTask id="rt_aktiv" name="Aktiv" messageRef="Msg_austritt">
+      <documentation>Zustand AKTIV: der Normalbetrieb, in dem eine Identität die meiste Zeit steht. Mutationen und Service-Ereignisse laufen währenddessen über den Hub. Wartet auf identitaet-austritt.</documentation>
+    </receiveTask>
+
+    <scriptTask id="s_austritt" name="Austritt: alle Services kündigen">
+      <documentation>Versetzt die Identität in den Zustand AUSTRITT und kündigt in einem Zug jeden Service, der noch nicht gekündigt oder dekommissioniert ist. Die Massenänderung steht im from-Ausdruck der Ausgabe-Assoziation, weil ein Script-Task nur eine resultVariable hat — die ist hier für "zustand" vergeben.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= &quot;AUSTRITT&quot;" resultVariable="zustand"/>
+      </extensionElements>
+      <dataInputAssociation id="dia_austritt_svc">
+        <sourceRef>Ref_svc_lesen_austritt</sourceRef>
+        <assignment><to>reg</to></assignment>
+      </dataInputAssociation>
+      <dataOutputAssociation id="doa_austritt_svc">
+        <targetRef>Ref_svc_schreiben_austritt</targetRef>
+        <assignment><from>= for s in reg return if s.status = "DEKOMMISSIONIERT" then s else context put(s, "status", "GEKUENDIGT")</from></assignment>
+      </dataOutputAssociation>
+      <dataOutputAssociation id="doa_austritt_ident">
+        <targetRef>Ref_ident_austritt</targetRef>
+      </dataOutputAssociation>
+    </scriptTask>
+
+    <scriptTask id="s_ueb_austritt" name="Übersicht nachführen">
+      <documentation>Führt die durchsuchbare Übersicht nach der Massenkündigung nach. Ohne diesen Schritt bliebe serviceUebersicht auf dem Stand des letzten Service-Ereignisses stehen und eine Suche nach GEKUENDIGT fände die ausgetretene Identität nicht — im ersten Testlauf genau so passiert.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= string join(for s in reg return s.id + &quot;=&quot; + s.status, &quot;, &quot;)" resultVariable="serviceUebersicht"/>
+      </extensionElements>
+      <dataInputAssociation id="dia_ueb_austritt">
+        <sourceRef>Ref_svc_lesen_ueb_austritt</sourceRef>
+        <assignment><to>reg</to></assignment>
+      </dataInputAssociation>
+    </scriptTask>
+
+    <receiveTask id="rt_gesperrt" name="Gesperrt — Aufbewahrungsfrist" messageRef="Msg_loeschfrist">
+      <documentation>Zustand GESPERRT: Zugänge sind entzogen, die Identität bleibt aber für Nachweis- und Aufbewahrungspflichten bestehen. Wartet auf identitaet-loeschfrist — die Meldung, dass die Frist abgelaufen ist.</documentation>
+    </receiveTask>
+
+    <scriptTask id="s_archivieren" name="Archivieren und dekommissionieren">
+      <documentation>Letzter Zustandsübergang: Identität ARCHIVIERT, jeder Service DEKOMMISSIONIERT. Danach endet die Instanz — die Historie der Datenobjekte bleibt über die abgeschlossene Instanz abfragbar.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= &quot;ARCHIVIERT&quot;" resultVariable="zustand"/>
+      </extensionElements>
+      <dataInputAssociation id="dia_archiv_svc">
+        <sourceRef>Ref_svc_lesen_archiv</sourceRef>
+        <assignment><to>reg</to></assignment>
+      </dataInputAssociation>
+      <dataOutputAssociation id="doa_archiv_svc">
+        <targetRef>Ref_svc_schreiben_archiv</targetRef>
+        <assignment><from>= for s in reg return context put(s, "status", "DEKOMMISSIONIERT")</from></assignment>
+      </dataOutputAssociation>
+      <dataOutputAssociation id="doa_archiv_ident">
+        <targetRef>Ref_ident_archiviert</targetRef>
+      </dataOutputAssociation>
+    </scriptTask>
+
+    <scriptTask id="s_ueb_archiv" name="Übersicht nachführen">
+      <documentation>Letzte Nachführung der Übersicht, nachdem jeder Service dekommissioniert wurde. Danach ist der Endzustand der Identität sowohl im Datenobjekt als auch in der durchsuchbaren Variable vollständig.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= string join(for s in reg return s.id + &quot;=&quot; + s.status, &quot;, &quot;)" resultVariable="serviceUebersicht"/>
+      </extensionElements>
+      <dataInputAssociation id="dia_ueb_archiv">
+        <sourceRef>Ref_svc_lesen_ueb_archiv</sourceRef>
+        <assignment><to>reg</to></assignment>
+      </dataInputAssociation>
+    </scriptTask>
+
+    <endEvent id="end_terminate" name="Identität gelöscht">
+      <documentation>Terminate-Ende: beendet den gesamten Wurzel-Scope und damit auch den Ereignis-Hub. Ein normales Ende würde nur diesen einen Token verbrauchen, der Hub liefe weiter und die Instanz bliebe für immer aktiv.</documentation>
+      <terminateEventDefinition/>
+    </endEvent>
+
+    <sequenceFlow id="f_a0" sourceRef="start" targetRef="s_stammdaten"/>
+    <sequenceFlow id="f_a1" sourceRef="s_stammdaten" targetRef="gw_split"/>
+    <sequenceFlow id="f_a2" sourceRef="gw_split" targetRef="rt_erfasst"/>
+    <sequenceFlow id="f_a3" sourceRef="rt_erfasst" targetRef="s_aktivieren"/>
+    <sequenceFlow id="f_a4" sourceRef="s_aktivieren" targetRef="rt_aktiv"/>
+    <sequenceFlow id="f_a5" sourceRef="rt_aktiv" targetRef="s_austritt"/>
+    <sequenceFlow id="f_a6" sourceRef="s_austritt" targetRef="s_ueb_austritt"/>
+    <sequenceFlow id="f_a6b" sourceRef="s_ueb_austritt" targetRef="rt_gesperrt"/>
+    <sequenceFlow id="f_a7" sourceRef="rt_gesperrt" targetRef="s_archivieren"/>
+    <sequenceFlow id="f_a8" sourceRef="s_archivieren" targetRef="s_ueb_archiv"/>
+    <sequenceFlow id="f_a8b" sourceRef="s_ueb_archiv" targetRef="end_terminate"/>
+
+    <!-- ================= Spur B: Ereignis-Hub ================= -->
+
+    <eventBasedGateway id="gw_hub" name="nächstes Ereignis">
+      <documentation>Wartet gleichzeitig auf ein Service-Ereignis und auf eine Stammdaten-Mutation und läuft nach jedem verbuchten Ereignis hierher zurück. Ein ereignisbasiertes Gateway statt zweier Schleifen: ein Token, ein Abonnement je Nachrichtenart, keine konkurrierenden Schreiber auf dem Register.</documentation>
+    </eventBasedGateway>
+
+    <intermediateCatchEvent id="c_service" name="Service-Ereignis">
+      <documentation>Nachricht service-ereignis mit serviceId, serviceName, serviceStatus und zeitpunkt. serviceStatus ist der Zielzustand des Produkts: BESTELLT, IN_BETRIEB, GESTOERT, GEKUENDIGT, DEKOMMISSIONIERT. Das Ereignis ist bewusst ein einziger Nachrichtentyp mit Statusfeld — jeder neue Produktzustand kostet so keine Modelländerung.</documentation>
+      <messageEventDefinition messageRef="Msg_service"/>
+    </intermediateCatchEvent>
+
+    <scriptTask id="s_register" name="Service-Register fortschreiben">
+      <documentation>Upsert in das Register: bekannter Service bekommt den neuen Status, unbekannter wird angelegt. Das Lesen (Eingabe-Assoziation) und das Schreiben (Ausgabe-Assoziation) desselben Datenobjekts in einer Aktivität ist der Ersatz für ein "update" — die Eingabe wird beim Aktivieren, die Ausgabe beim Abschliessen ausgewertet.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= serviceId + &quot;:&quot; + serviceStatus" resultVariable="letztesServiceEreignis"/>
+      </extensionElements>
+      <dataInputAssociation id="dia_reg">
+        <sourceRef>Ref_svc_lesen_ereignis</sourceRef>
+        <assignment><to>reg</to></assignment>
+      </dataInputAssociation>
+      <dataOutputAssociation id="doa_reg">
+        <targetRef>Ref_svc_schreiben_ereignis</targetRef>
+        <assignment><from>= if count(reg[id = serviceId]) &gt; 0 then (for s in reg return if s.id = serviceId then context put(context put(s, "status", serviceStatus), "seit", zeitpunkt) else s) else append(reg, {id: serviceId, name: serviceName, status: serviceStatus, seit: zeitpunkt})</from></assignment>
+      </dataOutputAssociation>
+    </scriptTask>
+
+    <scriptTask id="s_uebersicht" name="Übersicht nachführen">
+      <documentation>Spiegelt das Register in die Variable serviceUebersicht ("m365=IN_BETRIEB, vpn=GESTOERT"). Datenobjekte sind je Instanz lesbar, aber nicht durchsuchbar; über diese Variable findet atlas_search_instances mit einer Teilstring-Suche etwa alle Identitäten mit einem gestörten Produkt.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= string join(for s in reg return s.id + &quot;=&quot; + s.status, &quot;, &quot;)" resultVariable="serviceUebersicht"/>
+      </extensionElements>
+      <dataInputAssociation id="dia_uebersicht">
+        <sourceRef>Ref_svc_lesen_ereignis</sourceRef>
+        <assignment><to>reg</to></assignment>
+      </dataInputAssociation>
+    </scriptTask>
+
+    <intermediateCatchEvent id="c_mutation" name="Stammdaten-Mutation">
+      <documentation>Nachricht identitaet-mutation mit neueOrgEinheit und/oder neueFunktion. Ein nicht mitgeliefertes Feld bleibt stehen — deshalb der Null-Test im Schreibausdruck statt eines blinden Überschreibens.</documentation>
+      <messageEventDefinition messageRef="Msg_mutation"/>
+    </intermediateCatchEvent>
+
+    <scriptTask id="s_mutation" name="Stammdaten mutieren">
+      <documentation>Schreibt die geänderten Felder zurück in das Datenobjekt und hält den Datenzustand auf AKTIV. Die Historie des Datenobjekts hält jede Mutation mit Zeitstempel fest — die Mutation ist damit nachweisbar, ohne dass das Modell dafür einen eigenen Zweig braucht.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= zeitpunkt" resultVariable="letzteMutation"/>
+      </extensionElements>
+      <dataInputAssociation id="dia_mut">
+        <sourceRef>Ref_ident_lesen</sourceRef>
+        <assignment><to>identAlt</to></assignment>
+      </dataInputAssociation>
+      <dataOutputAssociation id="doa_mut">
+        <targetRef>Ref_ident_mutiert</targetRef>
+        <assignment><from>= context put(context put(identAlt, "orgEinheit", if neueOrgEinheit = null then identAlt.orgEinheit else neueOrgEinheit), "funktion", if neueFunktion = null then identAlt.funktion else neueFunktion)</from></assignment>
+      </dataOutputAssociation>
+    </scriptTask>
+
+    <sequenceFlow id="f_b0" sourceRef="gw_split" targetRef="gw_hub"/>
+    <sequenceFlow id="f_b1" sourceRef="gw_hub" targetRef="c_service"/>
+    <sequenceFlow id="f_b2" sourceRef="c_service" targetRef="s_register"/>
+    <sequenceFlow id="f_b3" sourceRef="s_register" targetRef="s_uebersicht"/>
+    <sequenceFlow id="f_b4" sourceRef="s_uebersicht" targetRef="gw_hub"/>
+    <sequenceFlow id="f_b5" sourceRef="gw_hub" targetRef="c_mutation"/>
+    <sequenceFlow id="f_b6" sourceRef="c_mutation" targetRef="s_mutation"/>
+    <sequenceFlow id="f_b7" sourceRef="s_mutation" targetRef="gw_hub"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="identitaet-lebenszyklus">
+      <!-- Spur A: eine gerade Achse auf y=180, Raster 150px, Tasks 100x80 -->
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="162" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="110" y="205" width="136" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_stammdaten" bpmnElement="s_stammdaten"><dc:Bounds x="250" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_split" bpmnElement="gw_split"><dc:Bounds x="400" y="155" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="378" y="118" width="95" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_rt_erfasst" bpmnElement="rt_erfasst"><dc:Bounds x="500" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_aktivieren" bpmnElement="s_aktivieren"><dc:Bounds x="650" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_rt_aktiv" bpmnElement="rt_aktiv"><dc:Bounds x="800" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_austritt" bpmnElement="s_austritt"><dc:Bounds x="950" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_ueb_austritt" bpmnElement="s_ueb_austritt"><dc:Bounds x="1100" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_rt_gesperrt" bpmnElement="rt_gesperrt"><dc:Bounds x="1250" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_archivieren" bpmnElement="s_archivieren"><dc:Bounds x="1400" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_ueb_archiv" bpmnElement="s_ueb_archiv"><dc:Bounds x="1550" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_terminate" bpmnElement="end_terminate"><dc:Bounds x="1700" y="162" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="1663" y="205" width="110" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <!-- Datenobjekt-Referenzen der Spur A, oberhalb der Achse auf y=40 -->
+      <bpmndi:BPMNShape id="di_Ref_ident_erfasst" bpmnElement="Ref_ident_erfasst"><dc:Bounds x="252" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="212" y="92" width="116" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_init" bpmnElement="Ref_svc_init"><dc:Bounds x="308" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="296" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_ident_aktiv" bpmnElement="Ref_ident_aktiv"><dc:Bounds x="682" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="648" y="92" width="104" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_lesen_austritt" bpmnElement="Ref_svc_lesen_austritt"><dc:Bounds x="912" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="900" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_schreiben_austritt" bpmnElement="Ref_svc_schreiben_austritt"><dc:Bounds x="982" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="970" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_ident_austritt" bpmnElement="Ref_ident_austritt"><dc:Bounds x="1052" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1008" y="92" width="124" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_lesen_ueb_austritt" bpmnElement="Ref_svc_lesen_ueb_austritt"><dc:Bounds x="1132" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1120" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_lesen_archiv" bpmnElement="Ref_svc_lesen_archiv"><dc:Bounds x="1362" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1350" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_schreiben_archiv" bpmnElement="Ref_svc_schreiben_archiv"><dc:Bounds x="1432" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1420" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_ident_archiviert" bpmnElement="Ref_ident_archiviert"><dc:Bounds x="1502" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1452" y="92" width="136" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_lesen_ueb_archiv" bpmnElement="Ref_svc_lesen_ueb_archiv"><dc:Bounds x="1582" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1570" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <!-- Spur B: Ereignis-Hub, Service-Zweig auf y=400, Mutations-Zweig auf y=520 -->
+      <bpmndi:BPMNShape id="di_gw_hub" bpmnElement="gw_hub"><dc:Bounds x="500" y="375" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="483" y="432" width="85" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_c_service" bpmnElement="c_service"><dc:Bounds x="650" y="382" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="622" y="345" width="92" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_register" bpmnElement="s_register"><dc:Bounds x="740" y="360" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_uebersicht" bpmnElement="s_uebersicht"><dc:Bounds x="890" y="360" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_c_mutation" bpmnElement="c_mutation"><dc:Bounds x="650" y="502" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="614" y="541" width="109" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_mutation" bpmnElement="s_mutation"><dc:Bounds x="740" y="480" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_lesen_ereignis" bpmnElement="Ref_svc_lesen_ereignis"><dc:Bounds x="1040" y="300" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1028" y="352" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_schreiben_ereignis" bpmnElement="Ref_svc_schreiben_ereignis"><dc:Bounds x="1040" y="410" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1028" y="462" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_ident_lesen" bpmnElement="Ref_ident_lesen"><dc:Bounds x="900" y="480" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="884" y="532" width="68" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_ident_mutiert" bpmnElement="Ref_ident_mutiert"><dc:Bounds x="900" y="580" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="866" y="632" width="104" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <!-- Kanten Spur A -->
+      <bpmndi:BPMNEdge id="di_f_a0" bpmnElement="f_a0"><di:waypoint x="196" y="180"/><di:waypoint x="250" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_a1" bpmnElement="f_a1"><di:waypoint x="350" y="180"/><di:waypoint x="400" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_a2" bpmnElement="f_a2"><di:waypoint x="450" y="180"/><di:waypoint x="500" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_a3" bpmnElement="f_a3"><di:waypoint x="600" y="180"/><di:waypoint x="650" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_a4" bpmnElement="f_a4"><di:waypoint x="750" y="180"/><di:waypoint x="800" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_a5" bpmnElement="f_a5"><di:waypoint x="900" y="180"/><di:waypoint x="950" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_a6" bpmnElement="f_a6"><di:waypoint x="1050" y="180"/><di:waypoint x="1100" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_a6b" bpmnElement="f_a6b"><di:waypoint x="1200" y="180"/><di:waypoint x="1250" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_a7" bpmnElement="f_a7"><di:waypoint x="1350" y="180"/><di:waypoint x="1400" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_a8" bpmnElement="f_a8"><di:waypoint x="1500" y="180"/><di:waypoint x="1550" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_a8b" bpmnElement="f_a8b"><di:waypoint x="1650" y="180"/><di:waypoint x="1700" y="180"/></bpmndi:BPMNEdge>
+      <!-- Kanten Spur B: Rückwege auf eigenen Bahnen (y=320 oben, y=610 unten) -->
+      <bpmndi:BPMNEdge id="di_f_b0" bpmnElement="f_b0"><di:waypoint x="425" y="205"/><di:waypoint x="425" y="400"/><di:waypoint x="500" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_b1" bpmnElement="f_b1"><di:waypoint x="550" y="400"/><di:waypoint x="650" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_b2" bpmnElement="f_b2"><di:waypoint x="686" y="400"/><di:waypoint x="740" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_b3" bpmnElement="f_b3"><di:waypoint x="840" y="400"/><di:waypoint x="890" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_b4" bpmnElement="f_b4"><di:waypoint x="940" y="360"/><di:waypoint x="940" y="320"/><di:waypoint x="525" y="320"/><di:waypoint x="525" y="375"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_b5" bpmnElement="f_b5"><di:waypoint x="550" y="400"/><di:waypoint x="575" y="400"/><di:waypoint x="575" y="520"/><di:waypoint x="650" y="520"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_b6" bpmnElement="f_b6"><di:waypoint x="686" y="520"/><di:waypoint x="740" y="520"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_b7" bpmnElement="f_b7"><di:waypoint x="790" y="560"/><di:waypoint x="790" y="610"/><di:waypoint x="525" y="610"/><di:waypoint x="525" y="425"/></bpmndi:BPMNEdge>
+      <!-- Daten-Assoziationen -->
+      <bpmndi:BPMNEdge id="di_doa_stamm_ident" bpmnElement="doa_stamm_ident"><di:waypoint x="280" y="140"/><di:waypoint x="280" y="90"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_doa_stamm_svc" bpmnElement="doa_stamm_svc"><di:waypoint x="326" y="140"/><di:waypoint x="326" y="90"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_doa_aktiv" bpmnElement="doa_aktiv"><di:waypoint x="700" y="140"/><di:waypoint x="700" y="90"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_dia_austritt_svc" bpmnElement="dia_austritt_svc"><di:waypoint x="930" y="90"/><di:waypoint x="930" y="140"/><di:waypoint x="950" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_doa_austritt_svc" bpmnElement="doa_austritt_svc"><di:waypoint x="1000" y="140"/><di:waypoint x="1000" y="90"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_doa_austritt_ident" bpmnElement="doa_austritt_ident"><di:waypoint x="1050" y="150"/><di:waypoint x="1070" y="150"/><di:waypoint x="1070" y="90"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_dia_ueb_austritt" bpmnElement="dia_ueb_austritt"><di:waypoint x="1150" y="90"/><di:waypoint x="1150" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_dia_archiv_svc" bpmnElement="dia_archiv_svc"><di:waypoint x="1380" y="90"/><di:waypoint x="1380" y="140"/><di:waypoint x="1400" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_doa_archiv_svc" bpmnElement="doa_archiv_svc"><di:waypoint x="1450" y="140"/><di:waypoint x="1450" y="90"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_doa_archiv_ident" bpmnElement="doa_archiv_ident"><di:waypoint x="1500" y="150"/><di:waypoint x="1520" y="150"/><di:waypoint x="1520" y="90"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_dia_ueb_archiv" bpmnElement="dia_ueb_archiv"><di:waypoint x="1600" y="90"/><di:waypoint x="1600" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_dia_reg" bpmnElement="dia_reg"><di:waypoint x="1058" y="350"/><di:waypoint x="1058" y="380"/><di:waypoint x="840" y="380"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_doa_reg" bpmnElement="doa_reg"><di:waypoint x="840" y="420"/><di:waypoint x="1058" y="420"/><di:waypoint x="1058" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_dia_uebersicht" bpmnElement="dia_uebersicht"><di:waypoint x="1058" y="350"/><di:waypoint x="1058" y="390"/><di:waypoint x="990" y="390"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_dia_mut" bpmnElement="dia_mut"><di:waypoint x="900" y="505"/><di:waypoint x="840" y="505"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_doa_mut" bpmnElement="doa_mut"><di:waypoint x="840" y="540"/><di:waypoint x="870" y="540"/><di:waypoint x="870" y="605"/><di:waypoint x="900" y="605"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

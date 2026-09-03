@@ -189,13 +189,16 @@ func runtimeTools() []Tool {
 		},
 		{
 			Name: "atlas_search_instances",
-			Description: "Search instances by variable content. 'q' is either \"name=value\" (variable name exact, " +
-				"value substring) or free text matched over variable names and values. Returns the matching instances " +
-				"(active first, then most-recently-completed), each with the variables that matched; the result is capped.",
+			Description: "Find instances by key or variable content. 'q' is a bare process instance key (looked up " +
+				"directly, live or finished, and returned with its whole variable set), or \"name=value\" (variable " +
+				"name exact, value substring), or free text matched over variable names and values. A content query " +
+				"returns the matching instances (active first, then most-recently-completed), each with the variables " +
+				"that matched; that result is capped.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"q": stringProp("The query: \"name=value\" (name exact, value substring) or free text over variable names/values."),
+					"q":       stringProp("The query: a bare instance key, or \"name=value\" (name exact, value substring), or free text over variable names/values."),
+					"process": stringProp("Optional process definition key: narrows the search to that version, which also makes it read that version's index instead of every instance."),
 				},
 				"required": []any{"q"},
 			},
@@ -204,7 +207,7 @@ func runtimeTools() []Tool {
 				if err != nil {
 					return "", err
 				}
-				return asText(c.get(searchInstancesPath(q)))
+				return asText(c.get(searchInstancesPath(q, optString(args, "process"))))
 			},
 		},
 		{

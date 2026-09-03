@@ -324,11 +324,17 @@ func (s *Server) reachableDeployments() (map[uint64]bool, error) {
 	for _, key := range newest {
 		out[key] = true
 	}
-	if err := s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
-		out[v.ProcessDefKey] = true
-		return nil
-	}); err != nil {
-		return nil, err
+	// A superseded version stays reachable while it still has instances running.
+	// That is the per-definition live counter (ADR-0083), one point read per
+	// deployment — not a walk of every instance in the engine.
+	for key := range s.deployments {
+		n, err := s.store.DefInstanceCount(key)
+		if err != nil {
+			return nil, err
+		}
+		if n > 0 {
+			out[key] = true
+		}
 	}
 	// A pin makes one exact version the target of every call to that process id, so it
 	// is current in the only sense this question cares about. A redirect or a disable

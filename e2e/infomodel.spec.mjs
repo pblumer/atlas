@@ -230,7 +230,9 @@ test("a refused save shows the server's findings rather than one sentence", asyn
   await expect(page.locator("button.im-problem .im-problem-tag")).toHaveText("invalid");
   // Clicking a problem selects what it is about, so it can be fixed where it is.
   await page.locator("button.im-problem").click();
-  await expect(page.locator(".im-panel h3")).toHaveText("Class");
+  await expect(page.locator(".phead .kv")).toHaveText("Business object");
+  // The header names the element, so it carries the rename that caused the finding.
+  await expect(page.locator(".phead b")).toHaveText("Ordr");
 });
 
 test("the JSON Schema projection is shown as derived, and says what it dropped", async ({ page }) => {
@@ -238,16 +240,64 @@ test("the JSON Schema projection is shown as derived, and says what it dropped",
   await page.locator('[data-act="schema"]').click();
   await expect(page.locator(".im-schema")).toContainText("json-schema.org/draft/2020-12");
   await expect(page.locator(".im-loss")).toContainText("JSON Schema has no keyword for identity");
-  await expect(page.locator(".im-panel .im-hint-text")).toContainText("Derived, never edited");
+  await expect(page.locator(".psec .im-hint-text")).toContainText("Derived, never edited");
   await page.locator('[data-act="close-schema"]').click();
   await expect(page.locator(".im-schema")).toHaveCount(0);
 });
 
 test("the panel states that this is a subset, and what it does not author", async ({ page }) => {
   await page.locator(".djs-container svg").click({ position: { x: 4, y: 4 } });
-  await expect(page.locator(".im-note")).toContainText("This is a subset of UML");
+  await expect(page.locator('.pgroup[data-group="This is a subset of UML"]')).toHaveCount(1);
   await expect(page.locator(".im-note li")).toHaveCount(3);
   await expect(page.locator(".im-note")).toContainText("Where a datum lives is the data store's question");
+});
+
+// The properties panel wears the Modeler's chrome (api/web/pgroup.js): an element
+// header naming what is selected, and collapsible property groups. Shared code rather
+// than a lookalike — a person moves between the two surfaces in one session.
+test("the panel is grouped like the Modeler's, and remembers what was opened", async ({ page }) => {
+  await box(page, "Order").click();
+  // Every group starts open here. A class has three sections and one of them is its
+  // attributes, so collapsing is worth offering and not worth doing by default — the
+  // opposite of the Modeler's dozen groups, where only General starts open.
+  await expect(page.locator('.pgroup[data-group="General"]')).not.toHaveClass(/collapsed/);
+  await expect(page.locator('.pgroup[data-group="Attributes"]')).not.toHaveClass(/collapsed/);
+  // The dot says a section carries content, so a collapsed one still says so.
+  await expect(page.locator('.pgroup[data-group="Attributes"] .pgroup-dot')).toHaveCount(1);
+
+  await page.locator('.pgroup[data-group="Attributes"] .pgroup-head').click();
+  await expect(page.locator('.pgroup[data-group="Attributes"]')).toHaveClass(/collapsed/);
+
+  // Selecting another class re-renders the panel from scratch. The choice is held by
+  // group title, so it survives that — otherwise every selection would re-open the
+  // section the author just put away.
+  await box(page, "Customer").click();
+  await expect(page.locator('.pgroup[data-group="Attributes"]')).toHaveClass(/collapsed/);
+
+  // Collapse all closes General too, so the whole outline of an element fits at once.
+  await page.locator('.pgroup-all[data-all="collapse"]').click();
+  await expect(page.locator(".pgroup.collapsed")).toHaveCount(await page.locator(".pgroup").count());
+  await page.locator('.pgroup-all[data-all="expand"]').click();
+  await expect(page.locator(".pgroup.collapsed")).toHaveCount(0);
+
+  expect(page.__errors).toEqual([]);
+});
+
+test("a relationship's ends are their own group, and a generalization says why it has none", async ({ page }) => {
+  await page.locator(".djs-element:has(.uml-edge)").click();
+  await expect(page.locator(".phead .kv")).toHaveText("Association");
+  await expect(page.locator('.pgroup[data-group="Ends"]')).toHaveCount(1);
+  // Roles and multiplicities are content, so the group says so before it is opened.
+  await expect(page.locator('.pgroup[data-group="Ends"] .pgroup-dot')).toHaveCount(1);
+
+  await page.locator('.im-connect[data-kind="generalization"]').click();
+  await box(page, "Order").click();
+  await box(page, "Customer").click();
+  await expect(page.locator(".phead .kv")).toHaveText("Generalization");
+  // The group is still there — it is where the sentence explaining the absence goes.
+  await expect(page.locator('.pgroup[data-group="Ends"] .im-hint-text'))
+    .toContainText("not a counted relationship");
+  await expect(page.locator(".im-end")).toHaveCount(0);
 });
 
 // Data stores on the class canvas (ADR-0230, slice 5b).
@@ -270,7 +320,7 @@ test.describe("data stores", () => {
 
   test("the panel offers only classes a store can keep", async ({ page }) => {
     await store(page).click();
-    await expect(page.locator(".im-panel h3")).toHaveText("Data store");
+    await expect(page.locator(".phead .kv")).toHaveText("Data store");
     // Only a business object with a business key: a process reads from a store by
     // naming which thing it wants, and the key is the only thing that names one.
     // Customer and Order have keys; Address is a value type and OrderStatus an
@@ -278,13 +328,13 @@ test.describe("data stores", () => {
     const options = await page.locator("#im-s-class option").evaluateAll((els) => els.map((e) => e.value));
     expect(options).toEqual(["", "Customer", "Order"]);
     await expect(page.locator("#im-s-worker")).toHaveValue("clio-main");
-    await expect(page.locator(".im-panel")).toContainText("business object with a business key");
+    await expect(page.locator(".psec")).toContainText("business object with a business key");
   });
 
   test("adding a store puts it on the canvas and selects it", async ({ page }) => {
     await page.locator('[data-add="store"]').click();
     await expect(page.locator(".uml-store")).toHaveCount(2);
-    await expect(page.locator(".im-panel h3")).toHaveText("Data store");
+    await expect(page.locator(".phead .kv")).toHaveText("Data store");
     await page.locator("#im-s-name").fill("Invoices");
     await expect(page.locator('.djs-element:has(.uml-store[data-name="Invoices"])')).toBeVisible();
     // A store with no class yet says so rather than claiming to hold something.

@@ -1,0 +1,736 @@
+<title>Eine Instanz je Identität</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --bg: #eef1f5;
+    --panel: #ffffff;
+    --panel-sunk: #f6f8fb;
+    --ink: #141a22;
+    --muted: #5a6472;
+    --faint: #8a94a3;
+    --line: #dbe1ea;
+    --line-strong: #c3ccd8;
+    --accent: #1466d6;
+    --accent-soft: #e3edfb;
+    --good: #12855f;
+    --good-soft: #dcefe7;
+    --warn: #b3720a;
+    --warn-soft: #f6ecd8;
+    --crit: #bd3226;
+    --crit-soft: #fae3e0;
+    --shadow: 0 1px 2px rgba(20,26,34,.05), 0 8px 24px rgba(20,26,34,.06);
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117;
+      --panel: #161c25;
+      --panel-sunk: #10161e;
+      --ink: #eef2f7;
+      --muted: #9aa6b4;
+      --faint: #6d7987;
+      --line: #262f3b;
+      --line-strong: #38424f;
+      --accent: #4d9bff;
+      --accent-soft: #16283f;
+      --good: #35c891;
+      --good-soft: #123026;
+      --warn: #e6a545;
+      --warn-soft: #2e2413;
+      --crit: #ff7d6e;
+      --crit-soft: #351c19;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117;
+    --panel: #161c25;
+    --panel-sunk: #10161e;
+    --ink: #eef2f7;
+    --muted: #9aa6b4;
+    --faint: #6d7987;
+    --line: #262f3b;
+    --line-strong: #38424f;
+    --accent: #4d9bff;
+    --accent-soft: #16283f;
+    --good: #35c891;
+    --good-soft: #123026;
+    --warn: #e6a545;
+    --warn-soft: #2e2413;
+    --crit: #ff7d6e;
+    --crit-soft: #351c19;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 40px 22px 90px; }
+
+  /* ---------- Kopf ---------- */
+  .eyebrow {
+    font-family: var(--mono); font-size: 11.5px; font-weight: 500;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--faint);
+  }
+  h1 {
+    font-size: clamp(30px, 5vw, 46px); line-height: 1.1; font-weight: 700;
+    letter-spacing: -.022em; text-wrap: balance; margin: 10px 0 0;
+  }
+  .standfirst {
+    font-size: 19px; color: var(--muted); max-width: 63ch;
+    margin: 16px 0 0; text-wrap: pretty;
+  }
+  .metabar {
+    display: flex; flex-wrap: wrap; gap: 8px 26px; margin-top: 24px;
+    padding-top: 18px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 12.5px; color: var(--muted);
+  }
+  .metabar b { color: var(--ink); font-weight: 500; }
+
+  .verdict {
+    display: flex; gap: 14px; align-items: flex-start;
+    margin-top: 26px; padding: 16px 18px;
+    background: var(--good-soft); border-radius: 4px;
+    border-left: 3px solid var(--good);
+  }
+  .verdict .tag {
+    font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--good);
+    white-space: nowrap; padding-top: 3px;
+  }
+  .verdict p { margin: 0; font-size: 15.5px; }
+
+  /* ---------- Kennzahlen ---------- */
+  .kpis {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 1px; margin: 34px 0 0; background: var(--line);
+    border: 1px solid var(--line); border-radius: 4px; overflow: hidden;
+  }
+  .kpi { background: var(--panel); padding: 16px 18px 15px; }
+  .kpi .big {
+    font-family: var(--mono); font-size: 26px; font-weight: 600;
+    letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.15;
+  }
+  .kpi .lbl { font-size: 13px; color: var(--muted); margin-top: 3px; }
+  .kpi .cap { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 6px; }
+  @media (max-width: 720px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ---------- Abschnitte ---------- */
+  section { margin-top: 54px; }
+  h2 {
+    font-size: 25px; font-weight: 600; letter-spacing: -.015em;
+    margin: 0 0 4px; text-wrap: balance;
+  }
+  h2 + .lede { color: var(--muted); margin: 0 0 22px; max-width: 66ch; }
+  h3 { font-size: 16.5px; font-weight: 600; margin: 0 0 6px; }
+  p { max-width: 68ch; }
+  code {
+    font-family: var(--mono); font-size: .88em;
+    background: var(--panel-sunk); border: 1px solid var(--line);
+    border-radius: 3px; padding: 1px 5px;
+  }
+  a { color: var(--accent); }
+  a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- Bauform-Diagramm ---------- */
+  .machine {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+    box-shadow: var(--shadow); padding: 26px 24px 22px; overflow-x: auto;
+  }
+  .track-label {
+    font-family: var(--mono); font-size: 11.5px; font-weight: 500;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--faint);
+    margin-bottom: 12px;
+  }
+  .rail { display: flex; align-items: stretch; gap: 0; min-width: 860px; }
+  .state {
+    flex: 1; background: var(--panel-sunk);
+    border: 1px solid var(--line-strong); border-radius: 4px;
+    padding: 11px 12px 12px; text-align: center;
+  }
+  .state .nm { font-weight: 600; font-size: 14.5px; }
+  .state .sub { font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-top: 3px; }
+  .state.term { background: var(--panel); border-style: dashed; }
+  .arrow {
+    flex: 0 0 46px; display: flex; align-items: center; justify-content: center;
+    color: var(--line-strong); font-size: 15px;
+  }
+  .arrow span { font-family: var(--mono); font-size: 9.5px; color: var(--faint); }
+  .arrowcol { flex: 0 0 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+  .arrowcol .msg { font-family: var(--mono); font-size: 9.5px; color: var(--accent); white-space: nowrap; }
+  .arrowcol .ln { color: var(--line-strong); line-height: 1; }
+
+  .hub {
+    display: flex; align-items: center; gap: 14px; min-width: 700px;
+    margin-top: 6px; padding: 14px 16px;
+    background: var(--accent-soft); border: 1px solid var(--line); border-radius: 4px;
+  }
+  .hub .node {
+    font-family: var(--mono); font-size: 12px; font-weight: 500;
+    padding: 6px 10px; border: 1px solid var(--line-strong);
+    border-radius: 3px; background: var(--panel); white-space: nowrap;
+  }
+  .hub .loop { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .split {
+    display: flex; align-items: center; gap: 10px; margin: 14px 0 10px;
+    font-family: var(--mono); font-size: 11px; color: var(--faint);
+  }
+  .split::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+  /* ---------- Tabellen ---------- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; min-width: 520px; }
+  th, td { text-align: left; padding: 10px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
+    background: var(--panel-sunk);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.mono, th.mono { font-family: var(--mono); font-size: 13px; }
+  tr.win td { background: var(--good-soft); }
+  tr.win td:first-child { font-weight: 600; }
+
+  .yes { color: var(--good); font-weight: 600; }
+  .no { color: var(--crit); font-weight: 600; }
+
+  /* ---------- Sackgassen ---------- */
+  .deadends { display: grid; gap: 14px; }
+  .deadend {
+    background: var(--panel); border: 1px solid var(--line);
+    border-left: 3px solid var(--crit); border-radius: 4px;
+    padding: 16px 18px 15px;
+  }
+  .deadend.fixed { border-left-color: var(--good); }
+  .chip {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 3px; white-space: nowrap;
+    background: var(--good-soft); color: var(--good);
+  }
+  .chip.open { background: var(--warn-soft); color: var(--warn); }
+  .deadend h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .probe {
+    font-family: var(--mono); font-size: 11px; font-weight: 400;
+    color: var(--faint); letter-spacing: .02em;
+  }
+  .obs { display: grid; grid-template-columns: 88px 1fr; gap: 4px 14px; margin-top: 10px; }
+  .obs dt {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
+    padding-top: 4px;
+  }
+  .obs dd { margin: 0; font-size: 14.5px; max-width: 62ch; }
+  @media (max-width: 560px) { .obs { grid-template-columns: 1fr; } .obs dt { padding-top: 8px; } }
+
+  /* ---------- Kritischer Block ---------- */
+  .critical {
+    background: var(--panel); border: 1px solid var(--crit);
+    border-radius: 6px; overflow: hidden; box-shadow: var(--shadow);
+  }
+  .critical .head {
+    background: var(--crit-soft); padding: 15px 20px;
+    border-bottom: 1px solid var(--crit);
+  }
+  .critical .head .tag {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--crit);
+  }
+  .critical .head h3 { margin: 4px 0 0; font-size: 18px; }
+  .critical .body { padding: 18px 20px 20px; }
+  .critical .body p { max-width: 66ch; }
+  .scan { display: grid; gap: 8px; margin: 16px 0 4px; }
+  .scanrow {
+    display: grid; grid-template-columns: 200px 1fr; gap: 14px; align-items: center;
+    font-size: 14px;
+  }
+  .scanrow .who { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .bar { height: 22px; border-radius: 2px; display: flex; align-items: center; padding-left: 9px;
+         font-family: var(--mono); font-size: 11px; color: var(--panel); white-space: nowrap; }
+  @media (max-width: 620px) { .scanrow { grid-template-columns: 1fr; gap: 3px; } }
+
+  .ways { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
+  .way { background: var(--panel-sunk); border: 1px solid var(--line); border-radius: 4px; padding: 14px 15px; }
+  .way .n { font-family: var(--mono); font-size: 11px; color: var(--accent); font-weight: 600; }
+  .way h4 { margin: 5px 0 5px; font-size: 15px; font-weight: 600; }
+  .way p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: none; }
+  @media (max-width: 760px) { .ways { grid-template-columns: 1fr; } }
+
+  /* ---------- Listen ---------- */
+  ul.findings { list-style: none; padding: 0; margin: 0; display: grid; gap: 13px; }
+  ul.findings li {
+    padding-left: 17px; position: relative; max-width: 70ch; font-size: 15px;
+  }
+  ul.findings li::before {
+    content: ""; position: absolute; left: 0; top: .62em;
+    width: 6px; height: 6px; background: var(--accent); border-radius: 50%;
+  }
+  ul.findings b { font-weight: 600; }
+
+  .open { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .openrow { background: var(--panel); padding: 15px 18px; display: grid; grid-template-columns: 30px 1fr; gap: 14px; }
+  .openrow .k { font-family: var(--mono); font-size: 13px; color: var(--warn); font-weight: 600; padding-top: 1px; }
+  .openrow h4 { margin: 0 0 3px; font-size: 15.5px; font-weight: 600; }
+  .openrow p { margin: 0; font-size: 14.5px; color: var(--muted); }
+
+  footer {
+    margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 12px; color: var(--faint);
+    display: flex; flex-wrap: wrap; gap: 6px 22px;
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Testbericht · atlas.blumer.cloud · 3. September 2026</div>
+    <h1>Eine Instanz je Identität</h1>
+    <p class="standfirst">
+      Trägt eine BPMN-Prozessinstanz je Mitarbeiter den kompletten Lebenszyklus einer
+      Identität aus SAP/CIS — samt aller bestellten Business Services mit deren Zuständen?
+      Bei 50.000 Mitarbeitern also 50.000 dauerhaft laufende Instanzen.
+    </p>
+    <div class="metabar">
+      <span>Server <b>server01</b></span>
+      <span>Atlas <b>0.4.0-dev</b></span>
+      <span>Revision <b>1020986</b></span>
+      <span>Zugang <b>nur über Atlas-MCP</b></span>
+    </div>
+
+    <div class="verdict">
+      <div class="tag">Verdikt</div>
+      <p>
+        Die Idee trägt — fachlich und im Schreibpfad. Die Grenze liegt nicht dort, wo wir sie
+        vermutet haben: nicht bei den Instanzen, sondern bei der <em>Abfrage über</em> die Instanzen.
+        Und die naheliegendste Bauform für das Produkt-Register trägt nicht; sie scheitert still.
+      </p>
+    </div>
+  </header>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="big">11.002</div>
+      <div class="lbl">aktive Identitäten</div>
+      <div class="cap">gleichzeitig, geparkt</div>
+    </div>
+    <div class="kpi">
+      <div class="big">33.006</div>
+      <div class="lbl">Token</div>
+      <div class="cap">3 je Identität</div>
+    </div>
+    <div class="kpi">
+      <div class="big" style="color: var(--good)">0</div>
+      <div class="lbl">Incidents</div>
+      <div class="cap">über den ganzen Test</div>
+    </div>
+    <div class="kpi">
+      <div class="big">~2.500</div>
+      <div class="lbl">Instanzen pro Sekunde</div>
+      <div class="cap">1.000 in 0,39 s</div>
+    </div>
+  </div>
+
+  <section>
+    <h2>Die Bauform</h2>
+    <p class="lede">
+      Zwei dauerhaft nebenläufige Token je Identität. Oben der Lebenszyklus, unten ein
+      Ereignis-Hub, der beliebig oft Produkt-Meldungen verbucht.
+    </p>
+
+    <div class="machine">
+      <div class="track-label">Spur A · Lebenszyklus — jeder Zustand ist ein Receive-Task, der Token steht <em>im</em> Zustand</div>
+      <div class="rail">
+        <div class="state"><div class="nm">Erfasst</div><div class="sub">in SAP/CIS angelegt</div></div>
+        <div class="arrowcol"><div class="msg">eintritt</div><div class="ln">──▶</div></div>
+        <div class="state"><div class="nm">Aktiv</div><div class="sub">Normalbetrieb</div></div>
+        <div class="arrowcol"><div class="msg">austritt</div><div class="ln">──▶</div></div>
+        <div class="state"><div class="nm">Austritt</div><div class="sub">alle Produkte gekündigt</div></div>
+        <div class="arrowcol"><div class="msg">loeschfrist</div><div class="ln">──▶</div></div>
+        <div class="state"><div class="nm">Gesperrt</div><div class="sub">Aufbewahrungsfrist</div></div>
+        <div class="arrowcol"><div class="ln">──▶</div></div>
+        <div class="state term"><div class="nm">Archiviert</div><div class="sub">terminate · Instanz endet</div></div>
+      </div>
+
+      <div class="split">paralleles Gateway · beide Spuren im Wurzel-Scope</div>
+
+      <div class="track-label">Spur B · Ereignis-Hub — Endlosschleife, ein Token</div>
+      <div class="hub">
+        <div class="node">◇ nächstes Ereignis</div>
+        <div class="loop">──▶</div>
+        <div class="node">service-ereignis</div>
+        <div class="loop">──▶</div>
+        <div class="node">Register fortschreiben</div>
+        <div class="loop">──▶</div>
+        <div class="node">Übersicht nachführen</div>
+        <div class="loop">↰ zurück</div>
+      </div>
+    </div>
+
+    <p style="margin-top:20px">
+      Der Zustand liegt in zwei Datenobjekten. <code>identitaet</code> trägt die Stammdaten als
+      Wert und den Lebenszyklus als BPMN-<em>Datenzustand</em>; <code>services</code> ist das
+      Produkt-Register als Sammel-Datenobjekt, je Eintrag <code>{id, name, status, seit}</code>.
+      Zu beiden führt Atlas von sich aus eine lückenlose Historie mit Zeitstempel und
+      schreibendem Element — der Verlauf entsteht als Nebenprodukt, nicht als eigene
+      Datenstruktur. Das ist der eigentliche Gewinn dieser Bauform.
+    </p>
+  </section>
+
+  <section>
+    <h2>Der fachliche Durchlauf</h2>
+    <p class="lede">
+      Identität P10001 (Anna Muster, IT-Betrieb) vollständig durchgespielt — inklusive der
+      Fälle, die im Alltag wehtun: Bestellung vor Eintritt, Störung, Abteilungswechsel.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Schritt</th><th class="mono">Nachricht</th><th>Ergebnis</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Anlage aus SAP/CIS</td><td class="mono">Start</td><td>Datenzustand <b>ERFASST</b></td></tr>
+          <tr><td>Vorab-Bestellung <em>vor</em> Eintritt</td><td class="mono">service-ereignis</td><td>Register: m365-e5 BESTELLT</td></tr>
+          <tr><td>Eintritt</td><td class="mono">identitaet-eintritt</td><td>Datenzustand <b>AKTIV</b></td></tr>
+          <tr><td>Inbetriebnahme</td><td class="mono">service-ereignis</td><td>m365-e5 IN_BETRIEB</td></tr>
+          <tr><td>Zweites Produkt</td><td class="mono">service-ereignis</td><td>Register: 2 Einträge</td></tr>
+          <tr><td>Störung</td><td class="mono">service-ereignis</td><td>vpn-remote <b>GESTOERT</b></td></tr>
+          <tr><td>Abteilungswechsel</td><td class="mono">identitaet-mutation</td><td>Stammdaten fortgeschrieben, Zustand bleibt AKTIV</td></tr>
+          <tr><td>Störung behoben</td><td class="mono">service-ereignis</td><td>vpn-remote IN_BETRIEB</td></tr>
+          <tr><td>Austritt</td><td class="mono">identitaet-austritt</td><td><b>AUSTRITT</b> — beide Produkte in einem Schritt gekündigt</td></tr>
+          <tr><td>Löschfrist abgelaufen</td><td class="mono">identitaet-loeschfrist</td><td><b>ARCHIVIERT</b>, alles dekommissioniert, Instanz endet</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:18px">
+      Ein Fehler im ersten Anlauf, gefunden und behoben: die durchsuchbare Spiegelvariable
+      <code>serviceUebersicht</code> wurde bei Austritt und Archivierung nicht nachgeführt. Eine
+      Suche nach „GEKUENDIGT“ hätte die ausgetretene Identität nicht gefunden, obwohl das
+      Register korrekt war. Version 2 des Modells führt sie an beiden Stellen nach.
+    </p>
+  </section>
+
+  <section>
+    <h2>Drei Sackgassen</h2>
+    <p class="lede">
+      Die intuitive Modellierung wäre ein eigener Token je Produkt-Bestellung, mit eigenem
+      Lebenszyklus im Diagramm. Drei Anläufe, alle verworfen. Alle drei <b>deployen fehlerfrei
+      und laufen an</b> — sie schreiben nur nichts. Genau das macht sie gefährlich.
+    </p>
+
+    <div class="deadends">
+      <div class="deadend fixed">
+        <h3>Ereignis-Subprozess mit Daten-Assoziationen <span class="chip">behoben</span> <span class="probe">Sonde probe_ident_esp</span></h3>
+        <dl class="obs">
+          <dt>Beobachtet</dt>
+          <dd>Zwei Bestellungen erzeugen korrekt zwei nebenläufige Subprozess-Instanzen — aber das Datenobjekt bleibt leer und die Skript-Variable steht auf <code>null</code>.</dd>
+          <dt>Ursache</dt>
+          <dd><code>compiler/parse.go</code> verdrahtet <code>zeebe:ioMapping</code> und Multi-Instance rekursiv durch alle Scopes, <code>dataInputAssociation</code>/<code>dataOutputAssociation</code> dagegen nur über die Elementlisten des Prozesses selbst. Eine Aktivität in einem Subprozess verliert ihre Daten-Assoziationen beim Kompilieren — ohne Fehler, ohne Warnung.</dd>
+        </dl>
+      </div>
+
+      <div class="deadend fixed">
+        <h3>Ereignis-Subprozess mit <code>zeebe:ioMapping</code> <span class="chip">behoben</span> <span class="probe">Sonde probe3_ident</span></h3>
+        <dl class="obs">
+          <dt>Beobachtet</dt>
+          <dd>Das Register wird beim ersten Auslösen mit <code>null</code> überschrieben.</dd>
+          <dt>Ursache</dt>
+          <dd>Der Ereignis-Subprozess wird schon beim Instanzstart als vorgehaltener Scope angelegt. Der wertet seine Eingabe-Zuordnung sofort aus — das Register ist da noch nicht initialisiert — und schreibt beim Auslösen dieses <code>null</code> zurück. Der ausgelöste Durchlauf liest danach das bereits zerstörte Register.</dd>
+        </dl>
+      </div>
+
+      <div class="deadend">
+        <h3>Nicht-unterbrechender Boundary-Event <span class="chip open">offen</span> <span class="probe">Sonde probe4_ident</span></h3>
+        <dl class="obs">
+          <dt>Beobachtet</dt>
+          <dd>Die <em>erste</em> Nachricht wird korrekt verbucht. Die zweite verpufft.</dd>
+          <dt>Ursache</dt>
+          <dd>Nach dem Auslösen wird der Boundary-Event nicht neu scharfgestellt. In <code>engine/behavior.go</code> gibt es Re-Arm nur für wiederkehrende <em>Timer</em>, nicht für Nachrichten.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <p style="margin-top:22px">Damit bleibt genau eine Konstruktion übrig, die beides kann:</p>
+    <div class="tablewrap" style="margin-top:10px">
+      <table>
+        <thead>
+          <tr><th>Konstruktion</th><th>wiederholt sich</th><th>darf ins Datenobjekt schreiben</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Ereignis-Subprozess (Nachricht, nicht-unterbrechend)</td><td class="yes">ja, beliebig oft</td><td class="no">nein</td></tr>
+          <tr><td>Boundary-Event (Nachricht, nicht-unterbrechend)</td><td class="no">nein, genau einmal</td><td class="yes">ja</td></tr>
+          <tr class="win"><td>Schleife im Wurzel-Scope</td><td class="yes">ja</td><td class="yes">ja</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Menge</h2>
+    <p class="lede">
+      Erzeugt über einen Seeder mit paralleler Multi-Instance-Call-Activity. Einzeln über MCP
+      wären es bei ~1,5 s je Aufruf über vier Stunden allein für die 10.000er-Charge.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th class="num">Charge</th><th>Beobachtung</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="num">100</td><td>Iteration am Visit-Count belegt, nicht an der Laufzeit — eine FEEL-Range, die still <code>null</code> liefert, sähe sonst wie ein sehr schneller Lauf aus</td></tr>
+          <tr><td class="num">1.000</td><td>0,39 s zwischen erster und letzter Instanzerzeugung</td></tr>
+          <tr><td class="num">10.000</td><td>Serverseitig sauber durchgelaufen — der MCP-Aufruf lief dabei in den Client-Timeout, weil <code>create_instance</code> synchron bis zum Leerlauf der Engine wartet. Die Arbeit war trotzdem vollständig</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tablewrap" style="margin-top:14px">
+      <table>
+        <thead>
+          <tr><th>Kosten je Identität</th><th class="num">gemessen bei 11.002</th><th class="num">hochgerechnet auf 50.000</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Token</td><td class="num">33.006</td><td class="num">150.000</td></tr>
+          <tr><td>Nachrichten-Abonnements</td><td class="num">~22.000</td><td class="num">100.000</td></tr>
+          <tr><td>Datenobjekte</td><td class="num">22.004</td><td class="num">100.000</td></tr>
+          <tr><td>reine Erzeugungszeit</td><td class="num">~4,4 s</td><td class="num">~20 s</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:16px">
+      Aufräumbarkeit ist belegt: die Seeder-Instanz zu terminieren beendet ihre Kinder mit —
+      ein Aufruf, 101 Instanzen weg. Im Schreibpfad ist an der Zielmenge nichts auffällig.
+    </p>
+  </section>
+
+  <section>
+    <h2>Die eigentliche Grenze</h2>
+    <p class="lede">
+      Sie liegt im Lesepfad. Und sie trifft genau die Fähigkeit, wegen der man den ganzen
+      Ansatz überhaupt wählt.
+    </p>
+
+    <div class="critical">
+      <div class="head">
+        <div class="tag">Blocker <span class="chip" style="margin-left:8px">behoben</span></div>
+        <h3>Die Instanzsuche ist ein Vollscan — und sie läuft im Single-Writer-Loop</h3>
+      </div>
+      <div class="body">
+        <p>
+          Bei 11.000 aktiven Instanzen läuft <code>atlas_search_instances</code> in den Timeout,
+          sowohl bei einer Statussuche als auch bei einer Punktabfrage auf eine einzelne
+          Personalnummer. <code>atlas_stats</code> und <code>atlas_process_runtime</code> antworten
+          in derselben Situation sofort — der Server ist gesund, der Suchpfad ist das Problem.
+        </p>
+
+        <div class="scan">
+          <div class="scanrow">
+            <div class="who">atlas_stats</div>
+            <div class="bar" style="background: var(--good); width: 8%">sofort</div>
+          </div>
+          <div class="scanrow">
+            <div class="who">atlas_process_runtime</div>
+            <div class="bar" style="background: var(--good); width: 11%">sofort</div>
+          </div>
+          <div class="scanrow">
+            <div class="who">atlas_search_instances</div>
+            <div class="bar" style="background: var(--crit); width: 100%">Timeout — und blockiert währenddessen die gesamte Engine</div>
+          </div>
+        </div>
+
+        <p style="margin-top:18px">
+          <code>handleSearchInstances</code> scannt <b>jede aktive und jede abgeschlossene</b>
+          Prozessinstanz linear, liest je Instanz alle Variablen und filtert in Go — es gibt
+          keinen Index über Variablenwerte. Und es tut das innerhalb von <code>s.do(…)</code>,
+          also im Single-Writer-Loop. Der letzte Punkt wiegt schwerer als der erste: eine
+          langsame Suche hält nicht nur sich selbst auf, sie hält die <em>gesamte
+          Verarbeitung</em> an. Auf server01 kommen zu den 11.000 aktiven noch mehrere
+          hunderttausend abgeschlossene Instanzen aus früheren Tests hinzu, die jede Suche
+          mitscannt.
+        </p>
+        <p>
+          Das ist der zentrale Punkt für das Vorhaben, denn die Suche <em>ist</em> der
+          Mechanismus hinter „auf einen Blick“: <em>Zeig mir alle Identitäten im Zustand
+          AUSTRITT, deren Produkte noch nicht dekommissioniert sind.</em> Diese Frage
+          beantwortet die Instanzsuche heute bei 50.000 Identitäten nicht. Das ist kein
+          Konzeptfehler — es ist eine fehlende Fähigkeit der Engine.
+        </p>
+
+        <div class="ways">
+          <div class="way">
+            <div class="n">Weg 1</div>
+            <h4>Index und Snapshot</h4>
+            <p>Variablenindex, Paginierung, und die Ausführung auf einem Snapshot statt im Single-Writer. Der saubere Weg, im Kern des Servers.</p>
+          </div>
+          <div class="way">
+            <div class="n">Weg 2</div>
+            <h4>OpenSearch-Export</h4>
+            <p>Der Event-Exporter (ADR-0114) ist vorhanden. Die Zustandsabfrage läuft dann dort, nicht auf dem Run-Loop.</p>
+          </div>
+          <div class="way">
+            <div class="n">Weg 3</div>
+            <h4>Lesemodell daneben</h4>
+            <p>Zustand und Register zusätzlich in eine eigene Sicht schreiben und Auswertungen dort fahren.</p>
+          </div>
+        </div>
+
+        <p style="margin-top:20px; margin-bottom:0">
+          Bis dahin bleibt der Betrieb möglich, aber gezielt: der Zugriff je Identität über den
+          Instanzschlüssel ist sofort da, und <code>atlas_process_runtime</code> liefert die
+          Verteilung über alle Zustände in konstanter Zeit. Was fehlt, ist die freie Suche
+          über Inhalte.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Was seither behoben ist</h2>
+    <p class="lede">
+      Der Test war im September; die Befunde sind es nicht mehr alle. Drei sind auf dem
+      Branch behoben, jeder mit einem Test, der ohne den Fix fehlschlägt.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Befund</th><th>Stand</th><th>Wie</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Daten-Assoziationen in Subprozessen werden still verworfen</td>
+            <td><span class="chip">behoben</span></td>
+            <td>Der Compiler verdrahtet sie durch den ganzen Scope-Baum — wie er es für <code>ioMapping</code> und Multi-Instance längst tat</td>
+          </tr>
+          <tr>
+            <td><code>ioMapping</code> am Ereignis-Subprozess überschreibt mit <code>null</code></td>
+            <td><span class="chip">behoben</span></td>
+            <td>Die vorgehaltene Wächter-Instanz trägt die Element-Id des Handlers und bekam deshalb dessen Zuordnungen. Sie gehören der Handler-Ausführung</td>
+          </tr>
+          <tr>
+            <td>Instanzsuche blockiert die Engine</td>
+            <td><span class="chip">behoben</span></td>
+            <td>Abfragen laufen auf einer konsistenten Momentaufnahme ausserhalb des Run-Loops; mehrere Endpunkte lesen jetzt einen gepflegten Zähler statt zu scannen</td>
+          </tr>
+          <tr>
+            <td>Nicht-unterbrechender Message-Boundary feuert nur einmal</td>
+            <td><span class="chip open">offen</span></td>
+            <td>Re-Arm gibt es bisher nur für Timer. Eine BPMN-Abweichung und ein eigener Change</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin-top:22px">
+      Beim Optimieren kam ein vierter Fund dazu, den der Test nicht zeigen konnte, weil
+      wir den Seeder nie terminiert haben: der Abbau einer Call-Activity suchte ihr Kind
+      durch einen Vollscan <em>aller</em> lebenden Instanzen — einmal je abzubauender
+      Call-Activity, und zwar im Prozessor, wo ein Lesevorgang nicht ausgelagert werden
+      kann, weil der Abbau selbst der Schreibvorgang ist. Der Abbruch des
+      10.000er-Seeders hätte in der Grössenordnung 10<sup>8</sup> Vergleiche gekostet,
+      mit stehender Engine. Dafür gibt es jetzt einen Rückwärts-Index.
+    </p>
+
+    <h3 style="margin-top:26px">Gemessen</h3>
+    <p style="margin-top:4px">
+      50.000 aktive plus 50.000 abgeschlossene Instanzen, acht Variablen je Instanz,
+      Suche über alle:
+    </p>
+    <div class="tablewrap" style="margin-top:12px">
+      <table>
+        <thead>
+          <tr><th></th><th class="num">Wert</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>die Suche selbst</td><td class="num">~2,0 s <span style="color:var(--muted)">(unverändert — sie läuft weiterhin durch)</span></td></tr>
+          <tr><td>längste Wartezeit für alles andere auf dem Run-Loop</td><td class="num" style="color:var(--good)"><b>200–479 µs</b></td></tr>
+          <tr><td>derselbe Durchlauf im Loop, wie vorher</td><td class="num" style="color:var(--crit)"><b>1,8–1,9 s</b>, für alle</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:16px">
+      Die Suche ist nicht schneller geworden. Der Unterschied ist, dass die Engine nicht
+      mehr auf sie wartet — das ist die Eigenschaft, um die es geht.
+    </p>
+    <p>
+      <b>Wichtig:</b> Das alles liegt auf dem Branch, nicht auf server01. Der Server läuft
+      weiter mit dem Build von vor dem Test; die 11.000 Instanzen dort zeigen unverändert
+      das alte Verhalten, bis der Branch deployed ist.
+    </p>
+  </section>
+
+  <section>
+    <h2>Nebenbefunde</h2>
+    <ul class="findings">
+      <li>
+        <b>Nachrichten in falscher Reihenfolge gehen verloren.</b> Ein Austritt für eine
+        Identität, die noch im Zustand ERFASST steht, korreliert auf kein Abonnement und ist
+        ein stiller No-Op — kein Fehler, kein Incident, und der Absender erfährt nicht, ob
+        korreliert wurde. Atlas puffert Nachrichten nicht. Die SAP/CIS-Kopplung braucht
+        Reihenfolge- und Zustellgarantie auf ihrer Seite.
+      </li>
+      <li>
+        <b>Eingabe-Assoziationen kosten dauerhaft Speicher.</b> Eine <code>dataInputAssociation</code>
+        legt ihre Kopie im Instanz-Scope ab und behält sie für die Lebensdauer der Instanz —
+        anders als <code>ioMapping</code>-Lokale, die beim Abschliessen verworfen werden. Vier
+        Lesevariablen bedeuteten vier vollständige Kopien des Registers je Identität; im Modell
+        heissen deshalb alle Lesezugriffe <code>reg</code>.
+      </li>
+      <li>
+        <b>Nachrichtennutzlast ist instanzweit.</b> Die Variablen einer korrelierten Nachricht
+        landen im Wurzel-Scope, nicht im auslösenden Zweig — zwei gleichzeitige
+        Ereignis-Subprozesse teilen sich dieselbe <code>serviceId</code>.
+      </li>
+      <li>
+        <b>FEEL auf 0.4.0-dev.</b> <code>for i in 1..n return i</code> liefert korrekt eine Liste;
+        der im Lasttest vom August dokumentierte Null-Fehler ist behoben. <code>get keys</code>
+        dagegen gibt es nicht — der Aufruf kompiliert und liefert still <code>null</code>.
+        <code>get entries</code> ist die richtige Funktion.
+      </li>
+      <li>
+        <b>Vier gleichzeitige Ereignisse für dieselbe Identität wurden alle vier verbucht.</b>
+        Die Hub-Schleife stellt ihr Abonnement offenbar noch in derselben Verarbeitungskette
+        wieder scharf. Stichprobenbefund, kein Beweis der Rennfreiheit.
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Vor einem Rollout auf 50.000</h2>
+    <div class="open">
+      <div class="openrow">
+        <div class="k">01</div>
+        <div>
+          <h4>Lesepfad</h4>
+          <p>Ohne indizierte Suche fehlt die Auswertungsfähigkeit, die den Ansatz überhaupt attraktiv macht.</p>
+        </div>
+      </div>
+      <div class="openrow">
+        <div class="k">02</div>
+        <div>
+          <h4>Ereigniszustellung</h4>
+          <p>Atlas puffert nicht und meldet dem Absender nicht, ob korreliert wurde. Es braucht Zustellgarantie auf der SAP/CIS-Seite plus eine Abgleichmöglichkeit.</p>
+        </div>
+      </div>
+      <div class="openrow">
+        <div class="k">03</div>
+        <div>
+          <h4>Tiefe des Produkt-Lebenszyklus</h4>
+          <p>Reicht ein Status je Produkt im Register? Braucht ein Produkt einen eigenen mehrstufigen Ablauf mit Fristen und Incidents, gehört je Bestellung eine eigene Prozessinstanz her — verbunden über dieselbe Personalnummer, nicht in die Identitäts-Instanz hinein.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Modell, Seeder und Langfassung: examples/identitaet-lebenszyklus/</span>
+    <span>Branch claude/atlas-identity-lifecycle-test-mkotb3</span>
+  </footer>
+
+</div>

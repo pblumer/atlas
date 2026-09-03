@@ -17,11 +17,12 @@ import { migrateInstanceFlow } from "./migrationdialog.js";
 // Which keys a form-js schema binds — the Developer View reads it to offer a linked
 // form's fields as variables, the incident's repair form reads it to know which keys a
 // submit may write (ADR-0169). One description of it, in one place.
-import { formFieldKeys, formFieldTypes, loadFormViewer } from "./formviewer.js";
+import { formFieldKeys, formFieldTypes, loadFormViewer, withLoadDeadline } from "./formviewer.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
 import { attachPlayground } from "./playground.js";
+import { groupifyPanel, groupController } from "./pgroup.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -179,6 +180,7 @@ function calleeXML(pid, name) {
 let current; // active modeler/viewer, destroyed on remount
 let onLayoutKey; // document-level F8 handler for auto-layout, removed on remount
 let onBarMenuDismiss; // document-level click that closes the bar menu, removed on remount
+let onVarsKey; // document-level F4 handler for the Variables panel, removed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
 let collab; // active live collaboration session (ADR-0140), closed on remount
 // generation is bumped by cleanup() on every navigation/remount. A mount captures
@@ -205,6 +207,7 @@ export function cleanup() {
   if (playground) { try { playground.destroy(); } catch { /* ignore */ } playground = null; }
   if (onLayoutKey) { document.removeEventListener("keydown", onLayoutKey, true); onLayoutKey = null; }
   if (onBarMenuDismiss) { document.removeEventListener("click", onBarMenuDismiss); onBarMenuDismiss = null; }
+  if (onVarsKey) { document.removeEventListener("keydown", onVarsKey, true); onVarsKey = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
@@ -487,15 +490,18 @@ function editorCrumbs(project, current) {
     `<span class="crumb-current">${esc(current)}</span></nav>`;
 }
 
-// The editor bar carries two things the author acts on constantly — Save and Deploy —
-// and one menu for everything else (ADR-0229). It used to carry
-// seven buttons in one weight, which said that re-flowing the diagram and shipping it to
-// a server were the same size of act, and on a narrower window `flex-wrap` dropped a few
-// of them into a second row mid-group. Deploy is the only filled button, because it is
-// the only one here that leaves the browser; Save sits beside it because it is the one
-// pressed most; the rest are a menu, where a toggle reads as on by its check rather than
-// by a pressed button. Every control kept its id, so what each one does is still wired
-// where it was.
+// The editor bar carries what the author reaches for constantly and a menu for the rest
+// (ADR-0229, revised in one part by ADR-0240). It used to
+// carry seven buttons in one weight, which said that re-flowing the diagram and shipping
+// it to a server were the same size of act, and on a narrower window `flex-wrap` dropped
+// a few of them into a second row mid-group.
+//
+// Left of the rule is what the bar *shows*: Variables, a two-state button whose look is
+// drawn from `aria-pressed` (F4). Right of it is what the bar *does*: Deploy, the only
+// filled button because it is the only one here that leaves the browser, and Save beside
+// it as the one pressed most. Token simulation, Auto-layout, Export XML and Documentation
+// are in the menu, where a toggle reads as on by its check rather than by a pressed
+// button. Every control kept its id, so what each one does is still wired where it was.
 export async function mountEditor(root, { api, toast, key, draftId, projectId, project }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
@@ -511,16 +517,15 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
           <button data-tab="playground" title="Run this diagram on the real engine in a throwaway sandbox — no deploy, no side effects">Playground</button>
         </div>
         <div style="flex:1"></div>
+        <button class="btn neutral toggle" id="vars-toggle" type="button" aria-pressed="false" title="Show the variables this diagram writes, and who writes them (F4)">Variables</button>
+        <span class="bar-div" aria-hidden="true"></span>
         <button class="btn neutral" id="save" title="Save this diagram as a draft">Save</button>
         <button class="btn" id="deploy" title="Deploy this single diagram. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
         <div class="dropdown">
           <button class="icon-btn bar-more" id="bar-more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="Everything else this diagram can do">&#8943;</button>
           <div class="dropdown-menu" id="bar-menu" hidden>
-            <div class="mlabel">View</div>
             <button id="sim-toggle" type="button" aria-pressed="false" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough"><span class="mi-icon">&#9654;</span>Token simulation</button>
-            <button id="vars-toggle" type="button" aria-pressed="false" title="Show the variables this diagram writes"><span class="mi-icon">{}</span>Variables</button>
             <div class="sep"></div>
-            <div class="mlabel">Diagram</div>
             <button id="autolayout" type="button" title="Re-flow the diagram into a clean left-to-right layout (F8)"><span class="mi-icon">&#8649;</span>Auto-layout</button>
             <button id="export" type="button" title="Download this diagram as BPMN XML"><span class="mi-icon">&#8595;</span>Export XML</button>
             <button id="docexport" type="button" title="Publish this process as a structured PDF — the diagram plus every element's documentation and notes — as a numbered version you can share (ADR-0143)"><span class="mi-icon">&#128196;</span>Documentation</button>
@@ -1922,12 +1927,11 @@ function wireEditorVars(root, modeler, api) {
         }).join("");
   };
 
-  // The toggle is a row in the bar menu, so "open" is carried by a check mark and by
-  // aria-pressed rather than by the look of a held-down button.
-  const reflect = () => {
-    toggle.classList.toggle("active", !panel.hidden);
-    toggle.setAttribute("aria-pressed", panel.hidden ? "false" : "true");
-  };
+  // The toggle is a two-state button on the bar, and `aria-pressed` is the whole of that
+  // state: the pressed look is drawn from the attribute (app.css `.btn.toggle`), so there
+  // is no second flag that can disagree with what the panel is actually doing. The Live
+  // view's Variables toggle has always worked this way; this is the same control.
+  const reflect = () => toggle.setAttribute("aria-pressed", panel.hidden ? "false" : "true");
   toggle.addEventListener("click", () => {
     panel.hidden = !panel.hidden;
     reflect();
@@ -1937,6 +1941,21 @@ function wireEditorVars(root, modeler, api) {
     panel.hidden = true;
     reflect();
   });
+
+  // F4 toggles the panel, the way F8 runs auto-layout: a bare function key, captured at
+  // the document so it works wherever focus sits, removed by cleanup() on navigation.
+  //
+  // Unlike F8 it deliberately does *not* stand down while a field has focus. F8 rewrites
+  // the diagram, so firing it mid-typing would be a surprise edit; this only shows or
+  // hides a panel, and the moment an author most wants to check what a variable is called
+  // is while typing the expression that uses it. F4 produces no text, so nothing is eaten
+  // by letting it through.
+  onVarsKey = (e) => {
+    if (e.key !== "F4" || e.repeat || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault();
+    toggle.click(); // one path for pointer and keyboard: whatever the click does, F4 does
+  };
+  document.addEventListener("keydown", onVarsKey, true);
   filter.addEventListener("input", render);
   if (sampleBox) sampleBox.addEventListener("click", (e) => {
     if (!e.target.closest("#vars-reload")) return;
@@ -5146,89 +5165,102 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
   attachEditors();
 }
 
-// groupifyPanel turns each <h3> section of the properties panel into a collapsible
-// group (Camunda-style): the heading becomes a toggle with a chevron and a filled
-// dot when the group has content, and everything up to the next <h3> becomes its
-// collapsible body. It works on the already-rendered panel, so every element type's
-// markup is grouped by one function instead of each branch knowing about grouping.
-// Nodes are moved as whole subtrees, so field listeners and rich editors survive.
-function groupifyPanel(body, ctl) {
-  const heads = [...body.children].filter((n) => n.tagName === "H3");
-  if (!heads.length) return;
-  // A section absorbs everything up to the next <h3>, but a standalone group (e.g.
-  // the I/O mapping list groups, which render their own header) must stay a
-  // top-level sibling rather than being folded into the preceding section's body.
-  const isStop = (n) => n.nodeType === 1 && (n.tagName === "H3" || n.dataset.standaloneGroup === "1");
-  for (const h3 of heads) {
-    const title = h3.textContent.trim();
-    const group = document.createElement("div");
-    group.className = "pgroup" + (ctl.isCollapsed(title) ? " collapsed" : "");
-    group.dataset.group = title;
-    const bodyWrap = document.createElement("div");
-    bodyWrap.className = "pgroup-body";
-    let n = h3.nextSibling;
-    while (n && !isStop(n)) {
-      const next = n.nextSibling;
-      bodyWrap.appendChild(n);
-      n = next;
-    }
-    const fields = [...bodyWrap.querySelectorAll("input, textarea, select")];
-    const hasVal = fields.some((el) =>
-      el.tagName === "SELECT" ? el.selectedIndex > 0
-        : (el.type !== "button" && el.type !== "submit" && (el.value || "").trim() !== ""));
-    const hasRows = !!bodyWrap.querySelector(".dmn-input-row, .sv-row, .msg-row, tr, li");
-    const head = document.createElement("button");
-    head.type = "button";
-    head.className = "pgroup-head";
-    head.innerHTML = `<span class="pgroup-chevron">▸</span><span class="pgroup-title"></span>`;
-    head.querySelector(".pgroup-title").textContent = title;
-    if (hasVal || hasRows) {
-      const dot = document.createElement("span");
-      dot.className = "pgroup-dot";
-      dot.title = "has content";
-      head.appendChild(dot);
-    }
-    head.addEventListener("click", () => ctl.onToggle(title, group.classList.toggle("collapsed")));
-    body.insertBefore(group, h3);
-    group.appendChild(head);
-    group.appendChild(bodyWrap);
-    body.removeChild(h3);
-  }
-  // A subtle expand-all / collapse-all control, added once there is more than one
-  // collapsible group (the <h3> sections plus any standalone I/O-mapping groups), so
-  // the author can open or clear the whole panel in one click.
-  const total = body.querySelectorAll(".pgroup, .io-group").length;
-  if (total >= 2 && !body.querySelector(".pgroup-tools")) {
-    const tools = document.createElement("div");
-    tools.className = "pgroup-tools";
-    tools.innerHTML = `<button type="button" class="pgroup-all" data-all="expand" title="Expand all groups">Expand all</button>`
-      + `<span class="pgroup-all-sep" aria-hidden="true">·</span>`
-      + `<button type="button" class="pgroup-all" data-all="collapse" title="Collapse all groups">Collapse all</button>`;
-    tools.querySelector('[data-all="expand"]').addEventListener("click", () => ctl.setAll(false));
-    tools.querySelector('[data-all="collapse"]').addEventListener("click", () => ctl.setAll(true));
-    body.insertBefore(tools, body.firstChild);
-  }
-}
 
 function wireProperties(root, modeler, api, projectId, toast, identity) {
-  // The class names this application models, offered as suggestions for a data
-  // object's type (ADR-0230). It is a *suggestion* and
-  // not a closed list on purpose: a model is routinely drawn before the vocabulary
-  // it names exists, so typing a class that is not modeled yet has to stay possible
-  // — the Problems panel says so, and a deploy is never refused for it.
-  let modeledClasses = [];
+  // The classes this application models (ADR-0230), which a data object's Type points
+  // at. Names alone were enough to *suggest* one; showing the reader what they have
+  // pointed at takes the class itself — its kind, its attributes, its business key —
+  // and which model it lives in, so the panel can link there and create there.
+  //
+  // It stays a suggestion and not a closed list on purpose: a model is routinely
+  // drawn before the vocabulary it names exists, so typing a class nothing models yet
+  // has to remain possible. The Problems panel says so, and a deploy is never refused
+  // for it.
+  let vocab = { classes: [], models: [], loaded: false };
+  const classNamed = (name) => vocab.classes.find((c) => c.name === name) || null;
+
+  // A <datalist> is invisible: nothing on the field says a vocabulary exists at all,
+  // so the one link this whole feature turns on was made by remembering a class name
+  // and typing it correctly. The picker says what has been modelled, and each option
+  // carries the business key — the fact that tells two similarly named classes apart,
+  // and the thing somebody is actually trying to recall.
+  //
+  // It fills the field rather than being the field. The value stays free text because
+  // it has to (ADR-0230): a diagram is routinely drawn before its vocabulary exists.
+  function classPickerHTML(current) {
+    if (!vocab.classes.length) return "";
+    const byModel = new Map();
+    for (const c of vocab.classes) {
+      if (!byModel.has(c.modelId)) byModel.set(c.modelId, { name: c.modelName, classes: [] });
+      byModel.get(c.modelId).classes.push(c);
+    }
+    const groups = [...byModel.values()].map((g) =>
+      `<optgroup label="${esc(g.name)}">${g.classes.map((c) => {
+        const key = (c.identity || []).join(", ");
+        return `<option value="${esc(c.name)}"${c.name === current ? " selected" : ""}>${esc(c.name)}${
+          key ? ` · key ${esc(key)}` : ""}</option>`;
+      }).join("")}</optgroup>`).join("");
+    return `<div class="field-actions">
+      <select id="f-itemtype-pick" title="The classes this application models">
+        <option value="">Pick from the information model…</option>${groups}</select></div>`;
+  }
+
+  // What the type points at, drawn rather than named. A class name read back as text
+  // says nothing about whether it is the right class; its business key and its members
+  // do — and until now they were in another application of the console, so checking
+  // meant leaving the diagram.
+  function classCardHTML(c) {
+    const stereo = c.stereotype || "businessObject";
+    const rows = stereo === "enumeration"
+      ? (c.literals || []).map((l) => `<li><span class="n">${esc(l)}</span></li>`)
+      : (c.attributes || []).map((a) => {
+        const isKey = (c.identity || []).includes(a.name);
+        const mult = a.multiplicity && a.multiplicity !== "1" ? ` [${a.multiplicity}]` : "";
+        return `<li${isKey ? ' class="key"' : ""}><span class="n">${isKey ? "⚿ " : ""}${esc(a.name)}</span>` +
+          `<span class="t">${esc(a.type || "")}${esc(mult)}</span></li>`;
+      });
+    const empty = stereo === "enumeration" ? "no literals yet" : "no attributes yet";
+    return `<div class="im-card">
+      <div class="im-card-head">
+        <span class="im-card-stereo">«${esc(stereo)}»</span>
+        <b class="im-card-name">${esc(c.name)}</b>
+        <span style="flex:1"></span>
+        <a class="im-card-open" href="#/data/m/${encodeURIComponent(c.modelId)}" target="_blank" rel="noopener"
+           title="Open ${esc(c.modelName)} in the information model">Open ↗</a>
+      </div>
+      <ul class="im-card-attrs">${rows.join("") || `<li class="none">${empty}</li>`}</ul>
+    </div>`;
+  }
+  async function loadVocabulary() {
+    const models = await api("GET", `/api/v1/infomodel/models?applicationId=${encodeURIComponent(projectId)}`);
+    const classes = [];
+    const seen = new Set();
+    const loaded = [];
+    for (const m of models || []) {
+      const full = await api("GET", `/api/v1/infomodel/models/${encodeURIComponent(m.id)}`);
+      loaded.push({ id: m.id, name: (full && full.name) || m.name || m.id });
+      for (const c of (full && full.classes) || []) {
+        // First model wins a name it shares with another: the type is a bare string,
+        // so two models offering the same class name cannot be told apart by one — and
+        // showing the first is at least stable rather than dependent on fetch order.
+        if (seen.has(c.name)) continue;
+        seen.add(c.name);
+        classes.push({ ...c, modelId: m.id, modelName: (full && full.name) || m.name || m.id });
+      }
+    }
+    classes.sort((a, b) => a.name.localeCompare(b.name));
+    vocab = { classes, models: loaded, loaded: true };
+  }
+  // Held so a panel rendered before the fetch lands can re-render when it does. A
+  // picker that is empty because the answer has not arrived is worse than no picker:
+  // it says the application models nothing.
+  let vocabReady = null;
   if (projectId) {
-    (async () => {
-      try {
-        const models = await api("GET", `/api/v1/infomodel/models?applicationId=${encodeURIComponent(projectId)}`);
-        const names = new Set();
-        for (const m of models || []) {
-          const full = await api("GET", `/api/v1/infomodel/models/${encodeURIComponent(m.id)}`);
-          for (const c of (full && full.classes) || []) names.add(c.name);
-        }
-        modeledClasses = [...names].sort();
-      } catch { /* no vocabulary: the field stays a plain text input */ }
-    })();
+    vocabReady = loadVocabulary().catch(() => {
+      // No vocabulary reachable: the field stays a plain text input, which is exactly
+      // what it was before there was an information model to read.
+      vocab = { classes: [], models: [], loaded: true };
+    });
   }
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
@@ -5237,30 +5269,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   const modeling = modeler.get("modeling");
   const selection = modeler.get("selection");
 
-  // Tidy the panel Camunda-style: every <h3> section becomes a collapsible group
-  // with a chevron and a filled dot when it carries content. groupifyPanel runs
-  // after each (re-)render via a MutationObserver, so no per-element branch has to
-  // know about grouping; collapse state persists across renders in `collapsed`.
-  // Property groups start collapsed on open — all but General — so a freshly selected
-  // element shows its identity, not every section at once (the author's request).
-  // `choice` remembers explicit toggles for this editing session, shared across element
-  // selections; untouched groups fall back to the default. It resets when the editor
-  // remounts, so reopening a file collapses the panel again.
-  const DEFAULT_OPEN = new Set(["General"]);
-  const choice = new Map(); // group title -> true(collapsed)/false(open), only when toggled
-  const groupCtl = {
-    isCollapsed: (title) => choice.has(title) ? choice.get(title) : !DEFAULT_OPEN.has(title),
-    onToggle: (title, col) => choice.set(title, col),
-    // Expand/collapse every group now on screen (both <h3> sections and standalone
-    // I/O-mapping groups) and record each so re-renders keep the chosen state.
-    setAll: (col) => {
-      for (const g of body.querySelectorAll(".pgroup, .io-group")) {
-        g.classList.toggle("collapsed", col);
-        const t = (g.dataset.group || "").trim();
-        if (t) choice.set(t, col);
-      }
-    },
-  };
+  // Tidy the panel Camunda-style, with the groups the class canvas's panel also uses
+  // (pgroup.js): every <h3> section becomes a collapsible group with a chevron and a
+  // filled dot when it carries content. It runs after each (re-)render via a
+  // MutationObserver, so no per-element branch has to know about grouping.
+  //
+  // Only General starts open: a freshly selected element should show its identity,
+  // not every section at once.
+  const groupCtl = groupController(body, ["General"]);
   let groupifying = false;
   const panelObserver = new MutationObserver(() => {
     if (groupifying) return;
@@ -5560,12 +5576,24 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           <p class="muted" style="font-size:12px">Point this box at an existing data object to show <b>the same object in several places</b> — one logical object, so you can put it next to each activity without long arrows across the diagram.</p>`;
       }
       const itemType = itemTypeOf(bo.dataObjectRef);
-      const unresolved = itemType && modeledClasses.length && !modeledClasses.includes(itemType);
+      // A panel rendered before the fetch lands re-renders when it does. An empty
+      // picker reads as "this application models nothing", which is a different and
+      // wrong answer to "not yet".
+      if (!vocab.loaded && vocabReady) {
+        vocabReady.then(() => { try { show(element); } catch { /* the panel moved on */ } });
+      }
+      const known = classNamed(itemType);
+      const unresolved = itemType && vocab.loaded && !known;
       html += `<h3>Data object</h3>
-        <label class="field"><span>Type <span class="muted">(optional)</span></span>
+        <label class="field"><span>Type <span class="muted">(the class this datum is)</span></span>
           <input type="text" id="f-itemtype" list="f-itemtype-list" value="${esc(itemType)}" placeholder="Order"/></label>
-        <datalist id="f-itemtype-list">${modeledClasses.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
-        ${unresolved ? `<p class="muted" style="font-size:12px; color:#b26a00">No class called <b>${esc(itemType)}</b> is modelled in this application yet — the Problems panel lists it, and a deploy is not refused for it.</p>` : ""}
+        <datalist id="f-itemtype-list">${vocab.classes.map((c) => `<option value="${esc(c.name)}"></option>`).join("")}</datalist>
+        ${classPickerHTML(itemType)}
+        ${known ? classCardHTML(known) : ""}
+        ${unresolved ? `<p class="im-nomatch">No class called <b>${esc(itemType)}</b> is modelled in this
+          application yet — the Problems panel lists it, and a deploy is not refused for it.
+          ${vocab.models.length ? `<button type="button" class="btn ghost small" id="f-itemtype-create"
+            data-name="${esc(itemType)}">+ Model it now</button>` : ""}</p>` : ""}
         <label class="field"><span>Data state</span>
           <input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/></label>
         <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>Collection (a list of items)</span></label>
@@ -6072,14 +6100,79 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // place the compiler reads it from, and the same reason the name is written
     // through to it above: the reference is a view of the object, not the object.
     const fitemtype = body.querySelector("#f-itemtype");
+    const setItemType = (v) => {
+      try {
+        const def = v ? ensureItemDefinition(modeler, v) : undefined;
+        modeling.updateModdleProperties(element, bo.dataObjectRef, { itemSubjectRef: def });
+      } catch { /* stale */ }
+      show(element); // re-render so the class card, or the note, appears or clears
+    };
     if (fitemtype && bo.dataObjectRef) {
-      fitemtype.addEventListener("change", (e) => {
-        const v = (e.target.value || "").trim();
+      fitemtype.addEventListener("change", (e) => setItemType((e.target.value || "").trim()));
+    }
+    // The picker fills the field and then goes through the same one write, so picking
+    // a class and typing its name are the same edit rather than two paths that can
+    // come to differ.
+    const ftypepick = body.querySelector("#f-itemtype-pick");
+    if (ftypepick && bo.dataObjectRef) {
+      ftypepick.addEventListener("change", (e) => {
+        const v = e.target.value;
+        if (!v) return;
+        if (fitemtype) fitemtype.value = v;
+        setItemType(v);
+      });
+    }
+
+    // "Model it now": the type names a class nothing models yet, and the remedy was to
+    // leave the diagram, find the model, add the class, and come back. It is added
+    // where it belongs and the panel then shows it, so the round closes here.
+    const fcreate = body.querySelector("#f-itemtype-create");
+    if (fcreate) {
+      fcreate.addEventListener("click", async () => {
+        const name = fcreate.dataset.name;
+        let target = vocab.models[0];
+        if (vocab.models.length > 1) {
+          const { openPickModal } = await import("./pickmodal.js");
+          const picked = await openPickModal({
+            title: `Model ${name}`,
+            label: "Information model",
+            options: vocab.models.map((m) => ({ value: m.id, label: m.name })),
+            hint: `${name} is added as a business object with no attributes yet. Open the model to give it its business key.`,
+            okLabel: "Add class",
+          });
+          if (!picked) return;
+          target = vocab.models.find((m) => m.id === picked.option.value);
+        }
+        if (!target) return;
+        fcreate.disabled = true;
         try {
-          const def = v ? ensureItemDefinition(modeler, v) : undefined;
-          modeling.updateModdleProperties(element, bo.dataObjectRef, { itemSubjectRef: def });
-        } catch { /* stale */ }
-        show(element); // re-render so the "not modelled yet" note appears or clears
+          // Read, append, write back against the revision it was read at — the same
+          // optimistic write the class canvas does, so two authors cannot silently
+          // overwrite one another.
+          const doc = await api("GET", `/api/v1/infomodel/models/${encodeURIComponent(target.id)}`);
+          const classes = (doc && doc.classes) || [];
+          if (!classes.some((c) => c.name === name)) {
+            // Placed where the canvas would place it rather than on top of the last
+            // one, so a model grown from here is still readable when it is opened.
+            const n = classes.length;
+            classes.push({
+              id: `new-${Math.random().toString(36).slice(2, 10)}`, name,
+              stereotype: "businessObject", attributes: [], identity: [],
+              x: 40 + (n % 4) * 260, y: 40 + Math.floor(n / 4) * 200,
+            });
+            await api("PUT", `/api/v1/infomodel/models/${encodeURIComponent(target.id)}`, {
+              name: doc.name, documentation: doc.documentation || "", classes,
+              associations: doc.associations || [], stores: doc.stores || [], revision: doc.revision,
+            });
+          }
+          await loadVocabulary();
+          toast(`${name} added to ${target.name} — open it to give it its business key`, "ok");
+        } catch (err) {
+          fcreate.disabled = false;
+          toast(err && err.message ? err.message : `could not add ${name}`, "err");
+          return;
+        }
+        show(element);
       });
     }
 
@@ -7573,7 +7666,7 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
         <div class="modal startform-modal" role="dialog" aria-modal="true" aria-label="Start form">
           <div class="modal-head"><h2>Start values</h2></div>
           <div class="modal-body">
-            <div class="startform-host" id="sf-host"><p class="muted">Loading form…</p></div>
+            <div class="startform-host" id="sf-host"></div>
             <p class="err" id="sf-err"></p>
           </div>
           <div class="modal-foot">
@@ -7586,7 +7679,9 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
       const errEl = ov.querySelector("#sf-err");
       const sendBtn = ov.querySelector("[data-sf-send]");
       let form = null;
+      let closed = false;
       const close = (result) => {
+        closed = true;
         if (form) { try { form.destroy(); } catch { /* noop */ } }
         ov.remove();
         document.removeEventListener("keydown", onKey);
@@ -7597,21 +7692,46 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
       ov.querySelector("[data-sf-cancel]").addEventListener("click", () => close(null));
       ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
 
-      Promise.all([loadFormViewer(), api("GET", "/api/v1/forms/" + encodeURIComponent(formId))])
-        .then(async ([{ Form }, def]) => {
-          host.innerHTML = "";
-          form = new Form({ container: host });
-          await form.importSchema((def && def.schema) || {}, {});
-          sendBtn.disabled = false;
-          sendBtn.focus();
-        })
-        .catch((e) => {
-          // The form is the way in and it did not load. Say so and offer the way out
-          // that still works rather than a Send that would start with nothing.
-          host.innerHTML = `<p class="err">Could not load the start form: ${esc(e.message)}</p>
-            <p class="muted">Deploy only still works, and the process can be started from
-            the Tasks app once its form loads.</p>`;
-        });
+      // loadIntoHost renders the form, and is what Try again calls to render it after a
+      // failure. Both halves carry a deadline (formviewer.js): a viewer bundle or a
+      // definition that never arrives used to leave "Loading form…" standing for the
+      // rest of the session — no error, no retry, and a Send that stayed disabled
+      // beside it. Nothing here can hang without saying so any more.
+      const loadIntoHost = () => {
+        // A retry after a half-built form (the viewer came, the schema did not) would
+        // otherwise wipe its container out from under it and leave it running.
+        if (form) { try { form.destroy(); } catch { /* noop */ } form = null; }
+        host.innerHTML = `<p class="muted">Loading form…</p>`;
+        errEl.textContent = "";
+        Promise.all([
+          loadFormViewer(),
+          withLoadDeadline(api("GET", "/api/v1/forms/" + encodeURIComponent(formId)), "The form definition"),
+        ])
+          .then(async ([{ Form }, def]) => {
+            // Cancelled while it loaded: instantiating form-js now would put a live
+            // form, with its timers and listeners, into a container already detached.
+            if (closed) return;
+            host.innerHTML = "";
+            form = new Form({ container: host });
+            await form.importSchema((def && def.schema) || {}, {});
+            if (closed) { try { form.destroy(); } catch { /* noop */ } form = null; return; }
+            sendBtn.disabled = false;
+            sendBtn.focus();
+          })
+          .catch((e) => {
+            if (closed) return;
+            // The form is the way in and it did not load. Say so, offer the retry that
+            // costs nothing (whatever did arrive is cached), and name the way out that
+            // still works rather than a Send that would start with nothing.
+            host.innerHTML = `<p class="err">Could not load the start form: ${esc(e.message)}</p>
+              <p class="muted">Deploy only still works, and the process can be started from
+              the Tasks app once its form loads.</p>
+              <button type="button" class="btn ghost small" data-sf-retry
+                title="Load the start form again">Try again</button>`;
+            host.querySelector("[data-sf-retry]").addEventListener("click", loadIntoHost);
+          });
+      };
+      loadIntoHost();
 
       sendBtn.addEventListener("click", () => {
         if (!form) return;
@@ -7636,8 +7756,13 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
   // fall back to the process-level Operations view.
   const resolveInstanceLink = async (defKey) => {
     try {
-      const list = await api("GET", "/api/v1/instances");
-      const mine = list.filter((r) => r.processDefKey === defKey);
+      // Scoped, and capped at one row per half: the definition's own indexes yield
+      // their newest entry first, so this costs two reads instead of a walk of every
+      // instance in the engine that is then filtered in the browser. Both halves,
+      // because a straight-through process has already finished by the time the
+      // roundtrip link is built.
+      const list = await api("GET", `/api/v1/instances?process=${encodeURIComponent(defKey)}&limit=1`);
+      const mine = (list || []).filter((r) => r.processDefKey === defKey);
       if (mine.length) {
         const inst = mine.reduce((a, b) => (b.key > a.key ? b : a));
         return `#/operations/p/${defKey}/i/${inst.key}`;
@@ -7745,7 +7870,7 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
 // definition is shown, and an instance picker either aggregates every instance's
 // tokens on the diagram or isolates a single one. The selected instance's
 // variables are listed below the diagram.
-export async function mountLive(root, { api, toast, key, instance }) {
+export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
@@ -7874,8 +7999,23 @@ export async function mountLive(root, { api, toast, key, instance }) {
   // roundtrip link, or a shared URL) preselects that one; refreshInstances falls
   // back to "all" if it no longer exists.
   let selected = instance != null ? String(instance) : "all";
-  let instances = [];       // this version's instances, cached for the picker/variables
+  let instances = [];       // the listed page of this version's instances (never all of them)
   let instSig = "";         // signature of the picker's current option set
+  // Paging over the two halves. Each is capped at PANEL_PAGE rows per call and
+  // continued through the cursor the server hands back, so the panel's cost is the
+  // page rather than the version's instance count.
+  const PANEL_PAGE = 50;
+  // How many pages of each half are currently listed. The poll re-reads exactly
+  // this many, so a page the operator loaded is not thrown away 1.5 seconds later —
+  // and an expanded panel still shows live state rather than freezing. Capped:
+  // past this depth the answer is the search box, not more scrolling.
+  const PANEL_MAX_PAGES = 10;
+  let activePages = 1, finishedPages = 1;
+  let moreActive = false, moreFinished = false;
+  let finishedCount = 0;    // finished instances of this version, for the honest total
+  let searchQuery = "";     // the active instance search; "" means the plain listing
+  let searchDraft = "";     // what is currently typed, kept across the 1.5s poll's rebuilds
+  let searchError = "";     // what the last search failed with, shown in the panel
   let liveTasks = [];       // open user-task jobs for this version, refreshed each poll
   let runningCount = 0;     // active instances of this version (from runtime), may exceed the listed page
   // Bulk-terminate selection over the "All instances" list. selectMode shows a
@@ -7890,29 +8030,132 @@ export async function mountLive(root, { api, toast, key, instance }) {
   // refreshInstances pulls this version's instances and, only when the set of
   // instances (or their state) actually changed, rebuilds the picker — so the
   // operator's current selection isn't reset on every poll. Newest activity first.
-  // Scope the fetch to this definition with ?process=: the list endpoint caps
-  // active and finished instances independently per call, so a global fetch can
-  // truncate this version's lone running instance out of the active page during a
-  // flood (its finished instances survive in the separate finished cap), leaving
-  // the picker showing only completed ones. Filtering server-side keeps the cap
-  // per-definition, so a running instance is never dropped.
-  async function refreshInstances() {
-    let all;
-    try { all = await api("GET", "/api/v1/instances?process=" + encodeURIComponent(key)); }
-    catch { return; } // transient; the picker just keeps its current options
-    instances = all
-      .filter((r) => r.processDefKey === key)
-      .sort((a, b) => (a.state === b.state ? b.key - a.key : a.state === "active" ? -1 : 1));
-    const sig = instances.map((r) => `${r.key}:${r.state}`).join(",");
+  //
+  // It reads ONE PAGE per half, not the version's whole instance set. A definition
+  // can hold hundreds of thousands of instances, and fetching them all cost a scan
+  // of the store per poll and a DOM node per instance — the panel became the
+  // slowest thing on the page precisely when an operator most needed it. The server
+  // pages each half off that definition's own index (newest first), so a page costs
+  // the page; `Load more` walks the cursor, and the search box below reaches
+  // anything the first page does not show.
+  async function loadHalf(state, cursor) {
+    const q = `/api/v1/instances?process=${encodeURIComponent(key)}&state=${state}&limit=${PANEL_PAGE}` +
+      (cursor ? `&before=${encodeURIComponent(cursor)}` : "");
+    const { data, headers } = await apiRaw("GET", q);
+    return {
+      rows: (data || []).filter((r) => r.processDefKey === key),
+      more: headers.get("X-Instances-Truncated") === "true",
+      cursor: headers.get("X-Instances-Next-Cursor") || "",
+    };
+  }
+
+  // applyInstances installs a new listed set and rebuilds the picker, but only when
+  // the set actually changed — so a 1.5s poll never resets the operator's selection.
+  function applyInstances(rows) {
+    instances = rows;
+    // The count in "All instances" is the version's real total from the runtime
+    // counters, not the length of the page — a page that says 50 when 300 000 are
+    // running is worse than no number at all. The counters arrive on the runtime
+    // poll, which lands *after* the first listing, so the total is part of the
+    // signature: otherwise the picker would keep the "80 of 80" it was first built
+    // with while the panel beside it says "80 of 150".
+    const total = Math.max(runningCount + finishedCount, instances.length);
+    const sig = instances.map((r) => `${r.key}:${r.state}`).join(",") + `|${searchQuery}|${total}`;
     if (sig === instSig) return;
     instSig = sig;
     // Drop a selection that no longer exists (e.g. its definition was deleted).
     if (selected !== "all" && !instances.some((r) => String(r.key) === selected)) selected = "all";
+    const label = searchQuery
+      ? `Search results (${instances.length})`
+      : `All instances (${listedAll() ? instances.length : `${instances.length} of ${total}`})`;
     instSel.innerHTML =
-      `<option value="all"${selected === "all" ? " selected" : ""}>All instances (${instances.length})</option>` +
+      `<option value="all"${selected === "all" ? " selected" : ""}>${esc(label)}</option>` +
       instances.map((r) =>
         `<option value="${r.key}"${String(r.key) === selected ? " selected" : ""}>${r.key} · ${esc(r.state)}</option>`
       ).join("");
+  }
+
+  // listedAll reports whether the panel is showing everything there is, so the
+  // header can say "12" rather than the needlessly alarming "12 of 12".
+  const listedAll = () => !moreActive && !moreFinished;
+
+  // loadPages walks up to `pages` pages of one half from the newest, following the
+  // cursor the server hands back. Re-reading from the top rather than appending is
+  // what keeps an expanded panel *live*: every listed row is refetched each poll, so
+  // an instance that finishes while the operator is looking at it changes on screen.
+  async function loadPages(state, pages) {
+    const rows = [];
+    let cursor = "", more = false;
+    for (let i = 0; i < pages; i++) {
+      const p = await loadHalf(state, cursor);
+      rows.push(...p.rows);
+      more = p.more;
+      cursor = p.cursor;
+      if (!more) break;
+    }
+    return { rows, more };
+  }
+
+  async function refreshInstances() {
+    if (searchQuery) return; // a search owns the list until it is cleared
+    let active, done;
+    try {
+      [active, done] = await Promise.all([
+        loadPages("active", activePages),
+        loadPages("finished", finishedPages),
+      ]);
+    } catch { return; } // transient; the picker just keeps its current options
+    moreActive = active.more;
+    moreFinished = done.more;
+    applyInstances(active.rows.concat(done.rows));
+  }
+
+  // loadMore deepens whichever half still has more, then re-reads. It goes through
+  // the same path the poll does, so the rows in front of the operator and the rows
+  // just added are one consistent listing rather than two spliced together.
+  async function loadMore() {
+    let deepened = false;
+    if (moreActive && activePages < PANEL_MAX_PAGES) { activePages++; deepened = true; }
+    if (moreFinished && finishedPages < PANEL_MAX_PAGES) { finishedPages++; deepened = true; }
+    if (!deepened) return;
+    instSig = ""; // the set grew; force the picker to rebuild
+    await refreshInstances();
+    renderVariables();
+  }
+
+  // atPageLimit reports that the panel has been expanded as far as it goes. Past
+  // this the honest answer is "search for the one you want", not another page.
+  const atPageLimit = () =>
+    (!moreActive || activePages >= PANEL_MAX_PAGES) && (!moreFinished || finishedPages >= PANEL_MAX_PAGES);
+
+  // runInstanceSearch replaces the listed set with what the server matched. The
+  // query is either a bare instance key — answered by a point read, so it lands
+  // instantly whatever the instance count — or variable content, scoped to this
+  // definition so the search reads this version's index rather than every instance
+  // in the engine.
+  async function runInstanceSearch(raw) {
+    const q = (raw || "").trim();
+    searchQuery = q;
+    searchDraft = q;
+    searchError = "";
+    if (!q) {
+      instSig = "";
+      await refreshInstances();
+      renderVariables();
+      return;
+    }
+    let rows;
+    try {
+      rows = await api("GET", `/api/v1/instances/search?process=${encodeURIComponent(key)}&q=${encodeURIComponent(q)}`);
+    } catch (e) {
+      searchError = e.message;
+      rows = [];
+    }
+    moreActive = moreFinished = false;
+    instSig = "";
+    applyInstances(rows);
+    if (selected !== "all" && !rows.some((r) => String(r.key) === selected)) selected = "all";
+    renderVariables();
   }
 
   // JSON variable values are shown with a collapsible preview (first 60 chars)
@@ -8067,10 +8310,20 @@ export async function mountLive(root, { api, toast, key, instance }) {
       // "Select all active" targets every running instance of this version — including
       // any beyond the listed page — so it uses the runtime count when it is larger.
       const allActive = Math.max(runningCount, activeInsts.length);
+      // What the panel is showing, and what it was drawn from. The list is one page
+      // per half, so saying "12" when 300 000 exist would be a lie an operator acts
+      // on; "12 of 300000" plus a search box is the honest version.
+      const total = Math.max(runningCount + finishedCount, instances.length);
+      const shown = searchQuery
+        ? `${instances.length} matched`
+        : (listedAll() ? `${instances.length}` : `${instances.length} of ${total}`);
+      const title = searchQuery
+        ? `Variables · search “${esc(searchQuery)}” (${shown})`
+        : `Variables · all instances (${shown})`;
       const head = !activeInsts.length
-        ? `<div class="vp-head"><span class="vp-title">Variables · all instances (${instances.length})</span></div>`
+        ? `<div class="vp-head"><span class="vp-title">${title}</span></div>`
         : `<div class="vp-head">
-            <span class="vp-title">Variables · all instances (${instances.length})</span>
+            <span class="vp-title">${title}</span>
             <span class="vp-actions">${selectMode
               ? (() => {
                   const n = scopeAllActive ? allActive : picked.size;
@@ -8081,10 +8334,26 @@ export async function mountLive(root, { api, toast, key, instance }) {
               : `<button class="btn neutral sm" data-term-on title="Select running instances to terminate in bulk">&#9745; Select</button>`}
             </span>
           </div>`;
+      // The search row is what makes this panel usable at scale: a bare instance key
+      // is a point read on the server, and anything else is a variable search scoped
+      // to this version. It sits above the list so it is the first thing reached
+      // when the list is a page out of hundreds of thousands.
+      const searchRow = `<form class="vp-search" title="Find an instance of this version by key or by variable content">
+          <input type="text" class="vp-search-q" value="${esc(searchDraft)}" placeholder="Instance key, or name=value…" aria-label="Find an instance" spellcheck="false" autocomplete="off"/>
+          <button class="btn neutral sm" type="submit" title="Search this version's instances">Find</button>
+          ${searchQuery ? '<button class="btn ghost sm" type="button" data-search-clear title="Clear the search and go back to the newest instances">Clear</button>' : ""}
+        </form>${searchError ? `<p class="muted vp-search-err">${esc(searchError)}</p>` : ""}`;
+      const more = !searchQuery && (moreActive || moreFinished)
+        ? (atPageLimit()
+          ? `<div class="vp-more"><span class="muted">Showing the newest ${instances.length}. Use the search above to reach a specific instance.</span></div>`
+          : `<div class="vp-more"><button class="btn ghost sm" type="button" data-load-more title="Load the next page of older instances">Load more</button></div>`)
+        : "";
+      const emptyNote = searchQuery
+        ? `<p class="muted" style="margin:0">No instance of this version matches “${esc(searchQuery)}”.</p>`
+        : `<p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`;
       html = !instances.length
-        ? `<div class="vp-head"><span class="vp-title">Variables</span></div>
-          <p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`
-        : `${head}
+        ? `<div class="vp-head"><span class="vp-title">Variables</span></div>${searchRow}${emptyNote}`
+        : `${head}${searchRow}
         <div class="vp-insts${selectMode ? " picking" : ""}">${instances.map((r) => {
           const ts = tasksFor(r.key);
           const active = r.state === "active";
@@ -8105,7 +8374,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
             ${instanceMeta(r)}
             <div class="vp-inst-vars">${varChips(r.variables)}</div>
           </div>`;
-        }).join("")}</div>`;
+        }).join("")}</div>${more}`;
     } else {
       const inst = instances.find((r) => String(r.key) === selected);
       if (!inst) {
@@ -8128,7 +8397,17 @@ export async function mountLive(root, { api, toast, key, instance }) {
     html = livePanelHTML() + html;
     if (html === varsHTML) { updateElapsed(); return; } // unchanged — keep DOM, just tick the age
     varsHTML = html;
+    // A rebuild replaces the search input, and the poll rebuilds every 1.5 seconds —
+    // so an operator mid-query would lose both their text and their caret. The text
+    // is re-rendered from searchDraft; the caret is carried across by hand.
+    const q = varPanel.querySelector(".vp-search-q");
+    const hadFocus = q && document.activeElement === q;
+    const caret = hadFocus ? q.selectionStart : 0;
     varPanel.innerHTML = html;
+    if (hadFocus) {
+      const next = varPanel.querySelector(".vp-search-q");
+      if (next) { next.focus(); next.setSelectionRange(caret, caret); }
+    }
     updateElapsed();
   }
 
@@ -8254,6 +8533,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
     incidentEl.textContent = incidents.length + (incidentsTruncated ? "+" : "");
     incidentPill.hidden = incidents.length === 0;
     runningCount = rt.instances || 0;
+    finishedCount = rt.finished || 0;
     renderVariables();
   }
 
@@ -8346,6 +8626,27 @@ export async function mountLive(root, { api, toast, key, instance }) {
       return;
     }
     if (t.closest("[data-term-go]")) { await runTerminate(); return; }
+    if (t.closest("[data-load-more]")) { await loadMore(); return; }
+    if (t.closest("[data-search-clear]")) { await runInstanceSearch(""); return; }
+  });
+
+  // What is typed is mirrored into searchDraft, because the 1.5s poll rebuilds this
+  // panel and would otherwise drop a half-written query on the floor.
+  varPanel.addEventListener("input", (e) => {
+    if (e.target.classList.contains("vp-search-q")) searchDraft = e.target.value;
+  });
+  // The search runs on submit, not per keystroke: each one is a server round trip,
+  // and on a version with hundreds of thousands of instances a content search is
+  // still a walk of that version — worth spending on purpose, not once per
+  // character.
+  varPanel.addEventListener("submit", async (e) => {
+    const form = e.target.closest(".vp-search");
+    if (!form) return;
+    e.preventDefault();
+    const input = form.querySelector(".vp-search-q");
+    await runInstanceSearch(input ? input.value : "");
+    const next = varPanel.querySelector(".vp-search-q");
+    if (next) { next.focus(); next.setSelectionRange(next.value.length, next.value.length); }
   });
 
   // The incident block's two actions — resolve, and correct the variables the retry
@@ -9804,14 +10105,25 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // variable's: a structure is summarized rather than dumped, because a data object is
   // variable-shaped by design (ADR-0053) and an operator scanning the two side by side
   // should not have to learn two readings of the same thing.
-  const doValueCell = (d) => {
+  // `label` names the value in the window it opens: the object for a row, the object
+  // and which write for a trail entry — a trail of four {3 fields} is unreadable if
+  // every window is titled the same.
+  const doValueCell = (d, label = "") => {
     if (d.kind === "null" || d.value === null || d.value === undefined) {
       return `<span class="c-val null" title="No value written yet — the object is declared and seeded, but no association has written it">unset</span>`;
     }
     if (d.kind === "json") {
       const text = JSON.stringify(d.value);
       const arr = Array.isArray(d.value);
-      return `<span class="c-val do-json" title="${esc(prettyJSON(text))}">${arr ? "[" : "{"}${esc(jsonSummary(text))}${arr ? "]" : "}"}</span>`;
+      // The summary opens the same window the Variables tab's values open, rather than
+      // hiding the value in a title attribute — a tooltip is unreadable past a few
+      // lines, cannot be scrolled, copied or selected from, and never appears at all on
+      // a touch device. A data object is variable-shaped by design (ADR-0053), so the
+      // two tabs answer "what is actually in there" with one surface.
+      return `<button type="button" class="c-val do-json" data-name="${esc(label)}"
+          data-json="${esc(text)}" data-type="${arr ? "array" : "object"}"
+          title="Show ${esc(label || "this value")} as formatted JSON"
+        >${arr ? "[" : "{"}${esc(jsonSummary(text))}${arr ? "]" : "}"}</button>`;
     }
     const cls = d.kind === "boolean" ? "bool" : d.kind === "number" ? "num" : "str";
     return `<span class="c-val ${cls}">${esc(String(d.value))}</span>`;
@@ -9880,7 +10192,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         </td>
         <td class="do-c-class">${cls}</td>
         <td class="do-c-state">${state}</td>
-        <td class="c-valcell">${doValueCell(d)}</td>
+        <td class="c-valcell">${doValueCell(d, d.name)}</td>
         <td class="do-c-by">${by}</td>
         <td class="do-c-at">${esc(fmtClock(d.at))}</td>
       </tr>`;
@@ -9888,7 +10200,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       const entries = trail.map((h, i) => `<tr class="do-trail-row">
           <td class="do-t-n">${i + 1}</td>
           <td class="do-t-state">${h.state ? esc(h.state) : "—"}</td>
-          <td class="do-t-val">${doValueCell(h)}</td>
+          <td class="do-t-val">${doValueCell(h, `${d.name} · write ${i + 1}`)}</td>
           <td class="do-t-by">${writtenBy(h, i)}</td>
           <td class="do-t-at">${esc(fmtClock(h.at))}</td>
         </tr>`).join("");
@@ -10047,6 +10359,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // The trail toggles are inside a body that re-renders, so they are wired by
   // delegation rather than re-bound on every render.
   dataEl.addEventListener("click", (e) => {
+    // A structured value opens in the same window the Variables tab uses.
+    const val = e.target.closest(".do-json");
+    if (val && dataEl.contains(val)) {
+      openVarModal(val.dataset.name, val.dataset.json, val.dataset.type);
+      return;
+    }
     const t = e.target.closest(".do-toggle");
     if (!t || !dataEl.contains(t)) return;
     const row = t.closest(".do-row");
