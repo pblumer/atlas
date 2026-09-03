@@ -984,19 +984,29 @@ _Changed_ / _Removed_ for each version.
   before ADR-0203 — the decision records, and the release notes above — keep their
   wording, because they are dated accounts of what was true when they were written.
 
-- **The Modeler's bar carries two buttons now, and a menu for the rest.** It ended with
-  seven, added one at a time as the editor grew — Token simulation, Variables,
+- **The Modeler's bar carries three controls now, and a menu for the rest.** It ended
+  with seven, added one at a time as the editor grew — Token simulation, Variables,
   Auto-layout, Save, Export XML, Documentation, Deploy — and every one of them was the
   same white button. That said they were the same size of decision, which they never
   were: Auto-layout nudges boxes, Deploy puts a definition on a server and cannot be
-  taken back ([ADR-0229](docs/adr/0229-modeler-bar-hierarchy.md)).
+  taken back ([ADR-0229](docs/adr/0229-modeler-bar-hierarchy.md),
+  [ADR-draft-modeler-variables-on-the-bar](docs/adr/draft-modeler-variables-on-the-bar.md)).
 
-  The bar now carries **Save** and **Deploy**, with Deploy the only filled button because
-  it is the only act there that leaves the browser. The other five moved into a **…**
-  menu beside them, grouped by what they touch: *View* (Token simulation, Variables) and
-  *Diagram* (Auto-layout, Export XML, Documentation). A toggle in a menu cannot look
-  held down, so it says it is on with a check and with `aria-pressed` — the Variables
-  toggle never announced its state at all before.
+  The bar now carries **Variables**, **Save** and **Deploy**, with Deploy the only filled
+  button because it is the only act there that leaves the browser. Token simulation,
+  Auto-layout, Export XML and Documentation moved into a **…** menu beside them, where a
+  toggle says it is on with a check and with `aria-pressed`.
+
+  **Variables stayed on the bar, as a proper two-state button** — tinted while the panel
+  is open, muted while it is shut, and separated from Save and Deploy by a rule, because
+  what the bar *shows* and what the bar *does* are different kinds of thing. It is the one
+  control here that is neither an act nor a mode but a reading aid, consulted briefly and
+  often while writing something else, and a menu taxes that every time. It answers **F4**
+  now, alongside Auto-layout's F8 — and unlike F8 it works while a field has focus, since
+  the moment you most want to know what a variable is called is while typing the
+  expression that uses it. Its pressed look is drawn straight from `aria-pressed`, so what
+  a screen reader is told and what you see cannot drift apart; the toggle never announced
+  its state at all before.
 
   Two things that were not about any single button go with it. The bar is one row again
   at the widths people work at: it wraps, and the buttons were direct children of it, so
@@ -1013,7 +1023,7 @@ _Changed_ / _Removed_ for each version.
   so leaving is one visible click rather than a trip back through the menu.
 
   Nothing about what the controls *do* changed, and F8 still runs Auto-layout from
-  wherever focus sits. The cost is honest and worth naming: five controls are a click
+  wherever focus sits. The cost is honest and worth naming: four controls are a click
   further away, and someone opening the Modeler for the first time cannot see that they
   exist until they open the menu.
 
