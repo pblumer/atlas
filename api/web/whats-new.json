@@ -2,6 +2,34 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "a-widened-properties-column-in-the-form-editor-gave-its-widt",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The form editor's Properties column is properly resizable again",
+        "de": "Die Eigenschaften-Spalte im Formular-Editor lässt sich wieder richtig verbreitern"
+      },
+      "summary": {
+        "en": "In the form editor's Design tab you can drag the Components palette and the Properties column wider — useful when a field's condition or an expression is longer than the column. Widening Properties used to add nothing but an empty white strip along the right edge of the window: the column grew, the panel inside it stayed 250 pixels, and because the width is remembered the strip was still there the next time you opened a form. Dragging the column narrower was worse and quieter — the panel was cut off rather than made smaller, so the right-hand end of every property row was out of reach. The panel now has exactly the width of the column it sits in. Double-click the divider to go back to the default width.",
+        "de": "Im Design-Tab des Formular-Editors lassen sich die Komponenten-Palette und die Eigenschaften-Spalte breiter ziehen — praktisch, wenn die Bedingung eines Feldes oder ein Ausdruck länger ist als die Spalte. Die Eigenschaften breiter zu ziehen brachte bisher nur einen leeren weissen Streifen am rechten Rand: Die Spalte wuchs, das Panel darin blieb bei 250 Pixeln, und weil die Breite gemerkt wird, war der Streifen beim nächsten Öffnen eines Formulars immer noch da. Schmaler ziehen war schlimmer und stiller — das Panel wurde abgeschnitten statt verkleinert, das rechte Ende jeder Eigenschaftszeile war damit unerreichbar. Das Panel hat jetzt genau die Breite der Spalte, in der es sitzt. Ein Doppelklick auf den Trenner stellt die Standardbreite wieder her."
+      },
+      "link": {
+        "label": "ADR-0028",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0028-forms-and-the-tasks-app.md"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "central-decisions-run-on-a-worker-now-and-the-last-in-proces",
       "version": "Unreleased",
       "date": null,
@@ -312,24 +340,6 @@
           "de": "Data öffnen"
         },
         "route": "#/data"
-      }
-    },
-    {
-      "id": "a-variable-named-after-one-of-your-data-objects-is-now-flagg",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A variable named after one of your data objects is now flagged.",
-        "de": "A variable named after one of your data objects is now flagged."
-      },
-      "summary": {
-        "en": "The new rule variable.shadows-data-object raises a warning where the two collide: draw a data object Kunde, have a task write its result into a variable Kunde — or read the object back into a variable of the same name — and the diagram shows one thing while the instance holds two.",
-        "de": "The new rule variable.shadows-data-object raises a warning where the two collide: draw a data object Kunde, have a task write its result into a variable Kunde — or read the object back into a variable of the same name — and the diagram shows one thing while the instance holds two."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     }
   ]
