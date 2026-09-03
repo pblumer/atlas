@@ -194,7 +194,11 @@ func (g *generator) merge(members []any, depth int) (any, error) {
 // request time in the middle of a demo.
 func (g *generator) resolve(ref string) (any, error) {
 	if !strings.HasPrefix(ref, "#/") {
-		return nil, fmt.Errorf("$ref %q: only local refs (#/…) are supported", ref)
+		// A document split across a tree of files is how most large APIs are
+		// published, and this mock reads the one file it was given. Loading it anyway
+		// would serve every operation in it with an empty body, which looks like a
+		// working mock and is not one.
+		return nil, fmt.Errorf("$ref %q: this mock reads one file, so only local refs (#/…) resolve — bundle the document into a single file first", ref)
 	}
 	var node any = g.doc
 	for _, token := range strings.Split(strings.TrimPrefix(ref, "#/"), "/") {
@@ -211,18 +215,31 @@ func (g *generator) resolve(ref string) (any, error) {
 	return node, nil
 }
 
-// deref follows a node that may itself be a $ref, leaving anything else alone. Named
-// examples are the one place a document commonly refs something that is not a schema.
+// maxRefHops bounds a chain of references that point at each other. A document whose
+// refs form a loop is not servable, and following it is not a way to find that out.
+const maxRefHops = 8
+
+// deref follows a node that may itself be a $ref, leaving anything else alone, and
+// follows a chain of them. Path items, operations, responses and named examples are all
+// places a document commonly refs something that is not a schema.
 func (g *generator) deref(node any) (any, error) {
-	mapping, ok := node.(map[string]any)
-	if !ok {
-		return node, nil
+	for hops := 0; ; hops++ {
+		mapping, ok := node.(map[string]any)
+		if !ok {
+			return node, nil
+		}
+		ref, ok := mapping["$ref"].(string)
+		if !ok {
+			return node, nil
+		}
+		if hops >= maxRefHops {
+			return nil, fmt.Errorf("$ref %q: the references point in a circle", ref)
+		}
+		var err error
+		if node, err = g.resolve(ref); err != nil {
+			return nil, err
+		}
 	}
-	ref, ok := mapping["$ref"].(string)
-	if !ok {
-		return node, nil
-	}
-	return g.resolve(ref)
 }
 
 // typeOf reads a schema's type, which OpenAPI 3.1 allows to be a list ("string" or

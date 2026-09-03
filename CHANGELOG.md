@@ -445,7 +445,12 @@ _Changed_ / _Removed_ for each version.
   It refuses rather than improvises: a `$ref` it cannot resolve fails at startup in the
   terminal that launched it, and a status the document does not describe is a 400 that
   names what is on offer — a test written against the 404 path must not quietly pass on
-  a 200. What it does *not* do is validate: a request body is recorded, never checked,
+  a 200. A response the document describes only in a media type this mock cannot
+  generate (XML, say) loses its body rather than being answered with JSON under an XML
+  label, and the startup banner names each one. A document whose operations live in
+  other files — how most large APIs are published — is refused with that advice, because
+  serving three hundred operations that answer nothing looks like a working mock and is
+  not one. What it does *not* do is validate: a request body is recorded, never checked,
   and nothing is stateful.
 
   `GET /__mock/calls` is the journal of what a run actually did — method, path,

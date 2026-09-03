@@ -16,6 +16,13 @@
 // those, and otherwise a value generated from the schema — deterministically, so two
 // runs of a demo produce the same output and a test can assert on it.
 //
+// It reads the one document it is given: a `$ref` into another file is refused at load
+// rather than half-served, because a document published as a tree of files (a common
+// shape for a large API) would otherwise become a mock whose every operation answers
+// nothing. For the same reason a response described only in a media type this mock
+// cannot generate loses its body instead of being answered with JSON wearing that
+// media type's label.
+//
 // It mocks; it does not validate. A request body is recorded, never checked against the
 // schema, and a security scheme is not enforced. What it does refuse is everything it
 // cannot honestly serve: a `$ref` it cannot resolve or a status it was never given
@@ -36,6 +43,7 @@ package openapimock
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -64,6 +72,12 @@ type Spec struct {
 	// walks: /pets/mine must be tried before /pets/{petId} or the literal path is
 	// unreachable.
 	Operations []Operation
+	// Skipped names the responses this mock will not answer with a body because the
+	// document describes them only in a media type it cannot generate — "GET /pet/{id}
+	// 200 application/xml". It is here to be said out loud at startup: a dropped media
+	// type is a small hole in the mock, and a person who is told about it once will not
+	// spend an afternoon on the 406 it produces later.
+	Skipped []string
 }
 
 // Operation is one method on one path.
@@ -151,7 +165,15 @@ func Load(data []byte) (*Spec, error) {
 		if !strings.HasPrefix(path, "/") {
 			return nil, fmt.Errorf("path %q must start with %q", path, "/")
 		}
-		item, ok := paths[path].(map[string]any)
+		// A path item, an operation and a response may each be a $ref into components
+		// rather than the thing itself; a large document routinely factors all three
+		// out. Reading the reference as an empty object is how a mock quietly stops
+		// mocking, so every one of them is followed here.
+		node, err := gen.deref(paths[path])
+		if err != nil {
+			return nil, fmt.Errorf("path %q: %w", path, err)
+		}
+		item, ok := node.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("path %q: expected a mapping", path)
 		}
@@ -164,7 +186,11 @@ func Load(data []byte) (*Spec, error) {
 			if !present {
 				continue
 			}
-			opDoc, ok := raw.(map[string]any)
+			resolved, err := gen.deref(raw)
+			if err != nil {
+				return nil, fmt.Errorf("%s %s: %w", strings.ToUpper(method), path, err)
+			}
+			opDoc, ok := resolved.(map[string]any)
 			if !ok {
 				return nil, fmt.Errorf("%s %s: expected a mapping", method, path)
 			}
@@ -175,8 +201,13 @@ func Load(data []byte) (*Spec, error) {
 			}
 			op.ID, _ = opDoc["operationId"].(string)
 			op.Summary, _ = opDoc["summary"].(string)
-			if op.Responses, err = compileResponses(opDoc, gen); err != nil {
+			responses, skipped, err := compileResponses(opDoc, gen)
+			if err != nil {
 				return nil, fmt.Errorf("%s %s: %w", strings.ToUpper(method), path, err)
+			}
+			op.Responses = responses
+			for _, entry := range skipped {
+				spec.Skipped = append(spec.Skipped, fmt.Sprintf("%s %s %s", op.Method, path, entry))
 			}
 			spec.Operations = append(spec.Operations, op)
 		}
@@ -261,36 +292,56 @@ func basePath(doc map[string]any) (string, error) {
 
 // compileResponses turns an operation's responses into the answers this mock can give,
 // one per status and media type, ordered by status and then media type.
-func compileResponses(opDoc map[string]any, gen *generator) ([]Response, error) {
+func compileResponses(opDoc map[string]any, gen *generator) ([]Response, []string, error) {
 	responses, _ := opDoc["responses"].(map[string]any)
 	var out []Response
+	var skipped []string
 	for _, key := range sortedKeys(responses) {
 		if strings.HasPrefix(key, "x-") {
 			continue
 		}
 		status, err := statusOf(key)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		respDoc, ok := responses[key].(map[string]any)
+		node, err := gen.deref(responses[key])
+		if err != nil {
+			return nil, nil, fmt.Errorf("response %q: %w", key, err)
+		}
+		respDoc, ok := node.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("response %q: expected a mapping", key)
+			return nil, nil, fmt.Errorf("response %q: expected a mapping", key)
 		}
 		headers, err := compileHeaders(respDoc, gen)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		content, _ := respDoc["content"].(map[string]any)
 		if len(content) == 0 {
 			out = append(out, Response{Status: status, Headers: headers})
 			continue
 		}
+		served := 0
 		for _, media := range sortedKeys(content) {
 			body, named, err := compileBody(content[media], media, gen)
+			if errors.Is(err, errUnserveableMedia) {
+				// The document describes this response in a shape this mock cannot
+				// produce. Answering it with generated JSON under that media type
+				// would be a lie the caller cannot see through, so the media type
+				// goes and the caller gets a 406 naming what is actually on offer.
+				skipped = append(skipped, fmt.Sprintf("%s %s", key, media))
+				continue
+			}
 			if err != nil {
-				return nil, fmt.Errorf("response %q, media type %q: %w", key, media, err)
+				return nil, nil, fmt.Errorf("response %q, media type %q: %w", key, media, err)
 			}
 			out = append(out, Response{Status: status, Media: media, Body: body, Named: named, Headers: headers})
+			served++
+		}
+		if served == 0 {
+			// Every media type went. The status still exists — the operation does
+			// answer it — it just answers with nothing.
+			out = append(out, Response{Status: status, Headers: headers})
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -299,7 +350,7 @@ func compileResponses(opDoc map[string]any, gen *generator) ([]Response, error) 
 		}
 		return out[i].Media < out[j].Media
 	})
-	return out, nil
+	return out, skipped, nil
 }
 
 // compileBody produces the bytes one media type answers with, plus every named example
@@ -378,13 +429,24 @@ func compileHeaders(respDoc map[string]any, gen *generator) ([]Header, error) {
 	return out, nil
 }
 
+// errUnserveableMedia says a response cannot be rendered in the media type the document
+// gives it. It is not a bad document: this mock generates JSON and copies text through,
+// and an XML response described only by a schema is simply outside what it can make.
+var errUnserveableMedia = errors.New("this mock cannot generate that media type")
+
 // encode renders a value for a media type: JSON for a JSON one, and for anything else
 // the string as written — a text/csv example is CSV, not a quoted JSON string.
+//
+// Anything else is refused. Generated JSON served under application/xml is the kind of
+// wrong answer a caller cannot see through, and a mock that gives one teaches a model
+// to be wrong (ADR-0217).
 func encode(value any, media string) ([]byte, error) {
 	if !isJSON(media) {
-		if text, ok := value.(string); ok {
-			return []byte(text), nil
+		text, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: %s", errUnserveableMedia, media)
 		}
+		return []byte(text), nil
 	}
 	body, err := json.Marshal(value)
 	if err != nil {

@@ -1,6 +1,6 @@
 # ADR-0217: A mock REST API served from an OpenAPI document
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-09-03 — see the amendment below, from running it against published documents)
 - **Date:** 2026-09-01
 - **Deciders:** Atlas maintainers
 
@@ -124,6 +124,35 @@ validation is the first follow-up, not a gap this record is unaware of.
   Console-managed mock — upload a document, Atlas serves it — if the standalone process
   proves itself, which is the path the AD mockup took
   ([ADR-0193](0193-ad-mock-in-the-console.md), [ADR-0202](0202-atlas-manages-the-ad-mock-seed.md)).
+
+## Amendment (2026-09-03): what real documents taught it
+
+The first cut was written against a fixture and then run against published documents —
+Swagger's own Petstore, Asana, Stripe, DocuSign, Kubernetes, DigitalOcean. Most of it
+held: Stripe (494 operations, 4.3 MB) and DocuSign (402) compile in under a second,
+Asana's example-rich document produces a mock worth demonstrating, and the Swagger 2.0
+documents are refused as designed.
+
+Two of them broke this record's own rule — the mock did something wrong quietly instead
+of refusing — and both are fixed:
+
+- **A media type it cannot generate.** The Petstore describes every response as both
+  JSON and XML. The mock generated JSON and served it under `application/xml`, which is
+  the kind of wrong answer a caller cannot see through. Such a media type is now dropped
+  when the document is compiled: the operation answers `406` naming what it does have, a
+  status left with nothing answers with no body, and the startup banner names every
+  response that lost one. A written text example still travels as itself, so a
+  `text/csv` response is unaffected.
+- **A document split across files.** DigitalOcean's published document is one file of
+  `$ref`s into a tree of others. The mock read each unresolved reference as an empty
+  object and served 290 operations that answered nothing — a mock that looks like it
+  works. `$ref` is now followed at the path-item, operation and response level as it
+  already was inside schemas, and a reference outside the file is refused at load with
+  the reason and the remedy (bundle it into one file).
+
+Following file references, rather than refusing them, stays a follow-up: it is a real
+convenience for a document published that way, and it is a feature with its own
+questions (what a relative path may reach) rather than a correctness gap.
 
 ## Pros and cons of the options
 

@@ -111,3 +111,29 @@ func TestRunMockServerReportsAnUnusableAddress(t *testing.T) {
 		t.Error("want an error for an address that cannot be bound")
 	}
 }
+
+func TestMockOpenAPIBannerNamesWhatItCannotGenerate(t *testing.T) {
+	// Found against Swagger's own Petstore, which describes every response as JSON and
+	// XML: the XML half is dropped, and the person starting the mock is told.
+	spec, err := openapimock.Load([]byte(`
+openapi: 3.0.0
+info: {title: Petstore, version: '1'}
+paths:
+  /pet:
+    get:
+      responses:
+        '200':
+          description: a pet
+          content:
+            application/json: {schema: {type: object}}
+            application/xml: {schema: {type: object}}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	printMockOpenAPIBanner(&out, spec, openapimock.New(spec), "petstore.yaml", ":8009", "http://127.0.0.1:8009")
+	if got := out.String(); !strings.Contains(got, "no body for GET /pet 200 application/xml") {
+		t.Errorf("banner does not name the dropped media type:\n%s", got)
+	}
+}

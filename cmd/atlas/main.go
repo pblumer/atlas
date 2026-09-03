@@ -1231,6 +1231,18 @@ func printMockOpenAPIBanner(w io.Writer, spec *openapimock.Spec, mock *openapimo
 		}
 		fmt.Fprintf(w, "  %-6s %s%s%s\n", op.Method, base, mock.BasePath(), op.Path)
 	}
+	// A dropped media type is a small hole in the mock. Saying so here costs three
+	// lines and saves the afternoon somebody would otherwise spend on the 406.
+	if len(spec.Skipped) > 0 {
+		const shownSkipped = 3
+		for i, entry := range spec.Skipped {
+			if i == shownSkipped {
+				fmt.Fprintf(w, "  … and %d more\n", len(spec.Skipped)-shownSkipped)
+				break
+			}
+			fmt.Fprintf(w, "  no body for %s — this mock generates JSON and copies text through\n", entry)
+		}
+	}
 	fmt.Fprintf(w, "  journal: GET %s/__mock/calls\n", base)
 	fmt.Fprintf(w, "  report:  GET %s/__mock/report\n", base)
 	fmt.Fprintf(w, "wire it up: point a REST connector task's url at %s%s/… — the model needs no other change\n", base, mock.BasePath())
