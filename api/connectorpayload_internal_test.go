@@ -23,6 +23,7 @@ import (
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
+	"github.com/pblumer/atlas/connector/temis"
 	"github.com/pblumer/atlas/connector/webscrape"
 )
 
@@ -376,42 +377,37 @@ func TestAnUnresolvableFeelFieldTravelsAsNullRatherThanBlockingTheLease(t *testi
 	}
 }
 
-// Not every Worker Type has an arm, and that is deliberate: a kind still served
-// in process needs no payload, because the engine makes the call itself and never
-// hands the task to anyone. The switch falls through to nil for those, and a worker
-// that leases one is expected to hold the whole configuration itself.
+// Local DMN evaluation is the one thing behind the payload gate that must never get
+// an arm, and with ADR-0233's table empty it is the only one left. It is a business
+// rule task like a central decision — same node type, same gate — so nothing but the
+// absence of a case keeps a local decision from being handed to a worker that holds
+// no DMN model and could not evaluate it.
 //
-// This is the case that turns "the switch has no arm for X" from a silent omission
-// into a stated one: if a kind is later offloaded without adding its arm, the worker
-// gets a job with nothing on it, and this test is where that shows up.
-func TestAKindWithNoArmResolvesToNoPayload(t *testing.T) {
-	// temis, the last kind ADR-0233's table still owes a worker half. This test has
-	// stood on ldap, then soap, then sharepoint, then scim, and moved each time one of
-	// them got its slice — the table shrinking, working as intended. When temis moves
-	// too, there is no kind left for it to name and it goes with that slice.
-	//
-	// It needs its own model rather than the shared one: a central decision is a
-	// *business rule* task, not a service task, which is also why its slice will be
-	// the one that does not simply copy the others.
-	got := leaseModelPayloadOrNil(t, centralDecisionPayloadBPMN,
-		compiler.TemisDecisionJobType, `{"variables":{}}`)
-	if got != nil {
-		t.Errorf("payload = %#v, want none: this kind has no arm in resolveConnectorTask", *got)
+// This test stood on ldap, then soap, sharepoint, scim and temis in turn, naming
+// whichever kind was still owed a worker half. There are none left, so what it
+// guards now is the carve-out itself: pure, deterministic, CPU-bounded work stays in
+// the engine.
+func TestLocalDMNMustNotGainAPayloadArm(t *testing.T) {
+	if arms := payloadArms(t); len(arms) == 0 {
+		t.Fatal("no payload arms parsed at all; the switch or the pattern must have changed")
+	} else if _, has := arms["compiler.DMNJobTypeIndex"]; has {
+		t.Error("the payload switch has an arm for local DMN: a decision evaluated by the engine's own library " +
+			"would be handed to a worker that holds no model. If this is deliberate it needs a record, " +
+			"because ADR-0233 lists local DMN among what stays in the engine.")
 	}
 }
 
-// centralDecisionPayloadBPMN is Start → BusinessRuleTask(central) → End: the one
-// shape that reaches a kind still evaluated in the engine.
-const centralDecisionPayloadBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+// localDecisionPayloadBPMN is Start → BusinessRuleTask(local) → End: a decision with
+// no connector, which is what makes it local.
+const localDecisionPayloadBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs-temis-proc">
-  <bpmn:process id="temis-proc" isExecutable="true">
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs-dmn-proc">
+  <bpmn:process id="dmn-proc" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:businessRuleTask id="decide">
       <bpmn:extensionElements>
         <zeebe:calledDecision decisionId="Rate" resultVariable="found"/>
-        <atlas:temisConnector connector="rules"/>
       </bpmn:extensionElements>
     </bpmn:businessRuleTask>
     <bpmn:endEvent id="e"/>
@@ -492,6 +488,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.SoapJobTypeIndex", soap.Job{}},
 		{"compiler.SharePointJobTypeIndex", sharepoint.Job{}},
 		{"compiler.ScimJobTypeIndex", scim.Job{}},
+		{"compiler.TemisDecisionJobTypeIndex", temis.Job{}},
 	} {
 		t.Run(tc.arm, func(t *testing.T) {
 			sent, ok := arms[tc.arm]

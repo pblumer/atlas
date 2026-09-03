@@ -14,6 +14,37 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Central decisions run on a worker now — and the last in-process kind is gone**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 7).
+  A call to a decision service somebody else operates no longer happens on the loop
+  that owns the partition's state. `temis` joins the kinds Atlas offloads and
+  supervises by itself, which empties the record's "owed a worker half" table: every
+  kind that reaches another system now has one.
+
+  This slice did not copy the six before it. A central decision is a **business rule
+  task**, and its completion carries something no other job's does — a durable
+  evaluation record with the inputs, the outputs and the service's trace, retained so
+  an operator can see how a decision was made (ADR-0066). Nothing in the
+  engine↔worker protocol could carry one, so the completion contract widened: a
+  worker may now report the evaluation it performed, and `atlas worker` sends it.
+
+  The division is the part worth knowing. The worker is believed about the
+  **evaluation** and about nothing else: which element instance it belongs to is
+  stamped by the engine from the job the worker held a lease on, so a report cannot
+  attach itself to a task it did not run. A completion *by hand* never carries one at
+  all — an operator override is recorded as an intervention (ADR-0159), and letting
+  that path write an evaluation would put a decision nobody made into the audit trail.
+
+  What has **not** changed, though it looks like it should have: the record's
+  provenance. A central decision's trace was always the remote service's account of
+  its own evaluation. Offloading moved which process makes the call, not who authored
+  the trace.
+
+  `--in-process-connectors` keeps working. The record originally said it would become
+  an error once the table emptied; that promise contradicted its own driver that no
+  running deployment may break, and the amendment explains which of the two was
+  wrong.
+
 - **SCIM tasks run on a worker now**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 6).
   Creating, reading or searching a user at an identity provider no longer happens on

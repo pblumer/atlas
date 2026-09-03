@@ -31,7 +31,9 @@ import (
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
+	"github.com/pblumer/atlas/connector/temis"
 	"github.com/pblumer/atlas/connector/webscrape"
+	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
@@ -4141,6 +4143,60 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 // who, when, on which element, and why — in append-only audit history that the
 // instance timeline and the replay surface (ADR-0159). A blank or missing reason is a
 // 400: an unexplained manual completion is exactly what this route must not allow.
+// decisionFromReport turns a worker's account of a central decision into the durable
+// record the completion folds, or nil when there is nothing to fold.
+//
+// The division is the point. What the worker is believed about is the *evaluation*:
+// which decision it asked for, the inputs it was handed, the outputs it got back and
+// the service's trace. What it is not believed about is *which task this was* — the
+// process, the element and the instance are read from the leased job, so a report
+// cannot attach itself to a different element than the one whose lease it holds.
+//
+// A report on a job that is not a business rule task is dropped rather than refused:
+// the completion is still valid and the variables still land. Refusing would turn a
+// worker sending a field the engine does not want into a failed job, which is a worse
+// answer than ignoring it.
+//
+// Runs inside the run loop (it reads the store), like its caller.
+func (s *Server) decisionFromReport(jv *model.JobValue, rep *struct {
+	DecisionID string         `json:"decisionId"`
+	Inputs     map[string]any `json:"inputs"`
+	Outputs    map[string]any `json:"outputs"`
+	Trace      string         `json:"trace"`
+}) *model.DecisionEvaluationValue {
+	if rep == nil || strings.TrimSpace(rep.DecisionID) == "" {
+		return nil
+	}
+	if !isBusinessRuleJobType(jv.JobType) {
+		return nil
+	}
+	ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey)
+	if err != nil || !ok {
+		return nil
+	}
+	d := s.deployments[ei.ProcessDefKey]
+	if d == nil || d.cp == nil {
+		return nil
+	}
+	return &model.DecisionEvaluationValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: jv.ElementInstanceKey,
+		ProcessDefKey:      d.cp.Key,
+		ElementId:          ei.ElementId,
+		DecisionId:         strings.TrimSpace(rep.DecisionID),
+		InputsJSON:         dmn.JSONObject(rep.Inputs),
+		OutputsJSON:        dmn.JSONObject(rep.Outputs),
+		TraceJSON:          rep.Trace,
+	}
+}
+
+// isBusinessRuleJobType reports whether a job type is one a decision evaluation may
+// be reported for: the local DMN type and the central temis type are the only two
+// element kinds that evaluate a decision at all.
+func isBusinessRuleJobType(jobType int32) bool {
+	return jobType == compiler.DMNJobTypeIndex || jobType == compiler.TemisDecisionJobTypeIndex
+}
+
 func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
@@ -4168,6 +4224,20 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		Reason     string `json:"reason"`
 		Worker     string `json:"worker"`
 		LeaseToken uint64 `json:"leaseToken"`
+		// Decision is a central business rule task's evaluation, reported by the
+		// worker that performed it (ADR-0233's temis slice). It is the one thing a
+		// completion carries besides variables, because a decision's record is
+		// durable (ADR-0066) and a worker is now where the evaluation happens.
+		//
+		// Only the *account of the evaluation* is taken from here. Which element it
+		// belongs to is stamped from the leased job below, so a report cannot claim
+		// to be about a different task than the one it holds.
+		Decision *struct {
+			DecisionID string         `json:"decisionId"`
+			Inputs     map[string]any `json:"inputs"`
+			Outputs    map[string]any `json:"outputs"`
+			Trace      string         `json:"trace"`
+		} `json:"decision"`
 	}
 	if len(bytes.TrimSpace(body)) > 0 {
 		if err := json.Unmarshal(body, &payload); err != nil {
@@ -4217,7 +4287,16 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 				notHolder = true
 				return
 			}
-			s.proc.CompleteJob(key, vars...)
+			// A decision report is accepted only from a lease-holding worker, and
+			// only on a job that *is* a business rule task. A completion by hand
+			// never carries one: an operator overriding a step is recorded as an
+			// intervention (ADR-0159), and letting that path write an evaluation
+			// record would put a decision nobody made into the audit trail.
+			if decision := s.decisionFromReport(jv, payload.Decision); decision != nil {
+				s.proc.CompleteJobWithDecision(key, decision, vars...)
+			} else {
+				s.proc.CompleteJob(key, vars...)
+			}
 			if name, ok := s.jobTypes.Name(jv.JobType); ok {
 				s.workers.completed(worker, name)
 			}
@@ -5256,10 +5335,26 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"source": j.Source, "input": j.Input, "resultVariable": j.Result,
 		}}
 	}
-	if node.Type != compiler.TypeConnectorTask {
+	// A *central* business rule task resolves too, so the gate admits both node types
+	// and the switch below decides. A *local* decision is a business rule task as
+	// well and deliberately has no arm: it is evaluated in the engine by a library,
+	// which is exactly what ADR-0233's carve-out keeps there.
+	if node.Type != compiler.TypeConnectorTask && node.Type != compiler.TypeBusinessRuleTask {
 		return nil // a plain job-worker task: nothing authored to resolve
 	}
 	switch jv.JobType {
+	case compiler.TemisDecisionJobTypeIndex:
+		// The one arm that is not a connector task's. What a worker needs is the
+		// decision id and the input context the engine built for it; what comes back
+		// is more than variables, which is why this kind went last (ADR-0233).
+		j, err := temis.Resolve(s.store, cp, cp.BusinessRuleTask(node.Detail), ei, jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "temis", Fields: map[string]any{
+			"connector": j.Connector, "decisionId": j.DecisionID,
+			"inputs": j.Inputs, "resultVariable": j.Result,
+		}}
 	case compiler.CsvImportJobTypeIndex:
 		j, err := csvimport.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
