@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -124,5 +125,59 @@ func TestACentralDecisionEvaluatedOnAWorkerIsStillRetained(t *testing.T) {
 	// task it did not run.
 	if found.ElementInstanceKey == 0 || found.ProcessInstanceKey == 0 {
 		t.Errorf("record = %+v, want the element and instance stamped from the leased job", found)
+	}
+}
+
+// An operator completing a job by hand may not write a decision record, and this is
+// the assertion the code's comment makes but nothing proved. Completing by hand is an
+// intervention: it is recorded with who did it and why (ADR-0159). A decision
+// evaluation is the opposite — an account of work a decision service actually did. If
+// the manual path could write one, the audit trail would contain a decision nobody
+// made, attributed to no one, indistinguishable from a real evaluation.
+func TestAManualCompletionCannotWriteADecisionRecord(t *testing.T) {
+	srv, _ := newValidateServer(t, WithOffloadedConnectorKinds([]string{"temis"}))
+
+	code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments",
+		centralDecisionOffloadBPMN, "application/xml")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("deploy: status=%d body=%s", code, raw)
+	}
+	code, raw = serveInternal(t, srv, http.MethodPost, "/api/v1/processes/1/instances",
+		`{"variables":{"laufzeit":10}}`, "application/json")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create instance: status=%d body=%s", code, raw)
+	}
+
+	var jobKey uint64
+	srv.do(func() {
+		_ = srv.store.ActivatableJobs(compiler.TemisDecisionJobTypeIndex, func(key uint64) error {
+			jobKey = key
+			return nil
+		})
+	})
+	if jobKey == 0 {
+		t.Fatal("the instance did not park on a job")
+	}
+
+	// No worker, no lease token: an operator forcing the step, and sending a decision
+	// along with it.
+	body := `{"reason":"the service was down and the answer is obvious",
+		"variables":{"zins":1.13},
+		"decision":{"decisionId":"Hypothekarzins","outputs":{"zins":1.13},"trace":"{\"rules\":[9]}"}}`
+	code, raw = serveInternal(t, srv,
+		http.MethodPost, fmt.Sprintf("/api/v1/jobs/%d/complete", jobKey), body, "application/json")
+	if code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("manual complete: status=%d body=%s", code, raw)
+	}
+
+	var records int
+	srv.do(func() {
+		_ = srv.store.EachDecisionEvaluation(func(uint64, int64, *model.DecisionEvaluationValue) error {
+			records++
+			return nil
+		})
+	})
+	if records != 0 {
+		t.Errorf("decision evaluations = %d, want none: an intervention is not an evaluation, and the audit trail must not carry a decision nobody made", records)
 	}
 }
