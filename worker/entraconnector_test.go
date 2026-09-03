@@ -63,7 +63,7 @@ func TestBuiltinConnectorsRefusesAMisconfiguredEntraWorker(t *testing.T) {
 		delete(env, "ATLAS_ENTRA_CONTOSO_"+missing)
 		_, err := BuiltinConnectors(envMap(env), "entra")
 		if err == nil {
-			t.Errorf("a connector missing %s must fail at startup", missing)
+			t.Errorf("a worker missing %s must fail at startup", missing)
 			continue
 		}
 		if !strings.Contains(err.Error(), "ATLAS_ENTRA_CONTOSO_"+missing) {
@@ -76,7 +76,7 @@ func TestBuiltinConnectorsRefusesAMisconfiguredEntraWorker(t *testing.T) {
 // Entra tasks — reported as that, rather than as an empty operation.
 func TestRunEntraJobWithoutADetail(t *testing.T) {
 	if _, err := RunEntraJob(context.Background(), Job{}, entra.NewRegistry()); err == nil {
-		t.Fatal("a job with no connector detail must fail")
+		t.Fatal("a job with no worker detail must fail")
 	}
 }
 
@@ -88,7 +88,7 @@ func TestRunEntraJobReadsTheResolvedDetail(t *testing.T) {
 			"connector": "contoso", "operation": "disable", "userId": "arno@contoso.com",
 		},
 	}}, entra.NewRegistry())
-	// The registry is empty, so this reaches the connector lookup — evidence the
+	// The registry is empty, so this reaches the worker lookup — evidence the
 	// payload decoded, since an undecodable one fails earlier and differently.
 	if err == nil || !strings.Contains(err.Error(), "contoso") {
 		t.Errorf("err = %v, want an unresolved-connector error naming contoso", err)
@@ -101,7 +101,7 @@ func TestRunEntraJobReadsTheResolvedDetail(t *testing.T) {
 // directory into a process variable.
 //
 // So each is asserted through what it does rather than through the decoded struct —
-// the query the connector built, and the cap actually refusing an oversized listing.
+// the query the worker built, and the cap actually refusing an oversized listing.
 func TestRunEntraJobCarriesTheListingBounds(t *testing.T) {
 	spy := &listingSpy{users: 51}
 	reg := entra.NewRegistry()
@@ -165,7 +165,7 @@ func TestRunEntraJobCarriesAdvancedQueryOnItsOwn(t *testing.T) {
 // deltaLink has to survive the engine→worker hop too, and its loss is the same silent,
 // unsafe kind as a dropped bound: a resume cursor decoding to "" turns a change-tracking
 // read into a full re-enumeration without a word. So it is asserted through what it does
-// — the first request the connector makes is the resume link verbatim, not a fresh
+// — the first request the worker makes is the resume link verbatim, not a fresh
 // /delta — which only holds if deltaLink crossed the wire.
 func TestRunEntraJobCarriesTheDeltaCursor(t *testing.T) {
 	spy := &deltaSpy{}
@@ -188,9 +188,9 @@ func TestRunEntraJobCarriesTheDeltaCursor(t *testing.T) {
 }
 
 // newPassword has to survive the hop as well: it is the whole of a reset-password, and a
-// dropped one decodes to "" — which the connector's checkRequired then refuses, so a
+// dropped one decodes to "" — which the worker's checkRequired then refuses, so a
 // reset would fail with "resolved no newPassword" though the model authored one. Asserted
-// through the body the connector built.
+// through the body the worker built.
 func TestRunEntraJobCarriesTheNewPassword(t *testing.T) {
 	spy := &bodySpy{res: map[string]any{"id": "u1"}}
 	reg := entra.NewRegistry()

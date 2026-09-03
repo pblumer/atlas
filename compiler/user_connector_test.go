@@ -6,10 +6,10 @@ import (
 )
 
 // A service task bearing an <atlas:userConnector> extension is a user-provisioning
-// connector task (ADR-0123): it creates, sets the password of, or disables an
+// task (ADR-0123): it creates, sets the password of, or disables an
 // Atlas login through the in-process user store via the job path. operation
 // selects the action; the fields are model-authored literal-or-FEEL values, like
-// the mail connector's message.
+// the mail worker's message.
 const userConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
@@ -59,7 +59,7 @@ func TestParseUserConnectorTask(t *testing.T) {
 	}
 	// A user task leaves the mail/REST/clio-only fields unset.
 	if d.To.Expr != nil || d.To.Literal != "" || cp.Intern(d.Method) != "" {
-		t.Errorf("unrelated connector fields not empty for a user task")
+		t.Errorf("unrelated worker fields not empty for a user task")
 	}
 }
 

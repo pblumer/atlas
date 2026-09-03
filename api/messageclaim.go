@@ -10,8 +10,8 @@ import (
 
 // The claim on a message name (ADR-0205, measure M11 step two).
 //
-// Step one gave a connector an owner and stopped there. It made a stranger unable
-// to *configure* somebody's inbound connector, and left them able to deploy a
+// Step one gave a worker an owner and stopped there. It made a stranger unable
+// to *configure* somebody's inbound worker, and left them able to deploy a
 // process whose message start event named the same message — because
 // `Processor.PublishInbound` carries a message name and a correlation key and
 // nothing else. The name was the whole authorization, and a name is not a secret:
@@ -32,7 +32,7 @@ import (
 //
 // # The two doors ask different questions, and that is not an oversight
 //
-// A connector has a sharing scope, so "can this person reach that subscription" is
+// A worker has a sharing scope, so "can this person reach that subscription" is
 // the scope question step one already answers. A *deployment* has none — ADR-0071
 // put runtime visibility out of scope and this record does not overturn that — so
 // "can this person reach that definition" is answered by the one fact a deployment
@@ -59,7 +59,7 @@ import (
 //     is its own decision.
 
 // messageClaim is one subscription's hold on a message name, carrying only what a
-// refusal needs: which connector it belongs to, so the caller's reach can be
+// refusal needs: which worker it belongs to, so the caller's reach can be
 // checked, and nothing that would identify it in an error.
 type messageClaim struct {
 	messageName string
@@ -109,7 +109,7 @@ func (s *Server) claimBlockingDeploy(r *http.Request, names []string) (string, e
 			if err != nil {
 				return "", err
 			}
-			// A claim whose connector is gone holds nothing: the subscription is an
+			// A claim whose worker is gone holds nothing: the subscription is an
 			// orphan the bridge already ignores.
 			if !found {
 				continue
@@ -174,7 +174,7 @@ func receivesMessage(names []string, want string) bool {
 // event or ask around. Naming the other party is what it must not do: the point is
 // to stop a delivery, not to disclose that somebody has a mailbox, and an error
 // that says "anna's posteingang claims this" hands over exactly what the private
-// connector was hiding.
+// worker was hiding.
 func claimRefusal(w http.ResponseWriter, message, detail string) {
 	httpapi.JSON(w, http.StatusConflict, map[string]any{
 		"error":       "the message name is claimed elsewhere",

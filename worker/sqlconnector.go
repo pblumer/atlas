@@ -11,10 +11,10 @@ import (
 	// The SQL drivers a worker can open, registered with database/sql by import.
 	// They live here rather than in connector/sqldb so that package stays free of
 	// vendor code and testable against a fake driver — and so the engine, which
-	// never opens a database, does not link a driver by depending on the connector.
+	// never opens a database, does not link a driver by depending on the worker.
 	//
 	// All three are pure Go: ADR-0010 forbids CGO, which is also why IBM DB2 has no
-	// connector (its driver is a CGO wrapper with no pure-Go alternative).
+	// worker (its driver is a CGO wrapper with no pure-Go alternative).
 	_ "github.com/go-sql-driver/mysql"  // mysql — MariaDB
 	_ "github.com/jackc/pgx/v5/stdlib"  // pgx — PostgreSQL
 	_ "github.com/microsoft/go-mssqldb" // sqlserver — Microsoft SQL Server
@@ -29,7 +29,7 @@ import (
 // also the answer to "what can this worker actually reach".
 //
 // The DSN comes from the environment and not from a flag because argv is readable by
-// anyone who can list processes — and unlike every other connector's endpoint, a DSN
+// anyone who can list processes — and unlike every other worker's endpoint, a DSN
 // *is* the credential (ADR-0173).
 func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Registry, []string, *sqldb.MockDatabase, error) {
 	mock, err := sqlMockFromEnv(env, p)
@@ -43,7 +43,7 @@ func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Regist
 		// conflated: this kind is supervised by default, so every server that has not
 		// configured a database yet starts one of these, and failing here would be a
 		// backoff loop that never converges (exitNothingToServe exists for exactly
-		// that). A *named* connector missing its DSN, below, is still an error.
+		// that). A *named* worker missing its DSN, below, is still an error.
 		return nil, nil, nil, nil
 	}
 	reg := sqldb.NewRegistry()
@@ -59,7 +59,7 @@ func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Regist
 		}
 		dsn := env(dsnVar)
 		if dsn == "" {
-			return nil, nil, nil, fmt.Errorf("worker: %s connector %q has no connection string: set %s", p.Name, name, dsnVar)
+			return nil, nil, nil, fmt.Errorf("worker: %s worker %q has no connection string: set %s", p.Name, name, dsnVar)
 		}
 		// sqldb.Open connects lazily and caps the pool. A database that is merely
 		// down therefore does not stop a worker from starting — a worker must survive
@@ -73,7 +73,7 @@ func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Regist
 		// first job rather than being silently ignored.
 		client, err := sqldb.Open(p, dsn)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("worker: %s connector %q has an unusable connection string: %w", p.Name, name, err)
+			return nil, nil, nil, fmt.Errorf("worker: %s worker %q has an unusable connection string: %w", p.Name, name, err)
 		}
 		reg.Register(name, client)
 	}
@@ -81,7 +81,7 @@ func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Regist
 }
 
 // ProbeSQL opens one database and checks that it answers. It is what the Console's
-// connector check calls, handed to the server as api.WithSQLProbe by whoever assembles
+// worker check calls, handed to the server as api.WithSQLProbe by whoever assembles
 // the binary.
 //
 // It lives here and not in the api package for the reason the blank imports above do:
@@ -104,7 +104,7 @@ func ProbeSQL(ctx context.Context, p sqldb.Product, dsn string) error {
 // execution.
 func RunSQLJob(ctx context.Context, j Job, reg *sqldb.Registry) (map[string]any, error) {
 	if j.Connector == nil {
-		return nil, fmt.Errorf("sqldb: the job carried no resolved connector detail; is this server running a version that resolves SQL tasks?")
+		return nil, fmt.Errorf("sqldb: the job carried no resolved worker detail; is this server running a version that resolves SQL tasks?")
 	}
 	raw, err := json.Marshal(j.Connector.Fields)
 	if err != nil {
@@ -156,7 +156,7 @@ func sqlMockFromEnv(env func(string) string, p sqldb.Product) (*sqldb.MockDataba
 		return nil, err
 	}
 	logging.Warn(logging.SQLMockEnabled,
-		"the "+p.Name+" connector is in mock mode: statements are answered from this worker's memory and reach no database",
+		"the "+p.Name+" worker is in mock mode: statements are answered from this worker's memory and reach no database",
 		slog.String("product", p.Name), slog.Int("seeded", len(answers)), slog.String("seed", seed))
 	return sqldb.NewMockDatabase(p, answers...), nil
 }

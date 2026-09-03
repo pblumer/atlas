@@ -7,7 +7,7 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
-// TestDefaultBudget pins the shared connector call budget. It is a deliberate
+// TestDefaultBudget pins the shared worker call budget. It is a deliberate
 // product decision, not an incidental constant: it caps how long a hung external
 // host can hold the run-loop goroutine, so a change here changes the worst-case
 // stall of the whole engine.
@@ -23,7 +23,7 @@ func TestDefaultBudget(t *testing.T) {
 func TestHTTPClientIsBounded(t *testing.T) {
 	c := nettimeout.HTTPClient()
 	if c.Timeout == 0 {
-		t.Fatal("HTTPClient has no timeout; an unbounded connector call can stall the run loop")
+		t.Fatal("HTTPClient has no timeout; an unbounded worker call can stall the run loop")
 	}
 	if c.Timeout != nettimeout.Default {
 		t.Fatalf("HTTPClient timeout = %v, want the shared budget %v", c.Timeout, nettimeout.Default)
@@ -32,7 +32,7 @@ func TestHTTPClientIsBounded(t *testing.T) {
 
 // TestHTTPClientIsNotShared: each call returns its own client, so a caller that
 // adjusts one (e.g. a future per-connector timeout) cannot retune every other
-// connector by accident.
+// worker by accident.
 func TestHTTPClientIsNotShared(t *testing.T) {
 	if a, b := nettimeout.HTTPClient(), nettimeout.HTTPClient(); a == b {
 		t.Fatal("HTTPClient returned the same client twice; callers could mutate each other's timeout")

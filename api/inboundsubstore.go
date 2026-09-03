@@ -5,7 +5,7 @@ import (
 )
 
 // inboundSubscription is an operator-configured inbound event binding for a clio
-// connector (ADR-0075): the bridge watches WatchedSubject on the connector's clio
+// worker (ADR-0075): the bridge watches WatchedSubject on the worker's clio
 // instance and republishes each new event as an Atlas message named MessageName,
 // correlated on CorrelationKey (a FEEL expression over the event body; empty =
 // keyless), so the event both starts message-start processes and wakes waiting
@@ -15,7 +15,7 @@ import (
 // high-water mark (ADR-0075), not by this cursor, so losing it re-reads harmlessly.
 type inboundSubscription struct {
 	ID             string `json:"id"`
-	ConnectorID    string `json:"connectorId"`    // FK → a kind:"clio" connector record
+	ConnectorID    string `json:"connectorId"`    // FK → a kind:"clio" worker record
 	WatchedSubject string `json:"watchedSubject"` // clio subject path, e.g. "orders/new"
 	Recursive      bool   `json:"recursive"`      // include the subject's subtree
 	MessageName    string `json:"messageName"`    // published Atlas message name
@@ -33,8 +33,8 @@ type inboundSubscription struct {
 	Primed       bool `json:"primed,omitempty"`
 
 	// The fields below belong to a jira watch (ADR-0214). Which set applies is decided
-	// by the *connector's* kind, not by a discriminator stored here: resolveInboundSubs
-	// already loads the connector record, so the kind it names is the discriminator and
+	// by the *worker's* kind, not by a discriminator stored here: resolveInboundSubs
+	// already loads the worker record, so the kind it names is the discriminator and
 	// a record written before these existed needs no migration.
 
 	// JQL is the query a jira watch follows, written exactly as in Jira's own search
@@ -83,7 +83,7 @@ type inboundSubscription struct {
 }
 
 // inboundSubStore is a durable store for inbound subscriptions, one JSON file per id
-// under a directory — the same sidecar approach as the connector store
+// under a directory — the same sidecar approach as the worker store
 // (ADR-0019/0041). It is owned solely by the server's run-loop goroutine, so it needs
 // no locking, and it holds no secret material.
 

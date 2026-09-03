@@ -170,7 +170,7 @@ func TestWorkersViewMarksInProcessTypes(t *testing.T) {
 		if row.Type == compiler.MailJobType {
 			found = true
 			if !row.ServedInProcess {
-				t.Error("the mail connector type is not marked as served in-process")
+				t.Error("the mail worker type is not marked as served in-process")
 			}
 		}
 	}
@@ -322,11 +322,11 @@ func TestRestartWorkerEndpoint(t *testing.T) {
 // has fifty rows saying "nobody", and none of them means anything until you can see
 // which process is waiting on it. It used to be filled from service and send tasks
 // alone, on the reasoning that those are the only elements carrying a job type the model
-// authored. That is true of the string and false of the job: a connector task creates a
+// authored. That is true of the string and false of the job: a task creates a
 // job under a reserved type, and so do script, business-rule and user tasks. So every
 // Jira, clio, AD, script and DMN row said nothing about who uses it.
 //
-// This deploys a process whose only job-creating element is a Jira connector task and
+// This deploys a process whose only job-creating element is a Jira task and
 // asks the view who uses io.atlas.jira.
 func TestWorkersViewNamesTheProcessesBehindAConnectorJobType(t *testing.T) {
 	srv := newServerWithOptions(t)
@@ -371,7 +371,7 @@ func TestWorkersViewNamesTheProcessesBehindTheUserTaskType(t *testing.T) {
 	t.Fatalf("no row for %s in %+v", compiler.UserTaskJobType, got.Types)
 }
 
-// jiraUsersBPMN has one connector task and one user task, so a single deploy exercises
+// jiraUsersBPMN has one task and one user task, so a single deploy exercises
 // both of the node types the users map used to walk past.
 const jiraUsersBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"

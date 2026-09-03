@@ -1,6 +1,6 @@
 {
   "tags": [
-    "Connectors"
+    "Workers"
   ],
   "summary": {
     "en": "You can try out a mail step without setting up a real mail server first — a built-in preview provider captures the message so you can see what would be sent.",

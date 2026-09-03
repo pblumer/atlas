@@ -17,7 +17,7 @@ import (
 // directory in production. LDAP is a connection-oriented binary protocol with no
 // httptest equivalent, so the server is spelled out here rather than vendored.
 //
-// It answers the six operations the connector issues (bind, search, add, modify,
+// It answers the six operations the worker issues (bind, search, add, modify,
 // delete, and the RFC 3062 password-modify extended request) and records what it
 // was asked, so a test can assert the DN really crossed the wire rather than only
 // that no error came back.
@@ -114,7 +114,7 @@ func (d *testDirectory) handle(conn net.Conn) {
 			d.record("delete", string(op.Data.Bytes()))
 			_, _ = conn.Write(d.resultPacket(id, goldap.ApplicationDelResponse, d.codeFor(false)))
 		case goldap.ApplicationExtendedRequest:
-			// Both STARTTLS and password-modify arrive here; the connector only ever
+			// Both STARTTLS and password-modify arrive here; the worker only ever
 			// sends one per connection, so one answer covers both.
 			d.record("extended", "")
 			_, _ = conn.Write(d.resultPacket(id, goldap.ApplicationExtendedResponse, d.codeFor(false)))

@@ -50,7 +50,7 @@ func TestRunAppliesTheDefaults(t *testing.T) {
 
 // A headerless file must name its columns; without them there is nothing to key the
 // JSON objects by, and silently producing an empty batch is the failure mode the
-// connector exists to avoid.
+// worker exists to avoid.
 func TestRunRejectsAHeaderlessFileWithNoColumns(t *testing.T) {
 	if _, err := csvimport.Run(csvimport.Job{Source: "1,2\n"}); err == nil {
 		t.Error("a headerless file with no columns parsed, want an error")
@@ -82,7 +82,7 @@ func TestRunHonoursColumnsAndDelimiter(t *testing.T) {
 }
 
 // TestHeaderlessColumnsAreParsedByPosition is a regression: a headerless CSV
-// connector task could not run at all. The compiler requires such a task to list its
+// task could not run at all. The compiler requires such a task to list its
 // columns, the parser requires an index for each when there is no header row, and
 // nothing was supplying one — so a model the compiler accepted failed at runtime
 // with "column needs an index". Without a header the listed order *is* the file's
@@ -123,7 +123,7 @@ func TestRunRejectsAFileItCannotParse(t *testing.T) {
 		t.Fatal("an unusable delimiter returned no error")
 	}
 	if !strings.Contains(err.Error(), "csv-import") {
-		t.Errorf("error = %v, want it to name the connector", err)
+		t.Errorf("error = %v, want it to name the worker", err)
 	}
 }
 
@@ -188,7 +188,7 @@ func TestResultVariablesCarryBothShapes(t *testing.T) {
 }
 
 // Rows that are not JSON fail the job rather than completing it with nothing. An
-// empty result is the failure this connector exists to avoid, so it must not be
+// empty result is the failure this worker exists to avoid, so it must not be
 // reachable through a decode that quietly yields nil.
 func TestResultVariablesRefuseRowsThatAreNotJSON(t *testing.T) {
 	_, err := csvimport.Result{ResultVariable: "orders", RowsJSON: "kaputt", RowCount: 1}.Variables()
@@ -196,6 +196,6 @@ func TestResultVariablesRefuseRowsThatAreNotJSON(t *testing.T) {
 		t.Fatal("rows that are not JSON completed the job")
 	}
 	if !strings.Contains(err.Error(), "csv-import") {
-		t.Errorf("error = %v, want it to name the connector", err)
+		t.Errorf("error = %v, want it to name the worker", err)
 	}
 }

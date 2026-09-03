@@ -72,7 +72,7 @@ func TestDynamicRegistrationIssuesAUsableClient(t *testing.T) {
 	}
 
 	status, out := registerDynamic(t, ts.URL, `{
-		"client_name": "Self-Registered Connector",
+		"client_name": "Self-Registered Worker",
 		"redirect_uris": ["`+testRedirect+`"]
 	}`)
 	if status != http.StatusCreated {
@@ -89,7 +89,7 @@ func TestDynamicRegistrationIssuesAUsableClient(t *testing.T) {
 		t.Error("no client_secret_expires_at, which is required when a secret is issued")
 	}
 	// The submitted metadata comes back, so a client can confirm what was recorded.
-	if out["client_name"] != "Self-Registered Connector" {
+	if out["client_name"] != "Self-Registered Worker" {
 		t.Errorf("client_name = %v, want it echoed", out["client_name"])
 	}
 
@@ -114,7 +114,7 @@ func TestDynamicRegistrationIssuesAUsableClient(t *testing.T) {
 //
 // With registration open, "an application is asking for access" no longer implies
 // anybody checked it. The consent context has to carry that distinction, or a
-// person deciding cannot tell an operator-vetted connector from one that named
+// person deciding cannot tell an operator-vetted worker from one that named
 // itself thirty seconds ago.
 func TestConsentScreenSeesWhoVouchedForTheClient(t *testing.T) {
 	ts := newOpenRegistrationServer(t)

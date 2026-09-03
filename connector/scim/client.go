@@ -1,11 +1,11 @@
-// Package scim integrates a SCIM 2.0 service provider as a service-task connector
-// (RFC 7643/7644): a BPMN SCIM connector task performs a resource operation —
+// Package scim integrates a SCIM 2.0 service provider as a service-task Worker Type
+// (RFC 7643/7644): a BPMN SCIM task performs a resource operation —
 // create, get, replace, patch, delete, or search a User/Group — against a
 // model-authored provider endpoint through the job path (ADR-0153), the same seam
 // the rest package uses for a generic HTTP call (ADR-0067). It inherits the job
 // protocol's durability and non-blocking properties (ADR-0007):
 //
-//   - A SCIM connector task creates a job carrying the reserved
+//   - A SCIM task creates a job carrying the reserved
 //     [compiler.ScimJobType]. The processor never performs the outbound call itself,
 //     so it stays allocation-free (invariant I1) and free of any HTTP dependency.
 //   - The in-process [Handler] — a job worker — pulls those jobs, calls the SCIM
@@ -17,7 +17,7 @@
 // id, and filter in the model; credentials are never authored there —
 // authentication (basic/bearer/apiKey) names a server-side secret the worker
 // resolves at runtime (ADR-0041/0067), so a token never appears in a BPMN file.
-// Unlike the generic REST connector it speaks SCIM: it sends and accepts
+// Unlike the generic REST worker it speaks SCIM: it sends and accepts
 // application/scim+json, addresses resources by path (…/Users/{id}), and turns a
 // SCIM error response (a urn:…:Error object with a detail/scimType) into the job
 // failure message rather than an opaque status.
@@ -41,7 +41,7 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
-// Request is one SCIM call a connector task makes. URL is the resolved resource
+// Request is one SCIM call a task makes. URL is the resolved resource
 // endpoint (base + resource type, plus /{id} for a single-resource operation).
 // Headers are set on the request (including any Authorization/api-key header the
 // worker resolved from a secret); Query is appended to the URL (a search's filter).
@@ -80,8 +80,8 @@ type HTTPClient struct {
 	http *http.Client
 }
 
-// NewHTTPClient builds a SCIM HTTP client bounded by the shared connector call
-// budget (nettimeout.HTTPClient), like the REST connector: the worker runs on the
+// NewHTTPClient builds a SCIM HTTP client bounded by the shared worker call
+// budget (nettimeout.HTTPClient), like the REST worker: the worker runs on the
 // run-loop goroutine, so an unbounded call would stall the whole engine (ADR-0149).
 func NewHTTPClient() *HTTPClient {
 	return &HTTPClient{http: nettimeout.HTTPClient()}
@@ -137,7 +137,7 @@ func (c *HTTPClient) Do(ctx context.Context, r Request) (Response, error) {
 	return Response{Status: resp.StatusCode, Body: decodeBody(raw)}, nil
 }
 
-// withQuery appends the connector's query parameters (a search's filter) to the
+// withQuery appends the worker's query parameters (a search's filter) to the
 // endpoint URL, preserving any already present. Encoding sorts keys, so the request
 // URL is deterministic. An unparseable URL is an error (the job then
 // retries/incidents like any other failure).

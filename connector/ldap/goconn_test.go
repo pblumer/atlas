@@ -26,7 +26,7 @@ func dialTest(t *testing.T, d *testDirectory, bindDN, password string) Conn {
 
 // TestGoDialerBindsAndSearches drives the production adapter end to end: it dials
 // a real socket, performs a simple bind, and reads a search result back off the
-// wire — the path every LDAP connector task takes and that the worker's fakes
+// wire — the path every LDAP task takes and that the worker's fakes
 // deliberately skip.
 func TestGoDialerBindsAndSearches(t *testing.T) {
 	d := startTestDirectory(t, &testDirectory{entries: []Entry{
@@ -121,7 +121,7 @@ func TestGoConnWriteOperations(t *testing.T) {
 }
 
 // TestGoConnOperationErrors covers each adapter method's failure branch: the
-// directory answers a non-zero result code, and the connector wraps it with the
+// directory answers a non-zero result code, and the worker wraps it with the
 // operation and DN so a parked incident names what failed.
 func TestGoConnOperationErrors(t *testing.T) {
 	// 1 = operationsError; any non-zero code takes the same path.
@@ -208,7 +208,7 @@ func TestGoConnPagedSearch(t *testing.T) {
 
 // TestGoConnClientCertificateBind proves the certificate path: a valid PEM bundle
 // configures TLS, and with no bind DN the identity is the certificate, so the
-// connector asks for SASL EXTERNAL rather than leaving the connection anonymous.
+// worker asks for SASL EXTERNAL rather than leaving the connection anonymous.
 func TestGoConnClientCertificateBind(t *testing.T) {
 	d := startTestDirectory(t, nil)
 	conn, err := NewDialer().Dial(DialOptions{URL: d.URL, ClientCert: testCertPEM(t)})

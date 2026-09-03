@@ -77,7 +77,7 @@ func TestGraphClientSend(t *testing.T) {
 	}
 }
 
-// A task-authored From overrides the connector mailbox in the sendMail path.
+// A task-authored From overrides the worker mailbox in the sendMail path.
 func TestGraphClientFromOverride(t *testing.T) {
 	a := newAPIServer(t)
 	c := NewGraphClient(staticToken("t"), a.srv.URL, "default@example.com")

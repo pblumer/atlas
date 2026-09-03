@@ -8,7 +8,7 @@
 // than duplicates.
 //
 // The sink is opt-in and server-configured (endpoint, credentials, index), never
-// authored in a model — mirroring the clio connector's shape (ADR-0036). An empty
+// authored in a model — mirroring the clio worker's shape (ADR-0036). An empty
 // endpoint disables it.
 package opensearch
 

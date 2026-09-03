@@ -84,7 +84,7 @@ func Run(j Job) (Result, error) {
 	return Result{ResultVariable: name, Entries: entries, EntryCount: len(entries)}, nil
 }
 
-// wireEntry is the JSON shape entries travel in — the one the directory connectors
+// wireEntry is the JSON shape entries travel in — the one the directory workers
 // write, so a process can hand a live directory's result straight to a file writer.
 type wireEntry struct {
 	DN         string              `json:"dn"`
@@ -109,7 +109,7 @@ func entriesFromJSON(raw string) ([]Entry, error) {
 // necessity — the compiled process and the scope live only there.
 func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64) (Job, error) {
 	if detail == nil {
-		return Job{}, fmt.Errorf("ldif: connector task has no detail")
+		return Job{}, fmt.Errorf("ldif: task has no detail")
 	}
 	vars, err := scopeChainVars(store, elementInstanceKey)
 	if err != nil {

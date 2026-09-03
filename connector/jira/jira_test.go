@@ -79,7 +79,7 @@ func cloudClient(base string) *jira.HTTPClient {
 	return jira.NewHTTPClient(jira.Connector{BaseURL: base, Email: "bot@acme.example", APIToken: "t0ken"})
 }
 
-// dcClient is a Data Center connector: a bearer personal access token rather than a
+// dcClient is a Data Center worker: a bearer personal access token rather than a
 // Cloud {email, apiToken} bundle. The distinction decides how an assignee is addressed
 // and — since the Cloud search deprecation — which search endpoint is used.
 func dcClient(base string) *jira.HTTPClient {
@@ -281,7 +281,7 @@ func TestAddComment(t *testing.T) {
 }
 
 // Cloud addresses an account by accountId; Data Center by username. Which one is not
-// guessed from the value — it follows from the credential the connector holds, which
+// guessed from the value — it follows from the credential the worker holds, which
 // is the same thing that decides the authentication scheme.
 func TestAssignIssue(t *testing.T) {
 	f, srv := newFakeJira(t)
@@ -309,7 +309,7 @@ func TestAssignIssue(t *testing.T) {
 }
 
 // A search returns the issues themselves, not Jira's paging envelope: the envelope is
-// this connector's business, and a model that had to unwrap it would be modelling the
+// this worker's business, and a model that had to unwrap it would be modelling the
 // API rather than the work. Data Center keeps the offset-paged endpoint, so this is
 // what it looks like there.
 func TestSearchOnDataCenterPagesToTheCap(t *testing.T) {
@@ -380,7 +380,7 @@ func TestSearchOnDataCenterUncappedReadsEveryPage(t *testing.T) {
 }
 
 // Cloud authenticates with HTTP Basic over email:apiToken; Data Center with a bearer
-// personal access token. Both are the same connector kind and differ only in the
+// personal access token. Both are the same Worker Type and differ only in the
 // bundle an operator stored.
 func TestAuthenticationSchemes(t *testing.T) {
 	f, srv := newFakeJira(t)
@@ -426,11 +426,11 @@ func TestUnknownOperation(t *testing.T) {
 	}
 }
 
-// A connector with neither credential shape is refused at build time, so its tasks
+// A worker with neither credential shape is refused at build time, so its tasks
 // park with a reason instead of calling Jira unauthenticated.
 func TestConnectorNeedsACredential(t *testing.T) {
 	if _, err := jira.NewProviderClient(jira.ProviderConfig{Endpoint: "https://acme.atlassian.net", Secret: ""}); err == nil {
-		t.Fatal("a connector with no credential was accepted")
+		t.Fatal("a worker with no credential was accepted")
 	}
 	if _, err := jira.NewProviderClient(jira.ProviderConfig{Endpoint: "https://acme.atlassian.net", Secret: "{"}); err == nil {
 		t.Fatal("a malformed credential bundle was accepted")
@@ -439,7 +439,7 @@ func TestConnectorNeedsACredential(t *testing.T) {
 		t.Fatal("a bundle with an email and no token was accepted")
 	}
 	if _, err := jira.NewProviderClient(jira.ProviderConfig{Endpoint: "", Secret: `{"token":"pat"}`}); err == nil {
-		t.Fatal("a connector with no base URL was accepted")
+		t.Fatal("a worker with no base URL was accepted")
 	}
 	if _, err := jira.NewProviderClient(jira.ProviderConfig{Endpoint: "https://acme.atlassian.net", Secret: `{"token":"pat"}`}); err != nil {
 		t.Fatalf("a Data Center PAT bundle was rejected: %v", err)
@@ -562,14 +562,14 @@ func TestHandlerWritesNothingWithoutAResultVariable(t *testing.T) {
 	}
 }
 
-// A connector name the registry does not hold fails the job with the registry's own
+// A worker name the registry does not hold fails the job with the registry's own
 // reason, so a parked token can say whether it was never configured or is broken.
 func TestHandlerUnresolvedConnector(t *testing.T) {
 	rd, lookup := workerFixture(t,
 		`<atlas:jiraConnector connector="acme" operation="get-issue" issueKey="OPS-1" resultVariable="t"/>`)
 	_, err := jira.Handler(rd, lookup, jira.NewRegistry())(job.Job{Key: 1, ElementInstanceKey: 42})
 	if err == nil || !strings.Contains(err.Error(), "acme") {
-		t.Fatalf("error = %v, want it to name the unresolved connector", err)
+		t.Fatalf("error = %v, want it to name the unresolved worker", err)
 	}
 }
 

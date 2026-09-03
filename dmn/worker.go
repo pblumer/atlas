@@ -41,7 +41,7 @@ const builtinProcessInstanceKey = "processInstanceKey"
 // engine can produce one, the temis trace explaining how it got there — which
 // tables ran and which rules fired (ADR-0066). Trace is canonical JSON or nil when
 // no trace is available (a literal-expression decision, or a remote decision whose
-// connector returns none).
+// worker returns none).
 type Evaluation struct {
 	Outputs map[string]any
 	Trace   []byte
@@ -50,12 +50,12 @@ type Evaluation struct {
 // Evaluator evaluates a decision by id against an input context and returns its
 // outputs and (when available) trace. It is the seam between a business rule task's
 // I/O semantics and the engine that runs the decision: the local embedded temis
-// library and a remote temis connector each provide one (ADR-0050).
+// library and a remote temis worker each provide one (ADR-0050).
 type Evaluator func(ctx context.Context, decisionId string, inputs map[string]any) (Evaluation, error)
 
 // Bind resolves the [Evaluator] for a business rule task on a compiled process —
 // the decision engine bound to it. A returned error (e.g. an unregistered
-// connector) leaves the job pending like any worker error.
+// worker) leaves the job pending like any worker error.
 type Bind func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail) (Evaluator, error)
 
 // DecisionHandler builds a job handler that evaluates the DMN decision behind a
@@ -78,7 +78,7 @@ type Bind func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDe
 // output variables, the completion carries a durable decision-evaluation record —
 // the inputs, outputs, and trace — so an operator can inspect how the decision was
 // made live and after the fact (ADR-0066). sink, if non-nil, additionally observes
-// each result. [Handler] (local) and the temis connector worker (central, ADR-0050)
+// each result. [Handler] (local) and the temis worker (central, ADR-0050)
 // are both built on it.
 func DecisionHandler(store state.Reader, lookup ProcessLookup, bind Bind, sink func(Result)) job.CompletingHandler {
 	return func(j job.Job) (job.Completion, error) {

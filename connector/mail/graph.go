@@ -13,13 +13,13 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
-// graphDefaultBase is the Microsoft Graph v1.0 API base a connector uses when it
+// graphDefaultBase is the Microsoft Graph v1.0 API base a worker uses when it
 // authors no endpoint override.
 const graphDefaultBase = "https://graph.microsoft.com/v1.0"
 
 // GraphClient sends mail through the Microsoft Graph sendMail API (ADR-0093). It
 // posts a structured message to /users/{mailbox}/sendMail with a bearer token from
-// its TokenSource; the mailbox is the message's From or the connector's default
+// its TokenSource; the mailbox is the message's From or the worker's default
 // sender. It reaches Microsoft 365 mailboxes with an app-only or refresh-token grant.
 type GraphClient struct {
 	http    *http.Client
@@ -62,7 +62,7 @@ type graphSendMail struct {
 func (c *GraphClient) Send(ctx context.Context, m Message) error {
 	from := firstNonEmpty(m.From, c.sender)
 	if from == "" {
-		return fmt.Errorf("mail: graph: no sender mailbox configured (set the connector's sender or the task's from)")
+		return fmt.Errorf("mail: graph: no sender mailbox configured (set the worker's sender or the task's from)")
 	}
 	if len(m.To) == 0 {
 		return fmt.Errorf("mail: graph: message has no recipients")

@@ -1,4 +1,4 @@
-// End-to-end coverage for what a connector's deployed use means on the operator page
+// End-to-end coverage for what a worker's deployed use means on the operator page
 // (ADR-0163): the count the row carries, the list behind it, and deleting one the
 // models still reference. The server refuses that delete and answers with the
 // processes in the way; this proves the operator surface does something useful with
@@ -10,7 +10,7 @@ const open = async (page) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.__errors = errors;
-  await page.goto("/connector-delete-harness.html");
+  await page.goto("/worker-delete-harness.html");
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
 };
 
@@ -25,7 +25,7 @@ const answer = (page, decisions) => {
   });
 };
 
-test("the row counts what resolves through a connector, and the instances running on them", async ({ page }) => {
+test("the row counts what resolves through a worker, and the instances running on them", async ({ page }) => {
   await open(page);
   // The row itself is the count. Two definitions of two processes agree, so it says
   // one number; the running total is what makes this a decision rather than a click.
@@ -39,7 +39,7 @@ test("the row counts what resolves through a connector, and the instances runnin
   await expect(page.locator("#usage-many")).toContainText("11 deployed versions");
   await expect(page.locator("#usage-many")).toContainText("1 running instance");
 
-  // A connector nothing references says so plainly rather than showing an empty line —
+  // A worker nothing references says so plainly rather than showing an empty line —
   // and offers nothing to open.
   await expect(page.locator("#usage-orphan")).toContainText("Referenced by no deployed process");
   await expect(page.locator("#usage-orphan button")).toHaveCount(0);
@@ -54,14 +54,14 @@ test("the count opens the list it stands for", async ({ page }) => {
   await expect(dialog).toContainText("Zahlung");
   await expect(dialog).toContainText("Mahnung");
   // Every version links to its own Operations page and names the elements whose tasks
-  // resolve through the connector — what the row used to spell out, where there is room.
+  // resolve through the worker — what the row used to spell out, where there is room.
   await expect(dialog.locator('a[href="#/operations/p/7"]')).toContainText("v3");
   await expect(dialog.locator('a[href="#/operations/p/7"]')).toContainText("Task_pay");
   await expect(dialog.locator('a[href="#/operations/p/9"]')).toContainText("Task_remind, Task_escalate");
   // The one process something is running on says so on its own row.
   await expect(dialog.locator('a[href="#/operations/p/7"]')).toContainText("2 running");
-  // And it says what deleting the connector would do to them.
-  await expect(dialog).toContainText("no connector registered as Patrick Blumer");
+  // And it says what deleting the worker would do to them.
+  await expect(dialog).toContainText("no worker registered as Patrick Blumer");
 
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
@@ -95,7 +95,7 @@ test("the list groups a redeployed process instead of repeating its name", async
   expect(page.__errors).toEqual([]);
 });
 
-test("a connector nothing references deletes on one confirm", async ({ page }) => {
+test("a worker nothing references deletes on one confirm", async ({ page }) => {
   await open(page);
   answer(page, [true]);
   await page.locator("#del-orphan").click();
@@ -123,11 +123,11 @@ test("a refused delete asks again with the processes in hand, then forces", asyn
   expect(second).toContain("Zahlung v3");
   expect(second).toContain("(2 running)");
   expect(second).toContain("Mahnung v1");
-  expect(second).toContain("no connector registered");
+  expect(second).toContain("no worker registered");
   expect(page.__errors).toEqual([]);
 });
 
-test("declining the second question leaves the connector alone", async ({ page }) => {
+test("declining the second question leaves the worker alone", async ({ page }) => {
   await open(page);
   answer(page, [true, false]);
   await page.locator("#del-referenced").click();

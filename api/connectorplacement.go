@@ -11,7 +11,7 @@ import (
 // This file answers one question for the Modeler: for the implementation an author is
 // about to choose, which process runs the work on THIS server?
 //
-// Three panels choose one — the service-task connector picker (ADR-0067), a script
+// Three panels choose one — the service-task worker picker (ADR-0067), a script
 // task's language (ADR-0047), and a business rule task's decision binding (ADR-0050) —
 // and all three author work that `--offload-connectors` can move.
 //
@@ -29,7 +29,7 @@ import (
 // than guesses, which also means a kind that moves later needs no second edit here
 // (ADR-0183).
 
-// The placements a connector kind can have. The pair of "-only" values is not
+// The placements a Worker Type can have. The pair of "-only" values is not
 // pedantry: each is the case where the *advice* attached to the plain value would be
 // wrong. Telling the author of an in-engine kind to prefer a job worker (ADR-0164) is
 // useless when the kind has no out-of-process form, and saying a kind was moved onto
@@ -53,7 +53,7 @@ const (
 // compiled processes; this table names them and moves none of them.
 //
 // The ids are what the *author* picks, which is not always what the *operator* moves.
-// For connectors and the decision bindings the two words coincide, and
+// For workers and the decision bindings the two words coincide, and
 // TestPlacementJobTypesAgreeWithOffloadableKinds holds them to the same job types. For
 // scripts they deliberately do not: `--offload-connectors script` is one word over three
 // languages, while the panel offers a language at a time and each can also be turned off
@@ -62,7 +62,7 @@ const (
 // called both in-engine. TestScriptLanguageIDsMatchTheLanguageRegistry ties those ids to
 // script.Langs, whose names the Modeler's own select is built from.
 //
-// TestEveryCatalogKindHasAPlacement fails when the connector picker gains a kind this
+// TestEveryCatalogKindHasAPlacement fails when the worker picker gains a kind this
 // table does not name, and TestEveryOffloadableJobTypeHasAPlacement fails when an
 // operator can move work nothing here reports — silence being the exact thing this
 // replaced.
@@ -217,7 +217,7 @@ func (s *Server) placementOfCatalogKind(id string) string {
 	}
 }
 
-// handleConnectorKinds tells the Modeler where this server runs each connector kind,
+// handleConnectorKinds tells the Modeler where this server runs each Worker Type,
 // so the picker's badge describes this install rather than the arrangement that held
 // when it was written. The Worker Type route was initially a direct alias; while the
 // legacy route remains byte-compatible, ADR-0208 now projects the same authority into

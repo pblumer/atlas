@@ -1,8 +1,8 @@
 // e2e for the secret shape hints (api/web/secret-shapes.js, ADR-0155) — the answer to
 // a field that cannot show what it holds. A vault secret is a name and an opaque
-// string; the only thing that knows what the string should be is the connector that
+// string; the only thing that knows what the string should be is the worker that
 // resolves the reference. These tests pin that the form says so before the value is
-// typed, and refuses a value that cannot be what the connector needs — the failure
+// typed, and refuses a value that cannot be what the worker needs — the failure
 // that otherwise surfaces hours later as an incident on a parked token.
 import { test, expect } from "@playwright/test";
 
@@ -23,7 +23,7 @@ const value = (page, v) => page.locator('[name="value"]').fill(v);
 const save = (page) => page.locator("#save").click();
 const error = (page) => page.locator("#error");
 
-test("the name binds the field to a connector, and the connector says what the value is", async ({ page }) => {
+test("the name binds the field to a worker, and the worker says what the value is", async ({ page }) => {
   await name(page, "gmail_auth");
   const hint = page.locator(".secret-hint");
   await expect(hint).toContainText("Patrick Blumer");
@@ -44,7 +44,7 @@ test("a plain-string secret gets no skeleton and stays masked", async ({ page })
 
 test("a name nothing references makes no claim about the value", async ({ page }) => {
   await name(page, "something_else");
-  await expect(page.locator(".secret-hint")).toContainText("Not referenced by any connector");
+  await expect(page.locator(".secret-hint")).toContainText("Not referenced by any worker");
   await value(page, "anything at all");
   await save(page);
   await expect(error(page)).toBeHidden();
@@ -53,7 +53,7 @@ test("a name nothing references makes no claim about the value", async ({ page }
 // The outage this shipped for: the bare Google refresh token pasted where the bundle
 // belongs. It parses as the number 1 followed by "//", which is why the server's
 // message was about JSON syntax and said nothing about what was actually wrong.
-test("the bare refresh token is refused, naming the connector and the shape", async ({ page }) => {
+test("the bare refresh token is refused, naming the worker and the shape", async ({ page }) => {
   await name(page, "gmail_auth");
   await value(page, "1//04it6ZnHhe84OCgYIARAAGAQSNwF-L9IrFix");
   await save(page);

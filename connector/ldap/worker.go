@@ -24,7 +24,7 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // credential at call time (ADR-0041), so the password never lives in the model.
 type SecretResolver func(ref string) string
 
-// Handler builds a job handler that performs a generic LDAP connector task. Register
+// Handler builds a job handler that performs a generic LDAP worker task. Register
 // it with a [job.Runner] under the reserved [compiler.LdapJobTypeIndex] via
 // HandleWithOutput; the runner then pulls activatable LDAP jobs, and for each the
 // handler resolves the task's url / bind DN / operation / DNs from the compiled

@@ -17,7 +17,7 @@ import (
 
 // TestRemedyWorkerHoldsItsOwnCredential is ADR-0168's decision seen from the worker's
 // side: the AR System base URL and the service account come from *this process's*
-// environment, and a leased job contributes only a connector name. A worker can
+// environment, and a leased job contributes only a worker name. A worker can
 // therefore file tickets in a Helix instance the engine has no configuration for —
 // and, more to the point for an ITSM system, one the engine cannot reach at all.
 func TestRemedyWorkerHoldsItsOwnCredential(t *testing.T) {

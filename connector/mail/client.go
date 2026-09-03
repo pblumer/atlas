@@ -1,17 +1,17 @@
 // Package mail integrates an outbound e-mail provider as a server-registered Atlas
-// connector: a BPMN mail connector task sends a model-authored message through a
+// worker: a BPMN mail task sends a model-authored message through a
 // configured provider via the job path (ADR-0079), mirroring how the clio package
 // delegates an append to a registry-managed endpoint (ADR-0036). The integration
 // inherits the job protocol's durability and non-blocking properties (ADR-0007):
 //
-//   - A connector task creates a job carrying the reserved [compiler.MailJobType].
+//   - A task creates a job carrying the reserved [compiler.MailJobType].
 //     The processor never performs the outbound send itself, so it stays
 //     allocation-free (invariant I1) and free of any SMTP dependency.
 //   - The in-process [Handler] — a job worker — pulls those jobs, sends the message
 //     off the processor goroutine and after fsync (invariant I2, never inside
 //     applyToState / I4), and completes the job, which drives the token onward.
 //   - The provider host and credentials live in a server-side [Registry] keyed by
-//     connector name, so a model refers to a provider by name only and never carries
+//     worker name, so a model refers to a provider by name only and never carries
 //     a host or a secret (ADR-0036/0041). Only the message (recipients, subject,
 //     body) is authored in the model, like a REST task's endpoint (ADR-0067).
 //
@@ -36,7 +36,7 @@ import (
 	"github.com/pblumer/atlas/connector/clientreg"
 )
 
-// Message is one e-mail an outbound mail connector task sends. To is the required
+// Message is one e-mail an outbound mail task sends. To is the required
 // recipient list; Cc and Bcc are optional. From overrides the provider's default
 // sender when set. MessageID is deterministic (the job key), so an at-least-once
 // retry carries the same RFC 5322 Message-ID and can be de-duplicated rather than
@@ -58,23 +58,23 @@ type Message struct {
 }
 
 // Client sends a Message through one configured mail provider. It is an interface so
-// the worker is testable without a live server and so a connector name binds to
+// the worker is testable without a live server and so a worker name binds to
 // exactly one provider (SMTP today; a native Gmail / Graph provider is additive).
 type Client interface {
 	Send(ctx context.Context, m Message) error
 }
 
-// Registry resolves a connector name to the [Client] for this kind. Connectors are
+// Registry resolves a worker name to the [Client] for this kind. Workers are
 // registered at the server from managed configuration (endpoint plus credentials), so
-// a model refers to a connector by name only (ADR-0036/0041).
+// a model refers to a worker by name only (ADR-0036/0041).
 //
 // It is the shared [clientreg.Registry], which also carries *why* a configured
-// connector is missing from it — the difference between "never configured" and
+// worker is missing from it — the difference between "never configured" and
 // "configured and broken", which is what a parked token has to be able to say
 // (ADR-0158).
 type Registry = clientreg.Registry[Client]
 
-// NewRegistry creates an empty connector registry.
+// NewRegistry creates an empty worker registry.
 func NewRegistry() *Registry { return clientreg.New[Client]() }
 
 // Connector is the server-side configuration of one SMTP mail provider: the
@@ -103,15 +103,15 @@ type sendFunc func(ctx context.Context, addr string, a smtp.Auth, from string, t
 
 // SMTPClient sends a Message over SMTP (the submission endpoint of any standards
 // compliant provider, including Google and Microsoft 365). It authenticates with the
-// connector's username/password when a username is configured, and frames the
+// worker's username/password when a username is configured, and frames the
 // message as a UTF-8 MIME e-mail (text, HTML, or both — see buildRFC822).
 type SMTPClient struct {
 	conn Connector
 	send sendFunc
 }
 
-// NewSMTPClient builds an SMTP mail client for a configured connector, backed by the
-// [submit] transport: net/smtp's SendMail flow under the shared connector call
+// NewSMTPClient builds an SMTP mail client for a configured worker, backed by the
+// [submit] transport: net/smtp's SendMail flow under the shared worker call
 // budget (ADR-0149), extended to reach an implicit-TLS submissions server, which
 // SendMail cannot (ADR-0150).
 func NewSMTPClient(conn Connector) *SMTPClient {
@@ -121,7 +121,7 @@ func NewSMTPClient(conn Connector) *SMTPClient {
 	return c
 }
 
-// auth is the credential this connector presents, or nil when it is configured
+// auth is the credential this worker presents, or nil when it is configured
 // without a username (an internal relay that authenticates by network position). Send
 // and Probe build it the same way, so what a check authenticates is what a send
 // authenticates.
@@ -133,7 +133,7 @@ func (c *SMTPClient) auth() smtp.Auth {
 }
 
 // Probe opens the session a send would open — connect, TLS, authenticate — and hangs
-// up without a message (ADR-0150). It is what the connector form's check button
+// up without a message (ADR-0150). It is what the worker form's check button
 // calls: the failures it catches (a host that does not resolve, a port nothing
 // listens on, a credential the server rejects) are exactly the ones that otherwise
 // surface much later as an incident on a parked token.
@@ -149,8 +149,8 @@ func (c *SMTPClient) Probe(ctx context.Context) error {
 	return nil
 }
 
-// Send frames m as a UTF-8 MIME e-mail and submits it to the connector's SMTP
-// endpoint. The sender is the message's From, or the connector's default From when
+// Send frames m as a UTF-8 MIME e-mail and submits it to the worker's SMTP
+// endpoint. The sender is the message's From, or the worker's default From when
 // the task authored none; a message with no sender and no default is a configuration
 // error. Recipients are the union of To, Cc and Bcc (the SMTP envelope); Bcc
 // addresses are delivered but never written into a header. A missing recipient or a
@@ -161,7 +161,7 @@ func (c *SMTPClient) Send(ctx context.Context, m Message) error {
 		from = strings.TrimSpace(c.conn.From)
 	}
 	if from == "" {
-		return fmt.Errorf("mail: no sender configured (set the connector's From or the task's from)")
+		return fmt.Errorf("mail: no sender configured (set the worker's From or the task's from)")
 	}
 	rcpts := recipients(m)
 	if len(rcpts) == 0 {

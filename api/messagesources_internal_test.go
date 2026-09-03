@@ -61,7 +61,7 @@ func TestMessageSourcesListsWhatPublishesEachName(t *testing.T) {
 		t.Fatalf("no source for the jira watch: %+v", got)
 	}
 	if jira.Kind != "jira" || jira.ConnectorName != "acme" || !jira.Enabled {
-		t.Errorf("jira source = %+v, want it to name the connector it polls", jira)
+		t.Errorf("jira source = %+v, want it to name the worker it polls", jira)
 	}
 	// The description is what makes the line worth reading: which watch, not just that
 	// one exists.

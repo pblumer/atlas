@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// The file formats this connector reads and writes.
+// The file formats this worker reads and writes.
 const (
 	// FormatLDIF is RFC 2849's LDAP Data Interchange Format — MIM's *LDIF* agent.
 	FormatLDIF = "ldif"
@@ -23,8 +23,8 @@ const (
 // Formats lists the formats, sorted, for the messages that say what was expected.
 func Formats() []string { return []string{FormatDSML, FormatLDIF} }
 
-// KnownFormat reports whether name is a format this connector handles. Unlike the
-// text-file connector there is no default: a file is LDIF or it is DSML, and guessing
+// KnownFormat reports whether name is a format this worker handles. Unlike the
+// text-file worker there is no default: a file is LDIF or it is DSML, and guessing
 // from the bytes is how a malformed file becomes a plausible-looking empty result.
 func KnownFormat(name string) bool { return name == FormatLDIF || name == FormatDSML }
 
@@ -70,7 +70,7 @@ func Render(format string, entries []Entry) (string, error) {
 }
 
 // EntriesToJSON turns entries into the JSON-ready shape a process variable holds —
-// the same one the directory connectors write, so downstream handling is shared.
+// the same one the directory workers write, so downstream handling is shared.
 func EntriesToJSON(entries []Entry) any {
 	out := make([]any, 0, len(entries))
 	for _, e := range entries {

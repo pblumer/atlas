@@ -36,11 +36,11 @@ func TestConfiguredWorkerAliasMirrorsConnectors(t *testing.T) {
 		}
 	}
 
-	// Connector names and kinds are deliberately immutable because deployed models
+	// Worker names and kinds are deliberately immutable because deployed models
 	// reference the logical name. Exercise an allowed compatibility mutation instead.
 	code, body = doReq(t, ts, http.MethodPatch, "/api/v1/connectors/"+created.ID, `{"enabled":false}`, "application/json")
 	if code != http.StatusOK || !strings.Contains(string(body), `"enabled":false`) {
-		t.Fatalf("update via legacy connector path status=%d body=%s", code, body)
+		t.Fatalf("update via legacy worker path status=%d body=%s", code, body)
 	}
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/configured-workers", "", "")
 	if code != http.StatusOK || !strings.Contains(string(body), `"enabled":false`) {
@@ -51,7 +51,7 @@ func TestConfiguredWorkerAliasMirrorsConnectors(t *testing.T) {
 		t.Fatalf("delete configured worker status=%d body=%s", code, body)
 	}
 	if _, body = doReq(t, ts, http.MethodGet, "/api/v1/connectors", "", ""); strings.Contains(string(body), created.ID) {
-		t.Fatalf("deleted configured worker still visible through connector compatibility path: %s", body)
+		t.Fatalf("deleted configured worker still visible through worker compatibility path: %s", body)
 	}
 }
 
@@ -64,10 +64,10 @@ func TestWorkerTypesExposeCanonicalRuntimeModes(t *testing.T) {
 	newCode, newBody := doReq(t, ts, http.MethodGet, "/api/v1/worker-types", "", "")
 	oldCode, oldBody := doReq(t, ts, http.MethodGet, "/api/v1/connector-kinds", "", "")
 	if newCode != http.StatusOK || oldCode != http.StatusOK {
-		t.Fatalf("worker types status=%d body=%s; connector kinds status=%d body=%s", newCode, newBody, oldCode, oldBody)
+		t.Fatalf("worker-types status=%d body=%s; connector-kinds status=%d body=%s", newCode, newBody, oldCode, oldBody)
 	}
 	if string(newBody) == string(oldBody) {
-		t.Fatalf("worker types still mirror legacy connector kinds: %s", newBody)
+		t.Fatalf("worker-types still mirrors the legacy connector-kinds shape: %s", newBody)
 	}
 
 	var catalog struct {

@@ -6,11 +6,11 @@ import (
 	"github.com/pblumer/atlas/connector/envname"
 )
 
-// The fold, on the shapes a connector name and a secret reference actually take.
+// The fold, on the shapes a worker name and a secret reference actually take.
 //
 // It is one function in one place precisely so these cases have one answer. The
 // engine renders a variable from a name, a worker reads a variable from the same
-// name, and a connector quotes the variable it could not resolve — three packages
+// name, and a worker quotes the variable it could not resolve — three packages
 // that never see each other, agreeing only because they all call this.
 func TestKey(t *testing.T) {
 	for _, tc := range []struct{ name, in, want string }{

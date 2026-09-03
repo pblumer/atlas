@@ -34,7 +34,7 @@ type TokenProvider interface {
 // tokenProvider fetches client-credentials tokens over HTTP and caches each by
 // (tokenURL, clientID, scope) until shortly before it expires, so a run of jobs
 // against one API reuses one token rather than calling the token endpoint for every
-// job. REST connector jobs are driven serially on the run-loop goroutine, so the
+// job. REST worker jobs are driven serially on the run-loop goroutine, so the
 // cache needs no concurrency, but the mutex keeps it correct if that ever changes.
 type tokenProvider struct {
 	http *http.Client
@@ -50,7 +50,7 @@ type cachedToken struct {
 	goodTil time.Time
 }
 
-// NewTokenProvider builds a token provider bounded by the shared connector call
+// NewTokenProvider builds a token provider bounded by the shared worker call
 // budget (nettimeout.HTTPClient), like the REST client itself.
 func NewTokenProvider() *tokenProvider {
 	return &tokenProvider{http: nettimeout.HTTPClient(), cache: map[string]cachedToken{}, now: time.Now}

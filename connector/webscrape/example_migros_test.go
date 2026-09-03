@@ -68,7 +68,7 @@ func migrosScrapeRequest(t *testing.T) Request {
 	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
 	detail := cp.ConnectorTask(cp.Node(task).Detail)
 	if detail == nil {
-		t.Fatal("the first task after the timer start is not a connector task")
+		t.Fatal("the first task after the timer start is not a worker task")
 	}
 	fields := make([]Field, 0, len(detail.ScrapeFields))
 	for _, f := range detail.ScrapeFields {

@@ -15,7 +15,7 @@ import (
 // memory, and a thousand rows is far past what a process variable should hold.
 const DefaultMaxRows = 1000
 
-// The pool policy every database this connector opens is held to. database/sql's own
+// The pool policy every database this worker opens is held to. database/sql's own
 // defaults are the two a database administrator would not have chosen: an unlimited
 // number of open connections, and connections kept until the process exits.
 //
@@ -67,7 +67,7 @@ func tunePool(db *sql.DB) {
 	db.SetConnMaxIdleTime(ConnMaxIdleTime)
 }
 
-// Registry resolves a connector name to the database behind it. It is the worker's
+// Registry resolves a worker name to the database behind it. It is the worker's
 // own map — the engine never holds one for this kind (ADR-0173).
 type Registry = clientreg.Registry[*Client]
 
@@ -76,7 +76,7 @@ func NewRegistry() *Registry { return clientreg.New[*Client]() }
 
 // Client is one configured database: a pooled handle and the product whose rules
 // apply to it. database/sql's handle *is* the pool, so unlike the LDAP and AD
-// connectors this kind reuses connections rather than dialing per job.
+// workers this kind reuses connections rather than dialing per job.
 type Client struct {
 	db      *sql.DB
 	product Product

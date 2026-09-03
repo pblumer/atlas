@@ -2,9 +2,9 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Atlas connector create-body e2e harness</title>
-    <!-- Drives the real api/web/connectordialog.js connectorCreateBody against a form
-         shaped like the Console's "New connector" row. The page scaffolding is the
+    <title>Atlas worker create-body e2e harness</title>
+    <!-- Drives the real api/web/workerdialog.js workerCreateBody against a form
+         shaped like the Console's "New worker" row. The page scaffolding is the
          test's own — app.js boots the whole console on import and cannot be loaded
          here — so this proves what a create carries, not app.js's wiring of it.
 
@@ -37,7 +37,7 @@
     </form>
     <pre id="out"></pre>
     <script type="module">
-      import { connectorCreateBody, connectorShape } from "/connectordialog.js";
+      import { workerCreateBody, workerShape } from "/workerdialog.js";
 
       const form = document.getElementById("f");
       const out = document.getElementById("out");
@@ -51,7 +51,7 @@
         }
       };
       window.build = () => {
-        const body = connectorCreateBody(form);
+        const body = workerCreateBody(form);
         out.textContent = JSON.stringify(body);
         return body;
       };
@@ -59,7 +59,7 @@
       // in each. A database's connection string has no syntax in common across the
       // three products, so the example is the only thing on screen that says which
       // one is expected.
-      window.shape = (kind, provider) => connectorShape(kind, provider);
+      window.shape = (kind, provider) => workerShape(kind, provider);
       window.__ready = true;
     </script>
   </body>

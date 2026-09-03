@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// A service task bearing an <atlas:clioConnector> extension is a clio connector
-// task (ADR-0036): it delegates to a server-registered connector via the job
+// A service task bearing an <atlas:clioConnector> extension is a clio worker
+// task (ADR-0036): it delegates to a server-registered worker via the job
 // path rather than to an external service-task worker.
 const clioConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -36,7 +36,7 @@ func TestParseClioConnectorTask(t *testing.T) {
 	}
 	d := cp.ConnectorTask(node.Detail)
 	if got := cp.Intern(d.Connector); got != "orders-clio" {
-		t.Errorf("connector = %q, want orders-clio", got)
+		t.Errorf("worker = %q, want orders-clio", got)
 	}
 	if got := cp.Intern(d.Subject); got != "orders/new" {
 		t.Errorf("subject = %q, want orders/new", got)
@@ -50,7 +50,7 @@ func TestParseClioConnectorTask(t *testing.T) {
 }
 
 func TestParseClioConnectorErrors(t *testing.T) {
-	// A clio connector task missing a required attribute fails to compile.
+	// A clio task missing a required attribute fails to compile.
 	const missingSubject = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas.dev/schema/1.0">
   <bpmn:process id="p">
@@ -66,7 +66,7 @@ func TestParseClioConnectorErrors(t *testing.T) {
   </bpmn:process>
 </bpmn:definitions>`
 	if _, err := Parse(1, 1, strings.NewReader(missingSubject)); err == nil {
-		t.Fatal("Parse: want an error for a clio connector task missing subject, got nil")
+		t.Fatal("Parse: want an error for a clio task missing subject, got nil")
 	}
 }
 
@@ -145,7 +145,7 @@ func TestParseClioReadTask(t *testing.T) {
 
 func TestParseClioOperationErrors(t *testing.T) {
 	cases := []struct{ name, attrs string }{
-		{"no connector", `subject="s" eventType="E"`},
+		{"no worker", `subject="s" eventType="E"`},
 		{"unknown op", `connector="c" operation="delete"`},
 		{"query without query or subject", `connector="c" operation="query" resultVariable="r"`},
 		{"query without resultVariable", `connector="c" operation="query" query="select 1"`},

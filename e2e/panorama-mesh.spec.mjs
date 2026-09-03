@@ -340,7 +340,7 @@ const statusGraph = {
         { elementId: "charge-card", elementType: "ServiceTask", count: 2,
           message: "POST https://payments.example/charge: 502 Bad Gateway" },
         { elementId: "notify-customer", elementType: "SendTask", count: 1,
-          message: "no worker holds the mail connector" },
+          message: "no Worker Instance holds the mail worker" },
       ] },
     { id: "process:2", kind: "process", name: "Dunning", provenance: "derived",
       application: "application:a1", processId: "dunning", version: 1,
@@ -430,13 +430,22 @@ test("opens fitted to the content and zooms from there", async ({ page }) => {
 
   const canvas = page.locator(".mesh-canvas");
   const fitted = await canvas.getAttribute("viewBox");
-  const [, , fitW, fitH] = fitted.split(" ").map(Number);
+  const [viewX, viewY, fitW, fitH] = fitted.split(" ").map(Number);
 
   // The frame the view opens on is the drawing surface itself, so its aspect ratio
   // matches the element's — which is what leaves no letterboxed band around the
   // graph. Anything else and preserveAspectRatio pads one axis with empty space.
   const box = await canvas.boundingBox();
   expect(fitW / fitH).toBeCloseTo(box.width / box.height, 1);
+
+  // The bottom-right corner is not drawable: the zoom controls float over it, and a
+  // node underneath them cannot be clicked or dragged. The fit holds it clear by
+  // giving up either that corner's width or its height — whichever costs the picture
+  // less — so the content is centred in the frame minus one of the two.
+  const chrome = await page.locator(".mesh-zoom").boundingBox();
+  const perUnit = fitW / box.width;
+  const reserveW = (chrome.width + 22) * perUnit;
+  const reserveH = (chrome.height + 22) * (fitH / box.height);
 
   // The settled nodes reach the frame: the content fills the space it was given
   // rather than floating in a small disc in the middle of it.
@@ -454,12 +463,15 @@ test("opens fitted to the content and zooms from there", async ({ page }) => {
   // the axis that ran out first. Requiring both would mean stretching the axes
   // independently, which fills the last pixel by misreporting distance — and
   // distance is the only thing a force layout is trying to say.
-  const reachesX = spread.x > fitW - 150;
-  const reachesY = spread.y > fitH - 150;
+  const reachesX = spread.x > fitW - reserveW - 200;
+  const reachesY = spread.y > fitH - reserveH - 200;
   expect(reachesX || reachesY).toBe(true);
-  // And it is centred in whatever is left over, so the leftover is a margin rather
-  // than a blank half.
-  expect(spread.left).toBeCloseTo(fitW - spread.left - spread.x, 0);
+  // And it is centred in the space it can be reached in, so the leftover is a margin
+  // rather than a blank half. Which of the two regions that is depends on the shape
+  // of the content, so either reading may hold — but one of them must.
+  const centredInWidth = Math.abs((spread.left - viewX) - (fitW - reserveW - spread.x) / 2) < 12;
+  const centredInHeight = Math.abs((spread.top - viewY) - (fitH - reserveH - spread.y) / 2) < 12;
+  expect(centredInWidth || centredInHeight).toBe(true);
 
   await page.locator("#mesh-zoom-in").click();
   const zoomed = Number((await canvas.getAttribute("viewBox")).split(" ")[2]);
@@ -1759,4 +1771,218 @@ test("a landscape with no dependencies says there is nothing to rank", async ({ 
   await expect(rank).toContainText("no radius to rank");
   // And why the one edge on screen did not count.
   await expect(rank).toContainText("Containment is not counted");
+});
+
+// Fit after arranging by hand (ADR-0211 §7). The layout skips its own fit while
+// anything is pinned — fitting rescales every position and would drag the pins off
+// the spots they were dropped on — so from the first drag onward the content and
+// the world are two different boxes. Framing the world then shows the picture in a
+// corner of a mostly empty sheet, which is what "Fit" exists to prevent.
+test("Fit frames the arrangement, not the empty sheet around it", async ({ page }) => {
+  installMock(page, meshOf(12));
+  await page.goto("/index.html#/panorama/landscape");
+  await page.locator(".mesh-node").first().waitFor();
+
+  // Pin one node, which is all it takes for the layout to stop fitting.
+  await dragBy(page, "process:3", 90, -60);
+  await page.locator("#mesh-zoom-fit").click();
+
+  const framing = await page.evaluate(() => {
+    const svg = document.querySelector(".mesh-canvas");
+    const v = svg.viewBox.baseVal;
+    const at = [...svg.querySelectorAll(".mesh-node")].map((g) => {
+      const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform"));
+      return { x: +m[1], y: +m[2], r: +g.querySelector(".mesh-body").getAttribute("data-r") };
+    });
+    const left = Math.min(...at.map((n) => n.x - n.r)), right = Math.max(...at.map((n) => n.x + n.r));
+    const top = Math.min(...at.map((n) => n.y - n.r)), bottom = Math.max(...at.map((n) => n.y + n.r));
+    return { v: { x: v.x, y: v.y, w: v.width, h: v.height }, left, right, top, bottom };
+  });
+
+  // Everything drawn is inside the frame.
+  expect(framing.left).toBeGreaterThanOrEqual(framing.v.x);
+  expect(framing.top).toBeGreaterThanOrEqual(framing.v.y);
+  expect(framing.right).toBeLessThanOrEqual(framing.v.x + framing.v.w);
+  expect(framing.bottom).toBeLessThanOrEqual(framing.v.y + framing.v.h);
+
+  // And it fills it: the content reaches most of the frame on at least one axis
+  // rather than sitting in a corner of it. A frame twice the content's size on both
+  // axes is the failure this test is about.
+  const fillX = (framing.right - framing.left) / framing.v.w;
+  const fillY = (framing.bottom - framing.top) / framing.v.h;
+  expect(Math.max(fillX, fillY)).toBeGreaterThan(0.6);
+});
+
+// A node under the zoom controls takes no pointer: the panel is in front of the
+// canvas, so the press lands on chrome and the node can be neither selected nor
+// dragged. The fit holds that corner clear, which matters most in a filtered or
+// drilled picture — few enough nodes that the fit puts one of them there, and even
+// odds it is the one being reached for.
+test("a node in the chrome's corner can still be picked up", async ({ page }) => {
+  installMock(page);
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.goto("/index.html#/panorama/landscape");
+  await page.locator(".mesh-canvas").waitFor();
+  await page.locator("#mesh-search").fill("invoice");
+  await expect(page.locator("#mesh-count")).toContainText("match");
+
+  // Whichever node the fit put closest to the controls is the one at risk.
+  const chrome = await page.locator(".mesh-zoom").boundingBox();
+  const corner = { x: chrome.x + chrome.width / 2, y: chrome.y + chrome.height / 2 };
+  const nearest = await page.evaluate((c) => {
+    let best = null;
+    for (const g of document.querySelectorAll(".mesh-node")) {
+      const box = g.querySelector(".mesh-body").getBoundingClientRect();
+      const d = Math.hypot(box.x + box.width / 2 - c.x, box.y + box.height / 2 - c.y);
+      if (!best || d < best.d) best = { id: g.dataset.nodeId, d };
+    }
+    return best;
+  }, corner);
+  expect(nearest).toBeTruthy();
+
+  // Every drawn node answers a hit test on its own body — none is behind the panel.
+  const covered = await page.evaluate(() => [...document.querySelectorAll(".mesh-node")]
+    .filter((g) => {
+      const box = g.querySelector(".mesh-body").getBoundingClientRect();
+      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return hit?.closest?.("[data-node-id]")?.dataset?.nodeId !== g.dataset.nodeId;
+    })
+    .map((g) => g.dataset.nodeId));
+  expect(covered).toEqual([]);
+
+  // And the one nearest the chrome really does drag, neighbours making room for it.
+  const before = await screenAt(page, nearest.id);
+  await dragBy(page, nearest.id, -140, -90);
+  const after = await screenAt(page, nearest.id);
+  expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeGreaterThan(60);
+  await expect(page.locator(`[data-node-id="${nearest.id}"]`)).toHaveClass(/mesh-pinned/);
+});
+
+// Notation projections (ADR-0211 §8). The landscape may be spoken in ArchiMate's or
+// C4's vocabulary. §8 allows exactly one thing here — a read-only projection with an
+// explicit versioned mapping and reported loss — and forbids the thing it would
+// otherwise become, which is a renderer toggle pretending to be a second notation.
+test("the landscape can be read in ArchiMate's vocabulary, loss and all", async ({ page }) => {
+  installMock(page, radiusGraph);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+
+  // Every node says what the notation calls it, which is ArchiMate's corner icon
+  // written out — an icon at this zoom is a smudge.
+  const canvas = page.locator(".mesh-canvas");
+  await expect(canvas).toContainText("[Application Process]");
+  await expect(canvas).toContainText("[Application Service]");
+  await expect(canvas).toContainText("[Application Function]");
+
+  // Structure is a rectangle and behaviour a rounded one, which is ArchiMate's own
+  // convention — and both are still inscribed in the circle the layout reserved.
+  const worker = page.locator('[data-node-id="worker:mail"] .mesh-body');
+  expect(await worker.evaluate((el) => el.tagName.toLowerCase())).toBe("rect");
+
+  // It says it is a projection, names the mapping's version, and lists what it
+  // drops. A picture in somebody else's vocabulary that does not name the vocabulary
+  // reads as a model of it.
+  const projection = page.locator(".mesh-projection");
+  await expect(projection).toContainText("Projected into ArchiMate 3.2");
+  await expect(projection).toContainText("mapping v1");
+  await expect(projection).toContainText("read-only");
+  await expect(projection).toContainText("Nothing on this landscape was modelled");
+  await expect(projection.locator(".mesh-loss li")).not.toHaveCount(0);
+  await expect(projection).toContainText("Relationships are untyped");
+
+  // The legend keeps Atlas's own word beside the notation's, or a reader could not
+  // get from the picture back to the thing it is about.
+  await expect(page.locator(".mesh-legend")).toContainText("Application Process — Process");
+
+  // And switching back is switching back: no annotations, Atlas's own shapes.
+  await page.selectOption("#mesh-notation", "atlas");
+  await expect(canvas).not.toContainText("[Application Process]");
+  await expect(page.locator(".mesh-projection")).toHaveCount(0);
+});
+
+// C4 tells its types apart by the annotation rather than by silhouette, and the
+// projection is faithful to that rather than inventing shapes C4 does not have.
+test("C4 draws boxes and says which kind of box each one is", async ({ page }) => {
+  installMock(page, radiusGraph);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "c4-projection");
+
+  const canvas = page.locator(".mesh-canvas");
+  await expect(canvas).toContainText("[Component]");
+  await expect(page.locator(".mesh-projection")).toContainText("C4 separates its levels");
+  await expect(page.locator(".mesh-projection")).toContainText("External systems are absent");
+});
+
+// A kind the notation has no word for keeps its own shape and is named as loss.
+// Inventing an element for it would be the silent drop §8's theme ban exists to
+// prevent — and a restricted placeholder is a finding about the picture rather than
+// a piece of architecture, so no notation should have a word for it.
+test("a kind the notation cannot express keeps its own shape", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const shapeOf = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => el.tagName.toLowerCase());
+  const before = await shapeOf("restricted:1");
+
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+  expect(await shapeOf("restricted:1")).toBe(before);
+  await expect(page.locator(".mesh-projection")).toContainText("no ArchiMate element");
+  // The process beside it did change, so this is a node the projection left alone
+  // rather than a projection that did nothing.
+  expect(await shapeOf("process:1")).toBe("rect");
+});
+
+// An exported projection has to carry that it is one. A C4-looking file that does
+// not say it was projected from Atlas's own resources is the misrepresentation §8
+// forbids, and the file is where nobody can ask.
+test("an exported projection says so, and says what it drops", async ({ page }) => {
+  installMock(page, { ...radiusGraph, observedAt: 1_700_000_000 });
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "c4-projection");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#mesh-export-svg").click(),
+  ]);
+  const stream = await download.createReadStream();
+  const svg = await new Promise((resolve) => {
+    let out = "";
+    stream.on("data", (chunk) => (out += chunk));
+    stream.on("end", () => resolve(out));
+  });
+
+  expect(svg).toContain("Atlas landscape · C4");
+  expect(svg).toContain("Projected into C4 (projection) (mapping v1)");
+  expect(svg).toContain("nothing here was modelled");
+  expect(svg).toContain("External systems are absent");
+  // The key in the file speaks the projection too, or it explains a picture that is
+  // no longer the one beside it — and keeps Atlas's own word next to C4's, so a
+  // reader can get from the file back to the thing it is about.
+  expect(svg).toContain("Component — Process");
+});
+
+// A saved view is the whole question somebody saved, and the vocabulary is part of
+// the question: reopening a C4 landscape as an Atlas one answers a different one.
+test("a saved view remembers the notation it was read in", async ({ page }) => {
+  installMock(page, radiusGraph);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+  await page.locator("#mesh-view-name").fill("As architecture");
+  await page.locator("#mesh-view-save button").click();
+  await expect(page.locator(".mesh-view-list")).toContainText("As architecture");
+
+  await page.selectOption("#mesh-notation", "atlas");
+  await expect(page.locator(".mesh-canvas")).not.toContainText("[Application Process]");
+
+  await page.locator(".mesh-view-open").first().click();
+  await expect(page.locator("#mesh-notation")).toHaveValue("archimate-3.2");
+  await expect(page.locator(".mesh-canvas")).toContainText("[Application Process]");
 });

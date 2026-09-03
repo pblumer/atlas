@@ -12,9 +12,9 @@ function installMock(page) {
       return route.fulfill({ json: { id: "c1", enabled: state.enabled } });
     }
     if (path.endsWith("/connectors")) {
-      // `role` is what the caller may do with this connector (ADR-0205), and it is
+      // `role` is what the caller may do with this worker (ADR-0205), and it is
       // what decides whether the row draws its actions at all. A server with auth
-      // off answers "owner" for every connector, which is what this mock stands in
+      // off answers "owner" for every worker, which is what this mock stands in
       // for; leaving it out would make the row read as somebody else's, and the
       // page would correctly draw no buttons.
       return route.fulfill({ json: [{ id: "c1", name: "clio-prod", kind: "clio", role: "owner", endpoint: "https://clio.example", credentialsRef: "clio_token", enabled: state.enabled }] });
@@ -51,17 +51,17 @@ test("Workers replaces Connectors in Console navigation", async ({ page }) => {
   expect(page.__errors).toEqual([]);
 });
 
-test("Workers presents catalog and configured workers over connector compatibility APIs", async ({ page }) => {
+test("Workers presents catalog and configured workers over the compatibility APIs", async ({ page }) => {
   await goto(page, "#/console/workers");
   const view = page.locator("#view");
   await expect(view.locator("h2").filter({ hasText: "Worker catalog" })).toBeVisible();
   await expect(view.locator("h2").filter({ hasText: "Configured workers" })).toBeVisible();
-  await expect(page.locator("#connector-rows")).toContainText("clio-prod");
+  await expect(page.locator("#worker-rows")).toContainText("clio-prod");
   await expect(view.locator("h2").filter({ hasText: "Secrets" })).toBeVisible();
   expect(page.__errors).toEqual([]);
 });
 
-test("legacy connector route canonicalizes to Workers", async ({ page }) => {
+test("the legacy connectors route canonicalizes to Workers", async ({ page }) => {
   await goto(page, "#/console/connectors");
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#/console/workers");
   await expect(page.locator("#view h1")).toHaveText("Workers");
@@ -70,7 +70,7 @@ test("legacy connector route canonicalizes to Workers", async ({ page }) => {
 
 test("a worker's actions live behind the row's ⋯ menu", async ({ page }) => {
   await goto(page, "#/console/workers");
-  const row = page.locator("#connector-rows tr").first();
+  const row = page.locator("#worker-rows tr").first();
   // Nothing but the menu trigger is drawn on the row: the seven buttons that used to
   // stand there are what made the table unreadable.
   await expect(row.locator("td.row-actions .dropdown-toggle")).toHaveCount(1);
@@ -91,10 +91,10 @@ test("a worker's actions live behind the row's ⋯ menu", async ({ page }) => {
 
 test("editing a configured worker stays on Workers", async ({ page }) => {
   await goto(page, "#/console/workers");
-  await expect(page.locator("#connector-rows")).toContainText("enabled");
-  await page.click("#connector-rows .dropdown-toggle");
-  await page.click('#connector-rows .dropdown-menu button[data-act="toggle"]');
-  await expect(page.locator("#connector-rows")).toContainText("disabled");
+  await expect(page.locator("#worker-rows")).toContainText("enabled");
+  await page.click("#worker-rows .dropdown-toggle");
+  await page.click('#worker-rows .dropdown-menu button[data-act="toggle"]');
+  await expect(page.locator("#worker-rows")).toContainText("disabled");
   await expect(page.locator("#view h1")).toHaveText("Workers");
   expect(page.__errors).toEqual([]);
 });

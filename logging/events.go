@@ -159,7 +159,7 @@ var (
 	// A setting that widens what an unauthenticated caller may do is one nobody
 	// should be able to inherit without being told (ADR-0200).
 	AuthOAuthRegistrationOpen = newEvent("auth.oauth_registration_open")
-	// Connector ownership (ADR-0205). Who may reach a connector's configuration —
+	// Worker ownership (ADR-0205). Who may reach a worker's configuration —
 	// its endpoint, its credential reference and its inbound subscriptions — is now
 	// somebody's decision rather than everybody's, so the decision is recorded.
 	// Sharing and withdrawing are separate events because "who was let in" and "who
@@ -185,7 +185,7 @@ var (
 	WorkerSupervisorStarted = newEvent("worker.supervised_started")
 	WorkerSupervisorFailed  = newEvent("worker.supervise_failed")
 	// ADMockEnabled is an AD worker announcing that it serves the Active Directory
-	// connector against a directory in its own memory rather than a real one
+	// worker against a directory in its own memory rather than a real one
 	// (ADR-0181). It is a warning rather than an info because
 	// a mock worker is indistinguishable from a working one everywhere else: it
 	// completes every job it leases.
@@ -224,7 +224,7 @@ var (
 	// the next statement sends again.
 	SQLMockReportFailed = newEvent("sql_mock.report_failed")
 	// WorkerHistoryFailed is the job-history exporter reporting that an append did not
-	// reach its clio connector, or that its buffer is dropping entries. Both are
+	// reach its clio worker, or that its buffer is dropping entries. Both are
 	// warnings rather than errors on purpose: the history is telemetry, and the engine
 	// deliberately does not wait for it, so a gap costs a run nothing.
 	WorkerHistoryFailed = newEvent("worker.history_failed")

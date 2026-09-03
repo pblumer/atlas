@@ -15,7 +15,7 @@ import (
 // TestJiraWorkerHoldsItsOwnCredential is ADR-0168's decision seen from the worker's
 // side, and the point of giving Jira a worker at all (ADR-0201/0203): the site URL and
 // the Atlassian credential come from *this process's* environment, and a leased job
-// contributes only a connector name. A worker can therefore operate as an account the
+// contributes only a worker name. A worker can therefore operate as an account the
 // engine has never held.
 func TestJiraWorkerHoldsItsOwnCredential(t *testing.T) {
 	built, err := worker.BuiltinConnectors(fakeEnv(map[string]string{
@@ -221,7 +221,7 @@ func TestAJiraJobWithNoResolvedDetailSaysSo(t *testing.T) {
 	}
 }
 
-// A connector name this worker does not hold is refused by name, so an operator reads
+// A worker name this worker does not hold is refused by name, so an operator reads
 // which instance is missing rather than a generic failure (ADR-0158).
 func TestAJiraJobForAnUnheldConnectorNamesIt(t *testing.T) {
 	built, err := worker.BuiltinConnectors(fakeEnv(map[string]string{
@@ -239,7 +239,7 @@ func TestAJiraJobForAnUnheldConnectorNamesIt(t *testing.T) {
 		}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "other") {
-		t.Fatalf("error = %v, want the unheld connector named", err)
+		t.Fatalf("error = %v, want the unheld worker named", err)
 	}
 }
 

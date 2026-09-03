@@ -7,7 +7,7 @@ import (
 )
 
 // A service task bearing an <atlas:mailConnector> extension is an outbound mail
-// connector task (ADR-0079): it sends an e-mail through a server-registered mail
+// task (ADR-0079): it sends an e-mail through a server-registered mail
 // provider via the job path, mirroring clio's registry-managed endpoint (the
 // provider host and credentials live server-side, never in the model) while the
 // message fields (recipients, subject, body) are model-authored like REST's.
@@ -46,7 +46,7 @@ func TestParseMailConnectorTask(t *testing.T) {
 		t.Errorf("jobType index = %d, want the reserved MailJobTypeIndex %d", d.JobType, MailJobTypeIndex)
 	}
 	if got := cp.Intern(d.Connector); got != "office365" {
-		t.Errorf("connector = %q, want office365", got)
+		t.Errorf("worker = %q, want office365", got)
 	}
 	if d.To.Expr != nil || d.To.Literal != "ops@example.com" {
 		t.Errorf("to = %+v, want the literal recipient", d.To)
@@ -121,7 +121,7 @@ func TestParseMailConnectorErrors(t *testing.T) {
 	// A malformed FEEL expression in any message field fails the compile — each field
 	// is validated on its own, so a case per field exercises every validation branch.
 	cases := map[string]string{
-		"missing connector":      `<atlas:mailConnector to="a@b.c" subject="hi" body="x"/>`,
+		"missing worker":         `<atlas:mailConnector to="a@b.c" subject="hi" body="x"/>`,
 		"missing recipient":      `<atlas:mailConnector connector="m" subject="hi" body="x"/>`,
 		"malformed FEEL to":      `<atlas:mailConnector connector="m" to="=(" subject="hi" body="x"/>`,
 		"malformed FEEL cc":      `<atlas:mailConnector connector="m" to="a@b.c" cc="=(" body="x"/>`,

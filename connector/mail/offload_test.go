@@ -43,7 +43,7 @@ func resolveFixture(t *testing.T, cfg compiler.MailConfig, vars ...model.Variabl
 
 // TestResolveCarriesTheValuesButNeverTheCredential is the security claim ADR-0168
 // rests on, made checkable. The engine resolves what to say and who to say it to;
-// the connector travels only as a *name*, and the worker looks up its own
+// the worker travels only as a *name*, and the worker looks up its own
 // endpoint and password under that name. Nothing in the resolved job can be a
 // secret, because the engine never puts one there.
 func TestResolveCarriesTheValuesButNeverTheCredential(t *testing.T) {
@@ -57,7 +57,7 @@ func TestResolveCarriesTheValuesButNeverTheCredential(t *testing.T) {
 	})
 
 	if j.Connector != "office365" {
-		t.Errorf("connector = %q, want the name the worker will look up", j.Connector)
+		t.Errorf("worker = %q, want the name the worker will look up", j.Connector)
 	}
 	if strings.Join(j.To, ",") != "ops@example.com,team@example.com" {
 		t.Errorf("to = %v, want both recipients split and trimmed", j.To)
@@ -96,7 +96,7 @@ func TestResolveEvaluatesFeelBeforeItTravels(t *testing.T) {
 	}
 }
 
-// Run is the worker's half: it looks its own connector up by name and sends. This
+// Run is the worker's half: it looks its own worker up by name and sends. This
 // is the same Client the in-process path uses, so the two cannot drift about what a
 // Message is.
 func TestRunSendsThroughTheWorkersOwnConnector(t *testing.T) {
@@ -124,7 +124,7 @@ func TestRunSendsThroughTheWorkersOwnConnector(t *testing.T) {
 
 // A name the worker holds no configuration for is the failure this whole split
 // creates: the engine used to refuse it, and now only the worker can know. The
-// message has to name the connector, because "configure it somewhere" is the fix
+// message has to name the worker, because "configure it somewhere" is the fix
 // and the operator needs to know where.
 func TestRunRefusesAConnectorTheWorkerDoesNotHold(t *testing.T) {
 	reg, j := resolveFixture(t, compiler.MailConfig{
@@ -132,18 +132,18 @@ func TestRunRefusesAConnectorTheWorkerDoesNotHold(t *testing.T) {
 		To:        compiler.RestExpr{Literal: "ops@example.com"},
 		Retries:   3,
 	})
-	// Nothing registered: this worker was started without that connector.
+	// Nothing registered: this worker was started without that worker.
 	err := mail.Run(context.Background(), j, reg)
 	if err == nil {
-		t.Fatal("sending through an unconfigured connector succeeded")
+		t.Fatal("sending through an unconfigured worker succeeded")
 	}
 	if !strings.Contains(err.Error(), "office365") {
-		t.Errorf("error = %v, want it to name the connector that is missing", err)
+		t.Errorf("error = %v, want it to name the worker that is missing", err)
 	}
 }
 
 // A task that resolved to nobody is refused rather than sent into the void — and it
-// is refused *after* the connector lookup, so an operator who has both problems is
+// is refused *after* the worker lookup, so an operator who has both problems is
 // told about the configuration first, which is the one they can act on.
 func TestRunRefusesAMessageWithNoRecipient(t *testing.T) {
 	reg, j := resolveFixture(t, compiler.MailConfig{

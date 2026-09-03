@@ -29,7 +29,7 @@ func TestInboundBridgeLive(t *testing.T) {
 	}
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"events","kind":"clio","endpoint":"http://x"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 	var conn connector
 	_ = json.Unmarshal(cb, &conn)
@@ -126,7 +126,7 @@ func TestInboundBridgeStartsAndDedupes(t *testing.T) {
 
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"events","kind":"clio","endpoint":"http://x"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 	var conn connector
 	_ = json.Unmarshal(cb, &conn)
@@ -177,7 +177,7 @@ func TestInboundBridgeBatchLimitBoundsCatchUp(t *testing.T) {
 	}
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"events","kind":"clio","endpoint":"http://x"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 	var conn connector
 	_ = json.Unmarshal(cb, &conn)
@@ -224,7 +224,7 @@ func TestInboundBridgeStartFromTipSkipsBacklog(t *testing.T) {
 	}
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"events","kind":"clio","endpoint":"http://x"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 	var conn connector
 	_ = json.Unmarshal(cb, &conn)
@@ -281,7 +281,7 @@ func TestInboundBridgePrimesAcrossPolls(t *testing.T) {
 	}
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"events","kind":"clio","endpoint":"http://x"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 	var conn connector
 	_ = json.Unmarshal(cb, &conn)
@@ -326,7 +326,7 @@ func TestInboundBridgePrimeResilience(t *testing.T) {
 
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"events","kind":"clio","endpoint":"http://x"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 	var conn connector
 	_ = json.Unmarshal(cb, &conn)
@@ -379,7 +379,7 @@ func TestInboundBridgeDedupesLostCursor(t *testing.T) {
 	}
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"events","kind":"clio","endpoint":"http://x"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 	var conn connector
 	_ = json.Unmarshal(cb, &conn)
@@ -443,7 +443,7 @@ func TestInboundBridgeRecursiveSubjectKey(t *testing.T) {
 	}
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"events","kind":"clio","endpoint":"http://x"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 	var conn connector
 	_ = json.Unmarshal(cb, &conn)
@@ -479,7 +479,7 @@ func TestInboundSubscriptionHandlers(t *testing.T) {
 		return rec.Code, rec.Body.Bytes()
 	}
 
-	// A clio connector to attach subscriptions to, and a temis one to reject against.
+	// A clio worker to attach subscriptions to, and a temis one to reject against.
 	_, cb := do(http.MethodPost, "/api/v1/connectors", `{"name":"ev","kind":"clio","endpoint":"http://x"}`)
 	var clioConn connector
 	_ = json.Unmarshal(cb, &clioConn)
@@ -497,9 +497,9 @@ func TestInboundSubscriptionHandlers(t *testing.T) {
 	if code, _ := do(http.MethodPost, base, `{"watchedSubject":"s","messageName":"m","correlationKey":"= ("}`); code != http.StatusBadRequest {
 		t.Error("bad FEEL: want 400")
 	}
-	// A subscription on a non-clio connector → 400.
+	// A subscription on a non-clio worker → 400.
 	if code, _ := do(http.MethodPost, "/api/v1/connectors/"+temisConn.ID+"/inbound-subscriptions", `{"watchedSubject":"s","messageName":"m"}`); code != http.StatusBadRequest {
-		t.Error("subscription on a temis connector: want 400")
+		t.Error("subscription on a temis worker: want 400")
 	}
 	// Invalid JSON → 400.
 	if code, _ := do(http.MethodPost, base, `{not json`); code != http.StatusBadRequest {
@@ -514,15 +514,15 @@ func TestInboundSubscriptionHandlers(t *testing.T) {
 	var sub inboundSubscription
 	_ = json.Unmarshal(sb, &sub)
 
-	// A subscription on a second clio connector must be filtered out of this
-	// connector's list (the list is scoped by connector id).
+	// A subscription on a second clio worker must be filtered out of this
+	// worker's list (the list is scoped by worker id).
 	_, ob := do(http.MethodPost, "/api/v1/connectors", `{"name":"other","kind":"clio","endpoint":"http://z"}`)
 	var otherConn connector
 	_ = json.Unmarshal(ob, &otherConn)
 	_, _ = do(http.MethodPost, "/api/v1/connectors/"+otherConn.ID+"/inbound-subscriptions", `{"watchedSubject":"x","messageName":"otherEvent"}`)
 
 	if code, lb := do(http.MethodGet, base, ""); code != http.StatusOK || !strings.Contains(string(lb), `"messageName":"orderEvent"`) || strings.Contains(string(lb), "otherEvent") {
-		t.Fatalf("list (should be scoped to this connector): %d %s", code, lb)
+		t.Fatalf("list (should be scoped to this worker): %d %s", code, lb)
 	}
 	// A create defaults StartFromTip on (forward-only).
 	if !sub.StartFromTip {
@@ -582,7 +582,7 @@ func TestInboundSubStore(t *testing.T) {
 	}
 }
 
-// A watch is validated against the kind of connector it names, because the kind is what
+// A watch is validated against the kind of worker it names, because the kind is what
 // decides which half of the record is meaningful (ADR-0214). Each side is refused on
 // the other's kind too, so a watch cannot be saved carrying a field nothing will read.
 func TestValidateInboundWatchPerKind(t *testing.T) {
@@ -617,7 +617,7 @@ func TestValidateInboundWatchPerKind(t *testing.T) {
 			inboundSubscription{JQL: "project = OPS", PollSeconds: -1}, "cannot be negative"},
 		{"a complete jira watch", connectorKindJira, inboundSubscription{JQL: "project = OPS"}, ""},
 
-		{"a connector that does not exist", "", inboundSubscription{}, "no connector with that id"},
+		{"a worker that does not exist", "", inboundSubscription{}, "no worker with that id"},
 		{"a kind with no inbound half", connectorKindMail, inboundSubscription{}, "has no inbound half"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

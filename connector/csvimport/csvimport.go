@@ -1,9 +1,9 @@
-// Package csvimport is Atlas's in-process worker for the CSV-to-JSON connector
+// Package csvimport is Atlas's in-process worker for the CSV-to-JSON Worker Type
 // task (ADR-0139), and the CSV parser the API's upload-validation endpoint shares
 // with it (ADR-0084).
 //
 // Like every package under connector/, it rides the standard service-task seam: a
-// CSV connector task compiles to a job carrying compiler.CsvImportJobTypeIndex, and
+// CSV task compiles to a job carrying compiler.CsvImportJobTypeIndex, and
 // [Handler] picks that job up off the processor goroutine, after fsync, so parsing
 // a file never allocates on the hot path or runs on the recovery path (I1/I4).
 // Unlike its siblings it talks to no external system — the "connector" reads a

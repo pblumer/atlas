@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:adConnector> extension is an Active Directory
-// connector task (ADR-0166): it performs an AD-specific provisioning operation against
+// task (ADR-0166): it performs an AD-specific provisioning operation against
 // a model-authored server via the job path.
 const adConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -271,14 +271,14 @@ func TestAdSyncValidation(t *testing.T) {
 	}
 }
 
-// A task addresses its directory by naming a connector an operator configured, the way
+// A task addresses its directory by naming a worker an operator configured, the way
 // every other credential-bearing kind is addressed
 // (ADR-0206). The model then carries the operation and its
 // DNs, and nothing about where the directory is or who binds to it.
 func TestAdConnectorTaskNamesAConfiguredDirectory(t *testing.T) {
 	cp, d := adDetail(t, `connector="prod-forest" operation="disable" dn="cn=Arno,dc=example,dc=com"`)
 	if got := cp.Intern(d.Connector); got != "prod-forest" {
-		t.Errorf("connector = %q, want prod-forest", got)
+		t.Errorf("worker = %q, want prod-forest", got)
 	}
 	// And nothing about the directory itself: those slots stay empty, so nothing
 	// downstream can quietly prefer a stale url the model happens to still carry.
@@ -288,26 +288,26 @@ func TestAdConnectorTaskNamesAConfiguredDirectory(t *testing.T) {
 	}
 }
 
-// The older shape still compiles, and carries no connector reference — which is what
-// keeps the deploy-time "a connector of kind ad is required here" check off models
+// The older shape still compiles, and carries no worker reference — which is what
+// keeps the deploy-time "a worker of kind ad is required here" check off models
 // written before records existed.
 func TestAdConnectorTaskStillCompilesWithItsOwnURL(t *testing.T) {
 	cp, d := adDetail(t, `url="ldaps://dc" bindDN="cn=svc,dc=x" bindSecret="AD_BIND" operation="disable" dn="cn=a"`)
 	if d.Connector != -1 {
-		t.Errorf("connector = %d, want none for a task carrying its own url", d.Connector)
+		t.Errorf("worker = %d, want none for a task carrying its own url", d.Connector)
 	}
 	if d.AdURL.Literal != "ldaps://dc" || cp.Intern(d.AdBindSecret) != "AD_BIND" {
 		t.Errorf("url/bindSecret = %q / %q", d.AdURL.Literal, cp.Intern(d.AdBindSecret))
 	}
-	// The reference view agrees: no connector to check against the store.
+	// The reference view agrees: no worker to check against the store.
 	if _, ok := cp.NodeConnectorRef(0); ok {
 		if ref, _ := cp.NodeConnectorRef(0); ref.Connector != "" {
-			t.Errorf("NodeConnectorRef = %+v, want no connector reference", ref)
+			t.Errorf("NodeConnectorRef = %+v, want no worker reference", ref)
 		}
 	}
 }
 
-// Naming a connector *and* carrying a url is refused rather than resolved by
+// Naming a worker *and* carrying a url is refused rather than resolved by
 // precedence. Whichever rule we picked, half the readers of the model would assume the
 // other — and the two point at different directories, so a silent winner writes to the
 // wrong forest.
@@ -328,13 +328,13 @@ func TestAdConnectorTaskRefusesBothShapesAtOnce(t *testing.T) {
 }
 
 // A task carrying neither is refused, naming both ways out — the message is the only
-// place a modeler learns that a Console connector is now an option.
+// place a modeler learns that a Console worker is now an option.
 func TestAdConnectorTaskNeedsADirectoryOneWayOrTheOther(t *testing.T) {
 	_, err := Parse(1, 1, strings.NewReader(adTaskBPMN(`operation="disable" dn="cn=a"`)))
 	if err == nil {
 		t.Fatal("a task naming no directory at all compiled")
 	}
-	for _, want := range []string{"connector", "url"} {
+	for _, want := range []string{"worker", "url"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error = %v, want it to mention %q", err, want)
 		}
@@ -374,7 +374,7 @@ func TestParseAdSearch(t *testing.T) {
 }
 
 // The two bounds a search does not have to author: the whole subtree, and the same
-// 1000-entry cap the LDAP connector applies.
+// 1000-entry cap the LDAP worker applies.
 func TestAdSearchDefaults(t *testing.T) {
 	cp, d := adDetail(t, `url="ldaps://dc" operation="search" baseDN="dc=x" resultVariable="r"`)
 	if got := cp.Intern(d.AdScope); got != "sub" {

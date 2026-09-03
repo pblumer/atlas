@@ -1,5 +1,5 @@
 // Package openapimock serves a mock REST API from an OpenAPI 3 document, so a process
-// with a REST connector task (ADR-0067) can be run end to end before the API it calls
+// with a REST task (ADR-0067) can be run end to end before the API it calls
 // exists — or without pointing a draft at the real one (ADR-0217).
 //
 // It is the generic sibling of the Remedy mock (package

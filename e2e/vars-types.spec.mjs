@@ -3,9 +3,9 @@
 //
 // The panel listed a name and who writes it, and nothing else. That answers "does this
 // variable exist"; it does not answer the two questions an author actually has in front
-// of a connector result — what type is this, and what is inside it. The type is knowable
+// of a worker result — what type is this, and what is inside it. The type is knowable
 // before anything runs, from three places: a start variable declares its own, a form
-// field's component type is a type, and what a connector kind writes is a fact about the
+// field's component type is a type, and what a Worker Type writes is a fact about the
 // kind (a query returns rows, "query one" a row, an execute a count). What is *inside*
 // is not knowable that way — so the panel reads it off the last real run of this process
 // and opens the structure where it stands, which is the only way to see at design time
@@ -48,12 +48,12 @@ test("a start variable's declared type is a badge, not a word inside its origin"
   expect(page.__errors).toEqual([]);
 });
 
-test("a connector's result type comes from the catalog, before anything has run", async ({ page }) => {
+test("a worker's result type comes from the catalog, before anything has run", async ({ page }) => {
   await open(page, { ran: false });
   // PostgreSQL, operation "query": rows. Nothing ran, nothing was deployed — the kind
   // itself is what knows this.
   expect(await badge(page, "kunden")).toBe("array");
-  await expect(row(page, "kunden").locator(".var-meta")).toContainText("connector result");
+  await expect(row(page, "kunden").locator(".var-meta")).toContainText("worker result");
   expect(page.__errors).toEqual([]);
 });
 

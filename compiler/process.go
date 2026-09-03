@@ -35,7 +35,7 @@ const (
 	TypeParallelGateway   // AND gateway: forks a token onto every outgoing flow, joins by waiting for all incoming
 	TypeInclusiveGateway  // OR gateway: forks onto every flow whose condition holds, joins by waiting for all that could still arrive
 	TypeMessageStartEvent // a start event that a correlating message instantiates (ADR-0035); at runtime it behaves like a none start (flows straight on)
-	TypeConnectorTask     // a service task that delegates to a server-registered connector via the job path (ADR-0036); like a service task it creates a job and waits
+	TypeConnectorTask     // a service task that delegates to a server-registered worker via the job path (ADR-0036); like a service task it creates a job and waits
 	TypeUserTask          // a human task: parks a token, creates a job, waits for a person to complete it via the Tasks app (ADR-0028)
 	TypeBoundaryEvent     // a timer/message event attached to a host activity; arms while the host runs and, when it fires, interrupts the host or spawns a parallel token (ADR-0040)
 	TypeScriptJobTask     // a script task authored in a general-purpose language (PowerShell, …) that runs via the job path, not inline like a FEEL script task (ADR-0047); like a service task it creates a job and waits
@@ -70,7 +70,7 @@ const (
 
 	TypeTerminateEndEvent // an end event that ends its enclosing flow scope at once (ADR-0116): it terminates every other live token in the scope (cancelling their jobs), then completes the scope — at the root the instance ends, inside a subprocess that subprocess ends and the parent continues. cancelEndEventBehavior minus compensation and the cancel boundary
 
-	TypeMockupTask // a service task simulated by the engine itself (ADR-0120): on activation it writes an optional FEEL result and arms a one-shot timer for a random duration, then completes (or, per a fail probability, raises an incident) — no external worker or connector. A distinct type because its execution (timer-wait, no job) differs from a service task, like TypeConnectorTask.
+	TypeMockupTask // a service task simulated by the engine itself (ADR-0120): on activation it writes an optional FEEL result and arms a one-shot timer for a random duration, then completes (or, per a fail probability, raises an incident) — no external worker. A distinct type because its execution (timer-wait, no job) differs from a service task, like TypeConnectorTask.
 
 	TypeEscalationThrowEvent // an intermediate throw event that raises an escalation, propagating up to the nearest matching handler, then continues on its outgoing flow (ADR-0125); the continue-after-throw counterpart of TypeMessageThrowEvent
 	TypeEscalationEndEvent   // an end event that raises an escalation, propagating up to the nearest matching handler, then ends its path (ADR-0125); unlike an error end the catch may be non-interrupting and an uncaught escalation is benign (no incident)
@@ -359,17 +359,17 @@ type DecisionInputMapping struct {
 // is the process variable the decision's result is written back into on job
 // completion (the output mapping); -1 if the task discards its result.
 //
-// Connector selects the evaluation locus (ADR-0050): -1 (the default) means the
+// Worker selects the evaluation locus (ADR-0050): -1 (the default) means the
 // decision is evaluated locally by the embedded temis library (ADR-0014); a set
-// Connector is the interned name of a server-registered temis connector that
-// evaluates the decision centrally, and the task then carries the temis-connector
+// Worker is the interned name of a server-registered temis worker that
+// evaluates the decision centrally, and the task then carries the temis
 // job type instead of the local DMN job type.
 type BusinessRuleTaskDetail struct {
-	JobType       int32 // interned reserved job type (DMN local, or temis connector) → index
+	JobType       int32 // interned reserved job type (DMN local, or temis worker) → index
 	DecisionId    int32 // interned DMN decision id → index
 	Inputs        int32 // interned JSON object of static inputs → index, -1 if none
 	ResultVar     int32 // interned result-variable name → index, -1 if none
-	Connector     int32 // interned temis connector name → index, -1 = local (in-engine)
+	Connector     int32 // interned temis worker name → index, -1 = local (in-engine)
 	Retries       int32
 	Binding       DecisionBinding        // how the decision model is resolved (ADR-0063)
 	InputMappings []DecisionInputMapping // variable-driven inputs, evaluated off the hot path
@@ -377,8 +377,8 @@ type BusinessRuleTaskDetail struct {
 
 // DecisionBinding selects which DMN model version a local business rule task
 // evaluates against (ADR-0063). It mirrors Camunda's zeebe:calledDecision
-// bindingType. It applies only to local decisions; a central (connector) decision
-// resolves through its connector, so Binding is ignored when Connector is set.
+// bindingType. It applies only to local decisions; a central (worker) decision
+// resolves through its worker, so Binding is ignored when Worker is set.
 type DecisionBinding int32
 
 const (
@@ -426,40 +426,40 @@ type UserTaskDetail struct {
 }
 
 // ConnectorTaskDetail is the per-connector-task data a behavior needs at runtime.
-// A connector task delegates to a server-registered connector evaluated off the
+// A task delegates to a server-registered worker evaluated off the
 // hot path by a job worker (ADR-0036). Like a service task it runs as a job, so
-// it carries a JobType (a reserved connector sentinel) the in-process connector
-// worker subscribes to, and Connector names the server-registered connector to
-// resolve at runtime. The JobType also selects which connector kind this is, and
+// it carries a JobType (a reserved worker sentinel) the in-process worker
+// worker subscribes to, and Worker names the server-registered worker to
+// resolve at runtime. The JobType also selects which Worker Type this is, and
 // thus which of the kind-specific fields below are populated:
 //
-//   - clio "write-events" (JobType == ClioWriteJobType): Connector names the
+//   - clio "write-events" (JobType == ClioWriteJobType): Worker names the
 //     server-registered clio instance; Subject and EventType are the interned clio
 //     coordinates the appended event lands under. The event body is what the task's
 //     zeebe:ioMapping inputs map, or — for a task with none — every variable it sees
 //     (ADR-0174).
-//   - clio "query" (JobType == ClioQueryJobType): Connector names the clio
+//   - clio "query" (JobType == ClioQueryJobType): Worker names the clio
 //     instance; the task reads projected state or runs a stored query and writes
 //     the result into ResultVar. Either ClioQuery (a run_query query string) is set
 //     — then the worker runs that query — or Subject (with the optional ReduceSpec
 //     projection) is set — then the worker reads get_state for that subject.
-//   - clio "read" (JobType == ClioReadJobType): Connector names the clio instance;
-//     Subject is the subject whose events are read (up to Limit, 0 = the connector's
+//   - clio "read" (JobType == ClioReadJobType): Worker names the clio instance;
+//     Subject is the subject whose events are read (up to Limit, 0 = the worker's
 //     default) into ResultVar as a JSON array.
 //   - HTTP REST (JobType == RestJobType): Method and Url are the interned request
 //     method (e.g. "POST") and the full endpoint URL authored in the model
 //     (ADR-0067, revising ADR-0036 for REST); a method that carries one gets the body
 //     described below; ResultVar, if set, is the process variable the JSON response is
 //     written back into on completion.
-//   - SharePoint (JobType == SharePointJobType): Connector names the
+//   - SharePoint (JobType == SharePointJobType): Worker names the
 //     server-registered SharePoint provider; Site and List address the target list
 //     and Fields are the created item's column values (all literal-or-FEEL); the
 //     created item's JSON is written into ResultVar when set (ADR-0141).
-//   - BMC Remedy (JobType == RemedyJobType): Connector names the server-registered
+//   - BMC Remedy (JobType == RemedyJobType): Worker names the server-registered
 //     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
 //     values (literal-or-FEEL) an incident/entry is created with through the AR System
 //     REST API; ResultVar, if set, receives the created entry's id (ADR-0106).
-//   - Jira (JobType == JiraJobType): Connector names the server-registered Jira
+//   - Jira (JobType == JiraJobType): Worker names the server-registered Jira
 //     instance; JiraOp is the issue-tracker operation and the Jira* fields below are
 //     the values it takes (all literal-or-FEEL); ResultVar, if set, receives what Jira
 //     returned (ADR-0201).
@@ -477,13 +477,13 @@ type UserTaskDetail struct {
 // variable named — it is the task's zeebe:ioMapping inputs, or everything the task
 // sees when it maps none (ADR-0174).
 type ConnectorTaskDetail struct {
-	JobType    int32 // interned reserved connector job type → index
-	Connector  int32 // interned connector name → index, -1 if not a clio task
+	JobType    int32 // interned reserved worker job type → index
+	Connector  int32 // interned worker name → index, -1 if not a clio task
 	Subject    int32 // interned clio target subject → index, -1 if unused
 	EventType  int32 // interned clio event type → index, -1 if not a clio write task
 	ClioQuery  int32 // interned clio run_query query string → index, -1 if unused
 	ReduceSpec int32 // interned clio get_state reduce-spec name → index, -1 if unused
-	Limit      int32 // clio read_events limit, 0 = the connector's default
+	Limit      int32 // clio read_events limit, 0 = the worker's default
 	Method     int32 // interned HTTP method → index, -1 if not a REST task
 	ResultVar  int32 // interned REST/clio result variable name → index, -1 if none
 	// Url is the request endpoint, Headers and Query the request headers and query
@@ -499,7 +499,7 @@ type ConnectorTaskDetail struct {
 	Query   []RestKV
 	Auth    int32
 	Retries int32
-	// Mail connector fields (JobType == MailJobType, ADR-0079). Connector (above)
+	// Mail worker fields (JobType == MailJobType, ADR-0079). Worker (above)
 	// names the server-registered mail provider; the message is authored in the
 	// model as literal-or-FEEL values evaluated over the instance's variables at
 	// send time. To and Bcc/Cc are comma-separated recipient lists; From overrides
@@ -514,7 +514,7 @@ type ConnectorTaskDetail struct {
 	MailSubject RestExpr
 	Body        RestExpr
 	BodyHTML    RestExpr
-	// CSV connector fields (JobType == CsvImportJobType, ADR-0139). CsvSource is the
+	// CSV worker fields (JobType == CsvImportJobType, ADR-0139). CsvSource is the
 	// interned name of the process variable holding the raw CSV text (-1 → the
 	// default "csvText"); CsvResult the variable the parsed rows are written to
 	// (-1 → "rows"); CsvDelimiter the field delimiter (-1 → ","); CsvHasHeader
@@ -535,7 +535,7 @@ type ConnectorTaskDetail struct {
 	CsvFormat    int32
 	CsvOperation int32
 	CsvWidths    []int32
-	// SharePoint connector fields (JobType == SharePointJobType, ADR-0141). Connector
+	// SharePoint worker fields (JobType == SharePointJobType, ADR-0141). Worker
 	// (above) names the server-registered SharePoint provider (its Graph base and
 	// OAuth credential live server-side). Site and List address the target list (a
 	// site host/path or id, and a list name or id); Fields are the created item's
@@ -545,7 +545,7 @@ type ConnectorTaskDetail struct {
 	Site   RestExpr
 	List   RestExpr
 	Fields []RestKV
-	// Remedy connector fields (JobType == RemedyJobType, ADR-0106). Connector (above)
+	// Remedy worker fields (JobType == RemedyJobType, ADR-0106). Worker (above)
 	// names the server-registered BMC Remedy instance; ResultVar (above), if set,
 	// receives the created entry's id. RemedyForm is the Remedy form the entry is
 	// created in (literal-or-FEEL, the zero RestExpr for a non-remedy task);
@@ -553,7 +553,7 @@ type ConnectorTaskDetail struct {
 	// over the instance's variables at call time (nil for a non-remedy task).
 	RemedyForm   RestExpr
 	RemedyFields []RestKV
-	// Web-scrape connector fields (JobType == WebScrapeJobType, ADR-0118/0190).
+	// Web-scrape worker fields (JobType == WebScrapeJobType, ADR-0118/0190).
 	// Url (above) is the model-authored document to fetch. HTML uses ScrapeSelector
 	// (literal-or-FEEL) and optional ScrapeAttribute. ScrapeFormat is compiled from
 	// format=html|rss|atom; its zero value is HTML so models compiled before ADR-0190
@@ -574,13 +574,13 @@ type ConnectorTaskDetail struct {
 	ScrapeFields        []ScrapeField
 	ScrapeAbsoluteLinks bool
 	ScrapePlainText     bool
-	// User-provisioning connector fields (JobType == UserConnectorJobType, ADR-0123).
+	// User-provisioning worker fields (JobType == UserConnectorJobType, ADR-0123).
 	// UserOp is the interned operation ("create" | "set-password" | "disable").
 	// UserName identifies the account; UserEmail/UserDisplayName/UserRoles/UserPassword
 	// are the create/update values — each a literal-or-FEEL value evaluated over the
 	// instance's variables at call time. Each is the zero value for a non-user task and
 	// is read only by the in-process user-provisioning worker, which the runner
-	// dispatches by the user job type alone. There is no Connector and no credential:
+	// dispatches by the user job type alone. There is no Worker and no credential:
 	// the worker mutates the internal user store directly, gated to the system project.
 	UserOp          int32
 	UserName        RestExpr
@@ -588,7 +588,7 @@ type ConnectorTaskDetail struct {
 	UserDisplayName RestExpr
 	UserRoles       RestExpr
 	UserPassword    RestExpr
-	// SCIM connector fields (JobType == ScimJobType, ADR-0153). ScimBaseURL is the
+	// SCIM worker fields (JobType == ScimJobType, ADR-0153). ScimBaseURL is the
 	// service provider's SCIM v2 base endpoint and ScimResource the resource-type path
 	// segment ("Users"/"Groups") — each a literal-or-FEEL value evaluated over the
 	// instance's variables at call time. ScimOp is the interned operation
@@ -605,7 +605,7 @@ type ConnectorTaskDetail struct {
 	ScimResourceID RestExpr
 	ScimFilter     RestExpr
 	ScimBody       int32
-	// LDAP connector fields (JobType == LdapJobType, ADR-0154). LdapURL is the server
+	// LDAP worker fields (JobType == LdapJobType, ADR-0154). LdapURL is the server
 	// (ldap://host:389 or ldaps://host:636) and LdapBindDN the bind identity — each a
 	// literal-or-FEEL value evaluated over the instance's variables at call time.
 	// LdapBindSecret is the interned name of the server-side secret holding the bind
@@ -639,7 +639,7 @@ type ConnectorTaskDetail struct {
 	LdapPageSize         int32
 	LdapMaxEntries       int32
 	LdapClientCertSecret int32
-	// SOAP connector fields (JobType == SoapJobType, ADR-0165). SoapEndpoint is the
+	// SOAP worker fields (JobType == SoapJobType, ADR-0165). SoapEndpoint is the
 	// web-service URL (from the WSDL's soap:address) — a literal-or-FEEL value evaluated
 	// over the instance's variables at call time. SoapOp is the interned operation name,
 	// used for diagnostics and as the default SOAPAction. SoapAction is the SOAPAction
@@ -656,7 +656,7 @@ type ConnectorTaskDetail struct {
 	SoapAction   RestExpr
 	SoapBody     RestExpr
 	SoapVersion  int32
-	// Active Directory connector fields (JobType == AdJobType, ADR-0166). AdURL is the
+	// Active Directory worker fields (JobType == AdJobType, ADR-0166). AdURL is the
 	// server (ldaps://host:636) and AdBindDN the bind identity — literal-or-FEEL values.
 	// AdBindSecret is the interned name of the server-side bind-password secret (interned
 	// "" → anonymous); AdStartTLS upgrades a plain connection. AdOp is the interned
@@ -684,7 +684,7 @@ type ConnectorTaskDetail struct {
 	// Read fields, shared by the two AD operations that read a subtree instead of
 	// acting on one entry: "sync" (a DirSync delta) and "search" (what is there now).
 	// AdBaseDN is the base the read starts from and AdFilter narrows it —
-	// literal-or-FEEL values. AdMaxEntries caps the result (0 = the connector's
+	// literal-or-FEEL values. AdMaxEntries caps the result (0 = the worker's
 	// default), and ResultVar (above) receives it.
 	//
 	// AdScope is the interned search scope ("base"|"one"|"sub", interned "" → -1 for
@@ -699,7 +699,7 @@ type ConnectorTaskDetail struct {
 	AdCookieVar      int32
 	AdMaxEntries     int32
 	AdObjectSecurity bool
-	// Generic SQL connector fields (JobType == SqlJobType, ADR-0173). Connector
+	// Generic SQL worker fields (JobType == SqlJobType, ADR-0173). Worker
 	// (above) names the database the *worker* is configured for — a SQL task carries
 	// no address and no credential, because the DSN never enters the engine. SqlOp is
 	// the interned operation ("query"|"query-one"|"execute").
@@ -720,15 +720,15 @@ type ConnectorTaskDetail struct {
 	SqlStatement int32
 	SqlParamsVar int32
 	SqlMaxRows   int32
-	// Microsoft Entra ID connector fields (JobType == EntraJobType, ADR-0172).
-	// Connector (above) names the tenant the *worker* is configured for; a task
+	// Microsoft Entra ID worker fields (JobType == EntraJobType, ADR-0172).
+	// Worker (above) names the tenant the *worker* is configured for; a task
 	// carries no tenant id and no client secret, because they never enter the engine.
 	// EntraConnector, when its Expr is non-nil, resolves that tenant name at runtime
 	// instead — a literal-or-FEEL value (e.g. "=tenant") for a process that serves
-	// more than one tenant. It overrides Connector at resolve time; Connector then
+	// more than one tenant. It overrides Worker at resolve time; Worker then
 	// still holds the authored text ("=tenant") for introspection. Only entra offers
 	// this, because it is worker-only and no deploy-time credential lookup keys off a
-	// fixed connector name (ADR-0172).
+	// fixed worker name (ADR-0172).
 	// EntraOp is the interned lifecycle operation ("create-user"|"get-user"|
 	// "update-user"|"delete-user"|"enable"|"disable"|"add-group-member"|
 	// "remove-group-member"). EntraUserID and EntraGroupID are literal-or-FEEL values
@@ -749,7 +749,7 @@ type ConnectorTaskDetail struct {
 	// Each is the zero value for a non-Entra task. No in-process worker reads these:
 	// they are resolved onto the job and read by a worker (ADR-0164/0168).
 	EntraOp            int32
-	EntraConnector     RestExpr // literal-or-FEEL tenant name; when Expr != nil it overrides Connector at resolve time
+	EntraConnector     RestExpr // literal-or-FEEL tenant name; when Expr != nil it overrides Worker at resolve time
 	EntraUserID        RestExpr
 	EntraGroupID       RestExpr
 	EntraNewPassword   RestExpr // reset-password's new secret (literal-or-FEEL), zero otherwise
@@ -766,22 +766,22 @@ type ConnectorTaskDetail struct {
 	// (a fresh full enumeration) on the first run. It is the zero RestExpr on every
 	// other operation, which the compiler enforces (ADR-0172).
 	EntraDeltaLink RestExpr
-	// Directory-file connector fields (JobType == LdifJobType, ADR-0171). LdifFormat
+	// Directory-file worker fields (JobType == LdifJobType, ADR-0171). LdifFormat
 	// is the interned file format ("ldif" | "dsml") and LdifOperation the direction
 	// ("read" | "write"). LdifSource is the interned name of the variable holding the
 	// file text (read) or the entries (write); LdifResult the variable receiving the
 	// entries (read) or the rendered file (write).
 	//
-	// Unlike the text-file connector there is no default format: a file is LDIF or it
+	// Unlike the text-file worker there is no default format: a file is LDIF or it
 	// is DSML, and guessing from the bytes is how a malformed file becomes a
 	// plausible-looking empty result.
 	LdifFormat    int32
 	LdifOperation int32
 	LdifSource    int32
 	LdifResult    int32
-	// Jira connector fields (JobType == JiraJobType, ADR-0201).
-	// Connector (above) names the server-registered Jira instance — its base URL and
-	// credential live in the managed connector store and the vault, never in a model.
+	// Jira worker fields (JobType == JiraJobType, ADR-0201).
+	// Worker (above) names the server-registered Jira instance — its base URL and
+	// credential live in the managed worker store and the vault, never in a model.
 	// JiraOp is the interned operation ("create-issue"|"get-issue"|"update-issue"|
 	// "transition-issue"|"add-comment"|"assign-issue"|"search"|"search-users"), and it
 	// decides which of the rest are populated; the compiler refuses a value on an
@@ -801,7 +801,7 @@ type ConnectorTaskDetail struct {
 	// interprets nothing (I5).
 	//
 	// JiraFields are extra issue fields as name/literal-or-FEEL pairs (create, update
-	// and transition), which is how a custom field or a field this connector does not
+	// and transition), which is how a custom field or a field this worker does not
 	// name is set. Each RestExpr is a literal-or-FEEL value evaluated over the
 	// variables the task sees at call time; all are the zero value for a non-Jira task.
 	// ResultVar (above) receives what Jira returned, for the operations that return
@@ -823,7 +823,7 @@ type ConnectorTaskDetail struct {
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
 // service task itself (ADR-0120), instead of dispatching a job to an external
-// worker or connector. On activation the behavior arms a one-shot timer for a
+// worker. On activation the behavior arms a one-shot timer for a
 // random duration in [MinNanos, MaxNanos] and, if Expr is set, evaluates it over
 // the instance's variables and writes the result into ResultVar (the input→output
 // "script", e.g. a simulated REST response). When the timer fires the task
@@ -849,7 +849,7 @@ type MockupTaskDetail struct {
 	ErrorCode string
 }
 
-// RestExpr is a REST connector field value that is either a literal string
+// RestExpr is a REST worker field value that is either a literal string
 // (Expr == nil, use Literal) or a FEEL expression evaluated over the instance's
 // variables at call time (Expr != nil), compiled once at deploy time (invariant
 // I5, ADR-0008/0067). It backs the modeler's fx toggle: a model value with a
@@ -1532,27 +1532,27 @@ type CallActivityRef struct {
 	Loop bool
 }
 
-// ConnectorRef is one model reference to a server-registered connector: the element
-// carrying it, the reserved job type that says which *kind* of connector it needs, and
-// the name it asks for. A model refers to a connector by name only and never carries
+// ConnectorRef is one model reference to a server-registered worker: the element
+// carrying it, the reserved job type that says which *kind* of worker it needs, and
+// the name it asks for. A model refers to a worker by name only and never carries
 // an endpoint or a secret (ADR-0036/0041), so nothing inside the model can tell whether
 // that name is configured anywhere — which is exactly why the references have to be
-// enumerable from outside, where the connector store is (ADR-0158).
+// enumerable from outside, where the worker store is (ADR-0158).
 type ConnectorRef struct {
 	ElementId string
 	JobType   int32
 	Connector string
 }
 
-// NodeConnectorRef returns the connector reference one node makes, and false when it
-// makes none. Both shapes are covered: a connector task (mail, REST, SharePoint, …)
+// NodeConnectorRef returns the worker reference one node makes, and false when it
+// makes none. Both shapes are covered: a task (mail, REST, SharePoint, …)
 // and a business rule task delegating to a remote decision service, which names its
-// connector the same way. An element that names no connector — a local decision, a
+// worker the same way. An element that names no worker — a local decision, a
 // REST task with its URL in the model, anything that is not one of those two task
 // types — is not a reference.
 //
 // It answers the question one element at a time because that is how an *incident* asks
-// it: a token is parked on this element, which connector is it stuck on (ADR-0160)?
+// it: a token is parked on this element, which worker is it stuck on (ADR-0160)?
 // ConnectorRefs asks the same question of every node.
 func (p *CompiledProcess) NodeConnectorRef(id int32) (ConnectorRef, bool) {
 	if id < 0 || int(id) >= len(p.nodes) {
@@ -1579,8 +1579,8 @@ func (p *CompiledProcess) NodeConnectorRef(id int32) (ConnectorRef, bool) {
 	}, true
 }
 
-// ConnectorRefs returns every connector reference the process makes, in node order.
-// An element that names no connector is left out; see NodeConnectorRef.
+// ConnectorRefs returns every worker reference the process makes, in node order.
+// An element that names no worker is left out; see NodeConnectorRef.
 // ReceivableMessageNames returns every message name this definition can be
 // *delivered* on, sorted and without duplicates: a message start event, an
 // intermediate catch, a receive task, a boundary message event, and a
@@ -1695,7 +1695,7 @@ func (p *CompiledProcess) BusinessRuleDecisions() []string {
 			continue
 		}
 		detail := p.BusinessRuleTask(p.nodes[i].Detail)
-		// A connector-mode (central) decision is evaluated by a remote temis
+		// A worker-mode (central) decision is evaluated by a remote temis
 		// service, so it has no local model to resolve and snapshot at deploy time
 		// (ADR-0050). Only local decisions contribute to the deploy-time gate.
 		if detail.Connector >= 0 {
@@ -1721,11 +1721,11 @@ func (p *CompiledProcess) ConnectorTask(detail int32) *ConnectorTaskDetail {
 }
 
 // ConnectorTaskOf returns the connector-task detail for element node id, or an
-// error if id is not a connector task in this compiled process. It is the
+// error if id is not a task in this compiled process. It is the
 // bounds-checked accessor for the job-worker path: a persisted job can outlive
-// the process definition that compiled its element as a connector task (e.g. a
+// the process definition that compiled its element as a task (e.g. a
 // job created before a redeploy that recompiled the element into something else,
-// or dropped its connector-task table), and resolving such a stale job must fail
+// or dropped its worker-task table), and resolving such a stale job must fail
 // it into an incident (ADR-0061) rather than index out of range and panic the
 // job-runner goroutine — an unrecovered panic there crashes the whole server. A
 // worker that gets an error returns it, and FailJob retries then parks the token.
@@ -1735,7 +1735,7 @@ func (p *CompiledProcess) ConnectorTaskOf(id int32) (*ConnectorTaskDetail, error
 	}
 	detail := p.nodes[id].Detail
 	if detail < 0 || int(detail) >= len(p.connectorTasks) {
-		return nil, fmt.Errorf("element %d is not a connector task (detail index %d, %d connector tasks)", id, detail, len(p.connectorTasks))
+		return nil, fmt.Errorf("element %d is not a task (detail index %d, %d tasks)", id, detail, len(p.connectorTasks))
 	}
 	return &p.connectorTasks[detail], nil
 }

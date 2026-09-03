@@ -210,7 +210,7 @@ The control-flow basics most real models use.
   transaction against something outside the engine whose durability guarantee stops at
   its own log. Next: the **runtime read** — the one remaining piece, and the one that
   needs its own record (an activity reading a store must park on a job, which is
-  either a two-phase activation the engine does not have, or a connector kind that
+  either a two-phase activation the engine does not have, or a Worker Type that
   delegates to the store's Worker). **Slice 5c landed** — the model can now be
   *brought in*. A data model is normally drawn in a UML tool long before anybody opens
   Atlas, and retyping it by hand loses the one fact BPMN has no equivalent for: the
@@ -393,7 +393,7 @@ The control-flow basics most real models use.
   the `{username,password}` credential bundle are server-registered and vault-resolved
   like mail/clio, never in the model. The `remedy` trio (registry/client/worker)
   is wired into the single-binary server run loop under the reserved Remedy job type and
-  authored via a first-class **BMC Remedy Connector** service-task type in the modeler.
+  authored via a first-class **BMC Remedy** Worker Type in the modeler.
   Create-entry is the first operation; update/query, JWT caching, typed field values, and
   a Remedy-side dedup field are follow-ups.
   Since the 2026-08-26 amendment the work also **runs on a worker** (ADR-0164/0168): the
@@ -423,8 +423,8 @@ The control-flow basics most real models use.
   same fact decides both the authentication scheme and how an account is addressed when
   assigning, so a model does not know which product it is talking to. The `jira` trio
   (registry/client/worker) is wired into the single-binary run loop under the
-  reserved Jira job type and authored via a first-class **Jira Connector** service-task
-  type in the modeler. A transition may be named by the button a person reads in Jira (its
+  reserved Jira job type and authored via a first-class **Jira** Worker Type
+  in the modeler. A transition may be named by the button a person reads in Jira (its
   id is resolved first), and an extra issue field keeps the JSON shape its FEEL value had.
   A search follows the paging of whichever endpoint the product serves: Jira Cloud removed
   the offset-paged `/rest/api/{2,3}/search` over 2025, so a Cloud search uses
@@ -435,7 +435,7 @@ The control-flow basics most real models use.
   task into plain values and `atlas worker --connector jira` performs it, holding the site
   URL and the Atlassian credential in its own environment (`ATLAS_JIRA_CONNECTORS` plus per
   name `_URL` and either `_EMAIL`/`_API_TOKEN` or `_TOKEN`) — handed to a supervised worker
-  out of the connector store and the vault at spawn, in exactly the one shape the engine
+  out of the worker store and the vault at spawn, in exactly the one shape the engine
   itself would have used. A worker can therefore operate as an Atlassian account the engine
   has never held. Atlas does not supervise it by default; `--offload-connectors jira` opts
   in, and the in-process handler remains as the fallback `--in-process-connectors` returns
@@ -1142,6 +1142,14 @@ for the derived whole-instance mesh above them.
   is deliberately absent is "is this the only way": every derived edge names exactly
   one resolved provider, so that distinction would be a label with one answer, and a
   label that never varies teaches a reader it exists when it does not.
+  **The landscape can also be read in ArchiMate 3.2's or C4's vocabulary** — a
+  read-only projection under ADR-0211 §8's four constraints, extended there from a
+  projection of a model to one of the derived landscape: nothing becomes authorable,
+  the mapping is one versioned table per notation, a kind the notation has no element
+  for keeps its derived shape rather than being dressed as one, and the loss is
+  listed beside the picture *and* inside the export. What travels with every
+  projected file is the sentence that makes it honest — Atlas's own resources in
+  somebody else's vocabulary, and nothing here was modelled.
 - ✅ **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
   workers and job types, releases, local runtimes, and deployment targets. Preserve

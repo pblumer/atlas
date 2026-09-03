@@ -15,9 +15,9 @@ import (
 )
 
 // These tests are about one question the Modeler asks and could not previously get
-// an answer to: for the implementation an author is about to choose — a connector, a
+// an answer to: for the implementation an author is about to choose — a worker, a
 // script language, a decision binding — which process runs the work, this engine or a
-// worker? The connector picker used to answer it from a constant, and the constant was
+// worker? The worker picker used to answer it from a constant, and the constant was
 // written when "every kind but the plain job worker runs in the engine" was true; the
 // other two panels never said anything at all. It stopped being true twice over: kinds were moved
 // onto a supervised worker by default (ADR-0168), and kinds were born on a worker
@@ -145,7 +145,7 @@ func TestPlacementSaysWorkerOnlyForAKindBornOnAWorker(t *testing.T) {
 	}
 }
 
-// The mirror image: the user-provisioning connector mutates the run-loop-owned user
+// The mirror image: the user-provisioning worker mutates the run-loop-owned user
 // store (ADR-0123), so there is nothing for a worker to hold. Telling its author to
 // prefer a job worker — which is what the in-engine notice does — would be advice
 // they cannot take.
@@ -182,7 +182,7 @@ func modelerSource(t *testing.T) string {
 
 // modelerCatalogSource is the body of editor.js's SERVICE_TASK_KINDS array. It is
 // bounded to that array on purpose: the send task's Message kind is declared after
-// it and is not a connector.
+// it and is not a worker.
 func modelerCatalogSource(t *testing.T) string {
 	t.Helper()
 	src := modelerSource(t)
@@ -214,7 +214,7 @@ func modelerCatalogKindIDs(t *testing.T) []string {
 
 // TestEveryCatalogKindHasAPlacement is the drift guard the badge needs. A kind the
 // server says nothing about renders with no badge at all, which is the silence this
-// change exists to remove — and a new connector is exactly when it would happen.
+// change exists to remove — and a new worker is exactly when it would happen.
 func TestEveryCatalogKindHasAPlacement(t *testing.T) {
 	var missing []string
 	for _, id := range modelerCatalogKindIDs(t) {
@@ -228,7 +228,7 @@ func TestEveryCatalogKindHasAPlacement(t *testing.T) {
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
-		t.Fatalf("api/web/editor.js offers %d connector kind(s) the server reports no placement for: %s\n\n"+
+		t.Fatalf("api/web/editor.js offers %d Worker Type(s) the server reports no placement for: %s\n\n"+
 			"The picker then says nothing about where that kind runs. Add it to authoredKindJobTypes, "+
 			"or record why it compiles to no job at all in catalogKindsWithoutJobType.",
 			len(missing), strings.Join(missing, ", "))

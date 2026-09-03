@@ -10,7 +10,7 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
-// gmailDefaultBase is the Gmail v1 API base a connector uses when it authors no
+// gmailDefaultBase is the Gmail v1 API base a worker uses when it authors no
 // endpoint override.
 const gmailDefaultBase = "https://gmail.googleapis.com/gmail/v1"
 
@@ -38,7 +38,7 @@ func NewGmailClient(tokens TokenSource, baseURL, sender string) *GmailClient {
 func (c *GmailClient) Send(ctx context.Context, m Message) error {
 	from := firstNonEmpty(m.From, c.sender)
 	if from == "" {
-		return fmt.Errorf("mail: gmail: no sender configured (set the connector's sender or the task's from)")
+		return fmt.Errorf("mail: gmail: no sender configured (set the worker's sender or the task's from)")
 	}
 	if len(m.To) == 0 {
 		return fmt.Errorf("mail: gmail: message has no recipients")

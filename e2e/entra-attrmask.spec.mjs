@@ -1,4 +1,4 @@
-// e2e for the Entra connector's per-operation attribute capture mask
+// e2e for the Entra worker's per-operation attribute capture mask
 // (api/web/entra-attrmask.js), which the Modeler shows instead of the raw attributes
 // JSON for the body-carrying operations (ADR-0172, amended). It proves the mask
 // assembles the important fields into the single `attributes` JSON the compiler

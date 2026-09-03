@@ -94,7 +94,7 @@ export function removeView(views, id) {
 // graph and the shape of the window, so a coordinate captured on one screen means
 // somewhere else on another — and a saved view that reopened on empty space would be
 // worse than no saved view. The pins go the same way, for the same reason.
-export function captureView({ name, term, direction, depth, selected, frameView, world, pinned, at, id }) {
+export function captureView({ name, term, direction, depth, notation, selected, frameView, world, pinned, at, id }) {
   const width = Math.max(world?.width || 0, 1), height = Math.max(world?.height || 0, 1);
   const zoom = frameView ? Math.min(Math.max(frameView.w / width, 0), 1) : 1;
   const centre = frameView
@@ -107,6 +107,11 @@ export function captureView({ name, term, direction, depth, selected, frameView,
     term: term || "",
     direction: direction || "dependents",
     depth: depth ?? "2",
+    // The vocabulary the picture was read in. A view is the whole question somebody
+    // saved, and reopening a C4 landscape as an Atlas one answers a different one —
+    // the same reason the filter and the depth are stored rather than left as
+    // whatever the page happened to be showing.
+    notation: notation || "atlas",
     selected: selected || null,
     zoom,
     centre,

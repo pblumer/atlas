@@ -6,9 +6,9 @@ import (
 )
 
 // A service task bearing an <atlas:sharepointConnector> extension is a SharePoint
-// connector task (ADR-0141): it creates a list item in a model-authored site/list
+// task (ADR-0141): it creates a list item in a model-authored site/list
 // through a server-registered SharePoint provider (Microsoft Graph) via the job
-// path, mirroring the mail connector (the Graph base and OAuth credential live
+// path, mirroring the mail worker (the Graph base and OAuth credential live
 // server-side, never in the model) while the target (site, list, item fields) is
 // model-authored like REST's endpoint.
 const sharePointConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
@@ -49,7 +49,7 @@ func TestParseSharePointConnectorTask(t *testing.T) {
 		t.Errorf("jobType index = %d, want the reserved SharePointJobTypeIndex %d", d.JobType, SharePointJobTypeIndex)
 	}
 	if got := cp.Intern(d.Connector); got != "contoso" {
-		t.Errorf("connector = %q, want contoso", got)
+		t.Errorf("worker = %q, want contoso", got)
 	}
 	if d.Site.Expr != nil || d.Site.Literal != "contoso.sharepoint.com,/sites/ops" {
 		t.Errorf("site = %+v, want the literal site", d.Site)
@@ -130,7 +130,7 @@ func TestParseSharePointConnectorErrors(t *testing.T) {
 	}
 	// Each required-field and malformed-FEEL case exercises one validation branch.
 	cases := map[string]string{
-		"missing connector":   `<atlas:sharepointConnector site="s" list="l"/>`,
+		"missing worker":      `<atlas:sharepointConnector site="s" list="l"/>`,
 		"missing site":        `<atlas:sharepointConnector connector="c" list="l"/>`,
 		"missing list":        `<atlas:sharepointConnector connector="c" site="s"/>`,
 		"malformed FEEL site": `<atlas:sharepointConnector connector="c" site="=(" list="l"/>`,
@@ -191,7 +191,7 @@ func TestParseSharePointConnectorCamelTag(t *testing.T) {
 		t.Errorf("jobType index = %d, want SharePointJobTypeIndex %d", d.JobType, SharePointJobTypeIndex)
 	}
 	if got := cp.Intern(d.Connector); got != "contoso" {
-		t.Errorf("connector = %q, want contoso", got)
+		t.Errorf("worker = %q, want contoso", got)
 	}
 	if d.List.Literal != "Incidents" {
 		t.Errorf("list = %+v, want Incidents", d.List)

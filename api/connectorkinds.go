@@ -16,11 +16,11 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// managedConnectorKind describes one operator-managed connector kind end to end: how
+// managedConnectorKind describes one operator-managed Worker Type end to end: how
 // a create request for it is validated, how its runtime registry is created and its
 // job worker(s) registered at startup, and how that registry is rebuilt from the
-// connector store on every change. The ordered slice below is the *single* list every
-// connector path consults — the create whitelist, the create validation, the startup
+// worker store on every change. The ordered slice below is the *single* list every
+// worker path consults — the create whitelist, the create validation, the startup
 // wiring, and the registry rebuild all derive from it — so adding a kind is one entry
 // here instead of edits scattered across the create handler, the server constructor,
 // and rebuildConnectorRegistries.
@@ -39,23 +39,23 @@ type managedConnectorKind struct {
 	// Server field, before rebuild populates it. Runs once at startup.
 	newRegistry func(s *Server)
 	// registerHandlers subscribes this kind's in-process job worker(s) under their
-	// reserved job type(s), resolving each job's connector from the compiled process
+	// reserved job type(s), resolving each job's worker from the compiled process
 	// (processLookup) and its client from the registry. Runs once at startup, after
 	// newRegistry. The worker runs off the run loop and after fsync (I2/I3).
 	registerHandlers func(s *Server, store *state.Store)
-	// rebuild rebuilds this kind's live client registry from the current connector
+	// rebuild rebuilds this kind's live client registry from the current worker
 	// store and swaps it atomically. It reads the store, so it runs on the run-loop
 	// goroutine (the store's owner), like the build*Clients helpers it wraps.
 	rebuild func(s *Server) error
-	// problem reports why a *configured* connector of this kind is not in the live
+	// problem reports why a *configured* worker of this kind is not in the live
 	// registry — disabled, missing an endpoint or credential, of another kind — and
-	// false when it is usable or unknown. It is what lets the connector list say a
+	// false when it is usable or unknown. It is what lets the worker list say a
 	// record is stored but not working, instead of leaving that to be discovered by a
 	// token parking on it (ADR-0158).
 	problem func(s *Server, name string) (string, bool)
 	// jobTypes are the reserved compiler job-type indices whose tasks resolve a
-	// connector of this kind. They are what turns a model's connector reference back
-	// into "a connector of kind X is required here", so a deploy can check the name
+	// worker of this kind. They are what turns a model's worker reference back
+	// into "a worker of kind X is required here", so a deploy can check the name
 	// against the store instead of leaving the mismatch to the first token (ADR-0158).
 	jobTypes []int32
 	// workerOnly marks a kind the engine never runs itself: it builds no client and
@@ -68,7 +68,7 @@ type managedConnectorKind struct {
 
 // createConnectorParams is the decoded body of a create-connector request. The
 // per-kind validators normalize it in place (see managedConnectorKind.validateCreate)
-// before handleCreateConnector persists it as a connector record.
+// before handleCreateConnector persists it as a worker record.
 type createConnectorParams struct {
 	Name           string `json:"name"`
 	Kind           string `json:"kind"`
@@ -77,7 +77,7 @@ type createConnectorParams struct {
 	Provider       string `json:"provider"`
 	Sender         string `json:"sender"`
 	Enabled        *bool  `json:"enabled"`
-	// ConnectionString is a SQL connector's whole configuration, sealed into the vault
+	// ConnectionString is a SQL worker's whole configuration, sealed into the vault
 	// by the create handler which then stores only the reference — so the record still
 	// holds no secret (I6). It exists because for these kinds the credential *is* the
 	// configuration: a dialog that asked only for a vault key would be a form with one
@@ -87,7 +87,7 @@ type createConnectorParams struct {
 	ConnectionString string `json:"connectionString"`
 }
 
-// managedConnectorKinds is the ordered registry of managed connector kinds. Order is
+// managedConnectorKinds is the ordered registry of managed worker kinds. Order is
 // preserved everywhere it is iterated (the startup wiring, the rebuild sequence, the
 // whitelist error message), so it stays stable across releases.
 var managedConnectorKinds = append([]managedConnectorKind{
@@ -95,7 +95,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		// A *central* business rule task delegates its decision to a remote temis
 		// service instead of the embedded library (ADR-0050). It registers via
 		// HandleCompleting because a decision's completion both writes its result back
-		// and retains the evaluation for debugging (ADR-0066). Connectors come from the
+		// and retains the evaluation for debugging (ADR-0066). Workers come from the
 		// environment plus operator-managed instances in the Console (ADR-0041).
 		name:           connectorKindTemis,
 		validateCreate: validateEndpointOnlyConnector,
@@ -122,9 +122,9 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes: []int32{compiler.TemisDecisionJobTypeIndex},
 	},
 	{
-		// A clio connector task appends, reads, or queries a server-registered clio
+		// A clio task appends, reads, or queries a server-registered clio
 		// event store (ADR-0036) — one worker per operation under its own reserved job
-		// type. The endpoint and token live in the managed connector store; the token is
+		// type. The endpoint and token live in the managed worker store; the token is
 		// resolved from the vault at build time (ADR-0041).
 		name:           connectorKindClio,
 		validateCreate: validateEndpointOnlyConnector,
@@ -151,9 +151,9 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes: []int32{compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
 	},
 	{
-		// An outbound mail connector task sends a model-authored message through a
+		// An outbound mail task sends a model-authored message through a
 		// server-registered provider (ADR-0079). The provider host and credential live
-		// in the managed connector store; the credential is resolved from the vault at
+		// in the managed worker store; the credential is resolved from the vault at
 		// build time (ADR-0041), so a secret never lives in a model. The preview
 		// provider (ADR-0150) is the exception that needs neither: it frames the message
 		// identically and delivers it to the server's outbox.
@@ -186,10 +186,10 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes: []int32{compiler.MailJobTypeIndex},
 	},
 	{
-		// A SharePoint connector task creates a list item through a server-registered
+		// A SharePoint task creates a list item through a server-registered
 		// Microsoft Graph provider (ADR-0141) and writes the created item's JSON into the
 		// task's result variable (HandleWithOutput). The Graph base and OAuth credential
-		// live in the managed connector store; the credential is resolved from the vault
+		// live in the managed worker store; the credential is resolved from the vault
 		// at build time (ADR-0041).
 		name:           connectorKindSharePoint,
 		validateCreate: validateSharePointConnector,
@@ -216,10 +216,10 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes: []int32{compiler.SharePointJobTypeIndex},
 	},
 	{
-		// A BMC Remedy connector task creates an entry (e.g. an incident) in a Remedy
+		// A BMC Remedy task creates an entry (e.g. an incident) in a Remedy
 		// form through the AR System REST API (ADR-0106) and writes the new entry id into
 		// the task's result variable (HandleWithOutput). The base URL and credential
-		// bundle live in the managed connector store; the bundle is resolved from the
+		// bundle live in the managed worker store; the bundle is resolved from the
 		// vault at build time (ADR-0041).
 		name:           connectorKindRemedy,
 		validateCreate: validateRemedyConnector,
@@ -244,11 +244,11 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes: []int32{compiler.RemedyJobTypeIndex},
 	},
 	{
-		// A Jira connector task performs one issue-tracker operation against a
+		// A Jira task performs one issue-tracker operation against a
 		// server-registered Atlassian Jira instance (ADR-0201) and
 		// writes what Jira returned into the task's result variable
 		// (HandleWithOutput) — for the operations Jira answers with something. The
-		// base URL and credential bundle live in the managed connector store; the
+		// base URL and credential bundle live in the managed worker store; the
 		// bundle is resolved from the vault at build time (ADR-0041), so a model
 		// carries neither a URL nor a secret.
 		name:           connectorKindJira,
@@ -276,12 +276,12 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes: []int32{compiler.JiraJobTypeIndex},
 	},
 	{
-		// A Microsoft Entra ID connector task manages the cloud directory over Graph
+		// A Microsoft Entra ID task manages the cloud directory over Graph
 		// (ADR-0172). It is worker-only: the engine builds no client and holds no tenant
 		// credential — the store entry exists only so an operator can add a tenant in the
 		// Console and the supervised entra worker is provisioned from it (superviseEnv),
 		// the credential resolved from the vault as an OAuth bundle. So there is no
-		// registry, no rebuild and no in-process handler here; the compiler's connector
+		// registry, no rebuild and no in-process handler here; the compiler's worker
 		// name check (jobTypes) still uses the store so a deploy catches a name typo.
 		name:           connectorKindEntra,
 		workerOnly:     true,
@@ -289,7 +289,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes:       []int32{compiler.EntraJobTypeIndex},
 	},
 	{
-		// An Active Directory connector task performs one directory operation against a
+		// An Active Directory task performs one directory operation against a
 		// domain controller an operator configured here
 		// (ADR-0206). The URL lives in the record and the
 		// bind account in a vault bundle behind credentialsRef, so a model names the
@@ -297,7 +297,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		//
 		// Worker-only for Entra's reason and one of its own: the engine never binds, so
 		// a service account allowed to write half a forest never enters it (ADR-0164
-		// puts every connector task on a worker anyway). A task that carries its own
+		// puts every task on a worker anyway). A task that carries its own
 		// url instead — the shape AD had before records — still compiles and is served
 		// by the same worker; it just resolves nothing here.
 		name:           connectorKindAD,
@@ -349,11 +349,11 @@ var sqlConnectorProducts = []struct {
 	{connectorKindMSSQL, compiler.MsSqlJobTypeIndex},
 }
 
-// setupManagedConnectors wires every managed connector kind at startup: it creates each
-// kind's registry, populates it from the connector store, and subscribes its job
+// setupManagedConnectors wires every managed Worker Type at startup: it creates each
+// kind's registry, populates it from the worker store, and subscribes its job
 // worker(s). Each registry is built here — before the loop serves traffic — and rebuilt
-// on every connector change; a task whose connector is not configured parks until it
-// is. It runs on the run-loop goroutine (the connector store's owner), after
+// on every worker change; a task whose worker is not configured parks until it
+// is. It runs on the run-loop goroutine (the worker store's owner), after
 // s.jobRunner and s.connectors are set.
 func (s *Server) setupManagedConnectors(store *state.Store) error {
 	for _, k := range managedConnectorKinds {
@@ -382,7 +382,7 @@ func (s *Server) setupManagedConnectors(store *state.Store) error {
 // The user task is absent on purpose: it waits for a person, and the pull refuses it
 // for that reason rather than because a handler serves it. Every *other* in-process
 // handler must appear here, and TestEveryInProcessHandlerIsOffloadable fails when one
-// does not: a connector Atlas can run but an operator cannot move is a kind that can
+// does not: a worker Atlas can run but an operator cannot move is a kind that can
 // only ever run on the loop, which is the thing ADR-0164 rules out.
 var offloadableKinds = map[string][]int32{
 	connectorKindTemis:      {compiler.TemisDecisionJobTypeIndex},
@@ -403,7 +403,7 @@ var offloadableKinds = map[string][]int32{
 	"script":                {compiler.PwshJobTypeIndex, compiler.PythonJobTypeIndex, compiler.JsJobTypeIndex},
 }
 
-// DefaultOffloadedKinds are the connector kinds Atlas moves onto a worker of its
+// DefaultOffloadedKinds are the Worker Types Atlas moves onto a worker of its
 // own accord, and supervises a worker for. It is the opt-out half of ADR-0164:
 // somebody trying Atlas gets the out-of-process architecture without configuring
 // anything, because the engine starts the worker itself.
@@ -414,7 +414,7 @@ var offloadableKinds = map[string][]int32{
 // reach for a scrape, neither for a CSV parse.
 //
 // Mail is the other way, and the reason the set is not simply "the unmanaged kinds".
-// Its endpoint and password live in the connector store rather than the environment
+// Its endpoint and password live in the worker store rather than the environment
 // (ADR-0036/0041), so for as long as a child only inherited the environment, moving
 // mail here would have handed every mail task to a worker with no mailbox. The engine
 // now writes that configuration into the child's environment at spawn (see
@@ -425,9 +425,9 @@ var offloadableKinds = map[string][]int32{
 //
 // Active Directory is the third way in, and the one that made the set worth
 // re-deciding (ADR-0182). It is not managed — it holds no
-// connector record, and an AD task authors its own server — but its bind password is
+// worker record, and an AD task authors its own server — but its bind password is
 // a per-task *reference* that resolves out of the vault, which a supervised worker
-// can read no more than it can read the connector store. So it is defaulted on the
+// can read no more than it can read the worker store. So it is defaulted on the
 // same condition mail is: superviseEnv hands the child exactly the references the
 // deployed models name (adWorkerEnv). It belongs here because a directory write is
 // the plainest case of work that should never sit on the engine's loop — a bind, a
@@ -436,19 +436,19 @@ var offloadableKinds = map[string][]int32{
 // (ADR-0166's own argument for offloading it at all).
 //
 // BMC Remedy is the fourth way in, and it is mail's way exactly (ADR-0192).
-// It is a managed kind whose AR System address and service account live in the connector
+// It is a managed kind whose AR System address and service account live in the worker
 // store and the vault, so it was excluded for as long as the engine had no worker to
 // hand them to — not as a judgement about the kind. ADR-0106's amendment built that
 // worker and the handover (remedyWorkerEnv), which leaves no reason for a ticket create,
 // three round trips to somebody else's ITSM host, to keep happening on the loop.
 //
 // Jira is the fifth, and it is Remedy's way exactly (ADR-0218).
-// A managed kind whose site address and Atlassian credential live in the connector store
+// A managed kind whose site address and Atlassian credential live in the worker store
 // and the vault, excluded only for as long as there was nothing to hand them to;
 // ADR-0201's follow-ups built the worker and jiraWorkerEnv built the handover. What
 // decided it was not the argument but watching an operator look for the worker: a kind
 // the engine serves itself appears in the Workers view only when something is wrong with
-// it, so a working Jira connector is a row that is folded away as quiet, in a table whose
+// it, so a working Jira worker is a row that is folded away as quiet, in a table whose
 // whole subject is who is doing the work.
 //
 // REST and LDIF are the sixth and seventh, and they are what turns the deprecation of
@@ -465,7 +465,7 @@ func DefaultOffloadedKinds() []string {
 	return []string{"ad", "csv", connectorKindJira, "ldif", connectorKindMail, connectorKindRemedy, "rest", "script", "webscrape"}
 }
 
-// DefaultSupervisedWorkerOnlyKinds are the worker-only connector kinds Atlas supervises
+// DefaultSupervisedWorkerOnlyKinds are the worker-only Worker Types Atlas supervises
 // by default (ADR-0172). Unlike the offloaded kinds these have no in-engine form at all,
 // so --in-process-connectors cannot apply to them: the worker is the only way to run
 // them. It starts with nothing to serve and parks (exitNothingToServe); the moment an
@@ -491,7 +491,7 @@ func (s *Server) applyOffloadedKinds() error {
 		}
 		types, ok := offloadableKinds[name]
 		if !ok {
-			return fmt.Errorf("api: cannot offload connector kind %q: no such kind (have %s)",
+			return fmt.Errorf("api: cannot offload Worker Type %q: no such kind (have %s)",
 				name, strings.Join(offloadableKindNames(), ", "))
 		}
 		for _, jt := range types {
@@ -502,7 +502,7 @@ func (s *Server) applyOffloadedKinds() error {
 }
 
 // offloadableKindNames lists every kind that can be named, for the error above.
-// IsOffloadableKind reports whether a connector kind has in-process handlers at all,
+// IsOffloadableKind reports whether a Worker Type has in-process handlers at all,
 // which is what makes it nameable in --offload-connectors: offloading is the removal
 // of those handlers, so a kind that has none (entra, which only ever runs on a
 // worker) is refused there rather than silently accepted. A caller that wants a
@@ -535,16 +535,16 @@ func lookupManagedConnectorKind(name string) (managedConnectorKind, bool) {
 
 // managedConnectorKindsError is the 400 message for an unsupported create kind. It is
 // built from the registry so it always lists exactly the supported kinds, in order
-// (e.g. connector kind must be "temis", "clio", "mail", "sharepoint", or "remedy").
+// (e.g. Worker Type must be "temis", "clio", "mail", "sharepoint", or "remedy").
 func managedConnectorKindsError() string {
 	quoted := make([]string, len(managedConnectorKinds))
 	for i, k := range managedConnectorKinds {
 		quoted[i] = "\"" + k.name + "\""
 	}
 	if len(quoted) == 1 {
-		return "connector kind must be " + quoted[0]
+		return "Worker Type must be " + quoted[0]
 	}
-	return "connector kind must be " + strings.Join(quoted[:len(quoted)-1], ", ") + ", or " + quoted[len(quoted)-1]
+	return "Worker Type must be " + strings.Join(quoted[:len(quoted)-1], ", ") + ", or " + quoted[len(quoted)-1]
 }
 
 // validateEndpointOnlyConnector validates a temis or clio create request: the
@@ -552,7 +552,7 @@ func managedConnectorKindsError() string {
 func validateEndpointOnlyConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.Endpoint == "" {
-		return "connector endpoint is required"
+		return "worker endpoint is required"
 	}
 	return ""
 }
@@ -564,10 +564,10 @@ func validateEndpointOnlyConnector(p *createConnectorParams) string {
 func validateRemedyConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.Endpoint == "" {
-		return "connector endpoint is required"
+		return "worker endpoint is required"
 	}
 	if p.CredentialsRef == "" {
-		return "a remedy connector requires a credentialsRef naming a vault {username,password} bundle"
+		return "a remedy worker requires a credentialsRef naming a vault {username,password} bundle"
 	}
 	return ""
 }
@@ -584,13 +584,13 @@ func validateRemedyConnector(p *createConnectorParams) string {
 func validateADConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.Endpoint == "" {
-		return "an active directory connector requires an endpoint — the domain controller's LDAP URL, e.g. ldaps://dc.example.com:636"
+		return "an active directory worker requires an endpoint — the domain controller's LDAP URL, e.g. ldaps://dc.example.com:636"
 	}
 	if !strings.HasPrefix(p.Endpoint, "ldap://") && !strings.HasPrefix(p.Endpoint, "ldaps://") {
 		return "an active directory endpoint must be an LDAP URL (ldaps://host:636, or ldap://host:389 with StartTLS)"
 	}
 	if p.CredentialsRef == "" {
-		return "an active directory connector requires a credentialsRef naming a vault {bindDN, password} bundle"
+		return "an active directory worker requires a credentialsRef naming a vault {bindDN, password} bundle"
 	}
 	return ""
 }
@@ -600,15 +600,15 @@ func validateADConnector(p *createConnectorParams) string {
 // naming a vault bundle. Which of the two bundle shapes it is ({email, apiToken} for
 // Cloud, {token} for a Data Center personal access token) is not decided here: the
 // record holds only the reference, and the bundle behind it is read at build time
-// (I6), where being wrong becomes a problem on the connector rather than a refused
+// (I6), where being wrong becomes a problem on the worker rather than a refused
 // form. Provider/Sender are mail-only.
 func validateJiraConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.Endpoint == "" {
-		return "connector endpoint is required (the Jira site, e.g. https://acme.atlassian.net)"
+		return "worker endpoint is required (the Jira site, e.g. https://acme.atlassian.net)"
 	}
 	if p.CredentialsRef == "" {
-		return "a jira connector requires a credentialsRef naming a vault bundle: {email, apiToken} for Jira Cloud, or {token} for a Data Center personal access token"
+		return "a jira worker requires a credentialsRef naming a vault bundle: {email, apiToken} for Jira Cloud, or {token} for a Data Center personal access token"
 	}
 	return ""
 }
@@ -619,7 +619,7 @@ func validateJiraConnector(p *createConnectorParams) string {
 func validateSharePointConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.CredentialsRef == "" {
-		return "a sharepoint connector requires a credentialsRef naming a vault auth bundle"
+		return "a sharepoint worker requires a credentialsRef naming a vault auth bundle"
 	}
 	return ""
 }
@@ -632,7 +632,7 @@ func validateSharePointConnector(p *createConnectorParams) string {
 func validateEntraConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.CredentialsRef == "" {
-		return "an entra connector requires a credentialsRef naming a vault bundle {tenantId, clientId, clientSecret}"
+		return "an entra worker requires a credentialsRef naming a vault bundle {tenantId, clientId, clientSecret}"
 	}
 	return ""
 }
@@ -643,12 +643,12 @@ func validateEntraConnector(p *createConnectorParams) string {
 // how an SMTP endpoint could be edited into a shape that only fails much later, at
 // send time (ADR-0150). The *record* does carry its kind, so the check a create got is
 // re-run against the record the update produced, which is what lets an operator switch
-// a mail connector's provider from an incident and be told immediately that the new
+// a mail worker's provider from an incident and be told immediately that the new
 // one needs a credential (ADR-0160).
 //
 // Only mail validates anything today; every other kind passes through untouched, so
 // emptying a temis endpoint is still allowed and reported as a problem on the
-// connector rather than refused — the shape an operator uses to park a connector they
+// worker rather than refused — the shape an operator uses to park a worker they
 // are in the middle of moving.
 func normalizeConnectorUpdate(rec *connector) string {
 	if rec.Kind != connectorKindMail {
@@ -684,10 +684,10 @@ func validateMailConnector(p *createConnectorParams) string {
 	switch p.Provider {
 	case mail.ProviderSMTP, mail.ProviderGmail, mail.ProviderMicrosoft, mail.ProviderPreview:
 	default:
-		return "mail connector provider must be \"smtp\", \"gmail\", \"microsoft\", or \"preview\""
+		return "mail worker provider must be \"smtp\", \"gmail\", \"microsoft\", or \"preview\""
 	}
 	if p.Sender == "" {
-		return "mail connector sender (default From address) is required"
+		return "mail worker sender (default From address) is required"
 	}
 	switch p.Provider {
 	case mail.ProviderSMTP:
@@ -697,13 +697,13 @@ func validateMailConnector(p *createConnectorParams) string {
 		}
 		p.Endpoint = endpoint
 	case mail.ProviderPreview:
-		// A preview connector dials nothing and authenticates against nothing, so an
+		// A preview worker dials nothing and authenticates against nothing, so an
 		// endpoint or credential written into the form would be dead configuration
 		// that reads as if it were in use.
 		p.Endpoint, p.CredentialsRef = "", ""
 	default:
 		if p.CredentialsRef == "" {
-			return "a " + p.Provider + " mail connector requires a credentialsRef naming a vault auth bundle"
+			return "a " + p.Provider + " mail worker requires a credentialsRef naming a vault auth bundle"
 		}
 	}
 	return ""

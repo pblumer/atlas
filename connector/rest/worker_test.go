@@ -20,7 +20,7 @@ type fixedClock struct{ t int64 }
 
 func (c *fixedClock) Now() int64 { c.t++; return c.t }
 
-// recordingClient captures the requests a connector task makes and returns a
+// recordingClient captures the requests a task makes and returns a
 // canned response.
 type recordingClient struct {
 	requests []rest.Request
@@ -43,7 +43,7 @@ func noSecret(string) string { return "" }
 
 const restDefKey = 71
 
-// restProcess: Start → REST connector task → End.
+// restProcess: Start → REST task → End.
 func restProcess(t *testing.T, method, url, resultVar string) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	b := compiler.NewBuilder(restDefKey, "customers", 1)
@@ -149,7 +149,7 @@ func openStore(t *testing.T) (*wal.Log, *state.Store) {
 }
 
 // TestRestConnectorWritesResponseToVariable is the vertical slice end to end: a
-// POST connector task creates a job, the in-process REST worker calls the API with
+// POST task creates a job, the in-process REST worker calls the API with
 // the instance's variables as the JSON body, writes the JSON response into the
 // task's result variable, and the token advances. The process parks on a following
 // task so the written variable is still readable.
@@ -240,7 +240,7 @@ func TestRestConnectorGetNoBodyNoResult(t *testing.T) {
 
 // TestRestConnectorRecoversAcrossRestart runs to the waiting REST job, simulates a
 // crash (reopen log and store), recovers by replaying the log, then lets the
-// worker call the API and finish the instance — proving the connector job survives
+// worker call the API and finish the instance — proving the worker job survives
 // recovery like any other job. The idempotency key (the job key) is stable across
 // replay, so a re-run after a crash would not double-call.
 func TestRestConnectorRecoversAcrossRestart(t *testing.T) {

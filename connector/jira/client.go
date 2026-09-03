@@ -1,5 +1,5 @@
-// Package jira integrates Atlassian Jira as a server-registered Atlas connector: a
-// BPMN Jira connector task performs one issue-tracker operation — create an issue,
+// Package jira integrates Atlassian Jira as a server-registered Atlas worker: a
+// BPMN Jira task performs one issue-tracker operation — create an issue,
 // read one, update it, move it through its workflow, comment on it, assign it, search
 // for issues, or look an account up — against a configured Jira instance via the job
 // path (ADR-0201). It mirrors how the remedy package delegates a ticket to
@@ -7,14 +7,14 @@
 // provider (ADR-0079), and inherits the job protocol's durability and non-blocking
 // properties (ADR-0007):
 //
-//   - A connector task creates a job carrying the reserved [compiler.JiraJobType].
+//   - A task creates a job carrying the reserved [compiler.JiraJobType].
 //     The processor never performs the outbound call itself, so it stays
 //     allocation-free (invariant I1) and free of any HTTP dependency.
 //   - The in-process [Handler] — a job worker — pulls those jobs, calls Jira off the
 //     processor goroutine and after fsync (invariant I2, never inside applyToState /
 //     I4), and completes the job, writing what Jira returned into the task's result
 //     variable, which drives the token onward.
-//   - The base URL and credential live in a server-side [Registry] keyed by connector
+//   - The base URL and credential live in a server-side [Registry] keyed by worker
 //     name, so a model refers to a Jira instance by name only and never carries a URL
 //     or a secret (ADR-0036/0041). Only what the task is *about* — the operation and
 //     its values — is authored in the model, like a Remedy task's form and fields.
@@ -23,7 +23,7 @@
 // Data Center serve. v3 differs from it in the one thing that matters here: a
 // description or comment body must be an Atlassian Document Format tree rather than a
 // string, and making every model author ADF to write one sentence is the opposite of
-// what this connector is for.
+// what this worker is for.
 //
 // Search is the one exception, and only on Cloud. Atlassian removed the offset-paged
 // /rest/api/{2,3}/search from Jira Cloud over 2025 (a switched-over site answers 410
@@ -91,13 +91,13 @@ type Op struct {
 // Ops is the operation table: the loop a process actually runs against an issue
 // tracker. It is deliberately not "every Jira endpoint" — what earns a row is a step a
 // business process takes, which is why there is no board, sprint or worklog here and
-// why the generic REST connector (ADR-0067) remains the way to reach the rest.
+// why the generic REST worker (ADR-0067) remains the way to reach the rest.
 //
 // search-users is the one row that is not about an issue, and it earns its place as
 // assign-issue's missing argument (ADR-0223): Jira hands an issue
 // to an accountId, a process knows a person by name or address, and without a row for
 // the step between them a model had to hard-code an opaque id or call Jira twice through
-// two different connectors.
+// two different workers.
 var Ops = map[string]Op{
 	"create-issue":     {NeedsProject: true, NeedsSummary: true, Label: "create an issue"},
 	"get-issue":        {NeedsIssue: true, NeedsResult: true, Label: "read an issue"},
@@ -157,7 +157,7 @@ type Request struct {
 	MaxResults int32
 	// Fields are extra issue fields keyed by Jira field id or name, each carrying the
 	// JSON shape its FEEL value had — a string stays a string, an object or a list is
-	// sent as one. It is how a custom field, a component, or anything this connector
+	// sent as one. It is how a custom field, a component, or anything this worker
 	// does not name by itself is set.
 	Fields map[string]any
 	// RequestID is deterministic (the job key), sent as an X-Request-ID header so an
@@ -166,11 +166,11 @@ type Request struct {
 }
 
 // Client performs one operation against a configured Jira instance. It is an
-// interface so the worker is testable without a live Jira and so a connector name
+// interface so the worker is testable without a live Jira and so a worker name
 // binds to exactly one instance.
 //
 // The shape is a single Do rather than a method per operation for the reason the
-// Entra connector gives (ADR-0172): this is a typed façade over Jira's REST API, and
+// Entra worker gives (ADR-0172): this is a typed façade over Jira's REST API, and
 // the value it adds is at the *model* level — naming the operations and building
 // their URLs and bodies — not in wrapping eight HTTP calls in eight Go signatures.
 type Client interface {
@@ -180,15 +180,15 @@ type Client interface {
 	Do(ctx context.Context, req Request) (any, error)
 }
 
-// Registry resolves a connector name to the [Client] for this kind. Connectors are
+// Registry resolves a worker name to the [Client] for this kind. Workers are
 // registered at the server from managed configuration (base URL plus credentials), so
-// a model refers to a connector by name only (ADR-0036/0041).
+// a model refers to a worker by name only (ADR-0036/0041).
 //
 // It is the shared [clientreg.Registry], which also carries *why* a configured
-// connector is missing from it — the difference between "never configured" and
+// worker is missing from it — the difference between "never configured" and
 // "configured and broken", which is what a parked token has to be able to say
 // (ADR-0158).
 type Registry = clientreg.Registry[Client]
 
-// NewRegistry creates an empty connector registry.
+// NewRegistry creates an empty worker registry.
 func NewRegistry() *Registry { return clientreg.New[Client]() }

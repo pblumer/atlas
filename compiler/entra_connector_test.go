@@ -32,31 +32,31 @@ func entraDetail(t *testing.T, attrs string) (*CompiledProcess, *ConnectorTaskDe
 	return cp, cp.ConnectorTask(node.Detail)
 }
 
-// The connector may be a static name (the common case) or a FEEL expression, so one
+// The worker may be a static name (the common case) or a FEEL expression, so one
 // process can serve several tenants and resolve the name from its own variables at
-// call time (ADR-0172). A literal leaves EntraConnector's Expr nil and Connector
-// holds the name; an expression compiles into EntraConnector and Connector keeps the
+// call time (ADR-0172). A literal leaves EntraConnector's Expr nil and Worker
+// holds the name; an expression compiles into EntraConnector and Worker keeps the
 // authored "=..." text for introspection.
 func TestEntraConnectorIsLiteralOrExpression(t *testing.T) {
-	// Literal: the static path is unchanged — no connector expression is compiled.
+	// Literal: the static path is unchanged — no worker expression is compiled.
 	_, lit := entraDetail(t, `connector="contoso" operation="disable" userId="=person.upn" resultVariable="k"`)
 	if lit.EntraConnector.Expr != nil {
-		t.Errorf("a literal connector should compile no expression, got %+v", lit.EntraConnector)
+		t.Errorf("a literal worker should compile no expression, got %+v", lit.EntraConnector)
 	}
 
-	// Expression: the '=' compiles into EntraConnector; Connector keeps the text so an
+	// Expression: the '=' compiles into EntraConnector; Worker keeps the text so an
 	// incident or a placement badge can still name the (dynamic) reference.
 	cp, dyn := entraDetail(t, `connector="=tenant" operation="disable" userId="=person.upn" resultVariable="k"`)
 	if dyn.EntraConnector.Expr == nil {
-		t.Errorf("a FEEL connector should compile an expression, got literal %q", dyn.EntraConnector.Literal)
+		t.Errorf("a FEEL worker should compile an expression, got literal %q", dyn.EntraConnector.Literal)
 	}
 	if got := cp.Intern(dyn.Connector); got != "=tenant" {
-		t.Errorf("Connector introspection text = %q, want =tenant", got)
+		t.Errorf("Worker introspection text = %q, want =tenant", got)
 	}
 }
 
-// A service task bearing <atlas:entraConnector> is an Entra ID connector task
-// (ADR-0172): it names a tenant connector and a lifecycle operation, never an
+// A service task bearing <atlas:entraConnector> is an Entra ID task
+// (ADR-0172): it names a tenant worker and a lifecycle operation, never an
 // address or a credential.
 func TestParseEntraConnectorTask(t *testing.T) {
 	cp, d := entraDetail(t, `connector="contoso" operation="disable" userId="=person.upn" resultVariable="konto"`)
@@ -67,7 +67,7 @@ func TestParseEntraConnectorTask(t *testing.T) {
 		t.Errorf("jobType index = %d, want %d", d.JobType, EntraJobTypeIndex)
 	}
 	if got := cp.Intern(d.Connector); got != "contoso" {
-		t.Errorf("connector = %q, want contoso", got)
+		t.Errorf("worker = %q, want contoso", got)
 	}
 	if got := cp.Intern(d.EntraOp); got != "disable" {
 		t.Errorf("operation = %q, want disable", got)
@@ -145,7 +145,7 @@ func TestEntraConnectorGroupsAndTeams(t *testing.T) {
 
 func TestEntraConnectorValidation(t *testing.T) {
 	for _, tc := range []struct{ name, attrs, want string }{
-		{"no connector", `operation="disable" userId="u"`, "connector"},
+		{"no worker", `operation="disable" userId="u"`, "worker"},
 		{"no operation", `connector="c" userId="u"`, "operation"},
 		{"unknown operation", `connector="c" operation="rename" userId="u"`, "unknown operation"},
 		{"disable without user", `connector="c" operation="disable"`, "userId"},
@@ -198,7 +198,7 @@ func TestEntraConnectorValidation(t *testing.T) {
 }
 
 // A listing compiles its query: the filter is a literal-or-FEEL value like every
-// other authored connector value, and the bounds are settled at deploy so the
+// other authored worker value, and the bounds are settled at deploy so the
 // runtime interprets nothing (I5).
 func TestEntraConnectorListUsers(t *testing.T) {
 	cp, d := entraDetail(t, `connector="contoso" operation="list-users" resultVariable="leute"

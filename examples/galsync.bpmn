@@ -69,7 +69,7 @@
       <!-- Is this person already in the target address book? The same AD worker type
            that writes the contact also reads it (ADR-0166, fifth amendment): a search
            used to belong to the generic LDAP worker type, which meant binding a second
-           connector to the same forest just to ask. `treffer` is {found, count, dn,
+           worker to the same forest just to ask. `treffer` is {found, count, dn,
            entries} — the gateway branches on found, the update addresses dn. -->
       <bpmn:serviceTask id="suche_kontakt" name="Kontakt suchen">
         <bpmn:extensionElements>

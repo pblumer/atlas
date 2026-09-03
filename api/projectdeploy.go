@@ -222,8 +222,8 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		return bundleOutcome{status: http.StatusConflict, proj: proj, resp: projectDeployResp{
 			ID: proj.ID, Name: proj.Name, Deployed: false,
 			Reason: "a draft can be delivered the message name " + claimed +
-				", which an inbound connector you cannot reach publishes under. Rename the message, " +
-				"or ask whoever owns that connector to share it.",
+				", which an inbound worker you cannot reach publishes under. Rename the message, " +
+				"or ask whoever owns that worker to share it.",
 			Definitions: []deployedProcess{}, References: refReports,
 		}}
 	}
@@ -269,7 +269,7 @@ func draftDecisions(deployables []compiler.Deployable) []string {
 // Returns (xmls, "", nil) when stored models together provide every needed local
 // decision (one model when they share it, several when the tasks span models);
 // (nil, "", nil) when the body needs none (no business rule tasks, or only central
-// connector decisions, which carry no local model); (nil, reason, nil) when a needed
+// worker decisions, which carry no local model); (nil, reason, nil) when a needed
 // decision is in no model, so the caller refuses (409) instead of deploying a
 // process that can never run; or (nil, "", err) on an infrastructure failure. It
 // resolves and compiles models (I/O + CPU), so it runs OFF the run loop; the

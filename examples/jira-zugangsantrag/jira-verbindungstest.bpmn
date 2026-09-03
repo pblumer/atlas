@@ -35,7 +35,7 @@
     </startEvent>
 
     <serviceTask id="anlegen" name="Testvorgang anlegen">
-      <documentation>Jira-Worker-Typ, Operation create-issue. Der Worker-Name "jira" verweist auf den konfigurierten Worker unter Console -> Workers (das Attribut heisst weiterhin connector); Basis-URL und Credential liegen dort und im Vault, nie im Modell. Projekt und Vorgangstyp kommen als FEEL aus dem Startformular, damit dasselbe Modell gegen jedes Projekt laeuft. resultVariable schreibt die Antwort ({id, key, self}) nach "ticket" — im Operations-View sichtbar, und der Schluessel ist danach als =ticket.key referenzierbar.</documentation>
+      <documentation>Jira-Worker-Typ, Operation create-issue. Der Worker-Name "jira" verweist auf den konfigurierten Worker unter Console -> Workers (das Attribut heisst weiterhin worker); Basis-URL und Credential liegen dort und im Vault, nie im Modell. Projekt und Vorgangstyp kommen als FEEL aus dem Startformular, damit dasselbe Modell gegen jedes Projekt laeuft. resultVariable schreibt die Antwort ({id, key, self}) nach "ticket" — im Operations-View sichtbar, und der Schluessel ist danach als =ticket.key referenzierbar.</documentation>
       <extensionElements>
         <atlas:jiraConnector connector="jira" operation="create-issue"
           project="=jiraProjekt"

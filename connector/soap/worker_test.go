@@ -20,7 +20,7 @@ type fixedClock struct{ t int64 }
 
 func (c *fixedClock) Now() int64 { c.t++; return c.t }
 
-// recordingClient captures the requests a connector task makes and returns a canned
+// recordingClient captures the requests a task makes and returns a canned
 // response.
 type recordingClient struct {
 	requests []soap.Request
@@ -46,7 +46,7 @@ const soapEndpoint = "https://ws.example.com/UserService"
 
 func lit(s string) compiler.RestExpr { return compiler.RestExpr{Literal: s} }
 
-// soapProcess: Start → SOAP connector task → End.
+// soapProcess: Start → SOAP task → End.
 func soapProcess(t *testing.T, cfg compiler.SoapConfig) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	return soapProcessWith(t, cfg, false)
@@ -378,7 +378,7 @@ func TestSoapHandlerElementInstanceGone(t *testing.T) {
 
 // TestSoapRecoversAcrossRestart runs to the waiting SOAP job, simulates a crash (reopen
 // log and store), recovers by replaying the log, then lets the worker call the service
-// and finish the instance — proving the connector job survives recovery like any other
+// and finish the instance — proving the worker job survives recovery like any other
 // job.
 func TestSoapRecoversAcrossRestart(t *testing.T) {
 	dir := t.TempDir()

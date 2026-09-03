@@ -15,15 +15,15 @@ import (
 )
 
 // ProcessLookup resolves a process-definition key to its compiled process. The
-// worker uses it to find the connector, subject, and event type a clio job
+// worker uses it to find the worker, subject, and event type a clio job
 // belongs to, so one handler serves every deployed process.
 type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
-// Handler builds a job handler that performs a clio "write-events" connector
+// Handler builds a job handler that performs a clio "write-events" worker
 // task. Register it with a [job.Runner] for the reserved ClioWriteJobType index;
 // the runner then pulls activatable clio jobs, and for each the handler resolves
-// the connector task's connector/subject/event-type from the compiled process,
-// resolves the connector's client from reg, and appends an event whose body the
+// the worker task's connector/subject/event-type from the compiled process,
+// resolves the worker's client from reg, and appends an event whose body the
 // task's input mappings define — or, with none, the variables it sees (see
 // [eventBody]) — keyed by the job key so an at-least-once retry de-duplicates
 // (ADR-0036). Returning an error leaves the job pending, exactly as for any
@@ -48,9 +48,9 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Handle
 	}
 }
 
-// QueryHandler builds a job handler for a clio "query" connector task: it reads
+// QueryHandler builds a job handler for a clio "query" task: it reads
 // projected state (get_state) or runs a stored query (run_query) on the task's
-// connector and writes the result back into the task's result variable. Register it
+// worker and writes the result back into the task's result variable. Register it
 // with a [job.Runner] for the reserved ClioQueryJobType index via HandleWithOutput,
 // like the REST worker (ADR-0036/0067): when the task carries a query the handler
 // runs it, otherwise it reads get_state for the task's subject (with the optional
@@ -85,8 +85,8 @@ func QueryHandler(store state.Reader, lookup ProcessLookup, reg *Registry) job.O
 	}
 }
 
-// ReadHandler builds a job handler for a clio "read" connector task: it reads the
-// task's subject events (up to the task's limit) from the connector and writes them
+// ReadHandler builds a job handler for a clio "read" task: it reads the
+// task's subject events (up to the task's limit) from the worker and writes them
 // back into the task's result variable as a JSON array. Register it for the reserved
 // ClioReadJobType index via HandleWithOutput (ADR-0036).
 func ReadHandler(store state.Reader, lookup ProcessLookup, reg *Registry) job.OutputHandler {
@@ -116,7 +116,7 @@ func ReadHandler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Ou
 
 // resolveConnector performs the guards shared by every clio handler: it loads the
 // job's element instance (a vanished one is a no-op), finds its compiled process and
-// connector-task detail, and resolves the named connector's client. ok is false with
+// connector-task detail, and resolves the named worker's client. ok is false with
 // a nil error only when the element instance is already gone; any other failure
 // returns an error so the job stays pending.
 func resolveConnector(store state.Reader, lookup ProcessLookup, reg *Registry, j job.Job) (*compiler.CompiledProcess, *compiler.ConnectorTaskDetail, Client, *model.ElementInstanceValue, bool, error) {
@@ -204,7 +204,7 @@ func eventBody(store state.Reader, cp *compiler.CompiledProcess, ei *model.Eleme
 // varToAny maps a stored variable to its JSON-ready Go value. A number keeps its
 // exact canonical decimal text via json.Number rather than being routed through a
 // float, so large or high-precision numbers survive intact. A structured value
-// (VarJSON) is re-parsed from its stored JSON so the connector payload nests it
+// (VarJSON) is re-parsed from its stored JSON so the worker payload nests it
 // as a real object/array rather than a JSON-in-a-string blob.
 func varToAny(v *model.VariableValue) any {
 	switch v.Kind {

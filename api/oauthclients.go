@@ -17,11 +17,11 @@ import (
 //
 // These endpoints are what the Console's AI access page drives (web/aiaccess.js),
 // and they changed not at all to gain it: the page asks which application, posts one
-// registration, and shows the three values the connector's own dialog is asking for.
+// registration, and shows the three values the worker's own dialog is asking for.
 // That order was deliberate — the credential surface first, the screen second — but
 // only the screen finishes the job. "Paste this JSON into a request" is an
 // instruction for whoever wrote the endpoint, not for the person setting up a
-// connector.
+// worker.
 //
 // The two halves are administered differently on purpose. A **client** is an
 // operator's decision about the installation, so registering and removing one is
@@ -305,9 +305,9 @@ func (s *Server) handleRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) 
 // These are the maintenance that makes the snapshot on a grant safe to keep. They
 // hang off the same decisions that already invalidate live sessions: disabling or
 // deleting an account destroys its sessions, and now its grants — otherwise a
-// disabled person would keep acting through a connector, which is the whole reason
+// disabled person would keep acting through a worker, which is the whole reason
 // disabling exists. A role or group change rewrites the snapshot instead of
-// dropping it, because the person did nothing wrong and their connector should not
+// dropping it, because the person did nothing wrong and their worker should not
 // fall over for an administrative edit.
 //
 // Both run inside a run-loop turn, so the caller must not already be in one.
@@ -335,7 +335,7 @@ func (s *Server) setUserGrantRoles(userID string, roles []string) {
 
 // setGrantGroupMembership and dropGroupFromGrants mirror the sessionStore methods
 // of the same shape, called from the same places, so a group change reaches a
-// person's connector exactly as it reaches their browser session (ADR-0185).
+// person's worker exactly as it reaches their browser session (ADR-0185).
 func (s *Server) setGrantGroupMembership(userID, groupID string, member bool) {
 	s.rewriteUserGrants(userID, func(g *oauthGrant) bool {
 		next, changed := applyGroup(g.GroupIDs, groupID, member)

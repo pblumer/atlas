@@ -39,7 +39,7 @@ func TestBuiltinConnectorsRegistersEachSQLProduct(t *testing.T) {
 				t.Errorf("no handler for %s; have %v", tc.jobType, got.Handlers)
 			}
 			// The names are what the Workers view subtracts from what models
-			// reference, to show which connectors nothing can serve.
+			// reference, to show which workers nothing can serve.
 			if len(got.Names) != 1 || got.Names[0] != "hr-db" {
 				t.Errorf("names = %v, want [hr-db]", got.Names)
 			}
@@ -51,7 +51,7 @@ func TestBuiltinConnectorsRegistersEachSQLProduct(t *testing.T) {
 // which is the state every server starts in. It must park rather than fail, because
 // a supervised worker that *fails* is restarted with a growing backoff that never
 // converges, and a kind Atlas supervises by default would spend the rest of the
-// server's life restarting into the same emptiness. Configure a connector in the
+// server's life restarting into the same emptiness. Configure a worker in the
 // Console and refreshSupervisedWorkers brings this worker back holding it.
 //
 // The distinction this draws is the whole point: nothing configured parks, anything
@@ -84,7 +84,7 @@ func TestASQLWorkerWithNoConfiguredConnectorParksInsteadOfFailing(t *testing.T) 
 }
 
 // A worker with no in-process fallback must refuse a broken configuration while the
-// operator is still watching, not a retry budget later. A *named* connector with no
+// operator is still watching, not a retry budget later. A *named* worker with no
 // DSN is that: somebody meant to configure it and did it wrong, which is not the
 // same as not having configured one at all.
 func TestBuiltinConnectorsRefusesAMisconfiguredSQLWorker(t *testing.T) {
@@ -92,7 +92,7 @@ func TestBuiltinConnectorsRefusesAMisconfiguredSQLWorker(t *testing.T) {
 		"ATLAS_POSTGRES_CONNECTORS": "hr-db",
 	}), "postgres")
 	if err == nil {
-		t.Fatal("a connector with no DSN must fail at startup")
+		t.Fatal("a worker with no DSN must fail at startup")
 	}
 	if !strings.Contains(err.Error(), "ATLAS_POSTGRES_HR_DB_DSN") {
 		t.Errorf("the error should quote the exact variable, got: %v", err)
@@ -111,7 +111,7 @@ func TestBuiltinConnectorsRefusesAnUnparsableDSN(t *testing.T) {
 		t.Fatal("an unparsable DSN must fail at startup")
 	}
 	if !strings.Contains(err.Error(), "hr-db") {
-		t.Errorf("the error should name the connector, got: %v", err)
+		t.Errorf("the error should name the worker, got: %v", err)
 	}
 }
 
@@ -149,7 +149,7 @@ func TestBuiltinConnectorsRefusesAnUnimplementedKind(t *testing.T) {
 func TestRunSQLJobWithoutADetail(t *testing.T) {
 	_, err := RunSQLJob(context.Background(), Job{}, sqldb.NewRegistry())
 	if err == nil {
-		t.Fatal("a job with no connector detail must fail")
+		t.Fatal("a job with no worker detail must fail")
 	}
 }
 
@@ -162,7 +162,7 @@ func TestRunSQLJobReadsTheResolvedDetail(t *testing.T) {
 			"statement": "SELECT 1", "resultVariable": "r",
 		},
 	}}, sqldb.NewRegistry())
-	// The registry is empty, so this reaches the connector lookup — which is the
+	// The registry is empty, so this reaches the worker lookup — which is the
 	// evidence the payload decoded: an undecodable one fails earlier and differently.
 	if err == nil || !strings.Contains(err.Error(), "hr-db") {
 		t.Errorf("err = %v, want an unresolved-connector error naming hr-db", err)
@@ -402,7 +402,7 @@ func TestProbeSQLReportsWhyItCannotConnect(t *testing.T) {
 
 // A driver nobody registered is reported before anything is dialled — the case a
 // server built without the SQL drivers is in, which the check words as "this server
-// cannot check a database connection" rather than as a broken connector.
+// cannot check a database connection" rather than as a broken worker.
 func TestProbeSQLWithoutADriver(t *testing.T) {
 	err := ProbeSQL(context.Background(), sqldb.Product{Name: "probe", Driver: "no-such-driver"}, "whatever")
 	if err == nil {

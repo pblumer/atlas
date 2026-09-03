@@ -2,7 +2,7 @@
 // application an information model or an architecture model belongs to, which target
 // a release is promoted to.
 //
-// It lives in its own module for the reason the connector and migration dialogs do:
+// It lives in its own module for the reason the worker and migration dialogs do:
 // app.js boots the whole console on import, so anything left inside it is only ever
 // exercised by hand. Here it is reachable from a test — which matters for this one,
 // because what it replaces failed in a way no one could see.
