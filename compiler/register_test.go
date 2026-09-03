@@ -186,7 +186,9 @@ func TestParseWiringRejectionSurvivesLaterPasses(t *testing.T) {
 	if err == nil {
 		t.Fatal("Parse: want an error, got nil")
 	}
-	if !strings.Contains(err.Error(), "targetRef") {
+	// On what was rejected rather than on one word of the wording: the message is
+	// shared with the data-*input* path, so it cannot name targetRef.
+	if !strings.Contains(err.Error(), `"ghost"`) {
 		t.Errorf("error = %q, want the data-association rejection from the first pass", err.Error())
 	}
 }

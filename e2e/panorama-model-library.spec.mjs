@@ -48,8 +48,16 @@ test("Panorama is active and creates an application-owned blank ArchiMate model"
   await expect(page.locator("#view")).toContainText("No architecture models yet");
 
   await page.getByRole("button", { name: "Create new" }).click();
-  page.once("dialog", (dialog) => dialog.accept("Application landscape"));
   await page.locator('button[data-act="new-panorama"]').click();
+
+  // Which application, and the name beside it, in one dialog. It replaced a
+  // window.prompt that printed the applications as a numbered list and asked for the
+  // number back — a body the browser truncates past a few lines, so the newest
+  // application was the one it cut off (api/web/pickmodal.js).
+  await expect(page.locator("#pick-opt")).toBeVisible();
+  await expect(page.locator("#pick-opt option")).toHaveText(["Enterprise Architecture"]);
+  await expect(page.locator("#pick-name")).toHaveValue("Application landscape");
+  await page.locator("[data-ok]").click();
 
   await expect(page.locator("#view tbody")).toContainText("Application landscape");
   await expect(page.locator("#view tbody")).toContainText("Enterprise Architecture");
