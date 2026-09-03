@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Workers",
+    "Connectors"
+  ],
+  "title": {
+    "en": "REST calls now run in a worker, not in the engine",
+    "de": "REST-Aufrufe laufen jetzt im Worker, nicht mehr in der Engine"
+  },
+  "summary": {
+    "en": "Until now Atlas made a REST task's HTTP call from its own process — the same process that runs the engine. A slow or hung host on the other end therefore held up work that had nothing to do with it. REST and LDIF tasks now run in a worker Atlas starts and supervises itself, so a call that hangs is one worker you can see and restart in the Workers view, not a number in a timeout. Nothing to configure: authenticated REST tasks keep working, because Atlas hands the worker exactly the secrets the deployed models use.",
+    "de": "Bisher hat Atlas den HTTP-Aufruf eines REST-Tasks im eigenen Prozess gemacht — in demselben, der die Engine ausführt. Ein langsamer oder hängender Host auf der Gegenseite hielt damit Arbeit auf, die nichts damit zu tun hatte. REST- und LDIF-Tasks laufen jetzt in einem Worker, den Atlas selbst startet und überwacht: Ein hängender Aufruf ist damit ein Worker, den Sie in der Workers-Ansicht sehen und neu starten können, und keine Zahl in einem Timeout. Zu konfigurieren ist nichts — authentifizierte REST-Tasks laufen weiter, weil Atlas dem Worker genau die Geheimnisse übergibt, die die deployten Modelle verwenden."
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Worker öffnen"
+    },
+    "route": "#/console/workers"
+  }
+}

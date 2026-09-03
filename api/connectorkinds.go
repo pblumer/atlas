@@ -451,10 +451,18 @@ var offloadableKinds = map[string][]int32{
 // it, so a working Jira connector is a row that is folded away as quiet, in a table whose
 // whole subject is who is doing the work.
 //
+// REST and LDIF are the sixth and seventh, and they are what turns the deprecation of
+// ADR-0164 into its rule (ADR-draft-in-process-connectors-refused). An HTTP call to
+// somebody else's host is the *original* case for not running integrations on the
+// engine's loop — it was left in-engine only because a REST task's auth secret is a
+// vault reference a supervised worker cannot resolve, which is AD's problem and now has
+// AD's answer (restWorkerEnv). LDIF needs no answer: it reads and writes a file, and a
+// supervised worker is a child on the same host.
+//
 // The credential-bearing kinds the engine cannot yet hand over stay in the engine
 // until an operator moves their secrets themselves, with --offload-connectors.
 func DefaultOffloadedKinds() []string {
-	return []string{"ad", "csv", connectorKindJira, connectorKindMail, connectorKindRemedy, "script", "webscrape"}
+	return []string{"ad", "csv", connectorKindJira, "ldif", connectorKindMail, connectorKindRemedy, "rest", "script", "webscrape"}
 }
 
 // DefaultSupervisedWorkerOnlyKinds are the worker-only connector kinds Atlas supervises

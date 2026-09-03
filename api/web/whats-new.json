@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "rest-and-ldif-tasks-no-longer-run-on-the-engine-s-own-loop",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "REST calls now run in a worker, not in the engine",
+        "de": "REST-Aufrufe laufen jetzt im Worker, nicht mehr in der Engine"
+      },
+      "summary": {
+        "en": "Until now Atlas made a REST task's HTTP call from its own process — the same process that runs the engine. A slow or hung host on the other end therefore held up work that had nothing to do with it. REST and LDIF tasks now run in a worker Atlas starts and supervises itself, so a call that hangs is one worker you can see and restart in the Workers view, not a number in a timeout. Nothing to configure: authenticated REST tasks keep working, because Atlas hands the worker exactly the secrets the deployed models use.",
+        "de": "Bisher hat Atlas den HTTP-Aufruf eines REST-Tasks im eigenen Prozess gemacht — in demselben, der die Engine ausführt. Ein langsamer oder hängender Host auf der Gegenseite hielt damit Arbeit auf, die nichts damit zu tun hatte. REST- und LDIF-Tasks laufen jetzt in einem Worker, den Atlas selbst startet und überwacht: Ein hängender Aufruf ist damit ein Worker, den Sie in der Workers-Ansicht sehen und neu starten können, und keine Zahl in einem Timeout. Zu konfigurieren ist nichts — authentifizierte REST-Tasks laufen weiter, weil Atlas dem Worker genau die Geheimnisse übergibt, die die deployten Modelle verwenden."
+      },
+      "link": {
+        "label": "ADR-0164",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "web-scraping-one-row-is-one-record-and-the-fetch-survives-th",
       "version": "Unreleased",
       "date": null,
@@ -470,28 +499,6 @@
         },
         "route": "#/operations/sql-mock"
       }
-    },
-    {
-      "id": "an-example-where-a-jira-ticket-starts-the-process",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "An example where a Jira ticket starts the process",
-        "de": "Ein Beispiel, in dem ein Jira-Ticket den Prozess startet"
-      },
-      "summary": {
-        "en": "The Jira demo folder gained its other direction. Until now Atlas wrote to Jira; here a new ticket starts an Atlas process — no form, no button. The process comments on the ticket to confirm it arrived, looks up the account of whoever reported it, and assigns the ticket to them. Everything it needs (issue key, project, summary, reporter) comes from the ticket itself. The README walks through the event watch in the Console, what the process receives, and the three things that look like a defect and are not — including why it takes about two minutes.",
-        "de": "Der Jira-Beispielordner hat jetzt auch die Gegenrichtung. Bisher schrieb Atlas nach Jira; hier startet ein neues Ticket einen Atlas-Prozess — ohne Formular, ohne Knopfdruck. Der Prozess quittiert den Eingang im Ticket, schlägt das Konto des Melders nach und weist ihm das Ticket zu. Alles, was er dafür braucht (Vorgangsschlüssel, Projekt, Titel, Melder), kommt aus dem Ticket selbst. Das README führt durch die Ereignisüberwachung in der Console, zeigt, was der Prozess bekommt, und nennt die drei Dinge, die wie ein Defekt aussehen und keiner sind — darunter, warum es etwa zwei Minuten dauert."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Connectors"
-      ]
     }
   ]
 }
