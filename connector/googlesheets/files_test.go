@@ -11,7 +11,7 @@ import (
 
 // TestListFilesAsksDriveForOneFolder is the inbound half's whole read: the files a
 // folder holds, newest last, bounded by the cursor and the page size
-// (ADR-draft-google-inbound-watch).
+// (ADR-0234).
 func TestListFilesAsksDriveForOneFolder(t *testing.T) {
 	f := newFakeGoogle(t, map[string]string{
 		"GET /drive/v3/files": `{"files":[{"id":"f1","name":"Rechnung.pdf","createdTime":"2026-09-03T08:00:00.000Z"}]}`,

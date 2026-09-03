@@ -2582,7 +2582,7 @@ type xmlJiraConnector struct {
 
 // A Google Sheets task's parameters, carried on a service task as an
 // <atlas:googleSheetsConnector connector="..." operation="..." .../> extension element
-// (ADR-draft-google-sheets-worker). The connector attribute names the Worker (whose
+// (ADR-0235). The connector attribute names the Worker (whose
 // credential lives on the server, never in the model) and operation is the spreadsheet
 // operation the task performs. Element and attribute keep the pre-ADR-0203 spelling
 // their siblings carry: both are authored in deployed models.

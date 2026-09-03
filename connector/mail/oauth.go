@@ -49,7 +49,7 @@ type credentialBundle struct {
 // parseRSAPrivateKey decodes a PEM-encoded RSA private key (PKCS#8, as Google service
 // account JSON carries, or PKCS#1) for JWT signing. The mechanism is the shared
 // [oauth2] package's since a second caller needed it
-// (ADR-draft-google-sheets-worker); what stays here is this package's name on the
+// (ADR-0235); what stays here is this package's name on the
 // error an operator reads.
 func parseRSAPrivateKey(pemStr string) (*rsa.PrivateKey, error) {
 	return oauth2.ParseRSAPrivateKey("mail", pemStr)

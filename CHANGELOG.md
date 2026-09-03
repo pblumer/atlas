@@ -102,7 +102,7 @@ _Changed_ / _Removed_ for each version.
   extension only recognizes `*Connector` elements), and the `"connector"` key in the
   offload payload.
 
-  **Outbound** ([ADR-draft-google-sheets-worker](docs/adr/draft-google-sheets-worker.md))
+  **Outbound** ([ADR-0235](docs/adr/0235-google-sheets-worker.md))
   is eight operations that are steps a process takes: create a spreadsheet, add a tab,
   read a range, write one, append rows, clear a range, delete a tab, move the file to
   the trash. `values` takes the three shapes a process actually holds — a list of rows,
@@ -114,7 +114,7 @@ _Changed_ / _Removed_ for each version.
   way, but only one of the two is survivable. The credential — a service account's key,
   or a refresh token — lives in the vault behind a Worker name, never in a model.
 
-  **Inbound** ([ADR-draft-google-inbound-watch](docs/adr/draft-google-inbound-watch.md))
+  **Inbound** ([ADR-0234](docs/adr/0234-google-inbound-watch.md))
   is the two intake channels people already have. A **row watch** publishes each new row
   of a spreadsheet as an Atlas message — the "a Google Form writes its responses into a
   sheet" case — and a **folder watch** publishes each file put into a Drive folder,

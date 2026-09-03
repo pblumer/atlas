@@ -16,7 +16,7 @@ import (
 type TokenSource = oauth2.TokenSource
 
 // OAuth2 grant methods a Google Worker supports
-// (ADR-draft-google-sheets-worker). serviceAccount is the normal shape for a server
+// (ADR-0235). serviceAccount is the normal shape for a server
 // workflow: a service account signs a JWT-bearer assertion with its own key and acts
 // as itself, or — with subject — as a Workspace user through domain-wide delegation.
 // refreshToken exchanges a pre-obtained refresh token, which is how a consumer Google

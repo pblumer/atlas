@@ -370,7 +370,7 @@ func jiraFields(rec inboundSubscription, issue map[string]any) map[string]any {
 
 // --- google sheets and drive ---
 
-// The two Google watches (ADR-draft-google-inbound-watch), which are two answers to
+// The two Google watches (ADR-0234), which are two answers to
 // the one question the bridge asks of a source: what is this event's sequence.
 //
 // A spreadsheet row has a real one — its row number rises with every append and never
@@ -744,7 +744,7 @@ func validateInboundWatch(kind string, rec *inboundSubscription) string {
 
 // validateGoogleWatch checks a watch on a Google Worker. The subscription names
 // exactly one target, and which one it is decides everything else about the watch
-// (ADR-draft-google-inbound-watch) — so naming both, or neither, is refused here
+// (ADR-0234) — so naming both, or neither, is refused here
 // rather than resolved by a precedence rule nobody would remember.
 //
 // It normalizes in place, the way the connector validators do: an unset range and an

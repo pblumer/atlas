@@ -278,7 +278,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 	},
 	{
 		// A Google Sheets task performs one spreadsheet operation against a Worker an
-		// operator configured (ADR-draft-google-sheets-worker) and writes what Google
+		// operator configured (ADR-0235) and writes what Google
 		// returned into the task's result variable (HandleWithOutput) — for the
 		// operations that answer with something. The credential bundle lives in the
 		// Worker store as a reference and is resolved from the vault at build time
@@ -666,7 +666,7 @@ func validateJiraConnector(p *createConnectorParams) string {
 // adding. Unlike Jira or Remedy it needs no endpoint: Google's API bases are the same
 // for everyone, and the endpoint field stays an override for an operator behind a
 // proxy. What it does need is the credentialsRef, because for this Worker Type the
-// credential *is* the whole configuration (ADR-draft-google-sheets-worker).
+// credential *is* the whole configuration (ADR-0235).
 // Provider/Sender are mail-only.
 //
 // The function keeps the validate*Connector name its siblings in this table carry.

@@ -16,7 +16,7 @@ import (
 // The two API bases this Worker Type speaks. Sheets owns cells; Drive owns the file the
 // cells live in — which is why creating one in a folder and trashing one are Drive
 // calls even though the object is a spreadsheet
-// (ADR-draft-google-sheets-worker).
+// (ADR-0235).
 const (
 	sheetsDefaultBase = "https://sheets.googleapis.com"
 	driveDefaultBase  = "https://www.googleapis.com"

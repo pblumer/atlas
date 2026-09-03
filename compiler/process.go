@@ -824,7 +824,7 @@ type ConnectorTaskDetail struct {
 	JiraMaxResults  int32
 	JiraFields      []RestKV
 	// Google Sheets fields (JobType == GoogleSheetsJobType,
-	// ADR-draft-google-sheets-worker). Connector (above) names the Worker — the field
+	// ADR-0235). Connector (above) names the Worker — the field
 	// keeps that name because the BPMN attribute it is read from does; its credential
 	// lives in the Worker store and the vault, never in a model. SheetsOp is the interned operation ("create-spreadsheet"|
 	// "add-sheet"|"read-range"|"write-range"|"append-row"|"clear-range"|"delete-sheet"|

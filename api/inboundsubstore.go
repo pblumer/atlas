@@ -56,7 +56,7 @@ type inboundSubscription struct {
 	// spending that budget on empty answers every two seconds is not what it is for.
 	PollSeconds int `json:"pollSeconds,omitempty"`
 
-	// The fields below belong to a Google watch (ADR-draft-google-inbound-watch).
+	// The fields below belong to a Google watch (ADR-0234).
 	// Which of the two it is follows from which target it names — a subscription names
 	// exactly one, and the create endpoint refuses both or neither.
 

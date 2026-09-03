@@ -350,7 +350,7 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 			}
 			// Which of the two Google watches this is follows from the target the
 			// subscription names, which the create endpoint has already held to exactly
-			// one (ADR-draft-google-inbound-watch).
+			// one (ADR-0234).
 			if strings.TrimSpace(r.FolderID) != "" {
 				src = driveFolderSource{client: client, now: s.inboundNow}
 			} else {

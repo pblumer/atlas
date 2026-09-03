@@ -2,7 +2,7 @@
 // service task performs one spreadsheet operation — create a spreadsheet, add a sheet
 // to one, read a range, write a range, append rows, clear a range, delete a sheet, or
 // trash the whole file — against a Worker an operator configured, via the job path
-// (ADR-draft-google-sheets-worker). It mirrors how the jira package delegates one
+// (ADR-0235). It mirrors how the jira package delegates one
 // operation to a registry-managed Worker (ADR-0201) and inherits the job protocol's
 // durability and non-blocking properties (ADR-0007):
 //
@@ -182,7 +182,7 @@ type Client interface {
 	// holds nothing a process needs.
 	Do(ctx context.Context, req Request) (any, error)
 	// ListFiles lists one Drive folder. It is the inbound half's read
-	// (ADR-draft-google-inbound-watch) and deliberately not one of [Ops]: a watch on a
+	// (ADR-0234) and deliberately not one of [Ops]: a watch on a
 	// drop folder needs it, and a model must not be able to author it.
 	ListFiles(ctx context.Context, q FileQuery) ([]map[string]any, error)
 }

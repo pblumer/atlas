@@ -363,7 +363,7 @@ func (s *Server) buildGoogleSheetsClients() (map[string]googlesheets.Client, map
 }
 
 // googleSheetsCredentials is the shape of a Google Worker's credential bundle held in
-// the vault under its credentialsRef (ADR-draft-google-sheets-worker): a service
+// the vault under its credentialsRef (ADR-0235): a service
 // account's signing key, or a consumer account's refresh token. Only a *reference* to
 // this bundle is stored in the Worker record; the values live in the vault, never in a
 // model or the record (I6). It mirrors connector/googlesheets' own unexported bundle

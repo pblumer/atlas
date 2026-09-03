@@ -351,7 +351,7 @@ const JiraJobType = "io.atlas.jira"
 const JiraJobTypeIndex int32 = 25
 
 // GoogleSheetsJobType is the reserved job type a Google Sheets task carries
-// (ADR-draft-google-sheets-worker). One job type serves every spreadsheet operation —
+// (ADR-0235). One job type serves every spreadsheet operation —
 // create a spreadsheet, add a sheet, read, write, append, clear, delete a sheet or
 // trash the file — because they share a credential and an error envelope; the
 // operation is a modeled value rather than a reserved index of its own, as it is for
@@ -1778,7 +1778,7 @@ func (b *Builder) AddJiraConnectorTask(cfg JiraConfig) int32 {
 }
 
 // GoogleSheetsConfig is the deploy-time configuration of a Google Sheets task
-// (ADR-draft-google-sheets-worker). Worker names the Google identity an operator
+// (ADR-0235). Worker names the Google identity an operator
 // configured (whose credential lives server-side, never in the model) and Operation is
 // the spreadsheet operation. It is read from the task's `connector="…"` attribute,
 // which keeps the pre-ADR-0203 spelling because it is authored in deployed models. The remaining values are the ones that operation takes —

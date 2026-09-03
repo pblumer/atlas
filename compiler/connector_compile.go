@@ -1833,7 +1833,7 @@ func googleSheetsOpNames() []string {
 
 // compileGoogleSheetsConnectorTask compiles an <atlas:googleSheetsConnector> task: one
 // spreadsheet operation against a Worker an operator configured, via the job path
-// (ADR-draft-google-sheets-worker). The credential is resolved server-side by Worker
+// (ADR-0235). The credential is resolved server-side by Worker
 // name, like Jira's and SharePoint's; only the operation and its values live in the
 // model.
 //

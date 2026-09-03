@@ -17,7 +17,7 @@
 // decisions and they stay in the worker. A caller may also supply its own
 // [Fetcher] for a grant nobody else has — the Google service-account JWT-bearer
 // assertion was that case until a second caller needed it, which is how it came to
-// live here as [ServiceAccount] instead (ADR-draft-google-sheets-worker).
+// live here as [ServiceAccount] instead (ADR-0235).
 //
 // Every error is prefixed with the caller's kind, so a message an operator reads
 // still names the worker that produced it.

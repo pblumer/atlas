@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:googleSheetsConnector> extension is a Google Sheets
-// task (ADR-draft-google-sheets-worker): it performs one spreadsheet operation against
+// task (ADR-0235): it performs one spreadsheet operation against
 // a Worker an operator configured, via the job path. The credential lives server-side,
 // like Jira's and SharePoint's (ADR-0141/0201); only what the task is *about* — the
 // operation, the spreadsheet, the range and the values — is authored in the model.

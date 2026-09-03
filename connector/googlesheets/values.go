@@ -11,7 +11,7 @@ import (
 // is plain data — a list, a context, or a scalar.
 //
 // Three shapes are accepted, because three shapes are what a process holds
-// (ADR-draft-google-sheets-worker):
+// (ADR-0235):
 //
 //   - a list of lists — the rows verbatim, which is Sheets' own shape;
 //   - a flat list of scalars — one row;

@@ -33,7 +33,7 @@ import (
 // managed here, never in the model; only the operation and its values are
 // model-authored.
 // connectorKindGoogleSheets is the Google Sheets Worker Type
-// (ADR-draft-google-sheets-worker): a configured record of this kind resolves to a
+// (ADR-0235): a configured record of this kind resolves to a
 // live client speaking Sheets v4 and Drive v3, whose OAuth credential bundle — a
 // service account's {clientEmail, privateKey}, or a {clientId, clientSecret,
 // refreshToken} for a consumer account — is read from the vault. Like Jira, only the

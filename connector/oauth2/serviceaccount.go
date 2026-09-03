@@ -18,7 +18,7 @@ import (
 
 // The Google service-account grant: a JWT-bearer assertion signed with a service
 // account's private key and exchanged for an access token
-// (ADR-draft-google-sheets-worker).
+// (ADR-0235).
 //
 // This package's doc comment used to name it as the one grant deliberately left with
 // its caller — "the mail Worker Type's Google service-account JWT-bearer assertion is

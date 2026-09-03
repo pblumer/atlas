@@ -1,4 +1,4 @@
-# ADR-DRAFT: Google Sheets and Drive as inbound event sources — a polled row watch and a polled folder watch
+# ADR-0234: Google Sheets and Drive as inbound event sources — a polled row watch and a polled folder watch
 
 - **Status:** Proposed
 - **Date:** 2026-09-03
@@ -6,7 +6,7 @@
 
 ## Context and problem statement
 
-[ADR-draft-google-sheets-worker](draft-google-sheets-worker.md) gives Atlas the
+[ADR-0235](0235-google-sheets-worker.md) gives Atlas the
 *outbound* half: a service task reads a range, appends a row, creates or deletes a
 spreadsheet. Every one of those eight operations begins inside a process instance that
 already exists.
@@ -187,7 +187,7 @@ makes the filtering cost real.
 
 ## Links
 
-- relates to [ADR-draft-google-sheets-worker](draft-google-sheets-worker.md) — the outbound half
+- relates to [ADR-0235](0235-google-sheets-worker.md) — the outbound half
 - relates to [ADR-0075](0075-clio-inbound-event-bridge.md) — the bridge and the durable mark
 - relates to [ADR-0214](0214-jira-inbound-issue-watch.md) — the second source, and `MarkKey`
 - relates to [ADR-0225](0225-inbound-watch-budget.md) — the per-hour ceiling

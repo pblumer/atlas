@@ -406,7 +406,7 @@ type Server struct {
 	jiraRegistry *jira.Registry
 
 	// googleSheetsRegistry resolves a Worker name to a Google client (Sheets v4 and
-	// Drive v3) for Google Sheets tasks (ADR-draft-google-sheets-worker), built from
+	// Drive v3) for Google Sheets tasks (ADR-0235), built from
 	// the Worker store at startup and rebuilt on every change to it, with each
 	// Worker's OAuth credential bundle resolved from the vault (ADR-0041). Read only
 	// while driving jobs on the run loop, so it needs no lock.

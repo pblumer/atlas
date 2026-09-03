@@ -1,10 +1,10 @@
 # Google-Sheets-Demo: Antragseingang 📊
 
 Zwei Prozesse, die den Google-Sheets-Worker-Typ
-([ADR-draft-google-sheets-worker](../../docs/adr/draft-google-sheets-worker.md))
+([ADR-0235](../../docs/adr/0235-google-sheets-worker.md))
 an einer echten Tabelle zeigen — den ausgehenden Weg und die Gegenrichtung, in der
 eine **neue Zeile** einen Prozess *startet*
-([ADR-draft-google-inbound-watch](../../docs/adr/draft-google-inbound-watch.md)).
+([ADR-0234](../../docs/adr/0234-google-inbound-watch.md)).
 
 | Datei | Zweck |
 |---|---|

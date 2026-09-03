@@ -4,7 +4,7 @@
   "kind": "connector",
   "title": "Google Sheets",
   "author": "Atlas core",
-  "description": "Read a range, write one, append rows, clear a range, create a spreadsheet, add or delete a sheet, or move the whole file to the trash — through a server-registered Google credential. The operation, the spreadsheet, the range and the values are authored in the model; the credential lives on the server, resolved from the vault (ADR-draft-google-sheets-worker). Values may be a list of rows, one row of cells, or a list of objects written through the Columns given here. A read with Header on answers with objects keyed by the range's first row, which is the shape a multi-instance subprocess iterates. Creating and deleting a spreadsheet are Drive operations on the same credential.",
+  "description": "Read a range, write one, append rows, clear a range, create a spreadsheet, add or delete a sheet, or move the whole file to the trash — through a server-registered Google credential. The operation, the spreadsheet, the range and the values are authored in the model; the credential lives on the server, resolved from the vault (ADR-0235). Values may be a list of rows, one row of cells, or a list of objects written through the Columns given here. A read with Header on answers with objects keyed by the range's first row, which is the shape a multi-instance subprocess iterates. Creating and deleting a spreadsheet are Drive operations on the same credential.",
   "engineCompat": ">=0.10",
   "template": {
     "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",

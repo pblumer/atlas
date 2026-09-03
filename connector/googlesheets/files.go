@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// The inbound half's read (ADR-draft-google-inbound-watch). A watch on a Drive folder
+// The inbound half's read (ADR-0234). A watch on a Drive folder
 // needs to list what is in it, which is not one of the eight authorable operations and
 // must not become one: a model cannot ask for it, and the bridge does not go through
 // the operation table to get it.
