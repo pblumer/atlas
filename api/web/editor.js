@@ -22,6 +22,7 @@ import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
 import { attachPlayground } from "./playground.js";
+import { groupifyPanel, groupController } from "./pgroup.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -179,6 +180,7 @@ function calleeXML(pid, name) {
 let current; // active modeler/viewer, destroyed on remount
 let onLayoutKey; // document-level F8 handler for auto-layout, removed on remount
 let onBarMenuDismiss; // document-level click that closes the bar menu, removed on remount
+let onVarsKey; // document-level F4 handler for the Variables panel, removed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
 let collab; // active live collaboration session (ADR-0140), closed on remount
 // generation is bumped by cleanup() on every navigation/remount. A mount captures
@@ -205,6 +207,7 @@ export function cleanup() {
   if (playground) { try { playground.destroy(); } catch { /* ignore */ } playground = null; }
   if (onLayoutKey) { document.removeEventListener("keydown", onLayoutKey, true); onLayoutKey = null; }
   if (onBarMenuDismiss) { document.removeEventListener("click", onBarMenuDismiss); onBarMenuDismiss = null; }
+  if (onVarsKey) { document.removeEventListener("keydown", onVarsKey, true); onVarsKey = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
@@ -487,15 +490,18 @@ function editorCrumbs(project, current) {
     `<span class="crumb-current">${esc(current)}</span></nav>`;
 }
 
-// The editor bar carries two things the author acts on constantly — Save and Deploy —
-// and one menu for everything else (ADR-0229). It used to carry
-// seven buttons in one weight, which said that re-flowing the diagram and shipping it to
-// a server were the same size of act, and on a narrower window `flex-wrap` dropped a few
-// of them into a second row mid-group. Deploy is the only filled button, because it is
-// the only one here that leaves the browser; Save sits beside it because it is the one
-// pressed most; the rest are a menu, where a toggle reads as on by its check rather than
-// by a pressed button. Every control kept its id, so what each one does is still wired
-// where it was.
+// The editor bar carries what the author reaches for constantly and a menu for the rest
+// (ADR-0229, revised in one part by ADR-0240). It used to
+// carry seven buttons in one weight, which said that re-flowing the diagram and shipping
+// it to a server were the same size of act, and on a narrower window `flex-wrap` dropped
+// a few of them into a second row mid-group.
+//
+// Left of the rule is what the bar *shows*: Variables, a two-state button whose look is
+// drawn from `aria-pressed` (F4). Right of it is what the bar *does*: Deploy, the only
+// filled button because it is the only one here that leaves the browser, and Save beside
+// it as the one pressed most. Token simulation, Auto-layout, Export XML and Documentation
+// are in the menu, where a toggle reads as on by its check rather than by a pressed
+// button. Every control kept its id, so what each one does is still wired where it was.
 export async function mountEditor(root, { api, toast, key, draftId, projectId, project }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
@@ -511,16 +517,15 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
           <button data-tab="playground" title="Run this diagram on the real engine in a throwaway sandbox — no deploy, no side effects">Playground</button>
         </div>
         <div style="flex:1"></div>
+        <button class="btn neutral toggle" id="vars-toggle" type="button" aria-pressed="false" title="Show the variables this diagram writes, and who writes them (F4)">Variables</button>
+        <span class="bar-div" aria-hidden="true"></span>
         <button class="btn neutral" id="save" title="Save this diagram as a draft">Save</button>
         <button class="btn" id="deploy" title="Deploy this single diagram. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
         <div class="dropdown">
           <button class="icon-btn bar-more" id="bar-more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="Everything else this diagram can do">&#8943;</button>
           <div class="dropdown-menu" id="bar-menu" hidden>
-            <div class="mlabel">View</div>
             <button id="sim-toggle" type="button" aria-pressed="false" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough"><span class="mi-icon">&#9654;</span>Token simulation</button>
-            <button id="vars-toggle" type="button" aria-pressed="false" title="Show the variables this diagram writes"><span class="mi-icon">{}</span>Variables</button>
             <div class="sep"></div>
-            <div class="mlabel">Diagram</div>
             <button id="autolayout" type="button" title="Re-flow the diagram into a clean left-to-right layout (F8)"><span class="mi-icon">&#8649;</span>Auto-layout</button>
             <button id="export" type="button" title="Download this diagram as BPMN XML"><span class="mi-icon">&#8595;</span>Export XML</button>
             <button id="docexport" type="button" title="Publish this process as a structured PDF — the diagram plus every element's documentation and notes — as a numbered version you can share (ADR-0143)"><span class="mi-icon">&#128196;</span>Documentation</button>
@@ -1922,12 +1927,11 @@ function wireEditorVars(root, modeler, api) {
         }).join("");
   };
 
-  // The toggle is a row in the bar menu, so "open" is carried by a check mark and by
-  // aria-pressed rather than by the look of a held-down button.
-  const reflect = () => {
-    toggle.classList.toggle("active", !panel.hidden);
-    toggle.setAttribute("aria-pressed", panel.hidden ? "false" : "true");
-  };
+  // The toggle is a two-state button on the bar, and `aria-pressed` is the whole of that
+  // state: the pressed look is drawn from the attribute (app.css `.btn.toggle`), so there
+  // is no second flag that can disagree with what the panel is actually doing. The Live
+  // view's Variables toggle has always worked this way; this is the same control.
+  const reflect = () => toggle.setAttribute("aria-pressed", panel.hidden ? "false" : "true");
   toggle.addEventListener("click", () => {
     panel.hidden = !panel.hidden;
     reflect();
@@ -1937,6 +1941,21 @@ function wireEditorVars(root, modeler, api) {
     panel.hidden = true;
     reflect();
   });
+
+  // F4 toggles the panel, the way F8 runs auto-layout: a bare function key, captured at
+  // the document so it works wherever focus sits, removed by cleanup() on navigation.
+  //
+  // Unlike F8 it deliberately does *not* stand down while a field has focus. F8 rewrites
+  // the diagram, so firing it mid-typing would be a surprise edit; this only shows or
+  // hides a panel, and the moment an author most wants to check what a variable is called
+  // is while typing the expression that uses it. F4 produces no text, so nothing is eaten
+  // by letting it through.
+  onVarsKey = (e) => {
+    if (e.key !== "F4" || e.repeat || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault();
+    toggle.click(); // one path for pointer and keyboard: whatever the click does, F4 does
+  };
+  document.addEventListener("keydown", onVarsKey, true);
   filter.addEventListener("input", render);
   if (sampleBox) sampleBox.addEventListener("click", (e) => {
     if (!e.target.closest("#vars-reload")) return;
@@ -5146,69 +5165,6 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
   attachEditors();
 }
 
-// groupifyPanel turns each <h3> section of the properties panel into a collapsible
-// group (Camunda-style): the heading becomes a toggle with a chevron and a filled
-// dot when the group has content, and everything up to the next <h3> becomes its
-// collapsible body. It works on the already-rendered panel, so every element type's
-// markup is grouped by one function instead of each branch knowing about grouping.
-// Nodes are moved as whole subtrees, so field listeners and rich editors survive.
-function groupifyPanel(body, ctl) {
-  const heads = [...body.children].filter((n) => n.tagName === "H3");
-  if (!heads.length) return;
-  // A section absorbs everything up to the next <h3>, but a standalone group (e.g.
-  // the I/O mapping list groups, which render their own header) must stay a
-  // top-level sibling rather than being folded into the preceding section's body.
-  const isStop = (n) => n.nodeType === 1 && (n.tagName === "H3" || n.dataset.standaloneGroup === "1");
-  for (const h3 of heads) {
-    const title = h3.textContent.trim();
-    const group = document.createElement("div");
-    group.className = "pgroup" + (ctl.isCollapsed(title) ? " collapsed" : "");
-    group.dataset.group = title;
-    const bodyWrap = document.createElement("div");
-    bodyWrap.className = "pgroup-body";
-    let n = h3.nextSibling;
-    while (n && !isStop(n)) {
-      const next = n.nextSibling;
-      bodyWrap.appendChild(n);
-      n = next;
-    }
-    const fields = [...bodyWrap.querySelectorAll("input, textarea, select")];
-    const hasVal = fields.some((el) =>
-      el.tagName === "SELECT" ? el.selectedIndex > 0
-        : (el.type !== "button" && el.type !== "submit" && (el.value || "").trim() !== ""));
-    const hasRows = !!bodyWrap.querySelector(".dmn-input-row, .sv-row, .msg-row, tr, li");
-    const head = document.createElement("button");
-    head.type = "button";
-    head.className = "pgroup-head";
-    head.innerHTML = `<span class="pgroup-chevron">▸</span><span class="pgroup-title"></span>`;
-    head.querySelector(".pgroup-title").textContent = title;
-    if (hasVal || hasRows) {
-      const dot = document.createElement("span");
-      dot.className = "pgroup-dot";
-      dot.title = "has content";
-      head.appendChild(dot);
-    }
-    head.addEventListener("click", () => ctl.onToggle(title, group.classList.toggle("collapsed")));
-    body.insertBefore(group, h3);
-    group.appendChild(head);
-    group.appendChild(bodyWrap);
-    body.removeChild(h3);
-  }
-  // A subtle expand-all / collapse-all control, added once there is more than one
-  // collapsible group (the <h3> sections plus any standalone I/O-mapping groups), so
-  // the author can open or clear the whole panel in one click.
-  const total = body.querySelectorAll(".pgroup, .io-group").length;
-  if (total >= 2 && !body.querySelector(".pgroup-tools")) {
-    const tools = document.createElement("div");
-    tools.className = "pgroup-tools";
-    tools.innerHTML = `<button type="button" class="pgroup-all" data-all="expand" title="Expand all groups">Expand all</button>`
-      + `<span class="pgroup-all-sep" aria-hidden="true">·</span>`
-      + `<button type="button" class="pgroup-all" data-all="collapse" title="Collapse all groups">Collapse all</button>`;
-    tools.querySelector('[data-all="expand"]').addEventListener("click", () => ctl.setAll(false));
-    tools.querySelector('[data-all="collapse"]').addEventListener("click", () => ctl.setAll(true));
-    body.insertBefore(tools, body.firstChild);
-  }
-}
 
 function wireProperties(root, modeler, api, projectId, toast, identity) {
   // The class names this application models, offered as suggestions for a data
@@ -5237,30 +5193,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   const modeling = modeler.get("modeling");
   const selection = modeler.get("selection");
 
-  // Tidy the panel Camunda-style: every <h3> section becomes a collapsible group
-  // with a chevron and a filled dot when it carries content. groupifyPanel runs
-  // after each (re-)render via a MutationObserver, so no per-element branch has to
-  // know about grouping; collapse state persists across renders in `collapsed`.
-  // Property groups start collapsed on open — all but General — so a freshly selected
-  // element shows its identity, not every section at once (the author's request).
-  // `choice` remembers explicit toggles for this editing session, shared across element
-  // selections; untouched groups fall back to the default. It resets when the editor
-  // remounts, so reopening a file collapses the panel again.
-  const DEFAULT_OPEN = new Set(["General"]);
-  const choice = new Map(); // group title -> true(collapsed)/false(open), only when toggled
-  const groupCtl = {
-    isCollapsed: (title) => choice.has(title) ? choice.get(title) : !DEFAULT_OPEN.has(title),
-    onToggle: (title, col) => choice.set(title, col),
-    // Expand/collapse every group now on screen (both <h3> sections and standalone
-    // I/O-mapping groups) and record each so re-renders keep the chosen state.
-    setAll: (col) => {
-      for (const g of body.querySelectorAll(".pgroup, .io-group")) {
-        g.classList.toggle("collapsed", col);
-        const t = (g.dataset.group || "").trim();
-        if (t) choice.set(t, col);
-      }
-    },
-  };
+  // Tidy the panel Camunda-style, with the groups the class canvas's panel also uses
+  // (pgroup.js): every <h3> section becomes a collapsible group with a chevron and a
+  // filled dot when it carries content. It runs after each (re-)render via a
+  // MutationObserver, so no per-element branch has to know about grouping.
+  //
+  // Only General starts open: a freshly selected element should show its identity,
+  // not every section at once.
+  const groupCtl = groupController(body, ["General"]);
   let groupifying = false;
   const panelObserver = new MutationObserver(() => {
     if (groupifying) return;
@@ -9985,14 +9925,25 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // variable's: a structure is summarized rather than dumped, because a data object is
   // variable-shaped by design (ADR-0053) and an operator scanning the two side by side
   // should not have to learn two readings of the same thing.
-  const doValueCell = (d) => {
+  // `label` names the value in the window it opens: the object for a row, the object
+  // and which write for a trail entry — a trail of four {3 fields} is unreadable if
+  // every window is titled the same.
+  const doValueCell = (d, label = "") => {
     if (d.kind === "null" || d.value === null || d.value === undefined) {
       return `<span class="c-val null" title="No value written yet — the object is declared and seeded, but no association has written it">unset</span>`;
     }
     if (d.kind === "json") {
       const text = JSON.stringify(d.value);
       const arr = Array.isArray(d.value);
-      return `<span class="c-val do-json" title="${esc(prettyJSON(text))}">${arr ? "[" : "{"}${esc(jsonSummary(text))}${arr ? "]" : "}"}</span>`;
+      // The summary opens the same window the Variables tab's values open, rather than
+      // hiding the value in a title attribute — a tooltip is unreadable past a few
+      // lines, cannot be scrolled, copied or selected from, and never appears at all on
+      // a touch device. A data object is variable-shaped by design (ADR-0053), so the
+      // two tabs answer "what is actually in there" with one surface.
+      return `<button type="button" class="c-val do-json" data-name="${esc(label)}"
+          data-json="${esc(text)}" data-type="${arr ? "array" : "object"}"
+          title="Show ${esc(label || "this value")} as formatted JSON"
+        >${arr ? "[" : "{"}${esc(jsonSummary(text))}${arr ? "]" : "}"}</button>`;
     }
     const cls = d.kind === "boolean" ? "bool" : d.kind === "number" ? "num" : "str";
     return `<span class="c-val ${cls}">${esc(String(d.value))}</span>`;
@@ -10061,7 +10012,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         </td>
         <td class="do-c-class">${cls}</td>
         <td class="do-c-state">${state}</td>
-        <td class="c-valcell">${doValueCell(d)}</td>
+        <td class="c-valcell">${doValueCell(d, d.name)}</td>
         <td class="do-c-by">${by}</td>
         <td class="do-c-at">${esc(fmtClock(d.at))}</td>
       </tr>`;
@@ -10069,7 +10020,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       const entries = trail.map((h, i) => `<tr class="do-trail-row">
           <td class="do-t-n">${i + 1}</td>
           <td class="do-t-state">${h.state ? esc(h.state) : "—"}</td>
-          <td class="do-t-val">${doValueCell(h)}</td>
+          <td class="do-t-val">${doValueCell(h, `${d.name} · write ${i + 1}`)}</td>
           <td class="do-t-by">${writtenBy(h, i)}</td>
           <td class="do-t-at">${esc(fmtClock(h.at))}</td>
         </tr>`).join("");
@@ -10228,6 +10179,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // The trail toggles are inside a body that re-renders, so they are wired by
   // delegation rather than re-bound on every render.
   dataEl.addEventListener("click", (e) => {
+    // A structured value opens in the same window the Variables tab uses.
+    const val = e.target.closest(".do-json");
+    if (val && dataEl.contains(val)) {
+      openVarModal(val.dataset.name, val.dataset.json, val.dataset.type);
+      return;
+    }
     const t = e.target.closest(".do-toggle");
     if (!t || !dataEl.contains(t)) return;
     const row = t.closest(".do-row");

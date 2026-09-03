@@ -33,6 +33,41 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **A data object's value opens as formatted JSON.** In an instance's **Data** tab, a
+  structured value showed as `{3 fields}` and the whole of it was reachable only as a
+  tooltip — unreadable past a few lines, impossible to scroll, select or copy from, and
+  absent altogether on a touch device. The summary is now a button, and it opens the
+  same pretty-printed, syntax-highlighted window the **Variables** tab opens, with the
+  same Copy JSON. A data object is variable-shaped by design
+  ([ADR-0053](docs/adr/0053-first-class-data-objects.md)), so the two tabs
+  should answer "what is actually in there" with one surface.
+
+  Every write in the state trail opens too, and each window says which write it is
+  showing — a trail of four `{3 fields}` is unreadable if every window is titled the
+  same. Scalars are left alone: a string is already whole in its cell, and a button
+  around it would promise a second reading that does not exist.
+
+- **The class diagram's properties panel is the Modeler's panel.** Selecting a class, a
+  data store or a relationship under **Data › Information model** now gives you the same
+  panel the BPMN Modeler does: a header naming what is selected — its kind in small
+  type, its own name in bold, a type chip beside it — and collapsible property groups
+  below, each with a chevron and a filled dot when it carries content. Fields look like
+  fields do everywhere else in Atlas.
+
+  It is the same panel because it is the **same code**, not a lookalike. The Modeler had
+  grown the shape first, as a function inside `editor.js` that turns a rendered panel's
+  sections into groups. That is exactly the kind of thing worth having once: a copy
+  drifts from its model the first time either side is touched, and then two panels a
+  person uses in one sitting disagree about what a group is. It moved to
+  `api/web/pgroup.js`, and both panels call it.
+
+  What the two panels do *not* share is which groups start open, because the honest
+  answer differs. A BPMN element has a dozen sections and opening one of them is the
+  point, so only **General** starts open. A class has three, and one of them is its
+  attributes — the attributes *are* the class, so hiding them behind a click on every
+  selection would be worse than having no groups at all. So the class panel opens
+  everything, and collapsing is there for when a long attribute list is in the way.
+
 - **SCIM tasks run on a worker now**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 6).
   Creating, reading or searching a user at an identity provider no longer happens on
@@ -1039,19 +1074,29 @@ _Changed_ / _Removed_ for each version.
   before ADR-0203 — the decision records, and the release notes above — keep their
   wording, because they are dated accounts of what was true when they were written.
 
-- **The Modeler's bar carries two buttons now, and a menu for the rest.** It ended with
-  seven, added one at a time as the editor grew — Token simulation, Variables,
+- **The Modeler's bar carries three controls now, and a menu for the rest.** It ended
+  with seven, added one at a time as the editor grew — Token simulation, Variables,
   Auto-layout, Save, Export XML, Documentation, Deploy — and every one of them was the
   same white button. That said they were the same size of decision, which they never
   were: Auto-layout nudges boxes, Deploy puts a definition on a server and cannot be
-  taken back ([ADR-0229](docs/adr/0229-modeler-bar-hierarchy.md)).
+  taken back ([ADR-0229](docs/adr/0229-modeler-bar-hierarchy.md),
+  [ADR-0240](docs/adr/0240-modeler-variables-on-the-bar.md)).
 
-  The bar now carries **Save** and **Deploy**, with Deploy the only filled button because
-  it is the only act there that leaves the browser. The other five moved into a **…**
-  menu beside them, grouped by what they touch: *View* (Token simulation, Variables) and
-  *Diagram* (Auto-layout, Export XML, Documentation). A toggle in a menu cannot look
-  held down, so it says it is on with a check and with `aria-pressed` — the Variables
-  toggle never announced its state at all before.
+  The bar now carries **Variables**, **Save** and **Deploy**, with Deploy the only filled
+  button because it is the only act there that leaves the browser. Token simulation,
+  Auto-layout, Export XML and Documentation moved into a **…** menu beside them, where a
+  toggle says it is on with a check and with `aria-pressed`.
+
+  **Variables stayed on the bar, as a proper two-state button** — tinted while the panel
+  is open, muted while it is shut, and separated from Save and Deploy by a rule, because
+  what the bar *shows* and what the bar *does* are different kinds of thing. It is the one
+  control here that is neither an act nor a mode but a reading aid, consulted briefly and
+  often while writing something else, and a menu taxes that every time. It answers **F4**
+  now, alongside Auto-layout's F8 — and unlike F8 it works while a field has focus, since
+  the moment you most want to know what a variable is called is while typing the
+  expression that uses it. Its pressed look is drawn straight from `aria-pressed`, so what
+  a screen reader is told and what you see cannot drift apart; the toggle never announced
+  its state at all before.
 
   Two things that were not about any single button go with it. The bar is one row again
   at the widths people work at: it wraps, and the buttons were direct children of it, so
@@ -1068,7 +1113,7 @@ _Changed_ / _Removed_ for each version.
   so leaving is one visible click rather than a trip back through the menu.
 
   Nothing about what the controls *do* changed, and F8 still runs Auto-layout from
-  wherever focus sits. The cost is honest and worth naming: five controls are a click
+  wherever focus sits. The cost is honest and worth naming: four controls are a click
   further away, and someone opening the Modeler for the first time cannot see that they
   exist until they open the menu.
 

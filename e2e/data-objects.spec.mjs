@@ -69,6 +69,45 @@ test("a row opens into the object's state trail, naming the element behind each 
   expect(page.__errors).toEqual([]);
 });
 
+test("a structured value opens as formatted JSON, and says which write it is showing", async ({ page }) => {
+  // {2 fields} is a summary, and until now the whole value was only reachable as a
+  // title attribute — unreadable past a few lines, impossible to select or copy from,
+  // and absent altogether on a touch device.
+  const order = row(page, "order");
+  await order.locator(".c-val.do-json").click();
+  const modal = page.locator("#var-modal-ov");
+  await expect(modal).toBeVisible();
+  await expect(page.locator("#var-modal-title")).toHaveText("order");
+  await expect(page.locator("#var-modal-tag")).toHaveText("object");
+  // Pretty-printed rather than the one line the table shows.
+  const shown = await page.locator("#var-modal-body").textContent();
+  expect(shown).toContain("\n");
+  expect(shown).toContain("ORD-1");
+  expect(shown).toContain("100");
+
+  await page.locator("#var-modal-x").click();
+  await expect(modal).toBeHidden();
+
+  // Every write in the trail opens too, and the window says which one it is — a trail
+  // of four {2 fields} is unreadable if every window is titled the same.
+  await order.locator(".do-toggle").click();
+  await page.locator("#tab-data .do-trail-table .do-t-val .do-json").first().click();
+  await expect(page.locator("#var-modal-title")).toHaveText("order · write 2");
+  const write2 = await page.locator("#var-modal-body").textContent();
+  expect(write2).toContain("ORD-1");
+  // The second write had no total yet; that is the point of reading the trail.
+  expect(write2).not.toContain("100");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a value that is not a structure stays plain text, with nothing to open", async ({ page }) => {
+  // Only a structure has anything a window would add. A string is already whole in the
+  // cell, and a button around it would promise a second reading that does not exist.
+  await expect(row(page, "altbestand").locator(".c-val")).toHaveText("alt");
+  await expect(row(page, "altbestand").locator(".do-json")).toHaveCount(0);
+  await expect(row(page, "positionen").locator(".do-json")).toHaveCount(0);
+});
+
 test("a write the log cannot attribute says unknown rather than borrowing a name", async ({ page }) => {
   const alt = row(page, "altbestand");
   // The row summarizes its most recent write, which names nobody — and it must not

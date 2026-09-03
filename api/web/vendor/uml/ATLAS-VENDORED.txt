@@ -1,6 +1,6 @@
 uml-canvas.js is Atlas's pre-built UML class-diagram canvas: diagram-js plus the
 Atlas-owned renderer, rules and viewer for the information model's notation
-(ADR-draft-class-canvas-on-diagram-js).
+(ADR-0237).
 
 It contains:
 
