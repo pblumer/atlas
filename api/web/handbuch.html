@@ -2537,12 +2537,22 @@ atlas worker --connector mssql</code></pre>
           zeigt die Liste eine <b>Seite</b> („80 von 150“) und nicht alles: <b>Load more</b> holt die nächste,
           und das Suchfeld über der Liste findet gezielt eine – gib einen <b>Instanzschlüssel</b> ein (das ist
           ein einzelner Lesezugriff, egal wie viele Instanzen es gibt) oder <code>name=wert</code> für eine
-          Suche über die Prozessvariablen dieser Version.</li>
+          Suche über die Prozessvariablen dieser Version. Damit die Wertsuche ebenfalls ein einzelner
+          Zugriff wird, sagt das Modell, wonach gesucht werden soll:
+          <code>&lt;bpmn:process atlas:searchable="identityId,item"&gt;</code>. Für eine so deklarierte
+          Variable trifft <code>name=wert</code> dann <b>genau</b> diesen Wert (ein <code>*</code> am Ende
+          sucht nach Präfix); alles andere bleibt eine Teilstring-Suche, die die Instanzen der Version
+          durchliest. Ein Prozess, der nichts deklariert, zahlt dafür nichts.</li>
         <li data-l="en"><b><a href="/#/operations">Instances</a></b> – all runs, their state, variables and a
           complete timeline per instance. A version can hold hundreds of thousands of instances, so the list
           shows a <b>page</b> ("80 of 150") rather than everything: <b>Load more</b> fetches the next one, and
           the search box above the list finds a specific one – type an <b>instance key</b> (one read, whatever
-          the instance count) or <code>name=value</code> to search this version's process variables.</li>
+          the instance count) or <code>name=value</code> to search this version's process variables. To make
+          the value search one read too, the model says what it wants to be found by:
+          <code>&lt;bpmn:process atlas:searchable="identityId,item"&gt;</code>. For a variable declared that
+          way, <code>name=value</code> matches that value <b>exactly</b> (a trailing <code>*</code> asks for a
+          prefix); anything else stays a substring search that reads through the version's instances. A
+          process that declares nothing pays nothing for it.</li>
         <li data-l="de"><b><a href="/#/operations/incidents">Incidents</a></b> – wenn ein Token nicht weiterkommt
           (Job fehlgeschlagen, Ausdrucksfehler, fehlende Variable), entsteht ein <b>Incident</b>. Du behebst die
           Ursache und löst ihn auf – die Instanz läuft weiter. Du musst dafür nicht in die Liste: das steckengebliebene

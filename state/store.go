@@ -890,6 +890,29 @@ func (q queries) instancesDesc(cf columnFamily, limit int, fn func(key uint64, v
 	return more, scanErr
 }
 
+// InstancesByVariable calls fn with the key of every process instance holding the
+// given variable value — a seek into the value index, not a walk of the instances.
+// It is the answer to the operator's real question ("where is MT-1998?"), and its
+// cost is the number of matches plus a seek, whatever the engine holds.
+//
+// prefix asks the other question an ordered index can answer: every value starting
+// with value, rather than equal to it. Both are the same scan over a different
+// bound — see [variableIndexExactPrefix] for why the exact one needs a terminator.
+//
+// Only writes the instance's process declared searchable are in the index, and only
+// since the declaration existed, so a caller that must not miss an older instance
+// falls back to a content walk. The index never reports an instance that does not
+// hold the value.
+func (q queries) InstancesByVariable(name, value string, prefix bool, fn func(piKey uint64) error) error {
+	scan := variableIndexExactPrefix(name, value)
+	if prefix {
+		scan = variableIndexValuePrefix(name, value)
+	}
+	return q.scanPrefix(scan, func(k, _ []byte) error {
+		return fn(trailingKey(k))
+	})
+}
+
 // errScanWindowFull halts a bounded scan once its per-tick cap is reached; it never
 // escapes CompletedProcessInstancesFrom.
 var errScanWindowFull = errors.New("state: scan window full")

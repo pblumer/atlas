@@ -557,8 +557,8 @@ func TestIndexBackedScansReportDecodeErrors(t *testing.T) {
 	h := srv.Handler()
 
 	const oneTask = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
-  xmlns:atlas="http://atlas.dev/schema/bpmn">
-  <process id="p" name="P" isExecutable="true">
+  xmlns:atlas="http://atlas/schema/1.0">
+  <process id="p" name="P" isExecutable="true" atlas:searchable="identityId">
     <startEvent id="s"/>
     <userTask id="t" name="T"/>
     <endEvent id="e"/>
@@ -580,7 +580,8 @@ func TestIndexBackedScansReportDecodeErrors(t *testing.T) {
 		t.Fatalf("decode deploy: %v", err)
 	}
 	startRec := httptest.NewRecorder()
-	startReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), strings.NewReader("{}"))
+	startReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key),
+		strings.NewReader(`{"variables":{"identityId":"MT-1998"}}`))
 	startReq.Header.Set("Content-Type", "application/json")
 	h.ServeHTTP(startRec, startReq)
 	if startRec.Code != http.StatusOK {
@@ -612,6 +613,10 @@ func TestIndexBackedScansReportDecodeErrors(t *testing.T) {
 		fmt.Sprintf("/api/v1/instances?process=%d&state=active", dep.Key),
 		fmt.Sprintf("/api/v1/instances/search?process=%d&q=anything", dep.Key),
 		fmt.Sprintf("/api/v1/instances/search?q=%d", key), // the exact-key point read
+		// The value index names the instance; reading it back is where the undecodable
+		// record surfaces. A search that quietly dropped the row would report the
+		// instance as not holding a value it does hold.
+		fmt.Sprintf("/api/v1/instances/search?process=%d&q=identityId%%3DMT-1998", dep.Key),
 	} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))

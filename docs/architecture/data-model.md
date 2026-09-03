@@ -177,9 +177,16 @@ pi:<procInstKey>                 → ProcessInstanceValue       (live instances)
 piHist:<procInstKey>             → ProcessInstanceValue       (terminal history, ADR-0017)
 piByDef:<procDefKey>:<piKey>     → nil                        (a version's live instances)
 piDoneByDef:<procDefKey>:<completedAt>:<piKey> → nil          (a version's history, in completion order)
+varIdx:<len><name><value>\0<piKey> → nil                      (declared searchable values → instance)
 ```
 
 The timer index shows the pattern: because `dueDate` is the prefix, "which timers are due now" is a range scan from the start up to `now` — no full scan, no separate scheduler structure. The `jobActivatable` index lets a worker find open jobs of a type with a prefix scan.
+
+`varIdx` is the same idea aimed at the question an operator actually arrives with —
+a business value, not a key. It holds only the variable names a process declared
+searchable (`atlas:searchable`), so a process that declares none writes no entries
+and pays nothing; the NUL between the value and the instance key is what lets an
+*exact* match be a different query from a *prefix* one over the same ordered range.
 
 The two `…ByDef` indexes are the same idea for the operator's question. Without them, "show me this version's instances" is a walk of every instance in the store filtered by definition, and "the ten most recently finished" is that walk plus an in-memory sort. With the definition key as the prefix each is a bounded range scan, and putting `completedAt` ahead of the instance key in the history index makes *completion order* the scan order — walked backwards, it is "most recently finished first" without sorting anything. Both entries are valueless: the key is the whole fact, and the instance's own record holds the rest.
 

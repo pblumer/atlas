@@ -197,7 +197,7 @@ func runtimeTools() []Tool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"q":       stringProp("The query: a bare instance key, or \"name=value\" (name exact, value substring), or free text over variable names/values."),
+					"q":       stringProp("The query: a bare instance key, or \"name=value\" (name exact, value substring), or free text over variable names/values. When 'process' names a definition that declares the variable atlas:searchable, \"name=value\" is an exact match served by the value index, and a trailing * makes it a prefix."),
 					"process": stringProp("Optional process definition key: narrows the search to that version, which also makes it read that version's index instead of every instance."),
 				},
 				"required": []any{"q"},

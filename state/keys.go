@@ -48,6 +48,7 @@ const (
 	cfChildByParent          columnFamily = 0x23 // childByParent:<callElKey>:<childPiKey> → nil (ADR-0238)
 	cfInstanceByDef          columnFamily = 0x24 // piByDef:<procDefKey>:<piKey> → nil
 	cfInstanceDoneByDef      columnFamily = 0x25 // piDoneByDef:<procDefKey>:<completedAt>:<piKey> → nil
+	cfVariableIndex          columnFamily = 0x26 // varIdx:<name>:<value>:0x00:<piKey> → nil
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -390,6 +391,35 @@ func timestampFromVarSnapKey(k []byte) int64 {
 // variable-snapshot key.
 func positionFromVarSnapKey(k []byte) uint64 {
 	return binary.BigEndian.Uint64(k[len(k)-8:])
+}
+
+// variableIndexNamePrefix is the value index's slice for one variable name. The
+// name is length-prefixed so it cannot run into the value that follows: two names
+// where one is a prefix of the other ("id" and "identityId") must not share a range.
+func variableIndexNamePrefix(name string) []byte {
+	return appendLenString([]byte{byte(cfVariableIndex)}, name)
+}
+
+// variableIndexValuePrefix is the scan prefix for a *prefix* query: every entry whose
+// value starts with these bytes, whatever follows.
+func variableIndexValuePrefix(name, valuePrefix string) []byte {
+	return append(variableIndexNamePrefix(name), valuePrefix...)
+}
+
+// variableIndexExactPrefix is the scan prefix for an *exact* query. The terminator is
+// what separates it from the prefix query above: without it "MT-19" would also match
+// "MT-1998", and the two questions an ordered index can answer would collapse into
+// one. It is safe as a terminator because [model.VariableValue.IndexText] refuses a
+// value containing it.
+func variableIndexExactPrefix(name, value string) []byte {
+	return append(variableIndexValuePrefix(name, value), 0)
+}
+
+// keyVariableIndex keys one indexed variable: name, value, terminator, then the
+// instance holding it. The entry has no value — the key is the whole fact, and the
+// instance's own record holds everything a reader wants.
+func keyVariableIndex(name, value string, piKey uint64) []byte {
+	return appendBE64(variableIndexExactPrefix(name, value), piKey)
 }
 
 func variablePrefix(scope uint64) []byte {

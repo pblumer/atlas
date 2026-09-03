@@ -371,6 +371,29 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 			return err
 		}
 	}
+	// The instance's value-index entries are keyed by name and value, not by instance,
+	// so they cannot be dropped by a prefix delete over the instance. They are read off
+	// the variables that are about to go — bounded by the instance's own size — and
+	// deleted individually. Left behind, they would name an instance that no longer
+	// exists.
+	type indexEntry struct{ name, text string }
+	var entries []indexEntry
+	if err := t.VariablesOfScope(piKey, func(v *model.VariableValue) error {
+		if !v.Indexed {
+			return nil
+		}
+		if text, ok := v.IndexText(); ok {
+			entries = append(entries, indexEntry{v.Name, text})
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if err := t.b.Delete(keyVariableIndex(e.name, e.text, piKey), nil); err != nil {
+			return err
+		}
+	}
 	for _, prefix := range [][]byte{
 		// The terminal history record is a full key, a strict prefix of no other, so a
 		// prefix delete over it removes exactly that record — uniform with the families.
@@ -739,13 +762,62 @@ func (t *Tx) MigrateInstance(v *model.ProcessMigrationValue) error {
 
 // PutVariable writes (upserts) a process variable under its scope and name.
 func (t *Tx) PutVariable(v *model.VariableValue) error {
+	if err := t.reindexVariable(v.ScopeKey, v.Name, v); err != nil {
+		return err
+	}
 	return t.b.Set(keyVariable(v.ScopeKey, v.Name), t.encodeValue(v), nil)
+}
+
+// reindexVariable moves a variable's value-index entry from whatever it held to
+// whatever next holds, where next is nil for a delete.
+//
+// A variable is a current value, not a log, so an overwrite has to *move* the entry:
+// leaving the old one would let the index answer with a value the instance no longer
+// holds. Finding the old entry needs the old value, which only a read can supply — so
+// the read happens, but only when one of the two sides is indexed. A process that
+// declares nothing therefore pays nothing here, which is the whole point of the
+// declaration (ADR-draft-searchable-variables).
+//
+// The read is of state, not of a clock or a definition, so the fold stays
+// deterministic (I4): live and replay read the same batch and reach the same entry.
+func (t *Tx) reindexVariable(scope uint64, name string, next *model.VariableValue) error {
+	var prev model.VariableValue
+	found, err := t.readInto(keyVariable(scope, name), &prev)
+	if err != nil {
+		return err
+	}
+	nextIndexed := next != nil && next.Indexed
+	if !found && !nextIndexed {
+		return nil // nothing was indexed and nothing will be: the common path
+	}
+	if found && prev.Indexed {
+		if text, ok := prev.IndexText(); ok {
+			if err := t.b.Delete(keyVariableIndex(name, text, scope), nil); err != nil {
+				return err
+			}
+		}
+	}
+	if !nextIndexed {
+		return nil
+	}
+	text, ok := next.IndexText()
+	if !ok {
+		// The name is declared searchable but this write cannot be indexed — a
+		// structured value, or one past the length bound. Dropping the stale entry
+		// above and adding nothing is the honest outcome: the index never claims a
+		// value it does not hold.
+		return nil
+	}
+	return t.b.Set(keyVariableIndex(name, text, scope), nil, nil)
 }
 
 // DeleteVariable removes a variable from its scope by name. It is idempotent —
 // deleting an absent variable is a no-op — and is used to drop an activity-local
 // variable scope when the activity completes (ADR-0068).
 func (t *Tx) DeleteVariable(scope uint64, name string) error {
+	if err := t.reindexVariable(scope, name, nil); err != nil {
+		return err
+	}
 	return t.b.Delete(keyVariable(scope, name), nil)
 }
 

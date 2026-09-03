@@ -316,8 +316,34 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 	// promoting its child's result, a loop promoting its body's) can never carry the
 	// producer of the write it was copied from (ADR-0219).
 	v.ProducerKey = c.producer
+	// Whether this write belongs in the variable value index is stamped here for the
+	// same reason, and for one more: applyToState holds the record and nothing else,
+	// so it cannot ask a compiled process whether a name is searchable. Deciding it
+	// here freezes the answer into the event, and replay indexes exactly what the live
+	// write indexed (I6).
+	v.Indexed = c.indexesVariable(v.ScopeKey, v.Name)
 	c.appendEvent(v.ScopeKey, model.VTVariable, intent, inflightValue{variable: v})
 	c.markConditionDirty(v.ScopeKey)
+}
+
+// indexesVariable reports whether a write of name into scopeKey belongs in the
+// variable value index: the scope has to be the instance's own root — an
+// activity-local scope is scratch state that disappears when the activity completes
+// (ADR-0068), and indexing it would fill the index with values no search should
+// return — and the instance's process has to have declared the name searchable.
+//
+// A process that declares nothing costs one length check here, the same shape as the
+// conditional-event question below it.
+func (c *ProcessingContext) indexesVariable(scopeKey uint64, name string) bool {
+	if c.GetElementInstance(scopeKey) != nil {
+		return false // an activity-local scope, not the instance root
+	}
+	pi := c.GetProcessInstance(scopeKey)
+	if pi == nil {
+		return false
+	}
+	cp := c.process(pi.ProcessDefKey)
+	return cp != nil && cp.HasSearchableVariables() && cp.IsSearchableVariable(name)
 }
 
 // markConditionDirty notes that a variable changed in the given scope, so the batch loop will

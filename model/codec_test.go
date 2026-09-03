@@ -431,3 +431,86 @@ func TestVariableProducerAppendCompatible(t *testing.T) {
 		t.Errorf("value = %+v, want the older record's fields read back intact", v)
 	}
 }
+
+// TestVariableIndexedRoundTrip covers the value-index flag. The fold cannot ask a
+// compiled process whether a name is searchable — it holds the record and nothing
+// else — so the answer is decided at command time and frozen into the event, and
+// replay indexes exactly what the live write indexed (I6), the same discipline the
+// producer key rides under.
+func TestVariableIndexedRoundTrip(t *testing.T) {
+	buf := AppendValue(nil, &VariableValue{
+		ScopeKey: NewKey(1, 5), Name: "identityId", Kind: VarString, Text: "MT-1998",
+		ProducerKey: NewKey(1, 42), Indexed: true,
+	})
+	got, err := DecodeValue(VTVariable, buf)
+	if err != nil {
+		t.Fatalf("DecodeValue: %v", err)
+	}
+	v := got.(*VariableValue)
+	if !v.Indexed {
+		t.Error("Indexed = false, want the flag the event was written with")
+	}
+	if v.ProducerKey != NewKey(1, 42) || v.Name != "identityId" || v.Text != "MT-1998" {
+		t.Errorf("value = %+v, want the earlier fields unchanged by the appended flag", v)
+	}
+}
+
+// TestVariableIndexedAppendCompatible pins its on-disk compatibility, and with it the
+// one honest limitation of the index: a record written before the flag existed reads
+// back as not indexed. Such a variable is findable by a content walk, never by a
+// seek, until it is written again — which is why the index is seeded once from the
+// declarations at startup rather than assumed complete.
+func TestVariableIndexedAppendCompatible(t *testing.T) {
+	full := AppendValue(nil, &VariableValue{
+		ScopeKey: NewKey(1, 5), Name: "identityId", Kind: VarString, Text: "MT-1998",
+		ProducerKey: NewKey(1, 7), Indexed: true,
+	})
+	legacy := full[:len(full)-1] // exactly what the pre-index encoder would have written
+
+	v := VariableValue{Indexed: true} // reused: carries someone else's flag
+	if err := DecodeValueInto(&v, legacy); err != nil {
+		t.Fatalf("DecodeValueInto(legacy): %v", err)
+	}
+	if v.Indexed {
+		t.Error("Indexed = true, want false — a pre-index record indexed nothing")
+	}
+	if v.ProducerKey != NewKey(1, 7) || v.Name != "identityId" || v.Text != "MT-1998" {
+		t.Errorf("value = %+v, want the older record's fields read back intact", v)
+	}
+}
+
+// TestVariableIndexText pins what the value index can hold. It is an ordered
+// key-value index, so it answers equality and prefix over a byte string and nothing
+// else: the scalars go in under their canonical text, and a structured value stays
+// out — nobody searches for a JSON blob by its exact encoding, and putting one in
+// would make the index mostly blobs. A NUL byte would break the terminator the exact
+// match relies on, and an unbounded value would let one write dominate the index.
+func TestVariableIndexText(t *testing.T) {
+	long := ""
+	for len(long) <= MaxIndexedValueBytes {
+		long += "x"
+	}
+	for _, tc := range []struct {
+		name   string
+		v      VariableValue
+		want   string
+		wantOK bool
+	}{
+		{"string", VariableValue{Kind: VarString, Text: "MT-1998"}, "MT-1998", true},
+		{"number", VariableValue{Kind: VarNumber, Text: "1998"}, "1998", true},
+		{"true", VariableValue{Kind: VarBool, Bool: true}, "true", true},
+		{"false", VariableValue{Kind: VarBool, Bool: false}, "false", true},
+		{"empty-string", VariableValue{Kind: VarString, Text: ""}, "", true},
+		{"null", VariableValue{Kind: VarNull}, "", false},
+		{"json", VariableValue{Kind: VarJSON, Text: `{"a":1}`}, "", false},
+		{"nul-byte", VariableValue{Kind: VarString, Text: "MT\x001998"}, "", false},
+		{"too-long", VariableValue{Kind: VarString, Text: long}, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := tc.v.IndexText()
+			if ok != tc.wantOK || (ok && got != tc.want) {
+				t.Errorf("IndexText() = (%q, %v), want (%q, %v)", got, ok, tc.want, tc.wantOK)
+			}
+		})
+	}
+}

@@ -1203,17 +1203,19 @@ type CompiledProcess struct {
 	ioInputs           []IOMapping             // shared: zeebe:ioMapping inputs grouped by activity node
 	ioOutputs          []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
 	startEvents        []int32
-	startFormId        int32        // interned start-form id (ADR-0028), -1 if none
-	versionTag         int32        // interned atlas:versionTag revision label, -1 if none
-	instanceTtlNanos   int64        // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
-	historyTtlNanos    int64        // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
-	isExecutable       bool         // bpmn:isExecutable — a non-executable process can't be started
-	elementIds         []int32      // interned source BPMN id per node id (-1 if unset)
-	elementDocs        []int32      // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
-	repairForms        []int32      // interned repair form id per node id (-1 if none, ADR-0169)
-	documentation      int32        // interned <bpmn:documentation> of the process itself, -1 if none
-	lanes              []LaneDetail // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
-	strings            []string     // intern table (index → string), for debug/export
+	startFormId        int32               // interned start-form id (ADR-0028), -1 if none
+	versionTag         int32               // interned atlas:versionTag revision label, -1 if none
+	instanceTtlNanos   int64               // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
+	historyTtlNanos    int64               // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
+	searchableVars     []string            // declared searchable variable names, in the order authored
+	searchableSet      map[string]struct{} // the same names as a set, for the per-write question
+	isExecutable       bool                // bpmn:isExecutable — a non-executable process can't be started
+	elementIds         []int32             // interned source BPMN id per node id (-1 if unset)
+	elementDocs        []int32             // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
+	repairForms        []int32             // interned repair form id per node id (-1 if none, ADR-0169)
+	documentation      int32               // interned <bpmn:documentation> of the process itself, -1 if none
+	lanes              []LaneDetail        // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
+	strings            []string            // intern table (index → string), for debug/export
 }
 
 // Node returns the node with the given ElementId.
@@ -1860,6 +1862,37 @@ func (p *CompiledProcess) InstanceTtlNanos() int64 { return p.instanceTtlNanos }
 // older than the TTL and its events are provably exported. Zero falls back to the
 // server-wide max age.
 func (p *CompiledProcess) HistoryTtlNanos() int64 { return p.historyTtlNanos }
+
+// SearchableVariables are the variable names this process declared an instance can
+// be found by (atlas:searchable), in the order they were authored. nil when the
+// process declares none.
+func (p *CompiledProcess) SearchableVariables() []string { return p.searchableVars }
+
+// HasSearchableVariables reports whether this process declares any. The engine asks
+// this first on every variable write, so a process that declares none pays one
+// comparison rather than a lookup.
+func (p *CompiledProcess) HasSearchableVariables() bool { return len(p.searchableSet) > 0 }
+
+// IsSearchableVariable reports whether name is one of the declared names — the
+// question the engine asks per variable write to decide whether the write is
+// indexed. Resolved at deploy time (I5): this is a set lookup, not a parse.
+func (p *CompiledProcess) IsSearchableVariable(name string) bool {
+	_, ok := p.searchableSet[name]
+	return ok
+}
+
+// searchableSet turns the authored order into the set the per-write question uses.
+// nil for no declaration, so HasSearchableVariables is one length check.
+func searchableSet(names []string) map[string]struct{} {
+	if len(names) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		set[n] = struct{}{}
+	}
+	return set
+}
 
 // Intern returns the string for an interned index, or "" if out of range.
 func (p *CompiledProcess) Intern(idx int32) string {

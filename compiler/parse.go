@@ -572,6 +572,28 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		b.SetHistoryTtl(nanos)
 	}
+	// The searchable variable names (ADR-draft-searchable-variables): resolved here, at
+	// deploy time, so the runtime never parses the attribute and the engine asks the
+	// compiled process one question per variable write (I5). A declaration that cannot
+	// mean anything — a nameless entry, or the same name twice — fails the deploy, for
+	// the same reason a malformed TTL does: it would otherwise index nothing and look
+	// like it was working.
+	if raw := strings.TrimSpace(proc.Searchable); raw != "" {
+		seen := make(map[string]bool)
+		var names []string
+		for _, part := range strings.Split(raw, ",") {
+			name := strings.TrimSpace(part)
+			if name == "" {
+				return nil, fmt.Errorf("compiler: process %q: searchable %q has an empty variable name", proc.Id, proc.Searchable)
+			}
+			if seen[name] {
+				return nil, fmt.Errorf("compiler: process %q: searchable names %q twice", proc.Id, name)
+			}
+			seen[name] = true
+			names = append(names, name)
+		}
+		b.SetSearchableVariables(names)
+	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
 	reg := &registrar{b: b, ids: ids, docs: docs}
 
@@ -1251,6 +1273,11 @@ type xmlProcess struct {
 	VersionTag   string `xml:"versionTag,attr"`
 	InstanceTtl  string `xml:"instanceTtl,attr"` // ISO-8601 duration; self-cleaning TTL (ADR-0085), empty = off
 	HistoryTtl   string `xml:"historyTtl,attr"`  // ISO-8601 duration; finished-instance retention (ADR-0144), empty = off
+	// Searchable is a comma-separated list of variable names this process wants to be
+	// findable by. It is a declaration, not a hint: the value index is maintained only
+	// for these names, because indexing every value would double the write path and
+	// index JSON blobs. Empty = nothing indexed, and the process pays nothing.
+	Searchable string `xml:"searchable,attr"`
 
 	xmlFlowContent // the process root's flow nodes and sequence flows
 
