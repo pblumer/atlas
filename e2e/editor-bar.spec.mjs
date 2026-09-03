@@ -13,7 +13,7 @@
 // puts the editor into a *mode* can still be got out of from inside that mode.
 import { test, expect } from "@playwright/test";
 
-const MENU_IDS = ["sim-toggle", "vars-toggle", "autolayout", "export", "docexport"];
+const MENU_IDS = ["sim-toggle", "autolayout", "export", "docexport"];
 
 test.beforeEach(async ({ page }) => {
   const errors = [];
@@ -29,12 +29,13 @@ test.afterEach(async ({ page }) => {
   expect(page.__errors, "the bar must not throw").toEqual([]);
 });
 
-test("the bar carries Save, Deploy and the menu trigger, and nothing else", async ({ page }) => {
+test("the bar carries Variables, Save, Deploy and the menu trigger, and nothing else", async ({ page }) => {
   const onBar = page.locator(".editor-bar > .btn, .editor-bar > .dropdown > button");
-  await expect(onBar).toHaveCount(3);
-  await expect(onBar.nth(0)).toHaveId("save");
-  await expect(onBar.nth(1)).toHaveId("deploy");
-  await expect(onBar.nth(2)).toHaveId("bar-more");
+  await expect(onBar).toHaveCount(4);
+  await expect(onBar.nth(0)).toHaveId("vars-toggle");
+  await expect(onBar.nth(1)).toHaveId("save");
+  await expect(onBar.nth(2)).toHaveId("deploy");
+  await expect(onBar.nth(3)).toHaveId("bar-more");
 
   // Deploy is the one act here that leaves the browser, and it is the only filled
   // button. `neutral` is what makes a .btn white, so its absence is the assertion.
@@ -91,22 +92,56 @@ test("the menu closes on the trigger, on an outside click and on Escape", async 
   await expect(menu).toBeHidden();
 });
 
-test("a toggle in the menu says whether it is on", async ({ page }) => {
-  await page.locator("#bar-more").click();
-  await expect(page.locator("#vars-toggle")).toHaveAttribute("aria-pressed", "false");
+test("Variables is a two-state button whose look follows aria-pressed", async ({ page }) => {
+  const toggle = page.locator("#vars-toggle");
+  const panel = page.locator("#vars-panel");
+  // Read the fill with the pointer parked away from the bar: `.btn.neutral:hover` paints
+  // its own background, and that is not the state under test.
+  const tint = async () => {
+    await page.mouse.move(0, 0);
+    return toggle.evaluate((b) => getComputedStyle(b).backgroundColor);
+  };
 
-  // Picking an item is an action: it does what it does and the menu gets out of the way.
-  await page.locator("#vars-toggle").click();
-  await expect(page.locator("#bar-menu")).toBeHidden();
-  await expect(page.locator("#vars-panel")).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(panel).toBeHidden();
+  const off = await tint();
 
-  await page.locator("#bar-more").click();
+  await toggle.click();
+  await expect(panel).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  // The pressed look is drawn from the attribute, so a state the button announces and a
+  // state it shows cannot come apart. Comparing the fills proves the rule actually bites.
+  expect(await tint(), "the pressed button must not look like the unpressed one").not.toBe(off);
+
+  await toggle.click();
+  await expect(panel).toBeHidden();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  expect(await tint()).toBe(off);
+
+  // Closing the panel by its own ✕ puts the button back in step too.
+  await toggle.click();
+  await expect(panel).toBeVisible();
+  await page.locator("#vars-close").click();
+  await expect(panel).toBeHidden();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+});
+
+test("F4 toggles Variables, including while a field has focus", async ({ page }) => {
+  const panel = page.locator("#vars-panel");
+
+  await page.keyboard.press("F4");
+  await expect(panel).toBeVisible();
   await expect(page.locator("#vars-toggle")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#vars-toggle")).toHaveClass(/active/);
 
+  await page.keyboard.press("F4");
+  await expect(panel).toBeHidden();
+
+  // The point of the shortcut is checking what a variable is called *while* writing the
+  // expression that uses it, so unlike F8 it does not stand down for a focused field.
   await page.locator("#vars-toggle").click();
-  await expect(page.locator("#vars-panel")).toBeHidden();
-  await page.locator("#bar-more").click();
+  await page.locator("#vars-filter").fill("kunde");
+  await page.locator("#vars-filter").press("F4");
+  await expect(panel).toBeHidden();
   await expect(page.locator("#vars-toggle")).toHaveAttribute("aria-pressed", "false");
 });
 
