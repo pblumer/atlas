@@ -2588,19 +2588,39 @@ type xmlRemedyConnector struct {
 }
 
 // A web-scraping connector task's parameters, carried on a service task as an
-// <atlas:webscrapeConnector> extension (ADR-0118/0190). url and resultVariable are
-// always required. format is a structural literal (html by default, rss, or atom);
-// maxItems is an optional non-negative structural bound. HTML requires selector and
-// may name attribute; RSS/Atom prohibit both. url and the HTML selector may be
-// literal-or-FEEL; format, maxItems, and attribute are compiled structure.
+// <atlas:webscrapeConnector> extension (ADR-0118/0190,
+// ADR-0231). url and resultVariable are always
+// required. format is a structural literal (html by default, rss, or atom); maxItems
+// is an optional non-negative structural bound. HTML requires selector and may name
+// attribute; RSS/Atom prohibit both. url and the HTML selector may be
+// literal-or-FEEL; everything else is compiled structure.
+//
+// Fields are the optional <atlas:scrapeField> children. With any, selector picks
+// *items* and each match becomes an object of these fields rather than a string —
+// which is why they are structure and not a runtime value: they are the result's
+// shape. absoluteLinks (HTML) resolves href/src reads against the fetched document's
+// final URL; plainText (feeds) strips markup from an entry's description.
 type xmlWebScrapeConnector struct {
-	Url            string `xml:"url,attr"`
-	Selector       string `xml:"selector,attr"`
-	Attribute      string `xml:"attribute,attr"`
-	Format         string `xml:"format,attr"`
-	MaxItems       string `xml:"maxItems,attr"`
-	ResultVariable string `xml:"resultVariable,attr"`
-	Retries        string `xml:"retries,attr"`
+	Url            string           `xml:"url,attr"`
+	Selector       string           `xml:"selector,attr"`
+	Attribute      string           `xml:"attribute,attr"`
+	Format         string           `xml:"format,attr"`
+	MaxItems       string           `xml:"maxItems,attr"`
+	AbsoluteLinks  string           `xml:"absoluteLinks,attr"`
+	PlainText      string           `xml:"plainText,attr"`
+	Fields         []xmlScrapeField `xml:"scrapeField"`
+	ResultVariable string           `xml:"resultVariable,attr"`
+	Retries        string           `xml:"retries,attr"`
+}
+
+// One <atlas:scrapeField> child of a web-scraping connector task: the object key its
+// value lands under, the optional CSS selector evaluated within the matched item
+// (empty = the item element itself), and the optional attribute read from it (empty =
+// that element's text).
+type xmlScrapeField struct {
+	Name      string `xml:"name,attr"`
+	Selector  string `xml:"selector,attr"`
+	Attribute string `xml:"attribute,attr"`
 }
 
 type xmlTaskDefinition struct {

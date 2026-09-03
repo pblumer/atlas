@@ -20,6 +20,72 @@
       }
     },
     {
+      "id": "web-scraping-one-row-is-one-record-and-the-fetch-survives-th",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A scraped table row now arrives as one record",
+        "de": "Eine ausgelesene Tabellenzeile kommt jetzt als ein Datensatz an"
+      },
+      "summary": {
+        "en": "Reading a web page used to give you a flat list: either the text of every match, or one attribute of every match — never both, and never grouped. A list of articles or a table of rates therefore needed two tasks returning two lists, and the first row missing a link shifted every later pairing by one. A scrape task now takes item fields: the selector picks the row, each field picks a cell, and every match arrives as one object. A field that finds nothing is present and empty, so the rows keep their shape. Feeds gained the same care: an entry now carries its own id to deduplicate on, plus author, categories and image, and pages in older character sets, RSS 1.0 feeds and sites that refuse anonymous requests no longer fail the way they quietly did.",
+        "de": "Eine Webseite auszulesen ergab bisher eine flache Liste: entweder den Text jedes Treffers oder ein Attribut jedes Treffers — nie beides, nie gruppiert. Eine Artikelliste oder eine Zinstabelle brauchte deshalb zwei Tasks mit zwei Listen, und die erste Zeile ohne Link verschob jede weitere Zuordnung um eins. Ein Scraping-Task nimmt jetzt Feldzeilen: Der Selektor wählt die Zeile, jedes Feld wählt eine Zelle, und jeder Treffer kommt als ein Objekt an. Ein Feld, das nichts findet, ist vorhanden und leer — die Zeilen behalten ihre Gestalt. Feeds haben dieselbe Sorgfalt bekommen: Ein Eintrag trägt jetzt seine eigene Kennung zum Deduplizieren, dazu Autor, Kategorien und Bild. Und Seiten in älteren Zeichensätzen, RSS-1.0-Feeds und Sites, die anonyme Anfragen abweisen, scheitern nicht mehr so still wie bisher."
+      },
+      "link": {
+        "label": "ADR-0231",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0231-webscrape-structured-extraction.md"
+      },
+      "tags": [
+        "Modeler",
+        "Connectors"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the Modeler and put a service task on the canvas.",
+          "Pick \"Web Scraping\" as the kind and enter the page URL.",
+          "Under Extraction, let the CSS selector pick one ITEM per match — a table row, a card, a list entry.",
+          "Add one item field per value: a name (the key you will read later), the selector inside the item, and optionally the attribute (for example href for a link).",
+          "Name a result variable — it now holds one object per match, so a later step reads eintrag.titel beside eintrag.link."
+        ],
+        "de": [
+          "Modeler öffnen und einen Service-Task auf die Fläche ziehen.",
+          "Als Art „Web Scraping“ wählen und die URL der Seite eintragen.",
+          "Unter „Extraction“ den CSS-Selektor so wählen, dass er je Treffer ein ITEM trifft — eine Tabellenzeile, eine Kachel, einen Listeneintrag.",
+          "Je Wert eine Feldzeile anlegen: Name (der Schlüssel, den Sie später lesen), Selektor innerhalb des Items und optional das Attribut (etwa href für einen Link).",
+          "Ergebnisvariable benennen — sie hält jetzt ein Objekt je Treffer, ein späterer Schritt liest also eintrag.titel neben eintrag.link."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "example-capturing-mortgage-rates-daily",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A worked example: capturing a rate table every morning",
+        "de": "Ein durchgespieltes Beispiel: eine Zinstabelle jeden Morgen erfassen"
+      },
+      "summary": {
+        "en": "The new example reads a bank's mortgage rates once a day and turns each table row into a record. It also answers the two questions every scraping process runs into: how to address the table you mean when six of them look alike (by what it contains, not by where it sits), and what should happen on the day the page is rebuilt and the selector matches nothing — here a branch that ends visibly, rather than a run that files an empty row and lets weeks pass unnoticed. The step that writes the rows away is deliberately left simulated, so the process runs end to end before a credential exists.",
+        "de": "Das neue Beispiel liest einmal täglich die Hypothekarzinsen einer Bank und macht aus jeder Tabellenzeile einen Datensatz. Es beantwortet nebenbei die zwei Fragen, auf die jeder Scraping-Prozess stösst: wie man die gemeinte Tabelle adressiert, wenn sechs davon gleich aussehen (über ihren Inhalt, nicht über ihre Position), und was am Tag passieren soll, an dem die Seite umgebaut ist und der Selektor nichts mehr trifft — hier ein Zweig, der sichtbar endet, statt eines Laufs, der eine leere Zeile ablegt und wochenlang unbemerkt bleibt. Der Schritt, der die Zeilen wegschreibt, ist bewusst simuliert: So läuft der Prozess vollständig durch, bevor es ein Credential gibt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Examples"
+      ]
+    },
+    {
       "id": "data-stores-saying-where-a-class-is-kept",
       "version": "Unreleased",
       "date": null,
@@ -421,76 +487,6 @@
           "de": "Mock database öffnen"
         },
         "route": "#/operations/sql-mock"
-      }
-    },
-    {
-      "id": "an-example-where-a-jira-ticket-starts-the-process",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "An example where a Jira ticket starts the process",
-        "de": "Ein Beispiel, in dem ein Jira-Ticket den Prozess startet"
-      },
-      "summary": {
-        "en": "The Jira demo folder gained its other direction. Until now Atlas wrote to Jira; here a new ticket starts an Atlas process — no form, no button. The process comments on the ticket to confirm it arrived, looks up the account of whoever reported it, and assigns the ticket to them. Everything it needs (issue key, project, summary, reporter) comes from the ticket itself. The README walks through the event watch in the Console, what the process receives, and the three things that look like a defect and are not — including why it takes about two minutes.",
-        "de": "Der Jira-Beispielordner hat jetzt auch die Gegenrichtung. Bisher schrieb Atlas nach Jira; hier startet ein neues Ticket einen Atlas-Prozess — ohne Formular, ohne Knopfdruck. Der Prozess quittiert den Eingang im Ticket, schlägt das Konto des Melders nach und weist ihm das Ticket zu. Alles, was er dafür braucht (Vorgangsschlüssel, Projekt, Titel, Melder), kommt aus dem Ticket selbst. Das README führt durch die Ereignisüberwachung in der Console, zeigt, was der Prozess bekommt, und nennt die drei Dinge, die wie ein Defekt aussehen und keiner sind — darunter, warum es etwa zwei Minuten dauert."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Connectors"
-      ]
-    },
-    {
-      "id": "the-database-mockup-is-a-switch-in-the-console",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Turn the database mockup on from the Console",
-        "de": "Den Datenbank-Mockup aus der Konsole einschalten"
-      },
-      "summary": {
-        "en": "Trying a process that reads a database used to mean editing a unit file and restarting the server. Now it is a checkbox: Workers, the Databases card, save. The SQL workers restart holding it and Atlas keeps running. The same card takes the prepared answers — choose a file, paste them, or press Example — and there is no path to type anywhere, because Atlas stores them and puts them where the worker will find them. They are checked as you save, so a typo comes back with the seed's own complaint instead of turning into a mockup that quietly answers nothing. One switch covers SQL Server, MariaDB and PostgreSQL together: simulating one while really writing to another would look like a full mockup run, and that is the one thing it must never look like. While it is on you can also add a database worker with no connection string at all — just the name your task states — which is exactly the situation you are in when you turn the mockup on because you have no database yet. Give a connection string anyway and it is still kept safe, so switching back is not a re-typing exercise.",
-        "de": "Einen Prozess auszuprobieren, der aus einer Datenbank liest, hiess bisher: Unit-Datei bearbeiten und Server neu starten. Jetzt ist es ein Häkchen — Workers, Karte Databases, speichern. Die SQL-Worker starten damit neu, Atlas läuft weiter. Dieselbe Karte nimmt die hinterlegten Antworten entgegen: Datei auswählen, einfügen oder Example drücken. Einen Pfad geben Sie nirgends an, denn Atlas speichert die Antworten und legt sie dem Worker hin. Beim Speichern werden sie geprüft, ein Tippfehler kommt also mit der Fehlermeldung des Seeds zurück, statt sich in einen Mockup zu verwandeln, der stillschweigend nichts beantwortet. Ein Schalter gilt für SQL Server, MariaDB und PostgreSQL gemeinsam: eines zu simulieren und gleichzeitig wirklich in ein anderes zu schreiben sähe aus wie ein vollständiger Mockup-Lauf, und genau danach darf es nie aussehen. Solange er an ist, können Sie ausserdem einen Datenbank-Worker ganz ohne Verbindungszeichenfolge anlegen — nur mit dem Namen, den Ihre Aufgabe nennt. Das ist genau die Lage, in der Sie sind, wenn Sie den Mockup einschalten, weil Sie noch keine Datenbank haben. Geben Sie doch eine an, bleibt sie sicher verwahrt, damit das Zurückschalten kein Neutippen ist."
-      },
-      "link": {
-        "label": "ADR-0221",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0221-sql-mock-mode.md"
-      },
-      "tags": [
-        "Console",
-        "Databases",
-        "Testing"
-      ],
-      "tutorial": {
-        "en": [
-          "Go to Console › Workers and find the Databases card, below Active Directory.",
-          "Tick “Answer database tasks from a mockup”, press Example to load a small seed, and Save.",
-          "Still on that page, add a worker of kind SQL Server named hr-db — leave the connection string empty; while the mockup is on it is not needed.",
-          "Deploy examples/mssql-eintrittsmeldung.bpmn and start an instance with kuerzel set to abo, which the example seed answers for.",
-          "Watch it in Operations: the row is in the person variable and the process ran through, with no database anywhere.",
-          "Now start one with a kuerzel the seed does not answer for and read the incident — it names the statement and the values, ready to paste into the answers."
-        ],
-        "de": [
-          "Gehen Sie zu Console › Workers und suchen Sie die Karte Databases, unterhalb von Active Directory.",
-          "Setzen Sie das Häkchen bei „Answer database tasks from a mockup\", drücken Sie Example für einen kleinen Seed und speichern Sie.",
-          "Legen Sie auf derselben Seite einen Worker der Art SQL Server namens hr-db an — die Verbindungszeichenfolge lassen Sie leer, solange der Mockup an ist braucht es keine.",
-          "Deployen Sie examples/mssql-eintrittsmeldung.bpmn und starten Sie eine Instanz mit kuerzel = abo, wofür der Beispiel-Seed eine Antwort hat.",
-          "Schauen Sie unter Betrieb zu: Die Zeile steht in der Variablen person, der Prozess ist durchgelaufen — ganz ohne Datenbank.",
-          "Starten Sie dann eine mit einem kuerzel, für das nichts hinterlegt ist, und lesen Sie den Incident: Er nennt Anweisung und Werte, fertig zum Übernehmen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
       }
     }
   ]
