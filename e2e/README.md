@@ -69,6 +69,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   ordered by size, keeping the row of an end event nothing reached and marking it as
   such — and offering each outcome *once*, which is the regression guard for a
   registry scan that used to see an element's external label as a second copy of it;
+  the setup is **three numbered steps that say where they stand** — each readout
+  following its boxes as they are typed in without moving the caret out of them,
+  naming a dataset the run cannot use by the generator's own rules, distinguishing
+  "not filled in" from "wrong", and disabling Run while the first two are unsatisfied;
   and stopping a batch leaves what it did readable.
 
   And the **scenario half**: the checkboxes an author ticks become the expectations a

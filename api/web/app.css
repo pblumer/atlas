@@ -3872,6 +3872,24 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
   font-size: 12px;
 }
 .pg-sec:first-child { border-top: 0; padding-top: 0; }
+
+/* The setup is three numbered steps, each with a one-line readout of what it will
+   contribute to the run — or of what is wrong with it. The number is filled once
+   the step has something to give, but the state is never carried by that colour
+   alone: the note beside it says it in words, which is also the only form of it
+   that says *what*. */
+.pg-step-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: none; width: 16px; height: 16px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; line-height: 1;
+  background: var(--border); color: var(--muted);
+}
+.pg-step-n.done { background: var(--accent); color: #fff; }
+.pg-step-note {
+  margin-left: auto; min-width: 0; font-size: 11px; color: var(--muted);
+  text-align: right; white-space: normal;
+}
+.pg-step-note.bad { color: var(--danger); }
 .pg-task {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 8px; border-radius: 6px; font-size: 12px;
