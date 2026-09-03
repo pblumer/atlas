@@ -15,7 +15,7 @@ _Changed_ / _Removed_ for each version.
 ### Changed
 
 - **REST and LDIF tasks no longer run on the engine's own loop**
-  ([ADR-draft-in-process-connectors-refused](docs/adr/draft-in-process-connectors-refused.md),
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md),
   finishing [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md)). ADR-0164 decided
   two years ago that a side-effecting service task belongs on a worker, and then chose
   deprecation over a ban for one stated reason: a connector task could not run on a

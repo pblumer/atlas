@@ -452,7 +452,7 @@ var offloadableKinds = map[string][]int32{
 // whole subject is who is doing the work.
 //
 // REST and LDIF are the sixth and seventh, and they are what turns the deprecation of
-// ADR-0164 into its rule (ADR-draft-in-process-connectors-refused). An HTTP call to
+// ADR-0164 into its rule (ADR-0233). An HTTP call to
 // somebody else's host is the *original* case for not running integrations on the
 // engine's loop — it was left in-engine only because a REST task's auth secret is a
 // vault reference a supervised worker cannot resolve, which is AD's problem and now has
