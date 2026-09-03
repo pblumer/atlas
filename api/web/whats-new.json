@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "rest-and-ldif-tasks-no-longer-run-on-the-engine-s-own-loop",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "REST calls now run in a worker, not in the engine",
+        "de": "REST-Aufrufe laufen jetzt im Worker, nicht mehr in der Engine"
+      },
+      "summary": {
+        "en": "Until now Atlas made a REST task's HTTP call from its own process — the same process that runs the engine. A slow or hung host on the other end therefore held up work that had nothing to do with it. REST and LDIF tasks now run in a worker Atlas starts and supervises itself, so a call that hangs is one worker you can see and restart in the Workers view, not a number in a timeout. Nothing to configure: authenticated REST tasks keep working, because Atlas hands the worker exactly the secrets the deployed models use.",
+        "de": "Bisher hat Atlas den HTTP-Aufruf eines REST-Tasks im eigenen Prozess gemacht — in demselben, der die Engine ausführt. Ein langsamer oder hängender Host auf der Gegenseite hielt damit Arbeit auf, die nichts damit zu tun hatte. REST- und LDIF-Tasks laufen jetzt in einem Worker, den Atlas selbst startet und überwacht: Ein hängender Aufruf ist damit ein Worker, den Sie in der Workers-Ansicht sehen und neu starten können, und keine Zahl in einem Timeout. Zu konfigurieren ist nichts — authentifizierte REST-Tasks laufen weiter, weil Atlas dem Worker genau die Geheimnisse übergibt, die die deployten Modelle verwenden."
+      },
+      "link": {
+        "label": "ADR-0164",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "importing-a-uml-class-diagram-reading-what-somebody-else-dre",
       "version": "Unreleased",
       "date": null,
@@ -458,35 +487,6 @@
           "de": "Organisation öffnen"
         },
         "route": "#/console/org"
-      }
-    },
-    {
-      "id": "an-inbound-event-watch-has-an-hourly-budget",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "An event watch stops itself if it starts looping",
-        "de": "Eine Ereignisüberwachung stoppt sich selbst, wenn sie in eine Schleife gerät"
-      },
-      "summary": {
-        "en": "A watch reads a system and starts a process for what it finds — and that process can write back to the same system. If it writes something the watch's own query matches, it feeds itself, and nothing looks wrong: every run succeeds. Each watch now has a Max events/hour (60 unless you set it). Cross it and the watch switches itself off and says so, naming the number to raise. Nothing is lost — turning it back on re-reads what it refused.",
-        "de": "Eine Überwachung liest ein System und startet zu jedem Fund einen Prozess — und dieser Prozess kann in dasselbe System zurückschreiben. Schreibt er etwas, das die Abfrage der Überwachung selbst findet, füttert sie sich selbst, und nichts sieht falsch aus: jeder Lauf gelingt. Jede Überwachung hat jetzt ein „Max events/hour\" (60, wenn Sie nichts setzen). Wird es überschritten, schaltet sie sich ab und sagt es — samt der Zahl, die Sie erhöhen müssten. Verloren geht nichts: Beim Wiedereinschalten wird das Abgewiesene erneut gelesen."
-      },
-      "link": {
-        "label": "ADR-0225",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0225-inbound-watch-budget.md"
-      },
-      "tags": [
-        "Workers",
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/console/workers"
       }
     }
   ]
