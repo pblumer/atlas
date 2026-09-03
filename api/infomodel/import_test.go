@@ -590,6 +590,7 @@ func TestNormalizeMultiplicityKeepsWhatItCan(t *testing.T) {
 		{"*", MultMany, true},
 		{"many", MultOptional, true},
 		{"1..x", MultOptional, true},
+		{"1..", MultOptional, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.raw, func(t *testing.T) {
@@ -686,5 +687,239 @@ func TestImportJSONDefaultsAndDrops(t *testing.T) {
 	}
 	if _, ok := noteFor(res.Notes, "laid out"); ok {
 		t.Error("a placed model was laid out anyway")
+	}
+}
+
+// legacyXMI is the third dialect, and the one that arrives from an older or more
+// idiosyncratic tool: no model element around the classes at all, a bare `id`
+// attribute instead of `xmi:id`, types by `href` rather than by idref, documentation
+// as an attribute, applied stereotypes for all three kinds, an association whose ends
+// are only its own, and bounds a tool wrote by hand and got wrong.
+const legacyXMI = `<?xml version="1.0" encoding="UTF-8"?>
+<xmi:XMI xmlns:xmi="http://www.omg.org/spec/XMI/20131001"
+         xmlns:uml="http://www.omg.org/spec/UML/20131001"
+         xmlns:atlas="http://atlas.example/profile">
+  <packagedElement xmi:type="uml:Class" id="_ticket" name="Ticket">
+    <ownedComment body="A request somebody is waiting on."/>
+    <ownedAttribute xmi:id="_t_ref" name="reference" isID="true">
+      <type href="pathmap://UML_LIBRARIES/UMLPrimitiveTypes.library.uml#String"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:id="_t_open" name="open">
+      <type href="Boolean"/>
+      <lowerValue xmi:type="uml:LiteralInteger"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:id="_t_notes" name="notes" lower="x" type="_string">
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="oops"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:id="_t_tags" name="tags" lower="3" upper="3" type="_string"/>
+    <ownedAttribute xmi:id="_t_owner" name="owner" type="_nameless"/>
+    <ownedAttribute xmi:id="_t_origin" name="origin" type="_missingref"/>
+    <ownedAttribute xmi:id="_t_void" name="void"><type/></ownedAttribute>
+    <ownedAttribute xmi:id="_t_price" name="price" type="_money" association="_priced" lower="0" upper="1"/>
+    <ownedOperation xmi:id="_t_op"/>
+    <generalization xmi:id="_t_gen"><general xmi:idref="_record"/></generalization>
+  </packagedElement>
+  <packagedElement xmi:type="uml:Class" xmi:id="_record" name="Record"/>
+  <packagedElement xmi:type="uml:Class" xmi:id="_nameless"/>
+  <packagedElement xmi:type="uml:Class" xmi:id="_prio" name="Priority">
+    <ownedLiteral xmi:id="_p1" name="low"/>
+    <ownedLiteral xmi:id="_p2" name="high"/>
+  </packagedElement>
+  <packagedElement xmi:type="uml:DataType" xmi:id="_money" name="Money">
+    <ownedAttribute xmi:id="_m_amount" name="amount" type="_string"/>
+  </packagedElement>
+  <packagedElement xmi:type="uml:Class" xmi:id="_comment" name="Comment"/>
+  <packagedElement xmi:type="uml:Class" name="Anon"/>
+  <packagedElement id="_plain" name="Plain"/>
+  <packagedElement xmi:type="uml:Interface" xmi:id="_iface9"/>
+  <packagedElement xmi:type="uml:Extension" xmi:id="_ext"/>
+  <packagedElement xmi:type="uml:PrimitiveType" xmi:id="_string" name="String"/>
+  <packagedElement xmi:type="uml:Association" xmi:id="_has_comments">
+    <ownedEnd xmi:id="_e_comments" name="comments" type="_comment" lower="0" upper="*"/>
+    <ownedEnd xmi:id="_e_ticket" name="ticket" type="_ticket" lower="1" upper="1"/>
+  </packagedElement>
+  <packagedElement xmi:type="uml:Association" xmi:id="_priced" memberEnd="_e_price _t_price">
+    <ownedEnd xmi:id="_e_price" name="ticket" type="_ticket" lower="1" upper="1"/>
+  </packagedElement>
+  <packagedElement xmi:type="uml:Association" xmi:id="_dangle" memberEnd="_e_price _nope"/>
+  <atlas:businessObject xmi:id="_s2" base_Class="_money"/>
+  <atlas:enumeration xmi:id="_s3" base_Class="_prio"/>
+</xmi:XMI>`
+
+func TestImportXMIReadsALegacyDocument(t *testing.T) {
+	res := mustParse(t, "", legacyXMI)
+
+	ticket := classPtr(res.Model, "Ticket")
+	if ticket == nil {
+		t.Fatalf("Ticket is missing; got %d classes", len(res.Model.Classes))
+	}
+	if ticket.Documentation != "A request somebody is waiting on." {
+		t.Errorf("documentation = %q, want the comment written as an attribute", ticket.Documentation)
+	}
+	if ref, ok := attributeNamed(ticket, "reference"); !ok || ref.Type != TypeString {
+		t.Errorf("Ticket.reference = %#v, want the type read from the href's fragment", ref)
+	}
+	if open, ok := attributeNamed(ticket, "open"); !ok || open.Type != TypeBoolean || open.Multiplicity != MultOptional {
+		t.Errorf("Ticket.open = %#v, want a boolean read from a bare href, optional from empty literals", open)
+	}
+	// A bound the tool wrote wrong is not a reason to lose the member.
+	if notes, ok := attributeNamed(ticket, "notes"); !ok || notes.Multiplicity != MultOptional {
+		t.Errorf("Ticket.notes = %#v, want unreadable bounds read as optional", notes)
+	}
+	if tags, ok := attributeNamed(ticket, "tags"); !ok || tags.Multiplicity != MultAtLeast1 {
+		t.Errorf("Ticket.tags = %#v, want 3 read as one-or-more", tags)
+	}
+	// A class the document never named cannot type anything, so the member is kept as
+	// text and the loss is stated against it.
+	if owner, ok := attributeNamed(ticket, "owner"); !ok || owner.Type != TypeString {
+		t.Errorf("Ticket.owner = %#v, want a member typed by an unnamed class read as text", owner)
+	}
+	if _, ok := noteFor(res.Notes, "_missingref"); !ok {
+		t.Errorf("a type reference to nothing went unreported; notes = %#v", res.Notes)
+	}
+
+	// The three stereotypes may all be applied, and an applied one wins over the
+	// metaclass in both directions.
+	if money := classPtr(res.Model, "Money"); money == nil || money.Stereotype != StereotypeBusinessObject {
+		t.Errorf("Money = %#v, want «businessObject» applied to a uml:DataType to win", money)
+	}
+	prio := classPtr(res.Model, "Priority")
+	if prio == nil || prio.Stereotype != StereotypeEnumeration || len(prio.Literals) != 2 {
+		t.Errorf("Priority = %#v, want «enumeration» applied to a uml:Class, with its literals", prio)
+	}
+
+	byID := map[string]string{}
+	for _, c := range res.Model.Classes {
+		byID[c.ID] = c.Name
+	}
+	found := map[string]Association{}
+	for _, a := range res.Model.Associations {
+		found[byID[a.From.ClassID]+" "+a.Kind+" "+byID[a.To.ClassID]] = a
+	}
+	// An association that lists no memberEnd still has two ends of its own. Neither is
+	// owned by a class here, so nothing says which end is the source: an association is
+	// undirected, and the document's own order is the answer.
+	comments, ok := found["Comment association Ticket"]
+	if !ok {
+		t.Fatalf("the association with only owned ends is missing; got %v", keysOf(found))
+	}
+	if comments.From.Multiplicity != MultMany || comments.To.Multiplicity != MultOne {
+		t.Errorf("ends = %v / %v, want 0..* and 1", comments.From.Multiplicity, comments.To.Multiplicity)
+	}
+	// Here one end *is* owned by a class, and it is the end that class points at — so
+	// its owner is the other side of the line, whichever order the ends are listed in.
+	priced, ok := found["Ticket association Money"]
+	if !ok {
+		t.Fatalf("the class-owned end was read from the wrong side; got %v", keysOf(found))
+	}
+	if priced.To.Role != "price" || priced.From.Role != "ticket" {
+		t.Errorf("roles = %q / %q, want ticket → price", priced.From.Role, priced.To.Role)
+	}
+	if _, ok := found["Ticket generalization Record"]; !ok {
+		t.Errorf("the generalization written as a child element is missing; got %v", keysOf(found))
+	}
+	// An association naming an end nothing defines is dropped, not guessed at.
+	if _, ok := noteFor(res.Notes, "_nope"); !ok {
+		t.Errorf("the unresolved association end went unreported; notes = %#v", res.Notes)
+	}
+	// A packagedElement that states no metaclass is a class in every dialect that
+	// omits the type, and one with no id of its own still has to be addressable.
+	for _, want := range []string{"Plain", "Anon"} {
+		if classPtr(res.Model, want) == nil {
+			t.Errorf("class %q is missing; got %d classes", want, len(res.Model.Classes))
+		}
+	}
+	if v, ok := attributeNamed(ticket, "void"); !ok || v.Type != TypeString {
+		t.Errorf("Ticket.void = %#v, want a member whose <type/> names nothing read as text", v)
+	}
+	for _, needle := range []string{"_iface9", "an operation", "_nameless"} {
+		if _, ok := noteFor(res.Notes, needle); !ok {
+			t.Errorf("nothing was said about %q; notes = %#v", needle, res.Notes)
+		}
+	}
+	// A tool extension describes the file rather than the business, so walking past
+	// one is not a loss worth reporting.
+	if note, ok := noteFor(res.Notes, "_ext"); ok {
+		t.Errorf("a tool extension was reported as a loss: %#v", note)
+	}
+}
+
+// TestImportKeepsWhatItCanOfABrokenKeyAndHierarchy: the three cases a hand-edited
+// document reaches that the canvas cannot even draw.
+func TestImportKeepsWhatItCanOfABrokenKeyAndHierarchy(t *testing.T) {
+	doc := `{
+      "classes": [
+        {"id":"c1","name":"Order","stereotype":"businessObject","identity":["codes"],
+         "attributes":[{"name":"codes","type":"string","multiplicity":"1..*"}]},
+        {"id":"c2","name":"Rush","stereotype":"businessObject"},
+        {"id":"c3","name":"Express","stereotype":"businessObject"}
+      ],
+      "associations": [
+        {"kind":"association","from":{"classId":"c2"},"to":{"classId":"c3"}},
+        {"kind":"generalization","from":{"classId":"c1"},"to":{"classId":"c2"}},
+        {"kind":"generalization","from":{"classId":"c2"},"to":{"classId":"c3"}},
+        {"kind":"generalization","from":{"classId":"c3"},"to":{"classId":"c1"}}
+      ]
+    }`
+	res := mustParse(t, ImportFormatJSON, doc)
+
+	// A key that holds a list identifies nothing, so it leaves the key and stays an
+	// attribute.
+	order := classPtr(res.Model, "Order")
+	if order == nil || len(order.Identity) != 0 {
+		t.Errorf("Order = %#v, want the list-valued member out of the business key", order)
+	}
+	if _, ok := attributeNamed(order, "codes"); !ok {
+		t.Error("the attribute itself was dropped; only the key claim is wrong")
+	}
+	// Three generalizations that close a ring: the one that closes it goes, the
+	// hierarchy it closed stays.
+	if len(res.Model.Associations) != 3 {
+		t.Errorf("kept %d relationships, want the association and two sound generalizations", len(res.Model.Associations))
+	}
+	if _, ok := noteFor(res.Notes, "cannot close on itself"); !ok {
+		t.Errorf("the cycle went unreported; notes = %#v", res.Notes)
+	}
+	// Every association arrived without an id and must still be addressable.
+	for _, a := range res.Model.Associations {
+		if a.ID == "" {
+			t.Errorf("an association came back with no id: %#v", a)
+		}
+	}
+}
+
+// TestImportDropsAStoreItCannotHonour walks the three things a data store may not be,
+// each of which follows from what a store is for: a process reads from one by naming
+// which thing it wants, and only a business key names one.
+func TestImportDropsAStoreItCannotHonour(t *testing.T) {
+	doc := `{
+      "classes": [
+        {"id":"c1","name":"Money","stereotype":"valueType",
+         "attributes":[{"name":"amount","type":"number","multiplicity":"1"}]},
+        {"id":"c2","name":"Note","stereotype":"businessObject",
+         "attributes":[{"name":"text","type":"string","multiplicity":"1"}]},
+        {"id":"c3","name":"Order","stereotype":"businessObject","identity":["id"],
+         "attributes":[{"name":"id","type":"string","multiplicity":"1"}]}
+      ],
+      "stores": [
+        {"name":"Wallet","class":"Money"},
+        {"name":"Notes","class":"Note"},
+        {"name":"Nowhere","class":"Ledger"},
+        {"name":"Orders","class":"Order","x":40,"y":900}
+      ]
+    }`
+	res := mustParse(t, ImportFormatJSON, doc)
+	if len(res.Model.Stores) != 1 || res.Model.Stores[0].Name != "Orders" {
+		t.Fatalf("stores = %#v, want only the one over a class with a business key", res.Model.Stores)
+	}
+	if res.Model.Stores[0].X != 40 || res.Model.Stores[0].Y != 900 {
+		t.Errorf("the store was moved to %v,%v; a placed store keeps its place",
+			res.Model.Stores[0].X, res.Model.Stores[0].Y)
+	}
+	for _, needle := range []string{"Wallet", "Notes", "Nowhere"} {
+		if _, ok := noteFor(res.Notes, needle); !ok {
+			t.Errorf("nothing was said about %q; notes = %#v", needle, res.Notes)
+		}
 	}
 }

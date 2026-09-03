@@ -196,3 +196,15 @@ func TestImportNamesAnUnnamedDocument(t *testing.T) {
 		t.Errorf("name = %#v, want a stated fallback", got.Model)
 	}
 }
+
+// TestImportDryRunReportsABrokenIDGenerator: a preview mints ids too, so that what it
+// shows is what would be stored. If the server cannot mint one, saying so beats
+// showing a preview whose elements the canvas could not address.
+func TestImportDryRunReportsABrokenIDGenerator(t *testing.T) {
+	fx := newFixture(t)
+	fx.idErr = errIDCollision
+	body := importBody("app-1", salesXMI)
+	body["dryRun"] = true
+	requestJSON(t, fx.service.HandleImport, http.MethodPost, "/api/v1/infomodel/import",
+		body, http.StatusInternalServerError)
+}

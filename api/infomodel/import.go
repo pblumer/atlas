@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 )
@@ -397,10 +396,9 @@ func sanitizeIdentity(c *Class, kind StereotypeKind, notes *noteList) []string {
 			notes.add(NoteDropped, c.Name, "%s's business key names %q, which is not one of its attributes, so that part of the key was dropped.", c.Name, name)
 			continue
 		}
-		mult, known := MultiplicityOf(attr.Multiplicity)
-		if !known {
-			continue
-		}
+		// The multiplicity is one of the four by now: sanitizeAttributes normalized it
+		// before this ran, so there is no unknown case left to skip.
+		mult, _ := MultiplicityOf(attr.Multiplicity)
 		if !mult.Required {
 			notes.add(NoteDropped, c.Name+"."+name, "%s.%s is part of the business key but may be absent, so it was dropped from the key: a key that can be missing identifies nothing.", c.Name, name)
 			continue
@@ -615,9 +613,6 @@ func nearestMultiplicity(raw string) (string, bool) {
 
 func parseBounds(raw string) (lower int, upper int, ok bool) {
 	value := strings.TrimSpace(raw)
-	if value == "" {
-		return 0, 0, false
-	}
 	lowerText, upperText := value, value
 	if idx := strings.Index(value, ".."); idx >= 0 {
 		lowerText, upperText = strings.TrimSpace(value[:idx]), strings.TrimSpace(value[idx+2:])
@@ -686,14 +681,12 @@ func layoutImported(m *Model, notes *noteList) {
 		originY = 60.0
 		pitchX  = 280.0
 		pitchY  = 220.0
+		// Four to a row. A square arrangement would be prettier for some counts and
+		// this is not the arrangement the author drew either way — what matters is that
+		// no two boxes sit on top of each other and the note says a person should move
+		// them.
+		columns = 4
 	)
-	columns := int(math.Ceil(math.Sqrt(float64(len(m.Classes)))))
-	if columns < 1 {
-		columns = 1
-	}
-	if columns > 5 {
-		columns = 5
-	}
 	for i := range m.Classes {
 		m.Classes[i].X = originX + float64(i%columns)*pitchX
 		m.Classes[i].Y = originY + float64(i/columns)*pitchY
