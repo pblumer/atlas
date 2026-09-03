@@ -45,33 +45,18 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Output
 		if err != nil {
 			return nil, fmt.Errorf("sharepoint: %w", err)
 		}
-		name := cp.Intern(detail.Connector)
-		client, ok := reg.Client(name)
-		if !ok {
-			return nil, reg.Unresolved("sharepoint", name)
-		}
-		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
-		// Read the variables the task sees once — up its scope chain, so its own
-		// input-mapped locals shadow what it inherits (ADR-0068). Every site, list
-		// and field FEEL value evaluates against them, off the hot path.
-		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
-		if err != nil {
-			return nil, fmt.Errorf("sharepoint: read variables for element %d: %w", j.ElementInstanceKey, err)
-		}
-		item, err := client.CreateItem(context.Background(), ItemRequest{
-			Site:      resolveValue(detail.Site, piKey, scopeVars),
-			List:      resolveValue(detail.List, piKey, scopeVars),
-			Fields:    resolveKVs(detail.Fields, piKey, scopeVars),
-			RequestID: strconv.FormatUint(j.Key, 10),
-		})
+		task, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey, j.Key)
 		if err != nil {
 			return nil, err
 		}
-		resultVar := cp.Intern(detail.ResultVar)
-		if resultVar == "" {
-			return nil, nil // the model discards the created item
+		// The same Resolve/Run pair the worker uses (ADR-0168), so relocating the work
+		// cannot change what a resolved SharePoint task means — only which instances
+		// the running process holds.
+		res, err := Run(context.Background(), task, reg)
+		if err != nil {
+			return nil, err
 		}
-		return []model.VariableValue{itemVariable(resultVar, item)}, nil
+		return res.Variables(), nil
 	}
 }
 

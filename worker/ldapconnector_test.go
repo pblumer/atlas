@@ -201,3 +201,22 @@ func TestRunLdapJobWithoutAResolvedDetail(t *testing.T) {
 		t.Fatal("a job with no connector payload was accepted")
 	}
 }
+
+// A payload whose field carries the wrong JSON type is reported as a payload this
+// worker cannot read, naming the kind. It is reachable rather than theoretical: a
+// worker leases from whichever Atlas is in front of it, so a field whose shape
+// changed between the two arrives exactly like this — and unmarshalling into a zero
+// Job would dial an empty url instead of saying what went wrong.
+func TestRunLdapJobRefusesAPayloadItCannotRead(t *testing.T) {
+	job := Job{Connector: &ConnectorPayload{Kind: "ldap", Fields: map[string]any{
+		"url": "ldaps://dc.example.com", "operation": "search", "maxEntries": "lots",
+	}}}
+
+	_, err := RunLdapJob(context.Background(), job, &recordingLdapDialer{}, ldapSecretFromEnv(envFrom(nil)))
+	if err == nil {
+		t.Fatal("a payload with a mistyped field was accepted")
+	}
+	if !strings.Contains(err.Error(), "cannot read the resolved detail") {
+		t.Errorf("error = %v, want it to say the resolved detail could not be read", err)
+	}
+}
