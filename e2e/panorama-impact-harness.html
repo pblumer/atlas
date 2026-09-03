@@ -11,10 +11,19 @@
   <body>
     <div id="ready">loading</div>
     <script type="module">
-      import { impactFrom } from "/panorama-mesh.js";
+      import {
+        blastRanking, impactFrom, impactList, impactSummary,
+      } from "/panorama-mesh.js";
       // Exposed for the spec; the spec passes a graph and options and reads the
       // result back, so every case is a table row rather than a click sequence.
       window.impactFrom = (graph, id, opts) => impactFrom(graph, id, opts);
+      // The three answers built over that walk: how bad the radius is, which nodes
+      // are in it, and — without any selection at all — which node carries the most.
+      window.impactSummary = (graph, id, opts) =>
+        impactSummary(graph, impactFrom(graph, id, opts), id);
+      window.impactList = (graph, id, opts, listOpts) =>
+        impactList(graph, impactFrom(graph, id, opts), id, listOpts);
+      window.blastRanking = (graph, opts) => blastRanking(graph, opts);
       document.getElementById("ready").textContent = "ready";
     </script>
   </body>

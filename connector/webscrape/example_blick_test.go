@@ -102,7 +102,7 @@ func TestBlickExampleKeepsTheMatchingHeadlines(t *testing.T) {
 	if feed == nil || feed.Kind != model.VarJSON {
 		t.Fatalf("schlagzeilen = %+v, want a structured JSON array", feed)
 	}
-	var entries []map[string]string
+	var entries []map[string]any
 	if err := json.Unmarshal([]byte(feed.Text), &entries); err != nil {
 		t.Fatalf("schlagzeilen is not a JSON array of objects: %v", err)
 	}

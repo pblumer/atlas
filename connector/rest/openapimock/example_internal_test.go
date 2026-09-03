@@ -128,16 +128,17 @@ func TestDerefLeavesEverythingElseAlone(t *testing.T) {
 		"a plain object": map[string]any{"value": 1},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, err := g.deref(node)
+			got, leave, err := g.deref(node)
 			if err != nil {
 				t.Fatalf("deref: %v", err)
 			}
+			defer leave()
 			if got == nil {
 				t.Errorf("deref returned nothing")
 			}
 		})
 	}
-	if _, err := g.deref(map[string]any{"$ref": "nowhere"}); err == nil {
+	if _, _, err := g.deref(map[string]any{"$ref": "nowhere"}); err == nil {
 		t.Error("want an error for an unresolvable ref")
 	}
 }

@@ -18,6 +18,7 @@ import {
 } from "./incidents.js";
 import { editConnectorFlow, connectorShape, connectorCreateBody, connectorUsageHTML, openConnectorUsage, deleteConnectorFlow } from "./connectordialog.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
+import { openPickModal } from "./pickmodal.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { loadFormViewer } from "./formviewer.js";
@@ -3081,11 +3082,15 @@ async function renderAppDeployments(id) {
 // picks *where*, never *what*. Results come back per target, so a refusal by one
 // peer is reported as that peer's, not as a failed action.
 async function promoteRelease(appID, version, targets) {
-  const names = targets.map((t, i) => `${i + 1}) ${t.targetName}`).join("\n");
-  const answer = window.prompt(
-    `Promote v${version} to which target?\n\n${names}\n\nEnter a number:`, "1");
-  if (answer == null) return;
-  const pick = targets[Number(answer) - 1];
+  const picked = await openPickModal({
+    title: `Promote v${version}`,
+    label: "Target",
+    options: targets.map((t) => ({ value: t.targetId, label: t.targetName })),
+    okLabel: "Promote",
+    hint: "The release is frozen, so this sends exactly what was published.",
+  });
+  if (!picked) return;
+  const pick = targets.find((t) => t.targetId === picked.option.value);
   if (!pick) { toast("No such target", "err"); return; }
 
   try {
@@ -7501,27 +7506,21 @@ async function viewInfoModels() {
   </div>`;
 
   const root = document.getElementById("im-root");
-  const chooseApplication = () => {
-    if (!writable.length) return null;
-    if (writable.length === 1) return writable[0];
-    const choices = writable.map((app, i) => `${i + 1}) ${app.name}`).join("\n");
-    const answer = window.prompt(`Store the information model in which application?\n\n${choices}\n\nEnter a number:`, "1");
-    if (answer == null) return null;
-    const selected = writable[Number(answer) - 1];
-    if (!selected) toast("No such application", "err");
-    return selected || null;
-  };
-
   root.addEventListener("click", async (e) => {
     const btn = e.target.closest('[data-act="new-im"]');
-    if (!btn) return;
-    const app = chooseApplication();
-    if (!app) return;
-    const name = window.prompt("Information model name:", `${app.name} data`);
-    if (name == null || !name.trim()) return;
+    if (!btn || !writable.length) return;
+    const picked = await openPickModal({
+      title: "New information model",
+      label: "Application",
+      options: writable.map((app) => ({ value: app.id, label: app.name })),
+      nameLabel: "Model name",
+      nameFor: (app) => `${app.label} data`,
+      hint: "The model belongs to this application and is shared by every process in it.",
+    });
+    if (!picked) return;
     try {
-      const created = await api("POST", "/api/v1/infomodel/models", { applicationId: app.id, name: name.trim() });
-      toast(`${name.trim()} created`, "ok");
+      const created = await api("POST", "/api/v1/infomodel/models", { applicationId: picked.option.value, name: picked.name });
+      toast(`${picked.name} created`, "ok");
       location.hash = `#/data/m/${encodeURIComponent(created.id)}`;
     } catch (err) { toast(err.message, "err"); }
   });
@@ -7796,16 +7795,7 @@ async function viewPanoramaModels() {
 
   const panoramaRoot = document.getElementById("panorama-root");
 
-  const chooseApplication = () => {
-    if (!writable.length) return null;
-    if (writable.length === 1) return writable[0];
-    const choices = writable.map((app, i) => `${i + 1}) ${app.name}`).join("\n");
-    const answer = window.prompt(`Store the architecture model in which application?\n\n${choices}\n\nEnter a number:`, "1");
-    if (answer == null) return null;
-    const selected = writable[Number(answer) - 1];
-    if (!selected) toast("No such application", "err");
-    return selected || null;
-  };
+  const applicationOptions = () => writable.map((app) => ({ value: app.id, label: app.name }));
 
   const saveImported = async (xml, suggestedName) => {
     const validation = await api("POST", "/api/v1/panorama/validate", xml, true);
@@ -7813,14 +7803,21 @@ async function viewPanoramaModels() {
       const first = validation.problems && validation.problems[0];
       throw new Error(first ? first.message : "The document is not valid ArchiMate Open Exchange XML");
     }
-    const app = chooseApplication();
-    if (!app) return;
-    const name = window.prompt("Model name:", validation.name || suggestedName || "Architecture model");
-    if (name == null || !name.trim()) return;
-    await api("POST", "/api/v1/panorama/models", {
-      applicationId: app.id, name: name.trim(), notation: "archimate-3.2", xml,
+    if (!writable.length) return;
+    const picked = await openPickModal({
+      title: "Import architecture model",
+      label: "Application",
+      options: applicationOptions(),
+      nameLabel: "Model name",
+      nameFor: () => validation.name || suggestedName || "Architecture model",
+      okLabel: "Import",
+      hint: "The model belongs to this application and inherits its sharing.",
     });
-    toast(`${name.trim()} imported`, "ok");
+    if (!picked) return;
+    await api("POST", "/api/v1/panorama/models", {
+      applicationId: picked.option.value, name: picked.name, notation: "archimate-3.2", xml,
+    });
+    toast(`${picked.name} imported`, "ok");
     return route();
   };
 
@@ -7839,18 +7836,24 @@ async function viewPanoramaModels() {
         input.click();
       }
       if (act === "new-panorama") {
-        const app = chooseApplication();
-        if (!app) return;
-        const name = window.prompt("Model name:", "Application landscape");
-        if (name == null || !name.trim()) return;
+        if (!writable.length) return;
+        const picked = await openPickModal({
+          title: "New architecture model",
+          label: "Application",
+          options: applicationOptions(),
+          nameLabel: "Model name",
+          nameFor: () => "Application landscape",
+          hint: "The model belongs to this application and inherits its sharing.",
+        });
+        if (!picked) return;
         const identifier = `model-${globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : Date.now()}`;
         const xml = `<?xml version="1.0" encoding="UTF-8"?>\n` +
           `<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" identifier="${identifier}">\n` +
-          `  <name xml:lang="en">${esc(name.trim())}</name>\n</model>\n`;
+          `  <name xml:lang="en">${esc(picked.name)}</name>\n</model>\n`;
         await api("POST", "/api/v1/panorama/models", {
-          applicationId: app.id, name: name.trim(), notation: "archimate-3.2", xml,
+          applicationId: picked.option.value, name: picked.name, notation: "archimate-3.2", xml,
         });
-        toast(`${name.trim()} created`, "ok");
+        toast(`${picked.name} created`, "ok");
         return route();
       }
       if (act === "rename-panorama") {

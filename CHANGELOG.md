@@ -62,6 +62,67 @@ _Changed_ / _Removed_ for each version.
   extracted to end, so it moved into `oauth2.ServiceAccount` and the mail Worker Type
   delegates to it.
 
+- **A variable named after one of your data objects is now flagged.** The new rule
+  `variable.shadows-data-object` raises a warning where the two collide: draw a data
+  object `Kunde`, have a task write its result into a variable `Kunde` — or read the
+  object back into a variable of the same name — and the diagram shows one thing while
+  the instance holds two.
+
+  They are not two views of one value. A data object carries the declared type, the data
+  state and the recorded history of every write; a variable carries a value. They live in
+  separate records, are written by separate events, and **writing one never changes the
+  other** — a data association *copies*, evaluating its expression once. And only one of
+  them answers to the name: FEEL is bound from the variables alone, so `Kunde` in a
+  condition, a mapping or a connector payload always means the variable, even in a model
+  whose whole point is the object. The two then drift apart under one name, and every
+  expression quietly means just one of them.
+
+  A warning rather than a refusal: it is legal, and wanting one name for one idea is
+  reasonable. The panel says which write collides and why it matters; renaming either
+  side clears it.
+
+- **Web scraping: one row is one record, and the fetch survives the real web**
+  ([ADR-0231](docs/adr/0231-webscrape-structured-extraction.md)).
+  An `<atlas:webscrapeConnector>` now takes `<atlas:scrapeField>` children. With at
+  least one, the selector picks **items** rather than values and every match becomes
+  an object carrying the named fields — title *and* link off the same row, instead of
+  two tasks returning two arrays that a following script re-zips by index (and pairs
+  wrongly from the first item that has no link). With no fields the task is exactly
+  what ADR-0118 described: an array of strings.
+
+  Two switches and three fewer failures come with it:
+
+  - `absoluteLinks="true"` (HTML) resolves `href`/`src` reads against the URL the page
+    was actually served from — a relative path is not something a process can open,
+    mail, or store.
+  - `plainText="true"` (RSS/Atom) strips the markup from a feed entry's `description`,
+    where that text is put in front of a person.
+  - Feed entries additionally carry `guid`, `author`, `categories` and `image`. `guid`
+    is the identity a daily run deduplicates on; a title cannot do that, because
+    publishers edit titles.
+  - **Character sets:** a feed declaring `encoding="ISO-8859-1"` used to fail outright
+    (`Decoder.CharsetReader is nil`), and a Latin-1 page arrived in the process as
+    mojibake. Both are now decoded as the document declares.
+  - **RSS 1.0/RDF** (`<rdf:RDF>`, `dc:date`, `dc:creator`) is read under
+    `format="rss"`, and `&nbsp;` or a bare `&` no longer rejects a document every
+    reader renders.
+  - **Identity and bounds:** requests carry their own `User-Agent` instead of Go's
+    anonymous default, which a large share of sites answer with 403; a document past
+    32 MiB fails the job instead of being truncated into a plausible half-result. And
+    fetching an HTML page as a feed now says *which setting* to change, rather than
+    reporting an XML syntax error at line 1.
+
+  The Modeler offers all three: field rows (name / selector / attribute), both
+  switches, and it clears the other mode's settings on a switch instead of leaving a
+  model the compiler rightly rejects.
+
+- **Example: capturing mortgage rates daily**
+  ([`examples/hypothekarzinsen-migrosbank.bpmn`](examples/hypothekarzinsen-migrosbank.bpmn)).
+  A timer start (`0 6 * * *`), a three-field scrape of Migros Bank's rate table, a
+  gateway for the day the selector stops matching, and a still-simulated step that
+  files the rows. It also shows how to address *the* table when six of them share a
+  CSS class: by what it contains (`table:has(th:contains('…'))`), not by where it sits.
+
 - **Data stores: saying where a class is kept.** BPMN has a `<dataStoreReference>` —
   the box on the diagram meaning "this outlives the process" — and says nothing about
   what it holds or what keeps it. Atlas did not even parse it. It does now, and a
@@ -493,8 +554,18 @@ _Changed_ / _Removed_ for each version.
   It refuses rather than improvises: a `$ref` it cannot resolve fails at startup in the
   terminal that launched it, and a status the document does not describe is a 400 that
   names what is on offer — a test written against the 404 path must not quietly pass on
-  a 200. What it does *not* do is validate: a request body is recorded, never checked,
-  and nothing is stateful.
+  a 200. A response the document describes only in a media type this mock cannot
+  generate (XML, say) loses its body rather than being answered with JSON under an XML
+  label, and the startup banner names each one. What it does *not* do is validate: a
+  request body is recorded, never checked, and nothing is stateful.
+
+  **A document published as a tree of files is read as one.** That is how most large
+  APIs ship — DigitalOcean's is a single entry file of references into a hundred others
+  — and each reference resolves against the directory of the file it is written in, so a
+  path item two directories down reaches its schemas the way its author meant. What may
+  be read is bounded on purpose: this mock serves what it reads and authenticates
+  nobody, so references may not climb out of the document's own directory unless
+  `--spec-root` says they may, and a `$ref` to a URL is refused.
 
   `GET /__mock/calls` is the journal of what a run actually did — method, path,
   operation, status, the `X-Request-ID` a job carries, and the body it sent — and
@@ -781,6 +852,50 @@ _Changed_ / _Removed_ for each version.
   extension elements are still `<atlas:jiraConnector>` and friends.
 
 ### Fixed
+
+- **A data object whose declaration went missing took the whole deploy down with it.**
+  A data object is two elements: the `<dataObject>` that declares it and carries its
+  type, and the `<dataObjectReference>` that puts it on the canvas with its name, its
+  data state and its shape. Only the second is drawn, so only the second is visibly
+  there — and a model can reach Atlas having lost the first. The box still reads
+  `Kunde [received]` to everybody looking at it, and it names nothing the engine can
+  find.
+
+  Two things then went wrong, neither of them the modeller's doing. The deploy was
+  refused with `dataObjectRef "DataObject_0s4i37q" is unknown` — an id nobody had ever
+  typed, attached to no shape, with nothing to do about it. And a type set in the
+  properties panel had nowhere to be written, so it vanished on the next save without
+  a word.
+
+  Both are fixed from opposite ends. **The compiler lets the reference stand in for
+  its own declaration**: a data object's identity is its name, the name is on the
+  reference, and nothing about such a model is in doubt — the same fallback a
+  `<dataStoreReference>` naming no root element already gets. Only the declared type
+  is genuinely lost, so the object is seeded without one rather than with a guess.
+  **The Modeler repairs the model on the way in**, declaring what the dangling
+  reference implies, which is where the type gets somewhere to live again. That repair
+  now runs beside the one for `itemSubjectRef`, and for the same reason: the bpmn
+  moddle drops a reference it cannot resolve, so a model that arrives dangling comes
+  back from the next save having lost more than it arrived with.
+
+  The message left for a reference that names nothing at all no longer claims to be
+  about a data *output* association when it is a read that failed.
+
+- **An application you had just created was missing from the dialog that asked which
+  application to use.** Creating an information model, creating or importing an
+  architecture model, and promoting a release all asked their question through a
+  `window.prompt` whose body was the choices as a numbered list, with "enter a number"
+  underneath. A browser truncates a prompt body once it grows past a handful of lines
+  and ends it with an ellipsis — so on a server with a dozen applications the newest
+  ones, which sort last, were simply not in the list somebody was being told to choose
+  from. Nothing said they had been cut off; the application looked missing, and the
+  three trailing dots looked like a rendering quirk.
+
+  All four are now the same small dialog: a real drop-down of the applications you can
+  write to, and the name beside it in one step instead of a second prompt. The
+  suggested name follows the picker until you type your own. Nothing has to be counted,
+  a list of any length fits, and Escape, Cancel or a click outside all mean the same
+  thing as before.
 
 - **A type a modeling tool wrote in its own namespace read back as a GUID.** BPMN gives
   an `<itemDefinition>` no name of its own — a root element carries an id and nothing

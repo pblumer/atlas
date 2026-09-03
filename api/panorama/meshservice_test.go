@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pblumer/atlas/api/runloop"
 )
@@ -21,6 +22,13 @@ func meshLoop(t *testing.T) *runloop.Loop {
 	t.Cleanup(func() { close(quit) })
 	return loop
 }
+
+// meshObservedAt is the moment every test in this file pretends to read its
+// landscape at. A fixed clock, because the stamp is asserted: a test that read the
+// real one could only check that the number was large.
+const meshObservedAt = int64(1_700_000_000)
+
+func meshNow() time.Time { return time.Unix(meshObservedAt, 0) }
 
 // stoppedLoop returns a loop whose quit channel is already closed, so Loop.Do
 // declines to run anything dispatched onto it.
@@ -36,7 +44,7 @@ func TestMeshHandleGraphServesTheDerivedGraph(t *testing.T) {
 			Applications: []Application{app("a1", "Billing")},
 			Processes:    []Process{proc(1, "invoice", "Invoice", "a1")},
 		}, nil, nil
-	}, nil, 0)
+	}, nil, 0, meshNow)
 
 	rec := httptest.NewRecorder()
 	mesh.HandleGraph(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil))
@@ -59,7 +67,7 @@ func TestMeshHandleGraphServesTheDerivedGraph(t *testing.T) {
 func TestMeshHandleGraphReportsACollectorFailure(t *testing.T) {
 	mesh := NewMesh(meshLoop(t), func(*http.Request) (Landscape, ReachOut, error) {
 		return Landscape{}, nil, errors.New("store is on fire")
-	}, nil, 0)
+	}, nil, 0, meshNow)
 
 	rec := httptest.NewRecorder()
 	mesh.HandleGraph(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil))
@@ -83,7 +91,7 @@ func TestMeshHandleGraphRefusesWhenTheLoopIsClosing(t *testing.T) {
 	mesh := NewMesh(stoppedLoop(), func(*http.Request) (Landscape, ReachOut, error) {
 		collected = true
 		return Landscape{}, nil, nil
-	}, nil, 0)
+	}, nil, 0, meshNow)
 
 	rec := httptest.NewRecorder()
 	mesh.HandleGraph(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil))
@@ -108,7 +116,7 @@ func TestMeshAppliesItsConfiguredSizeBudget(t *testing.T) {
 			land.Processes = append(land.Processes, proc(uint64(i), "p", "P", "a1"))
 		}
 		return land, nil, nil
-	}, nil, 5)
+	}, nil, 5, meshNow)
 
 	rec := httptest.NewRecorder()
 	mesh.HandleGraph(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil))
@@ -148,7 +156,7 @@ func TestMeshAsksPeersOffTheLoop(t *testing.T) {
 				land.Targets[0].State = StateUnreachable
 				land.Targets[0].Reason = "This peer could not be reached."
 			}, nil
-	}, nil, 0)
+	}, nil, 0, meshNow)
 
 	rec := httptest.NewRecorder()
 	mesh.HandleGraph(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil))
@@ -190,7 +198,7 @@ func TestMeshAsksPeersOffTheLoop(t *testing.T) {
 func TestMeshWithoutPeersNeedsNoReachOut(t *testing.T) {
 	mesh := NewMesh(meshLoop(t), func(*http.Request) (Landscape, ReachOut, error) {
 		return Landscape{Applications: []Application{app("a1", "Billing")}}, nil, nil
-	}, nil, 0)
+	}, nil, 0, meshNow)
 
 	rec := httptest.NewRecorder()
 	mesh.HandleGraph(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil))
@@ -204,5 +212,76 @@ func TestMeshWithoutPeersNeedsNoReachOut(t *testing.T) {
 	}
 	if len(g.Status.Unavailable) != 2 {
 		t.Errorf("Unavailable = %#v, want unreachable and stale declared", g.Status.Unavailable)
+	}
+}
+
+// TestMeshStampsWhenItReadTheLandscape. ADR-0211 §10 requires an exported landscape
+// to carry its observation time into the artifact, and the browser cannot supply
+// one: its clock dates the *export*, not the reading, and the two are the same
+// number only if nobody left the tab open. So the payload carries it.
+//
+// The stamp is taken before the loop turn, so it is the oldest moment any fact in
+// the answer could have been read — a picture that dated itself after its contents
+// would make a stale landscape look freshly checked.
+func TestMeshStampsWhenItReadTheLandscape(t *testing.T) {
+	mesh := NewMesh(meshLoop(t), func(*http.Request) (Landscape, ReachOut, error) {
+		return Landscape{Applications: []Application{app("a1", "Billing")}}, nil, nil
+	}, nil, 0, meshNow)
+
+	rec := httptest.NewRecorder()
+	mesh.HandleGraph(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil))
+
+	var g Graph
+	if err := json.NewDecoder(rec.Body).Decode(&g); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if g.ObservedAt != meshObservedAt {
+		t.Errorf("ObservedAt = %d, want %d", g.ObservedAt, meshObservedAt)
+	}
+}
+
+// TestMeshWithoutAClockStampsNothing. A missing clock leaves the field absent
+// rather than zero-and-rendered: "observed at the epoch" is a worse answer than
+// "this server did not say", because only the second one can be reported honestly
+// by whatever draws the export.
+func TestMeshWithoutAClockStampsNothing(t *testing.T) {
+	mesh := NewMesh(meshLoop(t), func(*http.Request) (Landscape, ReachOut, error) {
+		return Landscape{Applications: []Application{app("a1", "Billing")}}, nil, nil
+	}, nil, 0, nil)
+
+	rec := httptest.NewRecorder()
+	mesh.HandleGraph(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil))
+
+	if body := rec.Body.String(); strings.Contains(body, "observedAt") {
+		t.Errorf("body = %s, want no observedAt at all", body)
+	}
+}
+
+// TestMeshStampsACollapsedLandscapeToo guards the one place the graph is rebuilt
+// from scratch: over the size budget the derivation returns a second Graph, and a
+// field added to the first is exactly what that path drops. An export of a
+// collapsed landscape is the one most likely to be circulated — it is the whole
+// instance on one page — so it is the last one that should lose its date.
+func TestMeshStampsACollapsedLandscapeToo(t *testing.T) {
+	mesh := NewMesh(meshLoop(t), func(*http.Request) (Landscape, ReachOut, error) {
+		land := Landscape{Applications: []Application{app("a1", "Billing")}}
+		for i := 1; i <= 10; i++ {
+			land.Processes = append(land.Processes, proc(uint64(i), "p", "P", "a1"))
+		}
+		return land, nil, nil
+	}, nil, 5, meshNow)
+
+	rec := httptest.NewRecorder()
+	mesh.HandleGraph(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil))
+
+	var g Graph
+	if err := json.NewDecoder(rec.Body).Decode(&g); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !g.Clustered {
+		t.Fatal("not clustered; this test no longer covers the rebuilt graph")
+	}
+	if g.ObservedAt != meshObservedAt {
+		t.Errorf("ObservedAt = %d on a collapsed landscape, want %d", g.ObservedAt, meshObservedAt)
 	}
 }

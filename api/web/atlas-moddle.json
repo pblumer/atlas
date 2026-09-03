@@ -405,8 +405,20 @@
         { "name": "attribute", "type": "String", "isAttr": true },
         { "name": "format", "type": "String", "isAttr": true },
         { "name": "maxItems", "type": "String", "isAttr": true },
+        { "name": "absoluteLinks", "type": "String", "isAttr": true },
+        { "name": "plainText", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
-        { "name": "retries", "type": "String", "isAttr": true }
+        { "name": "retries", "type": "String", "isAttr": true },
+        { "name": "fields", "type": "ScrapeField", "isMany": true }
+      ]
+    },
+    {
+      "name": "ScrapeField",
+      "superClass": ["Element"],
+      "properties": [
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "selector", "type": "String", "isAttr": true },
+        { "name": "attribute", "type": "String", "isAttr": true }
       ]
     },
     {

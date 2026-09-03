@@ -12,7 +12,7 @@ const rssFixture = `<?xml version="1.0"?>
 </channel></rss>`
 
 func TestExtractRSS(t *testing.T) {
-	got, err := extractRSS(strings.NewReader(rssFixture), 0)
+	got, err := extractRSS(strings.NewReader(rssFixture), 0, false)
 	if err != nil {
 		t.Fatalf("extractRSS: %v", err)
 	}
@@ -28,7 +28,7 @@ func TestExtractRSS(t *testing.T) {
 }
 
 func TestExtractRSSMaxItems(t *testing.T) {
-	got, err := extractRSS(strings.NewReader(rssFixture), 1)
+	got, err := extractRSS(strings.NewReader(rssFixture), 1, false)
 	if err != nil {
 		t.Fatalf("extractRSS: %v", err)
 	}
@@ -55,7 +55,7 @@ const atomFixture = `<?xml version="1.0"?>
 </feed>`
 
 func TestExtractAtomFallbacksAndAlternateLink(t *testing.T) {
-	got, err := extractAtom(strings.NewReader(atomFixture), 0)
+	got, err := extractAtom(strings.NewReader(atomFixture), 0, false)
 	if err != nil {
 		t.Fatalf("extractAtom: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestExtractAtomFallbacksAndAlternateLink(t *testing.T) {
 }
 
 func TestExtractAtomMaxItems(t *testing.T) {
-	got, err := extractAtom(strings.NewReader(atomFixture), 1)
+	got, err := extractAtom(strings.NewReader(atomFixture), 1, false)
 	if err != nil {
 		t.Fatalf("extractAtom: %v", err)
 	}
@@ -81,10 +81,10 @@ func TestExtractAtomMaxItems(t *testing.T) {
 }
 
 func TestFeedFormatMismatchFails(t *testing.T) {
-	if _, err := extractRSS(strings.NewReader(atomFixture), 0); err == nil {
+	if _, err := extractRSS(strings.NewReader(atomFixture), 0, false); err == nil {
 		t.Fatal("Atom decoded as RSS without error")
 	}
-	if _, err := extractAtom(strings.NewReader(rssFixture), 0); err == nil {
+	if _, err := extractAtom(strings.NewReader(rssFixture), 0, false); err == nil {
 		t.Fatal("RSS decoded as Atom without error")
 	}
 }

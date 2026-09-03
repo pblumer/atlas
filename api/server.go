@@ -1260,7 +1260,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.collectBindingCatalog,
 		s.collectFacts,
 	).WithContextResolver(s.collectContext)
-	s.panoramaMesh = panorama.NewMesh(s.runLoop, s.collectLandscape, s.panorama.OverlaysOnLoop, meshMaxNodes)
+	s.panoramaMesh = panorama.NewMesh(s.runLoop, s.collectLandscape, s.panorama.OverlaysOnLoop, meshMaxNodes, time.Now)
 	// The information model reuses the same process-application scope, for the same
 	// reason Panorama does: a second ACL would be a second thing to get wrong. The
 	// resolver runs only inside the service's loop turn, so authorization and model
