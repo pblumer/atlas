@@ -1,0 +1,58 @@
+{
+  "id": "atlas.google-sheets",
+  "version": "1.0.0",
+  "kind": "connector",
+  "title": "Google Sheets",
+  "author": "Atlas core",
+  "description": "Read a range, write one, append rows, clear a range, create a spreadsheet, add or delete a sheet, or move the whole file to the trash — through a server-registered Google credential. The operation, the spreadsheet, the range and the values are authored in the model; the credential lives on the server, resolved from the vault (ADR-draft-google-sheets-worker). Values may be a list of rows, one row of cells, or a list of objects written through the Columns given here. A read with Header on answers with objects keyed by the range's first row, which is the shape a multi-instance subprocess iterates. Creating and deleting a spreadsheet are Drive operations on the same credential.",
+  "engineCompat": ">=0.10",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "Google Sheets",
+    "id": "atlas.google-sheets",
+    "appliesTo": ["bpmn:ServiceTask"],
+    "properties": [
+      { "label": "Worker", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:connector" },
+        "description": "Name of the configured Google Sheets Worker (Console → Workers), never a key. The attribute behind this field is spelled connector for compatibility with models already deployed." },
+      { "label": "Operation", "type": "Dropdown", "value": "read-range", "binding": { "type": "property", "name": "atlas:operation" },
+        "choices": [
+          { "name": "Read range", "value": "read-range" },
+          { "name": "Append rows", "value": "append-row" },
+          { "name": "Write range", "value": "write-range" },
+          { "name": "Clear range", "value": "clear-range" },
+          { "name": "Create spreadsheet", "value": "create-spreadsheet" },
+          { "name": "Add sheet", "value": "add-sheet" },
+          { "name": "Delete sheet", "value": "delete-sheet" },
+          { "name": "Delete spreadsheet (to trash)", "value": "delete-spreadsheet" }
+        ] },
+      { "label": "Spreadsheet (everything but create)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:spreadsheet" },
+        "description": "The spreadsheet by its id or by the whole URL out of the browser's address bar — both work. Often a FEEL expression naming what an earlier Create spreadsheet wrote, e.g. =datei.spreadsheetId." },
+      { "label": "Title (create)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:title" },
+        "description": "What the new spreadsheet is called." },
+      { "label": "Drive folder (create)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:folder" },
+        "description": "Optional. The folder the new spreadsheet is moved into, by id or by the URL of the folder page. The credential must be able to write there — for a service account that usually means the folder is shared with its address." },
+      { "label": "Sheet (create/add sheet/delete sheet)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:sheet" },
+        "description": "A tab title, as shown on the tab itself. On Create spreadsheet it names the new file's first tab and is optional." },
+      { "label": "Range (read/write/append/clear)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:range" },
+        "description": "A1 notation, optionally naming its sheet (Anträge!A2:F). Without a sheet name Google uses the first tab. For Append rows a whole-column range like Anträge!A:F is usually what you want, since Google appends after the last row that has anything in it." },
+      { "label": "Values (write/append)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:values" },
+        "description": "What to write. A FEEL list of lists is the rows; a flat list is one row; a list of objects is written through the Columns below. A single value writes one cell." },
+      { "label": "Columns (write/append)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:columns" },
+        "description": "Only for a list of objects: the fields to write and their order, comma-separated — and the order is the half that has to match the sheet. Without it a list of objects is refused at deploy rather than written in an order nobody chose." },
+      { "label": "Interpret values (write/append)", "type": "Dropdown", "value": "", "binding": { "type": "property", "name": "atlas:valueInput" },
+        "choices": [
+          { "name": "As typed (dates, numbers, formulas)", "value": "" },
+          { "name": "Verbatim — store the text as given", "value": "raw" }
+        ],
+        "description": "As typed is Google's USER_ENTERED: \"3,50 €\" becomes a currency number and \"=SUM(A1:A9)\" a formula. Verbatim stores exactly the characters given, which is what an id starting with a zero needs." },
+      { "label": "First row is a header (read)", "type": "Dropdown", "value": "", "binding": { "type": "property", "name": "atlas:header" },
+        "choices": [
+          { "name": "No — answer with the raw rows", "value": "" },
+          { "name": "Yes — answer with objects keyed by the first row", "value": "true" }
+        ],
+        "description": "With a header the result is a list of objects (=zeilen[1].name); without it, a list of lists (=zeilen[1][1]). Include the header row in the range when you turn this on." },
+      { "label": "Result variable (everything but the two deletes)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:resultVariable" },
+        "description": "Receives what Google returned; a read writes the rows. FEEL lists are 1-based, so the first row is =zeilen[1]. The two deletes answer with nothing a process needs, and the compiler refuses a result variable on them." }
+    ]
+  }
+}

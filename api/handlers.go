@@ -19,6 +19,7 @@ import (
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/entra"
+	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
@@ -5322,6 +5323,23 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"description": j.Description, "transition": j.Transition, "comment": j.Comment,
 			"assignee": j.Assignee, "jql": j.JQL, "query": j.Query, "maxResults": j.MaxResults,
 			"fields": j.Fields, "requestId": j.RequestID, "resultVariable": j.ResultVariable,
+		}}
+	case compiler.GoogleSheetsJobTypeIndex:
+		// The operation, the spreadsheet, the range and the already-projected rows
+		// travel; the service account's private key does not. Google Sheets is Jira's
+		// situation exactly — one operator-managed credential behind a name
+		// (ADR-draft-google-sheets-worker) — so what travels is the *Worker's* name,
+		// resolved against the Worker Instance's own configuration. That is also what
+		// lets it act as a different Google identity from anything the engine holds.
+		j, err := googlesheets.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "googlesheets", Fields: map[string]any{
+			"connector": j.Worker, "operation": j.Operation, "spreadsheet": j.Spreadsheet,
+			"sheet": j.Sheet, "range": j.Range, "title": j.Title, "folder": j.Folder,
+			"values": j.Values, "input": j.Input, "header": j.Header,
+			"requestId": j.RequestID, "resultVariable": j.ResultVariable,
 		}}
 	case compiler.MsSqlJobTypeIndex, compiler.MariaDBJobTypeIndex, compiler.PostgresJobTypeIndex:
 		// The statement and its bound parameters travel; the DSN does not exist here

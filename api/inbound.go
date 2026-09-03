@@ -85,6 +85,10 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		Enabled        *bool  `json:"enabled"`
 		StartFromTip   *bool  `json:"startFromTip"`
 		JQL            string `json:"jql"`
+		SpreadsheetID  string `json:"spreadsheetId"`
+		WatchRange     string `json:"watchRange"`
+		HeaderRow      bool   `json:"headerRow"`
+		FolderID       string `json:"folderId"`
 		CursorField    string `json:"cursorField"`
 		LagSeconds     int    `json:"lagSeconds"`
 		PollSeconds    int    `json:"pollSeconds"`
@@ -148,11 +152,15 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		ID: id, ConnectorID: connID, WatchedSubject: subject, Recursive: p.Recursive,
 		MessageName: messageName, CorrelationKey: corr, Enabled: enabled,
 		StartFromTip: startFromTip, CreatedAt: time.Now().Unix(),
-		JQL:         strings.TrimSpace(p.JQL),
-		CursorField: strings.TrimSpace(p.CursorField),
-		LagSeconds:  p.LagSeconds,
-		PollSeconds: p.PollSeconds,
-		MaxPerHour:  p.MaxPerHour,
+		JQL:           strings.TrimSpace(p.JQL),
+		SpreadsheetID: strings.TrimSpace(p.SpreadsheetID),
+		WatchRange:    strings.TrimSpace(p.WatchRange),
+		HeaderRow:     p.HeaderRow,
+		FolderID:      strings.TrimSpace(p.FolderID),
+		CursorField:   strings.TrimSpace(p.CursorField),
+		LagSeconds:    p.LagSeconds,
+		PollSeconds:   p.PollSeconds,
+		MaxPerHour:    p.MaxPerHour,
 	}
 	if msg := validateInboundWatch(kind, &rec); msg != "" {
 		httpapi.Error(w, http.StatusBadRequest, msg)

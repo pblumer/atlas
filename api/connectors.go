@@ -14,6 +14,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
@@ -324,6 +325,59 @@ func (s *Server) buildJiraClients() (map[string]jira.Client, map[string]string, 
 	}
 	noteForeignKinds(problems, recs, connectorKindJira, clients)
 	return clients, problems, nil
+}
+
+// buildGoogleSheetsClients builds the live Google client for every enabled Google
+// Sheets Worker, resolving each one's OAuth credential bundle from the vault
+// (ADR-0041) — so a model names a Worker and never a key. A Worker whose bundle is
+// missing or malformed is skipped with the reason recorded, which is what lets the
+// list say "configured but not working" instead of leaving it to be discovered by a
+// token parking on it (ADR-0158).
+func (s *Server) buildGoogleSheetsClients() (map[string]googlesheets.Client, map[string]string, error) {
+	clients := map[string]googlesheets.Client{}
+	problems := map[string]string{}
+	recs, err := s.connectors.LoadAll()
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, c := range recs {
+		if c.Kind != connectorKindGoogleSheets {
+			continue
+		}
+		if !c.Enabled {
+			problems[c.Name] = problemDisabled
+			continue
+		}
+		client, err := googlesheets.NewProviderClient(googlesheets.ProviderConfig{
+			Endpoint: strings.TrimSpace(c.Endpoint),
+			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+		})
+		if err != nil {
+			problems[c.Name] = err.Error() // its tasks park until it is fixed
+			continue
+		}
+		clients[c.Name] = client
+	}
+	noteForeignKinds(problems, recs, connectorKindGoogleSheets, clients)
+	return clients, problems, nil
+}
+
+// googleSheetsCredentials is the shape of a Google Worker's credential bundle held in
+// the vault under its credentialsRef (ADR-draft-google-sheets-worker): a service
+// account's signing key, or a consumer account's refresh token. Only a *reference* to
+// this bundle is stored in the Worker record; the values live in the vault, never in a
+// model or the record (I6). It mirrors connector/googlesheets' own unexported bundle
+// type, which is what the shape test holds it to.
+type googleSheetsCredentials struct {
+	Method       string `json:"method"`
+	TokenURL     string `json:"tokenUrl,omitempty"`
+	Scope        string `json:"scope,omitempty"`
+	ClientEmail  string `json:"clientEmail,omitempty"`
+	PrivateKey   string `json:"privateKey,omitempty"`
+	Subject      string `json:"subject,omitempty"`
+	ClientID     string `json:"clientId,omitempty"`
+	ClientSecret string `json:"clientSecret,omitempty"`
+	RefreshToken string `json:"refreshToken,omitempty"`
 }
 
 // jiraCredentials is the shape of a Jira worker's credential bundle held in the

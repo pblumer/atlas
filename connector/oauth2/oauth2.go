@@ -14,9 +14,10 @@
 //
 // Not shared is *policy*: which grants a worker accepts, what its credential
 // bundle looks like, and what its endpoint defaults are. Those are per-connector
-// decisions and they stay in the worker — which is also why a caller supplies its
-// own [Fetcher] for a grant nobody else has (the mail worker's Google
-// service-account JWT-bearer assertion is the one such case).
+// decisions and they stay in the worker. A caller may also supply its own
+// [Fetcher] for a grant nobody else has — the Google service-account JWT-bearer
+// assertion was that case until a second caller needed it, which is how it came to
+// live here as [ServiceAccount] instead (ADR-draft-google-sheets-worker).
 //
 // Every error is prefixed with the caller's kind, so a message an operator reads
 // still names the worker that produced it.

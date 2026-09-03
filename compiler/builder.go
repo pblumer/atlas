@@ -350,6 +350,21 @@ const JiraJobType = "io.atlas.jira"
 // the mail worker uses MailJobTypeIndex.
 const JiraJobTypeIndex int32 = 25
 
+// GoogleSheetsJobType is the reserved job type a Google Sheets task carries
+// (ADR-draft-google-sheets-worker). One job type serves every spreadsheet operation —
+// create a spreadsheet, add a sheet, read, write, append, clear, delete a sheet or
+// trash the file — because they share a credential and an error envelope; the
+// operation is a modeled value rather than a reserved index of its own, as it is for
+// Jira (ADR-0201).
+const GoogleSheetsJobType = "io.atlas.googlesheets"
+
+// GoogleSheetsJobTypeIndex is the interned index GoogleSheetsJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it twenty-seventh, so it is
+// always 26. Together with the name it lets a job carry its type as an integer and the
+// in-process Google Sheets worker subscribe by one global index across every deployed
+// process, the same way the Jira worker uses JiraJobTypeIndex.
+const GoogleSheetsJobTypeIndex int32 = 26
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -383,6 +398,7 @@ var reservedJobTypes = []string{
 	EntraJobType,         // 23
 	LdifJobType,          // 24
 	JiraJobType,          // 25
+	GoogleSheetsJobType,  // 26
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1757,6 +1773,73 @@ func (b *Builder) AddJiraConnectorTask(cfg JiraConfig) int32 {
 		JiraMaxResults:  cfg.MaxResults,
 		JiraFields:      cfg.Fields,
 		Retries:         cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// GoogleSheetsConfig is the deploy-time configuration of a Google Sheets task
+// (ADR-draft-google-sheets-worker). Worker names the Google identity an operator
+// configured (whose credential lives server-side, never in the model) and Operation is
+// the spreadsheet operation. It is read from the task's `connector="…"` attribute,
+// which keeps the pre-ADR-0203 spelling because it is authored in deployed models. The remaining values are the ones that operation takes —
+// literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over the
+// variables the task sees at call time.
+//
+// Columns, Input and Header are compiled structure rather than authored values: they
+// decide the *shape* of what is written or read, and a shape that could differ on
+// every token is not a shape. The compiler has already applied the Input default, so
+// the runtime interprets nothing (I5). ResultVar, if set, is the process variable what
+// Google returned is written back into.
+type GoogleSheetsConfig struct {
+	Worker      string
+	Operation   string
+	Spreadsheet RestExpr
+	Sheet       RestExpr
+	Range       RestExpr
+	Title       RestExpr
+	Folder      RestExpr
+	Values      RestExpr
+	Columns     []string
+	Input       string
+	Header      bool
+	ResultVar   string
+	Retries     int32
+}
+
+// AddGoogleSheetsConnectorTask adds a Google Sheets task and returns its element id.
+// Like a service task it creates a job on activation and waits; the job carries the
+// reserved GoogleSheetsJobType so the in-process Google Sheets handler picks it up,
+// evaluates the authored literal-or-FEEL values over the variables the task sees,
+// resolves the named Worker's client, performs the one operation, writes what Google
+// returned into ResultVar (empty = discard it), and completes the job. The credential
+// is resolved server-side from the named Worker, never authored in the model —
+// mirroring Jira and SharePoint (ADR-0141/0201).
+//
+// The method keeps the Add*ConnectorTask name its sixteen siblings on this Builder
+// carry; renaming that family is its own step of the ADR-0203 migration.
+func (b *Builder) AddGoogleSheetsConnectorTask(cfg GoogleSheetsConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:       b.intern(GoogleSheetsJobType),
+		Connector:     b.intern(cfg.Worker),
+		Subject:       -1, // not a clio task
+		EventType:     -1,
+		ClioQuery:     -1,
+		ReduceSpec:    -1,
+		Method:        -1, // not a REST task
+		ResultVar:     b.intern(cfg.ResultVar),
+		Auth:          -1,
+		SheetsOp:      b.intern(cfg.Operation),
+		SheetsID:      cfg.Spreadsheet,
+		SheetsTab:     cfg.Sheet,
+		SheetsRange:   cfg.Range,
+		SheetsTitle:   cfg.Title,
+		SheetsFolder:  cfg.Folder,
+		SheetsValues:  cfg.Values,
+		SheetsColumns: cfg.Columns,
+		SheetsInput:   b.intern(cfg.Input),
+		SheetsHeader:  cfg.Header,
+		Retries:       cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

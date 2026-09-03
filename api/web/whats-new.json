@@ -89,6 +89,29 @@
       }
     },
     {
+      "id": "google-sheets-as-a-worker-type-and-a-spreadsheet-or-a-drive-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Google Sheets, in both directions",
+        "de": "Google Sheets, in beide Richtungen"
+      },
+      "summary": {
+        "en": "A lot of what a process runs on lives in a spreadsheet somebody keeps by hand — the applicant list, the budget lines, the table the team actually looks at. Atlas can now work with one: create a spreadsheet, add a tab, read a range, write one, append rows, empty a range, and remove a tab or the whole file (to the trash, never permanently). And it can be started by one: a new row in a sheet begins a process — that is a Google Form writing its answers into a table — or a file dropped into a Drive folder does, because the folder is a queue people already use. Set the watch up under Workers → Events; Atlas polls, so nothing has to reach your server from the internet. Two things are worth knowing before you rely on it: after a crash a row can be appended twice, so write a status column and read it before appending (the shipped example does exactly that), and a row watch follows row numbers — it sees rows added at the end, which is what a form does. The example folder walks through the setup, including the thing people get wrong first: a service account owns nothing until you share the sheet with its address.",
+        "de": "Vieles, womit ein Prozess arbeitet, liegt in einer Tabelle, die jemand von Hand pflegt — die Bewerberliste, die Budgetzeilen, die Tabelle, in die das Team tatsächlich schaut. Atlas kann jetzt damit arbeiten: Tabelle anlegen, Blatt hinzufügen, Bereich lesen, Bereich schreiben, Zeilen anhängen, Bereich leeren, Blatt oder ganze Datei entfernen (in den Papierkorb, nie endgültig). Und Atlas kann davon gestartet werden: Eine neue Zeile startet einen Prozess — das ist der Fall „Google-Formular schreibt seine Antworten in eine Tabelle“ — oder eine Datei, die in einem Drive-Ordner abgelegt wird, denn der Ordner ist die Warteschlange, die es ohnehin schon gibt. Eingerichtet wird das unter Workers → Events; Atlas fragt selbst nach, es muss also nichts aus dem Internet Ihren Server erreichen. Zwei Dinge sollte man wissen, bevor man sich darauf verlässt: Nach einem Absturz kann eine Zeile zweimal angehängt werden — dagegen hilft eine Statusspalte, die der Prozess vor dem Anhängen liest (genau das führt das mitgelieferte Beispiel vor) —, und ein Zeilen-Watch folgt den Zeilennummern, sieht also am Ende angehängte Zeilen, was ein Formular genau so macht. Der Beispielordner führt durch die Einrichtung, samt dem, was man zuerst falsch macht: Ein Dienstkonto besitzt nichts, solange die Tabelle nicht mit seiner Adresse geteilt ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "Modeler",
+        "Events"
+      ]
+    },
+    {
       "id": "importing-a-uml-class-diagram-reading-what-somebody-else-dre",
       "version": "Unreleased",
       "date": null,

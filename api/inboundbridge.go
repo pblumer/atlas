@@ -146,6 +146,14 @@ func (s *Server) inboundNow() time.Time {
 // trip and a Jira search. A minute is the latency the record accepts in exchange.
 const jiraDefaultPoll = 60 * time.Second
 
+// googleDefaultPoll is the cadence a Google watch is read at when it states none of its
+// own. Google bills and rate-limits per project, and both reads are whole-collection
+// reads — a row watch returns the entire range every time, a folder watch a page of the
+// folder — so the bridge's own two-second tick would spend a day's quota on answers that
+// say nothing changed. A minute is the latency the record accepts in exchange, and it is
+// a knob on the watch for the folder somebody really does need read faster.
+const googleDefaultPoll = 60 * time.Second
+
 // inboundCadence is how often a watch is read: its own pollSeconds, or its kind's
 // default when it states none — which is what the field has always documented itself to
 // mean. Zero means "every tick", which is what a clio read is cheap enough for and what
@@ -154,8 +162,11 @@ func inboundCadence(kind string, rec inboundSubscription) time.Duration {
 	if rec.PollSeconds > 0 {
 		return time.Duration(rec.PollSeconds) * time.Second
 	}
-	if kind == connectorKindJira {
+	switch kind {
+	case connectorKindJira:
 		return jiraDefaultPoll
+	case connectorKindGoogleSheets:
+		return googleDefaultPoll
 	}
 	return 0
 }
@@ -332,6 +343,19 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 				continue
 			}
 			src = jiraSource{client: client, now: s.inboundNow}
+		case connectorKindGoogleSheets:
+			client, ok := s.googleSheetsRegistry.Client(c.Name)
+			if !ok {
+				continue
+			}
+			// Which of the two Google watches this is follows from the target the
+			// subscription names, which the create endpoint has already held to exactly
+			// one (ADR-draft-google-inbound-watch).
+			if strings.TrimSpace(r.FolderID) != "" {
+				src = driveFolderSource{client: client, now: s.inboundNow}
+			} else {
+				src = sheetRowSource{client: client}
+			}
 		default:
 			continue // a kind with no inbound half; its worker is outbound only
 		}

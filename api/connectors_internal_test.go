@@ -52,7 +52,7 @@ func TestManagedConnectorKindsRegistry(t *testing.T) {
 		t.Error("http.rest should not be a managed Worker Type")
 	}
 	// The whitelist error lists exactly the registered kinds, in order.
-	want := "Worker Type must be \"temis\", \"clio\", \"mail\", \"sharepoint\", \"remedy\", \"jira\", \"entra\", \"ad\", \"postgres\", \"mariadb\", or \"mssql\""
+	want := "Worker Type must be \"temis\", \"clio\", \"mail\", \"sharepoint\", \"remedy\", \"jira\", \"googlesheets\", \"entra\", \"ad\", \"postgres\", \"mariadb\", or \"mssql\""
 	if got := managedConnectorKindsError(); got != want {
 		t.Errorf("managedConnectorKindsError() = %q, want %q", got, want)
 	}

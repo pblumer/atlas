@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/logging"
 )
@@ -366,6 +368,313 @@ func jiraFields(rec inboundSubscription, issue map[string]any) map[string]any {
 	return out
 }
 
+// --- google sheets and drive ---
+
+// The two Google watches (ADR-draft-google-inbound-watch), which are two answers to
+// the one question the bridge asks of a source: what is this event's sequence.
+//
+// A spreadsheet row has a real one — its row number rises with every append and never
+// rises twice for the same row — so a row watch uses the *scalar* watch-level mark,
+// the simple case clio has. A Drive file has none: files.list is a query, its order is
+// an index's, and a file indexed late would be lost behind a scalar mark. That is the
+// wall ADR-0214 hit with Jira, and the fix transfers whole — the mark is scoped per
+// file id, the sequence is the file's own timestamp, and the cursor is held behind the
+// newest file seen.
+
+// sheetsDefaultRange is what a row watch reads when the operator names none: the first
+// sheet, columns A to Z. It is normalized into the record at create time rather than
+// applied here, so nothing downstream has to interpret an empty range.
+const sheetsDefaultRange = "A:Z"
+
+// driveDefaultLag is how far behind the newest file seen a folder watch's cursor is
+// held, so a file Drive indexes a moment late is still inside the next window.
+// Re-reading it costs one skipped publish, because its mark is its own.
+const driveDefaultLag = 30 * time.Second
+
+// sheetRowSource watches a spreadsheet's rows. The cursor is how many rows have been
+// seen; every row beyond it is one event, sequenced by its absolute row number.
+type sheetRowSource struct{ client googlesheets.Client }
+
+func (s sheetRowSource) Read(ctx context.Context, rec inboundSubscription, limit int) ([]inboundEvent, string, error) {
+	rows, header, err := s.rows(ctx, rec)
+	if err != nil || len(rows) == 0 {
+		return nil, "", err
+	}
+	seen := sheetRowsSeen(rec)
+	if len(rows) <= seen {
+		// Nothing new — or fewer rows than last time, which means rows were deleted.
+		// The cursor follows the sheet down so the next append is noticed at all; the
+		// rows in between keep the marks they already have, and the record says plainly
+		// that those are lost. There is no repair: a row's only identity is its place.
+		if len(rows) < seen {
+			return nil, strconv.Itoa(len(rows)), nil
+		}
+		return nil, "", nil
+	}
+	out := make([]inboundEvent, 0, limit)
+	for i := seen; i < len(rows) && len(out) < limit; i++ {
+		out = append(out, inboundEvent{
+			// No MarkKey: the row number *is* the watch's sequence, monotonic across
+			// the whole watch, so the scalar mark is correct — the clio case.
+			Seq:    uint64(i + 1), // absolute row number, 1-based as Sheets counts
+			Fields: sheetRowFields(rec, header, rows[i], i+1),
+		})
+	}
+	return out, strconv.Itoa(seen + len(out)), nil
+}
+
+func (s sheetRowSource) Prime(ctx context.Context, rec inboundSubscription) (string, bool, error) {
+	rows, _, err := s.rows(ctx, rec)
+	if err != nil {
+		return "", false, err
+	}
+	// One read reaches the tip: what is being skipped is every row already there.
+	return strconv.Itoa(len(rows)), true, nil
+}
+
+// rows reads the watched range and splits off the header when the watch names one.
+// The header row is not an event — it names the columns — so it is removed from the
+// rows *and* still counted, which keeps a row's sequence its real row number.
+func (s sheetRowSource) rows(ctx context.Context, rec inboundSubscription) ([]any, []string, error) {
+	got, err := s.client.Do(ctx, googlesheets.Request{
+		Operation:   "read-range",
+		Spreadsheet: rec.SpreadsheetID,
+		Range:       sheetWatchRange(rec),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	rows, _ := got.([]any)
+	if !rec.HeaderRow || len(rows) == 0 {
+		return rows, nil, nil
+	}
+	first, _ := rows[0].([]any)
+	names := make([]string, len(first))
+	for i, cell := range first {
+		names[i] = strings.TrimSpace(fmt.Sprint(cell))
+	}
+	return rows, names, nil
+}
+
+// sheetWatchRange is the A1 range a row watch reads; the create endpoint has already
+// normalized an unset one to the default.
+func sheetWatchRange(rec inboundSubscription) string {
+	if r := strings.TrimSpace(rec.WatchRange); r != "" {
+		return r
+	}
+	return sheetsDefaultRange
+}
+
+// sheetRowsSeen reads the watch's cursor: how many rows of the range have already been
+// published. A cursor that is not a number (there is no way to write one, but a hand-
+// edited record could) reads as none, which re-publishes rather than skipping — the
+// engine's mark then discards the duplicates, where the opposite mistake would lose
+// rows silently.
+func sheetRowsSeen(rec inboundSubscription) int {
+	n, err := strconv.Atoi(strings.TrimSpace(rec.LastEventID))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+// sheetRowFields is the binding environment one row exposes: the envelope, the row as
+// a list, and — when the watch names a header — each cell under its column name.
+//
+// The named columns are spread as top-level fields the way clio spreads an event body,
+// because that is what makes a correlation key readable: `Antragsnummer` rather than
+// `row[3]`. The envelope fields take precedence over a column of the same name, so a
+// subscription can always rely on them.
+func sheetRowFields(rec inboundSubscription, header []string, row any, number int) map[string]any {
+	cells, _ := row.([]any)
+	fields := make(map[string]any, len(header)+5)
+	for i, name := range header {
+		if name == "" {
+			continue // an unnamed column cannot be addressed
+		}
+		if i < len(cells) {
+			fields[name] = cells[i]
+			continue
+		}
+		fields[name] = "" // a short row has empty cells, not missing ones
+	}
+	fields["eventType"] = "googlesheets.row"
+	fields["spreadsheetId"] = rec.SpreadsheetID
+	fields["range"] = sheetWatchRange(rec)
+	fields["rowNumber"] = number
+	fields["row"] = cells
+	return fields
+}
+
+// driveFolderSource watches a Drive folder. Unlike a row it takes its sequence and its
+// mark from the file rather than from the read: the mark is scoped per file id, so no
+// delivery order can make one file suppress another, and the cursor carries no
+// correctness weight at all — only progress.
+type driveFolderSource struct {
+	client googlesheets.Client
+	now    func() time.Time // injectable for tests; time.Now in production
+}
+
+func (s driveFolderSource) Read(ctx context.Context, rec inboundSubscription, limit int) ([]inboundEvent, string, error) {
+	files, err := s.client.ListFiles(ctx, googlesheets.FileQuery{
+		Folder: rec.FolderID,
+		Field:  driveCursorField(rec),
+		After:  driveCursorTime(rec),
+		Limit:  limit,
+	})
+	if err != nil || len(files) == 0 {
+		return nil, "", err
+	}
+	field := driveCursorField(rec)
+	out := make([]inboundEvent, 0, len(files))
+	newest := time.Time{}
+	for _, file := range files {
+		id, _ := file["id"].(string)
+		if id == "" {
+			continue // not a file; nothing to key a mark on
+		}
+		at := driveFileTime(file, field)
+		if at.IsZero() {
+			// No usable timestamp, so no sequence — and an event with no sequence has
+			// no place in a mechanism whose correctness rests on one. Skipping is not
+			// merely tidy: uint64(time.Time{}.UnixMilli()) is a *negative* millis count
+			// wrapped near the top of the range, which would set this file's mark so
+			// high that nothing about it is ever delivered again.
+			continue
+		}
+		out = append(out, inboundEvent{
+			MarkKey: id,
+			Seq:     uint64(at.UnixMilli()),
+			Fields:  driveFileFields(rec, file, field),
+		})
+		if at.After(newest) {
+			newest = at
+		}
+	}
+	if newest.IsZero() {
+		// Nothing carried a usable timestamp: leave the cursor where it was rather than
+		// stepping it somewhere arbitrary. The marks make a re-read harmless.
+		return out, "", nil
+	}
+	return out, driveNextCursor(rec, newest, len(files) >= limit), nil
+}
+
+func (s driveFolderSource) Prime(ctx context.Context, rec inboundSubscription) (string, bool, error) {
+	// One descending read of a single file reaches the tip; there is no backlog to page
+	// through, because what is being skipped is everything already in the folder.
+	files, err := s.client.ListFiles(ctx, googlesheets.FileQuery{
+		Folder: rec.FolderID, Field: driveCursorField(rec), Limit: 1, Descending: true,
+	})
+	if err != nil {
+		return "", false, err
+	}
+	// An empty folder primes to now: there is nothing to skip, and the next poll's
+	// window starts here rather than at the beginning of time.
+	cursor := s.now().UTC().Add(-driveLag(rec))
+	if len(files) > 0 {
+		if at := driveFileTime(files[0], driveCursorField(rec)); !at.IsZero() {
+			cursor = at.Add(-driveLag(rec))
+		}
+	}
+	return cursor.UTC().Format(time.RFC3339), true, nil
+}
+
+// driveNextCursor is where a folder watch resumes, and the one rule it may not break
+// is that a full page moves it.
+//
+// The lag holds the cursor behind the newest file seen so a file Drive indexes late is
+// still inside the next window; its own mark makes that re-read free. That is right at
+// the tip, where a page is short because there is nothing more to read. It is wrong
+// behind a *full* page: there the read stopped at the bridge's cap with more files
+// behind it, and a cursor held back into the page just read asks the next poll for the
+// same files again. Nothing then ever advances — which is not a slow watch, it is a
+// stopped one, and it looks like a busy Atlas because the publishes are real work the
+// engine correctly discards.
+func driveNextCursor(rec inboundSubscription, newest time.Time, full bool) string {
+	at := newest
+	if !full {
+		at = at.Add(-driveLag(rec))
+	}
+	// Drive compares with '>' at second granularity, so a full page whose newest file
+	// is exactly the stored cursor would be re-read for ever. One second past it is the
+	// smallest step that moves; it can only skip files sharing that second beyond the
+	// cap, where standing still skips every file after them.
+	cursor := at.UTC().Format(time.RFC3339)
+	if full && cursor == strings.TrimSpace(rec.LastEventID) {
+		return at.Add(time.Second).UTC().Format(time.RFC3339)
+	}
+	return cursor
+}
+
+// driveCursorField is the file timestamp a watch follows: `created` for new files (the
+// default), `modified` for a watch on changes. It is both what the query filters and
+// orders on AND what the event's sequence is taken from, and those must be the same
+// field — a watch for new files that sequenced on modifiedTime would let an edit
+// inside the lag window pass the mark and start a second instance for a file already
+// handled.
+func driveCursorField(rec inboundSubscription) string {
+	if strings.TrimSpace(rec.CursorField) == "modified" {
+		return "modifiedTime"
+	}
+	return "createdTime"
+}
+
+// driveCursorTime parses the resume cursor; an unset or unparseable one is no lower
+// bound, which re-reads the folder rather than skipping it.
+func driveCursorTime(rec inboundSubscription) time.Time {
+	at, err := time.Parse(time.RFC3339, strings.TrimSpace(rec.LastEventID))
+	if err != nil {
+		return time.Time{}
+	}
+	return at
+}
+
+// driveLag is how far behind the newest file the cursor is held, in seconds; 0 uses
+// the default. It is a knob rather than a constant because how late an index runs is a
+// property of the drive, not of Atlas.
+func driveLag(rec inboundSubscription) time.Duration {
+	if rec.LagSeconds > 0 {
+		return time.Duration(rec.LagSeconds) * time.Second
+	}
+	return driveDefaultLag
+}
+
+// driveFileTime reads one of a file's timestamps. Drive renders them as RFC 3339 with
+// milliseconds; a value that does not parse yields the zero time, which the caller
+// treats as "no usable timestamp" rather than as the epoch.
+func driveFileTime(file map[string]any, name string) time.Time {
+	raw, _ := file[name].(string)
+	if raw == "" {
+		return time.Time{}
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t
+	}
+	return time.Time{}
+}
+
+// driveFileFields is the binding environment one file exposes: a bounded envelope plus
+// the whole file as one value, the shape the Jira watch settled on. What is named here
+// is what a correlation key or a gateway actually uses — above all the link, because
+// that is what a process puts into the mail or the task it creates next.
+func driveFileFields(rec inboundSubscription, file map[string]any, field string) map[string]any {
+	kind := "created"
+	if field == "modifiedTime" {
+		kind = "modified"
+	}
+	return map[string]any{
+		"eventType":    "googledrive.file." + kind,
+		"fileId":       file["id"],
+		"fileName":     file["name"],
+		"mimeType":     file["mimeType"],
+		"createdTime":  file["createdTime"],
+		"modifiedTime": file["modifiedTime"],
+		"webViewLink":  file["webViewLink"],
+		"folderId":     rec.FolderID,
+		"file":         file,
+	}
+}
+
 // validateInboundWatch checks a watch against the kind of worker it names, returning
 // the message to refuse it with or "" when it is usable. The kind is the discriminator
 // (ADR-0214), so this is where a clio watch's subject and a jira watch's query are each
@@ -423,11 +732,62 @@ func validateInboundWatch(kind string, rec *inboundSubscription) string {
 		}
 		return ""
 
+	case connectorKindGoogleSheets:
+		return validateGoogleWatch(rec)
+
 	case "":
 		return "no worker with that id"
 	default:
-		return "Worker Type " + kind + " has no inbound half: only clio and jira workers can carry a watch"
+		return "Worker Type " + kind + " has no inbound half: only clio, jira and googlesheets workers can carry a watch"
 	}
+}
+
+// validateGoogleWatch checks a watch on a Google Worker. The subscription names
+// exactly one target, and which one it is decides everything else about the watch
+// (ADR-draft-google-inbound-watch) — so naming both, or neither, is refused here
+// rather than resolved by a precedence rule nobody would remember.
+//
+// It normalizes in place, the way the connector validators do: an unset range and an
+// unset cursor field become their defaults rather than values every reader has to
+// defend against.
+func validateGoogleWatch(rec *inboundSubscription) string {
+	if rec.WatchedSubject != "" || rec.Recursive || rec.JQL != "" {
+		return "watchedSubject, recursive and jql belong to a clio or jira watch; " +
+			"a google watch names a spreadsheet or a Drive folder"
+	}
+	sheet, folder := rec.SpreadsheetID != "", rec.FolderID != ""
+	switch {
+	case sheet && folder:
+		return "a google watch names either a spreadsheetId (its new rows start processes) " +
+			"or a folderId (the files put in it do), not both"
+	case !sheet && !folder:
+		return "a google watch needs a spreadsheetId (its new rows start processes) " +
+			"or a folderId (the files put in it do)"
+	case sheet:
+		// A row watch follows the sheet's own numbering, so it has no cursor field to
+		// choose; the range is normalized rather than left for every reader to default.
+		if rec.CursorField != "" {
+			return `cursorField belongs to a folder watch; a row watch follows the sheet's own row numbers`
+		}
+		if rec.WatchRange == "" {
+			rec.WatchRange = sheetsDefaultRange
+		}
+	default:
+		if rec.WatchRange != "" || rec.HeaderRow {
+			return "watchRange and headerRow belong to a row watch; a folder watch names a folder"
+		}
+		switch rec.CursorField {
+		case "", "created":
+			rec.CursorField = "created"
+		case "modified":
+		default:
+			return `cursorField must be "created" (new files, the default) or "modified" (changed files)`
+		}
+	}
+	if rec.LagSeconds < 0 || rec.PollSeconds < 0 {
+		return "lagSeconds and pollSeconds cannot be negative"
+	}
+	return ""
 }
 
 // jqlLooksBounded reports whether a query says anything about *which* issues it wants,

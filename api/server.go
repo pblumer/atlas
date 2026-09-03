@@ -56,6 +56,7 @@ import (
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/envname"
+	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
@@ -403,6 +404,13 @@ type Server struct {
 	// credential bundle resolved from the vault (ADR-0041). Read only while driving
 	// jobs on the run loop, so it needs no lock.
 	jiraRegistry *jira.Registry
+
+	// googleSheetsRegistry resolves a Worker name to a Google client (Sheets v4 and
+	// Drive v3) for Google Sheets tasks (ADR-draft-google-sheets-worker), built from
+	// the Worker store at startup and rebuilt on every change to it, with each
+	// Worker's OAuth credential bundle resolved from the vault (ADR-0041). Read only
+	// while driving jobs on the run loop, so it needs no lock.
+	googleSheetsRegistry *googlesheets.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
