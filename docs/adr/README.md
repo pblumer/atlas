@@ -290,6 +290,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0234](0234-google-inbound-watch.md) | Google Sheets and Drive as inbound event sources — a polled row watch and a polled folder watch | Proposed |
 | [0235](0235-google-sheets-worker.md) | Google Sheets as a Worker Type — a spreadsheet is a process data source | Proposed |
 | [0236](0236-repeating-non-interrupting-boundary-events.md) | A non-interrupting message or signal boundary event stays armed | Accepted |
+| [0237](0237-class-canvas-on-diagram-js.md) | The class canvas on diagram-js | Proposed |
 
 ## Status values
 

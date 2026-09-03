@@ -126,7 +126,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // The canvas. Everything a modeler expects of one — zoom, pan, marquee, multi-select
   // move, undo of a move, keyboard nudging — comes from diagram-js; what Atlas owns is
   // how a class is drawn and what the served subset permits between two of them
-  // (ADR-draft-class-canvas-on-diagram-js).
+  // (ADR-0237).
   const canvas = new AtlasUml.ClassCanvas(canvasEl, {
     subset,
     onSelection: (bo) => onCanvasSelection(bo),

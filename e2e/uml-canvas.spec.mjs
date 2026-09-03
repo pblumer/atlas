@@ -1,5 +1,5 @@
 // End-to-end coverage for the UML class canvas bundle
-// (api/web/vendor/uml/, ADR-draft-class-canvas-on-diagram-js).
+// (api/web/vendor/uml/, ADR-0237).
 //
 // The class canvas was hand-rolled SVG, redrawn whole on every edit. That is why it
 // had no zoom, no pan, no marquee, no multi-select and no undo: each of those is

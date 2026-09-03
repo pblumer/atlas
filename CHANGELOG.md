@@ -49,6 +49,51 @@ _Changed_ / _Removed_ for each version.
   selection would be worse than having no groups at all. So the class panel opens
   everything, and collapsing is there for when a long attribute list is in the way.
 
+- **SCIM tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 6).
+  Creating, reading or searching a user at an identity provider no longer happens on
+  the loop that owns the partition's state. `scim` joins the kinds Atlas offloads and
+  supervises by itself.
+
+  It is REST's slice a third time, and the collector says so: `scimWorkerEnv` is the
+  third caller of one function rather than a third copy of it, and a test now deploys
+  a REST, a SOAP and a SCIM task together and holds that each worker gets its own
+  kind's secret and none of the others' — the failure a shared implementation makes
+  easy, and one that every per-kind test would pass.
+
+  One choice is deliberate: the payload carries the **authored** operation, base URL,
+  resource, id and filter, not the HTTP method and URL derived from them. A parked
+  job's payload is something an operator reads, and "operation: create, resource:
+  Users" answers what they came to ask where "POST .../Users" makes them work
+  backwards — and the derivation's own refusals (a `get` with no id would otherwise
+  become a list of every user) belong in `Run`, where both halves reach them.
+
+  One kind remains in-engine for want of a worker: `temis`.
+
+- **SharePoint tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 5).
+  Creating a list item — a token fetch and an HTTP round trip to Microsoft Graph — no
+  longer happens on the loop that owns the partition's state. `sharepoint` joins the
+  kinds Atlas offloads and supervises by itself.
+
+  It is Jira's handover with a document library in place of an issue tracker
+  ([ADR-0141](docs/adr/0141-sharepoint-connector.md)): the task names its instance and
+  nothing more, because the Graph endpoint and the OAuth bundle are a worker record and
+  a vault secret — a URL is half a credential — so `sharepointWorkerEnv` renders the
+  instances the engine has configured.
+
+  One difference is deliberate: the credential is handed over as the **whole bundle**,
+  one opaque value, rather than field by field. The bundle has no public half worth
+  splitting — tenant and client ids sit in the same vault secret as the client secret
+  and the refresh token — and splitting it would mean deciding the grant's shape a
+  second time, where getting it wrong yields a worker that fails every job instead of
+  one that will not start. That is the SQL kinds' arrangement for the SQL kinds' reason.
+
+  An instance whose bundle does not resolve is left out rather than handed over empty,
+  so one unfinished record cannot stop a worker that also serves other kinds.
+
+  Two kinds remain in-engine for want of a worker: `scim`, `temis`.
+
 - **SOAP tasks run on a worker now**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 4).
   A call to somebody else's web service no longer happens on the loop that owns the

@@ -514,10 +514,21 @@ var offloadableKinds = map[string][]int32{
 // different job type, which is the sense in which this slice was already decided when
 // REST's was.
 //
+// SharePoint is the eleventh, and it is Jira's way exactly (ADR-0233, slice 5): a
+// managed kind whose Graph endpoint and OAuth bundle live in the worker store and the
+// vault, excluded only for as long as there was nothing to hand them to. It has a
+// worker now (worker.RunSharePointJob) and sharepointWorkerEnv builds the handover,
+// which leaves no reason for an item create against Microsoft's Graph — a token fetch
+// and an HTTP round trip — to keep happening on the loop.
+//
+// SCIM is the twelfth, and REST's way a third time (ADR-0233, slice 6): the same
+// call with a provisioning vocabulary, the same one thing that cannot travel.
+// scimWorkerEnv is the third caller of one collector rather than a third copy of it.
+//
 // The credential-bearing kinds the engine cannot yet hand over stay in the engine
 // until an operator moves their secrets themselves, with --offload-connectors.
 func DefaultOffloadedKinds() []string {
-	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "script", "soap", "webscrape"}
+	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "scim", "script", connectorKindSharePoint, "soap", "webscrape"}
 }
 
 // DefaultSupervisedWorkerOnlyKinds are the worker-only Worker Types Atlas supervises

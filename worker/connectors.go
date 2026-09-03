@@ -20,6 +20,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
@@ -130,6 +131,17 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.SoapJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return runSoap(ctx, j, client, secret)
 			})
+		case "scim":
+			// REST's and SOAP's branch: the authored auth arrives with the job and the
+			// secret behind its reference is read here, under the same
+			// ATLAS_CONNECTOR_<REF>_TOKEN name the engine uses.
+			client := scim.NewHTTPClient()
+			secret := scim.SecretResolver(func(ref string) string {
+				return env(envname.ConnectorToken(ref))
+			})
+			built.Handlers[compiler.ScimJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return runScim(ctx, j, client, secret)
+			})
 		case "mail":
 			reg, names, err := mailRegistryFromEnv(env)
 			if err != nil {
@@ -237,6 +249,24 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 					return RunClioJob(ctx, j, reg)
 				})
 			}
+		case "sharepoint":
+			reg, names, err := sharepointRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve SharePoint, holding no site to create items in. Not an
+				// error, for the reason mail's and Jira's identical branches are not:
+				// this worker very likely serves other kinds, and a site nobody has
+				// configured yet must park its tasks rather than take down the kinds
+				// that are configured.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.SharePointJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunSharePointJob(ctx, j, reg)
+			})
 		case "remedy":
 			reg, names, err := remedyRegistryFromEnv(env)
 			if err != nil {
@@ -359,7 +389,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "clio", "csv", "entra", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "soap", "webscrape"}
+	return []string{"ad", "clio", "csv", "entra", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "scim", "script", "sharepoint", "soap", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.
@@ -670,6 +700,39 @@ func runSoap(ctx context.Context, j Job, client soap.Client, secret soap.SecretR
 		return nil, fmt.Errorf("soap: cannot read the resolved detail: %w", err)
 	}
 	res, err := soap.Run(ctx, task, client, secret)
+	if err != nil {
+		return nil, err
+	}
+	// Through Result.Variables rather than the raw body, so an offloaded call writes
+	// what an in-engine one writes — and a task naming no result variable completes
+	// with nothing rather than with an empty object.
+	vars := res.Variables()
+	if len(vars) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]any, len(vars))
+	for _, v := range vars {
+		out[v.Name] = variableValue(v)
+	}
+	return out, nil
+}
+
+// runScim performs a resolved SCIM job. REST's shape once more: the whole call
+// travels resolved and the credential behind the task's authSecret is read here,
+// from this worker's own environment.
+func runScim(ctx context.Context, j Job, client scim.Client, secret scim.SecretResolver) (map[string]any, error) {
+	if j.Connector == nil {
+		return nil, fmt.Errorf("scim: the job carried no resolved worker detail; is this server offloading the scim kind?")
+	}
+	raw, err := json.Marshal(j.Connector.Fields)
+	if err != nil {
+		return nil, err
+	}
+	var task scim.Job
+	if err := json.Unmarshal(raw, &task); err != nil {
+		return nil, fmt.Errorf("scim: cannot read the resolved detail: %w", err)
+	}
+	res, err := scim.Run(ctx, task, client, secret)
 	if err != nil {
 		return nil, err
 	}

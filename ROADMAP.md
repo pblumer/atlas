@@ -1149,7 +1149,15 @@ for the derived whole-instance mesh above them.
   for keeps its derived shape rather than being dressed as one, and the loss is
   listed beside the picture *and* inside the export. What travels with every
   projected file is the sentence that makes it honest — Atlas's own resources in
-  somebody else's vocabulary, and nothing here was modelled.
+  somebody else's vocabulary, and nothing here was modelled. The ArchiMate half is
+  also a **document**: `GET /api/v1/panorama/mesh/archimate` generates an Open
+  Exchange model from the same derived landscape, filtered for the same principal —
+  structure only, so it stays a model export in §10's sense rather than a live one;
+  carrying ADR-0189 §4's own binding keys, so importing it back into Panorama arrives
+  with the bindings already resolving; deterministic, so it can be committed and
+  diffed; and opening with the sentence that it was generated and not drawn. The
+  mapping behind all of it is served from the server rather than duplicated in the
+  browser, because three surfaces now read it and copies drift.
 - ✅ **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
   workers and job types, releases, local runtimes, and deployment targets. Preserve
