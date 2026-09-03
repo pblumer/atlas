@@ -521,10 +521,14 @@ var offloadableKinds = map[string][]int32{
 // which leaves no reason for an item create against Microsoft's Graph — a token fetch
 // and an HTTP round trip — to keep happening on the loop.
 //
+// SCIM is the twelfth, and REST's way a third time (ADR-0233, slice 6): the same
+// call with a provisioning vocabulary, the same one thing that cannot travel.
+// scimWorkerEnv is the third caller of one collector rather than a third copy of it.
+//
 // The credential-bearing kinds the engine cannot yet hand over stay in the engine
 // until an operator moves their secrets themselves, with --offload-connectors.
 func DefaultOffloadedKinds() []string {
-	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "script", connectorKindSharePoint, "soap", "webscrape"}
+	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "scim", "script", connectorKindSharePoint, "soap", "webscrape"}
 }
 
 // DefaultSupervisedWorkerOnlyKinds are the worker-only Worker Types Atlas supervises

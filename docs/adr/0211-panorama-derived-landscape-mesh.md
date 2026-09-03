@@ -20,7 +20,10 @@
   only way" is not a question this graph can be asked; amended 2026-09-03 — §7's
   legibility half gains canvas ink, a fit that frames the picture rather than the
   world, and a reachable chrome corner, and §8's projection is extended to the
-  derived landscape under the same four constraints)
+  derived landscape under the same four constraints; amended 2026-09-03 — §8's
+  ArchiMate projection becomes an exportable document under stated conditions,
+  replacing the previous amendment's blanket refusal, and the mapping moves to the
+  server)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -704,6 +707,62 @@ open that door.
 > corner icon is written out, because an icon at this magnification is a smudge, and
 > every shape stays inscribed in the circle the layout reserved, so a change of
 > vocabulary can never make two nodes overlap that did not overlap before.
+
+> **Amendment (2026-09-03): the ArchiMate projection is also a document, and the
+> mapping is served rather than duplicated.**
+> The amendment above said no document can be exported from a projected landscape.
+> That was the safe answer and it was the wrong one, and this replaces it. What it
+> was protecting against is real — a generated file taken for one somebody drew —
+> but a picture that cannot leave the browser is a picture an architect cannot use,
+> and the objection is answerable rather than fatal.
+>
+> The landscape can be exported as an **ArchiMate Open Exchange document**, under
+> these conditions, which are what make the generated file honest rather than merely
+> permitted:
+>
+> - **It says what it is, three times over.** The model's documentation opens with
+>   `DERIVED, NOT AUTHORED: nothing in this model was drawn by a person`, names the
+>   instance and the moment it was generated, states the mapping version, and says
+>   that editing it changes nothing in Atlas. Every element carries `atlas.*`
+>   provenance. The model identifier is derived rather than random.
+> - **It carries no observation state.** No severity, no incidents, no reachability.
+>   This is what settles §10's question about it: structure only makes it a *model*
+>   export, the safe class, and not a live one. An architecture document that froze
+>   this morning's health would go on asserting it — the undated green picture in
+>   another wrapper. Health belongs on the image export, dated.
+> - **The loss is in the file.** The same list the legend shows, written into the
+>   model's documentation, plus what this particular export dropped: how many
+>   dependencies point at resources the exporting reader may not see, and how many
+>   relationships went with them. A model missing a third of the estate that did not
+>   say so would be worse than no model.
+> - **Nothing becomes authorable.** There is no round trip: the document is generated
+>   from resources, never read back as one, and re-generating it reproduces it. It is
+>   deterministic for that reason — the same landscape produces the same bytes, so it
+>   can be committed and diffed and a change in it means a change in the estate.
+> - **The bindings are ADR-0189 §4's own keys**, so a model exported here and
+>   imported back into Panorama arrives with its bindings already resolving. That is
+>   the one direction that *is* a round trip, and it is a useful one: it turns the
+>   generated file into a starting point somebody can then model on top of.
+> - **No diagram.** The landscape's arrangement is computed in the browser and
+>   belongs to whoever arranged it; a server-side grid would be worse than the
+>   importing tool's own layout.
+>
+> Two mapping decisions are worth naming because a reader would otherwise find them
+> surprising. An application is **assigned to** the processes it holds rather than
+> composing them — composition is for elements of one kind, and a component and a
+> behaviour are not. And a `uses` edge is **reversed** on export: ArchiMate's Serving
+> runs from provider to consumer while the landscape's edge points from the process
+> to the worker it needs, so the document says "the mail worker serves the invoice
+> process", which is the true statement in ArchiMate's terms.
+>
+> **The mapping moves to the server and is served to the browser.** It now has three
+> readers — the picture's labels, the stamp on its image export, and this document —
+> and a table each of them kept a copy of would end with the picture calling a node
+> an Application Process beside a file that called it something else. This is
+> ADR-0189's rule for the connection subset, applied for the same reason: a surface
+> that offers what another surface contradicts is a promise the server breaks. Each
+> row carries both what a person is shown and the notation's own machine token, since
+> the two readers need different halves of one fact.
 
 ### 9. Placement in the shell
 

@@ -284,6 +284,15 @@ var mcpOmittedRoutes = map[string]string{
 	// edge kinds across several slices, and an MCP tool is a public contract that
 	// would pin that shape before it settles. Revisit once the slice is complete.
 	"GET /api/v1/panorama/mesh": "landscape mesh payload is still gaining node kinds across P2.5; exposing it now would freeze a shape that is about to change",
+	// The notation mapping and the ArchiMate document generated from it are omitted
+	// for the two reasons already given above rather than a third: the document is
+	// derived from the mesh payload, whose shape is still moving, and both are at
+	// mapping version 1, which is the same "still settling" the C4 projection below
+	// is held back by. An agent asking for an architecture model of the instance is a
+	// good tool to have — it is the one an assistant would reach for first — and it
+	// is worth having once the mapping has stopped changing under it.
+	"GET /api/v1/panorama/notations":      "notation mapping is at version 1 and still settling; exposing it now would freeze a contract that is about to change",
+	"GET /api/v1/panorama/mesh/archimate": "generated from the mesh payload and the version-1 notation mapping, both of which are still moving; an MCP tool would pin them",
 	// Bindings ride with the Panorama authoring surface: an agent that could set
 	// one could rewrite an architecture model, which is the authoring contract
 	// deferred above rather than a read-only query.

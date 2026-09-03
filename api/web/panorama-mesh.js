@@ -113,7 +113,7 @@ export function shapeVertices(shape, r) {
     // half-diagonal is r, which is what keeps it inside the reserved circle.
     case "square": return at(4, -Math.PI / 4);
     default: {
-      // The wide rectangles the notation projections draw in (see NOTATIONS). Same
+      // The wide rectangles the notation projections draw in (see NOTATION_SHAPES). Same
       // rule as every other shape: the corners sit *on* the reserved circle, so the
       // separation guarantee transfers unchanged and a projection cannot make two
       // nodes overlap that did not overlap before.
@@ -162,98 +162,83 @@ function bodyElement(shape, r, attrs) {
   return `<polygon ${common} points="${points}"/>`;
 }
 
-// NOTATION_MAPPING_VERSION identifies the tables below. ADR-0211 §8 requires a
-// projection's mapping to be explicit *and versioned*, because a reader who saw a
-// picture last quarter has to be able to tell whether it would be drawn the same way
-// today. Bump it whenever a row changes meaning.
-export const NOTATION_MAPPING_VERSION = 1;
-
-// NOTATIONS is what the landscape may be drawn in.
+// The notations the landscape can be drawn in (ADR-0211 §8).
 //
-// ADR-0211 §8 allows a **read-only projection** with an explicit versioned mapping
-// and reported loss, and forbids a renderer toggle that pretends to be a second
-// authoring notation. Everything here is the first and none of it is the second:
-// there is no ArchiMate document behind an ArchiMate-drawn landscape and none can be
-// exported from one — this is Atlas's own resources spoken in somebody else's
-// vocabulary, and the legend says exactly that in those words.
+// The *mapping* — what each notation calls each kind, and what it cannot carry —
+// comes from the server, and that is the point. Three things read it: these labels,
+// the stamp on the image export, and the ArchiMate document the server generates
+// from the same landscape. A copy of the table here would eventually have the
+// picture calling a node an Application Process beside a file that called it
+// something else, which is the failure ADR-0189's connection subset is served to the
+// browser to avoid.
 //
-// §8 wrote the rule for a projection *of a model*. Applying it to the derived
-// landscape is the smaller case rather than a wider one: a projection of a model has
-// a source document whose fidelity can be argued about, and this has none, so the
-// only thing at risk of being misread is the vocabulary itself. Which is why every
-// entry below carries its loss, and why the loss is on the export as well as on the
-// screen.
-//
-// The names are the standards' own. Where a mesh kind has no counterpart the row is
-// simply absent: inventing one would be the silent drop §8 exists to prevent, so
-// those nodes keep their derived shape and the loss list says which they are.
-export const NOTATIONS = {
-  atlas: {
-    id: "atlas",
-    label: "Atlas (derived)",
-    short: "Atlas",
-    projection: false,
-    types: {},
-    loss: [],
-  },
+// What stays here is the half the server has no business having an opinion about:
+// which outline to draw. ArchiMate's own convention is a rectangle for structure and
+// a rounded one for behaviour; C4 draws everything as the same box and tells its
+// types apart by the annotation under the name. Both are rendering.
+const NOTATION_SHAPES = {
   "archimate-3.2": {
-    id: "archimate-3.2",
-    label: "ArchiMate 3.2",
-    short: "ArchiMate",
-    projection: true,
-    // Structure is a rectangle and behaviour is a rounded one, which is ArchiMate's
-    // own convention and the only part of its notation this can honour: the type
-    // icon in the corner is replaced by the type written out, because a landscape is
-    // read at a zoom where a 12-pixel icon is a smudge.
-    types: {
-      application: { name: "Application Component", shape: "box" },
-      process: { name: "Application Process", shape: "rounded" },
-      worker: { name: "Application Service", shape: "rounded" },
-      decision: { name: "Application Function", shape: "rounded" },
-      target: { name: "Node", shape: "box" },
-    },
-    loss: [
-      "Nothing here was modelled. This is Atlas's own resources in ArchiMate's vocabulary, not an ArchiMate model: no Open Exchange document exists behind it and none can be exported from it.",
-      "Relationships are untyped. ArchiMate tells serving from triggering from realization; the landscape derives calls and uses, and both are drawn as a plain line.",
-      "A worker becomes an Application Service with nothing behind it. Atlas holds the worker's name and type and never what is on the other side, so there is no Technology Service to realize it.",
-      "Restricted and unresolved placeholders have no ArchiMate element — they are findings about this picture rather than architecture — and keep their own shape.",
-      "The type is written out rather than drawn as ArchiMate's corner icon.",
-    ],
+    application: "box", process: "rounded", worker: "rounded",
+    decision: "rounded", target: "box",
   },
   "c4-projection": {
-    id: "c4-projection",
-    label: "C4 (projection)",
-    short: "C4",
-    projection: true,
-    // C4 draws almost everything as the same box and tells its types apart by the
-    // annotation under the name. Kept faithfully: the silhouette stops carrying the
-    // kind here, and the colour and the type line carry it instead.
-    types: {
-      application: { name: "Container", shape: "rounded" },
-      process: { name: "Component", shape: "rounded" },
-      worker: { name: "Component", shape: "rounded" },
-      decision: { name: "Component", shape: "rounded" },
-      target: { name: "Deployment Node", shape: "box" },
-    },
-    loss: [
-      "C4 separates its levels onto different diagrams. This canvas shows containers and components together, which no C4 level does.",
-      "External systems are absent. C4 puts the thing a component talks to on the diagram; Atlas holds no model of what is behind a worker, only its name and type.",
-      "Relationships carry no technology or protocol label, which is most of what a C4 arrow is for.",
-      "Restricted and unresolved placeholders have no C4 element and keep their own shape.",
-      "There is no Person and no Software System: the landscape is derived from what this server runs, and neither is a thing Atlas holds.",
-    ],
+    application: "rounded", process: "rounded", worker: "rounded",
+    decision: "rounded", target: "box",
   },
 };
 
-// notationOf resolves an id to a notation, falling back to the derived one. An
-// unknown id is a stale saved view or a hand-edited URL, and drawing the landscape
-// as itself is the answer that cannot mislead.
+// The landscape drawn as itself: Atlas's own kinds, no projection, nothing to
+// declare. It is here rather than fetched because it is what the view falls back to
+// when the mapping cannot be read at all — a picture in its own vocabulary is never
+// wrong about which vocabulary it is in.
+const DERIVED_NOTATION = {
+  id: "atlas", label: "Atlas (derived)", short: "Atlas",
+  projection: false, mappingVersion: 0, types: {}, loss: [],
+};
+
+let notations = { atlas: DERIVED_NOTATION };
+
+// useNotations takes what the server serves and adds this side's shapes to it. An
+// entry with no shapes is still usable — every kind falls back to its derived
+// outline — so a notation the server learns about before this file does degrades to
+// a vocabulary change rather than to a blank canvas.
+export function useNotations(served) {
+  const next = { atlas: DERIVED_NOTATION };
+  for (const notation of Array.isArray(served) ? served : []) {
+    if (!notation?.id || notation.id === "atlas") continue;
+    const shapes = NOTATION_SHAPES[notation.id] || {};
+    next[notation.id] = {
+      id: notation.id,
+      label: notation.label || notation.id,
+      short: notation.short || notation.label || notation.id,
+      projection: Boolean(notation.projection),
+      mappingVersion: notation.mappingVersion ?? 0,
+      loss: Array.isArray(notation.loss) ? notation.loss : [],
+      // The served row carries what a person is shown *and* the notation's own
+      // machine token; the picture wants the first and the exported document the
+      // second, and they come from one row so the two cannot drift apart.
+      types: Object.fromEntries(Object.entries(notation.types || {}).map(([kind, type]) =>
+        [kind, { name: type?.name || kind, type: type?.type || "", shape: shapes[kind] || null }])),
+    };
+  }
+  notations = next;
+  return notations;
+}
+
+// notationsAvailable is what the picker offers, in the order the server listed them.
+export function notationsAvailable() {
+  return Object.values(notations);
+}
+
+// notationOf resolves an id, falling back to the derived vocabulary. An unknown id
+// is a stale saved view or a hand-edited URL, and drawing the landscape as itself is
+// the answer that cannot mislead.
 export function notationOf(id) {
-  return NOTATIONS[id] || NOTATIONS.atlas;
+  return notations[id] || notations.atlas;
 }
 
 // typeIn is what a notation calls this kind of node, or null where it has no word
-// for it. Null is a real answer here and never an empty string: the caller draws the
+// for it. Null is a real answer and never an empty string: the caller draws the
 // derived shape and the legend lists the kind as loss.
 export function typeIn(kind, notation) {
   return notationOf(notation?.id ?? notation).types[kind] || null;
@@ -1348,7 +1333,7 @@ function legendHTML(graph, layoutMs, notation) {
   // between a projection and a lie of omission.
   const projection = spoken.projection ? `<details class="mesh-projection">
     <summary><b>Projected into ${esc(spoken.label)}</b>
-      <span class="muted">mapping v${NOTATION_MAPPING_VERSION} · read-only · what it drops</span></summary>
+      <span class="muted">mapping v${esc(spoken.mappingVersion)} · read-only · what it drops</span></summary>
     <p class="mesh-note">Atlas's own resources, drawn in ${esc(spoken.short)}'s vocabulary.
       Nothing on this landscape was modelled, and this projection cannot be edited or
       exported as a ${esc(spoken.short)} document.</p>
@@ -1692,7 +1677,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   let graph;
   const fetched = performance.now();
   try {
-    graph = await api("GET", "/api/v1/panorama/mesh");
+    // The mapping is additive: a landscape is worth drawing even when the notations
+    // cannot be read, and without them the picker offers only the derived vocabulary
+    // — which is the one that cannot be wrong about what it is.
+    const [mesh, served] = await Promise.all([
+      api("GET", "/api/v1/panorama/mesh"),
+      api("GET", "/api/v1/panorama/notations").catch(() => []),
+    ]);
+    graph = mesh;
+    useNotations(served);
   } catch (e) {
     view.innerHTML = `<div class="card empty"><h1>Landscape</h1>
       <p>${esc(e.message)}</p></div>`;
@@ -1718,11 +1711,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
            the side column, because it changes the drawing rather than the answer
            about it (ADR-0211 §8). -->
       <label class="mesh-notation" for="mesh-notation">Notation</label>
-      <select id="mesh-notation" class="mesh-notation-pick">
-        <option value="atlas">Atlas (derived)</option>
-        <option value="archimate-3.2">ArchiMate 3.2</option>
-        <option value="c4-projection">C4 (projection)</option>
-      </select>
+      <select id="mesh-notation" class="mesh-notation-pick">${notationsAvailable()
+        .map((n) => `<option value="${esc(n.id)}">${esc(n.label)}</option>`).join("")}</select>
       <!-- Beside the picture's own controls rather than in the side column: what is
            exported is the picture, including whatever the search box and the
            drilldown have done to it. -->
@@ -1731,6 +1721,12 @@ export async function mountPanoramaMesh(view, { api, toast }) {
           title="Save this landscape as an SVG, stamped with when and where it was observed">Export SVG</button>
         <button id="mesh-export-png" type="button"
           title="Save this landscape as a PNG, stamped with when and where it was observed">PNG</button>
+        <!-- Generated by the server from the same landscape, so it is the whole of it
+             rather than whatever the search box has narrowed this picture to — and it
+             carries structure only, never health. A plain navigation, so the session
+             cookie authenticates it, exactly as the application source download does. -->
+        <button id="mesh-export-archimate" type="button"
+          title="Download the whole landscape as an ArchiMate Open Exchange model — structure only, generated, not drawn">ArchiMate XML</button>
       </span>
     </div>
     <div id="mesh-legend-slot"></div>
@@ -1806,6 +1802,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const viewNote = document.getElementById("mesh-view-note");
   const notationPick = document.getElementById("mesh-notation");
   const exportSvgBtn = document.getElementById("mesh-export-svg");
+  const exportModelBtn = document.getElementById("mesh-export-archimate");
   const exportPngBtn = document.getElementById("mesh-export-png");
 
   let selected = null;
@@ -2418,7 +2415,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // was projected from something else.
       notation: spoken.projection
         ? { label: spoken.label, short: spoken.short, projection: true,
-            loss: spoken.loss, mappingVersion: NOTATION_MAPPING_VERSION }
+            loss: spoken.loss, mappingVersion: spoken.mappingVersion }
         : null,
       scope,
       drawn: { nodes: shown.nodes.length },
@@ -2479,6 +2476,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // every notation's shape is inscribed in the same reserved circle, so nothing moves
   // except the outlines.
   notationPick.addEventListener("change", paint);
+
+  exportModelBtn.addEventListener("click", () => {
+    window.location.href = "/api/v1/panorama/mesh/archimate";
+  });
 
   exportSvgBtn.addEventListener("click", () => exportPicture("svg"));
   exportPngBtn.addEventListener("click", () => exportPicture("png"));
@@ -2546,7 +2547,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     depthSelect.value = v.depth ?? "2";
     // A view saved before notations existed carries none, and the derived drawing is
     // what it was looking at.
-    notationPick.value = NOTATIONS[v.notation] ? v.notation : "atlas";
+    notationPick.value = notationOf(v.notation).id === v.notation ? v.notation : "atlas";
     selected = null;
     pinned.clear();
     frameView = null;

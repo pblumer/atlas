@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "scim-tasks-run-on-a-worker-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "User provisioning moved out of the engine",
+        "de": "User-Provisionierung ist aus der Engine ausgezogen"
+      },
+      "summary": {
+        "en": "Creating a user at an identity provider, looking one up, searching for one — until now Atlas did all of it from the process that runs the engine, so a slow provider held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the credential your task references is handed to that worker, exactly as it already is for REST and SOAP.",
+        "de": "Einen Benutzer beim Identity Provider anlegen, einen nachschlagen, nach einem suchen — bisher machte Atlas all das im Prozess, der die Engine ausführt, sodass ein langsamer Provider Arbeit aufhielt, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Das Credential, das Ihr Task referenziert, wird an diesen Worker übergeben — genau wie bei REST und SOAP schon."
+      },
+      "link": {
+        "label": "ADR-0233",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "sharepoint-tasks-run-on-a-worker-now",
       "version": "Unreleased",
       "date": null,
@@ -314,51 +343,6 @@
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "web-scraping-one-row-is-one-record-and-the-fetch-survives-th",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A scraped table row now arrives as one record",
-        "de": "Eine ausgelesene Tabellenzeile kommt jetzt als ein Datensatz an"
-      },
-      "summary": {
-        "en": "Reading a web page used to give you a flat list: either the text of every match, or one attribute of every match — never both, and never grouped. A list of articles or a table of rates therefore needed two tasks returning two lists, and the first row missing a link shifted every later pairing by one. A scrape task now takes item fields: the selector picks the row, each field picks a cell, and every match arrives as one object. A field that finds nothing is present and empty, so the rows keep their shape. Feeds gained the same care: an entry now carries its own id to deduplicate on, plus author, categories and image, and pages in older character sets, RSS 1.0 feeds and sites that refuse anonymous requests no longer fail the way they quietly did.",
-        "de": "Eine Webseite auszulesen ergab bisher eine flache Liste: entweder den Text jedes Treffers oder ein Attribut jedes Treffers — nie beides, nie gruppiert. Eine Artikelliste oder eine Zinstabelle brauchte deshalb zwei Tasks mit zwei Listen, und die erste Zeile ohne Link verschob jede weitere Zuordnung um eins. Ein Scraping-Task nimmt jetzt Feldzeilen: Der Selektor wählt die Zeile, jedes Feld wählt eine Zelle, und jeder Treffer kommt als ein Objekt an. Ein Feld, das nichts findet, ist vorhanden und leer — die Zeilen behalten ihre Gestalt. Feeds haben dieselbe Sorgfalt bekommen: Ein Eintrag trägt jetzt seine eigene Kennung zum Deduplizieren, dazu Autor, Kategorien und Bild. Und Seiten in älteren Zeichensätzen, RSS-1.0-Feeds und Sites, die anonyme Anfragen abweisen, scheitern nicht mehr so still wie bisher."
-      },
-      "link": {
-        "label": "ADR-0231",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0231-webscrape-structured-extraction.md"
-      },
-      "tags": [
-        "Modeler",
-        "Connectors"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the Modeler and put a service task on the canvas.",
-          "Pick \"Web Scraping\" as the kind and enter the page URL.",
-          "Under Extraction, let the CSS selector pick one ITEM per match — a table row, a card, a list entry.",
-          "Add one item field per value: a name (the key you will read later), the selector inside the item, and optionally the attribute (for example href for a link).",
-          "Name a result variable — it now holds one object per match, so a later step reads eintrag.titel beside eintrag.link."
-        ],
-        "de": [
-          "Modeler öffnen und einen Service-Task auf die Fläche ziehen.",
-          "Als Art „Web Scraping“ wählen und die URL der Seite eintragen.",
-          "Unter „Extraction“ den CSS-Selektor so wählen, dass er je Treffer ein ITEM trifft — eine Tabellenzeile, eine Kachel, einen Listeneintrag.",
-          "Je Wert eine Feldzeile anlegen: Name (der Schlüssel, den Sie später lesen), Selektor innerhalb des Items und optional das Attribut (etwa href für einen Link).",
-          "Ergebnisvariable benennen — sie hält jetzt ein Objekt je Treffer, ein späterer Schritt liest also eintrag.titel neben eintrag.link."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

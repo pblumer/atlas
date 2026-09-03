@@ -26,6 +26,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/soap"
@@ -5148,6 +5149,21 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "sharepoint", Fields: map[string]any{
 			"connector": j.Connector, "site": j.Site, "list": j.List,
 			"fields": j.Fields, "requestId": j.RequestID, "resultVariable": j.Result,
+		}}
+	case compiler.ScimJobTypeIndex:
+		// The authored operation and its operands travel, not the method and URL
+		// derived from them: a parked job's payload is read by an operator, and the
+		// derivation's own failure cases (a get with no id) belong where both halves
+		// reach them (ADR-0168).
+		j, err := scim.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "scim", Fields: map[string]any{
+			"operation": j.Operation, "baseUrl": j.BaseURL, "resource": j.Resource,
+			"resourceId": j.ResourceID, "filter": j.Filter, "body": j.Body,
+			"auth": j.Auth, "idempotencyKey": j.IdempotencyKey,
+			"resultVariable": j.Result,
 		}}
 	case compiler.EntraJobTypeIndex:
 		// The operation and the ids travel; the tenant's app credential does not

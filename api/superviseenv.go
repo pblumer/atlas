@@ -168,6 +168,8 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// credential behind authSecret is a vault reference and cannot. Provisioned
 		// for REST's reason, and defaulted with it.
 		"soap": s.soapWorkerEnv,
+		// SCIM is REST's shape with a provisioning vocabulary. Same reason again.
+		"scim": s.scimWorkerEnv,
 		// SharePoint is a managed kind like Jira: the site's address and its OAuth
 		// bundle are a record and a vault secret, so a supervised worker holding
 		// neither could serve no SharePoint task at all.
@@ -1134,6 +1136,21 @@ func (s *Server) restWorkerEnv() []string {
 	return env
 }
 
+// scimWorkerEnv renders the auth secrets a supervised SCIM worker needs: one variable
+// per secret reference the deployed models name (ADR-0233, slice 6).
+//
+// The third caller of the same collector, for the third kind that poses REST's
+// problem: the provider's base URL and the resource are model data and travel with
+// the job, while the credential behind its authSecret is a vault reference, and a
+// reference is resolved where it is used.
+func (s *Server) scimWorkerEnv() []string {
+	var env []string
+	s.do(func() {
+		env = s.deployedSecretRefEnvLocked("SCIM auth-secret", scimAuthSecretRefs)
+	})
+	return env
+}
+
 // soapWorkerEnv renders the auth secrets a supervised SOAP worker needs: one variable
 // per secret reference the deployed models name (ADR-0233, slice 4).
 //
@@ -1153,6 +1170,11 @@ func (s *Server) soapWorkerEnv() []string {
 // tasks name.
 func restAuthSecretRefs(cp *compiler.CompiledProcess) []string {
 	return authSecretRefs(cp, compiler.RestJobTypeIndex)
+}
+
+// scimAuthSecretRefs returns the same for its SCIM tasks.
+func scimAuthSecretRefs(cp *compiler.CompiledProcess) []string {
+	return authSecretRefs(cp, compiler.ScimJobTypeIndex)
 }
 
 // soapAuthSecretRefs returns the same for its SOAP tasks. REST and SOAP author their
