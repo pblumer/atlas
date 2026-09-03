@@ -19,6 +19,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
@@ -384,34 +385,56 @@ func TestAnUnresolvableFeelFieldTravelsAsNullRatherThanBlockingTheLease(t *testi
 // into a stated one: if a kind is later offloaded without adding its arm, the worker
 // gets a job with nothing on it, and this test is where that shows up.
 func TestAKindWithNoArmResolvesToNoPayload(t *testing.T) {
-	// SCIM, one of the kinds ADR-0233's table still owes a worker half. It stood as
-	// ldap, then soap, then sharepoint, and moves again each time one of them gets its
-	// slice — which is the table shrinking working as intended: this test names
-	// whichever kind is still in-engine, and the day the last one moves it has nothing
-	// left to assert.
-	got := leaseConnectorPayloadOrNil(t, "scim-proc",
-		`<atlas:scimConnector baseUrl="https://idp.example.com/scim/v2" resource="Users" operation="search" resultVariable="found"/>`,
-		compiler.ScimJobType, `{"variables":{}}`)
+	// temis, the last kind ADR-0233's table still owes a worker half. This test has
+	// stood on ldap, then soap, then sharepoint, then scim, and moved each time one of
+	// them got its slice — the table shrinking, working as intended. When temis moves
+	// too, there is no kind left for it to name and it goes with that slice.
+	//
+	// It needs its own model rather than the shared one: a central decision is a
+	// *business rule* task, not a service task, which is also why its slice will be
+	// the one that does not simply copy the others.
+	got := leaseModelPayloadOrNil(t, centralDecisionPayloadBPMN,
+		compiler.TemisDecisionJobType, `{"variables":{}}`)
 	if got != nil {
 		t.Errorf("payload = %#v, want none: this kind has no arm in resolveConnectorTask", *got)
 	}
 }
 
-// leaseConnectorPayloadOrNil is leaseConnectorPayload without the insistence that a
-// payload came back — the shape a kind with no arm needs.
-func leaseConnectorPayloadOrNil(t *testing.T, procID, element, jobType, variables string) *connectorPayload {
+// centralDecisionPayloadBPMN is Start → BusinessRuleTask(central) → End: the one
+// shape that reaches a kind still evaluated in the engine.
+const centralDecisionPayloadBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs-temis-proc">
+  <bpmn:process id="temis-proc" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:businessRuleTask id="decide">
+      <bpmn:extensionElements>
+        <zeebe:calledDecision decisionId="Rate" resultVariable="found"/>
+        <atlas:temisConnector connector="rules"/>
+      </bpmn:extensionElements>
+    </bpmn:businessRuleTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="decide"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="decide" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+// leaseModelPayloadOrNil is leaseConnectorPayload without the insistence that a
+// payload came back, and taking a whole model rather than one element — the shape a
+// kind with no arm needs, since the last of them is not a service task at all.
+func leaseModelPayloadOrNil(t *testing.T, modelXML, jobType, variables string) *connectorPayload {
 	t.Helper()
 	srv, _ := newValidateServer(t, WithOffloadedConnectorKinds(offloadableKindNames()))
 
-	code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments",
-		connectorTaskModel(procID, element), "application/xml")
+	code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", modelXML, "application/xml")
 	if code != http.StatusOK && code != http.StatusCreated {
-		t.Fatalf("deploy %s: status=%d body=%s", procID, code, raw)
+		t.Fatalf("deploy: status=%d body=%s", code, raw)
 	}
 	code, raw = serveInternal(t, srv, http.MethodPost, "/api/v1/processes/1/instances",
 		variables, "application/json")
 	if code != http.StatusOK && code != http.StatusCreated {
-		t.Fatalf("create instance for %s: status=%d body=%s", procID, code, raw)
+		t.Fatalf("create instance: status=%d body=%s", code, raw)
 	}
 	code, raw = serveInternal(t, srv, http.MethodPost, "/api/v1/jobs/activate",
 		fmt.Sprintf(`{"type":%q,"worker":"w1"}`, jobType), "application/json")
@@ -468,6 +491,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.RestJobTypeIndex", rest.Job{}},
 		{"compiler.SoapJobTypeIndex", soap.Job{}},
 		{"compiler.SharePointJobTypeIndex", sharepoint.Job{}},
+		{"compiler.ScimJobTypeIndex", scim.Job{}},
 	} {
 		t.Run(tc.arm, func(t *testing.T) {
 			sent, ok := arms[tc.arm]

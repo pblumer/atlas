@@ -2,6 +2,7 @@ package ldap
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -83,3 +84,26 @@ func TestRunRefusesOperationsItCannotPerform(t *testing.T) {
 		})
 	}
 }
+
+// A search whose connection fails is reported rather than completed with an empty
+// entry list. The difference matters: a model that reads "no entries" concludes the
+// person is not in the directory, which is the opposite of "the directory could not
+// be asked".
+func TestRunReportsASearchThatFails(t *testing.T) {
+	dialer := &failingOpDialer{err: errors.New("connection reset")}
+	_, err := Run(context.Background(), Job{
+		URL: "ldap://dc", Operation: "search", BaseDN: "dc=example,dc=com", ResultVariable: "found",
+	}, dialer, nil)
+	if err == nil {
+		t.Fatal("a failed search completed as if the directory were empty")
+	}
+	if !strings.Contains(err.Error(), "connection reset") {
+		t.Errorf("error = %v, want the directory's own failure", err)
+	}
+}
+
+// failingOpDialer dials fine and then fails every operation, which is the shape of a
+// directory that accepted the bind and then went away.
+type failingOpDialer struct{ err error }
+
+func (d *failingOpDialer) Dial(DialOptions) (Conn, error) { return &poolFakeConn{opError: d.err}, nil }
