@@ -81,10 +81,10 @@
     </bpmn:startEvent>
 
     <bpmn:serviceTask id="zinsen_holen" name="Hypothekarzinsen holen">
-      <bpmn:documentation>Der Selektor wählt die Zeilen der Tabelle, deren Kopfzeile "Online-Hypothek" nennt — nicht die erste Tabelle der Seite, denn davon gibt es sechs mit identischer Klasse. Jede Zeile wird zu einem Objekt: die drei scrapeField-Kinder lesen die Zellen 1 bis 3. Ein Feld, dessen Selektor nichts trifft, ist leer statt zu fehlen, deshalb hat jede Zeile dieselbe Gestalt. maxItems="20" ist die Schranke gegen eine Seite, die eines Tages hundert Laufzeiten führt.</bpmn:documentation>
+      <bpmn:documentation>Der Selektor wählt die Zeilen der Tabelle, deren Kopfzeile "Online-Hypothek" nennt — nicht die erste Tabelle der Seite, denn davon gibt es sechs mit identischer Klasse. Das :has(td) am Ende schliesst die Kopfzeile aus: sie trägt dieselbe Zeilenklasse, ihre Zellen sind aber th, also träfe kein Feldselektor etwas und die Zeile käme als Datensatz mit lauter leeren Feldern an — im Tabellenblatt jeden Tag eine Leerzeile. Jede Zeile wird zu einem Objekt: die drei scrapeField-Kinder lesen die Zellen 1 bis 3. Ein Feld, dessen Selektor nichts trifft, ist leer statt zu fehlen, deshalb hat jede Zeile dieselbe Gestalt. maxItems="20" ist die Schranke gegen eine Seite, die eines Tages hundert Laufzeiten führt.</bpmn:documentation>
       <bpmn:extensionElements>
         <atlas:webscrapeConnector url="https://www.migrosbank.ch/de/privatpersonen/hypotheken/aktuelle-hypothekarzinsen.html"
-                                  selector="table:has(th:contains('Online-Hypothek')) tr.Table--row"
+                                  selector="table:has(th:contains('Online-Hypothek')) tr.Table--row:has(td)"
                                   maxItems="20"
                                   resultVariable="zinssaetze"
                                   retries="3">

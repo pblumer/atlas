@@ -19,6 +19,7 @@ import {
 import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWorkerUsage, deleteWorkerFlow } from "./workerdialog.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
 import { openPickModal } from "./pickmodal.js";
+import { runImport } from "./infomodel-import.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { loadFormViewer } from "./formviewer.js";
@@ -622,6 +623,11 @@ const WORKER_TYPES = [
     id: "jira", name: "Jira", kind: "Issue tracker",
     desc: "Performs one Atlassian Jira operation from a service task off the processor loop via the REST API: create an issue, read one, update it, move it through its workflow, comment on it, assign it, or search with JQL. The operation and its values are model-authored (FEEL-capable) and what Jira returned is written into a result variable; the site URL and the credential bundle — {email, apiToken} for Jira Cloud or {token} for a Data Center personal access token — are managed below and resolved from the vault. Authored on a service task with the Jira Worker Type.",
     refs: "ADR-0041 · ADR-0201", status: "active", statusLabel: "configurable",
+  },
+  {
+    id: "googlesheets", name: "Google Sheets", kind: "Spreadsheet",
+    desc: "Performs one Google Sheets operation from a service task off the processor loop: read a range, write one, append rows, clear a range, create a spreadsheet, add or delete a sheet, or move the whole file to the trash. The operation, the spreadsheet, the range and the values are model-authored (FEEL-capable) and what Google returned is written into a result variable; the credential — a service account's {clientEmail, privateKey} or a consumer account's {clientId, clientSecret, refreshToken} — is managed below and resolved from the vault. Creating and deleting a spreadsheet are Drive operations on the same credential, so the scopes an operator grants decide which half works. Authored on a service task with the Google Sheets Worker Type.",
+    refs: "ADR-0041", status: "active", statusLabel: "configurable",
   },
   {
     id: "remedy", name: "BMC Remedy", kind: "ITSM",
@@ -1708,7 +1714,7 @@ async function viewConsoleWorkers() {
     // Kind-specific first: these are the reasons an operator came to this row rather
     // than to any other, and they exist on no other kind.
     if (c.kind === "clio") items.push({ label: "Provision access…", icon: "🔑", act: "provision" });
-    if (c.kind === "clio" || c.kind === "jira") items.push({ label: "Events…", icon: "⇄", act: "subs" });
+    if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets") items.push({ label: "Events…", icon: "⇄", act: "subs" });
     // Every Worker Type the check covers: mail connects and authenticates (or sends a
     // test message), a SQL worker dials its connection string. workerShape is the one
     // place that knows, so the menu does not go stale the next type that gains one.
@@ -3697,7 +3703,7 @@ function wireWorkerManagement(workers) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option><option value="preview">Preview (in-app outbox)</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -4036,7 +4042,7 @@ async function toggleInboundSubs(row, workerId, kind) {
   }
   const subs = (await api("GET", "/api/v1/connectors/" + encodeURIComponent(workerId) + "/inbound-subscriptions")) || [];
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
-      <td><code>${esc(s.jql || s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}</td>
+      <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
       <td>${s.enabled
         ? '<span class="pill ok"><span class="dot"></span>on</span>'
@@ -4045,13 +4051,39 @@ async function toggleInboundSubs(row, workerId, kind) {
       <td style="text-align:right"><button class="btn ghost danger" data-sdel title="Delete this subscription">Delete</button></td>
     </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">No subscriptions. Add one below to have clio events start or wake processes.</td></tr>`;
   const isJira = kind === "jira";
-  const what = isJira
+  const isGoogle = kind === "googlesheets";
+  const what = isGoogle
+    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — a spreadsheet's new rows, or the files put into a Drive folder, are published as Atlas messages so each one starts a process. Atlas polls once a minute by default; nothing has to reach this server from the internet. <b>A row watch follows the sheet's own row numbers</b>, so it sees rows appended at the end — which is what a form response sheet does. Deleting rows from the watched range renumbers the tail, and a later row landing on a number already delivered is not delivered again. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a watch fed by what its own processes write has no natural end. Empty uses 60.</div>`
+    : isJira
     ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as Atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`
     : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0075). <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`;
-  const source = isJira
+  const source = isGoogle
+    ? `<label class="field" style="margin:0"><span>Watch</span><select name="googleTarget" class="input">
+        <option value="rows">new rows in a spreadsheet</option>
+        <option value="files">new files in a Drive folder</option>
+      </select></label>
+      <label class="field" style="margin:0"><span>Spreadsheet or folder</span><input name="googleId" placeholder="paste the id or the whole URL" required/></label>`
+    : isJira
     ? `<label class="field" style="margin:0"><span>JQL</span><input name="jql" placeholder="project = OPS AND issuetype = Bug" required/></label>`
     : `<label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="/employees" required/></label>`;
-  const extra = isJira
+  const extra = isGoogle
+    ? `<div class="google-rows" style="grid-column:1 / -1;display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+        <label class="field" style="margin:0;flex:1 1 200px"><span>Range (optional)</span><input name="watchRange" placeholder="Formularantworten 1!A:F"/></label>
+        <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center">
+          <input type="checkbox" name="headerRow"/>
+          <span>The first row names the columns</span>
+        </label>
+      </div>
+      <div class="google-files" style="grid-column:1 / -1;display:flex;gap:12px;align-items:center" hidden>
+        <span>Watch</span>
+        <select name="cursorField" class="input" style="width:auto">
+          <option value="created">files added to the folder</option>
+          <option value="modified">files changed in the folder</option>
+        </select>
+      </div>
+      <div class="muted google-rows" style="grid-column:1 / -1">With <b>the first row names the columns</b>, the correlation key (FEEL) sees each cell under its column name — <code>= Antragsnummer</code> — plus <code>rowNumber</code>, <code>row</code> (the cells as a list), <code>spreadsheetId</code>, <code>range</code> and <code>eventType</code>. Without it, only the envelope: index into <code>row</code>. These are also seeded as process variables on the started instance. A new watch is forward-only, so the rows already in the sheet are skipped.</div>
+      <div class="muted google-files" style="grid-column:1 / -1" hidden>The correlation key (FEEL) sees <code>fileId</code>, <code>fileName</code>, <code>mimeType</code>, <code>webViewLink</code>, <code>createdTime</code>, <code>modifiedTime</code>, <code>folderId</code>, <code>eventType</code>, and <code>file</code> — the whole file, for anything not named here. These are also seeded as process variables on the started instance. A new watch is forward-only, so the files already in the folder are skipped. <b>The credential must be able to see the folder</b>: a service account owns nothing by itself, so share the folder with its address.</div>`
+    : isJira
     ? `<label class="check" style="grid-column:1 / -1;margin:0;display:flex;gap:12px;align-items:center">
         <span>Watch</span>
         <select name="cursorField" class="input" style="width:auto">
@@ -4073,13 +4105,30 @@ async function toggleInboundSubs(row, workerId, kind) {
     <table style="width:100%"><tbody id="subs-body">${list}</tbody></table>
     <form id="subs-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin-top:10px">
       ${source}
-      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
-      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isJira ? "= issueKey" : "= subjectTail"}"/></label>
+      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isGoogle ? "antrag.eingegangen" : isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
+      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isGoogle ? "= Antragsnummer" : isJira ? "= issueKey" : "= subjectTail"}"/></label>
       <label class="field" style="margin:0"><span>Max events/hour</span><input name="maxPerHour" type="number" min="0" placeholder="60"/></label>
       <button class="btn" type="submit" title="Add this inbound event watch">Add</button>
       ${extra}
     </form></td>`;
   row.after(panel);
+  // The two Google watches share one form, and the target decides which half of it
+  // applies — so the half that does not is hidden rather than left to be filled in and
+  // silently ignored. The server refuses a watch carrying the other's fields anyway;
+  // this is what keeps an operator from writing one.
+  const target = panel.querySelector('select[name="googleTarget"]');
+  if (target) {
+    const sync = () => {
+      const files = target.value === "files";
+      panel.querySelectorAll(".google-rows").forEach((el) => { el.hidden = files; });
+      panel.querySelectorAll(".google-files").forEach((el) => { el.hidden = !files; });
+      panel.querySelector('input[name="googleId"]').placeholder = files
+        ? "paste the folder id or the whole URL of the folder page"
+        : "paste the spreadsheet id or the whole URL";
+    };
+    target.addEventListener("change", sync);
+    sync();
+  }
   panel.querySelector("#subs-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -4089,7 +4138,17 @@ async function toggleInboundSubs(row, workerId, kind) {
         correlationKey: (f.get("correlationKey") || "").trim(),
         maxPerHour: Number(f.get("maxPerHour") || 0) || 0,
       };
-      if (isJira) {
+      if (isGoogle) {
+        const id = (f.get("googleId") || "").trim();
+        if (f.get("googleTarget") === "files") {
+          body.folderId = id;
+          body.cursorField = f.get("cursorField") || "created";
+        } else {
+          body.spreadsheetId = id;
+          body.watchRange = (f.get("watchRange") || "").trim();
+          body.headerRow = f.get("headerRow") === "on";
+        }
+      } else if (isJira) {
         body.jql = (f.get("jql") || "").trim();
         body.cursorField = f.get("cursorField") || "created";
       } else {
@@ -7456,8 +7515,29 @@ async function viewInfoModels() {
   const root = document.getElementById("im-root");
   root.addEventListener("click", async (e) => {
     if (e.target.closest('[data-act="import-im"]')) {
-      const app = chooseApplication();
-      if (app) await importInfoModel(app);
+      if (!writable.length) return;
+      // The file is chosen first, while the click's user activation is still live: a
+      // browser refuses to open a file picker from a task that no longer counts as a
+      // gesture, and putting a dialog in front of it costs exactly that.
+      const file = await pickFile(".json,.xml,.xmi,.uml,application/json,application/xml,text/xml");
+      if (!file) return;
+      let target = writable[0];
+      if (writable.length > 1) {
+        const picked = await openPickModal({
+          title: "Import an information model",
+          label: "Application",
+          options: writable.map((a) => ({ value: a.id, label: a.name })),
+          hint: "The imported model belongs to this application and is shared by every process in it.",
+          okLabel: "Continue",
+        });
+        if (!picked) return;
+        target = writable.find((a) => a.id === picked.option.value);
+      }
+      if (!target) return;
+      await runImport({
+        app: target, file, api, toast,
+        navigate: (id) => { location.hash = `#/data/m/${encodeURIComponent(id)}`; },
+      });
       return;
     }
     const btn = e.target.closest('[data-act="new-im"]');
@@ -7497,94 +7577,6 @@ async function viewInfoModels() {
     }
   });
   enhanceViewTables();
-}
-
-// importInfoModel reads a class diagram somebody already drew.
-//
-// A data model is normally drawn in a UML tool long before anybody opens Atlas, and
-// retyping one by hand is both the slowest way to start and the way a business key
-// quietly goes missing. Two documents are read: Atlas's own JSON — how a model moves
-// between applications and installations — and the XMI 2.5.1 a UML tool exports.
-//
-// The import is deliberately two steps. Reading a foreign notation into a declared
-// subset is lossy, and the report the first step returns is the substance of it: what
-// arrived, and what the subset would not take, element by element. The same call
-// makes both — the second one only drops the dryRun flag — so what the report
-// promises is exactly what gets stored.
-async function importInfoModel(app) {
-  const file = await pickFile(".json,.xml,.xmi,.uml,application/json,application/xml,text/xml");
-  if (!file) return;
-  let text;
-  try { text = await file.text(); }
-  catch (e) { toast("Import failed: " + e.message, "err"); return; }
-
-  const base = file.name.replace(/\.[^.]+$/, "");
-  let preview;
-  try {
-    preview = await api("POST", "/api/v1/infomodel/import",
-      { applicationId: app.id, document: text, dryRun: true });
-  } catch (e) { toast("Import failed: " + e.message, "err"); return; }
-
-  showImportReport(app, file.name, base, text, preview);
-}
-
-// showImportReport is the report and the confirmation in one: the counts, the name the
-// model will carry, and every note the reader has to see before deciding.
-function showImportReport(app, fileName, base, text, preview) {
-  const model = preview.preview || { classes: [], associations: [], stores: [] };
-  const notes = preview.notes || [];
-  const level = (l) => ({ dropped: "#b42318", adjusted: "#9a6700", info: "#6a737d" }[l] || "#6a737d");
-  const badge = (l) => `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;color:#fff;white-space:nowrap;background:${level(l)}">${esc(l)}</span>`;
-  const rows = notes.map((n) =>
-    `<tr><td>${badge(n.level)}</td><td>${n.element ? `<code>${esc(n.element)}</code>` : `<span class="muted">the model</span>`}</td>
-     <td class="muted">${esc(n.message)}</td></tr>`).join("");
-  const counted = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-
-  const ov = document.createElement("div");
-  ov.className = "modal-ov";
-  ov.innerHTML = `
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Import report" style="max-width:880px">
-      <div class="modal-head"><h2>Import ${esc(fileName)}</h2></div>
-      <div class="modal-body">
-        <p class="muted" style="margin:0 0 10px">Read as <b>${esc(preview.format === "xmi" ? "UML XMI" : "Atlas JSON")}</b> —
-          ${counted((model.classes || []).length, "class", "classes")},
-          ${counted((model.associations || []).length, "relationship", "relationships")},
-          ${counted((model.stores || []).length, "data store", "data stores")}.
-          Nothing is stored until you import.</p>
-        <label class="field" style="max-width:380px"><span>Model name</span>
-          <input id="im-import-name" value="${esc(model.name || base)}"/></label>
-        <p class="muted" style="margin:10px 0 6px">Atlas authors a declared subset of the UML class diagram, so a
-          document from another tool routinely says things it has no place for. Every one of them is listed here:
-          <b>dropped</b> is not in the model, <b>adjusted</b> is in it saying something slightly different.</p>
-        <div style="max-height:44vh; overflow:auto">
-          <table><thead><tr><th style="width:90px">What</th><th style="width:190px">Element</th><th>Detail</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="3" class="muted">Nothing was lost: the document fits the subset as it stands.</td></tr>`}</tbody></table>
-        </div>
-      </div>
-      <div class="modal-foot">
-        <button class="btn neutral" data-close title="Close without importing">Cancel</button>
-        <button class="btn" data-import title="Store this as an information model of ${esc(app.name)}">Import into ${esc(app.name)}</button>
-      </div>
-    </div>`;
-  document.body.appendChild(ov);
-  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
-  const onKey = (e) => { if (e.key === "Escape") close(); };
-  document.addEventListener("keydown", onKey);
-  ov.querySelector("[data-close]").addEventListener("click", close);
-  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
-  ov.querySelector("[data-import]").addEventListener("click", async () => {
-    const name = (document.getElementById("im-import-name").value || "").trim();
-    try {
-      const created = await api("POST", "/api/v1/infomodel/import",
-        { applicationId: app.id, document: text, name });
-      close();
-      const dropped = (created.notes || []).filter((n) => n.level === "dropped").length;
-      toast(dropped
-        ? `Imported “${created.model.name}” — ${dropped} element${dropped === 1 ? "" : "s"} the subset does not author were left out`
-        : `Imported “${created.model.name}”`, "ok");
-      location.hash = `#/data/m/${encodeURIComponent(created.model.id)}`;
-    } catch (e) { toast("Import failed: " + e.message, "err"); }
-  });
 }
 
 // viewDataInstances is the same subject one altitude down: not what an Order *is*,

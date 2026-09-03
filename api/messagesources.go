@@ -14,7 +14,7 @@ import (
 //
 // A message start event names a message and nothing else — deliberately: what feeds a
 // message is an operational fact, not a property of the process (ADR-0075/0214). The
-// same name can arrive from a Jira watch, a clio subscription, POST /api/v1/messages,
+// same name can arrive from a Google or Jira watch, a clio subscription, POST /api/v1/messages,
 // or another process's send task, and a model that named its source could be started by
 // only one of them and would need a redeploy to change which.
 //
@@ -31,7 +31,8 @@ type messageSourceView struct {
 	ConnectorName string `json:"connectorName"`
 	Kind          string `json:"kind"`
 	Enabled       bool   `json:"enabled"`
-	// Description says *which* watch, e.g. the JQL a jira watch follows or the subject a
+	// Description says *which* watch, e.g. the JQL a jira watch follows, the spreadsheet a
+	// Google row watch reads, or the subject a
 	// clio one does. That is the worker's configuration, so it is filled only for a
 	// caller with viewer access to that worker and is empty otherwise: knowing a name
 	// is fed is what a modeller needs; knowing the query behind it is not.
@@ -114,6 +115,22 @@ func (s *Server) handleListMessageSources(w http.ResponseWriter, r *http.Request
 // counts. The kind comes from the worker record, which is the discriminator
 // everywhere else too (see inboundSubscription).
 func describeInboundWatch(kind string, sub inboundSubscription) string {
+	if kind == connectorKindGoogleSheets {
+		// A Google watch is one of two things, and which it is follows from the target
+		// it names — the same discriminator the bridge and the validator use.
+		if folder := strings.TrimSpace(sub.FolderID); folder != "" {
+			field := strings.TrimSpace(sub.CursorField)
+			if field == "" {
+				field = "created"
+			}
+			return fmt.Sprintf("files %s in Drive folder %s", field, folder)
+		}
+		rng := strings.TrimSpace(sub.WatchRange)
+		if rng == "" {
+			rng = sheetsDefaultRange
+		}
+		return fmt.Sprintf("new rows in spreadsheet %s (%s)", sub.SpreadsheetID, rng)
+	}
 	if kind == connectorKindJira {
 		field := strings.TrimSpace(sub.CursorField)
 		if field == "" {

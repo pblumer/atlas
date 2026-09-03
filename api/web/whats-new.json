@@ -2,6 +2,144 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "soap-tasks-run-on-a-worker-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Web service calls moved out of the engine",
+        "de": "Web-Service-Aufrufe sind aus der Engine ausgezogen"
+      },
+      "summary": {
+        "en": "A SOAP call went out from the process that runs the engine, so a slow web service held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the credential your task references is handed to that worker, exactly as it already is for REST.",
+        "de": "Ein SOAP-Aufruf ging bisher aus dem Prozess hinaus, der die Engine ausführt — ein langsamer Web-Service hielt also Arbeit auf, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Das Credential, das Ihr Task referenziert, wird an diesen Worker übergeben — genau wie bei REST schon."
+      },
+      "link": {
+        "label": "ADR-0233",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
+      "id": "ldap-tasks-run-on-a-worker-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Directory tasks moved out of the engine",
+        "de": "Verzeichnis-Tasks sind aus der Engine ausgezogen"
+      },
+      "summary": {
+        "en": "Searching a directory, adding an entry, changing a password — until now Atlas did all three from the process that runs the engine, so a slow or unreachable directory held up work that had nothing to do with it. They run in a worker Atlas starts and supervises itself now. Nothing to configure: the bind passwords and client certificates your models reference are handed to that worker, and the pooled connections that make repeat binds cheap move along with them.",
+        "de": "Ein Verzeichnis durchsuchen, einen Eintrag anlegen, ein Passwort ändern — bisher machte Atlas alle drei im Prozess, der die Engine ausführt, sodass ein langsames oder nicht erreichbares Verzeichnis Arbeit aufhielt, die nichts damit zu tun hatte. Sie laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Die Bind-Passwörter und Client-Zertifikate, die Ihre Modelle referenzieren, werden an diesen Worker übergeben — und die gepoolten Verbindungen, die wiederholte Binds günstig machen, ziehen mit um."
+      },
+      "link": {
+        "label": "ADR-0233",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
+      "id": "a-non-interrupting-message-or-signal-boundary-event-now-fire",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "A reminder attached to a task now fires every time, not just the first",
+        "de": "Eine Erinnerung an einer Aufgabe feuert jetzt jedes Mal, nicht nur beim ersten Mal"
+      },
+      "summary": {
+        "en": "A non-interrupting boundary event is how a model says remind me: it fires beside a running task and leaves the task running. On a timer that repeats it already fired on every occurrence — but on a message or a signal it fired once and then stopped listening, so the second message matched nothing at all: no incident, no log line, and no way for the sender to tell. It now stays armed for as long as its task runs, and every message takes the reminder branch again. A model that only ever expected to hear the first one will now hear them all; an interrupting event, or a condition on the reminder branch, is how you ask for exactly one.",
+        "de": "Ein nicht-unterbrechendes Boundary-Ereignis ist die Art, wie ein Modell «erinnere mich» sagt: Es feuert neben einer laufenden Aufgabe und lässt sie weiterlaufen. Bei einem wiederkehrenden Timer tat es das schon bisher bei jedem Mal — bei einer Nachricht oder einem Signal dagegen genau einmal, danach hörte es auf zuzuhören: Die zweite Nachricht traf auf nichts, ohne Incident, ohne Logzeile und ohne dass der Absender es hätte merken können. Es bleibt jetzt scharf, solange seine Aufgabe läuft, und jede Nachricht nimmt den Erinnerungszweig erneut. Ein Modell, das nur die erste erwartet hat, hört nun alle; wer genau eine will, nimmt ein unterbrechendes Ereignis oder eine Bedingung auf dem Erinnerungszweig."
+      },
+      "link": {
+        "label": "ADR-0236",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0236-repeating-non-interrupting-boundary-events.md"
+      },
+      "tags": [
+        "Operations",
+        "Modeler"
+      ]
+    },
+    {
+      "id": "clio-tasks-run-on-a-worker-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Event-store tasks moved out of the engine",
+        "de": "Event-Store-Tasks sind aus der Engine ausgezogen"
+      },
+      "summary": {
+        "en": "Writing an event, reading a subject's history, folding its state — until now Atlas did all three from the process that runs the engine, so a slow event store held up work that had nothing to do with it. They run in a worker Atlas starts and supervises itself now. Nothing to configure: the store you set up in Connectors is handed to that worker, including a store you reach without a token.",
+        "de": "Ein Event schreiben, die Historie eines Subjects lesen, seinen Zustand falten — bisher machte Atlas alle drei im Prozess, der die Engine ausführt, sodass ein langsamer Event-Store Arbeit aufhielt, die nichts damit zu tun hatte. Sie laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Der Store, den Sie unter Connectors eingerichtet haben, wird an diesen Worker übergeben — auch einer, den Sie ohne Token erreichen."
+      },
+      "link": {
+        "label": "ADR-0233",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
+      "id": "rest-and-ldif-tasks-no-longer-run-on-the-engine-s-own-loop",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "REST calls now run in a worker, not in the engine",
+        "de": "REST-Aufrufe laufen jetzt im Worker, nicht mehr in der Engine"
+      },
+      "summary": {
+        "en": "Until now Atlas made a REST task's HTTP call from its own process — the same process that runs the engine. A slow or hung host on the other end therefore held up work that had nothing to do with it. REST and LDIF tasks now run in a worker Atlas starts and supervises itself, so a call that hangs is one worker you can see and restart in the Workers view, not a number in a timeout. Nothing to configure: authenticated REST tasks keep working, because Atlas hands the worker exactly the secrets the deployed models use.",
+        "de": "Bisher hat Atlas den HTTP-Aufruf eines REST-Tasks im eigenen Prozess gemacht — in demselben, der die Engine ausführt. Ein langsamer oder hängender Host auf der Gegenseite hielt damit Arbeit auf, die nichts damit zu tun hatte. REST- und LDIF-Tasks laufen jetzt in einem Worker, den Atlas selbst startet und überwacht: Ein hängender Aufruf ist damit ein Worker, den Sie in der Workers-Ansicht sehen und neu starten können, und keine Zahl in einem Timeout. Zu konfigurieren ist nichts — authentifizierte REST-Tasks laufen weiter, weil Atlas dem Worker genau die Geheimnisse übergibt, die die deployten Modelle verwenden."
+      },
+      "link": {
+        "label": "ADR-0233",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "a-class-s-attributes-can-be-put-in-the-order-you-want-to-rea",
       "version": "Unreleased",
       "date": null,
@@ -18,6 +156,29 @@
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
+    },
+    {
+      "id": "google-sheets-as-a-worker-type-and-a-spreadsheet-or-a-drive-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Google Sheets, in both directions",
+        "de": "Google Sheets, in beide Richtungen"
+      },
+      "summary": {
+        "en": "A lot of what a process runs on lives in a spreadsheet somebody keeps by hand — the applicant list, the budget lines, the table the team actually looks at. Atlas can now work with one: create a spreadsheet, add a tab, read a range, write one, append rows, empty a range, and remove a tab or the whole file (to the trash, never permanently). And it can be started by one: a new row in a sheet begins a process — that is a Google Form writing its answers into a table — or a file dropped into a Drive folder does, because the folder is a queue people already use. Set the watch up under Workers → Events; Atlas polls, so nothing has to reach your server from the internet. Two things are worth knowing before you rely on it: after a crash a row can be appended twice, so write a status column and read it before appending (the shipped example does exactly that), and a row watch follows row numbers — it sees rows added at the end, which is what a form does. The example folder walks through the setup, including the thing people get wrong first: a service account owns nothing until you share the sheet with its address.",
+        "de": "Vieles, womit ein Prozess arbeitet, liegt in einer Tabelle, die jemand von Hand pflegt — die Bewerberliste, die Budgetzeilen, die Tabelle, in die das Team tatsächlich schaut. Atlas kann jetzt damit arbeiten: Tabelle anlegen, Blatt hinzufügen, Bereich lesen, Bereich schreiben, Zeilen anhängen, Bereich leeren, Blatt oder ganze Datei entfernen (in den Papierkorb, nie endgültig). Und Atlas kann davon gestartet werden: Eine neue Zeile startet einen Prozess — das ist der Fall „Google-Formular schreibt seine Antworten in eine Tabelle“ — oder eine Datei, die in einem Drive-Ordner abgelegt wird, denn der Ordner ist die Warteschlange, die es ohnehin schon gibt. Eingerichtet wird das unter Workers → Events; Atlas fragt selbst nach, es muss also nichts aus dem Internet Ihren Server erreichen. Zwei Dinge sollte man wissen, bevor man sich darauf verlässt: Nach einem Absturz kann eine Zeile zweimal angehängt werden — dagegen hilft eine Statusspalte, die der Prozess vor dem Anhängen liest (genau das führt das mitgelieferte Beispiel vor) —, und ein Zeilen-Watch folgt den Zeilennummern, sieht also am Ende angehängte Zeilen, was ein Formular genau so macht. Der Beispielordner führt durch die Einrichtung, samt dem, was man zuerst falsch macht: Ein Dienstkonto besitzt nichts, solange die Tabelle nicht mit seiner Adresse geteilt ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "Modeler",
+        "Events"
+      ]
     },
     {
       "id": "importing-a-uml-class-diagram-reading-what-somebody-else-dre",
@@ -193,289 +354,6 @@
           "de": "Data öffnen"
         },
         "route": "#/data"
-      }
-    },
-    {
-      "id": "which-instances-are-carrying-this-order",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Find every process handling the same order",
-        "de": "Alle Prozesse finden, die dieselbe Bestellung bearbeiten"
-      },
-      "summary": {
-        "en": "Until now you could ask a process what data it was carrying. You could not ask a piece of data which processes were carrying it. Data › Instances turns the question around: it groups everything the engine holds by the type its model declares, and then by the business key — so order ORD-1 appears once, with every instance under it that has a hand on it, whichever process it belongs to. Search by class, by key, or both, and the link is the address bar, so a found order is something you can send to a colleague. There is a box for including finished instances, and it is worth knowing what that costs, because it costs less than you would think: a finished instance keeps its data until you purge it, and purging is off unless you turned it on. So history is a longer look, not extra storage. Atlas walks the instances rather than keeping a separate lookup table, and it tells you afterwards how many it examined and whether it stopped early — because a list that quietly cut itself short, read as if it were the whole answer, is worse than no list. And the object diagram's one honest admission, where it says a customer is not in this instance, now has a link that goes and finds it.",
-        "de": "Bisher konnten Sie einen Prozess fragen, welche Daten er trägt. Sie konnten nicht ein Datum fragen, welche Prozesse es tragen. „Data › Instances\" dreht die Frage um: Es gruppiert alles, was die Engine hält, nach dem Typ, den ihr Modell nennt, und dann nach dem fachlichen Schlüssel — Bestellung ORD-1 erscheint also einmal, und darunter jede Instanz, die daran arbeitet, gleich in welchem Prozess. Suchen Sie nach Klasse, nach Schlüssel oder beidem; die Adresszeile ist der Link, eine gefundene Bestellung lässt sich also einem Kollegen schicken. Es gibt ein Kästchen für abgeschlossene Instanzen, und es lohnt sich zu wissen, was das kostet — nämlich weniger, als man denkt: Eine abgeschlossene Instanz behält ihre Daten, bis Sie sie löschen lassen, und das ist standardmässig aus. Historie ist also ein längerer Blick, kein zusätzlicher Speicher. Atlas geht dafür die Instanzen durch, statt eine eigene Nachschlagetabelle zu führen, und sagt Ihnen hinterher, wie viele es angeschaut hat und ob es vorzeitig aufgehört hat — denn eine Liste, die sich still selbst abgeschnitten hat und wie die ganze Antwort gelesen wird, ist schlimmer als gar keine. Und das Objektdiagramm, dort wo es ehrlich zugibt, dass ein Kunde nicht in dieser Instanz steckt, hat jetzt einen Link, der ihn suchen geht."
-      },
-      "link": {
-        "label": "ADR-0230",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
-      },
-      "tags": [
-        "Data",
-        "Operations",
-        "Search"
-      ],
-      "tutorial": {
-        "en": [
-          "Model a class under Data › Model and tick one of its attributes as the business key — an Order with an id, say.",
-          "Set that class as the Type of a data object in two different processes of the same application, and let each write an order with the same id.",
-          "Start an instance of each, then open Data › Instances.",
-          "The order appears once under its key, with both instances beneath it. Press Isolate to narrow to that one.",
-          "Tick “Include finished instances” and run it again once an instance has completed — its data is still there.",
-          "Read the line at the bottom: it says how many instances were examined, and whether the sweep stopped early."
-        ],
-        "de": [
-          "Modellieren Sie unter Data › Model eine Klasse und markieren Sie eines ihrer Attribute als fachlichen Schlüssel — etwa eine Order mit id.",
-          "Setzen Sie diese Klasse als „Type\" eines Datenobjekts in zwei verschiedenen Prozessen derselben Applikation und lassen Sie beide eine Bestellung mit derselben id schreiben.",
-          "Starten Sie je eine Instanz und öffnen Sie dann Data › Instances.",
-          "Die Bestellung erscheint einmal unter ihrem Schlüssel, mit beiden Instanzen darunter. „Isolate\" grenzt auf genau diese ein.",
-          "Haken Sie „Include finished instances\" an und suchen Sie erneut, sobald eine Instanz fertig ist — ihre Daten sind noch da.",
-          "Lesen Sie die Zeile unten: Sie nennt die Zahl der geprüften Instanzen und ob der Durchlauf vorzeitig endete."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data › Instances",
-          "de": "Data › Instances öffnen"
-        },
-        "route": "#/data/instances"
-      }
-    },
-    {
-      "id": "an-instance-s-data-drawn-as-objects",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See a running instance's data as a picture",
-        "de": "Die Daten einer laufenden Instanz als Bild"
-      },
-      "summary": {
-        "en": "The Data tab of an instance listed what the process was carrying. It now also draws it. Each data object becomes a box with its name underlined — which is how UML says \"this is an actual thing, not a type\" — showing the fields its class declares, in the order the class declares them, with the business key marked. A field the value simply does not have says \"not set\", because that is a different fact from having it and it being empty. Two kinds of line appear between the boxes, and they mean different things, so they look different. A solid line with a diamond means one thing is part of another and lives inside its value: an order and its lines. A dashed line means one object is holding another's business key — the order says its customer is C-7, and a customer here is C-7 — which is an inference from two values agreeing rather than something written down anywhere. And when an order points at a customer that is not in this instance, the diagram says so underneath instead of quietly leaving the line out: that customer is in another instance or in a data store, and knowing where the picture ends is what makes the rest of it worth trusting. This is the same model you drew under Data › Model, one level down: that diagram says what an Order is, this one says which orders are here.",
-        "de": "Der Reiter „Data\" einer Instanz hat aufgelistet, was der Prozess mit sich führt. Jetzt zeichnet er es auch. Jedes Datenobjekt wird zu einem Kasten mit unterstrichenem Namen — so sagt UML „das ist ein konkretes Ding, kein Typ\" — und zeigt die Felder, die seine Klasse deklariert, in der Reihenfolge der Klasse, mit markiertem fachlichem Schlüssel. Ein Feld, das der Wert schlicht nicht hat, sagt „not set\", denn das ist eine andere Aussage als vorhanden und leer. Zwischen den Kästen erscheinen zwei Arten von Linien, die Verschiedenes bedeuten und deshalb verschieden aussehen. Eine durchgezogene Linie mit Raute heisst: das eine ist Teil des anderen und liegt in dessen Wert — eine Bestellung und ihre Positionen. Eine gestrichelte Linie heisst: ein Objekt hält den fachlichen Schlüssel eines anderen — die Bestellung nennt als Kunden C-7, und ein Kunde hier ist C-7 — was ein Schluss aus zwei übereinstimmenden Werten ist und nirgends so notiert steht. Und wenn eine Bestellung auf einen Kunden zeigt, den es in dieser Instanz nicht gibt, sagt das Diagramm das darunter, statt die Linie still wegzulassen: Dieser Kunde steckt in einer anderen Instanz oder in einem Data Store, und zu wissen, wo das Bild aufhört, ist das, was den Rest davon vertrauenswürdig macht. Es ist dasselbe Modell, das Sie unter Data › Model gezeichnet haben, eine Ebene tiefer: Jenes Diagramm sagt, was eine Bestellung ist — dieses, welche Bestellungen hier sind."
-      },
-      "link": {
-        "label": "ADR-0230",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
-      },
-      "tags": [
-        "Operations",
-        "Data",
-        "UML"
-      ],
-      "tutorial": {
-        "en": [
-          "Under Data › Model, give your application an Order with an id as its business key, and a Customer with a number as its own.",
-          "Draw a composition from Order to an OrderLine and name the end lines, and an association between Customer and Order whose Order-side role is customer.",
-          "In the Modeler, set the data objects' Type to those classes, and have a task write an order value that carries an id, a customer key and a lines list.",
-          "Start an instance, open it under Operations › Instances, and go to the Data tab.",
-          "Press Diagram. The order, its line and the customer are drawn, with the two kinds of line between them.",
-          "Point the order's customer at a key nothing in the instance carries and look underneath — the diagram tells you where that object must be instead."
-        ],
-        "de": [
-          "Geben Sie Ihrer Applikation unter Data › Model eine Order mit id als fachlichem Schlüssel und eine Customer mit number als ihrem.",
-          "Zeichnen Sie eine Komposition von Order zu einer OrderLine und benennen Sie das Ende „lines\", sowie eine Assoziation zwischen Customer und Order, deren Rolle auf der Order-Seite „customer\" heisst.",
-          "Setzen Sie im Modeler „Type\" der Datenobjekte auf diese Klassen und lassen Sie eine Aufgabe einen Order-Wert schreiben, der id, Kundenschlüssel und eine lines-Liste trägt.",
-          "Starten Sie eine Instanz, öffnen Sie sie unter Betrieb › Instanzen und gehen Sie auf den Reiter „Data\".",
-          "Drücken Sie „Diagram\". Die Bestellung, ihre Position und der Kunde werden gezeichnet, mit den zwei Linienarten dazwischen.",
-          "Lassen Sie die Bestellung auf einen Schlüssel zeigen, den die Instanz nicht trägt, und schauen Sie darunter — das Diagramm sagt Ihnen, wo dieses Objekt stattdessen sein muss."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Instances",
-          "de": "Instanzen öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-data-object-s-declared-type-now-means-something",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Atlas now checks what your process does with its data",
-        "de": "Atlas prüft jetzt, was Ihr Prozess mit seinen Daten macht"
-      },
-      "summary": {
-        "en": "A data object on a diagram could always say which type it is, and nothing ever checked it — the word was decoration. Now it is looked up in the information model of the application the process belongs to, and three kinds of mistake surface while you model instead of after a token has run. A type nothing has modelled is named. A task that writes into a field the class does not have is named, along with the class and the field, and so is a write that tries to reach inside a plain value or a list of fixed choices, which have nothing inside to write to. And the one worth the whole feature: a task that reads a data object no task before it fills. That last check does not need a modelled type at all — it reads the diagram — and it is careful about what it claims: a loop whose writing step comes round before the reading one is left alone, while a task that reads what it will only write when it finishes is flagged, because on the first pass it reads nothing. None of this refuses a deployment. You draw a process before the vocabulary it uses exists, and being told at deploy is the point; being stopped would not be. The Modeler also has the Type field this always needed, which offers the classes your application has modelled. Adding it turned up something worth knowing: the type was quietly being lost whenever a diagram written by hand or by an agent was opened here and saved again. That is fixed, and models that were written the short way keep working.",
-        "de": "Ein Datenobjekt im Diagramm konnte immer schon sagen, welchen Typ es hat, und geprüft hat das nie jemand — das Wort war Dekoration. Jetzt wird es im Informationsmodell der Applikation nachgeschlagen, zu der der Prozess gehört, und drei Arten von Fehler zeigen sich beim Modellieren statt erst, nachdem ein Token gelaufen ist. Ein Typ, den niemand modelliert hat, wird benannt. Eine Aufgabe, die in ein Feld schreibt, das die Klasse nicht hat, wird benannt — mit Klasse und Feld — und ebenso ein Schreibvorgang, der in einen einfachen Wert oder in eine feste Werteliste hineingreifen will, in denen es nichts zu beschreiben gibt. Und der, für den sich das Ganze lohnt: eine Aufgabe, die ein Datenobjekt liest, das keine Aufgabe davor gefüllt hat. Diese Prüfung braucht gar keinen modellierten Typ — sie liest das Diagramm — und sie ist vorsichtig mit dem, was sie behauptet: eine Schleife, deren schreibender Schritt vor dem lesenden herumkommt, bleibt unbehelligt, während eine Aufgabe, die liest, was sie erst beim Abschliessen schreibt, gemeldet wird, denn im ersten Durchlauf liest sie nichts. Nichts davon verweigert ein Deployment. Man zeichnet einen Prozess, bevor das Vokabular dazu existiert; beim Deploy darauf hingewiesen zu werden ist der Sinn, aufgehalten zu werden wäre es nicht. Der Modeler hat ausserdem das Feld „Type\", das dafür immer gefehlt hat — es schlägt die Klassen vor, die Ihre Applikation modelliert hat. Beim Einbauen kam etwas heraus, das man wissen sollte: Der Typ ging still verloren, sobald ein von Hand oder von einem Agenten geschriebenes Diagramm hier geöffnet und wieder gespeichert wurde. Das ist behoben, und kurz geschriebene Modelle laufen unverändert weiter."
-      },
-      "link": {
-        "label": "ADR-0230",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
-      },
-      "tags": [
-        "Data",
-        "Modeling",
-        "Validation"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data › Model and give your application a class — an Order with an id and a total, say.",
-          "Open a process of the same application in the Modeler, select a data object and set its Type to Order; the field suggests the classes you modelled.",
-          "Give a task a data output association to that object and set its Target member to a field the class does not have, e.g. amount.",
-          "Watch the Problems bar at the bottom: it names the task, the class and the field. Click the finding to jump to the element.",
-          "Now delete the association and leave only a task that reads the object — the panel tells you nothing writes it.",
-          "Deploy anyway. It succeeds, and the same sentences come back as deploy warnings."
-        ],
-        "de": [
-          "Öffnen Sie Data › Model und geben Sie Ihrer Applikation eine Klasse — etwa eine Order mit id und total.",
-          "Öffnen Sie im Modeler einen Prozess derselben Applikation, wählen Sie ein Datenobjekt und setzen Sie „Type\" auf Order; das Feld schlägt Ihre modellierten Klassen vor.",
-          "Geben Sie einer Aufgabe eine Data Output Association auf dieses Objekt und tragen Sie als Zielfeld eines ein, das die Klasse nicht hat, z. B. amount.",
-          "Schauen Sie in die Problems-Leiste unten: Sie nennt Aufgabe, Klasse und Feld. Ein Klick auf den Befund springt zum Element.",
-          "Löschen Sie jetzt die Assoziation und lassen Sie nur eine Aufgabe stehen, die das Objekt liest — die Leiste sagt Ihnen, dass es niemand schreibt.",
-          "Deployen Sie trotzdem. Es gelingt, und dieselben Sätze kommen als Deploy-Warnungen zurück."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Data öffnen"
-        },
-        "route": "#/data"
-      }
-    },
-    {
-      "id": "atlas-can-now-say-what-the-data-in-a-process-actually-is",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Say what an Order is — once, for every process",
-        "de": "Sagen, was eine Bestellung ist — einmal, für alle Prozesse"
-      },
-      "summary": {
-        "en": "BPMN lets you draw a data object and give it a type name, and then says nothing about what that type is. So two processes that both handle an order share the word \"Order\" and nothing else — no fields, no rules, no way to tell whether they mean the same thing. There is now a Data area with a class diagram in it: you draw an Order once, give it its fields with their types, and mark which of them is its business key — the thing that makes ORD-1 the same order in the ordering process, the invoicing process and the returns process. Three kinds of class carry the difference that matters: something the business can point at and identify, a structured value like an address that is just its contents, and a closed list of values like draft/approved/rejected. The canvas will not let you draw a relationship that makes no sense — you cannot point an arrow at a list of values, and an address cannot own parts, because it has no existence of its own to own them with — and when it refuses it tells you why, in the same words the server would use. It also says plainly which refusals are the notation talking and which are just what this version does not do yet. Every class can be shown as a JSON Schema, which is what a value gets checked against, and that view is honest about what it cannot express: a document is a tree, and two things that merely refer to each other are not.",
-        "de": "BPMN lässt Sie ein Datenobjekt zeichnen und ihm einen Typnamen geben — und sagt danach nichts darüber, was dieser Typ ist. Zwei Prozesse, die beide eine Bestellung bearbeiten, teilen sich also das Wort „Order\" und sonst nichts: keine Felder, keine Regeln, keine Möglichkeit festzustellen, ob dasselbe gemeint ist. Es gibt jetzt einen Bereich „Data\" mit einem Klassendiagramm darin: Sie zeichnen eine Bestellung einmal, geben ihr ihre Felder mit Typen und markieren, welches davon ihr fachlicher Schlüssel ist — das, was ORD-1 im Bestellprozess, im Fakturaprozess und im Retourenprozess zur selben Bestellung macht. Drei Klassenarten tragen den Unterschied, auf den es ankommt: etwas, das die Fachseite benennen und identifizieren kann; ein strukturierter Wert wie eine Adresse, der nur aus seinem Inhalt besteht; und eine abgeschlossene Werteliste wie Entwurf/freigegeben/abgelehnt. Die Zeichenfläche lässt keine Beziehung zu, die keinen Sinn ergibt — auf eine Werteliste zeigt kein Pfeil, und eine Adresse kann keine Teile besitzen, weil sie selbst keine eigene Existenz hat — und wenn sie ablehnt, sagt sie warum, mit denselben Worten wie der Server. Sie sagt auch klar, welche Ablehnung die Notation selbst ist und welche nur das, was diese Version noch nicht kann. Jede Klasse lässt sich als JSON Schema anzeigen — das, woran ein Wert geprüft wird — und diese Ansicht ist ehrlich darüber, was sie nicht ausdrücken kann: ein Dokument ist ein Baum, und zwei Dinge, die nur aufeinander verweisen, sind keiner."
-      },
-      "link": {
-        "label": "ADR-0230",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
-      },
-      "tags": [
-        "Data",
-        "Modeling",
-        "UML"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data in the app drawer. The Model tab lists the information models; create one and pick the application it belongs to.",
-          "Press “+ Business object” and name it Order. Add its attributes in the panel on the right — an id as text, a date, an amount as a number.",
-          "Tick the ⚿ box next to id. That is the business key: what makes two of these the same one.",
-          "Add a second class, then press a relationship button in the toolbar and click the two boxes to connect them. Try pointing one at an enumeration — it will refuse and tell you why.",
-          "Press “View JSON Schema” on a class to see the contract a value of it is checked against, and what the projection had to leave out.",
-          "Switch to the Instances tab to see the data objects your running processes are actually carrying, grouped by the type they declare."
-        ],
-        "de": [
-          "Öffnen Sie „Data\" in der App-Leiste. Der Reiter „Model\" listet die Informationsmodelle; legen Sie eines an und wählen Sie die Applikation dazu.",
-          "Drücken Sie „+ Business object\" und nennen Sie die Klasse Order. Ergänzen Sie rechts im Panel ihre Attribute — eine id als Text, ein Datum, einen Betrag als Zahl.",
-          "Setzen Sie das Häkchen ⚿ neben id. Das ist der fachliche Schlüssel: das, was zwei davon zur selben Sache macht.",
-          "Legen Sie eine zweite Klasse an, drücken Sie in der Leiste eine Beziehungsart und klicken Sie die beiden Kästen an. Versuchen Sie ruhig, auf eine Aufzählung zu zeigen — es wird abgelehnt, mit Begründung.",
-          "Drücken Sie bei einer Klasse „View JSON Schema\", um den Vertrag zu sehen, an dem ein Wert geprüft wird — und was die Projektion weglassen musste.",
-          "Wechseln Sie auf „Instances\", um zu sehen, welche Datenobjekte Ihre laufenden Prozesse tatsächlich tragen, gruppiert nach dem Typ, den sie deklarieren."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Data öffnen"
-        },
-        "route": "#/data"
-      }
-    },
-    {
-      "id": "a-process-instance-now-shows-the-data-it-carries-and-where-e",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See the data an instance carries — and who wrote it",
-        "de": "Sehen, welche Daten eine Instanz trägt — und wer sie geschrieben hat"
-      },
-      "summary": {
-        "en": "A process exists to move data: an order, a claim, a contract. Until now you could watch the token and read the variables, but the data objects on the diagram — the ones with a name and a state like [received] or [approved] — showed nothing at all once the process ran. The replay of an instance now has a Data tab: every data object it carries, the class the model says it is, the state it is in, and its current value. Open a row and you get that datum's whole life: every write, the state it moved into, when, and which task on the diagram made it. That last column is the one worth having. Two tasks running side by side on a parallel branch both look like they wrote everything if you only compare before-and-after snapshots, which is what any engine without recorded attribution has to do. Atlas now records who wrote each value at the moment of the write, so the answer is read rather than guessed. Instances that ran before this simply say so instead of naming a task that might be the wrong one.",
-        "de": "Ein Prozess ist dazu da, Daten zu bewegen: eine Bestellung, einen Schadenfall, einen Vertrag. Bisher konnten Sie dem Token zusehen und die Variablen lesen, aber die Datenobjekte auf dem Diagramm — jene mit einem Namen und einem Zustand wie [received] oder [approved] — zeigten im laufenden Prozess überhaupt nichts. Der Replay einer Instanz hat jetzt einen Reiter „Data\": jedes Datenobjekt, das sie trägt, die Klasse, die das Modell dafür nennt, den Zustand, in dem es steht, und den aktuellen Wert. Eine Zeile aufgeklappt zeigt das ganze Leben dieses Datums: jeden Schreibvorgang, den Zustand, in den er es gebracht hat, wann — und welche Aufgabe im Diagramm ihn gemacht hat. Diese letzte Spalte ist die eigentliche Neuerung. Zwei Aufgaben, die auf einem parallelen Zweig nebeneinander laufen, sehen beide so aus, als hätten sie alles geschrieben, wenn man nur Momentaufnahmen davor und danach vergleicht — und genau darauf ist jede Engine ohne aufgezeichnete Zuordnung angewiesen. Atlas hält jetzt im Moment des Schreibens fest, wer geschrieben hat; die Antwort wird also gelesen und nicht geraten. Instanzen, die vorher liefen, sagen das offen, statt eine Aufgabe zu nennen, die die falsche sein könnte."
-      },
-      "link": {
-        "label": "ADR-0230",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
-      },
-      "tags": [
-        "Operations",
-        "Data",
-        "Modeling"
-      ],
-      "tutorial": {
-        "en": [
-          "Model a data object: drop a Data Object on the canvas, name it (order), and give it a data state under Properties.",
-          "Draw a data output association from a task to it, with a FEEL value under <from> — that is the write.",
-          "Deploy the model and start an instance, then open it under Operations › Instances and click into the replay.",
-          "Switch to the Data tab: the object is there with its class, its state and its value.",
-          "Click the object's name to open its state trail — every write, in order, with the task that made it."
-        ],
-        "de": [
-          "Modellieren Sie ein Datenobjekt: Ziehen Sie ein Data Object auf die Fläche, benennen Sie es (order) und geben Sie ihm unter Eigenschaften einen Datenzustand.",
-          "Zeichnen Sie von einer Aufgabe eine Data Output Association darauf, mit einem FEEL-Wert unter <from> — das ist der Schreibvorgang.",
-          "Deployen Sie das Modell, starten Sie eine Instanz und öffnen Sie sie unter Betrieb › Instanzen im Replay.",
-          "Wechseln Sie auf den Reiter „Data\": Das Objekt steht dort mit Klasse, Zustand und Wert.",
-          "Klicken Sie auf den Namen des Objekts, um seine Zustandsspur zu öffnen — jeden Schreibvorgang der Reihe nach, mit der Aufgabe, die ihn gemacht hat."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Instances",
-          "de": "Instanzen öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "see-who-is-signed-in-right-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See who is signed in right now",
-        "de": "Sehen, wer gerade angemeldet ist"
-      },
-      "summary": {
-        "en": "The user list under Organization now has a Presence column. Online means somebody did something in the last five minutes, idle means a session is open but untouched, offline means no browser is reporting for that account. The list could only tell you whether an account was enabled before — the same answer for the person reading the screen and for the one who left in March. The two states nobody gets right by accident are the last two: the Console polls by itself, so a tab parked behind another window would look busy forever, and a session outlives the laptop that was closed on it by up to twelve hours. So your browser reports two separate things once a minute — that the tab is open, and whether anybody actually touched it. Nothing is stored: presence is read from the live sessions and nothing else, there is no record, no event, nothing in a backup and no way to ask about yesterday, and after a restart it shows nobody, because after a restart nobody is signed in. Three states, never which page or which action, and only administrators see it.",
-        "de": "Die Benutzerliste unter Organization hat jetzt eine Spalte «Presence». Online heisst, jemand hat in den letzten fünf Minuten etwas getan; idle, dass eine Sitzung offen ist, aber unberührt; offline, dass für dieses Konto kein Browser mehr meldet. Bisher konnte die Liste nur sagen, ob ein Konto aktiviert ist — dieselbe Antwort für die Person, die gerade auf den Bildschirm schaut, wie für die, die im März gegangen ist. Die beiden letzten Zustände bekommt man nicht nebenbei richtig: Die Konsole fragt von sich aus nach, ein Tab hinter einem anderen Fenster sähe also ewig beschäftigt aus, und eine Sitzung überlebt den zugeklappten Laptop um bis zu zwölf Stunden. Deshalb meldet Ihr Browser einmal pro Minute zweierlei getrennt — dass der Tab offen ist, und ob ihn jemand angefasst hat. Gespeichert wird nichts: Die Anwesenheit wird aus den laufenden Sitzungen gelesen und aus nichts sonst, es gibt keinen Datensatz, kein Ereignis, nichts in der Sicherung und keine Möglichkeit, nach gestern zu fragen; nach einem Neustart zeigt sie niemanden, denn nach einem Neustart ist niemand angemeldet. Drei Zustände, nie welche Seite oder welche Aktion, und sehen tun es nur Administratorinnen."
-      },
-      "link": {
-        "label": "ADR-0228",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0228-user-presence.md"
-      },
-      "tags": [
-        "Organization",
-        "Security"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Console › Organization. The Users card is admin-only, and so is the Presence column.",
-          "Your own row says online: you are reading this page, which is somebody doing something.",
-          "Leave the tab open and do nothing else for five minutes. Your row turns idle — the page keeps polling, but polling is not you.",
-          "Close a browser somebody else is signed in with. Within five minutes their row turns offline, even though their session has hours left on it.",
-          "Hover a pill for the detail: when the account was last used, or when its browser last reported."
-        ],
-        "de": [
-          "Console › Organization öffnen. Die Karte «Users» ist Administratorinnen vorbehalten, die Spalte «Presence» ebenso.",
-          "Die eigene Zeile steht auf online: Sie lesen gerade diese Seite, und das ist jemand, der etwas tut.",
-          "Den Tab offen lassen und fünf Minuten nichts tun. Die Zeile wechselt auf idle — die Seite fragt weiter nach, aber Nachfragen sind nicht Sie.",
-          "Einen Browser schliessen, in dem jemand anderes angemeldet ist. Innert fünf Minuten steht die Zeile auf offline, obwohl die Sitzung noch Stunden gültig wäre.",
-          "Mit der Maus über ein Pill fahren: Dort steht, wann das Konto zuletzt benutzt wurde beziehungsweise wann sein Browser zuletzt gemeldet hat."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organisation öffnen"
-        },
-        "route": "#/console/org"
       }
     }
   ]

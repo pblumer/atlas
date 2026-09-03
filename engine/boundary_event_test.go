@@ -382,3 +382,167 @@ func TestBoundaryTimerRecovers(t *testing.T) {
 		t.Errorf("escalation end visits = %d, want 1", v[escEnd])
 	}
 }
+
+// TestBoundaryMessageNonInterruptingRepeats is the boundary-event half of the
+// repeat-forever contract an event subprocess already keeps: a non-interrupting message
+// boundary stays armed after it fires, so every later message routes its reminder branch
+// again while the host keeps working — what BPMN says and what Camunda and Zeebe do
+// (ADR-0040 with ADR-0054).
+//
+// It used to fire exactly once. OnCompleting completed the boundary element instance and
+// let its subscription retire with it, so the second message correlated to nothing and
+// vanished without a trace — no incident, no log line, the host simply never heard it. A
+// recurring *timer* boundary already did the right thing (fireRecurringBoundary): fire the
+// outgoing flow without completing the element instance. This is that, for a message.
+//
+// The test also crashes and recovers between the second and third message: the re-opened
+// subscription is an event like any other, so it must rebuild from the log.
+func TestBoundaryMessageNonInterruptingRepeats(t *testing.T) {
+	dir := t.TempDir()
+
+	b := compiler.NewBuilder(defKey, "reminders", 1)
+	start := b.AddStartEvent()
+	host := b.AddServiceTask("post", 3)
+	ping := b.AddBoundaryMessageEvent(host, false, "ping", mustCompile(t, `"k"`))
+	done := b.AddEndEvent()
+	reminded := b.AddEndEvent()
+	b.Connect(start, host)
+	b.Connect(host, done)
+	b.Connect(ping, reminded)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(host).Detail).JobType
+
+	h := openHarness(t, dir)
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	for i := 1; i <= 2; i++ {
+		p.PublishMessage("ping", "k")
+		if err := p.RunUntilIdle(); err != nil {
+			t.Fatalf("RunUntilIdle after publish %d: %v", i, err)
+		}
+		if v := elementVisits(t, h.store, cp.Key)[reminded]; v != int64(i) {
+			t.Fatalf("after message %d: reminder end visits = %d, want %d (the boundary must stay armed)", i, v, i)
+		}
+		if jobGone(t, h.store, jobType) {
+			t.Fatalf("non-interrupting boundary cancelled the host job (message %d)", i)
+		}
+		// Host plus the still-armed boundary: the boundary must not have completed.
+		if pi, ei := counts(t, h.store); pi != 1 || ei != 2 {
+			t.Fatalf("after message %d: process=%d element=%d, want 1 and 2 (host + armed boundary)", i, pi, ei)
+		}
+	}
+	h.close(t)
+
+	// Restart: the re-opened subscription rebuilds from the log and fires once more.
+	h2 := openHarness(t, dir)
+	defer h2.close(t)
+	p2 := engine.New(1, h2.log, h2.store, &manualClock{})
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover after restart: %v", err)
+	}
+	p2.PublishMessage("ping", "k")
+	if err := p2.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after publish 3: %v", err)
+	}
+	if v := elementVisits(t, h2.store, cp.Key)[reminded]; v != 3 {
+		t.Errorf("after recovery: reminder end visits = %d, want 3 (re-armed subscription survives a restart)", v)
+	}
+
+	// Completing the host disarms the boundary and drains the instance; a later message
+	// then correlates to nothing.
+	p2.CompleteJob(activatableJobs(t, h2.store, jobType)[0])
+	if err := p2.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after complete: %v", err)
+	}
+	if pi, ei := counts(t, h2.store); pi != 0 || ei != 0 {
+		t.Fatalf("after host completes: process=%d element=%d, want 0 and 0 (boundary disarmed)", pi, ei)
+	}
+	p2.PublishMessage("ping", "k")
+	if err := p2.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after the late publish: %v", err)
+	}
+	v := elementVisits(t, h2.store, cp.Key)
+	if v[reminded] != 3 {
+		t.Errorf("after the late publish: reminder end visits = %d, want 3 (boundary was disarmed)", v[reminded])
+	}
+	if v[done] != 1 {
+		t.Errorf("normal end visits = %d, want 1", v[done])
+	}
+}
+
+// TestBoundarySignalNonInterruptingRepeats is the signal twin of the message case: a
+// non-interrupting signal boundary stays armed across broadcasts (ADR-0088 with ADR-0040).
+func TestBoundarySignalNonInterruptingRepeats(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(defKey, "signalled", 1)
+	start := b.AddStartEvent()
+	host := b.AddServiceTask("post", 3)
+	sig := b.AddBoundarySignalEvent(host, false, "alarm")
+	done := b.AddEndEvent()
+	noticed := b.AddEndEvent()
+	b.Connect(start, host)
+	b.Connect(host, done)
+	b.Connect(sig, noticed)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(host).Detail).JobType
+
+	// A signal is broadcast by a throwing instance, not published from outside, so the
+	// alarm gets its own one-shot definition to run.
+	tb := compiler.NewBuilder(defKey+1, "alarm-thrower", 1)
+	tStart := tb.AddStartEvent()
+	tThrow := tb.AddSignalThrowEvent("alarm")
+	tEnd := tb.AddEndEvent()
+	tb.Connect(tStart, tThrow)
+	tb.Connect(tThrow, tEnd)
+	thrower, err := tb.Build()
+	if err != nil {
+		t.Fatalf("Build thrower: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	p.Deploy(thrower)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	for i := 1; i <= 3; i++ {
+		p.CreateInstance(thrower.Key)
+		if err := p.RunUntilIdle(); err != nil {
+			t.Fatalf("RunUntilIdle after broadcast %d: %v", i, err)
+		}
+		if v := elementVisits(t, h.store, cp.Key)[noticed]; v != int64(i) {
+			t.Fatalf("after broadcast %d: visits = %d, want %d (the boundary must stay armed)", i, v, i)
+		}
+	}
+	if jobGone(t, h.store, jobType) {
+		t.Fatal("non-interrupting signal boundary cancelled the host job")
+	}
+	p.CompleteJob(activatableJobs(t, h.store, jobType)[0])
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after complete: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after host completes: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}

@@ -1,18 +1,9 @@
 package mail
 
 import (
-	"context"
-	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
-	"crypto/x509"
-	"encoding/base64"
-	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -55,88 +46,13 @@ type credentialBundle struct {
 	Subject      string `json:"subject,omitempty"`
 }
 
-// serviceAccountFetcher signs a JWT-bearer assertion with a Google service account's
-// private key and exchanges it for an access token (domain-wide delegation). subject
-// is the mailbox the service account impersonates.
-type serviceAccountFetcher struct {
-	httpc       *http.Client
-	tokenURL    string
-	clientEmail string
-	privateKey  *rsa.PrivateKey
-	scope       string
-	subject     string
-	now         func() time.Time
-}
-
-func (f *serviceAccountFetcher) clock() time.Time {
-	if f.now != nil {
-		return f.now()
-	}
-	return time.Now()
-}
-
-func (f *serviceAccountFetcher) Fetch(ctx context.Context) (string, time.Duration, error) {
-	assertion, err := f.signAssertion()
-	if err != nil {
-		return "", 0, err
-	}
-	return oauth2.PostForm(ctx, f.httpc, "mail", f.tokenURL, url.Values{
-		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
-		"assertion":  {assertion},
-	})
-}
-
-// signAssertion builds and RS256-signs the JWT-bearer assertion a Google service
-// account presents: iss is the SA email, sub the impersonated user, aud the token
-// endpoint, with a one-hour validity window.
-func (f *serviceAccountFetcher) signAssertion() (string, error) {
-	now := f.clock()
-	header := map[string]string{"alg": "RS256", "typ": "JWT"}
-	claims := map[string]any{
-		"iss":   f.clientEmail,
-		"scope": f.scope,
-		"aud":   f.tokenURL,
-		"iat":   now.Unix(),
-		"exp":   now.Add(time.Hour).Unix(),
-	}
-	if f.subject != "" {
-		claims["sub"] = f.subject
-	}
-	hb, err := json.Marshal(header)
-	if err != nil {
-		return "", fmt.Errorf("mail: encode JWT header: %w", err)
-	}
-	cb, err := json.Marshal(claims)
-	if err != nil {
-		return "", fmt.Errorf("mail: encode JWT claims: %w", err)
-	}
-	signingInput := base64.RawURLEncoding.EncodeToString(hb) + "." + base64.RawURLEncoding.EncodeToString(cb)
-	digest := sha256.Sum256([]byte(signingInput))
-	sig, err := rsa.SignPKCS1v15(rand.Reader, f.privateKey, crypto.SHA256, digest[:])
-	if err != nil {
-		return "", fmt.Errorf("mail: sign JWT assertion: %w", err)
-	}
-	return signingInput + "." + base64.RawURLEncoding.EncodeToString(sig), nil
-}
-
 // parseRSAPrivateKey decodes a PEM-encoded RSA private key (PKCS#8, as Google service
-// account JSON carries, or PKCS#1) for JWT signing.
+// account JSON carries, or PKCS#1) for JWT signing. The mechanism is the shared
+// [oauth2] package's since a second caller needed it
+// (ADR-0235); what stays here is this package's name on the
+// error an operator reads.
 func parseRSAPrivateKey(pemStr string) (*rsa.PrivateKey, error) {
-	block, _ := pem.Decode([]byte(pemStr))
-	if block == nil {
-		return nil, fmt.Errorf("mail: service-account private key is not valid PEM")
-	}
-	if k, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
-		rk, ok := k.(*rsa.PrivateKey)
-		if !ok {
-			return nil, fmt.Errorf("mail: service-account private key is not an RSA key")
-		}
-		return rk, nil
-	}
-	if k, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
-		return k, nil
-	}
-	return nil, fmt.Errorf("mail: cannot parse service-account private key (want PKCS#8 or PKCS#1 RSA)")
+	return oauth2.ParseRSAPrivateKey("mail", pemStr)
 }
 
 // newTokenSource builds a cached TokenSource for a fully-resolved credential bundle
@@ -166,8 +82,6 @@ func newTokenSource(b credentialBundle, httpc *http.Client, now func() time.Time
 		}
 		f = oauth2.RefreshToken(cfg)
 	case methodServiceAccount:
-		// The one grant the shared package does not carry: it is Google-specific, so
-		// it lives with the worker that needs it and only borrows the exchange.
 		if b.ClientEmail == "" || b.PrivateKey == "" {
 			return nil, fmt.Errorf("mail: serviceAccount needs clientEmail and privateKey")
 		}
@@ -175,7 +89,10 @@ func newTokenSource(b credentialBundle, httpc *http.Client, now func() time.Time
 		if err != nil {
 			return nil, err
 		}
-		f = &serviceAccountFetcher{httpc: httpc, tokenURL: b.TokenURL, clientEmail: b.ClientEmail, privateKey: key, scope: b.Scope, subject: b.Subject, now: now}
+		f = oauth2.ServiceAccount(oauth2.ServiceAccountConfig{
+			HTTPClient: httpc, Kind: "mail", TokenURL: b.TokenURL,
+			ClientEmail: b.ClientEmail, PrivateKey: key, Scope: b.Scope, Subject: b.Subject,
+		}, now)
 	default:
 		return nil, fmt.Errorf("mail: unknown auth method %q (want %q, %q, or %q)", b.Method, methodClientCredentials, methodRefreshToken, methodServiceAccount)
 	}
