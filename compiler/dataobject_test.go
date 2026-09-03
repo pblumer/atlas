@@ -348,9 +348,17 @@ func TestParseDataOutputAssociationUnknownTarget(t *testing.T) {
 	}
 }
 
-// TestParseDataOutputAssociationUnknownReferenceObject rejects a reference whose
-// dataObjectRef points at no declared data object.
-func TestParseDataOutputAssociationUnknownReferenceObject(t *testing.T) {
+// TestParseDataObjectReferenceWithNoNameFallsBackToItsID covers the reference that
+// lost its declaration *and* has no name of its own to stand in with.
+//
+// This used to be a refusal — a reference whose dataObjectRef named nothing failed
+// the whole deploy. It is not one any more, for the reason
+// TestDataObjectReferenceStandsInForALostDeclaration sets out: the declaration is the
+// half a model can do without, and refusing over it strands a diagram whose meaning
+// nobody is unsure about. With no name either there is nothing left to call the
+// object but the reference's own id, which is exactly what a nameless <dataObject>
+// already falls back to.
+func TestParseDataObjectReferenceWithNoNameFallsBackToItsID(t *testing.T) {
 	const model = `<?xml version="1.0"?>
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
   <process id="p" isExecutable="true">
@@ -363,8 +371,19 @@ func TestParseDataOutputAssociationUnknownReferenceObject(t *testing.T) {
   </process>
 </definitions>`
 
-	if _, err := compiler.Parse(1, 1, strings.NewReader(model)); err == nil {
-		t.Fatal("Parse err = nil, want an error for a reference with an unknown dataObjectRef")
+	cp, err := compiler.Parse(1, 1, strings.NewReader(model))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	objs := cp.DataObjects()
+	if len(objs) != 1 {
+		t.Fatalf("DataObjects = %d, want 1", len(objs))
+	}
+	if got := cp.Intern(objs[0].Name); got != "Ref" {
+		t.Errorf("Name = %q, want the reference's own id Ref", got)
+	}
+	if got := cp.Intern(objs[0].InitialState); got != "x" {
+		t.Errorf("InitialState = %q, want x", got)
 	}
 }
 
@@ -694,6 +713,96 @@ func TestDataObjectItemTypeReadsAVendorNameWhenThereIsNoStructureRef(t *testing.
 		if got := byName[tt.object]; got != tt.want {
 			t.Errorf("data object %q: ItemType = %q, want %q", tt.object, got, tt.want)
 		}
+	}
+}
+
+// danglingDataObjectRefBPMN is a diagram that lost the <dataObject> its reference
+// points at — the shape on the canvas survived, the declaration behind it did not.
+// This is a real save from the Modeler, reduced: the box reads "Kunde [received]" to
+// anybody looking at it, and dataObjectRef names an id the model does not contain.
+const danglingDataObjectRefBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <process id="p" isExecutable="true">
+    <startEvent id="s"><outgoing>f1</outgoing></startEvent>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <dataObjectReference id="DataObjectReference_11h2i4n" name="Kunde" dataObjectRef="DataObject_0s4i37q">
+      <dataState name="received"/>
+    </dataObjectReference>
+    <task id="t" name="Kunde einlesen">
+      <incoming>f1</incoming><outgoing>f2</outgoing>
+      <property id="Property_0ohqky9" name="__targetRef_placeholder"/>
+      <dataInputAssociation id="DataInputAssociation_0c1cg2c">
+        <sourceRef>DataObjectReference_11h2i4n</sourceRef>
+        <targetRef>Property_0ohqky9</targetRef>
+        <assignment><to xsi:type="tFormalExpression">Kunde</to></assignment>
+      </dataInputAssociation>
+      <dataOutputAssociation id="DataOutputAssociation_1">
+        <targetRef>DataObjectReference_11h2i4n</targetRef>
+        <assignment><from xsi:type="tFormalExpression">=customer</from></assignment>
+      </dataOutputAssociation>
+    </task>
+    <sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+    <endEvent id="e"><incoming>f2</incoming></endEvent>
+  </process>
+</definitions>`
+
+// TestDataObjectReferenceStandsInForALostDeclaration pins that such a model compiles
+// and means what it looks like.
+//
+// A data object is two elements: the <dataObject> that declares it and carries its
+// type, and the <dataObjectReference> that puts it on the canvas with its name, its
+// data state and its shape. Only the second is drawn, so only the second is visibly
+// there — and a model can arrive having lost the first. Before this, the compiler
+// refused the whole deploy over it, naming an id nobody had ever typed and offering
+// nothing to do about it.
+//
+// Nothing about such a model is ambiguous: a data object's identity is its name, and
+// the name is on the reference. So the reference stands in for its own declaration —
+// the same fallback a <dataStoreReference> naming no root element already gets — and
+// the associations wire to it. Only the declared type is genuinely lost, and the
+// object is seeded without one rather than with a guess.
+func TestDataObjectReferenceStandsInForALostDeclaration(t *testing.T) {
+	cp, err := compiler.Parse(1, 1, strings.NewReader(danglingDataObjectRefBPMN))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	objs := cp.DataObjects()
+	if len(objs) != 1 {
+		t.Fatalf("DataObjects = %d, want 1", len(objs))
+	}
+	// Named off the reference, in the state the reference declares.
+	if got := cp.Intern(objs[0].Name); got != "Kunde" {
+		t.Errorf("Name = %q, want Kunde", got)
+	}
+	if got := cp.Intern(objs[0].InitialState); got != "received" {
+		t.Errorf("InitialState = %q, want received", got)
+	}
+	// The type was on the lost declaration, so it is empty rather than invented.
+	if got := cp.Intern(objs[0].ItemType); got != "" {
+		t.Errorf("ItemType = %q, want empty", got)
+	}
+
+	// And both associations resolve to it, so the task reads and writes the object
+	// the diagram shows it reading and writing.
+	var task int32 = -1
+	for id := int32(0); id < 10; id++ {
+		if cp.ElementBpmnId(id) == "t" {
+			task = id
+			break
+		}
+	}
+	if task < 0 {
+		t.Fatal("task node not found")
+	}
+	out := cp.DataOutputAssociations(task)
+	if len(out) != 1 || cp.Intern(out[0].DataObject) != "Kunde" {
+		t.Fatalf("output associations = %+v, want one writing Kunde", out)
+	}
+	if got := cp.Intern(out[0].TargetState); got != "received" {
+		t.Errorf("TargetState = %q, want received", got)
+	}
+	in := cp.DataInputAssociations(task)
+	if len(in) != 1 || cp.Intern(in[0].DataObject) != "Kunde" {
+		t.Fatalf("input associations = %+v, want one reading Kunde", in)
 	}
 }
 

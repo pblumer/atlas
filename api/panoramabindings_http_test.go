@@ -258,7 +258,11 @@ func TestPanoramaBindingCandidatesCarryNoEndpoint(t *testing.T) {
 	if !strings.Contains(string(raw), "ops-mail") {
 		t.Errorf("candidates = %s, want the configured worker", raw)
 	}
-	for _, leak := range []string{"internal-relay", "corp.example", "smtp://", "587"} {
+	// The port is checked with its colon. A bare "587" is three digits, and the ids in
+	// this response are random hex — "3f6d114ad5c5879f" contains it — so the bare form
+	// failed this test on roughly one run in a few hundred, for a reason that had
+	// nothing to do with an endpoint leaking.
+	for _, leak := range []string{"internal-relay", "corp.example", "smtp://", ":587"} {
 		if strings.Contains(string(raw), leak) {
 			t.Errorf("candidates leak %q: %s", leak, raw)
 		}

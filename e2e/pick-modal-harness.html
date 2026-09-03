@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas pick-modal e2e harness</title>
+    <!-- Drives the real api/web/pickmodal.js against the list shape that broke its
+         predecessor: thirty applications, the newest one last. The window.prompt this
+         replaces printed them as numbered text, and a browser truncates a prompt body
+         past a few lines — so the application somebody had just created was not in the
+         dialog they were told to pick from, with nothing to say it had been cut. The
+         page scaffolding is the test's own, because app.js boots the whole console on
+         import and cannot be loaded here. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="card" style="padding: 18px; max-width: 720px">
+      <button class="btn" id="open">Create new</button>
+      <button class="btn" id="open-plain">Promote</button>
+      <pre id="result">—</pre>
+    </div>
+    <script type="module">
+      import { openPickModal } from "/pickmodal.js";
+
+      // Thirty, because the list only has to outgrow what a prompt() can show; the
+      // real server this was reported from had a dozen and already cut them off.
+      // "proc_new_cutomer" is last, the way a just-created application sorts.
+      const APPS = [
+        ...Array.from({ length: 29 }, (_, i) => ({ value: `app-${i + 1}`, label: `Application ${i + 1}` })),
+        { value: "app-new", label: "proc_new_cutomer" },
+      ];
+      const TARGETS = [
+        { value: "t1", label: "Staging" },
+        { value: "t2", label: "Production" },
+      ];
+
+      const result = document.getElementById("result");
+      const show = (r) => { result.textContent = r ? JSON.stringify(r) : "cancelled"; };
+
+      document.getElementById("open").addEventListener("click", async () => {
+        show(await openPickModal({
+          title: "New information model",
+          label: "Application",
+          options: APPS,
+          nameLabel: "Model name",
+          nameFor: (app) => `${app.label} data`,
+          hint: "The model belongs to this application.",
+        }));
+      });
+      document.getElementById("open-plain").addEventListener("click", async () => {
+        show(await openPickModal({
+          title: "Promote v3", label: "Target", options: TARGETS, okLabel: "Promote",
+        }));
+      });
+      window.__ready = true;
+    </script>
+  </body>
+</html>
