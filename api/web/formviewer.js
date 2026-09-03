@@ -10,6 +10,30 @@
 // _formViewer caches the import promise so repeated opens reuse the one module instance.
 let _formViewer = null;
 
+// FORM_LOAD_TIMEOUT_MS bounds how long anything waits for a form to arrive. Every
+// surface that renders one puts up "Loading form…" first and replaces it once the
+// viewer and the definition are both here — so a fetch that neither answers nor fails
+// leaves that placeholder standing for good, with no error, no way to retry, and a
+// disabled Send button next to it. A stall is a failure the person can act on, so it is
+// reported as one. The bundle is 476 KB: this has to be long enough for a slow link to
+// finish honestly, and short enough that nobody sits watching a placeholder.
+export const FORM_LOAD_TIMEOUT_MS = 20000;
+
+// withLoadDeadline rejects if `p` has not settled within the deadline, naming what did
+// not arrive so the message says which half stalled. It does not cancel the underlying
+// work — a module import cannot be cancelled — which is exactly why a retry is cheap:
+// whatever did arrive in the meantime is in the browser's cache.
+export function withLoadDeadline(p, what, ms = FORM_LOAD_TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${what} did not arrive within ${Math.round(ms / 1000)} seconds`)),
+      ms);
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
 // loadFormViewer lazily imports the vendored form-js viewer and injects its stylesheet
 // once, the first time anything renders a form — so a user who never opens one never
 // pays for the 86 KB of CSS or the bundle.
@@ -22,7 +46,12 @@ export function loadFormViewer() {
       link.href = "vendor/form-js/form-js.css";
       document.head.appendChild(link);
     }
-    _formViewer = import("./vendor/form-js/form-viewer.js");
+    // The memo is here to load the bundle once, not to make one bad fetch permanent: a
+    // remembered failure would fail every later form in the tab, leaving a page reload
+    // as the only way back. So a load that fails — or that runs out its deadline — is
+    // forgotten, and the next open imports again.
+    _formViewer = withLoadDeadline(import("./vendor/form-js/form-viewer.js"), "The form viewer")
+      .catch((e) => { _formViewer = null; throw e; });
   }
   return _formViewer;
 }

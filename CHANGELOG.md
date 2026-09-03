@@ -1173,6 +1173,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **"Loading form…" could stand there for good.** Deploy & run opens the process's
+  start form in a modal (ADR-0028), and the modal waited on two things — the vendored
+  form-js viewer and the form definition — with a deadline on neither. A request that
+  hangs instead of failing is an ordinary thing in the wild (a stalled asset, a proxy
+  holding the connection, a server that stops answering), and it left the placeholder
+  on screen for the rest of the session: no error, no way to retry, and a disabled
+  **Send** beside it. Reported from a running server, where the start form of a
+  process being deployed never appeared.
+
+  A stall is now a failure somebody can act on. Both halves of the load carry a
+  deadline, the message names which half did not arrive, and a **Try again** costs
+  nothing — whatever did arrive in the meantime is in the browser's cache. The
+  memoized viewer import no longer remembers a failure either: one bad fetch used to
+  fail every later form in the tab, leaving a page reload as the only way back.
+  Cancelling while it loads now also drops the late arrival rather than building a
+  live form into a container already detached.
+
+  `e2e/deploy-start-form-stall.spec.mjs` holds a definition, then the bundle, open —
+  the modal has to report it, offer the retry, and render the form when the retry
+  arrives, having deployed nothing throughout.
+
 - **The Data area's Import button did nothing at all.** Its click handler called a
   helper that a change to the Console had removed in the meantime — the picker for
   which application a new model belongs to, which became a dialog rather than a

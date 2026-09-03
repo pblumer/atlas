@@ -17,7 +17,7 @@ import { migrateInstanceFlow } from "./migrationdialog.js";
 // Which keys a form-js schema binds — the Developer View reads it to offer a linked
 // form's fields as variables, the incident's repair form reads it to know which keys a
 // submit may write (ADR-0169). One description of it, in one place.
-import { formFieldKeys, formFieldTypes, loadFormViewer } from "./formviewer.js";
+import { formFieldKeys, formFieldTypes, loadFormViewer, withLoadDeadline } from "./formviewer.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
@@ -7513,7 +7513,7 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
         <div class="modal startform-modal" role="dialog" aria-modal="true" aria-label="Start form">
           <div class="modal-head"><h2>Start values</h2></div>
           <div class="modal-body">
-            <div class="startform-host" id="sf-host"><p class="muted">Loading form…</p></div>
+            <div class="startform-host" id="sf-host"></div>
             <p class="err" id="sf-err"></p>
           </div>
           <div class="modal-foot">
@@ -7526,7 +7526,9 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
       const errEl = ov.querySelector("#sf-err");
       const sendBtn = ov.querySelector("[data-sf-send]");
       let form = null;
+      let closed = false;
       const close = (result) => {
+        closed = true;
         if (form) { try { form.destroy(); } catch { /* noop */ } }
         ov.remove();
         document.removeEventListener("keydown", onKey);
@@ -7537,21 +7539,46 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
       ov.querySelector("[data-sf-cancel]").addEventListener("click", () => close(null));
       ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
 
-      Promise.all([loadFormViewer(), api("GET", "/api/v1/forms/" + encodeURIComponent(formId))])
-        .then(async ([{ Form }, def]) => {
-          host.innerHTML = "";
-          form = new Form({ container: host });
-          await form.importSchema((def && def.schema) || {}, {});
-          sendBtn.disabled = false;
-          sendBtn.focus();
-        })
-        .catch((e) => {
-          // The form is the way in and it did not load. Say so and offer the way out
-          // that still works rather than a Send that would start with nothing.
-          host.innerHTML = `<p class="err">Could not load the start form: ${esc(e.message)}</p>
-            <p class="muted">Deploy only still works, and the process can be started from
-            the Tasks app once its form loads.</p>`;
-        });
+      // loadIntoHost renders the form, and is what Try again calls to render it after a
+      // failure. Both halves carry a deadline (formviewer.js): a viewer bundle or a
+      // definition that never arrives used to leave "Loading form…" standing for the
+      // rest of the session — no error, no retry, and a Send that stayed disabled
+      // beside it. Nothing here can hang without saying so any more.
+      const loadIntoHost = () => {
+        // A retry after a half-built form (the viewer came, the schema did not) would
+        // otherwise wipe its container out from under it and leave it running.
+        if (form) { try { form.destroy(); } catch { /* noop */ } form = null; }
+        host.innerHTML = `<p class="muted">Loading form…</p>`;
+        errEl.textContent = "";
+        Promise.all([
+          loadFormViewer(),
+          withLoadDeadline(api("GET", "/api/v1/forms/" + encodeURIComponent(formId)), "The form definition"),
+        ])
+          .then(async ([{ Form }, def]) => {
+            // Cancelled while it loaded: instantiating form-js now would put a live
+            // form, with its timers and listeners, into a container already detached.
+            if (closed) return;
+            host.innerHTML = "";
+            form = new Form({ container: host });
+            await form.importSchema((def && def.schema) || {}, {});
+            if (closed) { try { form.destroy(); } catch { /* noop */ } form = null; return; }
+            sendBtn.disabled = false;
+            sendBtn.focus();
+          })
+          .catch((e) => {
+            if (closed) return;
+            // The form is the way in and it did not load. Say so, offer the retry that
+            // costs nothing (whatever did arrive is cached), and name the way out that
+            // still works rather than a Send that would start with nothing.
+            host.innerHTML = `<p class="err">Could not load the start form: ${esc(e.message)}</p>
+              <p class="muted">Deploy only still works, and the process can be started from
+              the Tasks app once its form loads.</p>
+              <button type="button" class="btn ghost small" data-sf-retry
+                title="Load the start form again">Try again</button>`;
+            host.querySelector("[data-sf-retry]").addEventListener("click", loadIntoHost);
+          });
+      };
+      loadIntoHost();
 
       sendBtn.addEventListener("click", () => {
         if (!form) return;
