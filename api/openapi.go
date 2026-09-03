@@ -571,6 +571,13 @@ func (s *Server) apiRoutes() []apiRoute {
 				"applicationId": tString(), "name": tString(), "documentation": tString(),
 			}, "applicationId", "name")),
 			resp: jsonBody("Information model", tObject()), status: http.StatusCreated}},
+		{"POST", "/api/v1/infomodel/import", s.infomodel.HandleImport, apiOp{
+			summary: "Import a UML class diagram as a new information model: Atlas's own JSON, or the XMI 2.5.1 a UML tool exports. It goes through the same subset the canvas writes through, so anything outside it is dropped with a note naming the element; dryRun reports what an import would do and stores nothing (ADR-draft-uml-model-import)", tag: "Information model", role: RoleModeler,
+			req: jsonBody("Document to import", schemaObj(map[string]any{
+				"applicationId": tString(), "name": tString(), "documentation": tString(),
+				"format": tString(), "document": tString(), "dryRun": tBool(),
+			}, "applicationId", "document")),
+			resp: jsonBody("Import result: the notes, the validation verdict, and either the preview or the stored model", tObject()), status: http.StatusCreated}},
 		{"GET", "/api/v1/infomodel/models/{id}", s.infomodel.HandleGet, apiOp{
 			summary: "Read one information model whole — its classes, their attributes and business keys, its associations, and the validation verdict on all of it", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Information model", tObject())}},
