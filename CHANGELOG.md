@@ -14,6 +14,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **clio tasks run on a worker now** (ADR-draft-in-process-connectors-refused, slice 2).
+  Writing an event, folding a subject's state, reading its history: three round trips
+  to an event store somebody else operates, all of them on the loop that owns the
+  partition's state. clio joins the kinds Atlas offloads and supervises by itself.
+
+  It is Remedy's handover with an event store in place of an ITSM instance — the
+  endpoint is a connector record, the token a vault reference behind it, and
+  `clioWorkerEnv` renders the stores the engine has configured. One difference is
+  deliberate: a store with **no** token is still handed over, because clio can be
+  reached without one and dropping it would leave a working instance unserved.
+
+  A clio write also carries something no other kind does — the event **body**, which is
+  the task's input mappings or the variables it sees. That is engine state, so it is
+  resolved in the engine and travels in the payload beside the idempotency key that
+  de-duplicates a retry. Both halves now go through one `clio.Run`: the in-process
+  handlers were rewritten to call it, so an offloaded write and an in-engine one cannot
+  disagree about what a clio task means.
+
+  Five kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `ldap`,
+  `soap`, `temis`.
+
 - **REST and LDIF tasks no longer run on the engine's own loop**
   ([ADR-draft-in-process-connectors-refused](docs/adr/draft-in-process-connectors-refused.md),
   finishing [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md)). ADR-0164 decided

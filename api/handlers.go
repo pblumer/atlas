@@ -16,6 +16,7 @@ import (
 	"github.com/pblumer/atlas/api/layout"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
+	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/jira"
@@ -5370,6 +5371,23 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"filter": j.Filter, "select": j.Select, "pageSize": j.PageSize, "maxUsers": j.MaxUsers,
 			"search": j.Search, "advancedQuery": j.Advanced, "deltaLink": j.DeltaLink,
 			"resultVariable": j.ResultVariable,
+		}}
+	case compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex:
+		// One arm for the three clio operations: the resolved job says which it is, so
+		// a worker dispatches on the payload rather than on a job-type index it would
+		// have to keep in step with the compiler. The endpoint and token stay with the
+		// worker under the connector's name (ADR-0036/0168); what travels is what only
+		// the engine has — including a write's event body, which is the task's input
+		// mappings or the variables it sees, and exists nowhere but in engine state.
+		j, err := clio.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "clio", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "subject": j.Subject,
+			"eventType": j.EventType, "query": j.Query, "reduceSpec": j.ReduceSpec,
+			"limit": j.Limit, "data": j.Data, "idempotencyKey": j.IdempotencyKey,
+			"resultVariable": j.Result,
 		}}
 	case compiler.WebScrapeJobTypeIndex:
 		// No credential at all here — what the worker adds is network reach. A page

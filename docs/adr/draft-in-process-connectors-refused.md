@@ -99,7 +99,7 @@ Everything else that reaches another system belongs on a worker.
 
 ### What moves now
 
-`rest` and `ldif` join `DefaultOffloadedKinds`. LDIF needs nothing to make that work —
+`rest`, `ldif` and `clio` join `DefaultOffloadedKinds`. LDIF needs nothing to make that work —
 it reads and writes a file, and a supervised worker is a child process on the same
 host. REST needed the same thing Active Directory needed (ADR-0182): its endpoint is
 in the model and travels with the job, but its `authSecret` is a *vault reference*, and
@@ -108,11 +108,20 @@ references the deployed models name, resolved through the vault, into the child'
 environment under the `ATLAS_CONNECTOR_<REF>_TOKEN` names the worker already reads.
 Only what is deployed is handed over — the running models' secrets, not the vault.
 
+clio needed Remedy's answer rather than AD's: its endpoint is a *connector record* and
+its token a vault reference behind that record, so `clioWorkerEnv` renders the stores
+the engine has configured. One difference is deliberate — a store with no token is
+still handed over, because clio can be reached without one and dropping it would leave
+a working instance unserved, where Remedy without a password is simply not configured.
+A clio write also carries something no other kind does: the event *body*, which is the
+task's input mappings or the variables it sees (ADR-0174). That is engine state and
+nothing else could reconstruct it, so it travels resolved, in the payload, beside the
+idempotency key that de-duplicates the retry.
+
 ### What is still in the engine, and is now a list
 
 | Kind | Owed |
 |---|---|
-| `clio` (write/query/read) | Worker half |
 | `sharepoint` | Worker half |
 | `scim` | Worker half |
 | `ldap` | Worker half |

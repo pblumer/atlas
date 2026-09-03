@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "clio-tasks-run-on-a-worker-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Event-store tasks moved out of the engine",
+        "de": "Event-Store-Tasks sind aus der Engine ausgezogen"
+      },
+      "summary": {
+        "en": "Writing an event, reading a subject's history, folding its state — until now Atlas did all three from the process that runs the engine, so a slow event store held up work that had nothing to do with it. They run in a worker Atlas starts and supervises itself now. Nothing to configure: the store you set up in Connectors is handed to that worker, including a store you reach without a token.",
+        "de": "Ein Event schreiben, die Historie eines Subjects lesen, seinen Zustand falten — bisher machte Atlas alle drei im Prozess, der die Engine ausführt, sodass ein langsamer Event-Store Arbeit aufhielt, die nichts damit zu tun hatte. Sie laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Der Store, den Sie unter Connectors eingerichtet haben, wird an diesen Worker übergeben — auch einer, den Sie ohne Token erreichen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "rest-and-ldif-tasks-no-longer-run-on-the-engine-s-own-loop",
       "version": "Unreleased",
       "date": null,
@@ -442,51 +471,6 @@
           "de": "Instanzen öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "see-who-is-signed-in-right-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See who is signed in right now",
-        "de": "Sehen, wer gerade angemeldet ist"
-      },
-      "summary": {
-        "en": "The user list under Organization now has a Presence column. Online means somebody did something in the last five minutes, idle means a session is open but untouched, offline means no browser is reporting for that account. The list could only tell you whether an account was enabled before — the same answer for the person reading the screen and for the one who left in March. The two states nobody gets right by accident are the last two: the Console polls by itself, so a tab parked behind another window would look busy forever, and a session outlives the laptop that was closed on it by up to twelve hours. So your browser reports two separate things once a minute — that the tab is open, and whether anybody actually touched it. Nothing is stored: presence is read from the live sessions and nothing else, there is no record, no event, nothing in a backup and no way to ask about yesterday, and after a restart it shows nobody, because after a restart nobody is signed in. Three states, never which page or which action, and only administrators see it.",
-        "de": "Die Benutzerliste unter Organization hat jetzt eine Spalte «Presence». Online heisst, jemand hat in den letzten fünf Minuten etwas getan; idle, dass eine Sitzung offen ist, aber unberührt; offline, dass für dieses Konto kein Browser mehr meldet. Bisher konnte die Liste nur sagen, ob ein Konto aktiviert ist — dieselbe Antwort für die Person, die gerade auf den Bildschirm schaut, wie für die, die im März gegangen ist. Die beiden letzten Zustände bekommt man nicht nebenbei richtig: Die Konsole fragt von sich aus nach, ein Tab hinter einem anderen Fenster sähe also ewig beschäftigt aus, und eine Sitzung überlebt den zugeklappten Laptop um bis zu zwölf Stunden. Deshalb meldet Ihr Browser einmal pro Minute zweierlei getrennt — dass der Tab offen ist, und ob ihn jemand angefasst hat. Gespeichert wird nichts: Die Anwesenheit wird aus den laufenden Sitzungen gelesen und aus nichts sonst, es gibt keinen Datensatz, kein Ereignis, nichts in der Sicherung und keine Möglichkeit, nach gestern zu fragen; nach einem Neustart zeigt sie niemanden, denn nach einem Neustart ist niemand angemeldet. Drei Zustände, nie welche Seite oder welche Aktion, und sehen tun es nur Administratorinnen."
-      },
-      "link": {
-        "label": "ADR-0228",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0228-user-presence.md"
-      },
-      "tags": [
-        "Organization",
-        "Security"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Console › Organization. The Users card is admin-only, and so is the Presence column.",
-          "Your own row says online: you are reading this page, which is somebody doing something.",
-          "Leave the tab open and do nothing else for five minutes. Your row turns idle — the page keeps polling, but polling is not you.",
-          "Close a browser somebody else is signed in with. Within five minutes their row turns offline, even though their session has hours left on it.",
-          "Hover a pill for the detail: when the account was last used, or when its browser last reported."
-        ],
-        "de": [
-          "Console › Organization öffnen. Die Karte «Users» ist Administratorinnen vorbehalten, die Spalte «Presence» ebenso.",
-          "Die eigene Zeile steht auf online: Sie lesen gerade diese Seite, und das ist jemand, der etwas tut.",
-          "Den Tab offen lassen und fünf Minuten nichts tun. Die Zeile wechselt auf idle — die Seite fragt weiter nach, aber Nachfragen sind nicht Sie.",
-          "Einen Browser schliessen, in dem jemand anderes angemeldet ist. Innert fünf Minuten steht die Zeile auf offline, obwohl die Sitzung noch Stunden gültig wäre.",
-          "Mit der Maus über ein Pill fahren: Dort steht, wann das Konto zuletzt benutzt wurde beziehungsweise wann sein Browser zuletzt gemeldet hat."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organisation öffnen"
-        },
-        "route": "#/console/org"
       }
     }
   ]
