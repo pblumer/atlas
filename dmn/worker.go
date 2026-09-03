@@ -100,7 +100,7 @@ func DecisionHandler(store state.Reader, lookup ProcessLookup, bind Bind, sink f
 		if err != nil {
 			return job.Completion{}, err
 		}
-		inputs, err := buildInputs(store, j.ElementInstanceKey, ei.ProcessInstanceKey, cp.Intern(detail.Inputs), detail.InputMappings)
+		inputs, err := BuildInputs(store, j.ElementInstanceKey, ei.ProcessInstanceKey, cp.Intern(detail.Inputs), detail.InputMappings)
 		if err != nil {
 			return job.Completion{}, fmt.Errorf("dmn: build inputs for element %d: %w", j.ElementInstanceKey, err)
 		}
@@ -127,13 +127,13 @@ func DecisionHandler(store state.Reader, lookup ProcessLookup, bind Bind, sink f
 			ProcessDefKey:      cp.Key,
 			ElementId:          ei.ElementId,
 			DecisionId:         decisionId,
-			InputsJSON:         jsonObject(inputs),
-			OutputsJSON:        jsonObject(eval.Outputs),
+			InputsJSON:         JSONObject(inputs),
+			OutputsJSON:        JSONObject(eval.Outputs),
 			TraceJSON:          string(eval.Trace),
 		}
 		var outputs []model.VariableValue
 		if resultVar := cp.Intern(detail.ResultVar); resultVar != "" {
-			outputs = []model.VariableValue{outputVariable(resultVar, eval.Outputs)}
+			outputs = []model.VariableValue{OutputVariable(resultVar, eval.Outputs)}
 		}
 		return job.Completion{Outputs: outputs, Decision: decision}, nil
 	}
@@ -143,12 +143,7 @@ func DecisionHandler(store state.Reader, lookup ProcessLookup, bind Bind, sink f
 // durable evaluation record. An empty context is recorded as "{}" (an object with
 // no members) rather than JSON null, so the debugging view always shows an object;
 // a marshal failure degrades the same way rather than failing the completion.
-// JSONObject is exported alongside [BuildInputs] and for the same reason: the
-// engine folds a central decision's durable record from what a worker reports, and
-// that record must be rendered exactly as an in-engine evaluation renders it.
-func JSONObject(m map[string]any) string { return jsonObject(m) }
-
-func jsonObject(m map[string]any) string {
+func JSONObject(m map[string]any) string {
 	if len(m) == 0 {
 		return "{}"
 	}
@@ -191,16 +186,7 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, sink func(
 // subprocess or a multi-instance body reads its enclosing scope's variables — e.g.
 // a per-row `inputElement` bound by a multi-instance loop (ADR-0068 scope-chain
 // resolution, ADR-0077, ADR-0084). piKey binds the reserved processInstanceKey.
-// BuildInputs is exported because a *central* decision resolves its inputs in the
-// engine and evaluates them somewhere else (ADR-0233's temis slice): the offloaded
-// half needs the identical merge — static inputs overlaid by input mappings
-// evaluated over the instance's live variables — or a decision would be asked a
-// different question depending on which process asked it.
 func BuildInputs(store state.Reader, elementKey, piKey uint64, staticJSON string, mappings []compiler.DecisionInputMapping) (map[string]any, error) {
-	return buildInputs(store, elementKey, piKey, staticJSON, mappings)
-}
-
-func buildInputs(store state.Reader, elementKey, piKey uint64, staticJSON string, mappings []compiler.DecisionInputMapping) (map[string]any, error) {
 	base, err := decodeInputs(staticJSON)
 	if err != nil {
 		return nil, err
@@ -280,15 +266,7 @@ func feelToInput(v expr.Value) any {
 // a condition reads it as a scalar); a multi-output decision stores the whole
 // output map as a structured (JSON) context. The value is canonicalized through
 // the same expr path as any other variable, so it round-trips on replay.
-// OutputVariable is exported for the same reason [BuildInputs] is: a central
-// decision writes its outputs back from whichever process evaluated it, and the
-// single-output unwrapping below is a rule a model depends on — a gateway routing on
-// the decision reads a scalar. Two renderings of it would be two answers.
 func OutputVariable(name string, outputs map[string]any) model.VariableValue {
-	return outputVariable(name, outputs)
-}
-
-func outputVariable(name string, outputs map[string]any) model.VariableValue {
 	var val any = outputs
 	if len(outputs) == 1 {
 		for _, v := range outputs {

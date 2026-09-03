@@ -6,8 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/temis"
+	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
 )
 
 // The offload seam, tested in the package that owns it. Its two halves answer
@@ -144,5 +147,87 @@ func TestResultVariablesRenderLikeAnInEngineDecision(t *testing.T) {
 
 	if got := (temis.Result{Outputs: map[string]any{"Risk": "high"}}).Variables(); got != nil {
 		t.Errorf("variables = %+v, want none when the model named no result variable", got)
+	}
+}
+
+// A decision service that answers with an error leaves the token parked with an
+// incident, exactly as an unregistered one does — the in-engine path goes through the
+// same Run as the worker's, so a service that is reachable but failing and one that
+// is not configured at all reach a model the same way: as work not done, never as a
+// decision with no answer.
+func TestTemisConnectorEvaluationFailureParksTheToken(t *testing.T) {
+	p, store := openEngine(t)
+	cp, jobType := loanProcess(t)
+	p.Deploy(cp)
+
+	runner := job.NewRunner(store, p)
+	lookup := func(uint64) *compiler.CompiledProcess { return cp }
+	reg := registryWith("risk-service", &errClient{err: errors.New("decision service unreachable")})
+	runner.HandleCompleting(jobType, func(rd state.Reader) job.CompletingHandler {
+		return temis.Handler(store, lookup, reg, nil)
+	})
+
+	p.CreateInstance(cp.Key, model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "150"})
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive with a failing service: %v, want nil (failure routed to an incident, ADR-0061)", err)
+	}
+	ei, err := store.ActiveElementInstanceCount()
+	if err != nil {
+		t.Fatalf("ActiveElementInstanceCount: %v", err)
+	}
+	if ei != 1 {
+		t.Fatalf("active elements = %d, want 1: the token stays on the business rule task", ei)
+	}
+}
+
+// scopeErrStore reports the element instance but fails the variable read, which is
+// the shape of a read view that went away mid-job.
+type scopeErrStore struct {
+	inner state.Reader
+	err   error
+}
+
+func (s scopeErrStore) GetElementInstance(k uint64) (*model.ElementInstanceValue, bool, error) {
+	return s.inner.GetElementInstance(k)
+}
+
+func (s scopeErrStore) VariablesOfScope(uint64, func(*model.VariableValue) error) error {
+	return s.err
+}
+
+// Resolve fails rather than sending a decision an empty input context. The failure
+// mode this prevents is the quiet one: a decision asked with no inputs still gets an
+// answer — the table's default rule — and that answer would route the process.
+func TestResolveFailsRatherThanSendingAnEmptyContext(t *testing.T) {
+	p, store := openEngine(t)
+	cp, _ := loanProcess(t)
+	p.Deploy(cp)
+	p.CreateInstance(cp.Key, model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "50000"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	var (
+		ei    *model.ElementInstanceValue
+		eiKey uint64
+	)
+	_ = store.ActiveElementInstances(func(key uint64, v *model.ElementInstanceValue) error {
+		if d := cp.BusinessRuleTask(cp.Node(v.ElementId).Detail); d != nil && cp.Intern(d.DecisionId) == "Risk" {
+			ei, eiKey = v, key
+		}
+		return nil
+	})
+	if ei == nil {
+		t.Fatal("the instance did not park at the business rule task")
+	}
+
+	boom := errors.New("read view is gone")
+	_, err := temis.Resolve(scopeErrStore{inner: store, err: boom},
+		cp, cp.BusinessRuleTask(cp.Node(ei.ElementId).Detail), ei, eiKey)
+	if err == nil {
+		t.Fatal("a decision resolved with no readable inputs; it would have been asked an empty question")
+	}
+	if !strings.Contains(err.Error(), "build inputs") {
+		t.Errorf("error = %v, want it to say the inputs could not be built", err)
 	}
 }

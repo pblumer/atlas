@@ -254,3 +254,16 @@ func TestRunHandlerAsksForTheWidestShapeAHandlerImplements(t *testing.T) {
 		t.Errorf("variables = %#v, want what the ordinary handler returned", out.Variables)
 	}
 }
+
+// A payload that cannot even be re-marshalled is reported rather than panicked on.
+// The runner takes the leased payload as it arrived, so a value the engine could not
+// have produced is still a value this code has to survive.
+func TestRunTemisJobReportsAPayloadItCannotMarshal(t *testing.T) {
+	job := Job{Connector: &ConnectorPayload{Kind: "temis", Fields: map[string]any{
+		"connector": make(chan int), // nothing JSON can render
+	}}}
+
+	if _, err := RunTemisJob(context.Background(), job, nil); err == nil {
+		t.Fatal("an unrenderable payload was accepted")
+	}
+}
