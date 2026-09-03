@@ -1,0 +1,297 @@
+package api
+
+import (
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
+)
+
+// maxInstanceSearchResults caps a variable search so a single query can't return
+// an unbounded response on a large deployment. There is no value index yet, so a
+// content search is a walk — of one version when scoped with ?process=, of every
+// instance when not — and the cap bounds both the answer's size and, on the scoped
+// path, the walk itself: those indexes are newest-first, so it stops here. Active
+// instances come first, then finished ones most-recently-completed first, so the
+// newest matches are what survives truncation either way. An exact-key lookup is
+// not a walk and is not subject to the cap: it returns the one instance it found.
+const maxInstanceSearchResults = 200
+
+// varQuery is a parsed instance-variable search. Two shapes: a structured
+// name=value match (variable name exact, value substring) when the query
+// contains "="; otherwise a free-text substring over variable names and values.
+// All comparisons are case-insensitive.
+type varQuery struct {
+	structured bool
+	name       string // lower-cased variable name; structured only
+	needle     string // lower-cased substring (value in structured, term in free-text)
+}
+
+// parseVarQuery interprets a raw ?q= value. ok is false for a blank query (the
+// caller returns an empty result set rather than scanning everything). A query
+// like "=value" with no name degrades to free text — an empty exact name can
+// never match, so treating it structurally would be a silent dead end.
+func parseVarQuery(q string) (varQuery, bool) {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return varQuery{}, false
+	}
+	if i := strings.IndexByte(q, '='); i >= 0 {
+		if name := strings.TrimSpace(q[:i]); name != "" {
+			return varQuery{
+				structured: true,
+				name:       strings.ToLower(name),
+				needle:     strings.ToLower(strings.TrimSpace(q[i+1:])),
+			}, true
+		}
+	}
+	return varQuery{needle: strings.ToLower(q)}, true
+}
+
+// match reports whether a variable satisfies the query.
+func (p varQuery) match(v variableView) bool {
+	if p.structured {
+		return strings.ToLower(v.Name) == p.name && strings.Contains(strings.ToLower(v.Value), p.needle)
+	}
+	return strings.Contains(strings.ToLower(v.Name), p.needle) || strings.Contains(strings.ToLower(v.Value), p.needle)
+}
+
+// instanceKeyQuery reports the process instance key a query names, when the query
+// is nothing but digits that fit one. It is deliberately narrow: only a bare
+// number is treated as a key, so "customerType=1998" and "MT-1998" stay content
+// searches. A number that is not a live or finished instance falls through to the
+// content search — which is what keeps a query like "3098" finding zip=3098.
+func instanceKeyQuery(q string) (uint64, bool) {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return 0, false
+	}
+	// Digits only, checked before parsing: ParseUint would otherwise accept a leading
+	// sign, and "+123" is not something an operator pasted out of an instance list.
+	// ParseUint itself rejects anything too large to be a key.
+	for i := 0; i < len(q); i++ {
+		if q[i] < '0' || q[i] > '9' {
+			return 0, false
+		}
+	}
+	key, err := strconv.ParseUint(q, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return key, true
+}
+
+// instanceDefInfo is the deployment metadata an instance row is labelled with.
+type instanceDefInfo struct {
+	ProcessID  string
+	Version    int32
+	VersionTag string
+}
+
+// instanceDefs is a copy of that metadata for every deployment, taken on the run
+// loop so a scan that enriches rows with it can run *off* the loop. The
+// deployments map itself is loop-owned state (I3) and must not be read from a
+// handler goroutine; this small copy can be, and there are as many entries as
+// there are deployed versions, not as there are instances.
+type instanceDefs map[uint64]instanceDefInfo
+
+// snapshotInstanceDefs copies the deployment metadata. Call it on the run loop.
+func (s *Server) snapshotInstanceDefs() instanceDefs {
+	defs := make(instanceDefs, len(s.deployments))
+	for key, d := range s.deployments {
+		info := instanceDefInfo{ProcessID: d.ProcessID, Version: d.Version}
+		if d.cp != nil {
+			info.VersionTag = d.cp.VersionTag()
+		}
+		defs[key] = info
+	}
+	return defs
+}
+
+// enrich labels a row with its definition's id, version and version tag. A row
+// whose definition is gone (deleted after the instance ran) keeps its keys and
+// simply carries no labels.
+func (defs instanceDefs) enrich(r *instanceResp) {
+	if d, ok := defs[r.ProcessDefKey]; ok {
+		r.ProcessID, r.Version, r.VersionTag = d.ProcessID, d.Version, d.VersionTag
+	}
+}
+
+// newInstanceRow builds the response row for an instance, without its variables.
+func newInstanceRow(key uint64, v *model.ProcessInstanceValue, defs instanceDefs) instanceResp {
+	r := instanceResp{
+		Key:           key,
+		ProcessDefKey: v.ProcessDefKey,
+		// ProcessInstanceState.String() reads "active" for a live record and names the
+		// terminal state on a history one, so one row builder serves both families.
+		State:          v.State.String(),
+		CreatedAt:      v.CreatedAt,
+		CompletedAt:    v.CompletedAt,
+		CorrelationKey: v.CorrelationKey,
+		Variables:      []variableView{},
+	}
+	defs.enrich(&r)
+	return r
+}
+
+// lookupInstanceByKey answers a bare-key query with that one instance and its
+// whole variable set — the operator asked for the instance, not for whichever
+// variables a needle happened to match. Two point reads and one prefix scan of a
+// single scope, so its cost is the instance's size and not the store's.
+func lookupInstanceByKey(rv *state.ReadView, defs instanceDefs, key uint64) (instanceResp, bool, error) {
+	pi, ok, err := rv.ProcessInstance(key)
+	if err != nil || !ok {
+		return instanceResp{}, false, err
+	}
+	row := newInstanceRow(key, pi, defs)
+	err = rv.VariablesOfScope(key, func(vv *model.VariableValue) error {
+		row.Variables = append(row.Variables, toVariableView(vv))
+		return nil
+	})
+	return row, err == nil, err
+}
+
+// searchInstances resolves a parsed query against a consistent read view: an
+// exact-key hit first (a point read), otherwise a walk of the live instances and
+// then the history, keeping only instances with a matching variable and, on each
+// row, only the variables that matched — so the UI can highlight them.
+//
+// Scoped to a definition (defKey != 0) the walk reads that definition's own
+// indexes, so a search on a busy engine costs the version being looked at rather
+// than every instance in it. Unscoped it is still a full scan: without a value
+// index there is nothing to seek to, which is why the result is capped.
+//
+// It touches no loop-owned state: the view and the definition labels were both
+// taken on the run loop and handed here, which is what lets the walk — the
+// expensive part, and the part whose cost grows with the store — run off the loop
+// without breaking the single-writer invariant (I3, ADR-0157).
+func searchInstances(rv *state.ReadView, defs instanceDefs, defKey uint64, raw string, pred varQuery) ([]instanceResp, error) {
+	// A bare instance key is answered without scanning anything. It only wins when
+	// the key actually resolves — and, under a scope, when it resolves to *this*
+	// definition; an ordinary number falls through to the content search below.
+	if key, isKey := instanceKeyQuery(raw); isKey {
+		row, found, err := lookupInstanceByKey(rv, defs, key)
+		if err != nil {
+			return nil, err
+		}
+		if found && (defKey == 0 || row.ProcessDefKey == defKey) {
+			return []instanceResp{row}, nil
+		}
+	}
+
+	// matchingVars returns the scope's variables that satisfy the query, or nil if
+	// none do (so the caller can drop the instance).
+	matchingVars := func(key uint64) ([]variableView, error) {
+		var hits []variableView
+		err := rv.VariablesOfScope(key, func(vv *model.VariableValue) error {
+			if view := toVariableView(vv); pred.match(view) {
+				hits = append(hits, view)
+			}
+			return nil
+		})
+		return hits, err
+	}
+
+	active := []instanceResp{}
+	done := []instanceResp{}
+	// Scoped, both indexes are newest-first, so the walk can stop the moment the cap
+	// is met and still return the newest matches — the same rows reading the rest
+	// would have left standing. Unscoped, the history family is in key order and
+	// which matches are newest is only known once all of it has been read, so that
+	// walk runs to the end and the cap is applied to the sorted result below.
+	bounded := defKey != 0
+	collect := func(into *[]instanceResp) func(uint64, *model.ProcessInstanceValue) error {
+		return func(key uint64, v *model.ProcessInstanceValue) error {
+			if bounded && len(active)+len(done) >= maxInstanceSearchResults {
+				return errListTruncated
+			}
+			hits, err := matchingVars(key)
+			if err != nil || len(hits) == 0 {
+				return err
+			}
+			row := newInstanceRow(key, v, defs)
+			row.Variables = hits
+			*into = append(*into, row)
+			return nil
+		}
+	}
+	walkActive, walkDone := rv.ActiveProcessInstances, rv.CompletedProcessInstances
+	if defKey != 0 {
+		walkActive = func(fn func(uint64, *model.ProcessInstanceValue) error) error {
+			return rv.ActiveInstancesOfDefDesc(defKey, 0, fn)
+		}
+		walkDone = func(fn func(uint64, *model.ProcessInstanceValue) error) error {
+			return rv.FinishedInstancesOfDefDesc(defKey, 0, 0, fn)
+		}
+	}
+	if err := unlessTruncated(walkActive(collect(&active))); err != nil {
+		return nil, err
+	}
+	if err := unlessTruncated(walkDone(collect(&done))); err != nil {
+		return nil, err
+	}
+	sort.Slice(done, func(i, j int) bool { return done[i].CompletedAt > done[j].CompletedAt })
+	out := append(active, done...)
+	if len(out) > maxInstanceSearchResults {
+		out = out[:maxInstanceSearchResults]
+	}
+	return out, nil
+}
+
+// handleSearchInstances finds process instances by key or by the content of their
+// variables — the operator "which instance had customerType=Business?" surface,
+// and the "I have this instance key, take me to it" one.
+//
+// A blank query returns an empty list, not every instance. ?process=<key> narrows
+// the search to one definition, which is also what makes it read an index rather
+// than every instance. Finished instances are searchable only while their scope's
+// variables are retained, same as the instances list. Content results are capped at
+// maxInstanceSearchResults.
+//
+// The handler visits the run loop once, briefly, to take a read view and copy the
+// definition labels; the reading itself happens on this goroutine against that
+// view. The search therefore no longer stalls the processor for the length of a
+// scan, and what it reports is one consistent state rather than a state that moved
+// underneath it.
+func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	var defKey uint64
+	if v := strings.TrimSpace(query.Get("process")); v != "" {
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "invalid process key")
+			return
+		}
+		defKey = n
+	}
+	raw := query.Get("q")
+	pred, ok := parseVarQuery(raw)
+	if !ok {
+		httpapi.JSON(w, http.StatusOK, []instanceResp{})
+		return
+	}
+	var (
+		rv   *state.ReadView
+		defs instanceDefs
+	)
+	s.do(func() {
+		rv = s.store.ReadView()
+		defs = s.snapshotInstanceDefs()
+	})
+	if rv == nil { // the run loop is closing: nothing ran, and there is no answer
+		httpapi.Error(w, http.StatusServiceUnavailable, "server is shutting down")
+		return
+	}
+	defer func() { _ = rv.Close() }()
+
+	out, err := searchInstances(rv, defs, defKey, raw, pred)
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "search instances: "+err.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, out)
+}

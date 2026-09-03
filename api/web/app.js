@@ -4770,12 +4770,12 @@ async function viewInstances() {
     <form class="ops-varsearch" id="var-search" title="Find instances by the content of their process variables">
       <span class="ops-search">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
-        <input id="var-q" type="text" placeholder="Search instances by variable — e.g. customerType=Business" aria-label="Search instances by variable" spellcheck="false" autocomplete="off"/>
+        <input id="var-q" type="text" placeholder="Search instances by variable or key — e.g. customerType=Business" aria-label="Search instances by variable or key" spellcheck="false" autocomplete="off"/>
       </span>
       <button class="btn" type="submit" title="Find instances whose process variables match">Search variables</button>
       <button class="btn ghost" type="button" id="var-clear" hidden title="Clear the variable search and its results">Clear</button>
     </form>
-    <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">Contains <code>=</code> → structured <code>name=value</code> (name exact, value substring); otherwise free text across variable names and values.</p>
+    <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">A bare instance key is looked up directly — one read, whatever the instance count. Otherwise: contains <code>=</code> → structured <code>name=value</code> (name exact, value substring), else free text across variable names and values.</p>
     <div id="var-panel" hidden></div>
     <div id="ops-inc-note"></div>
     <div class="card" id="proc-card" style="padding:0">
@@ -5042,7 +5042,10 @@ async function viewInstances() {
       return;
     }
     if (!rows.length) {
-      varPanel.innerHTML = `<div class="card"><div class="empty">No instance has a variable matching “${esc(q)}”.</div></div>`;
+      const miss = /^\d+$/.test(q)
+        ? `No instance has the key ${esc(q)}, and no variable matches it either.`
+        : `No instance has a variable matching “${esc(q)}”.`;
+      varPanel.innerHTML = `<div class="card"><div class="empty">${miss}</div></div>`;
       return;
     }
     const needle = needleOf(q);
@@ -5071,8 +5074,13 @@ async function viewInstances() {
       </tr>`;
     }).join("");
     const capped = rows.length >= 200 ? ' <span class="muted">(showing first 200)</span>' : "";
+    // The server answers a bare instance key as a point read; everything else is
+    // still a content scan. Say which, so the cost of what was just run is visible
+    // rather than implied.
+    const byKey = /^\d+$/.test(q) && rows.length === 1 && String(rows[0].key) === q;
+    const how = byKey ? "exact instance key" : "full scan";
     varPanel.innerHTML = `
-      <p class="muted" style="font-size:12px;margin:0 2px 8px">${rows.length} instance${rows.length === 1 ? "" : "s"} matched${capped} · full scan</p>
+      <p class="muted" style="font-size:12px;margin:0 2px 8px">${rows.length} instance${rows.length === 1 ? "" : "s"} matched${capped} · ${how}</p>
       <div class="card" style="padding:0">
         <table class="var-results" data-dt-key="instance-search">
           <thead><tr><th>Process</th><th>Version</th><th>State</th><th>Started</th><th>Matched variable(s)</th><th></th></tr></thead>
@@ -7986,7 +7994,9 @@ async function viewFormEditor(formId, projectId) {
 
 async function viewLive(key, instance) {
   const mod = await import("./editor.js");
-  await mod.mountLive(view, { api, toast, key, instance });
+  // apiRaw rides along because the live view pages its instance list through the
+  // X-Instances-Next-Cursor header, which the body-only helper cannot see.
+  await mod.mountLive(view, { api, apiRaw, toast, key, instance });
 }
 
 async function viewCollaboration(key) {

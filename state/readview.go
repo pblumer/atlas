@@ -132,3 +132,45 @@ func LocalVariablesMap(r Reader, scope uint64) (map[string]model.VariableValue, 
 	}
 	return vars, nil
 }
+
+// ProcessInstance resolves an instance key against the view, looking in the live
+// family and then the terminal history — [Store.ProcessInstance] as of the moment
+// the view was taken. It is two point reads, which is what lets an operator paste
+// an instance key into the search box and get an answer whose cost does not depend
+// on how many instances exist.
+func (v *ReadView) ProcessInstance(key uint64) (*model.ProcessInstanceValue, bool, error) {
+	return processInstanceOf(v.snap, key)
+}
+
+// ActiveProcessInstances walks the live process instances in the view —
+// [Store.ActiveProcessInstances] against a consistent snapshot, so a scan that
+// runs off the run loop sees one coherent state rather than a moving one.
+func (v *ReadView) ActiveProcessInstances(fn func(key uint64, pi *model.ProcessInstanceValue) error) error {
+	return scanActiveProcessInstances(v.snap, fn)
+}
+
+// CompletedProcessInstances walks the terminal history in the view, the history
+// counterpart of [ReadView.ActiveProcessInstances].
+func (v *ReadView) CompletedProcessInstances(fn func(key uint64, pi *model.ProcessInstanceValue) error) error {
+	return scanCompletedProcessInstances(v.snap, fn)
+}
+
+// ElementInstancesOfProcess walks one instance's element instances in the view —
+// how the instance listing counts the tokens a running instance holds.
+func (v *ReadView) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64) error) error {
+	return elementInstancesOfProcess(v.snap, procKey, fn)
+}
+
+// ActiveInstancesOfDefDesc pages one definition's live instances newest-first in
+// the view — [Store.ActiveInstancesOfDefDesc] against a consistent snapshot, which
+// is what lets the operations list be served without occupying the run loop for
+// the length of a page.
+func (v *ReadView) ActiveInstancesOfDefDesc(procDefKey, before uint64, fn func(key uint64, pi *model.ProcessInstanceValue) error) error {
+	return activeInstancesOfDefDesc(v.snap, procDefKey, before, fn)
+}
+
+// FinishedInstancesOfDefDesc is the history counterpart of
+// [ReadView.ActiveInstancesOfDefDesc].
+func (v *ReadView) FinishedInstancesOfDefDesc(procDefKey uint64, beforeCompletedAt int64, beforeKey uint64, fn func(key uint64, pi *model.ProcessInstanceValue) error) error {
+	return finishedInstancesOfDefDesc(v.snap, procDefKey, beforeCompletedAt, beforeKey, fn)
+}

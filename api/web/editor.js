@@ -7533,8 +7533,13 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
   // fall back to the process-level Operations view.
   const resolveInstanceLink = async (defKey) => {
     try {
-      const list = await api("GET", "/api/v1/instances");
-      const mine = list.filter((r) => r.processDefKey === defKey);
+      // Scoped, and capped at one row per half: the definition's own indexes yield
+      // their newest entry first, so this costs two reads instead of a walk of every
+      // instance in the engine that is then filtered in the browser. Both halves,
+      // because a straight-through process has already finished by the time the
+      // roundtrip link is built.
+      const list = await api("GET", `/api/v1/instances?process=${encodeURIComponent(defKey)}&limit=1`);
+      const mine = (list || []).filter((r) => r.processDefKey === defKey);
       if (mine.length) {
         const inst = mine.reduce((a, b) => (b.key > a.key ? b : a));
         return `#/operations/p/${defKey}/i/${inst.key}`;
@@ -7642,7 +7647,7 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
 // definition is shown, and an instance picker either aggregates every instance's
 // tokens on the diagram or isolates a single one. The selected instance's
 // variables are listed below the diagram.
-export async function mountLive(root, { api, toast, key, instance }) {
+export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
@@ -7771,8 +7776,23 @@ export async function mountLive(root, { api, toast, key, instance }) {
   // roundtrip link, or a shared URL) preselects that one; refreshInstances falls
   // back to "all" if it no longer exists.
   let selected = instance != null ? String(instance) : "all";
-  let instances = [];       // this version's instances, cached for the picker/variables
+  let instances = [];       // the listed page of this version's instances (never all of them)
   let instSig = "";         // signature of the picker's current option set
+  // Paging over the two halves. Each is capped at PANEL_PAGE rows per call and
+  // continued through the cursor the server hands back, so the panel's cost is the
+  // page rather than the version's instance count.
+  const PANEL_PAGE = 50;
+  // How many pages of each half are currently listed. The poll re-reads exactly
+  // this many, so a page the operator loaded is not thrown away 1.5 seconds later —
+  // and an expanded panel still shows live state rather than freezing. Capped:
+  // past this depth the answer is the search box, not more scrolling.
+  const PANEL_MAX_PAGES = 10;
+  let activePages = 1, finishedPages = 1;
+  let moreActive = false, moreFinished = false;
+  let finishedCount = 0;    // finished instances of this version, for the honest total
+  let searchQuery = "";     // the active instance search; "" means the plain listing
+  let searchDraft = "";     // what is currently typed, kept across the 1.5s poll's rebuilds
+  let searchError = "";     // what the last search failed with, shown in the panel
   let liveTasks = [];       // open user-task jobs for this version, refreshed each poll
   let runningCount = 0;     // active instances of this version (from runtime), may exceed the listed page
   // Bulk-terminate selection over the "All instances" list. selectMode shows a
@@ -7787,29 +7807,132 @@ export async function mountLive(root, { api, toast, key, instance }) {
   // refreshInstances pulls this version's instances and, only when the set of
   // instances (or their state) actually changed, rebuilds the picker — so the
   // operator's current selection isn't reset on every poll. Newest activity first.
-  // Scope the fetch to this definition with ?process=: the list endpoint caps
-  // active and finished instances independently per call, so a global fetch can
-  // truncate this version's lone running instance out of the active page during a
-  // flood (its finished instances survive in the separate finished cap), leaving
-  // the picker showing only completed ones. Filtering server-side keeps the cap
-  // per-definition, so a running instance is never dropped.
-  async function refreshInstances() {
-    let all;
-    try { all = await api("GET", "/api/v1/instances?process=" + encodeURIComponent(key)); }
-    catch { return; } // transient; the picker just keeps its current options
-    instances = all
-      .filter((r) => r.processDefKey === key)
-      .sort((a, b) => (a.state === b.state ? b.key - a.key : a.state === "active" ? -1 : 1));
-    const sig = instances.map((r) => `${r.key}:${r.state}`).join(",");
+  //
+  // It reads ONE PAGE per half, not the version's whole instance set. A definition
+  // can hold hundreds of thousands of instances, and fetching them all cost a scan
+  // of the store per poll and a DOM node per instance — the panel became the
+  // slowest thing on the page precisely when an operator most needed it. The server
+  // pages each half off that definition's own index (newest first), so a page costs
+  // the page; `Load more` walks the cursor, and the search box below reaches
+  // anything the first page does not show.
+  async function loadHalf(state, cursor) {
+    const q = `/api/v1/instances?process=${encodeURIComponent(key)}&state=${state}&limit=${PANEL_PAGE}` +
+      (cursor ? `&before=${encodeURIComponent(cursor)}` : "");
+    const { data, headers } = await apiRaw("GET", q);
+    return {
+      rows: (data || []).filter((r) => r.processDefKey === key),
+      more: headers.get("X-Instances-Truncated") === "true",
+      cursor: headers.get("X-Instances-Next-Cursor") || "",
+    };
+  }
+
+  // applyInstances installs a new listed set and rebuilds the picker, but only when
+  // the set actually changed — so a 1.5s poll never resets the operator's selection.
+  function applyInstances(rows) {
+    instances = rows;
+    // The count in "All instances" is the version's real total from the runtime
+    // counters, not the length of the page — a page that says 50 when 300 000 are
+    // running is worse than no number at all. The counters arrive on the runtime
+    // poll, which lands *after* the first listing, so the total is part of the
+    // signature: otherwise the picker would keep the "80 of 80" it was first built
+    // with while the panel beside it says "80 of 150".
+    const total = Math.max(runningCount + finishedCount, instances.length);
+    const sig = instances.map((r) => `${r.key}:${r.state}`).join(",") + `|${searchQuery}|${total}`;
     if (sig === instSig) return;
     instSig = sig;
     // Drop a selection that no longer exists (e.g. its definition was deleted).
     if (selected !== "all" && !instances.some((r) => String(r.key) === selected)) selected = "all";
+    const label = searchQuery
+      ? `Search results (${instances.length})`
+      : `All instances (${listedAll() ? instances.length : `${instances.length} of ${total}`})`;
     instSel.innerHTML =
-      `<option value="all"${selected === "all" ? " selected" : ""}>All instances (${instances.length})</option>` +
+      `<option value="all"${selected === "all" ? " selected" : ""}>${esc(label)}</option>` +
       instances.map((r) =>
         `<option value="${r.key}"${String(r.key) === selected ? " selected" : ""}>${r.key} · ${esc(r.state)}</option>`
       ).join("");
+  }
+
+  // listedAll reports whether the panel is showing everything there is, so the
+  // header can say "12" rather than the needlessly alarming "12 of 12".
+  const listedAll = () => !moreActive && !moreFinished;
+
+  // loadPages walks up to `pages` pages of one half from the newest, following the
+  // cursor the server hands back. Re-reading from the top rather than appending is
+  // what keeps an expanded panel *live*: every listed row is refetched each poll, so
+  // an instance that finishes while the operator is looking at it changes on screen.
+  async function loadPages(state, pages) {
+    const rows = [];
+    let cursor = "", more = false;
+    for (let i = 0; i < pages; i++) {
+      const p = await loadHalf(state, cursor);
+      rows.push(...p.rows);
+      more = p.more;
+      cursor = p.cursor;
+      if (!more) break;
+    }
+    return { rows, more };
+  }
+
+  async function refreshInstances() {
+    if (searchQuery) return; // a search owns the list until it is cleared
+    let active, done;
+    try {
+      [active, done] = await Promise.all([
+        loadPages("active", activePages),
+        loadPages("finished", finishedPages),
+      ]);
+    } catch { return; } // transient; the picker just keeps its current options
+    moreActive = active.more;
+    moreFinished = done.more;
+    applyInstances(active.rows.concat(done.rows));
+  }
+
+  // loadMore deepens whichever half still has more, then re-reads. It goes through
+  // the same path the poll does, so the rows in front of the operator and the rows
+  // just added are one consistent listing rather than two spliced together.
+  async function loadMore() {
+    let deepened = false;
+    if (moreActive && activePages < PANEL_MAX_PAGES) { activePages++; deepened = true; }
+    if (moreFinished && finishedPages < PANEL_MAX_PAGES) { finishedPages++; deepened = true; }
+    if (!deepened) return;
+    instSig = ""; // the set grew; force the picker to rebuild
+    await refreshInstances();
+    renderVariables();
+  }
+
+  // atPageLimit reports that the panel has been expanded as far as it goes. Past
+  // this the honest answer is "search for the one you want", not another page.
+  const atPageLimit = () =>
+    (!moreActive || activePages >= PANEL_MAX_PAGES) && (!moreFinished || finishedPages >= PANEL_MAX_PAGES);
+
+  // runInstanceSearch replaces the listed set with what the server matched. The
+  // query is either a bare instance key — answered by a point read, so it lands
+  // instantly whatever the instance count — or variable content, scoped to this
+  // definition so the search reads this version's index rather than every instance
+  // in the engine.
+  async function runInstanceSearch(raw) {
+    const q = (raw || "").trim();
+    searchQuery = q;
+    searchDraft = q;
+    searchError = "";
+    if (!q) {
+      instSig = "";
+      await refreshInstances();
+      renderVariables();
+      return;
+    }
+    let rows;
+    try {
+      rows = await api("GET", `/api/v1/instances/search?process=${encodeURIComponent(key)}&q=${encodeURIComponent(q)}`);
+    } catch (e) {
+      searchError = e.message;
+      rows = [];
+    }
+    moreActive = moreFinished = false;
+    instSig = "";
+    applyInstances(rows);
+    if (selected !== "all" && !rows.some((r) => String(r.key) === selected)) selected = "all";
+    renderVariables();
   }
 
   // JSON variable values are shown with a collapsible preview (first 60 chars)
@@ -7964,10 +8087,20 @@ export async function mountLive(root, { api, toast, key, instance }) {
       // "Select all active" targets every running instance of this version — including
       // any beyond the listed page — so it uses the runtime count when it is larger.
       const allActive = Math.max(runningCount, activeInsts.length);
+      // What the panel is showing, and what it was drawn from. The list is one page
+      // per half, so saying "12" when 300 000 exist would be a lie an operator acts
+      // on; "12 of 300000" plus a search box is the honest version.
+      const total = Math.max(runningCount + finishedCount, instances.length);
+      const shown = searchQuery
+        ? `${instances.length} matched`
+        : (listedAll() ? `${instances.length}` : `${instances.length} of ${total}`);
+      const title = searchQuery
+        ? `Variables · search “${esc(searchQuery)}” (${shown})`
+        : `Variables · all instances (${shown})`;
       const head = !activeInsts.length
-        ? `<div class="vp-head"><span class="vp-title">Variables · all instances (${instances.length})</span></div>`
+        ? `<div class="vp-head"><span class="vp-title">${title}</span></div>`
         : `<div class="vp-head">
-            <span class="vp-title">Variables · all instances (${instances.length})</span>
+            <span class="vp-title">${title}</span>
             <span class="vp-actions">${selectMode
               ? (() => {
                   const n = scopeAllActive ? allActive : picked.size;
@@ -7978,10 +8111,26 @@ export async function mountLive(root, { api, toast, key, instance }) {
               : `<button class="btn neutral sm" data-term-on title="Select running instances to terminate in bulk">&#9745; Select</button>`}
             </span>
           </div>`;
+      // The search row is what makes this panel usable at scale: a bare instance key
+      // is a point read on the server, and anything else is a variable search scoped
+      // to this version. It sits above the list so it is the first thing reached
+      // when the list is a page out of hundreds of thousands.
+      const searchRow = `<form class="vp-search" title="Find an instance of this version by key or by variable content">
+          <input type="text" class="vp-search-q" value="${esc(searchDraft)}" placeholder="Instance key, or name=value…" aria-label="Find an instance" spellcheck="false" autocomplete="off"/>
+          <button class="btn neutral sm" type="submit" title="Search this version's instances">Find</button>
+          ${searchQuery ? '<button class="btn ghost sm" type="button" data-search-clear title="Clear the search and go back to the newest instances">Clear</button>' : ""}
+        </form>${searchError ? `<p class="muted vp-search-err">${esc(searchError)}</p>` : ""}`;
+      const more = !searchQuery && (moreActive || moreFinished)
+        ? (atPageLimit()
+          ? `<div class="vp-more"><span class="muted">Showing the newest ${instances.length}. Use the search above to reach a specific instance.</span></div>`
+          : `<div class="vp-more"><button class="btn ghost sm" type="button" data-load-more title="Load the next page of older instances">Load more</button></div>`)
+        : "";
+      const emptyNote = searchQuery
+        ? `<p class="muted" style="margin:0">No instance of this version matches “${esc(searchQuery)}”.</p>`
+        : `<p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`;
       html = !instances.length
-        ? `<div class="vp-head"><span class="vp-title">Variables</span></div>
-          <p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`
-        : `${head}
+        ? `<div class="vp-head"><span class="vp-title">Variables</span></div>${searchRow}${emptyNote}`
+        : `${head}${searchRow}
         <div class="vp-insts${selectMode ? " picking" : ""}">${instances.map((r) => {
           const ts = tasksFor(r.key);
           const active = r.state === "active";
@@ -8002,7 +8151,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
             ${instanceMeta(r)}
             <div class="vp-inst-vars">${varChips(r.variables)}</div>
           </div>`;
-        }).join("")}</div>`;
+        }).join("")}</div>${more}`;
     } else {
       const inst = instances.find((r) => String(r.key) === selected);
       if (!inst) {
@@ -8025,7 +8174,17 @@ export async function mountLive(root, { api, toast, key, instance }) {
     html = livePanelHTML() + html;
     if (html === varsHTML) { updateElapsed(); return; } // unchanged — keep DOM, just tick the age
     varsHTML = html;
+    // A rebuild replaces the search input, and the poll rebuilds every 1.5 seconds —
+    // so an operator mid-query would lose both their text and their caret. The text
+    // is re-rendered from searchDraft; the caret is carried across by hand.
+    const q = varPanel.querySelector(".vp-search-q");
+    const hadFocus = q && document.activeElement === q;
+    const caret = hadFocus ? q.selectionStart : 0;
     varPanel.innerHTML = html;
+    if (hadFocus) {
+      const next = varPanel.querySelector(".vp-search-q");
+      if (next) { next.focus(); next.setSelectionRange(caret, caret); }
+    }
     updateElapsed();
   }
 
@@ -8151,6 +8310,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
     incidentEl.textContent = incidents.length + (incidentsTruncated ? "+" : "");
     incidentPill.hidden = incidents.length === 0;
     runningCount = rt.instances || 0;
+    finishedCount = rt.finished || 0;
     renderVariables();
   }
 
@@ -8243,6 +8403,27 @@ export async function mountLive(root, { api, toast, key, instance }) {
       return;
     }
     if (t.closest("[data-term-go]")) { await runTerminate(); return; }
+    if (t.closest("[data-load-more]")) { await loadMore(); return; }
+    if (t.closest("[data-search-clear]")) { await runInstanceSearch(""); return; }
+  });
+
+  // What is typed is mirrored into searchDraft, because the 1.5s poll rebuilds this
+  // panel and would otherwise drop a half-written query on the floor.
+  varPanel.addEventListener("input", (e) => {
+    if (e.target.classList.contains("vp-search-q")) searchDraft = e.target.value;
+  });
+  // The search runs on submit, not per keystroke: each one is a server round trip,
+  // and on a version with hundreds of thousands of instances a content search is
+  // still a walk of that version — worth spending on purpose, not once per
+  // character.
+  varPanel.addEventListener("submit", async (e) => {
+    const form = e.target.closest(".vp-search");
+    if (!form) return;
+    e.preventDefault();
+    const input = form.querySelector(".vp-search-q");
+    await runInstanceSearch(input ? input.value : "");
+    const next = varPanel.querySelector(".vp-search-q");
+    if (next) { next.focus(); next.setSelectionRange(next.value.length, next.value.length); }
   });
 
   // The incident block's two actions — resolve, and correct the variables the retry

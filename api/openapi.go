@@ -246,11 +246,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "file", "config")},
 			resp: jsonBody("Created instance with parsed row count", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
-			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); narrow to one definition with ?process=<key>; X-Instances-Truncated: true marks a capped page", tag: "Instances", role: RoleOperator, resp: jsonBody("Instances", tArray())}},
+			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); ?process=<key> narrows to one definition and reads its index (cost is the page, not the store); ?state=active|finished returns one half (all = both, the default); ?before=<cursor> pages it (requires ?process=); X-Instances-Truncated: true marks a capped page and X-Instances-Next-Cursor carries the next one", tag: "Instances", role: RoleOperator, resp: jsonBody("Instances", tArray())}},
 		{"GET", "/api/v1/instances/summary", s.handleInstancesSummary, apiOp{
 			summary: "Per-definition instance counts (active/completed) — lean count-only scan for the operations overview", tag: "Instances", role: RoleOperator, resp: jsonBody("Instance summary", tArray())}},
 		{"GET", "/api/v1/instances/search", s.handleSearchInstances, apiOp{
-			summary: "Search instances by variable content — ?q=name=value (name exact, value substring) or free text over variable names and values", tag: "Instances", role: RoleOperator,
+			summary: "Find instances by key or variable content — ?q= a bare instance key (point read, live or finished), or name=value (name exact, value substring), or free text over variable names and values; ?process=<key> narrows the search to one definition and reads its index instead of every instance", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Matching instances", tArray())}},
 		// Every signed-in identity, not the operator role the rest of this group carries:
 		// a task form is prefilled from the variables of the instance the task belongs to,

@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -277,5 +278,84 @@ func TestSearchCompletedSortAndSkip(t *testing.T) {
 	}
 	if len(matches) != 2 {
 		t.Fatalf("search matched %d, want the 2 keep instances (%s)", len(matches), body)
+	}
+}
+
+// TestProcessRuntimeReportsFinishedCount: the runtime response carries the
+// definition's finished-instance count alongside its live one, both from the O(1)
+// counters (ADR-0083). The live view needs it to say how many instances the page
+// it is showing was drawn from — a panel that reports the length of its own page
+// as the total is how "50 instances" gets read as the whole truth.
+func TestProcessRuntimeReportsFinishedCount(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", userTaskBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	runtime := func() (active, finished int) {
+		t.Helper()
+		code, body := doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/processes/%d/runtime", dep.Key), "", "")
+		if code != http.StatusOK {
+			t.Fatalf("runtime: status=%d body=%s", code, body)
+		}
+		var rt struct {
+			Instances int `json:"instances"`
+			Finished  int `json:"finished"`
+		}
+		if err := json.Unmarshal(body, &rt); err != nil {
+			t.Fatalf("decode runtime: %v (%s)", err, body)
+		}
+		return rt.Instances, rt.Finished
+	}
+
+	if a, f := runtime(); a != 0 || f != 0 {
+		t.Fatalf("fresh definition = %d active / %d finished, want 0/0", a, f)
+	}
+	for i := 0; i < 2; i++ {
+		if code, b := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), "{}", "application/json"); code != http.StatusOK {
+			t.Fatalf("create instance %d: status=%d body=%s", i, code, b)
+		}
+	}
+	if a, f := runtime(); a != 2 || f != 0 {
+		t.Fatalf("after two starts = %d active / %d finished, want 2/0", a, f)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list tasks: status=%d body=%s", code, body)
+	}
+	var tasks []struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got %v (%s)", err, body)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/tasks/%d/complete", tasks[0].Key), "{}", "application/json"); code != http.StatusOK {
+		t.Fatalf("complete task: status=%d body=%s", code, b)
+	}
+	if a, f := runtime(); a != 1 || f != 1 {
+		t.Errorf("after one completion = %d active / %d finished, want 1/1", a, f)
+	}
+
+	// Isolating one instance on the diagram must not change what the total means:
+	// the live view labels the same list from it either way.
+	code, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/processes/%d/runtime?instance=%d", dep.Key, tasks[1].Key), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("runtime (filtered): status=%d body=%s", code, body)
+	}
+	var filtered struct {
+		Finished int `json:"finished"`
+	}
+	if err := json.Unmarshal(body, &filtered); err != nil {
+		t.Fatalf("decode filtered runtime: %v (%s)", err, body)
+	}
+	if filtered.Finished != 1 {
+		t.Errorf("filtered runtime finished = %d, want 1", filtered.Finished)
 	}
 }

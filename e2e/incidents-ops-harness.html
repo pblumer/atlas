@@ -157,7 +157,20 @@
           return [{ key: DEF, processId: "zahlung", name: "Zahlung", version: 1 }];
         }
         if (/\/processes\/\d+\/xml$/.test(url)) return XML;
-        if (url.startsWith("/api/v1/instances?process=")) return instances;
+        if (url.startsWith("/api/v1/instances?process=")) {
+          // The live panel asks for one half at a time and pages each off its own
+          // index, so the stub answers per half. Both instances here are active, so
+          // the finished half is empty.
+          const state = new URL(url, location.origin).searchParams.get("state");
+          if (state === "finished") return [];
+          return instances;
+        }
+        if (url.startsWith("/api/v1/instances/search")) {
+          const q = new URL(url, location.origin).searchParams.get("q") || "";
+          return instances.filter((r) =>
+            String(r.key) === q.trim() ||
+            (r.variables || []).some((v) => `${v.name}=${v.value}`.toLowerCase().includes(q.toLowerCase())));
+        }
         if (url === "/api/v1/tasks") return [];
         if (url.includes("/runtime")) {
           // The overlay carries the incidents (ADR-0150): scoped to one instance when the
@@ -166,7 +179,7 @@
           const inst = new URL(url, location.origin).searchParams.get("instance");
           const inView = inst ? incidents.filter((i) => i.processInstanceKey === inst) : incidents;
           return {
-            instances: inst ? 1 : 2, tokens: inst ? 1 : 2,
+            instances: inst ? 1 : 2, finished: 0, tokens: inst ? 1 : 2,
             incidents: inView,
             incidentsTruncated: false,
             elements: [
@@ -184,7 +197,14 @@
         return {};
       };
 
-      window.__mountLive = (instance) => mountLive(view, { api, toast: noop, key: DEF, instance });
+      // apiRaw is the header-carrying wrapper the live view pages its instance list
+      // with. Nothing here is truncated, so it reports no cursor.
+      const apiRaw = async (method, url, body) => ({
+        data: await api(method, url, body),
+        headers: new Headers(),
+      });
+
+      window.__mountLive = (instance) => mountLive(view, { api, apiRaw, toast: noop, key: DEF, instance });
       window.__mountReplay = () => mountInstanceReplay(view, { api, toast: noop, key: STUCK });
       window.__ready = true;
     </script>

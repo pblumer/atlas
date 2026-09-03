@@ -1322,6 +1322,20 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .var-panel .vp-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
 .var-panel .vp-actions .replay-link { text-transform: none; letter-spacing: 0; }
 
+/* Find-an-instance row above the listed page. The panel shows one page of a
+   version that may hold hundreds of thousands of instances, so this — not the
+   list — is how an operator reaches a specific one. */
+.var-panel .vp-search { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.var-panel .vp-search-q {
+  flex: 1 1 auto; min-width: 0; padding: 4px 8px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); color: inherit; font: inherit; font-size: 12px;
+}
+.var-panel .vp-search-q:focus { outline: none; border-color: var(--accent); }
+.var-panel .vp-search-err { margin: -4px 0 8px; font-size: 12px; color: var(--danger); }
+/* "Load more" walks the newest-first cursor into older instances. */
+.var-panel .vp-more { display: flex; justify-content: center; margin-top: 8px; }
+
 /* Copy buttons: one per scalar field, per JSON card, and a "Copy all" in the head.
    A brief green check confirms the write (the ::after swaps in on .copied). Shared
    by the Live view's side panel (.var-panel) and the Operations replay inspector

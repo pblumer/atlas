@@ -247,8 +247,19 @@ func (t *Tx) DeleteTimer(key uint64, v *model.TimerValue) error {
 
 // --- ProcessInstance ---
 
-// PutProcessInstance writes the process instance.
+// PutProcessInstance writes the process instance and indexes it under its
+// definition, so a version's running instances are a range scan rather than a
+// filtered walk of every instance in the store.
+//
+// The index entry is derived from the value's own ProcessDefKey, so it cannot
+// disagree with the record, and writing it is an idempotent Set — a re-put of the
+// same instance rewrites the same entry. An instance whose definition *changes*
+// (a migration) is the one case that also needs the old entry dropped, and
+// [Tx.MigrateInstance] does that where it moves the counters.
 func (t *Tx) PutProcessInstance(key uint64, v *model.ProcessInstanceValue) error {
+	if err := t.b.Set(keyInstanceByDef(v.ProcessDefKey, key), nil, nil); err != nil {
+		return err
+	}
 	return t.b.Set(keyProcessInstance(key), t.encodeValue(v), nil)
 }
 
@@ -268,8 +279,15 @@ func (t *Tx) GetProcessInstance(key uint64) (*model.ProcessInstanceValue, error)
 	return &v, nil
 }
 
-// DeleteProcessInstance removes the process instance.
-func (t *Tx) DeleteProcessInstance(key uint64) error {
+// DeleteProcessInstance removes the process instance and its live by-definition
+// index entry. The definition key is passed rather than read back from the record
+// because every caller already holds the value it is retiring — the terminal fold
+// builds the history record from it — so the index stays in step without a second
+// read on the path an instance finishes on.
+func (t *Tx) DeleteProcessInstance(key, procDefKey uint64) error {
+	if err := t.b.Delete(keyInstanceByDef(procDefKey, key), nil); err != nil {
+		return err
+	}
 	return t.b.Delete(keyProcessInstance(key), nil)
 }
 
@@ -277,6 +295,12 @@ func (t *Tx) DeleteProcessInstance(key uint64) error {
 // instance in the history index. Written from applyToState when an instance
 // ends, from the event alone, so it replays identically on recovery (ADR-0017).
 func (t *Tx) PutProcessInstanceHistory(key uint64, v *model.ProcessInstanceValue) error {
+	// Indexed under its definition by completion time, so "this version's most
+	// recently finished instances" is a bounded backwards scan. Both components come
+	// off the record being written, so replay rebuilds the identical entry.
+	if err := t.b.Set(keyInstanceDoneByDef(v.ProcessDefKey, v.CompletedAt, key), nil, nil); err != nil {
+		return err
+	}
 	return t.b.Set(keyProcessInstanceHistory(key), t.encodeValue(v), nil)
 }
 
@@ -310,6 +334,21 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 	// is no entry to drop.
 	if purgeDueDate != 0 {
 		if err := t.b.Delete(keyHistoryExpiry(purgeDueDate, piKey), nil); err != nil {
+			return err
+		}
+	}
+	// The finished-by-definition entry is keyed by completion time, which only the
+	// record itself carries — so it is read before the record goes. An already-purged
+	// instance reads back absent and there is nothing to drop, which is what keeps a
+	// re-applied purge idempotent. The read is of state, not of a clock, so the fold
+	// stays deterministic (I4).
+	var hist model.ProcessInstanceValue
+	found, err := t.readInto(keyProcessInstanceHistory(piKey), &hist)
+	if err != nil {
+		return err
+	}
+	if found {
+		if err := t.b.Delete(keyInstanceDoneByDef(hist.ProcessDefKey, hist.CompletedAt, piKey), nil); err != nil {
 			return err
 		}
 	}
@@ -648,6 +687,12 @@ func (t *Tx) MigrateInstance(v *model.ProcessMigrationValue) error {
 		}
 	}
 
+	// The instance leaves the source version's live index and enters the target's,
+	// the same move its per-definition counter makes below — otherwise the version it
+	// migrated off would go on listing it.
+	if err := t.b.Delete(keyInstanceByDef(v.FromProcessDefKey, v.ProcessInstanceKey), nil); err != nil {
+		return err
+	}
 	pi.ProcessDefKey = v.ToProcessDefKey
 	if err := t.PutProcessInstance(v.ProcessInstanceKey, pi); err != nil {
 		return err

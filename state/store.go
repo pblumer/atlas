@@ -73,6 +73,14 @@ func Open(dir string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill runtime totals: %w", err)
 	}
+	// The by-definition instance indexes are later still. Unlike a counter, a missing
+	// index does not read low — it reads *empty*, so a store upgraded into this
+	// version would answer "this version's instances" with nothing until it was
+	// seeded once from the instances and history it already holds.
+	if err := s.backfillInstanceDefIndexIfNeeded(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: backfill instance-by-definition index: %w", err)
+	}
 	return s, nil
 }
 
@@ -126,7 +134,14 @@ func (s *Store) LastAppliedPosition() (uint64, error) {
 // ElementInstancesOfProcess calls fn with the key of every element instance
 // belonging to the given process instance, via the elByProc index.
 func (s *Store) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64) error) error {
-	return s.scanPrefix(elByProcPrefix(procKey), func(k, _ []byte) error {
+	return elementInstancesOfProcess(s.db, procKey, fn)
+}
+
+// elementInstancesOfProcess is [Store.ElementInstancesOfProcess] over any reader,
+// shared with a [ReadView] so an instance listing that counts an instance's live
+// element instances can do it off the run loop.
+func elementInstancesOfProcess(r iterReader, procKey uint64, fn func(elKey uint64) error) error {
+	return scanPrefixWith(r, elByProcPrefix(procKey), func(k, _ []byte) error {
 		return fn(trailingKey(k))
 	})
 }
@@ -605,6 +620,50 @@ func (s *Store) backfillSummaryCountersIfNeeded() error {
 	return b.Commit(pebble.Sync)
 }
 
+const metaInstanceDefIndexV1 = "instance_def_index_v1"
+
+// backfillInstanceDefIndexIfNeeded seeds the by-definition instance indexes from
+// the instances and history a store already holds, the first time it gains them,
+// then records that it has done so. It scans the two process-instance families
+// once and writes their index entries plus the marker in a single atomic, synced
+// batch — so a crash mid-migration leaves nothing and the next open re-runs
+// cleanly.
+//
+// Both entries are valueless, so an interrupted and repeated run could only rewrite
+// keys it had already written; the marker is nevertheless what keeps a normal open
+// from re-scanning the whole store every time.
+func (s *Store) backfillInstanceDefIndexIfNeeded() error {
+	if _, ok, err := getCopy(s.db, keyMeta(metaInstanceDefIndexV1)); err != nil || ok {
+		return err
+	}
+
+	b := s.db.NewBatch()
+	defer b.Close()
+	if err := s.scanPrefix([]byte{byte(cfProcessInstance)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		return b.Set(keyInstanceByDef(v.(*model.ProcessInstanceValue).ProcessDefKey, trailingKey(k)), nil, nil)
+	}); err != nil {
+		return err
+	}
+	if err := s.scanPrefix([]byte{byte(cfProcessInstanceHistory)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		pi := v.(*model.ProcessInstanceValue)
+		return b.Set(keyInstanceDoneByDef(pi.ProcessDefKey, pi.CompletedAt, trailingKey(k)), nil, nil)
+	}); err != nil {
+		return err
+	}
+	if err := b.Set(keyMeta(metaInstanceDefIndexV1), []byte{1}, nil); err != nil {
+		return err
+	}
+	return b.Commit(pebble.Sync)
+}
+
 // InjectCorruptProcessInstance writes an undecodable record under a process
 // instance's key. It is a test/tooling affordance only — it lets a caller in another
 // package exercise the decode-error path of the active-instance scan
@@ -652,7 +711,14 @@ func (s *Store) InjectCorruptDataObjectSnapshot(scope uint64, ts int64, pos uint
 // instance, via the process-instance column family — the operator "list running
 // instances" access pattern.
 func (s *Store) ActiveProcessInstances(fn func(key uint64, v *model.ProcessInstanceValue) error) error {
-	return s.scanPrefix([]byte{byte(cfProcessInstance)}, func(k, raw []byte) error {
+	return scanActiveProcessInstances(s.db, fn)
+}
+
+// scanActiveProcessInstances is [Store.ActiveProcessInstances] over any reader, so
+// the live store and a [ReadView] share one implementation rather than growing two
+// that can drift.
+func scanActiveProcessInstances(r iterReader, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	return scanPrefixWith(r, []byte{byte(cfProcessInstance)}, func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTProcessInstance, raw)
 		if err != nil {
 			return err
@@ -666,12 +732,91 @@ func (s *Store) ActiveProcessInstances(fn func(key uint64, v *model.ProcessInsta
 // the operator "list finished instances" access pattern (ADR-0017). Each value
 // carries its terminal State and CompletedAt.
 func (s *Store) CompletedProcessInstances(fn func(key uint64, v *model.ProcessInstanceValue) error) error {
-	return s.scanPrefix([]byte{byte(cfProcessInstanceHistory)}, func(k, raw []byte) error {
+	return scanCompletedProcessInstances(s.db, fn)
+}
+
+// scanCompletedProcessInstances is [Store.CompletedProcessInstances] over any
+// reader, shared with a [ReadView] for the same reason as its live counterpart.
+func scanCompletedProcessInstances(r iterReader, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	return scanPrefixWith(r, []byte{byte(cfProcessInstanceHistory)}, func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTProcessInstance, raw)
 		if err != nil {
 			return err
 		}
 		return fn(trailingKey(k), v.(*model.ProcessInstanceValue))
+	})
+}
+
+// ActiveInstancesOfDefDesc calls fn with every live instance of one definition in
+// DESCENDING key order — newest first — starting just below `before`; before == 0
+// starts from the newest. It reads the by-definition index, so its cost is the
+// page it yields plus one point read per row, not the size of the store: a version
+// with three running instances costs three reads whether the engine holds a
+// thousand instances or a million.
+//
+// The caller stops a page by returning a sentinel from fn, exactly as the task
+// inbox pages ActivatableJobsDesc; the key of the last row it kept is the cursor
+// for the next (older) page.
+func (s *Store) ActiveInstancesOfDefDesc(procDefKey, before uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	return activeInstancesOfDefDesc(s.db, procDefKey, before, fn)
+}
+
+func activeInstancesOfDefDesc(r iterReader, procDefKey, before uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	lo := instanceByDefPrefix(procDefKey)
+	hi := prefixEnd(lo)
+	if before != 0 {
+		// UpperBound is exclusive, so this starts at the highest key strictly below
+		// `before` — the natural cursor for "the next older page".
+		hi = keyInstanceByDef(procDefKey, before)
+	}
+	return scanRangeDescWith(r, lo, hi, func(k, _ []byte) error {
+		key := trailingKey(k)
+		raw, ok, err := getCopy(r, keyProcessInstance(key))
+		if err != nil || !ok {
+			// An index entry whose record is gone is skipped rather than reported: the
+			// pair is written in one batch, so this can only be a store that predates
+			// the index and has not been backfilled.
+			return err
+		}
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		return fn(key, v.(*model.ProcessInstanceValue))
+	})
+}
+
+// FinishedInstancesOfDefDesc calls fn with every finished instance of one
+// definition in DESCENDING completion order — most recently finished first —
+// starting just below the (beforeCompletedAt, beforeKey) cursor; a zero cursor
+// starts from the most recent. It is the history counterpart of
+// [Store.ActiveInstancesOfDefDesc], and it gets that order from the index key
+// rather than by sorting the history in memory.
+//
+// The cursor is a pair because completion order is not key order: an instance
+// started first can finish last. fn receives the value, whose CompletedAt together
+// with the key forms the cursor for the next page.
+func (s *Store) FinishedInstancesOfDefDesc(procDefKey uint64, beforeCompletedAt int64, beforeKey uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	return finishedInstancesOfDefDesc(s.db, procDefKey, beforeCompletedAt, beforeKey, fn)
+}
+
+func finishedInstancesOfDefDesc(r iterReader, procDefKey uint64, beforeCompletedAt int64, beforeKey uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	lo := instanceDoneByDefPrefix(procDefKey)
+	hi := prefixEnd(lo)
+	if beforeCompletedAt != 0 || beforeKey != 0 {
+		hi = keyInstanceDoneByDef(procDefKey, beforeCompletedAt, beforeKey)
+	}
+	return scanRangeDescWith(r, lo, hi, func(k, _ []byte) error {
+		key := trailingKey(k)
+		raw, ok, err := getCopy(r, keyProcessInstanceHistory(key))
+		if err != nil || !ok {
+			return err // as above: only reachable on a store awaiting its backfill
+		}
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		return fn(key, v.(*model.ProcessInstanceValue))
 	})
 }
 
@@ -974,8 +1119,16 @@ func (s *Store) EachDecisionEvaluation(fn func(scopeKey uint64, ts int64, v *mod
 // (ADR-0017). It lets a query resolve an instance's definition whether it is
 // still running or already finished — the lookup the single-process replay uses.
 func (s *Store) ProcessInstance(key uint64) (*model.ProcessInstanceValue, bool, error) {
+	return processInstanceOf(s.db, key)
+}
+
+// processInstanceOf is [Store.ProcessInstance] over any reader — two point reads,
+// no scan, whatever the store holds. It is what answers a search for a bare
+// instance key, and it is shared with a [ReadView] so that search can run off the
+// run loop against a consistent view.
+func processInstanceOf(r reader, key uint64) (*model.ProcessInstanceValue, bool, error) {
 	for _, k := range [][]byte{keyProcessInstance(key), keyProcessInstanceHistory(key)} {
-		raw, ok, err := getCopy(s.db, k)
+		raw, ok, err := getCopy(r, k)
 		if err != nil {
 			return nil, false, err
 		}
@@ -1116,7 +1269,13 @@ func scanRangeWith(r iterReader, lo, hi []byte, fn func(k, v []byte) error) erro
 // scanRangeDesc is scanRange in reverse — it walks [lo, hi) from the highest key
 // down to the lowest, so a caller can page a key-ordered index newest-first.
 func (s *Store) scanRangeDesc(lo, hi []byte, fn func(k, v []byte) error) error {
-	iter, err := s.db.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
+	return scanRangeDescWith(s.db, lo, hi, fn)
+}
+
+// scanRangeDescWith is scanRangeDesc over any reader, so the live store and a
+// [ReadView] page the same index the same way.
+func scanRangeDescWith(r iterReader, lo, hi []byte, fn func(k, v []byte) error) error {
+	iter, err := r.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
 	if err != nil {
 		return err
 	}

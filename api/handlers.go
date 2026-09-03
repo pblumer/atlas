@@ -224,9 +224,15 @@ type runtimeIncident struct {
 }
 
 type runtimeResp struct {
-	Instances int              `json:"instances"`
-	Tokens    int              `json:"tokens"`
-	Elements  []runtimeElement `json:"elements"`
+	Instances int `json:"instances"`
+	// Finished is how many of this definition's instances have ended, from the O(1)
+	// per-definition counter (ADR-0083). It rides here because the live view already
+	// polls this endpoint and needs a real total to say what its (paged) instance
+	// list was drawn from — a panel that reports the size of its own page as the
+	// total is read as the whole truth.
+	Finished int              `json:"finished"`
+	Tokens   int              `json:"tokens"`
+	Elements []runtimeElement `json:"elements"`
 	// Incidents is why a token is not moving (ADR-0061). Without it a parked token
 	// renders exactly like one that is legitimately waiting, which is the reading an
 	// operator then gives it — "the task is still open" — while the engine has in fact
@@ -1260,6 +1266,14 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			inc.RepairForm = d.cp.RepairForm(v.ElementId)
 			resp.Incidents = append(resp.Incidents, inc)
 			return len(resp.Incidents) >= maxRuntimeIncidents
+		}
+
+		// The definition's finished-instance total, on both branches: the live view
+		// reads it to label its paged instance list, and that label must not change
+		// meaning when the operator isolates a single instance on the diagram. It is
+		// one counter read (ADR-0083), not a scan.
+		if resp.Finished, scanErr = s.store.DefCompletedCount(key); scanErr != nil {
+			return
 		}
 
 		if instanceFilter == 0 {
@@ -3006,154 +3020,6 @@ func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request)
 	httpapi.JSON(w, http.StatusOK, out)
 }
 
-// handleListInstances lists process instances — live ones (with their current
-// token count) followed by finished ones from the history index, most recently
-// completed first (ADR-0017). It is the operator "instances" view.
-// errListTruncated stops a bounded list scan once the page cap is reached. It is a
-// sentinel to break the scan early, not a failure.
-var errListTruncated = errors.New("list page full")
-
-// unlessTruncated maps a bounded-scan result to a real error: the page-full sentinel
-// (a deliberate early stop) becomes nil, any other error passes through. It lets the
-// capped list handlers report a genuine scan failure without treating truncation as one.
-func unlessTruncated(err error) error {
-	if errors.Is(err, errListTruncated) {
-		return nil
-	}
-	return err
-}
-
-const (
-	// maxInstanceListDefault and maxInstanceListMax bound how many active and how many
-	// completed instances GET /api/v1/instances returns (each capped independently),
-	// so the endpoint can never try to enrich and serialize hundreds of thousands of
-	// rows — the shape that made the operations page unreachable during the reported
-	// flood. Raise per request with ?limit= (up to the max); narrow to one definition
-	// with ?process=. The overview reads per-definition counts from
-	// /api/v1/instances/summary instead, so the cap does not skew its tallies.
-	maxInstanceListDefault = 1000
-	maxInstanceListMax     = 10000
-)
-
-func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
-	limit := maxInstanceListDefault
-	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
-		n, err := strconv.Atoi(q)
-		if err != nil || n <= 0 {
-			httpapi.Error(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
-			return
-		}
-		limit = n
-	}
-	if limit > maxInstanceListMax {
-		limit = maxInstanceListMax
-	}
-	var (
-		filterDef uint64
-		hasFilter bool
-	)
-	if q := strings.TrimSpace(r.URL.Query().Get("process")); q != "" {
-		n, err := strconv.ParseUint(q, 10, 64)
-		if err != nil {
-			httpapi.Error(w, http.StatusBadRequest, "invalid process key")
-			return
-		}
-		filterDef, hasFilter = n, true
-	}
-	active := []instanceResp{}
-	done := []instanceResp{}
-	truncated := false
-	var scanErr error
-	s.do(func() {
-		// Attach the definition's id/version and the scope's variables to a row.
-		enrich := func(r *instanceResp, key uint64) error {
-			if d, ok := s.deployments[r.ProcessDefKey]; ok {
-				r.ProcessID = d.ProcessID
-				r.Version = d.Version
-				if d.cp != nil {
-					r.VersionTag = d.cp.VersionTag()
-				}
-			}
-			return s.store.VariablesOfScope(key, func(vv *model.VariableValue) error {
-				r.Variables = append(r.Variables, toVariableView(vv))
-				return nil
-			})
-		}
-
-		err := s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
-			if hasFilter && v.ProcessDefKey != filterDef {
-				return nil
-			}
-			if len(active) >= limit {
-				truncated = true
-				return errListTruncated // page full: stop enriching further rows
-			}
-			elements := 0
-			if err := s.store.ElementInstancesOfProcess(key, func(uint64) error {
-				elements++
-				return nil
-			}); err != nil {
-				return err
-			}
-			r := instanceResp{
-				Key:              key,
-				ProcessDefKey:    v.ProcessDefKey,
-				ElementInstances: elements,
-				State:            "active",
-				CreatedAt:        v.CreatedAt,
-				CorrelationKey:   v.CorrelationKey,
-				Variables:        []variableView{},
-			}
-			if err := enrich(&r, key); err != nil {
-				return err
-			}
-			active = append(active, r)
-			return nil
-		})
-		if err != nil && !errors.Is(err, errListTruncated) {
-			scanErr = err
-			return
-		}
-
-		err = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
-			if hasFilter && v.ProcessDefKey != filterDef {
-				return nil
-			}
-			if len(done) >= limit {
-				truncated = true
-				return errListTruncated
-			}
-			r := instanceResp{
-				Key:            key,
-				ProcessDefKey:  v.ProcessDefKey,
-				State:          v.State.String(),
-				CreatedAt:      v.CreatedAt,
-				CompletedAt:    v.CompletedAt,
-				CorrelationKey: v.CorrelationKey,
-				Variables:      []variableView{},
-			}
-			if err := enrich(&r, key); err != nil {
-				return err
-			}
-			done = append(done, r)
-			return nil
-		})
-		scanErr = unlessTruncated(err)
-	})
-	if scanErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())
-		return
-	}
-	// Finished instances: most recently completed first.
-	sort.Slice(done, func(i, j int) bool { return done[i].CompletedAt > done[j].CompletedAt })
-	if truncated {
-		// Signal that the page was capped so a client can page with ?process=/?limit=
-		// rather than assume it received every instance.
-		w.Header().Set("X-Instances-Truncated", "true")
-	}
-	httpapi.JSON(w, http.StatusOK, append(active, done...))
-}
-
 type instanceSummaryRow struct {
 	ProcessDefKey     uint64 `json:"processDefKey"`
 	ProcessID         string `json:"processId"`
@@ -3193,144 +3059,6 @@ func (s *Server) handleInstancesSummary(w http.ResponseWriter, _ *http.Request) 
 			})
 		}
 	})
-	httpapi.JSON(w, http.StatusOK, out)
-}
-
-// maxInstanceSearchResults caps a variable search so a single query can't return
-// an unbounded response on a large deployment. The search is a full scan (v1, no
-// index); the cap keeps the answer size and scan cost bounded — active instances
-// first, then finished ones most-recently-completed first, so the newest matches
-// survive truncation.
-const maxInstanceSearchResults = 200
-
-// varQuery is a parsed instance-variable search. Two shapes: a structured
-// name=value match (variable name exact, value substring) when the query
-// contains "="; otherwise a free-text substring over variable names and values.
-// All comparisons are case-insensitive.
-type varQuery struct {
-	structured bool
-	name       string // lower-cased variable name; structured only
-	needle     string // lower-cased substring (value in structured, term in free-text)
-}
-
-// parseVarQuery interprets a raw ?q= value. ok is false for a blank query (the
-// caller returns an empty result set rather than scanning everything). A query
-// like "=value" with no name degrades to free text — an empty exact name can
-// never match, so treating it structurally would be a silent dead end.
-func parseVarQuery(q string) (varQuery, bool) {
-	q = strings.TrimSpace(q)
-	if q == "" {
-		return varQuery{}, false
-	}
-	if i := strings.IndexByte(q, '='); i >= 0 {
-		if name := strings.TrimSpace(q[:i]); name != "" {
-			return varQuery{
-				structured: true,
-				name:       strings.ToLower(name),
-				needle:     strings.ToLower(strings.TrimSpace(q[i+1:])),
-			}, true
-		}
-	}
-	return varQuery{needle: strings.ToLower(q)}, true
-}
-
-// match reports whether a variable satisfies the query.
-func (p varQuery) match(v variableView) bool {
-	if p.structured {
-		return strings.ToLower(v.Name) == p.name && strings.Contains(strings.ToLower(v.Value), p.needle)
-	}
-	return strings.Contains(strings.ToLower(v.Name), p.needle) || strings.Contains(strings.ToLower(v.Value), p.needle)
-}
-
-// handleSearchInstances finds process instances by the content of their
-// variables — the operator "which instance had customerType=Business?" surface.
-// It reuses the same live+history scan as handleListInstances, but keeps only
-// instances with a variable matching ?q= and, on each row, only the matching
-// variables (so the UI can highlight them). A blank query returns an empty list,
-// not every instance. This is a full scan with no value index (v1): finished
-// instances are searchable only while their scope's variables are retained, same
-// as the instances list. Results are capped at maxInstanceSearchResults.
-func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
-	pred, ok := parseVarQuery(r.URL.Query().Get("q"))
-	if !ok {
-		httpapi.JSON(w, http.StatusOK, []instanceResp{})
-		return
-	}
-	active := []instanceResp{}
-	done := []instanceResp{}
-	var scanErr error
-	s.do(func() {
-		// matchingVars returns the scope's variables that satisfy the query, or
-		// nil if none do (so the caller can drop the instance).
-		matchingVars := func(key uint64) ([]variableView, error) {
-			var hits []variableView
-			err := s.store.VariablesOfScope(key, func(vv *model.VariableValue) error {
-				if view := toVariableView(vv); pred.match(view) {
-					hits = append(hits, view)
-				}
-				return nil
-			})
-			return hits, err
-		}
-		enrichDef := func(r *instanceResp) {
-			if d, ok := s.deployments[r.ProcessDefKey]; ok {
-				r.ProcessID = d.ProcessID
-				r.Version = d.Version
-				if d.cp != nil {
-					r.VersionTag = d.cp.VersionTag()
-				}
-			}
-		}
-
-		scanErr = s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
-			hits, err := matchingVars(key)
-			if err != nil || len(hits) == 0 {
-				return err
-			}
-			r := instanceResp{
-				Key:            key,
-				ProcessDefKey:  v.ProcessDefKey,
-				State:          "active",
-				CreatedAt:      v.CreatedAt,
-				CorrelationKey: v.CorrelationKey,
-				Variables:      hits,
-			}
-			enrichDef(&r)
-			active = append(active, r)
-			return nil
-		})
-		if scanErr != nil {
-			return
-		}
-
-		scanErr = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
-			hits, err := matchingVars(key)
-			if err != nil || len(hits) == 0 {
-				return err
-			}
-			r := instanceResp{
-				Key:            key,
-				ProcessDefKey:  v.ProcessDefKey,
-				State:          v.State.String(),
-				CreatedAt:      v.CreatedAt,
-				CompletedAt:    v.CompletedAt,
-				CorrelationKey: v.CorrelationKey,
-				Variables:      hits,
-			}
-			enrichDef(&r)
-			done = append(done, r)
-			return nil
-		})
-	})
-	if scanErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "search instances: "+scanErr.Error())
-		return
-	}
-	sort.Slice(done, func(i, j int) bool { return done[i].CompletedAt > done[j].CompletedAt })
-	out := append(active, done...)
-	if len(out) > maxInstanceSearchResults {
-		out = out[:maxInstanceSearchResults]
-	}
 	httpapi.JSON(w, http.StatusOK, out)
 }
 
