@@ -26,10 +26,10 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // model or the compiled process — only its reference does.
 type SecretResolver func(ref string) string
 
-// Handler builds a job handler that performs an HTTP-REST connector task. Register
+// Handler builds a job handler that performs an HTTP-REST worker task. Register
 // it with a [job.Runner] under the reserved [compiler.RestJobTypeIndex] via
 // HandleWithOutput; the runner then pulls activatable REST jobs, and for each the
-// handler resolves the connector task's method/url/headers/query/result-variable
+// handler resolves the worker task's method/url/headers/query/result-variable
 // from the compiled process and calls the API through client — evaluating any FEEL
 // url/header/query values over the variables the task sees, up its scope chain (the
 // fx toggle, ADR-0067/0068), and sending as the JSON request body, for methods that
@@ -278,9 +278,9 @@ func methodHasBody(method string) bool {
 }
 
 // bodyFromVars turns the already-read variables into a JSON-ready map — the request
-// body a connector task sends. Which variables those are is [Resolve]'s decision:
+// body a task sends. Which variables those are is [Resolve]'s decision:
 // the task's input mappings when it has them, else everything it sees — the same
-// rule the clio connector's event body follows
+// rule the clio worker's event body follows
 // (ADR-0174).
 func bodyFromVars(scopeVars map[string]model.VariableValue) map[string]any {
 	data := make(map[string]any, len(scopeVars))

@@ -7,8 +7,8 @@
          diagram holding one task of each job-backed kind, to verify the Implement
          panel's Failure handling / Retries property (ADR-0135): every kind reads the
          budget its model carries and writes it back where the compiler reads it —
-         <zeebe:taskDefinition retries> for a job worker, the connector extension's own
-         retries for a connector, <atlas:jobScript retries> for a polyglot script, and
+         <zeebe:taskDefinition retries> for a job worker, the worker extension's own
+         retries for a worker, <atlas:jobScript retries> for a polyglot script, and
          <zeebe:calledDecision retries> for a business rule task. Mounted in deployment
          mode (key set, draftId null) so no live collaboration SSE is attached. -->
     <link rel="stylesheet" href="/app.css" />

@@ -565,3 +565,121 @@ func TestEventSubprocessSubprocessInterruptRecovers(t *testing.T) {
 		t.Fatalf("after recovery completion: process=%d element=%d, want 0 and 0", pi, ei)
 	}
 }
+
+// TestEventSubprocessIOMappingRunsWithTheHandler covers the trap the identity-lifecycle
+// test hit: an event subprocess carrying a zeebe:ioMapping overwrote the very register it
+// was meant to append to, with null, the first time it fired.
+//
+// An armed trigger is an element instance whose ElementId is the *handler container* — that
+// is how its behavior finds the trigger detail. handleElementActivating/Completing key the
+// generic ioMapping and data-association work off ElementId, so the trigger used to run the
+// handler's mappings as if it were the handler: the input mapping evaluated at arm time
+// (instance creation, before the main flow has written anything) and the output mapping
+// promoted that stale null back into the parent scope on the fire — destroying the register
+// the handler was about to read. The handler subprocess applies both at the right moment;
+// the trigger must apply neither.
+//
+// The model: start → seed(script sets register="seed") → work(service task, parks), plus a
+// non-interrupting message event subprocess mapping register→reg on the way in and reg→
+// register on the way out. Firing it must leave register at "seed", not null.
+func TestEventSubprocessIOMappingRunsWithTheHandler(t *testing.T) {
+	dir := t.TempDir()
+	h := openHarness(t, dir)
+
+	b := compiler.NewBuilder(1, "esp-io", 1)
+	start := b.AddStartEvent()
+	seed := b.AddScriptTask(mustCompile(t, `"seed"`), "register")
+	work := b.AddServiceTask("work", 3)
+	end := b.AddEndEvent()
+	b.Connect(start, seed)
+	b.Connect(seed, work)
+	b.Connect(work, end)
+
+	handler := b.AddSubProcess()
+	b.PushScope(handler)
+	corr := mustCompile(t, `"k"`)
+	es := b.AddMessageStartEvent("ev", corr, false)
+	he := b.AddEndEvent()
+	b.Connect(es, he)
+	b.PopScope()
+	b.SetEventSubProcess(handler, compiler.EventSubProcessDetail{
+		StartNode: es, Interrupting: false, Kind: compiler.BoundaryMessage,
+		MessageName: "ev", CorrelationKey: corr,
+	})
+	// The handler reads the register into a local on entry and writes it back on exit —
+	// the shape a real handler uses to append an entry to a collection.
+	b.AddInputMapping(handler, "reg", mustCompile(t, `register`))
+	b.AddOutputMapping(handler, "register", mustCompile(t, `reg`))
+
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	piKey := singleActiveInstance(t, h.store)
+	if v := readVar(t, h.store, piKey, "register"); v == nil || v.Text != "seed" {
+		t.Fatalf("register before the fire = %v, want seed", v)
+	}
+	// The armed trigger must not have evaluated the handler's input mapping into its own
+	// scope: nothing has run the handler yet, so there is no reg anywhere.
+	if v := readVar(t, h.store, piKey, "reg"); v != nil {
+		t.Errorf("reg = %v at the root scope while only the trigger is armed, want none", v)
+	}
+
+	p.PublishMessage("ev", "k")
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after publish: %v", err)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[he]; v != 1 {
+		t.Fatalf("handler end visits = %d, want 1 (the handler must have run)", v)
+	}
+	if v := readVar(t, h.store, piKey, "register"); v == nil || v.Text != "seed" {
+		t.Errorf("register after the fire = %v, want seed (the trigger must not promote a stale mapping)", v)
+	}
+	// Main flow untouched.
+	if jobGone(t, h.store, jobType) {
+		t.Fatal("non-interrupting event subprocess cancelled the main-flow job")
+	}
+	h.close(t)
+
+	// State after replay must equal state built live (the events are the whole record):
+	// the register survives the restart, and the re-armed trigger fires again onto it.
+	h2 := openHarness(t, dir)
+	defer h2.close(t)
+	p2 := engine.New(1, h2.log, h2.store, &manualClock{})
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover after restart: %v", err)
+	}
+	if v := readVar(t, h2.store, piKey, "register"); v == nil || v.Text != "seed" {
+		t.Errorf("register after replay = %v, want seed", v)
+	}
+	p2.PublishMessage("ev", "k")
+	if err := p2.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after publish 2: %v", err)
+	}
+	if v := elementVisits(t, h2.store, cp.Key)[he]; v != 2 {
+		t.Errorf("handler end visits = %d, want 2 (re-armed trigger fired post-restart)", v)
+	}
+	if v := readVar(t, h2.store, piKey, "register"); v == nil || v.Text != "seed" {
+		t.Errorf("register after the second fire = %v, want seed", v)
+	}
+	// The whole thing still drains.
+	p2.CompleteJob(activatableJobs(t, h2.store, jobType)[0])
+	if err := p2.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after complete: %v", err)
+	}
+	if pi, ei := counts(t, h2.store); pi != 0 || ei != 0 {
+		t.Fatalf("after main flow completes: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}

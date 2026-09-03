@@ -10,7 +10,7 @@
 // pull, and ADR-0157 as step 1 of moving side-effecting work onto workers.
 //
 // The table has two halves. The **reserved** half is the built-in job types
-// (DMN, user task, the connector kinds, the script languages): their indices are
+// (DMN, user task, the Worker Types, the script languages): their indices are
 // compile-time constants that every builder reserves in order, so the registry
 // seeds itself from [compiler.ReservedJobTypes] and never persists them — a
 // stored copy could only drift from the constants. The **dynamic** half is the

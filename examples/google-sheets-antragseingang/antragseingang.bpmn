@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Antragseingang aus einer Google-Tabelle
+
+  Zeigt die eingehende Richtung: Ein Google-Formular schreibt jede Antwort als
+  Zeile in ein Blatt, ein Zeilen-Watch veroeffentlicht jede neue Zeile als
+  Atlas-Nachricht, und diese Nachricht startet genau eine Instanz dieses
+  Prozesses. Der Prozess entscheidet und schreibt das Ergebnis in DIESELBE Zeile
+  zurueck — was zugleich das Muster gegen doppelte Zeilen ist: eine Merkspalte,
+  die man vor dem Anhaengen lesen kann.
+
+  Start (Nachricht "antrag.eingegangen", aus dem Zeilen-Watch)
+   -> Gateway "Betrag ueber 1000?"
+        ja   -> "Zur Pruefung markieren"   (write-range Status = "Pruefung")
+        nein -> "Automatisch genehmigen"   (write-range Status = "genehmigt")
+   -> Join
+   -> Ende "Antrag bearbeitet"
+
+  Einrichtung: Console -> Workers -> beim Google-Worker "Events...", dann
+  "neue Zeilen in einer Tabelle", die Tabelle einfuegen, Bereich
+  "Antraege!A:D", "Die erste Zeile benennt die Spalten" ankreuzen, Nachrichtenname
+  "antrag.eingegangen". Der Watch ist vorwaertsgerichtet: die Zeilen, die schon
+  drinstehen, loesen nichts aus.
+
+  Der Watch setzt die Spalten der Zeile als Prozessvariablen, hier also
+  Antragsnummer, Name und Betrag — plus rowNumber, spreadsheetId, range und row.
+  rowNumber ist der Grund, warum der Prozess in seine eigene Zeile schreiben kann.
+
+  BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=240, Zweige bei y=140 und
+  y=340, damit keine Kante durch einen Knoten laeuft.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_gs_antragseingang" targetNamespace="http://atlas/examples">
+  <message id="msg_antrag" name="antrag.eingegangen"/>
+
+  <process id="proc_gs_antragseingang" name="Antragseingang (Google Sheets)" isExecutable="true">
+    <documentation>Wird von einer neuen Zeile in der Antragstabelle gestartet (Zeilen-Watch auf dem Google-Worker) und schreibt das Ergebnis in dieselbe Zeile zurueck. Variablen aus dem Watch: Antragsnummer, Name, Betrag (die Spalten der Zeile, weil der Watch eine Kopfzeile hat) sowie rowNumber, spreadsheetId, range und row.</documentation>
+
+    <startEvent id="start" name="Antrag eingegangen">
+      <documentation>Nachrichten-Startereignis. Die Nachricht kommt nicht ueber die HTTP-API, sondern aus dem Zeilen-Watch: Atlas fragt die Tabelle ab (standardmaessig einmal pro Minute) und veroeffentlicht jede Zeile, die es noch nicht gesehen hat. Der Watch merkt sich die Zeilennummer, deshalb loest dieselbe Zeile nach einem Neustart nicht noch einmal aus.</documentation>
+      <messageEventDefinition id="med_antrag" messageRef="msg_antrag"/>
+      <outgoing>f_start_gw</outgoing>
+    </startEvent>
+
+    <exclusiveGateway id="gw_betrag" name="Betrag ueber 1000?" default="f_gw_auto">
+      <documentation>Exklusiv, nicht parallel: ein Antrag geht genau einen der beiden Wege. Der Betrag kommt als Spalte der Zeile herein. Sheets liefert Zellen als Text, deshalb steht hier number(Betrag) und nicht Betrag &gt; 1000 — ein Vergleich zwischen Text und Zahl ist in FEEL null, und eine Bedingung, die null ist, ist nicht wahr; der Antrag ginge dann immer den Standardweg.</documentation>
+      <incoming>f_start_gw</incoming>
+      <outgoing>f_gw_pruefung</outgoing>
+      <outgoing>f_gw_auto</outgoing>
+    </exclusiveGateway>
+
+    <serviceTask id="pruefung" name="Zur Pruefung markieren">
+      <documentation>write-range ueberschreibt genau eine Zelle: die Statusspalte C der Zeile, die diesen Prozess gestartet hat. Der Bereich wird aus rowNumber zusammengesetzt — "Antraege!C" + string(rowNumber) —, weshalb der Watch diese Zahl ueberhaupt mitgibt. values ist ein einzelner Wert, was einer Zelle entspricht; eine Liste von Listen waeren Zeilen.</documentation>
+      <extensionElements>
+        <atlas:googleSheetsConnector connector="google" operation="write-range"
+          spreadsheet="=spreadsheetId"
+          range="=&quot;Antraege!C&quot; + string(rowNumber)"
+          values="Pruefung"/>
+      </extensionElements>
+      <incoming>f_gw_pruefung</incoming>
+      <outgoing>f_pruefung_join</outgoing>
+    </serviceTask>
+
+    <serviceTask id="automatisch" name="Automatisch genehmigen">
+      <documentation>Derselbe Schreibzugriff mit dem anderen Status. Absichtlich zwei Tasks statt eines mit einem FEEL-Ausdruck im Wert: was in der Tabelle landet, soll im Diagramm stehen, nicht in einem Ausdruck, den man aufklappen muss.</documentation>
+      <extensionElements>
+        <atlas:googleSheetsConnector connector="google" operation="write-range"
+          spreadsheet="=spreadsheetId"
+          range="=&quot;Antraege!C&quot; + string(rowNumber)"
+          values="genehmigt"/>
+      </extensionElements>
+      <incoming>f_gw_auto</incoming>
+      <outgoing>f_auto_join</outgoing>
+    </serviceTask>
+
+    <exclusiveGateway id="gw_join" name="">
+      <documentation>Zusammenfuehrung. Exklusiv wie die Verzweigung: es kommt genau ein Token an, und ein paralleles Join wuerde hier auf ein zweites warten, das nie kommt.</documentation>
+      <incoming>f_pruefung_join</incoming>
+      <incoming>f_auto_join</incoming>
+      <outgoing>f_join_ende</outgoing>
+    </exclusiveGateway>
+
+    <endEvent id="ende" name="Antrag bearbeitet">
+      <incoming>f_join_ende</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_gw" sourceRef="start" targetRef="gw_betrag"/>
+    <sequenceFlow id="f_gw_pruefung" name="ja" sourceRef="gw_betrag" targetRef="pruefung">
+      <conditionExpression xsi:type="tFormalExpression"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">=number(Betrag) &gt; 1000</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_gw_auto" name="nein" sourceRef="gw_betrag" targetRef="automatisch"/>
+    <sequenceFlow id="f_pruefung_join" sourceRef="pruefung" targetRef="gw_join"/>
+    <sequenceFlow id="f_auto_join" sourceRef="automatisch" targetRef="gw_join"/>
+    <sequenceFlow id="f_join_ende" sourceRef="gw_join" targetRef="ende"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_gs_antragseingang">
+    <bpmndi:BPMNPlane id="BPMNPlane_gs_antragseingang" bpmnElement="proc_gs_antragseingang">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="152" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="128" y="265" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_betrag_di" bpmnElement="gw_betrag" isMarkerVisible="true">
+        <omgdc:Bounds x="250" y="215" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="220" y="185" width="110" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pruefung_di" bpmnElement="pruefung">
+        <omgdc:Bounds x="400" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="automatisch_di" bpmnElement="automatisch">
+        <omgdc:Bounds x="400" y="300" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_join_di" bpmnElement="gw_join" isMarkerVisible="true">
+        <omgdc:Bounds x="600" y="215" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="720" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="696" y="265" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f_start_gw_di" bpmnElement="f_start_gw">
+        <omgdi:waypoint x="188" y="240"/><omgdi:waypoint x="250" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_pruefung_di" bpmnElement="f_gw_pruefung">
+        <omgdi:waypoint x="275" y="215"/><omgdi:waypoint x="275" y="140"/><omgdi:waypoint x="400" y="140"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="285" y="150" width="20" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_auto_di" bpmnElement="f_gw_auto">
+        <omgdi:waypoint x="275" y="265"/><omgdi:waypoint x="275" y="340"/><omgdi:waypoint x="400" y="340"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="285" y="312" width="28" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_pruefung_join_di" bpmnElement="f_pruefung_join">
+        <omgdi:waypoint x="500" y="140"/><omgdi:waypoint x="625" y="140"/><omgdi:waypoint x="625" y="215"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_auto_join_di" bpmnElement="f_auto_join">
+        <omgdi:waypoint x="500" y="340"/><omgdi:waypoint x="625" y="340"/><omgdi:waypoint x="625" y="265"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_join_ende_di" bpmnElement="f_join_ende">
+        <omgdi:waypoint x="650" y="240"/><omgdi:waypoint x="720" y="240"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

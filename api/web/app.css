@@ -27,6 +27,17 @@
      disappears as a ring on a tinted circle while this does not. Kept out of the
      dense views for the same reason it is used here. */
   --mesh-attention: #d97706;
+  /* The landscape's neutral ink, and deliberately not --border-strong. Same
+     argument as the amber above, in the other direction: --border-strong is a
+     hairline between two panels a hand's width from the eye, where anything darker
+     would draw attention a border has no business drawing. The same value on a
+     canvas is a node that is *there* and cannot be seen — and the nodes it happens
+     to fall on are the unremarkable ones, so a landscape drawn in it shows its
+     findings sharply and its structure barely at all. These two carry the outlines
+     and the edges instead; they are the darkest values that still read as quiet
+     beside a status mark. */
+  --mesh-ink: #8b9099;
+  --mesh-line: #adb2ba;
   --ok: #2d8a4e;
   --topbar-h: 48px;
   --radius: 8px;
@@ -264,7 +275,7 @@ textarea::placeholder {
 .field.inline input { width: auto; margin: 0; }
 
 /* Entra attribute capture mask (ADR-0172, amended): a per-operation form that assembles
-   the connector's attributes JSON. Each row stacks a caption, an input, and a hint to
+   the worker's attributes JSON. Each row stacks a caption, an input, and a hint to
    match the .field look; a dashed rule sets off the "Weitere Attribute" escape hatch,
    and an error line flags a malformed escape-hatch JSON. */
 .entra-mask { display: block; margin-top: 6px; }
@@ -433,19 +444,19 @@ textarea::placeholder {
    columns evenly — which put the status halfway across the row and stranded the actions
    an inch of empty table away from it. */
 .conn-status-col { width: 220px; }
-/* Why a stored connector is not usable, under its status pill (ADR-0158). */
+/* Why a stored worker is not usable, under its status pill (ADR-0158). */
 .conn-problem {
   margin-top: 3px; max-width: 340px; color: var(--danger);
   font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere;
 }
-/* The connector a parked task resolves through, named on the incident itself
-   (ADR-0160). An operator reading "no connector registered as X" has to know which
+/* The worker a parked task resolves through, named on the incident itself
+   (ADR-0160). An operator reading "no worker registered as X" has to know which
    integration X is before they can go and fix it, and the incident is where they are
    standing. Amber when the model references a name nobody configured. */
 .inc-conn { margin: 4px 0 6px; }
 .inc-conn .pill { font-weight: 600; }
-/* The shared connector dialog (ADR-0160): the same form whether it is opened from
-   Organization › Connectors or from the incident a misconfigured connector parked. */
+/* The shared worker dialog (ADR-0160): the same form whether it is opened from
+   Console › Workers or from the incident a misconfigured worker parked. */
 .conn-modal { max-width: 640px; width: 92vw; }
 .conn-fields { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
 .conn-fields .field { margin: 0; }
@@ -455,7 +466,7 @@ textarea::placeholder {
 }
 .conn-enabled { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 12.5px; }
 .conn-enabled input { width: auto; margin: 0; }
-/* Which deployed processes resolve through a connector, under its row (ADR-0163) —
+/* Which deployed processes resolve through a worker, under its row (ADR-0163) —
    the line that turns Delete from a click into a decision. It is a count on a chip
    rather than the list itself: spelled out, a worker twenty-one deployed definitions
    reference drew fourteen wrapped lines of links, and the endpoint, the status and the
@@ -1792,9 +1803,9 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* Implementation-type marker the editor draws on a task in the Implement view (and the
    runtime views), so its executable nature reads at a glance — a script task's language
-   (PowerShell/Python/JavaScript) or a service task's connector kind (REST) (drawImplBadges).
+   (PowerShell/Python/JavaScript) or a service task's Worker Type (REST) (drawImplBadges).
    A round disc carrying the type icon, sized and placed to sit over the shape's own
-   top-left BPMN marker — the corner-glyph look of a connector task, not a floating label. */
+   top-left BPMN marker — the corner-glyph look of a worker task, not a floating label. */
 .impl-badge {
   display: grid; place-items: center; width: 26px; height: 26px;
   background: var(--surface); border-radius: 50%; box-shadow: 0 0 0 1px var(--border-strong);
@@ -1863,7 +1874,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 
 /* Type icon in the service-task kind picker (serviceTaskKindHTML) — the same disc as
-   the canvas marker so the picker and the diagram show the connector kind identically.
+   the canvas marker so the picker and the diagram show the Worker Type identically.
    Carries a `glyph` SVG when the kind has one (REST), else the kind's letter/emoji. */
 .stkind-icon {
   flex: 0 0 22px; height: 22px; display: grid; place-items: center;
@@ -2352,7 +2363,7 @@ tr[hidden] { display: none; }
 .pgroup-all:hover { color: var(--accent); text-decoration: underline; }
 .pgroup-all-sep { color: var(--border-strong); font-size: 11px; }
 
-/* A caption naming the section the groups below it belong to (e.g. the chosen connector
+/* A caption naming the section the groups below it belong to (e.g. the chosen Worker Type
    above its Mail provider / Message / Failure handling groups). It is a label, not a
    control: no chevron, no hover, not focusable — so it never suggests a collapse it
    cannot do. Deliberately unlike .pgroup-head (smaller, uppercase, muted) so the two
@@ -3086,7 +3097,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .code-editor:hover .dev-open, .code-editor:focus-within .dev-open { opacity: 1; }
 .code-editor .dev-open:hover { color: var(--accent); border-color: var(--accent); }
 
-/* The verdict of a connector check, under the connector form (ADR-0150). It says
+/* The verdict of a worker check, under the worker form (ADR-0150). It says
    what was proved, so it is a sentence and not a status dot — and a failure keeps the
    provider's own words, which is the part that tells an operator what to change. */
 .conn-test-result { font: 12.5px/1.5 system-ui, sans-serif; overflow-wrap: anywhere; }
@@ -3177,7 +3188,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 
 /* ---------- Secret shape hints (ADR-0155) ---------- */
 /* A vault secret is a name and an opaque string, so the form has to say what the
-   string is for: which connector resolves it and what shape that connector needs. */
+   string is for: which worker resolves it and what shape that worker needs. */
 .secret-hint { margin: 0 0 10px; font-size: 12.5px; line-height: 1.55; }
 .secret-hint p { margin: 0 0 6px; }
 .secret-skeleton {
@@ -3191,7 +3202,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   width: 100%; resize: vertical;
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-/* Why a value cannot be what the connector needs, said where it was typed. */
+/* Why a value cannot be what the worker needs, said where it was typed. */
 .secret-error {
   margin: 8px 0 0; padding: 8px 10px; border-radius: 6px;
   border: 1px solid var(--danger); background: #fdecea; color: var(--danger);
@@ -3413,7 +3424,7 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
   font-size: 12px; white-space: pre-wrap; word-break: break-word;
 }
 
-/* What the configured clio connector holds, under the in-memory tail. Separated by a
+/* What the configured clio worker holds, under the in-memory tail. Separated by a
    rule rather than a card, because they are the same rows from two places and the
    distinction that matters is only "this run" versus "before it". */
 .wkjob-history { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
@@ -3455,10 +3466,10 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 }
 .warn-note code { font-family: ui-monospace, monospace; font-size: 12px; }
 
-/* Connector ownership (ADR-0205): who else may configure one, inline in its row. */
+/* Worker ownership (ADR-0205): who else may configure one, inline in its row. */
 .conn-share { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
 .conn-share-head { font-size: 13px; font-weight: 600; }
-/* A connector somebody else configures: present, referenceable, and visibly not yours. */
+/* A worker somebody else configures: present, referenceable, and visibly not yours. */
 .conn-foreign td { opacity: .72; }
 
 /* Panorama's derived landscape mesh (ADR-0211). The graph is computed by the
@@ -3471,7 +3482,30 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 /* Export sits at the end of the head, pushed away from the search box: it acts on
    the picture as a whole, and a button that saves a file should not be adjacent to
    the one that narrows what would be in it. */
-.mesh-export { margin-left: auto; display: inline-flex; gap: 6px; }
+/* Which vocabulary the picture is drawn in (ADR-0211 §8). Beside the picture, not
+   in the answer column: it changes the drawing rather than what is being said about
+   it. */
+.mesh-notation { margin-left: auto; font-size: 13px; color: var(--muted); }
+.mesh-notation-pick {
+  height: 28px; padding: 0 6px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text);
+}
+/* The type a projection calls this node, under its name. C4's own idiom, and
+   ArchiMate's corner icon written out — an icon at this zoom is a smudge. It follows
+   the name's own reveal rule, so it appears when the name does. */
+.mesh-type { font-size: 11px; fill: var(--muted); pointer-events: none; }
+.mesh-application .mesh-type { font-size: 15px; }
+/* What the projection drops. Collapsed by default and never absent: a projection
+   that hides its loss is the failure §8's theme ban exists to prevent, and one that
+   shouts it every time is one nobody reads twice. */
+.mesh-projection { font-size: 13px; }
+.mesh-projection summary { cursor: pointer; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.mesh-projection summary .muted { font-size: 11px; }
+.mesh-projection > p { margin: 6px 0 4px; }
+.mesh-loss { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
+.mesh-loss li { margin: 2px 0; }
+.mesh-export { display: inline-flex; gap: 6px; }
 .mesh-export button {
   height: 28px; padding: 0 10px; font-size: 13px; line-height: 1;
   border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
@@ -3519,10 +3553,17 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    landscape is already on screen and dragging is deliberately inert. */
 .mesh-canvas.mesh-zoomed { cursor: grab; }
 .mesh-canvas.mesh-zoomed:active { cursor: grabbing; }
+/* The zoom controls float over the canvas, which means they are also *in front of*
+   it: a node under them takes no pointer, so it cannot be selected or dragged. The
+   fitted view now holds this corner clear (see fitView), and the panel itself passes
+   pointers through everywhere except on its own buttons, so the gaps between them
+   stop being dead canvas too. */
 .mesh-zoom {
   position: absolute; right: 10px; bottom: 10px; display: flex; gap: 4px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px;
+  pointer-events: none;
 }
+.mesh-zoom button { pointer-events: auto; }
 .mesh-zoom button {
   min-width: 30px; height: 26px; padding: 0 8px; font-size: 14px; line-height: 1;
   border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
@@ -3530,8 +3571,8 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 }
 .mesh-zoom button:hover { border-color: var(--border-strong); }
 .mesh-zoom button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.mesh-edge { stroke: var(--border-strong); stroke-width: 1.5; }
-.mesh-edge-contains { stroke-dasharray: 4 4; opacity: 0.7; }
+.mesh-edge { stroke: var(--mesh-line); stroke-width: 1.6; }
+.mesh-edge-contains { stroke-dasharray: 4 4; opacity: 0.75; }
 /* Labels (ADR-0211 §7's legibility half). A few hundred names on one canvas is a
    wall of text with circles behind it, so most names are revealed rather than
    painted: the element is always in the DOM — screen readers and the node's
@@ -3672,7 +3713,11 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
    filter keeps one hop of neighbourhood around every match. Those are context rather
    than results, and are drawn as such: a search that presented things which do not
    match the search as matches would be a worse answer than the empty field. */
-.mesh-context { opacity: 0.55; }
+/* Context, not a result: this node is on screen because something next to it
+   matched. Faint enough that the answer still reads as the answer, and no fainter —
+   context nobody can make out is not context, it is a smudge that makes the picture
+   look broken. */
+.mesh-context { opacity: 0.75; }
 
 /* Impact analysis (ADR-0211 §6). The canvas and the panel are one answer: the
    highlight says which, the panel says how many and whether the count is a floor. */
@@ -3834,7 +3879,12 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
 line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 /* Dimmed rather than hidden: the rest of the landscape stays visible as context,
    so an impact set reads as a part of the whole rather than as the whole. */
-.mesh-dimmed { opacity: 0.22; }
+/* Outside the impact set. It was 0.22, which on white is nearly gone: the answer
+   stood out because everything else had been erased, and a reader could no longer
+   see what the highlighted nodes were highlighted *against*. An impact set is a
+   part of a whole, and the whole has to stay legible for the part to mean
+   anything. */
+.mesh-dimmed { opacity: 0.42; }
 @media (max-width: 900px) {
   .mesh-body { flex-direction: column; }
   .mesh-side { width: 100%; }
@@ -4398,47 +4448,63 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .im-dirty { font: 11px/1.5 system-ui, sans-serif; color: var(--muted); font-style: italic; }
 
 .im-body { display: flex; flex: 1; min-height: 0; border: 1px solid var(--border); }
-.im-canvas { flex: 1; overflow: auto; background: var(--bg); min-width: 0; }
+.im-canvas { flex: 1; overflow: hidden; background: var(--bg); min-width: 0; position: relative; }
+/* Over the drawing, not on it: diagram-js fits the viewport to its content, and a
+   sentence drawn on the sheet would be zoomed to fill the window. */
+.im-empty-hint { position: absolute; z-index: 1; inset: 40px 40px auto 40px; margin: 0;
+  max-width: 44ch; color: var(--muted); font-size: 13px; line-height: 1.5; pointer-events: none; }
 .im-canvas.connecting { cursor: crosshair; }
 .im-side { width: 340px; flex: none; border-left: 1px solid var(--border); overflow: auto; background: var(--bg); }
 
-.im-svg { display: block; }
-.im-hint { fill: var(--muted); font: 13px/1.5 system-ui, sans-serif; }
+/* The class canvas. The drawing is diagram-js now
+   (ADR-0237), so these style what the Atlas renderer in
+   api/web/vendor/uml/ emits; the selection outline and the hit layer are the
+   library's own. */
+.im-canvas .djs-container { background: var(--bg); }
 
 /* A class box. The three kinds are told apart by the colour of their header strip
    rather than by shape, because shape is what the notation already uses. */
-.im-class { cursor: grab; }
-.im-class .im-box { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
-.im-class .im-sep { stroke: var(--border); }
-.im-class .im-stereo { fill: var(--muted); font: 10px/1.4 system-ui, sans-serif; letter-spacing: .02em; }
-.im-class .im-cname { fill: var(--text); font: 600 13px/1.4 system-ui, sans-serif; }
-.im-class .im-attr { font: 12px/1.4 ui-monospace, monospace; }
-.im-class .im-attr-name { fill: var(--text); }
-.im-class .im-attr-type { fill: var(--muted); }
-.im-class .im-attr-mult { fill: var(--muted); }
-.im-class .im-attr.key .im-attr-name { font-weight: 700; }
-.im-class .im-literal { fill: var(--text); font: 12px/1.4 ui-monospace, monospace; }
-.im-class .im-empty { fill: var(--muted); font: italic 11.5px/1.4 system-ui, sans-serif; }
-.im-class.selected .im-box { stroke: var(--accent); stroke-width: 2; }
-.im-class.invalid .im-box { stroke: #d93025; stroke-dasharray: 4 3; }
+.uml-class .uml-box { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+.uml-class .uml-sep { stroke: var(--border); }
+.uml-class .uml-stereo { fill: var(--muted); font: 10px/1.4 system-ui, sans-serif; letter-spacing: .02em; }
+.uml-class .uml-cname { fill: var(--text); font: 600 13px/1.4 system-ui, sans-serif; }
+.uml-class .uml-attr { font: 12px/1.4 ui-monospace, monospace; }
+.uml-class .uml-attr-name { fill: var(--text); }
+.uml-class .uml-attr-type { fill: var(--muted); }
+.uml-class .uml-attr-mult { fill: var(--muted); }
+.uml-class .uml-attr.key .uml-attr-name { font-weight: 700; }
+.uml-class .uml-literal { fill: var(--text); font: 12px/1.4 ui-monospace, monospace; }
+.uml-class .uml-empty { fill: var(--muted); font: italic 11.5px/1.4 system-ui, sans-serif; }
+.uml-class.invalid .uml-box { stroke: #d93025; stroke-dasharray: 4 3; }
 /* While a relationship is being drawn, a class the matrix would refuse fades: the
    canvas offers only what the server would accept. */
-.im-class.unreachable { opacity: .35; }
-.im-class.businessObject .im-box { fill: color-mix(in srgb, var(--accent-soft) 60%, var(--bg)); }
-.im-class.valueType .im-box { fill: var(--bg); stroke-dasharray: 0; }
-.im-class.enumeration .im-box { fill: color-mix(in srgb, #b26a00 8%, var(--bg)); }
+.uml-class.unreachable { opacity: .35; }
+.uml-class.businessObject .uml-box { fill: color-mix(in srgb, var(--accent-soft) 60%, var(--bg)); }
+.uml-class.valueType .uml-box { fill: var(--bg); stroke-dasharray: 0; }
+.uml-class.enumeration .uml-box { fill: color-mix(in srgb, #b26a00 8%, var(--bg)); }
 
-.im-line { stroke: var(--text); stroke-width: 1.4; }
-.im-line.generalization { stroke-width: 1.2; }
-.im-line-hit { stroke: transparent; stroke-width: 12; cursor: pointer; }
-.im-mark { stroke: var(--text); stroke-width: 1.2; }
-.im-mark.filled { fill: var(--text); }
-.im-mark.open { fill: var(--bg); }
-.im-edge.selected .im-line { stroke: var(--accent); stroke-width: 2.2; }
-.im-edge.selected .im-mark { stroke: var(--accent); }
-.im-edge.selected .im-mark.filled { fill: var(--accent); }
-.im-edge-label { fill: var(--text); font: 600 11px/1.4 system-ui, sans-serif; text-anchor: middle; }
-.im-end-label { fill: var(--muted); font: 11px/1.4 ui-monospace, monospace; text-anchor: middle; }
+.uml-edge .uml-edge-line { stroke: var(--text); stroke-width: 1.4; fill: none; }
+.uml-edge.generalization .uml-edge-line { stroke-width: 1.2; }
+.uml-edge-label { fill: var(--text); font: 600 11px/1.4 system-ui, sans-serif; text-anchor: middle; }
+.uml-end-label { fill: var(--muted); font: 11px/1.4 ui-monospace, monospace; text-anchor: middle; }
+
+/* A store is kept visibly unlike a class, because it is not one: a cylinder, joined
+   to the class it holds by a dashed annotation rather than by an association. */
+.uml-store .uml-store-body { fill: color-mix(in srgb, var(--muted) 12%, var(--bg)); stroke: var(--border); }
+.uml-store .uml-store-lip { stroke: var(--border); }
+.uml-store .uml-store-name { fill: var(--text); font: 600 12px/1.4 system-ui, sans-serif; }
+.uml-store .uml-store-sub { fill: var(--muted); font: 11px/1.4 system-ui, sans-serif; }
+.uml-store.invalid .uml-store-body { stroke: #d93025; stroke-dasharray: 4 3; }
+.uml-store.unreachable { opacity: .35; }
+/* A store's line to its class is an annotation, not a relationship: a store and its
+   class do not relate, one *is kept in* the other (ADR-0230 §7). Dashed says so. */
+.uml-store-link .uml-edge-line { stroke: var(--muted); stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; }
+
+/* diagram-js draws the selection, so the box does not have to. A line gets no
+   outline from the library, so which relationship is being edited is said here. */
+.djs-element.selected .uml-box,
+.djs-element.selected .uml-store-body { stroke: var(--accent); stroke-width: 2; }
+.djs-element.selected .uml-edge-line { stroke: var(--accent); stroke-width: 2.2; }
 
 /* The properties panel. */
 .im-panel { padding: 12px 14px 20px; }
@@ -4470,6 +4536,19 @@ table.im-attrs { width: 100%; border-collapse: collapse; font-size: 12px; }
   background: var(--bg); color: var(--text);
 }
 .im-attrs .im-key-cell { text-align: center; width: 24px; }
+
+/* Reordering an attribute or a literal. The grip is the only thing that starts a
+   drag, so the text inputs beside it keep their own selection; the drop line marks
+   the edge the row will land against. */
+.im-attrs .im-grip {
+  width: 16px; padding: 2px 0 2px 2px; cursor: grab; user-select: none;
+  color: var(--muted); font-size: 11px; line-height: 1; text-align: center;
+}
+.im-attrs .im-grip:active { cursor: grabbing; }
+.im-attrs tr:hover .im-grip { color: var(--text); }
+.im-attrs tr.im-dragging { opacity: .45; }
+.im-attrs tr.im-drop-before td { box-shadow: inset 0 2px 0 0 var(--accent); }
+.im-attrs tr.im-drop-after td { box-shadow: inset 0 -2px 0 0 var(--accent); }
 .im-end { border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px 2px; margin-bottom: 10px; }
 .im-end legend { font: 600 11px/1.5 system-ui, sans-serif; color: var(--muted); padding: 0 4px; }
 .im-note { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; font: 12px/1.55 system-ui, sans-serif; color: var(--muted); }

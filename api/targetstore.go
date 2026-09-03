@@ -11,11 +11,11 @@ import (
 
 // deploymentTarget is another Atlas server this one can promote a release to
 // (ADR-0129). It is operator configuration in the same category as managed
-// connectors (ADR-0041) and per-server call-activity overrides (ADR-0105): it
+// workers (ADR-0041) and per-server call-activity overrides (ADR-0105): it
 // belongs to this server, not to any one application, and applications merely
 // reference it.
 //
-// Like a connector, it stores only a *reference* to its credential, never the
+// Like a worker, it stores only a *reference* to its credential, never the
 // secret: CredentialRef names a vault entry (ADR-0069/0070) that holds the peer's
 // deploy token. The token itself is resolved at promotion time, used for one
 // request, and never written anywhere.

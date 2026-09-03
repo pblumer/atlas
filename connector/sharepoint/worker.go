@@ -13,17 +13,17 @@ import (
 )
 
 // ProcessLookup resolves a process-definition key to its compiled process. The
-// worker uses it to find the connector name, site, list, and item fields a
+// worker uses it to find the worker name, site, list, and item fields a
 // SharePoint job belongs to, so one handler serves every deployed process.
 type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
-// Handler builds a job handler that performs a SharePoint connector task. Register it
+// Handler builds a job handler that performs a SharePoint worker task. Register it
 // with a [job.Runner] under the reserved [compiler.SharePointJobTypeIndex] via
 // HandleWithOutput; the runner then pulls activatable SharePoint jobs, and for each
 // the handler resolves the task's connector/site/list/fields from the compiled
 // process — evaluating any FEEL value over the variables the task sees, up its scope
 // chain (the fx toggle,
-// ADR-0067) — resolves the named connector's Graph client from reg, creates the list
+// ADR-0067) — resolves the named worker's Graph client from reg, creates the list
 // item, and (when the task names a result variable) returns the created item's JSON
 // as that variable to be written back on completion. Returning an error leaves the
 // job pending (retry, then an incident, ADR-0061); the runner completes it only on
@@ -45,33 +45,18 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Output
 		if err != nil {
 			return nil, fmt.Errorf("sharepoint: %w", err)
 		}
-		name := cp.Intern(detail.Connector)
-		client, ok := reg.Client(name)
-		if !ok {
-			return nil, reg.Unresolved("sharepoint", name)
-		}
-		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
-		// Read the variables the task sees once — up its scope chain, so its own
-		// input-mapped locals shadow what it inherits (ADR-0068). Every site, list
-		// and field FEEL value evaluates against them, off the hot path.
-		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
-		if err != nil {
-			return nil, fmt.Errorf("sharepoint: read variables for element %d: %w", j.ElementInstanceKey, err)
-		}
-		item, err := client.CreateItem(context.Background(), ItemRequest{
-			Site:      resolveValue(detail.Site, piKey, scopeVars),
-			List:      resolveValue(detail.List, piKey, scopeVars),
-			Fields:    resolveKVs(detail.Fields, piKey, scopeVars),
-			RequestID: strconv.FormatUint(j.Key, 10),
-		})
+		task, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey, j.Key)
 		if err != nil {
 			return nil, err
 		}
-		resultVar := cp.Intern(detail.ResultVar)
-		if resultVar == "" {
-			return nil, nil // the model discards the created item
+		// The same Resolve/Run pair the worker uses (ADR-0168), so relocating the work
+		// cannot change what a resolved SharePoint task means — only which instances
+		// the running process holds.
+		res, err := Run(context.Background(), task, reg)
+		if err != nil {
+			return nil, err
 		}
-		return []model.VariableValue{itemVariable(resultVar, item)}, nil
+		return res.Variables(), nil
 	}
 }
 
@@ -80,7 +65,7 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Output
 // reference processInstanceKey.
 const builtinProcessInstanceKey = "processInstanceKey"
 
-// resolveValue turns a connector field value into a string: a literal verbatim, or a
+// resolveValue turns a worker field value into a string: a literal verbatim, or a
 // FEEL expression evaluated over the scope's variables and coerced to its string
 // form. A FEEL null — an absent variable or a failed evaluation — becomes the empty
 // string, matching the engine's null-propagating contract (as the REST worker's
@@ -97,7 +82,7 @@ func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model
 	return text
 }
 
-// resolveKVs resolves a list of named connector values (item fields) into a map,
+// resolveKVs resolves a list of named worker values (item fields) into a map,
 // evaluating any FEEL values. Returns nil for an empty list.
 func resolveKVs(kvs []compiler.RestKV, piKey uint64, scopeVars map[string]model.VariableValue) map[string]string {
 	if len(kvs) == 0 {

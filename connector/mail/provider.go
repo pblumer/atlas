@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
-// Provider identifiers for a managed mail connector. SMTP (the default) reaches any
+// Provider identifiers for a managed mail worker. SMTP (the default) reaches any
 // submission server; Gmail and Microsoft are the native provider APIs (ADR-0079/0081).
 // [ProviderPreview], declared beside its outbox, is the fourth: it frames a message
 // like the others and delivers it in-server instead of sending it (ADR-0150).
@@ -30,11 +30,11 @@ const (
 // ProviderConfig is the per-connector data the server resolves before building a
 // client: the provider, an optional endpoint override, the default sender, and the
 // resolved Secret — an SMTP password, or (for a native provider) the OAuth credential
-// JSON bundle held in the vault under the connector's credentialsRef (ADR-0093). The
+// JSON bundle held in the vault under the worker's credentialsRef (ADR-0093). The
 // secret lives only here at build time, never in a model or an event (I6).
 //
 // Name and Outbox serve the preview provider (ADR-0150), which delivers into the
-// server's outbox under the connector's own name; every other provider ignores them.
+// server's outbox under the worker's own name; every other provider ignores them.
 // Outbox is a [Sink] rather than the concrete outbox because a mail worker runs in
 // another process and delivers back over the wire (ADR-0168).
 type ProviderConfig struct {
@@ -46,15 +46,15 @@ type ProviderConfig struct {
 	Outbox   Sink
 }
 
-// NewProviderClient builds the mail client for a managed connector, dispatching on its
+// NewProviderClient builds the mail client for a managed worker, dispatching on its
 // provider. SMTP is the default; Gmail and Microsoft Graph parse the credential bundle
-// and build an OAuth token source. A misconfigured connector returns an error so the
+// and build an OAuth token source. A misconfigured worker returns an error so the
 // caller can skip it (its tasks park) rather than sending wrongly. This is the single
 // place a new provider is added.
 func NewProviderClient(cfg ProviderConfig) (Client, error) {
 	switch strings.ToLower(strings.TrimSpace(cfg.Provider)) {
 	case "", ProviderSMTP:
-		// Normalized here, not only where a connector is saved: a record written
+		// Normalized here, not only where a worker is saved: a record written
 		// before the endpoint was checked at all (or through a partial update) would
 		// otherwise keep failing deep in the send, one parked token at a time.
 		endpoint, err := NormalizeSMTPEndpoint(cfg.Endpoint)
@@ -69,7 +69,7 @@ func NewProviderClient(cfg ProviderConfig) (Client, error) {
 		}), nil
 	case ProviderPreview:
 		if cfg.Outbox == nil {
-			return nil, fmt.Errorf("mail: preview connector %q has no outbox", cfg.Name)
+			return nil, fmt.Errorf("mail: preview worker %q has no outbox", cfg.Name)
 		}
 		return NewPreviewClient(cfg.Outbox, cfg.Name, cfg.Sender), nil
 	case ProviderGmail:
@@ -94,7 +94,7 @@ func NewProviderClient(cfg ProviderConfig) (Client, error) {
 // cached token source.
 func oauthTokenSource(provider string, cfg ProviderConfig) (TokenSource, error) {
 	if strings.TrimSpace(cfg.Secret) == "" {
-		return nil, fmt.Errorf("mail: %s connector has no credential (set credentialsRef to a JSON auth bundle in the vault)", provider)
+		return nil, fmt.Errorf("mail: %s worker has no credential (set credentialsRef to a JSON auth bundle in the vault)", provider)
 	}
 	var b credentialBundle
 	if err := json.Unmarshal([]byte(cfg.Secret), &b); err != nil {

@@ -19,9 +19,9 @@ func nodeIndexOf(t *testing.T, cp *CompiledProcess, bpmnID string) int32 {
 }
 
 // TestConnectorRefsEnumeratesBothShapes covers the two ways a model names a
-// server-registered connector — a connector task and a *central* business rule task —
+// server-registered worker — a task and a *central* business rule task —
 // and the elements that name none. A deploy checks every reference in a model against
-// the connector store this way (ADR-0158).
+// the worker store this way (ADR-0158).
 func TestConnectorRefsEnumeratesBothShapes(t *testing.T) {
 	mail, err := Parse(1, 1, strings.NewReader(mailConnectorBPMN))
 	if err != nil {
@@ -49,8 +49,8 @@ func TestConnectorRefsEnumeratesBothShapes(t *testing.T) {
 }
 
 // TestNodeConnectorRefPerElement covers the per-element question an *incident* asks:
-// a token is parked here, which connector is it stuck on (ADR-0160)? Every element
-// that names no connector — a local decision, a start event, an index that is not a
+// a token is parked here, which worker is it stuck on (ADR-0160)? Every element
+// that names no worker — a local decision, a start event, an index that is not a
 // node at all — has to answer "none" rather than a wrong or partial reference.
 func TestNodeConnectorRefPerElement(t *testing.T) {
 	cp, err := Parse(1, 1, strings.NewReader(twoDecisionBPMN))
@@ -62,13 +62,13 @@ func TestNodeConnectorRefPerElement(t *testing.T) {
 		t.Errorf("central = %+v (ok=%v), want the risk-service reference", ref, ok)
 	}
 	// A business rule task evaluating a local decision is the same node type carrying
-	// no connector — the case that would make a naive "it's a decision, so it has a
-	// connector" answer wrong.
+	// no worker — the case that would make a naive "it's a decision, so it has a
+	// worker" answer wrong.
 	if ref, ok := cp.NodeConnectorRef(nodeIndexOf(t, cp, "local")); ok {
-		t.Errorf("local decision = %+v, want no connector reference", ref)
+		t.Errorf("local decision = %+v, want no worker reference", ref)
 	}
 	if ref, ok := cp.NodeConnectorRef(nodeIndexOf(t, cp, "s")); ok {
-		t.Errorf("start event = %+v, want no connector reference", ref)
+		t.Errorf("start event = %+v, want no worker reference", ref)
 	}
 	for _, id := range []int32{-1, int32(len(cp.nodes))} {
 		if ref, ok := cp.NodeConnectorRef(id); ok {

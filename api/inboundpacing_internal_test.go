@@ -116,7 +116,7 @@ func assertNotRewritten(t *testing.T, srv *Server, subID string, poll func()) {
 	}
 }
 
-// newClioWatch creates an enabled clio connector named "events" and a watch on it,
+// newClioWatch creates an enabled clio worker named "events" and a watch on it,
 // returning the watch's id.
 func newClioWatch(t *testing.T, srv *Server, subject, messageName string) string {
 	t.Helper()
@@ -124,7 +124,7 @@ func newClioWatch(t *testing.T, srv *Server, subject, messageName string) string
 		`{"watchedSubject":"`+subject+`","messageName":"`+messageName+`","startFromTip":false}`)
 }
 
-// newJiraWatch creates an enabled jira connector named "tickets" and a watch on it.
+// newJiraWatch creates an enabled jira worker named "tickets" and a watch on it.
 func newJiraWatch(t *testing.T, srv *Server, jql, messageName string) string {
 	t.Helper()
 	return newWatch(t, srv, `{"name":"tickets","kind":"jira","endpoint":"https://acme.atlassian.net","credentialsRef":"JIRA"}`,
@@ -136,11 +136,11 @@ func newWatch(t *testing.T, srv *Server, connBody, watchBody string) string {
 	x := deployTestHarness{t, srv.Handler()}
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", connBody)
 	if code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 	var conn connector
 	if err := json.Unmarshal(cb, &conn); err != nil {
-		t.Fatalf("decode connector: %v", err)
+		t.Fatalf("decode worker: %v", err)
 	}
 	code, sb := x.do(http.MethodPost, "/api/v1/connectors/"+conn.ID+"/inbound-subscriptions", watchBody)
 	if code != http.StatusOK {

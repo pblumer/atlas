@@ -41,7 +41,7 @@ func TestMockAnswersASeededQuery(t *testing.T) {
 	}
 	// A seeded 7 must arrive as an integer, not as the 7e+00 a JSON round trip
 	// through float64 would produce — an id that does not compare is the whole
-	// class of bug the real connector's jsonScalar exists to prevent.
+	// class of bug the real worker's jsonScalar exists to prevent.
 	if got := rows[0]["id"]; got != int64(7) {
 		t.Errorf("id = %#v, want int64(7)", got)
 	}
@@ -251,13 +251,13 @@ func TestMockAnswersAPing(t *testing.T) {
 	}
 }
 
-// A mock is one statement at a time, like the connector itself: there is no
+// A mock is one statement at a time, like the worker itself: there is no
 // transaction to span two tasks (ADR-0173), so pretending to start one would be the
-// mock teaching a model something the real connector will not do.
+// mock teaching a model something the real worker will not do.
 func TestMockHasNoTransactions(t *testing.T) {
 	c, _ := mockClient(t)
 	if _, err := c.db.BeginTx(context.Background(), nil); err == nil {
-		t.Fatal("the mock started a transaction the real connector has no way to offer")
+		t.Fatal("the mock started a transaction the real worker has no way to offer")
 	}
 }
 
@@ -363,7 +363,7 @@ func TestMockHasNoConnectionString(t *testing.T) {
 
 // An execute reports the affected rows and nothing else. A mock has no identity
 // column, so the id a real INSERT would produce is refused rather than invented —
-// the connector never reads it, and a made-up key is the kind of value that escapes
+// the worker never reads it, and a made-up key is the kind of value that escapes
 // into a process variable and is believed.
 func TestMockReportsNoInsertedIdentity(t *testing.T) {
 	c, _ := mockClient(t, MockAnswer{Statement: "INSERT INTO personen (mail) VALUES (@p1)", Affected: 1})

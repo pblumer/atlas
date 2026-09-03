@@ -201,7 +201,7 @@ func TestMeshReportsAWorkerThatCannotServeWorkAsCritical(t *testing.T) {
 		t.Fatalf("a disabled worker = %q/%q, want not-ready/critical", worker.State, worker.Severity)
 	}
 	if !strings.Contains(worker.Reason, "disabled") {
-		t.Errorf("reason = %q, want the same words the connector list gives", worker.Reason)
+		t.Errorf("reason = %q, want the same words the worker list gives", worker.Reason)
 	}
 	// The finding is on the worker and does not travel up the uses edge: ADR-0211
 	// §4 aggregates containment only, so one broken worker cannot repaint the

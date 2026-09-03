@@ -7,7 +7,7 @@ import (
 	"github.com/pblumer/atlas/worker"
 )
 
-// Active Directory as a Console connector (ADR-0206).
+// Active Directory as a Console worker (ADR-0206).
 //
 // AD used to be the one credential-bearing kind an operator could not create: the
 // directory lived in the model, so there was nothing to configure and nowhere
@@ -192,7 +192,7 @@ func TestAnADBundleNeedsBothHalves(t *testing.T) {
 func TestCreatingAnADConnectorNeedsAnLDAPURLAndABundle(t *testing.T) {
 	k, ok := lookupManagedConnectorKind(connectorKindAD)
 	if !ok {
-		t.Fatal("ad is not a managed connector kind")
+		t.Fatal("ad is not a managed Worker Type")
 	}
 	for _, tc := range []struct{ name, endpoint, ref, want string }{
 		{"no endpoint", "", "ad-bind", "endpoint"},
@@ -205,7 +205,7 @@ func TestCreatingAnADConnectorNeedsAnLDAPURLAndABundle(t *testing.T) {
 				Name: "forest", Endpoint: tc.endpoint, CredentialsRef: tc.ref,
 			})
 			if msg == "" {
-				t.Fatal("an incomplete active directory connector was accepted")
+				t.Fatal("an incomplete active directory worker was accepted")
 			}
 			if !strings.Contains(msg, tc.want) {
 				t.Errorf("message = %q, want it to mention %q", msg, tc.want)
@@ -218,7 +218,7 @@ func TestCreatingAnADConnectorNeedsAnLDAPURLAndABundle(t *testing.T) {
 	for _, url := range []string{"ldaps://dc.example.com:636", "ldap://dc.example.com:389"} {
 		p := &createConnectorParams{Name: "forest", Endpoint: url, CredentialsRef: "ad-bind", Provider: "smtp", Sender: "bot@x"}
 		if msg := k.validateCreate(p); msg != "" {
-			t.Errorf("a complete active directory connector on %s was refused: %s", url, msg)
+			t.Errorf("a complete active directory worker on %s was refused: %s", url, msg)
 		}
 		// The mail-only fields are cleared rather than stored, so a record carried over
 		// from another kind cannot leave a provider or a sender behind on a directory.

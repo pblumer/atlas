@@ -1,6 +1,6 @@
 {
   "tags": [
-    "Connectors",
+    "Workers",
     "Operations"
   ],
   "title": {
@@ -12,7 +12,7 @@
     "de": "Eine Überwachung liest ein System und startet zu jedem Fund einen Prozess — und dieser Prozess kann in dasselbe System zurückschreiben. Schreibt er etwas, das die Abfrage der Überwachung selbst findet, füttert sie sich selbst, und nichts sieht falsch aus: jeder Lauf gelingt. Jede Überwachung hat jetzt ein „Max events/hour\" (60, wenn Sie nichts setzen). Wird es überschritten, schaltet sie sich ab und sagt es — samt der Zahl, die Sie erhöhen müssten. Verloren geht nichts: Beim Wiedereinschalten wird das Abgewiesene erneut gelesen."
   },
   "try": {
-    "label": { "en": "Open Connectors", "de": "Konnektoren öffnen" },
-    "route": "#/console/connectors"
+    "label": { "en": "Open Workers", "de": "Workers öffnen" },
+    "route": "#/console/workers"
   }
 }

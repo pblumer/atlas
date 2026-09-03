@@ -61,7 +61,7 @@ func TestBuildSearchRequest(t *testing.T) {
 	}
 }
 
-// TestEntriesFrom flattens a go-ldap result into connector entries.
+// TestEntriesFrom flattens a go-ldap result into worker entries.
 func TestEntriesFrom(t *testing.T) {
 	res := &goldap.SearchResult{Entries: []*goldap.Entry{
 		goldap.NewEntry("uid=ada,dc=x", map[string][]string{"mail": {"ada@x"}, "objectClass": {"top", "person"}}),

@@ -25,7 +25,7 @@ func TestSharePointConnectorValidationAndCreate(t *testing.T) {
 		_ = json.Unmarshal(rec.Body.Bytes(), &c)
 		return rec.Code, c
 	}
-	// A SharePoint connector needs a credentialsRef (its vault OAuth bundle).
+	// A SharePoint worker needs a credentialsRef (its vault OAuth bundle).
 	if code, _ := post(`{"name":"sp1","kind":"sharepoint"}`); code != http.StatusBadRequest {
 		t.Error("sharepoint without credentialsRef: want 400")
 	}
@@ -65,7 +65,7 @@ func TestBuildSharePointClients(t *testing.T) {
 		t.Fatalf("clients = %d, want 1 (only the enabled valid record; the broken bundle is skipped)", len(clients))
 	}
 	if _, ok := clients["contoso"].(*sharepoint.GraphClient); !ok {
-		t.Errorf("contoso connector = %T, want *sharepoint.GraphClient", clients["contoso"])
+		t.Errorf("contoso worker = %T, want *sharepoint.GraphClient", clients["contoso"])
 	}
 	if _, ok := clients["broken"]; ok {
 		t.Error("a malformed credential bundle should be skipped, not built")
@@ -81,7 +81,7 @@ func TestBuildSharePointClientsLoadError(t *testing.T) {
 	}
 }
 
-// TestSharePointConnectorLifecycle drives a SharePoint connector through create, list,
+// TestSharePointConnectorLifecycle drives a SharePoint worker through create, list,
 // and delete, exercising the create branch and the sharepoint arm of the registry
 // rebuild end to end (ADR-0141).
 func TestSharePointConnectorLifecycle(t *testing.T) {
@@ -97,17 +97,17 @@ func TestSharePointConnectorLifecycle(t *testing.T) {
 	code, b := do(http.MethodPost, "/api/v1/connectors",
 		`{"name":"contoso","kind":"sharepoint","credentialsRef":"sp_bundle"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create sharepoint connector: %d %s", code, b)
+		t.Fatalf("create sharepoint worker: %d %s", code, b)
 	}
 	var c connector
 	_ = json.Unmarshal(b, &c)
 
 	_, lb := do(http.MethodGet, "/api/v1/connectors", "")
 	if !strings.Contains(string(lb), `"kind":"sharepoint"`) {
-		t.Fatalf("connector list = %s, want the sharepoint connector", lb)
+		t.Fatalf("worker list = %s, want the sharepoint worker", lb)
 	}
 
 	if code, _ := do(http.MethodDelete, "/api/v1/connectors/"+c.ID, ""); code != http.StatusNoContent {
-		t.Fatalf("delete sharepoint connector: want 204")
+		t.Fatalf("delete sharepoint worker: want 204")
 	}
 }

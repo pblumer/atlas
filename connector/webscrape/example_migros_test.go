@@ -23,7 +23,7 @@ const ratesPageFixture = `<!DOCTYPE html>
   <section>
     <h2>Hypothekarzinsen Online-Hypothek</h2>
     <table class="Table table table-hover">
-      <thead><tr><th>Laufzeit</th><th>Vorzugszinssatz Online-Hypothek*</th><th>Standardzinssatz</th></tr></thead>
+      <thead><tr class="Table--row"><th>Laufzeit</th><th>Vorzugszinssatz Online-Hypothek*</th><th>Standardzinssatz</th></tr></thead>
       <tbody>
         <tr class="Table--row"><td class="Table--bodyCell">2 Jahre</td><td class="Table--bodyCell">1.130 %</td><td class="Table--bodyCell">1.430 %</td></tr>
         <tr class="Table--row"><td class="Table--bodyCell">3 Jahre</td><td class="Table--bodyCell">1.240 %</td><td class="Table--bodyCell">1.540 %</td></tr>
@@ -34,7 +34,7 @@ const ratesPageFixture = `<!DOCTYPE html>
   <section>
     <h2>Hypothekarzinsen Festhypothek</h2>
     <table class="Table table table-hover">
-      <thead><tr><th>Laufzeit</th><th>Vorzugszinssatz Eco-Vergünstigung*</th><th>Standardzinssatz</th></tr></thead>
+      <thead><tr class="Table--row"><th>Laufzeit</th><th>Vorzugszinssatz Eco-Vergünstigung*</th><th>Standardzinssatz</th></tr></thead>
       <tbody>
         <tr class="Table--row"><td class="Table--bodyCell">2 Jahre</td><td class="Table--bodyCell">1.280 %</td><td class="Table--bodyCell">1.430 %</td></tr>
         <tr class="Table--row"><td class="Table--bodyCell">3 Jahre</td><td class="Table--bodyCell">1.390 %</td><td class="Table--bodyCell">1.540 %</td></tr>
@@ -68,7 +68,7 @@ func migrosScrapeRequest(t *testing.T) Request {
 	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
 	detail := cp.ConnectorTask(cp.Node(task).Detail)
 	if detail == nil {
-		t.Fatal("the first task after the timer start is not a connector task")
+		t.Fatal("the first task after the timer start is not a worker task")
 	}
 	fields := make([]Field, 0, len(detail.ScrapeFields))
 	for _, f := range detail.ScrapeFields {

@@ -129,7 +129,7 @@ func (s *Server) handleSetSQLMock(w http.ResponseWriter, r *http.Request) {
 
 // sqlMockEnabled reports whether this server's Console switch turns the database
 // mockup on. It is the one place that answers the question, so the supervised
-// environment, the connector-create rule and the Console's own hints cannot disagree
+// environment, the worker-create rule and the Console's own hints cannot disagree
 // about what "mockup mode" means here.
 //
 // A stored record decides either way; without one the host's own ATLAS_<PRODUCT>_MOCK

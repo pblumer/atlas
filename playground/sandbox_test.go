@@ -245,8 +245,8 @@ func TestStubCanFailIntoAnIncident(t *testing.T) {
 	}
 }
 
-// The isolation property, stated as a test: a REST connector task names a URL that
-// nothing may fetch. The sandbox registers no connectors at all, so the stub is the
+// The isolation property, stated as a test: a REST task names a URL that
+// nothing may fetch. The sandbox registers no workers at all, so the stub is the
 // only thing that can answer it — the call is not "configured off", it is impossible.
 func TestConnectorTaskIsAnsweredByTheStubAndNeverCalled(t *testing.T) {
 	sb := openSandbox(t, "rest-connector.bpmn", playground.StubSet{
@@ -260,7 +260,7 @@ func TestConnectorTaskIsAnsweredByTheStubAndNeverCalled(t *testing.T) {
 		t.Fatalf("case: %v", err)
 	}
 	if c.State != model.PICompleted {
-		t.Fatalf("instance state = %v, want completed — the stub answers the connector task", c.State)
+		t.Fatalf("instance state = %v, want completed — the stub answers the task", c.State)
 	}
 	if got := c.Variables["score"]; got != "A" {
 		t.Errorf("variable score = %q, want %q from the stub", got, "A")

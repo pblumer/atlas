@@ -101,6 +101,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_list_information_models":  "GET /api/v1/infomodel/models",
 	"atlas_get_information_model":    "GET /api/v1/infomodel/models/{id}",
 	"atlas_create_information_model": "POST /api/v1/infomodel/models",
+	"atlas_import_information_model": "POST /api/v1/infomodel/import",
 	"atlas_save_information_model":   "PUT /api/v1/infomodel/models/{id}",
 	"atlas_delete_information_model": "DELETE /api/v1/infomodel/models/{id}",
 	"atlas_information_model_schema": "GET /api/v1/infomodel/models/{id}/schema",
@@ -212,7 +213,7 @@ var mcpOmittedRoutes = map[string]string{
 	// pointed at, and never needs to hold one against other workers.
 	"POST /api/v1/jobs/{key}/activate": "worker-protocol lease, not an agent action",
 	"POST /api/v1/jobs/activate":       "worker-protocol lease (type-keyed pull), not an agent action",
-	// The same category: a mail worker running a preview connector hands the framed
+	// The same category: a mail worker running a preview worker hands the framed
 	// message back to this server's outbox (ADR-0168). An agent reads the outbox with
 	// atlas_mail_outbox; putting a message *into* it would be inventing a preview of
 	// something no process sent.
@@ -235,7 +236,7 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/checkpoints":          "admin on-demand checkpoint/compaction, not an agent action",
 
 	// Per-server call-activity target overrides (ADR-0105): admin operator config,
-	// like connectors — an agent reads the resolution via atlas_call_activities but
+	// like workers — an agent reads the resolution via atlas_call_activities but
 	// does not set server-local routing. requireAdmin-gated.
 	"PUT /api/v1/call-activities/overrides/{processId}":    "per-server call-activity override is admin config, not an agent action",
 	"DELETE /api/v1/call-activities/overrides/{processId}": "per-server call-activity override is admin config, not an agent action",
@@ -278,7 +279,7 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/panorama/models/{id}/elements":      "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
 	"POST /api/v1/panorama/models/{id}/relationships": "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
 	// The derived landscape mesh (ADR-0211) is read-only and would make an obvious
-	// agent tool — "what depends on this connector" is exactly the question. It is
+	// agent tool — "what depends on this worker" is exactly the question. It is
 	// omitted for now because its payload shape is still moving: P2.5 adds node and
 	// edge kinds across several slices, and an MCP tool is a public contract that
 	// would pin that shape before it settles. Revisit once the slice is complete.
@@ -356,24 +357,24 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/applications/{id}/audit":               "access-control history is an admin/UI concern",
 	"GET /api/v1/audit":                                 "global access-control history is an admin/UI concern",
 
-	// Connectors + inbound subscriptions: infrastructure config, admin-owned.
-	// Where this server runs each connector kind: the Modeler's picker reads it to
+	// Workers + inbound subscriptions: infrastructure config, admin-owned.
+	// Where this server runs each Worker Type: the Modeler's picker reads it to
 	// badge a kind it is about to author (ADR-0183).
 	// It describes the server's own arrangement, like the rest of this family, and an
 	// agent that needs the same fact reads servedInProcess per job type from
 	// atlas_workers, where it comes with the queue and the workers holding it.
-	"GET /api/v1/connector-kinds":                        "server connector arrangement; atlas_workers reports the same per job type",
-	"GET /api/v1/connectors":                             "connector infrastructure is admin config",
-	"POST /api/v1/connectors":                            "connector infrastructure is admin config",
-	"POST /api/v1/connectors/test":                       "connector infrastructure is admin config",
-	"PATCH /api/v1/connectors/{id}":                      "connector infrastructure is admin config",
-	"DELETE /api/v1/connectors/{id}":                     "connector infrastructure is admin config",
-	"GET /api/v1/connectors/{id}/inbound-subscriptions":  "connector infrastructure is admin config",
-	"POST /api/v1/connectors/{id}/inbound-subscriptions": "connector infrastructure is admin config",
-	"PATCH /api/v1/inbound-subscriptions/{id}":           "connector infrastructure is admin config",
-	"DELETE /api/v1/inbound-subscriptions/{id}":          "connector infrastructure is admin config",
-	"POST /api/v1/connectors/{id}/provision-clio-key":    "connector infrastructure is admin config",
-	// Which inbound watches publish a message name. It reads the same connector
+	"GET /api/v1/connector-kinds":                        "server worker arrangement; atlas_workers reports the same per job type",
+	"GET /api/v1/connectors":                             "worker infrastructure is admin config",
+	"POST /api/v1/connectors":                            "worker infrastructure is admin config",
+	"POST /api/v1/connectors/test":                       "worker infrastructure is admin config",
+	"PATCH /api/v1/connectors/{id}":                      "worker infrastructure is admin config",
+	"DELETE /api/v1/connectors/{id}":                     "worker infrastructure is admin config",
+	"GET /api/v1/connectors/{id}/inbound-subscriptions":  "worker infrastructure is admin config",
+	"POST /api/v1/connectors/{id}/inbound-subscriptions": "worker infrastructure is admin config",
+	"PATCH /api/v1/inbound-subscriptions/{id}":           "worker infrastructure is admin config",
+	"DELETE /api/v1/inbound-subscriptions/{id}":          "worker infrastructure is admin config",
+	"POST /api/v1/connectors/{id}/provision-clio-key":    "worker infrastructure is admin config",
+	// Which inbound watches publish a message name. It reads the same worker
 	// configuration as the family above, and the blind spot it exists to close is not
 	// one an agent has: a person authoring in the Console cannot see whether a
 	// Console-configured watch feeds the name they typed, while an agent that wants a
@@ -423,18 +424,18 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/oauth-grants/{id}":    "withdrawing a person's approval is theirs or an administrator's to do",
 	"GET /api/v1/oauth/authorize-context": "backs the consent screen in a browser; nothing for an agent to call",
 	"POST /api/v1/oauth/authorize":        "a person's consent decision, made on a screen — an agent must never record one",
-	// Connector ownership (ADR-0205). Who may reach a connector's configuration is a
+	// Worker ownership (ADR-0205). Who may reach a worker's configuration is a
 	// person's decision about their own thing, made on a screen by whoever owns it.
 	// An agent acting as them could make it, which is the argument for exposing it —
 	// and is exactly why it is not: a share is not undone by noticing it later.
-	"PUT /api/v1/connectors/{id}/members/{principalId}":    "sharing a connector is the owner's decision, not an agent action",
+	"PUT /api/v1/connectors/{id}/members/{principalId}":    "sharing a worker is the owner's decision, not an agent action",
 	"DELETE /api/v1/connectors/{id}/members/{principalId}": "withdrawing somebody's access is the owner's decision, not an agent action",
-	"PUT /api/v1/connectors/{id}/visibility":               "sealing or opening a connector is the owner's decision, not an agent action",
-	"PUT /api/v1/connectors/{id}/owner/{userId}":           "handing a connector to somebody else is the owner's decision, not an agent action",
+	"PUT /api/v1/connectors/{id}/visibility":               "sealing or opening a worker is the owner's decision, not an agent action",
+	"PUT /api/v1/connectors/{id}/owner/{userId}":           "handing a worker to somebody else is the owner's decision, not an agent action",
 
 	// Deployment targets and promotion (ADR-0129, sending side): a target names
 	// another server and the credential to reach it — admin config in the same
-	// category as connectors. Promotion ships work to a *different* engine, often a
+	// category as workers. Promotion ships work to a *different* engine, often a
 	// production one; that is an operator's decision with consequences outside this
 	// server, not a step an agent drives while building a scenario. An agent
 	// publishes locally via atlas_publish_application and stops there.

@@ -278,7 +278,7 @@ func TestHTTPClientBuildError(t *testing.T) {
 	}
 }
 
-// TestWithQuery merges connector query parameters with any already in the URL and
+// TestWithQuery merges worker query parameters with any already in the URL and
 // encodes deterministically; an empty map leaves the URL untouched.
 func TestWithQuery(t *testing.T) {
 	if got, err := withQuery("https://x/y?a=1", nil); err != nil || got != "https://x/y?a=1" {

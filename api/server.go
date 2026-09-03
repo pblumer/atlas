@@ -56,6 +56,7 @@ import (
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/envname"
+	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
@@ -102,10 +103,10 @@ func dmnResolverFromEnv(dir string) dmn.Resolver {
 	return dmn.DirResolver{Dir: dir}
 }
 
-// temisRegistryFromEnv builds a temis decision-connector registry from the
+// temisRegistryFromEnv builds a temis decision-worker registry from the
 // environment alone (the pre-managed mechanism, ADR-0041's env secret model):
 // ATLAS_TEMIS_CONNECTORS lists names, and per name N, ATLAS_TEMIS_<N>_URL /
-// ATLAS_TEMIS_<N>_TOKEN configure it. Managed connector instances are layered on
+// ATLAS_TEMIS_<N>_TOKEN configure it. Managed workers are layered on
 // top of this by [Server.buildTemisClients]; this helper is the env-only base.
 func temisRegistryFromEnv() *temis.Registry {
 	reg := temis.NewRegistry()
@@ -113,12 +114,12 @@ func temisRegistryFromEnv() *temis.Registry {
 	return reg
 }
 
-// connectorEnvKey normalizes a connector name into its environment-variable
+// connectorEnvKey normalizes a worker name into its environment-variable
 // fragment: upper-case, with each run of non-alphanumeric characters collapsed to
 // a single underscore and leading/trailing underscores trimmed.
 //
 // The fold itself is [envname.Key], because a worker reads the variables this
-// renders and a connector has to name the one it could not resolve. Three packages
+// renders and a worker has to name the one it could not resolve. Three packages
 // applying the same rule separately is a bug an operator meets as "I set that
 // variable and it still says it is missing".
 func connectorEnvKey(name string) string { return envname.Key(name) }
@@ -206,7 +207,7 @@ type Server struct {
 	SuperviseSpecs   []SuperviseSpec
 	superviseHandles [][]string
 	superviseURL     string
-	// offloadedKinds are the managed connector kinds this server does not serve
+	// offloadedKinds are the managed Worker Types this server does not serve
 	// itself; their jobs park for an external worker. See [WithOffloadedConnectorKinds].
 	offloadedKinds []string
 	drafts         *draftStore // durable sidecar for saved-but-not-deployed diagrams
@@ -264,9 +265,9 @@ type Server struct {
 	panoramaMesh     *panorama.Mesh
 	systemPIDs       map[string]bool     // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
 	deploySysProcs   bool                // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
-	userProvisioning bool                // opt-in: enable the user-provisioning connector for system processes (ADR-0123)
+	userProvisioning bool                // opt-in: enable the user-provisioning worker for system processes (ADR-0123)
 	dmnrefs          *dmnRefStore        // durable sidecar for DMN reference artifacts (ADR-0034)
-	connectors       *connectorStore     // durable sidecar for managed connector instances (ADR-0041)
+	connectors       *connectorStore     // durable sidecar for managed workers (ADR-0041)
 	callOverrides    *callOverrideStore  // durable sidecar for per-server call-activity target overrides (ADR-0105)
 	repository       []repositoryPackage // curated, bundled repository catalog, immutable after New (ADR-0081)
 	repositoryStore  *repositoryStore    // durable sidecar for installed repository templates (ADR-0081)
@@ -333,25 +334,25 @@ type Server struct {
 	// Handler is mounted; read-only thereafter.
 	scriptWorkers map[int32]script.Exec
 
-	// temisRegistry resolves a connector name to a temis service client for
+	// temisRegistry resolves a worker name to a temis service client for
 	// *central* business rule tasks (ADR-0050), built from the environment at
 	// startup (ADR-0041 secret model). Read only while driving jobs on the run loop.
 	temisRegistry *temis.Registry
 
-	// clioRegistry resolves a connector name to a clio event-store client for clio
-	// connector tasks (write/query/read, ADR-0036), built from the managed
-	// connector store at startup and rebuilt on every connector change, with each
+	// clioRegistry resolves a worker name to a clio event-store client for clio
+	// tasks (write/query/read, ADR-0036), built from the managed
+	// worker store at startup and rebuilt on every worker change, with each
 	// endpoint token resolved from the vault (ADR-0041). Read only while driving
 	// jobs on the run loop, so it needs no lock.
 	clioRegistry *clio.Registry
 
-	// history appends settled job runs to a clio connector, when an operator named
+	// history appends settled job runs to a clio worker, when an operator named
 	// one (see workerhistory.go). nil means they did not, and the console's ring is
 	// the whole of what this server remembers.
 	history *historyExporter
-	// mailRegistry resolves a connector name to a mail-provider client for outbound
-	// mail connector tasks (ADR-0079), built from the managed connector store at
-	// startup and rebuilt on every connector change, with each provider's credential
+	// mailRegistry resolves a worker name to a mail-provider client for outbound
+	// mail tasks (ADR-0079), built from the managed worker store at
+	// startup and rebuilt on every worker change, with each provider's credential
 	// resolved from the vault (ADR-0041). Read only while driving jobs on the run
 	// loop, so it needs no lock.
 	mailRegistry *mail.Registry
@@ -377,32 +378,39 @@ type Server struct {
 	// loop — runtime state, never engine state (ADR-0224).
 	sqlMockView *sqldb.MockJournalView
 
-	// sqlProbe checks a SQL connector's connection string, when the binary that built
+	// sqlProbe checks a SQL worker's connection string, when the binary that built
 	// this server linked a database driver (WithSQLProbe). Nil is the ordinary state
 	// of an embedder, and the Console's check says so rather than reporting a
-	// connector broken.
+	// worker broken.
 	sqlProbe SQLProbe
 
-	// sharePointRegistry resolves a connector name to the Microsoft Graph client for
-	// SharePoint connector tasks (ADR-0141), built from the managed connector store at
-	// startup and rebuilt on every connector change, with each connector's OAuth
+	// sharePointRegistry resolves a worker name to the Microsoft Graph client for
+	// SharePoint tasks (ADR-0141), built from the managed worker store at
+	// startup and rebuilt on every worker change, with each worker's OAuth
 	// credential resolved from the vault (ADR-0041). Read only while driving jobs on
 	// the run loop, so it needs no lock.
 	sharePointRegistry *sharepoint.Registry
 
-	// remedyRegistry resolves a connector name to a BMC Remedy AR System client for
-	// Remedy connector tasks (ADR-0106), built from the managed connector store at
-	// startup and rebuilt on every connector change, with each instance's credential
+	// remedyRegistry resolves a worker name to a BMC Remedy AR System client for
+	// Remedy tasks (ADR-0106), built from the managed worker store at
+	// startup and rebuilt on every worker change, with each instance's credential
 	// bundle resolved from the vault (ADR-0041). Read only while driving jobs on the
 	// run loop, so it needs no lock.
 	remedyRegistry *remedy.Registry
 
-	// jiraRegistry resolves a connector name to an Atlassian Jira REST client for Jira
-	// connector tasks (ADR-0201), built from the managed connector
-	// store at startup and rebuilt on every connector change, with each instance's
+	// jiraRegistry resolves a worker name to an Atlassian Jira REST client for Jira
+	// tasks (ADR-0201), built from the managed worker
+	// store at startup and rebuilt on every worker change, with each instance's
 	// credential bundle resolved from the vault (ADR-0041). Read only while driving
 	// jobs on the run loop, so it needs no lock.
 	jiraRegistry *jira.Registry
+
+	// googleSheetsRegistry resolves a Worker name to a Google client (Sheets v4 and
+	// Drive v3) for Google Sheets tasks (ADR-0235), built from
+	// the Worker store at startup and rebuilt on every change to it, with each
+	// Worker's OAuth credential bundle resolved from the vault (ADR-0041). Read only
+	// while driving jobs on the run loop, so it needs no lock.
+	googleSheetsRegistry *googlesheets.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
@@ -700,7 +708,7 @@ func WithPublicFormsCORS(origins []string) Option {
 // with no deployments.
 func WithSystemProcesses() Option { return func(s *Server) { s.deploySysProcs = true } }
 
-// WithUserProvisioning enables the in-process user-provisioning connector
+// WithUserProvisioning enables the in-process user-provisioning worker
 // (create/set-password/disable Atlas logins) for the protected system project's
 // processes (ADR-0123). Opt-in and off by default: it deliberately, and narrowly,
 // reopens the ADR-0044/0049 boundary that no automated identity may manage users —
@@ -741,7 +749,7 @@ func WithInboundBatchLimit(n int) Option {
 
 // WithoutVault disables the engine-internal encrypted secret vault, which is
 // otherwise on by default (ADR-0070). With it disabled the secret endpoints
-// return 503 and connector credentials resolve only from the environment
+// return 503 and worker credentials resolve only from the environment
 // (ADR-0041 A2). Pass it when Atlas must not custody a key or ciphertext at all.
 func WithoutVault() Option { return func(s *Server) { s.vaultEnabled = false } }
 
@@ -1138,7 +1146,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		deploys:     ds,
 		jobTypes:    jobTypes,
 		workers:     newWorkerRegistry(nil),
-		// Created unconditionally, not with a connector registry: AD is worker-only
+		// Created unconditionally, not with a worker registry: AD is worker-only
 		// (ADR-0206), so this server never holds a mock
 		// directory of its own and is only ever the place the workers' reports land.
 		adMockView:          ad.NewMockView(0),
@@ -1154,7 +1162,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// Registration gets its own budget rather than sharing publicRate: a flood of
 		// registrations must not throttle the token exchanges of the clients that
 		// already registered, or abuse of the open endpoint becomes an outage for
-		// everybody else. Burst enough for an operator wiring up several connectors at
+		// everybody else. Burst enough for an operator wiring up several workers at
 		// once, then one every five seconds — slow enough that churning the bounded
 		// registry from outside is not worth anyone's time (ADR-0197, ADR-0200).
 		registerRate:      newRateLimiter(30, 0.2),
@@ -1357,15 +1365,15 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	for jobType, exec := range s.scriptWorkers {
 		s.jobRunner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler { return script.Handler(rd, s.processLookup, exec) })
 	}
-	// Managed connector job workers (temis, clio, mail, sharepoint, remedy, jira): one
+	// Managed worker job workers (temis, clio, mail, sharepoint, remedy, jira): one
 	// registry plus job worker(s) per kind, all driven from the managedConnectorKinds
 	// registry so adding a kind needs no new block here. Each registry is created and
-	// built before the loop serves traffic and rebuilt on every connector change; a
-	// task whose connector is not configured parks until it is.
+	// built before the loop serves traffic and rebuilt on every worker change; a
+	// task whose worker is not configured parks until it is.
 	if err := s.setupManagedConnectors(store); err != nil {
 		return nil, err
 	}
-	// An HTTP-REST connector task calls a model-authored endpoint (ADR-0067). One
+	// An HTTP-REST task calls a model-authored endpoint (ADR-0067). One
 	// worker serves every process under the reserved REST job type; it resolves each
 	// job's method/url/headers/query/result-variable from the compiled process, calls
 	// the API off the run loop and after fsync, and writes the JSON response into the
@@ -1378,7 +1386,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		return rest.Handler(rd, s.processLookup, rest.NewHTTPClient(), s.resolveConnectorSecret, rest.NewTokenProvider())
 	})
-	// A SCIM 2.0 connector task provisions/reads an identity resource against a
+	// A SCIM 2.0 task provisions/reads an identity resource against a
 	// model-authored service provider (ADR-0153). Like REST the base URL and resource
 	// live in the model and the authentication secret is a *reference* the worker
 	// resolves at call time (resolveConnectorSecret, ADR-0041); unlike REST it speaks
@@ -1387,7 +1395,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.HandleWithOutput(compiler.ScimJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		return scim.Handler(rd, s.processLookup, scim.NewHTTPClient(), s.resolveConnectorSecret)
 	})
-	// A generic LDAP connector task performs a directory operation (search/add/modify/
+	// A generic LDAP task performs a directory operation (search/add/modify/
 	// delete/modify-password) against a model-authored server (ADR-0154). The server URL
 	// and DNs live in the model; the bind password is a *reference* the worker resolves
 	// at call time (resolveConnectorSecret, ADR-0041). One worker serves every process
@@ -1401,7 +1409,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.HandleWithOutput(compiler.LdapJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		return ldap.Handler(rd, s.processLookup, s.ldapPool, s.resolveConnectorSecret)
 	})
-	// A SOAP / Web Services (WSDL) connector task invokes an operation against a
+	// A SOAP / Web Services (WSDL) task invokes an operation against a
 	// model-authored web-service endpoint (ADR-0165) — reading identities (import) or
 	// provisioning accounts (outbound). Like REST the endpoint and body live in the model
 	// and any authentication secret is a *reference* the worker resolves at call time
@@ -1411,7 +1419,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.HandleWithOutput(compiler.SoapJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		return soap.Handler(rd, s.processLookup, soap.NewHTTPClient(), s.resolveConnectorSecret)
 	})
-	// An Active Directory connector task performs an AD-specific provisioning operation
+	// An Active Directory task performs an AD-specific provisioning operation
 	// (create-user, set-password via unicodePwd, enable/disable via userAccountControl,
 	// add/remove a group member) against a model-authored server (ADR-0166). AD speaks
 	// LDAP; the server URL and DNs live in the model, the bind password is a *reference*
@@ -1438,13 +1446,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.HandleWithOutput(compiler.WebScrapeJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		return webscrape.Handler(rd, s.processLookup, webscrape.NewHTTPClient())
 	})
-	// A directory-file connector task reads or writes LDIF/DSML entries (ADR-0171).
+	// A directory-file task reads or writes LDIF/DSML entries (ADR-0171).
 	// Like CSV it is a pure transform — no network, no credential — so it runs here as
 	// well as on a worker, and neither placement can block the other.
 	s.jobRunner.HandleWithOutput(compiler.LdifJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		return ldif.Handler(rd, s.processLookup)
 	})
-	// User-provisioning connector (ADR-0123), opt-in. The handler mutates the
+	// User-provisioning worker (ADR-0123), opt-in. The handler mutates the
 	// run-loop-owned user store, so it is a closure over s and runs on the loop (the
 	// server drives jobs synchronously); it is gated at runtime to the system project.
 	if s.userProvisioning {
@@ -1526,7 +1534,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.exporter = exp
 	}
 
-	// The job-history exporter, when an operator named a connector for it. It is a
+	// The job-history exporter, when an operator named a worker for it. It is a
 	// plain goroutine rather than one of the tracked three: nothing waits for it, and
 	// a shutdown that blocked on draining telemetry would be the tail wagging the dog.
 	//
@@ -1545,7 +1553,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// an operator could run by hand, just launched here (ADR-0157 step 7).
 	//
 	// They are registered after the run loop is running because a worker's environment
-	// is read from the connector store, and the store is the loop's to read.
+	// is read from the worker store, and the store is the loop's to read.
 	if len(s.SuperviseSpecs) > 0 {
 		s.supervisor = newSupervisor(quit)
 		for i, spec := range s.SuperviseSpecs {
@@ -1553,10 +1561,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			for _, h := range s.superviseHandles[i] {
 				args = append(args, "--handle", h)
 			}
-			// A supervised worker may also serve built-in connector kinds. It is a
+			// A supervised worker may also serve built-in worker kinds. It is a
 			// child of this process, so it inherits the environment any of them read
 			// their configuration from — and for a kind whose configuration lives in
-			// the connector store instead, the engine adds it to that environment at
+			// the worker store instead, the engine adds it to that environment at
 			// spawn (see superviseEnv). Together that is what makes the default set
 			// work with nothing configured at all.
 			if len(spec.Connectors) > 0 {
@@ -2037,14 +2045,14 @@ func (s *Server) processLookup(defKey uint64) *compiler.CompiledProcess {
 	return nil
 }
 
-// WithOffloadedConnectorKinds names the managed connector kinds this server must
+// WithOffloadedConnectorKinds names the managed Worker Types this server must
 // NOT serve itself, so their jobs park for an external worker instead
 // (ADR-0168/0164).
 //
 // This is the operative act of relocating a kind. The type-keyed pull refuses a job
 // type an in-process handler is registered for — that refusal is what keeps one job
 // from being worked twice — so a kind stays in the engine until its handler is
-// turned off here. What is left is exactly what an unconfigured connector already
+// turned off here. What is left is exactly what an unconfigured worker already
 // does: the job parks on the activatable index until something takes it.
 //
 // An unknown name is refused at startup rather than ignored. An operator who
@@ -2069,13 +2077,13 @@ func WithSupervisedWorkers(serverURL string, specs []SuperviseSpec, handles [][]
 	}
 }
 
-// WithWorkerHistory sends every settled job run to a clio connector, so a worker's
+// WithWorkerHistory sends every settled job run to a clio worker, so a worker's
 // history outlives this process and its retention becomes the operator's own policy
 // in their own store (see workerhistory.go).
 //
-// Like the supervisor's configuration it is an Option, so the connector is named on
+// Like the supervisor's configuration it is an Option, so the worker is named on
 // this server's command line and nowhere else. The name is resolved at write time
-// rather than at startup: an operator may create the connector after the server is
+// rather than at startup: an operator may create the worker after the server is
 // running, and the history should start flowing when they do rather than at the next
 // restart.
 //
@@ -2087,7 +2095,7 @@ func WithWorkerHistory(connector, scope string) Option {
 				c  clio.Client
 				ok bool
 			)
-			// On the loop: clientreg.Registry has no lock, and a connector rebuild
+			// On the loop: clientreg.Registry has no lock, and a worker rebuild
 			// swaps its map wholesale. The network write happens outside, in run.
 			s.do(func() { c, ok = s.clioRegistry.Client(connector) })
 			return c, ok
@@ -2098,7 +2106,7 @@ func WithWorkerHistory(connector, scope string) Option {
 // drive runs the engine and its in-process job handlers until nothing is left to
 // do. It is where ADR-0157 step 6 actually lands: the run loop is held only for the
 // processor's own steps — claiming jobs and applying their outcomes — while the
-// handlers, which is where a connector's outbound call happens, run out here on the
+// handlers, which is where a worker's outbound call happens, run out here on the
 // caller's goroutine.
 //
 // Before this, driving happened inside s.do, so every outbound call held the single
@@ -2265,7 +2273,7 @@ func (s *Server) timerScheduler(every time.Duration) {
 			// Fire due timers on the loop, then drive any jobs they unblocked (e.g. a
 			// timer leading into a business rule task) OFF it: this tick runs every
 			// second, and before ADR-0157 step 6 it was the path that could hold the
-			// single writer for a connector call nobody had asked for.
+			// single writer for a worker call nobody had asked for.
 			ticked := false
 			s.do(func() { ticked = s.proc.TickTimers() == nil })
 			if ticked {

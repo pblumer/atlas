@@ -79,7 +79,7 @@ darf keinen Zugang gewähren.
 und lässt den Vorgang für einen Menschen offen. Welcher Übergang eine Ablehnung in
 einem fremden Jira-Workflow wäre, weiß das Modell ohnehin nicht.
 
-**Der Übergangsname steht im Startformular, nicht im Modell.** Der Konnektor löst
+**Der Übergangsname steht im Startformular, nicht im Modell.** Der Worker löst
 einen Übergang über den Namen auf, den Jira auf dem Knopf zeigt — und der ist pro
 Workflow verschieden. So läuft dasselbe Modell gegen jedes Projekt.
 

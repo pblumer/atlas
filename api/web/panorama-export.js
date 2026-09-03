@@ -101,7 +101,8 @@ export function exportName(extension, at = new Date()) {
 // Every note is about the picture in the file rather than about the app it was
 // taken in. A reader who was not there has no other source for any of it.
 export function stampLines(meta = {}) {
-  const lines = [{ weight: "bold", text: `Atlas landscape — ${scopeText(meta.scope)}` }];
+  const notation = meta.notation?.projection ? ` · ${meta.notation.short}` : "";
+  const lines = [{ weight: "bold", text: `Atlas landscape${notation} — ${scopeText(meta.scope)}` }];
 
   const drawn = meta.drawn || {};
   const facts = [
@@ -117,6 +118,17 @@ export function stampLines(meta = {}) {
   }
   lines.push({ text: facts.join("  ·  ") });
 
+  // A projection has to say so in the file (ADR-0211 §8): a picture in somebody
+  // else's vocabulary that does not name the vocabulary reads as a model *of* it,
+  // and the loss list is what separates a projection from a lie of omission. On
+  // screen this sits in the legend; the file has no legend beside it.
+  const spoken = meta.notation;
+  if (spoken?.projection) {
+    lines.push({ text: `Projected into ${spoken.label} (mapping v${spoken.mappingVersion}). ` +
+      `Atlas's own resources in ${spoken.short}'s vocabulary — nothing here was modelled, ` +
+      `and this is not a ${spoken.short} document.` });
+    for (const loss of spoken.loss || []) lines.push({ text: `— ${loss}` });
+  }
   if (meta.restricted > 0) {
     lines.push({ text: `${meta.restricted} node(s) in this landscape are hidden by your ` +
       `access. Their dependencies are drawn, their identities are not — this picture is ` +

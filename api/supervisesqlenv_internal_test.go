@@ -43,7 +43,7 @@ func TestASupervisedSQLWorkerGetsItsConnectionStringFromTheVault(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			p, ok := sqldb.ProductByName(kind)
 			if !ok {
-				t.Fatalf("connector kind %q is not a sqldb product", kind)
+				t.Fatalf("Worker Type %q is not a sqldb product", kind)
 			}
 			dsn := dsns[kind]
 			if dsn == "" {
@@ -88,7 +88,7 @@ func TestASupervisedSQLWorkerGetsItsConnectionStringFromTheVault(t *testing.T) {
 // out of CONNECTORS as well. A name in CONNECTORS with no DSN behind it is exactly the
 // misconfiguration the worker refuses to start on.
 //
-// The scenario is deliberately two connectors, not one. With a single unconfigured
+// The scenario is deliberately two workers, not one. With a single unconfigured
 // record the CONNECTORS line is never rendered at all, so the defect hides. It appears
 // the moment a *working* database exists and the operator starts adding a second one:
 // the record is created before its secret is, and for that window the rendered
@@ -115,7 +115,7 @@ func TestASQLConnectorWithNoSecretYetIsLeftOutOfCONNECTORS(t *testing.T) {
 
 	env := envOf(t, srv.sqlWorkerEnvByName(connectorKindPostgres))
 	if _, ok := env["ATLAS_POSTGRES_CRM_DB_DSN"]; ok {
-		t.Error("a connector with no stored secret must not be handed over with an empty DSN")
+		t.Error("a worker with no stored secret must not be handed over with an empty DSN")
 	}
 	if got := env["ATLAS_POSTGRES_CONNECTORS"]; strings.Contains(got, "crm-db") {
 		t.Errorf("ATLAS_POSTGRES_CONNECTORS = %q; a name with no DSN behind it is what the worker refuses to start on", got)
@@ -160,7 +160,7 @@ func TestAnOperatorSetSQLDSNIsNotOverriddenByTheVault(t *testing.T) {
 	}
 }
 
-// A disabled connector is not handed over at all.
+// A disabled worker is not handed over at all.
 func TestADisabledSQLConnectorIsNotHandedToTheWorker(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	if _, err := srv.vault.Set("sql/1/dsn", "postgres://u:p@db.example/hr"); err != nil {
@@ -173,7 +173,7 @@ func TestADisabledSQLConnectorIsNotHandedToTheWorker(t *testing.T) {
 		t.Fatalf("connectors.Save: %v", err)
 	}
 	if env := srv.sqlWorkerEnvByName(connectorKindPostgres); len(env) != 0 {
-		t.Errorf("environment = %v, want nothing for a disabled connector", env)
+		t.Errorf("environment = %v, want nothing for a disabled worker", env)
 	}
 }
 
@@ -199,7 +199,7 @@ func TestASQLConnectorIsOnlyHandedToItsOwnProductsWorker(t *testing.T) {
 	}
 }
 
-// The Console needs to say which database a connector points at, and must never say
+// The Console needs to say which database a worker points at, and must never say
 // the password. Deriving a label is allowed where assembling a DSN is not, precisely
 // because this may give up: anything that is not a URL with a host yields no label.
 func TestRedactedSQLTargetNeverCarriesThePassword(t *testing.T) {
@@ -223,24 +223,24 @@ func TestRedactedSQLTargetNeverCarriesThePassword(t *testing.T) {
 	}
 }
 
-// Every SQL kind in the connector store must be a real sqldb product, and every kind
+// Every SQL kind in the worker store must be a real sqldb product, and every kind
 // the supervised-by-default list names must be one the engine can actually provision.
 // The two tables are edited in different files, and a name that appears in one and not
-// the other is a worker started for a kind nothing configures, or a connector nobody
+// the other is a worker started for a kind nothing configures, or a worker nobody
 // serves.
 func TestEverySQLKindIsAProduct(t *testing.T) {
 	for _, kind := range sqlConnectorKinds() {
 		if _, ok := sqldb.ProductByName(kind); !ok {
-			t.Errorf("connector kind %q is not a sqldb product", kind)
+			t.Errorf("Worker Type %q is not a sqldb product", kind)
 		}
 		if _, ok := lookupManagedConnectorKind(kind); !ok {
-			t.Errorf("connector kind %q is not registered in managedConnectorKinds", kind)
+			t.Errorf("Worker Type %q is not registered in managedConnectorKinds", kind)
 		}
 		if !slices.Contains(DefaultSupervisedWorkerOnlyKinds(), kind) {
-			t.Errorf("connector kind %q is not supervised by default; nothing would serve it", kind)
+			t.Errorf("Worker Type %q is not supervised by default; nothing would serve it", kind)
 		}
 		if !slices.Contains(worker.KnownConnectorKinds(), kind) {
-			t.Errorf("connector kind %q is not a kind `atlas worker --connector` implements", kind)
+			t.Errorf("Worker Type %q is not a kind `atlas worker --connector` implements", kind)
 		}
 	}
 	// Every default-supervised kind must be provisioned from the store, or the worker
@@ -261,7 +261,7 @@ func envMapFrom(env map[string]string) func(string) string {
 	return func(k string) string { return env[k] }
 }
 
-// Creating a SQL connector from the Console: the operator pastes a connection string,
+// Creating a SQL worker from the Console: the operator pastes a connection string,
 // and what lands in the record is a vault reference and a redacted label — never the
 // string. This is the property the whole design rests on, so it is asserted against
 // the stored record and the response body, not against the handler's intent.
@@ -305,7 +305,7 @@ func TestCreatingASQLConnectorSealsTheConnectionString(t *testing.T) {
 }
 
 // A connectionString sent to a kind that has no use for one is refused rather than
-// silently dropped: an operator who pastes a DSN into a mail connector has made a
+// silently dropped: an operator who pastes a DSN into a mail worker has made a
 // mistake worth hearing about.
 func TestAConnectionStringIsRefusedForANonSQLKind(t *testing.T) {
 	srv, _ := newValidateServer(t)
@@ -316,13 +316,13 @@ func TestAConnectionStringIsRefusedForANonSQLKind(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
-		t.Errorf("create = %d, want 400 — connectionString applies only to a SQL connector", rec.Code)
+		t.Errorf("create = %d, want 400 — connectionString applies only to a SQL worker", rec.Code)
 	}
 }
 
-// A SQL connector created with neither a connection string nor a reference is refused:
+// A SQL worker created with neither a connection string nor a reference is refused:
 // there is nothing else on the record that could make it work, so accepting it would
-// store a connector guaranteed to park.
+// store a worker guaranteed to park.
 func TestASQLConnectorNeedsACredential(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	h := srv.Handler()
@@ -332,11 +332,11 @@ func TestASQLConnectorNeedsACredential(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
-		t.Errorf("create = %d, want 400 — a SQL connector with no credential cannot work", rec.Code)
+		t.Errorf("create = %d, want 400 — a SQL worker with no credential cannot work", rec.Code)
 	}
 }
 
-// Why a configured SQL connector is not usable, said by the Console instead of
+// Why a configured SQL worker is not usable, said by the Console instead of
 // discovered by a task that parks (ADR-0158). These kinds build no in-engine client,
 // so what can be checked is the record and whether its secret resolves.
 func TestSQLConnectorProblemReportsWhyItCannotWork(t *testing.T) {
@@ -358,8 +358,8 @@ func TestSQLConnectorProblemReportsWhyItCannotWork(t *testing.T) {
 		problem               bool
 	}{
 		{"healthy", "works", "", false},
-		{"disabled", "disabled", "the connector is disabled", true},
-		{"no secret", "secretless", "no connection string is stored for this connector", true},
+		{"disabled", "disabled", "the worker is disabled", true},
+		{"no secret", "secretless", "no connection string is stored for this worker", true},
 		{"unknown name", "nothing", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -371,7 +371,7 @@ func TestSQLConnectorProblemReportsWhyItCannotWork(t *testing.T) {
 	}
 	// A record of another product is not this product's problem to report.
 	if _, isProblem := srv.sqlConnectorProblem(connectorKindMariaDB, "works"); isProblem {
-		t.Error("a postgres record was reported as a mariadb connector's problem")
+		t.Error("a postgres record was reported as a mariadb worker's problem")
 	}
 }
 
@@ -384,7 +384,7 @@ func TestSQLConnectorProblemReportsWhyItCannotWork(t *testing.T) {
 // data and not of the store's iteration order: "hr db" sorts before "hr-db" (space
 // before hyphen), so it is the one that gets the variable. That is worth pinning down,
 // because a collision resolved differently on two servers would hand the same model's
-// connector two different databases.
+// worker two different databases.
 func TestTwoSQLConnectorsFoldingToOneVariableDoNotOverwriteEachOther(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	if _, err := srv.vault.Set("sql/1/dsn", "postgres://first"); err != nil {
@@ -422,7 +422,7 @@ func TestSQLWorkerEnvForAKindThatIsNotAProductRendersNothing(t *testing.T) {
 
 // A name with nothing alphanumeric in it folds to an empty variable name, which would
 // render ATLAS_POSTGRES__DSN — a variable the worker does not read, under a name no
-// model can meaningfully reference. It is skipped, and the connector simply does not
+// model can meaningfully reference. It is skipped, and the worker simply does not
 // reach the worker.
 func TestASQLConnectorWhoseNameFoldsToNothingIsSkipped(t *testing.T) {
 	srv, _ := newValidateServer(t)

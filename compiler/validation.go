@@ -710,7 +710,7 @@ func checkDottedTargets(cp *CompiledProcess) []Problem {
 // result of the work itself wherever the node type keeps it.
 //
 // Two rules walk this list, and a node kind added to one and forgotten in the other is
-// the kind of gap nobody notices — a new connector's result variable silently exempt
+// the kind of gap nobody notices — a new worker's result variable silently exempt
 // from both checks — so the walk is written once and the rules differ only in what
 // they do with each name.
 //
@@ -744,8 +744,8 @@ func forEachVariableWrite(cp *CompiledProcess, report func(id int32, what, name 
 		case TypeMockupTask:
 			report(elementID, "its result", cp.MockupTask(n.Detail).ResultVar)
 		case TypeConnectorTask:
-			// CsvResult and LdifResult are read only by the connector each belongs to,
-			// dispatched by job type — so every other connector leaves them at the zero
+			// CsvResult and LdifResult are read only by the worker each belongs to,
+			// dispatched by job type — so every other worker leaves them at the zero
 			// value, which is a *valid* interned index (0 is the first reserved job type),
 			// not the -1 that means "none". Ask the job type first, as the offloads do.
 			d := cp.ConnectorTask(n.Detail)
@@ -771,7 +771,7 @@ func forEachVariableWrite(cp *CompiledProcess, report func(id int32, what, name 
 // keeps what it had.
 //
 // And only one of them answers to the name. A FEEL expression is bound from the
-// variables alone, so `order` in a condition, a mapping or a connector's payload is
+// variables alone, so `order` in a condition, a mapping or a worker's payload is
 // always the variable — even in a model whose whole point is the object. Somebody
 // reading the diagram sees one `order`; the engine has two, and every expression
 // silently means the same one of them.

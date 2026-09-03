@@ -1,7 +1,7 @@
 {
   "tags": [
     "Organization",
-    "Connectors"
+    "Workers"
   ],
   "summary": {
     "en": "Editing a connector now uses a proper form showing only the fields that kind actually needs — including the enabled switch and the connection test — instead of two generic prompt boxes.",

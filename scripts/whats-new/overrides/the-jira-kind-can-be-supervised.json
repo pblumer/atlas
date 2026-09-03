@@ -1,7 +1,7 @@
 {
   "tags": [
     "Workers",
-    "Connectors"
+    "Workers"
   ],
   "title": {
     "en": "Atlas can run the Jira worker for you again",

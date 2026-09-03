@@ -73,7 +73,7 @@ func TestPreviewProbeIsReadyWithoutANetwork(t *testing.T) {
 		t.Errorf("the check delivered %d message(s), want none", n)
 	}
 	if err := Probe(context.Background(), NewPreviewClient(nil, "trial", "bot@x")); err == nil {
-		t.Error("a preview connector with no outbox passed the check")
+		t.Error("a preview worker with no outbox passed the check")
 	}
 }
 

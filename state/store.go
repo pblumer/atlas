@@ -1152,7 +1152,7 @@ func decodeVariable(raw []byte, fn func(v *model.VariableValue) error) error {
 // reading a root instance are unaffected.
 //
 // It is the [Reader]-level [VisibleVariables] under a name that reads better at a
-// call site holding a *Store; the walk itself lives there, shared with the connector
+// call site holding a *Store; the walk itself lives there, shared with the worker
 // workers.
 func (q queries) VisibleVariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
 	return VisibleVariables(q, scope, fn)
@@ -1228,12 +1228,6 @@ type queries struct{ r iterReader }
 
 func (q queries) scanPrefix(prefix []byte, fn func(k, v []byte) error) error {
 	return q.scanRange(prefix, prefixEnd(prefix), fn)
-}
-
-// scanPrefixWith scans one prefix against any pebble reader — the live database or
-// a read view — so both share one iteration path.
-func scanPrefixWith(r iterReader, prefix []byte, fn func(k, v []byte) error) error {
-	return scanRangeWith(r, prefix, prefixEnd(prefix), fn)
 }
 
 // iterReader is the slice of pebble both the database and a snapshot provide.

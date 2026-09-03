@@ -868,3 +868,136 @@ func TestDataStoreDeduplicatesByName(t *testing.T) {
 		t.Errorf("stores = %+v, want one Orders", got)
 	}
 }
+
+// TestParseDataAssociationsInNestedScopes checks that an activity nested inside a
+// subprocess keeps its data associations (ADR-0058/0059). Wiring used to walk only
+// the process root's element lists, so an association drawn inside any nested scope
+// was dropped at compile time — no error, no warning, and at runtime the data object
+// stayed empty and the read variable null. The scopes covered here are the three a
+// model can nest an activity in: an ordinary subprocess, an event subprocess, and an
+// ad-hoc subprocess (and one subprocess inside another, for the recursion itself).
+func TestParseDataAssociationsInNestedScopes(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="p" isExecutable="true">
+    <dataObject id="DO_reg" name="register"/>
+    <dataObjectReference id="Ref_reg" dataObjectRef="DO_reg"/>
+    <startEvent id="s"/>
+    <subProcess id="Sub">
+      <startEvent id="subStart"/>
+      <scriptTask id="InSub">
+        <extensionElements><zeebe:script expression="=reg" resultVariable="reg"/></extensionElements>
+        <dataInputAssociation><sourceRef>Ref_reg</sourceRef><assignment><to>reg</to></assignment></dataInputAssociation>
+        <dataOutputAssociation><targetRef>Ref_reg</targetRef><assignment><from>=reg</from></assignment></dataOutputAssociation>
+      </scriptTask>
+      <subProcess id="Deeper">
+        <startEvent id="deepStart"/>
+        <task id="InDeeper">
+          <dataInputAssociation><sourceRef>Ref_reg</sourceRef><assignment><to>deep</to></assignment></dataInputAssociation>
+        </task>
+        <endEvent id="deepEnd"/>
+        <sequenceFlow id="df1" sourceRef="deepStart" targetRef="InDeeper"/>
+        <sequenceFlow id="df2" sourceRef="InDeeper" targetRef="deepEnd"/>
+      </subProcess>
+      <endEvent id="subEnd"/>
+      <sequenceFlow id="sf1" sourceRef="subStart" targetRef="InSub"/>
+      <sequenceFlow id="sf2" sourceRef="InSub" targetRef="Deeper"/>
+      <sequenceFlow id="sf3" sourceRef="Deeper" targetRef="subEnd"/>
+    </subProcess>
+    <subProcess id="Handler" triggeredByEvent="true">
+      <startEvent id="handlerStart">
+        <messageEventDefinition messageRef="Msg"/>
+      </startEvent>
+      <task id="InHandler">
+        <dataOutputAssociation><targetRef>Ref_reg</targetRef><assignment><from>=payload</from></assignment></dataOutputAssociation>
+      </task>
+      <endEvent id="handlerEnd"/>
+      <sequenceFlow id="hf1" sourceRef="handlerStart" targetRef="InHandler"/>
+      <sequenceFlow id="hf2" sourceRef="InHandler" targetRef="handlerEnd"/>
+    </subProcess>
+    <adHocSubProcess id="AdHoc">
+      <userTask id="InAdHoc">
+        <dataInputAssociation><sourceRef>Ref_reg</sourceRef><assignment><to>adhoc</to></assignment></dataInputAssociation>
+      </userTask>
+    </adHocSubProcess>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="Sub"/>
+    <sequenceFlow id="f2" sourceRef="Sub" targetRef="AdHoc"/>
+    <sequenceFlow id="f3" sourceRef="AdHoc" targetRef="e"/>
+  </process>
+  <message id="Msg" name="ev"/>
+</definitions>`
+
+	cp, err := compiler.Parse(1, 1, strings.NewReader(model))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	node := func(id string) int32 {
+		for i := int32(0); i < int32(cp.NodeCount()); i++ {
+			if cp.ElementBpmnId(i) == id {
+				return i
+			}
+		}
+		t.Fatalf("element %q not found in the compiled process", id)
+		return -1
+	}
+	// Reads: one input association each, all resolving to the one logical object.
+	for _, tc := range []struct{ element, variable string }{
+		{"InSub", "reg"},
+		{"InDeeper", "deep"},
+		{"InAdHoc", "adhoc"},
+	} {
+		in := cp.DataInputAssociations(node(tc.element))
+		if len(in) != 1 {
+			t.Errorf("%s: input associations = %d, want 1 (nested scopes must keep them)", tc.element, len(in))
+			continue
+		}
+		if got := cp.Intern(in[0].DataObject); got != "register" {
+			t.Errorf("%s: input object = %q, want register", tc.element, got)
+		}
+		if got := cp.Intern(in[0].Variable); got != tc.variable {
+			t.Errorf("%s: input variable = %q, want %q", tc.element, got, tc.variable)
+		}
+	}
+	// Writes: one output association each.
+	for _, element := range []string{"InSub", "InHandler"} {
+		out := cp.DataOutputAssociations(node(element))
+		if len(out) != 1 {
+			t.Errorf("%s: output associations = %d, want 1 (nested scopes must keep them)", element, len(out))
+			continue
+		}
+		if got := cp.Intern(out[0].DataObject); got != "register" {
+			t.Errorf("%s: output object = %q, want register", element, got)
+		}
+	}
+}
+
+// TestParseDataAssociationErrorInNestedScope checks a bad association inside a
+// subprocess is reported rather than silently dropped: the recursive wiring must
+// carry the same rejections the root scope's does.
+func TestParseDataAssociationErrorInNestedScope(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <dataObject id="DO_reg" name="register"/>
+    <startEvent id="s"/>
+    <subProcess id="Sub">
+      <startEvent id="subStart"/>
+      <task id="InSub">
+        <dataOutputAssociation><targetRef>Nope</targetRef></dataOutputAssociation>
+      </task>
+      <endEvent id="subEnd"/>
+      <sequenceFlow id="sf1" sourceRef="subStart" targetRef="InSub"/>
+      <sequenceFlow id="sf2" sourceRef="InSub" targetRef="subEnd"/>
+    </subProcess>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="Sub"/>
+    <sequenceFlow id="f2" sourceRef="Sub" targetRef="e"/>
+  </process>
+</definitions>`
+
+	if _, err := compiler.Parse(1, 1, strings.NewReader(model)); err == nil {
+		t.Fatal("Parse accepted a data association naming an unknown target inside a subprocess")
+	}
+}

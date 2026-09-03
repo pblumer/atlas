@@ -12,20 +12,20 @@ import (
 
 // A Remedy task resolved into plain values, and the function that creates the entry.
 //
-// This is ADR-0168's split applied to an ITSM connector. Finding the task's detail in
+// This is ADR-0168's split applied to an ITSM worker. Finding the task's detail in
 // the compiled process, evaluating its form and every field value against the
 // variables the task sees up its scope chain (ADR-0068/0174) — all of that needs the
 // compiled process and the store, which only the engine has, so [Resolve] does it and
 // produces plain strings. The AR System base URL, the service account and its password
-// are never among them: what travels is the connector's *name*, and [Run] looks that
+// are never among them: what travels is the worker's *name*, and [Run] looks that
 // name up in the registry the caller was built with.
 //
 // A Remedy worker can therefore hold credentials the engine has never seen, which is
-// what makes an offloaded Remedy connector deployable next to a Helix instance the
+// what makes an offloaded Remedy worker deployable next to a Helix instance the
 // engine cannot reach — the usual position of an ITSM system.
 //
-// The cost is the failure the engine used to catch at lease time: a connector name no
-// worker holds. [Run] refuses it instead, naming the connector, and the Workers view
+// The cost is the failure the engine used to catch at lease time: a worker name no
+// worker holds. [Run] refuses it instead, naming the worker, and the Workers view
 // is where an operator sees which names are configured nowhere.
 
 // Job is a Remedy task with everything already evaluated: which Remedy instance,
@@ -35,7 +35,7 @@ import (
 // put a base URL or a password, and that is a property of the type rather than of the
 // code that fills it in.
 type Job struct {
-	// Connector names the Remedy instance the *worker* is configured for. A name and
+	// Worker names the Remedy instance the *worker* is configured for. A name and
 	// not a URL, because a URL is half a credential.
 	Connector string `json:"connector"`
 	// Form is the Remedy form the entry is created in, e.g. HPD:IncidentInterface_Create.
@@ -52,18 +52,18 @@ type Job struct {
 	ResultVariable string `json:"resultVariable,omitempty"`
 }
 
-// Resolve turns a compiled Remedy connector task into a [Job]: the authored form and
+// Resolve turns a compiled Remedy task into a [Job]: the authored form and
 // field values evaluated against the variables the task sees. It is engine work by
 // necessity — FEEL is compiled at deploy (ADR-0008/0015) and the scope lives in the
 // store.
 //
 // It deliberately does not validate that a form resolved. That check belongs with the
-// create, after the connector lookup, so an operator with both an unconfigured
-// connector and an empty form hears about the configuration first — that being the one
+// create, after the worker lookup, so an operator with both an unconfigured
+// worker and an empty form hears about the configuration first — that being the one
 // they can act on.
 func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64) (Job, error) {
 	if detail == nil {
-		return Job{}, fmt.Errorf("remedy: connector task has no detail")
+		return Job{}, fmt.Errorf("remedy: task has no detail")
 	}
 	// Read the variables the task sees once — up its scope chain, so its own
 	// input-mapped locals shadow what it inherits (ADR-0068) — and evaluate the form
@@ -90,7 +90,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 // whole of the worker's half, and the in-process path calls it too, so there is one
 // definition of what a resolved Remedy task means rather than two that drift.
 //
-// The connector lookup comes first: an unconfigured name is the more actionable of the
+// The worker lookup comes first: an unconfigured name is the more actionable of the
 // two failures a job can carry here, and reporting it ahead of an unresolved form
 // keeps the message an operator sees pointed at the fix.
 func Run(ctx context.Context, j Job, reg *Registry) (Result, error) {

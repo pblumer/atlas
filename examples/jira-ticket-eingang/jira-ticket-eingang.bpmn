@@ -7,7 +7,7 @@
   quittiert den Eingang im Vorgang selbst und weist ihn dem Melder zu.
 
   Start (Nachricht "jira.ticket.created" — kommt aus einer Ereignis-
-         ueberwachung unter Console -> Connectors -> Events, ADR-0214)
+         ueberwachung unter Console -> Workers -> Events, ADR-0214)
    -> Service-Task "Eingang quittieren"   (add-comment)
    -> Service-Task "Melder nachschlagen"  (search-users -> konten)
    -> (X) Gateway  "Konto gefunden?"      (default -> kein Konto)
@@ -38,7 +38,7 @@
   konten nicht gesetzt, naehme die Bedingung den Zweig "gefunden" und der
   naechste Task zoege eine accountId aus null.
 
-  Voraussetzung: ein Konnektor namens "jira" unter Console -> Connectors, mit
+  Voraussetzung: ein Worker namens "jira" unter Console -> Workers, mit
   einer Ereignisueberwachung darauf. Siehe README.md.
 
   BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=200, Nebenzweig bei y=340.
@@ -53,16 +53,16 @@
   <message id="msg_ticket_created" name="jira.ticket.created"/>
 
   <process id="proc_jira_ticket_eingang" name="Ticket-Eingang (Jira)" isExecutable="true">
-    <documentation>Wird von einem neuen Jira-Vorgang gestartet: quittiert den Eingang als Kommentar, schlaegt das Konto des Melders nach und weist ihm den Vorgang zu. Die Startvariablen kommen aus der Ereignisueberwachung, nicht aus einem Formular; der Konnektor heisst "jira".</documentation>
+    <documentation>Wird von einem neuen Jira-Vorgang gestartet: quittiert den Eingang als Kommentar, schlaegt das Konto des Melders nach und weist ihm den Vorgang zu. Die Startvariablen kommen aus der Ereignisueberwachung, nicht aus einem Formular; der Worker heisst "jira".</documentation>
 
     <startEvent id="start" name="Ticket angelegt">
-      <documentation>Nachrichten-Start. Der Name der Nachricht ist die ganze Kopplung zwischen diesem Modell und der Ueberwachung, die es speist: er muss exakt dem Message name unter Console -> Connectors -> Events entsprechen. Stimmt er nicht, laeuft beides fehlerfrei und trifft sich nie — der Modeler schreibt deshalb unter den Namen, welche Ueberwachung ihn veroeffentlicht.</documentation>
+      <documentation>Nachrichten-Start. Der Name der Nachricht ist die ganze Kopplung zwischen diesem Modell und der Ueberwachung, die es speist: er muss exakt dem Message name unter Console -> Workers -> Events entsprechen. Stimmt er nicht, laeuft beides fehlerfrei und trifft sich nie — der Modeler schreibt deshalb unter den Namen, welche Ueberwachung ihn veroeffentlicht.</documentation>
       <outgoing>f_start_quittieren</outgoing>
       <messageEventDefinition messageRef="msg_ticket_created"/>
     </startEvent>
 
     <serviceTask id="quittieren" name="Eingang quittieren">
-      <documentation>Jira-Konnektor, add-comment. Der erste Schritt schreibt zurueck in den Vorgang, der die Instanz gestartet hat: das ist zugleich die Quittung fuer den Melder und der Beweis, dass die Ueberwachung laeuft. processInstanceKey bindet als String, deshalb darf er direkt in die Verkettung — eine Zahl an einen String zu haengen ergaebe in FEEL null, und zwar fuer den *ganzen* Ausdruck.</documentation>
+      <documentation>Jira-Worker, add-comment. Der erste Schritt schreibt zurueck in den Vorgang, der die Instanz gestartet hat: das ist zugleich die Quittung fuer den Melder und der Beweis, dass die Ueberwachung laeuft. processInstanceKey bindet als String, deshalb darf er direkt in die Verkettung — eine Zahl an einen String zu haengen ergaebe in FEEL null, und zwar fuer den *ganzen* Ausdruck.</documentation>
       <extensionElements>
         <atlas:jiraConnector connector="jira" operation="add-comment"
           issueKey="=issueKey"
@@ -73,7 +73,7 @@
     </serviceTask>
 
     <serviceTask id="nachschlagen" name="Melder nachschlagen">
-      <documentation>Jira-Konnektor, search-users (ADR-0223). Der Suchbegriff ist der Anzeigename aus dem Ereignis; das Projekt schraenkt auf die Konten ein, denen dieses Projekt ueberhaupt zugewiesen werden kann — ein Konto, das es zwar gibt, dem Jira aber keinen Vorgang uebergibt, waere sonst genau der Wert, an dem der naechste Task scheitert. Ein leeres Ergebnis ist kein Beweis, dass niemand passt: dasselbe leere Array kommt zurueck, wenn dem Konto des Workers die globale Berechtigung "Benutzer und Gruppen durchsuchen" fehlt.</documentation>
+      <documentation>Jira-Worker, search-users (ADR-0223). Der Suchbegriff ist der Anzeigename aus dem Ereignis; das Projekt schraenkt auf die Konten ein, denen dieses Projekt ueberhaupt zugewiesen werden kann — ein Konto, das es zwar gibt, dem Jira aber keinen Vorgang uebergibt, waere sonst genau der Wert, an dem der naechste Task scheitert. Ein leeres Ergebnis ist kein Beweis, dass niemand passt: dasselbe leere Array kommt zurueck, wenn dem Konto des Workers die globale Berechtigung "Benutzer und Gruppen durchsuchen" fehlt.</documentation>
       <extensionElements>
         <atlas:jiraConnector connector="jira" operation="search-users"
           query="=reporter"
@@ -93,7 +93,7 @@
     </exclusiveGateway>
 
     <serviceTask id="zuweisen" name="Ticket zuweisen">
-      <documentation>Jira-Konnektor, assign-issue. konten ist eine JSON-Liste, und FEEL-Listen sind 1-basiert: der erste Treffer ist konten[1], nicht konten[0] — konten[0] waere null. Was hier hingehoert, ist die accountId (Jira Cloud) bzw. der Benutzername (Data Center); welches von beidem, entscheidet der Konnektor an seinem eigenen Credential, nicht das Modell. Diese Operation gibt nichts zurueck (204), deshalb hat sie keine resultVariable — der Compiler wuerde eine auch abweisen.</documentation>
+      <documentation>Jira-Worker, assign-issue. konten ist eine JSON-Liste, und FEEL-Listen sind 1-basiert: der erste Treffer ist konten[1], nicht konten[0] — konten[0] waere null. Was hier hingehoert, ist die accountId (Jira Cloud) bzw. der Benutzername (Data Center); welches von beidem, entscheidet der Worker an seinem eigenen Credential, nicht das Modell. Diese Operation gibt nichts zurueck (204), deshalb hat sie keine resultVariable — der Compiler wuerde eine auch abweisen.</documentation>
       <extensionElements>
         <atlas:jiraConnector connector="jira" operation="assign-issue"
           issueKey="=issueKey"
@@ -104,7 +104,7 @@
     </serviceTask>
 
     <serviceTask id="offen" name="Zuweisung offen">
-      <documentation>Jira-Konnektor, add-comment. Der Vorgang bleibt unzugewiesen und sagt im Vorgang selbst, warum — das ist die Stelle, an der ein Mensch merkt, dass der Anzeigename nicht aufloesbar war oder dem Worker die Berechtigung fehlt.</documentation>
+      <documentation>Jira-Worker, add-comment. Der Vorgang bleibt unzugewiesen und sagt im Vorgang selbst, warum — das ist die Stelle, an der ein Mensch merkt, dass der Anzeigename nicht aufloesbar war oder dem Worker die Berechtigung fehlt.</documentation>
       <extensionElements>
         <atlas:jiraConnector connector="jira" operation="add-comment"
           issueKey="=issueKey"

@@ -95,7 +95,7 @@ type incidentTally struct {
 // counts above it stay right.
 const maxIncidentSites = 5
 
-// maxIncidentMessage bounds one message. A connector can return a page of HTML as
+// maxIncidentMessage bounds one message. A worker can return a page of HTML as
 // its error, and a panel is not where somebody reads that.
 const maxIncidentMessage = 240
 
@@ -186,7 +186,7 @@ func processStatus(parked int) (state, reason string) {
 // them is exactly what would make this dishonest:
 //
 //   - The engine serves this kind itself, so it built the client (or failed to) and
-//     knows. connectorProblem is the same derivation the connector list shows
+//     knows. connectorProblem is the same derivation the worker list shows
 //     (ADR-0158), so the mesh and that page cannot disagree.
 //   - The kind is worker-only (ADR-0172): the engine holds no credential and builds
 //     no client, so the absence of a problem is not evidence of health. The only

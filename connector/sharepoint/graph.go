@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
-// graphDefaultBase is the Microsoft Graph v1.0 API base a connector uses when it
+// graphDefaultBase is the Microsoft Graph v1.0 API base a worker uses when it
 // authors no endpoint override.
 const graphDefaultBase = "https://graph.microsoft.com/v1.0"
 
@@ -41,7 +41,7 @@ type graphListItem struct {
 	Fields map[string]string `json:"fields"`
 }
 
-// CreateItem creates a list item in the connector's site/list and returns the
+// CreateItem creates a list item in the worker's site/list and returns the
 // created item decoded from Graph's JSON response. A missing site or list, or a
 // non-2xx response, is an error so the job stays pending and is retried (at-least-once).
 func (c *GraphClient) CreateItem(ctx context.Context, req ItemRequest) (any, error) {

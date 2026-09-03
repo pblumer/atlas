@@ -6,14 +6,14 @@ import "github.com/pblumer/atlas/connector/clientreg"
 // is, and who binds to it.
 //
 // It exists because AD sat on the wrong side of a line this repository otherwise draws
-// cleanly (ADR-0206). A connector whose target carries
+// cleanly (ADR-0206). A worker whose target carries
 // credentials — mail, Entra, Remedy, SharePoint, the three SQL products — is a *record*
-// an operator creates, referenced from a model by name. A connector addressed per call
+// an operator creates, referenced from a model by name. A worker addressed per call
 // with nothing secret about the address — REST, web scrape — carries its target in the
 // model. AD is the first kind: a domain controller, a service account and a password.
-// It got the model-authored shape by inheritance from the LDAP connector rather than
+// It got the model-authored shape by inheritance from the LDAP worker rather than
 // from an argument, and paid for it twice — an operator could not create one like any
-// other connector, and the mockup switch had nowhere per-directory to live.
+// other worker, and the mockup switch had nowhere per-directory to live.
 //
 // The password is a *value* here, not a reference. That is the point of the boundary:
 // the engine resolves references out of its vault and renders what a worker needs into
@@ -32,8 +32,8 @@ type Directory struct {
 }
 
 // Registry is the set of directories a worker holds, by name. Like every other
-// connector registry it is a clientreg.Registry, so an unconfigured name produces the
-// same "not configured" refusal across kinds rather than one message per connector.
+// worker registry it is a clientreg.Registry, so an unconfigured name produces the
+// same "not configured" refusal across kinds rather than one message per worker.
 type Registry = clientreg.Registry[Directory]
 
 // NewRegistry returns an empty directory registry.

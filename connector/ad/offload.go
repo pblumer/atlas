@@ -20,7 +20,7 @@ import (
 // This is [ADR-0168]'s split applied to a kind that was built in process, and AD's
 // shape makes the line fall in a different place than mail's did.
 //
-// A mail task names a connector and nothing else: the endpoint and the credential
+// A mail task names a worker and nothing else: the endpoint and the credential
 // both move to the worker. An AD task authors its own server URL and bind DN, because
 // ADR-0166 decided the directory is model data — so those keep travelling, and the
 // only thing that moves is *where the bind password behind the reference is read*.
@@ -40,7 +40,7 @@ import (
 // BindSecret is a *reference*, not a password — the same reference the model authored
 // (ADR-0041). Whoever runs the job resolves it against whatever secret store it has.
 type Job struct {
-	// Connector is the Console-configured directory this job talks to. When it is set
+	// Worker is the Console-configured directory this job talks to. When it is set
 	// the worker holds that directory's URL and bind credentials under this name and
 	// URL/BindDN/BindSecret below are empty — the shape every other credential-bearing
 	// kind already uses (ADR-0206). When it is empty the job
@@ -71,7 +71,7 @@ type Job struct {
 	// to sync alone: Cookie is base64 of the server's opaque resume token, because a
 	// process variable holds text and the token is binary, and CookieVariable is where
 	// the *new* cookie is written back — which is what lets a reconciliation loop carry
-	// itself forward without any state in the connector.
+	// itself forward without any state in the worker.
 	BaseDN         string `json:"baseDN,omitempty"`
 	Filter         string `json:"filter,omitempty"`
 	Scope          string `json:"scope,omitempty"`
@@ -82,13 +82,13 @@ type Job struct {
 	ResultVariable string `json:"resultVariable,omitempty"`
 }
 
-// Resolve turns a compiled AD connector task into a [Job]: the authored values
+// Resolve turns a compiled AD task into a [Job]: the authored values
 // evaluated against the instance's variables, and the attribute object read out of
 // the named variable. It is engine work by necessity — FEEL is compiled at deploy
 // (ADR-0008/0015) and only the engine has the scope.
 func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey uint64) (Job, error) {
 	if detail == nil {
-		return Job{}, fmt.Errorf("ad: connector task has no detail")
+		return Job{}, fmt.Errorf("ad: task has no detail")
 	}
 	// The variables the task sees, up its scope chain, so its own input-mapped locals
 	// shadow what it inherits (ADR-0068).
@@ -175,7 +175,7 @@ func Run(_ context.Context, j Job, dialer Dialer, secret SecretResolver, dirs *R
 // target resolves which directory this job talks to and how it binds, from whichever
 // of the two shapes the task carries.
 //
-// A named connector is looked up in the registry the worker was built with; a task
+// A named worker is looked up in the registry the worker was built with; a task
 // that carries its own url resolves its bind password out of the worker's secrets, as
 // it always did. The two are deliberately not blended — a task compiles as one or the
 // other (the compiler refuses both), so there is no precedence rule here for a reader
@@ -206,7 +206,7 @@ func target(j Job, secret SecretResolver, dirs *Registry) (url, bindDN, password
 			// correctly on a reference that may carry punctuation. Both ways out are
 			// named because both are real: the Console vault reaches a worker Atlas
 			// supervises, and the environment is what a worker you run yourself reads.
-			return "", "", "", false, fmt.Errorf("ad: bind secret %q is not configured where this job runs: store it under that name in Console > Connectors > Secrets, or set %s in the environment of the worker that leases ad jobs",
+			return "", "", "", false, fmt.Errorf("ad: bind secret %q is not configured where this job runs: store it under that name in Console > Workers > Secrets, or set %s in the environment of the worker that leases ad jobs",
 				j.BindSecret, envname.ConnectorToken(j.BindSecret))
 		}
 	}
@@ -219,7 +219,7 @@ func target(j Job, secret SecretResolver, dirs *Registry) (url, bindDN, password
 // The cookie is written back into the same variable it was read from, so a
 // reconciliation modelled as a loop — sync, handle the changes, wait on a timer,
 // sync again — carries its own position forward with no state anywhere in the
-// connector or the engine.
+// worker or the engine.
 func runSync(j Job, conn Conn) (map[string]any, error) {
 	cookie, err := base64.StdEncoding.DecodeString(j.Cookie)
 	if err != nil {
@@ -313,7 +313,7 @@ func runSearch(j Job, conn Conn) (map[string]any, error) {
 
 // entriesToJSON turns directory entries — a delta's or a search's — into a JSON-ready
 // slice: each entry is {"dn": …, "attributes": {name: [values]}}, the same shape the
-// LDAP connector's search writes, so a process reads all three the same way.
+// LDAP worker's search writes, so a process reads all three the same way.
 //
 // A deleted object arrives here like any other entry, carrying isDeleted=TRUE — AD
 // reports a deletion as a change rather than as an absence, and flattening that away

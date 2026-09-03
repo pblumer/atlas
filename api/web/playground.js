@@ -5,7 +5,7 @@
 // this data": the server compiles the diagram on screen and executes it on the
 // real processor over a virtual clock, so FEEL, gateways, DMN and timers behave
 // exactly as they will in production. Nothing is deployed, nothing durable is
-// written, and the sandbox holds no connectors, so no task can reach the network.
+// written, and the sandbox holds no workers, so no task can reach the network.
 //
 // The tab has two ways to drive that sandbox, and they share it:
 //   Step  — one case, one occurrence at a time, with the person at the keyboard
@@ -1126,7 +1126,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     return `
       <p class="muted">Runs the diagram on screen with the real compiler and the real
         processor, on a clock the sandbox owns — a three-day timer takes no time at all.
-        Nothing is deployed and no connector can be called: the sandbox has none.</p>
+        Nothing is deployed and no worker can be called: the sandbox has none.</p>
       ${scenarioPickerHTML()}
       <div class="pg-sec"><b>Resources</b> <span class="muted">optional</span></div>
       ${tasks.length
@@ -1800,7 +1800,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     el("pg-human-wrap").hidden = open;
 
     el("pg-hint").textContent = !open
-      ? "Nothing is deployed and no connector can be called — the sandbox has none."
+      ? "Nothing is deployed and no worker can be called — the sandbox has none."
       : batching
         ? running ? "Running the dataset. Stop leaves what it did readable."
           : state.inspect ? "One case is on the diagram. Back to the run puts the whole run back."

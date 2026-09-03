@@ -339,7 +339,7 @@ func TestRepositoryHandlerErrorPaths(t *testing.T) {
 		t.Errorf("empty installed list = %d %q, want 200 \"[]\\n\"", rr.Code, rr.Body.String())
 	}
 
-	// Install of a package that fails validation → 422. Inject an invalid connector
+	// Install of a package that fails validation → 422. Inject an invalid worker
 	// (a data-only kind, so no admin gate) carrying an embedded secret.
 	srv.repository = append(srv.repository, repositoryPackage{
 		ID: "bad.secret", Version: "1.0.0", Kind: packageKindConnector, Title: "Bad",

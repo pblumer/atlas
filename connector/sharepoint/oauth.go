@@ -12,11 +12,11 @@ import (
 
 // TokenSource yields a valid OAuth2 bearer access token for the Graph API. The
 // mechanism — caching, refresh timing, the token exchange — is the shared
-// [oauth2] package's; what stays here is this connector's policy: which grants it
+// [oauth2] package's; what stays here is this worker's policy: which grants it
 // accepts and what its credential bundle looks like.
 type TokenSource = oauth2.TokenSource
 
-// OAuth2 grant methods a SharePoint connector supports (ADR-0141). clientCredentials
+// OAuth2 grant methods a SharePoint worker supports (ADR-0141). clientCredentials
 // is app-only (a confidential client acts as itself, the norm for server workflows);
 // refreshToken exchanges a pre-obtained refresh token (works for delegated /
 // consumer scenarios). These mirror the native mail providers' grants (ADR-0093);
@@ -27,11 +27,11 @@ const (
 )
 
 // credentialBundle is the JSON an operator stores in the vault under a SharePoint
-// connector's credentialsRef (ADR-0141). method selects the OAuth2 grant; the
+// worker's credentialsRef (ADR-0141). method selects the OAuth2 grant; the
 // remaining fields configure it. Non-secret fields (ids, tenant) and secret fields
 // (clientSecret, refreshToken) live together in this one vault secret, so a model
 // never carries any of them (I6). tokenUrl and scope are optional overrides; the
-// connector supplies sensible Graph defaults (from tenantId).
+// worker supplies sensible Graph defaults (from tenantId).
 type credentialBundle struct {
 	Method       string `json:"method"`
 	TokenURL     string `json:"tokenUrl,omitempty"`
@@ -43,7 +43,7 @@ type credentialBundle struct {
 }
 
 // newTokenSource builds a cached TokenSource for a fully-resolved credential bundle
-// (the connector has already filled in tokenUrl/scope defaults). It validates the
+// (the worker has already filled in tokenUrl/scope defaults). It validates the
 // fields the chosen method requires, so a misconfigured bundle fails here rather than
 // at call time. httpc and now are injected so the token flow is testable without a
 // live OAuth endpoint.

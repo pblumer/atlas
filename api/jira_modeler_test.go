@@ -10,7 +10,7 @@ import (
 	"github.com/pblumer/atlas/connector/jira"
 )
 
-// jiraOptionRe matches one option of a select field in the Modeler's connector
+// jiraOptionRe matches one option of a select field in the Modeler's worker
 // catalog, e.g. `{ v: "create-issue", l: "Create issue" }`.
 var jiraOptionRe = regexp.MustCompile(`\{ v: "([a-z-]+)", l: "[^"]+" \}`)
 
@@ -32,7 +32,7 @@ func TestModelerOffersEveryJiraOperation(t *testing.T) {
 	catalog := string(src)
 	start := strings.Index(catalog, `id: "jira"`)
 	if start < 0 {
-		t.Fatal("the jira connector is missing from SERVICE_TASK_KINDS")
+		t.Fatal("the jira worker is missing from SERVICE_TASK_KINDS")
 	}
 	// The operation dropdown is the first select in the entry, so its options end at
 	// the closing bracket of that field's option list.
@@ -71,7 +71,7 @@ func TestModelerOffersEveryJiraOperation(t *testing.T) {
 			len(unreachable), strings.Join(unreachable, ", "))
 	}
 	if len(unknown) > 0 {
-		t.Errorf("the Modeler offers %d Jira operation(s) the connector does not implement: %s\n\n"+
+		t.Errorf("the Modeler offers %d Jira operation(s) the worker does not implement: %s\n\n"+
 			"Such a task deploys and then fails at call time with \"unknown operation\".",
 			len(unknown), strings.Join(unknown, ", "))
 	}

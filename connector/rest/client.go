@@ -1,10 +1,10 @@
-// Package rest integrates an external HTTP-REST API as a service-task connector:
-// a BPMN REST connector task calls a model-authored endpoint through the job path
+// Package rest integrates an external HTTP-REST API as a service-task Worker Type:
+// a BPMN REST task calls a model-authored endpoint through the job path
 // (ADR-0036/0067), mirroring how the dmn package delegates a decision to temis
 // (ADR-0014). The integration inherits the job protocol's durability and
 // non-blocking properties (ADR-0007):
 //
-//   - A connector task creates a job carrying the reserved [compiler.RestJobType].
+//   - A task creates a job carrying the reserved [compiler.RestJobType].
 //     The processor never performs the outbound call itself, so it stays
 //     allocation-free (invariant I1) and free of any HTTP dependency.
 //   - The in-process [Handler] — a job worker — pulls those jobs, calls the REST
@@ -12,7 +12,7 @@
 //     applyToState / I4), writes the JSON response into the task's result variable,
 //     and completes the job, which drives the token onward.
 //
-// Unlike the clio connector (ADR-0036), a REST task authors its full URL, method,
+// Unlike the clio worker (ADR-0036), a REST task authors its full URL, method,
 // headers, and query parameters in the model; credentials are never authored there
 // — authentication (basic/bearer/apiKey) names a server-side secret the worker
 // resolves at runtime (ADR-0041/0067), so a token never appears in a BPMN file.
@@ -36,7 +36,7 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
-// Request is one HTTP call a REST connector task makes. URL is the full,
+// Request is one HTTP call a REST task makes. URL is the full,
 // model-authored endpoint (ADR-0067). Headers are set on the request (including
 // any Authorization/api-key header the worker resolved from a secret); Query is
 // appended to the URL. Body, when non-nil, is sent as a JSON request body (the
@@ -74,7 +74,7 @@ type HTTPClient struct {
 	http *http.Client
 }
 
-// NewHTTPClient builds a REST HTTP client bounded by the shared connector call
+// NewHTTPClient builds a REST HTTP client bounded by the shared worker call
 // budget (nettimeout.Default). The worker runs on the run-loop goroutine, so an
 // unbounded call would let a hung host stall the whole engine; see the
 // nettimeout package doc. A per-connector configurable timeout is a follow-up
@@ -141,7 +141,7 @@ const errorExcerptRunes = 500
 // The status alone names the class of fault and never the fault. "returned HTTP 400" sent
 // an operator looking through a task's URL, its headers, its query parameters and its
 // body for which part the far side objected to — while the answer was in the response all
-// along ("The query parameter 'query' is required"). This connector cannot parse a vendor
+// along ("The query parameter 'query' is required"). This worker cannot parse a vendor
 // error envelope the way the Jira one can, because it talks to every API rather than to
 // one; quoting the body is what it can do instead, and it is enough.
 //
@@ -150,7 +150,7 @@ const errorExcerptRunes = 500
 // transcript. Truncation is by rune, so a cut never lands inside a UTF-8 sequence.
 //
 // What this means for what an incident carries: a response body reaches an operator's
-// eyes. That is the same exposure the Jira connector already accepts for the same reason,
+// eyes. That is the same exposure the Jira worker already accepts for the same reason,
 // and an API that answers a rejection by echoing a credential back has a problem this
 // message only reveals.
 func describeError(raw []byte) string {
@@ -164,7 +164,7 @@ func describeError(raw []byte) string {
 	return ": " + text
 }
 
-// withQuery appends the connector's query parameters to the endpoint URL,
+// withQuery appends the worker's query parameters to the endpoint URL,
 // preserving any already present in the model URL. Encoding sorts keys, so the
 // request URL is deterministic. An unparseable URL is an error (the job then
 // retries/incidents like any other failure).

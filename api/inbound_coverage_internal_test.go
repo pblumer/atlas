@@ -91,7 +91,7 @@ func TestEventVarsAndKeys(t *testing.T) {
 }
 
 // TestResolveInboundSubsSkips proves resolveInboundSubs skips subscriptions that are
-// disabled, reference a non-clio or disabled connector, or whose connector has no
+// disabled, reference a non-clio or disabled worker, or whose worker has no
 // live client — only a fully-live clio subscription is returned.
 func TestResolveInboundSubsSkips(t *testing.T) {
 	srv, _ := newValidateServer(t, WithInboundPollInterval(0))
@@ -164,7 +164,7 @@ func (errReader) ReadEvents(context.Context, clio.ReadEventsRequest) ([]clio.Inb
 }
 
 // TestInboundSubStoreErrors covers the store's non-happy paths (mirrors the
-// connector store error tests).
+// worker store error tests).
 func TestInboundSubStoreErrors(t *testing.T) {
 	// loadAll ignores foreign files (subdir, non-json, non-hex name).
 	st, _ := newInboundSubStore(filepath.Join(t.TempDir(), "s"))
@@ -216,7 +216,7 @@ func TestInboundSubStoreErrors(t *testing.T) {
 // read-body/JSON (400) branches.
 func TestInboundHandlerStoreAndBodyErrors(t *testing.T) {
 	srv, _ := newValidateServer(t, WithInboundPollInterval(0))
-	// A clio connector exists so create passes its kind check and reaches the save.
+	// A clio worker exists so create passes its kind check and reaches the save.
 	srv.do(func() {
 		_ = srv.connectors.Save(connector{ID: "c", Name: "on", Kind: "clio", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
 	})
@@ -248,18 +248,18 @@ func TestInboundHandlerStoreAndBodyErrors(t *testing.T) {
 		t.Error("update invalid JSON: want 400")
 	}
 
-	// A corrupt connector record makes the create handler's connector lookup error
+	// A corrupt worker record makes the create handler's worker lookup error
 	// (a decode failure, not a missing file) → 500.
 	srv.do(func() {
 		_ = os.WriteFile(srv.connectors.FileFor("corrupt"), []byte("{not json"), 0o644)
 	})
 	if do(http.MethodPost, "/api/v1/connectors/corrupt/inbound-subscriptions", `{"watchedSubject":"s","messageName":"m"}`) != http.StatusInternalServerError {
-		t.Error("create with a corrupt connector record: want 500")
+		t.Error("create with a corrupt worker record: want 500")
 	}
 
-	// Point the subscription store at a broken (missing) directory while the connector
+	// Point the subscription store at a broken (missing) directory while the worker
 	// store stays real. list (loadAll) and delete (fsync) fail hard → 500; create
-	// passes the connector-kind check on the real "c" connector, then the save fails
+	// passes the Worker Type check on the real "c" worker, then the save fails
 	// → 500. (An update or get of a missing record is a 404, not a 500, since a
 	// missing file is not-found rather than an error.)
 	srv.do(func() { srv.inboundSubs = brokenStore(newInboundSubStore(filepath.Join(t.TempDir(), "gone"))) })
@@ -275,7 +275,7 @@ func TestInboundHandlerStoreAndBodyErrors(t *testing.T) {
 }
 
 // TestResolveInboundSubsLoadErrors covers resolveInboundSubs' store-read failure
-// branches: a broken subscription store or connector store yields no subscriptions.
+// branches: a broken subscription store or worker store yields no subscriptions.
 func TestResolveInboundSubsLoadErrors(t *testing.T) {
 	srv, _ := newValidateServer(t, WithInboundPollInterval(0))
 	var got []pendingSub
@@ -293,7 +293,7 @@ func TestResolveInboundSubsLoadErrors(t *testing.T) {
 		got = srv.resolveInboundSubs()
 	})
 	if got != nil {
-		t.Errorf("resolveInboundSubs with a broken connector store = %v, want nil", got)
+		t.Errorf("resolveInboundSubs with a broken worker store = %v, want nil", got)
 	}
 }
 
@@ -309,7 +309,7 @@ func TestInboundSubStoreLoadAllReadError(t *testing.T) {
 	}
 }
 
-// A jira watch resolves through the same path as a clio one: the connector's kind is
+// A jira watch resolves through the same path as a clio one: the worker's kind is
 // the discriminator, so what changes is which reader the watch gets, not the record's
 // shape (ADR-0214). A kind with no inbound half is skipped rather than handed a reader
 // it has no use for.
@@ -328,7 +328,7 @@ func TestResolveInboundSubsPicksTheReaderByConnectorKind(t *testing.T) {
 	srv.do(func() { subs = srv.resolveInboundSubs() })
 
 	if len(subs) != 1 {
-		t.Fatalf("resolved %d watches, want only the one whose jira connector has a live client: %+v", len(subs), subs)
+		t.Fatalf("resolved %d watches, want only the one whose jira worker has a live client: %+v", len(subs), subs)
 	}
 	if subs[0].rec.ID != "w-jira" || subs[0].kind != connectorKindJira {
 		t.Errorf("resolved %q of kind %q, want w-jira of kind jira", subs[0].rec.ID, subs[0].kind)

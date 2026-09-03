@@ -39,7 +39,7 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
 // of the landscape hangs off it.
 const KIND = {
   application: { r: 30, grow: 12, shape: "circle", fill: "var(--accent-soft)", stroke: "var(--accent)", label: "Application" },
-  process: { r: 17, grow: 5, shape: "square", fill: "var(--surface)", stroke: "var(--border-strong)", label: "Process" },
+  process: { r: 17, grow: 5, shape: "square", fill: "var(--surface)", stroke: "var(--mesh-ink)", label: "Process" },
   // --ok is a fixed green rather than a shade of the configurable accent, so its
   // soft companion is a literal here too. There is no --ok-soft at :root, and
   // defining one would change the one other rule that already asks for it.
@@ -78,7 +78,12 @@ const KIND = {
 // than a shape meaning "missing": its id names the kind — a deployment, a worker, a
 // decision — and drawing the gap in the silhouette of what should fill it says what
 // is wrong at a glance. The dashes already say it is not there.
-export function shapeForNode(node) {
+export function shapeForNode(node, notation) {
+  // A projection speaks for the kinds it has a word for and stays silent about the
+  // rest, so a placeholder keeps the shape that says what it is rather than being
+  // dressed as an element of a notation that has no such element.
+  const projected = notation ? typeIn(node?.kind, notation) : null;
+  if (projected) return projected.shape;
   if (node?.kind === "unresolved") {
     const missing = String(node.id || "").split(":")[1];
     return KIND[missing]?.shape || KIND.unresolved.shape;
@@ -107,9 +112,32 @@ export function shapeVertices(shape, r) {
     // Axis-aligned, so it reads as a tile rather than as a rotated diamond. Its
     // half-diagonal is r, which is what keeps it inside the reserved circle.
     case "square": return at(4, -Math.PI / 4);
-    default: return [];
+    default: {
+      // The wide rectangles the notation projections draw in (see NOTATIONS). Same
+      // rule as every other shape: the corners sit *on* the reserved circle, so the
+      // separation guarantee transfers unchanged and a projection cannot make two
+      // nodes overlap that did not overlap before.
+      const rect = RECTS[shape];
+      if (!rect) return [];
+      const half = r / Math.hypot(rect.aspect, 1);
+      const wide = half * rect.aspect;
+      return [[-wide, -half], [wide, -half], [wide, half], [-wide, half]];
+    }
   }
 }
+
+// RECTS are the shapes drawn as rectangles rather than as polygons: aspect is width
+// over height, round is the corner radius as a fraction of the short side.
+//
+// ArchiMate's own convention is the reason there are two of them — a structure
+// element is a rectangle and a behaviour element is a rounded one — and C4 draws
+// everything as a rounded box and tells its types apart by the annotation under the
+// name rather than by silhouette.
+const RECTS = {
+  square: { aspect: 1, round: 0.26 },
+  box: { aspect: 1.9, round: 0.08 },
+  rounded: { aspect: 1.9, round: 0.42 },
+};
 
 // bodyElement is the node's own outline, as SVG. Everything downstream keys off the
 // mesh-body class rather than off the element name, so severity, hover and impact
@@ -120,16 +148,115 @@ export function shapeVertices(shape, r) {
 // circle — not the polygon — that the separation guarantee is about.
 function bodyElement(shape, r, attrs) {
   const common = `class="mesh-body" data-r="${r.toFixed(1)}" ${attrs}`;
-  if (shape === "square") {
-    const half = r / Math.SQRT2;
-    return `<rect ${common} x="${(-half).toFixed(1)}" y="${(-half).toFixed(1)}"
-      width="${(half * 2).toFixed(1)}" height="${(half * 2).toFixed(1)}"
-      rx="${(half * 0.26).toFixed(1)}"/>`;
+  const rect = RECTS[shape];
+  if (rect) {
+    const half = r / Math.hypot(rect.aspect, 1);
+    const wide = half * rect.aspect;
+    return `<rect ${common} x="${(-wide).toFixed(1)}" y="${(-half).toFixed(1)}"
+      width="${(wide * 2).toFixed(1)}" height="${(half * 2).toFixed(1)}"
+      rx="${(half * rect.round * 2).toFixed(1)}"/>`;
   }
   const vertices = shapeVertices(shape, r);
   if (!vertices.length) return `<circle ${common} r="${r.toFixed(1)}"/>`;
   const points = vertices.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
   return `<polygon ${common} points="${points}"/>`;
+}
+
+// NOTATION_MAPPING_VERSION identifies the tables below. ADR-0211 §8 requires a
+// projection's mapping to be explicit *and versioned*, because a reader who saw a
+// picture last quarter has to be able to tell whether it would be drawn the same way
+// today. Bump it whenever a row changes meaning.
+export const NOTATION_MAPPING_VERSION = 1;
+
+// NOTATIONS is what the landscape may be drawn in.
+//
+// ADR-0211 §8 allows a **read-only projection** with an explicit versioned mapping
+// and reported loss, and forbids a renderer toggle that pretends to be a second
+// authoring notation. Everything here is the first and none of it is the second:
+// there is no ArchiMate document behind an ArchiMate-drawn landscape and none can be
+// exported from one — this is Atlas's own resources spoken in somebody else's
+// vocabulary, and the legend says exactly that in those words.
+//
+// §8 wrote the rule for a projection *of a model*. Applying it to the derived
+// landscape is the smaller case rather than a wider one: a projection of a model has
+// a source document whose fidelity can be argued about, and this has none, so the
+// only thing at risk of being misread is the vocabulary itself. Which is why every
+// entry below carries its loss, and why the loss is on the export as well as on the
+// screen.
+//
+// The names are the standards' own. Where a mesh kind has no counterpart the row is
+// simply absent: inventing one would be the silent drop §8 exists to prevent, so
+// those nodes keep their derived shape and the loss list says which they are.
+export const NOTATIONS = {
+  atlas: {
+    id: "atlas",
+    label: "Atlas (derived)",
+    short: "Atlas",
+    projection: false,
+    types: {},
+    loss: [],
+  },
+  "archimate-3.2": {
+    id: "archimate-3.2",
+    label: "ArchiMate 3.2",
+    short: "ArchiMate",
+    projection: true,
+    // Structure is a rectangle and behaviour is a rounded one, which is ArchiMate's
+    // own convention and the only part of its notation this can honour: the type
+    // icon in the corner is replaced by the type written out, because a landscape is
+    // read at a zoom where a 12-pixel icon is a smudge.
+    types: {
+      application: { name: "Application Component", shape: "box" },
+      process: { name: "Application Process", shape: "rounded" },
+      worker: { name: "Application Service", shape: "rounded" },
+      decision: { name: "Application Function", shape: "rounded" },
+      target: { name: "Node", shape: "box" },
+    },
+    loss: [
+      "Nothing here was modelled. This is Atlas's own resources in ArchiMate's vocabulary, not an ArchiMate model: no Open Exchange document exists behind it and none can be exported from it.",
+      "Relationships are untyped. ArchiMate tells serving from triggering from realization; the landscape derives calls and uses, and both are drawn as a plain line.",
+      "A worker becomes an Application Service with nothing behind it. Atlas holds the worker's name and type and never what is on the other side, so there is no Technology Service to realize it.",
+      "Restricted and unresolved placeholders have no ArchiMate element — they are findings about this picture rather than architecture — and keep their own shape.",
+      "The type is written out rather than drawn as ArchiMate's corner icon.",
+    ],
+  },
+  "c4-projection": {
+    id: "c4-projection",
+    label: "C4 (projection)",
+    short: "C4",
+    projection: true,
+    // C4 draws almost everything as the same box and tells its types apart by the
+    // annotation under the name. Kept faithfully: the silhouette stops carrying the
+    // kind here, and the colour and the type line carry it instead.
+    types: {
+      application: { name: "Container", shape: "rounded" },
+      process: { name: "Component", shape: "rounded" },
+      worker: { name: "Component", shape: "rounded" },
+      decision: { name: "Component", shape: "rounded" },
+      target: { name: "Deployment Node", shape: "box" },
+    },
+    loss: [
+      "C4 separates its levels onto different diagrams. This canvas shows containers and components together, which no C4 level does.",
+      "External systems are absent. C4 puts the thing a component talks to on the diagram; Atlas holds no model of what is behind a worker, only its name and type.",
+      "Relationships carry no technology or protocol label, which is most of what a C4 arrow is for.",
+      "Restricted and unresolved placeholders have no C4 element and keep their own shape.",
+      "There is no Person and no Software System: the landscape is derived from what this server runs, and neither is a thing Atlas holds.",
+    ],
+  },
+};
+
+// notationOf resolves an id to a notation, falling back to the derived one. An
+// unknown id is a stale saved view or a hand-edited URL, and drawing the landscape
+// as itself is the answer that cannot mislead.
+export function notationOf(id) {
+  return NOTATIONS[id] || NOTATIONS.atlas;
+}
+
+// typeIn is what a notation calls this kind of node, or null where it has no word
+// for it. Null is a real answer here and never an empty string: the caller draws the
+// derived shape and the legend lists the kind as loss.
+export function typeIn(kind, notation) {
+  return notationOf(notation?.id ?? notation).types[kind] || null;
 }
 
 // DEGREE_FULL is the number of dependencies at which a node is drawn at the top of
@@ -526,7 +653,7 @@ function follow(nodes, tethers, radii, { steps = 3 } = {}) {
 // screen rather than re-deriving one around the pins. Without it, filtering after a
 // drag would keep the pinned nodes and re-scatter everything else — the arrangement
 // would survive and its context would not, which is the worse half of both.
-function layout(nodes, edges, { width, height, iterations = 220, pinned, from } = {}) {
+function layout(nodes, edges, { width, height, iterations = 220, pinned, from, margin = LABEL_MARGIN } = {}) {
   const started = performance.now();
   const random = mulberry32(0x5EED);
   const force = forcesFor(nodes, width, height);
@@ -561,12 +688,12 @@ function layout(nodes, edges, { width, height, iterations = 220, pinned, from } 
   // for this pair rather than assuming one radius for all of them.
   const radii = nodes.map(radiusOf);
   settle(nodes, linksAmong(nodes, edges), radii, force, iterations);
-  if (!anchored) fitToFrame(nodes, width, height);
+  if (!anchored) fitToFrame(nodes, width, height, margin);
   // And once more where the circles are actually drawn. The fit scales positions
   // and leaves radii alone, so whatever the settle guaranteed is only true again
   // after this. Anything it moves outside the world is pulled back by the re-fit.
   separate(nodes, radii, NODE_ROOM);
-  if (!anchored) fitToFrame(nodes, width, height);
+  if (!anchored) fitToFrame(nodes, width, height, margin);
   return performance.now() - started;
 }
 
@@ -613,6 +740,81 @@ export function fitToFrame(nodes, width, height, pad = LABEL_MARGIN) {
     n.y = n.y * k + offsetY;
   }
   return nodes;
+}
+
+// contentBox is the box the drawn nodes actually occupy, in world units, including
+// each node's own footprint and the room its name needs beside it.
+//
+// It exists because the world and the picture in it are not the same thing. The
+// world is an *area budget* — sized from the graph so the layout has room to settle
+// — and the layout normally spreads the content across it, so the two coincide and
+// framing the world frames the picture. They stop coinciding the moment a node is
+// pinned: the fit is skipped then (it would drag the pins off the spots they were
+// dropped on), and the content is left wherever it settled. Framing the world after
+// that shows the picture in one corner of a mostly empty sheet, which is exactly
+// what "Fit" is for and exactly what it stopped doing.
+export function contentBox(nodes, pad = LABEL_MARGIN) {
+  if (!nodes.length) return { x: 0, y: 0, width: 0, height: 0 };
+  const m = typeof pad === "number" ? { top: pad, right: pad, bottom: pad, left: pad } : pad;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of nodes) {
+    const r = radiusOf(n);
+    minX = Math.min(minX, n.x - r - m.left);
+    maxX = Math.max(maxX, n.x + r + m.right);
+    minY = Math.min(minY, n.y - r - m.top);
+    maxY = Math.max(maxY, n.y + r + m.bottom);
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+// fitView frames a content box in a viewport, and keeps a corner of that viewport
+// clear.
+//
+// Two things it does that framing the world did not:
+//
+//   - **The returned view has the viewport's own aspect ratio**, so the SVG has
+//     nothing to letterbox and the content is centred in what is left rather than
+//     pushed to one side of a box of a different shape.
+//   - **It holds `reserve` pixels of the bottom-right corner free.** The zoom
+//     controls float over the canvas there, and a node underneath them cannot be
+//     clicked or dragged — the pointer lands on the panel. That is not a rare
+//     coincidence either: the fit pushes content to the edges by construction, so
+//     the corner is where a node reliably ends up, and it happens most in a filtered
+//     or drilled picture, where there are few enough nodes for one of them to be the
+//     one you wanted. Reserving the corner in the *framing* rather than in the
+//     layout keeps the arithmetic exact: the scale is known here, so pixels of chrome
+//     convert to world units without a second guess.
+//
+// The chrome sits in a *corner*, and that is the whole subtlety. Subtracting its
+// width and its height both — the obvious reading — reserves two full strips whose
+// intersection is the corner, and gives away a quarter of a wide canvas to a panel
+// two hundred pixels across. What the picture actually has to avoid is the corner
+// rectangle, and the largest rectangle that avoids it is one of exactly two: the
+// frame minus the panel's width, or the frame minus its height. Whichever holds the
+// content at the larger scale wins, which on a landscape-shaped canvas with a short
+// panel is nearly always the second and costs almost nothing.
+export function fitView(box, frame, reserve = { width: 0, height: 0 }) {
+  const boxW = Math.max(box.width, 1), boxH = Math.max(box.height, 1);
+  // Chrome is chrome: it may never take more than half the picture, whatever it
+  // reports its size as.
+  const takeW = Math.min(reserve.width || 0, frame.width * 0.5);
+  const takeH = Math.min(reserve.height || 0, frame.height * 0.5);
+  const options = [
+    { w: Math.max(frame.width - takeW, 1), h: Math.max(frame.height, 1), takeW, takeH: 0 },
+    { w: Math.max(frame.width, 1), h: Math.max(frame.height - takeH, 1), takeW: 0, takeH },
+  ];
+  let best = null;
+  for (const option of options) {
+    const scale = Math.min(option.w / boxW, option.h / boxH);
+    if (!best || scale > best.scale) best = { ...option, scale };
+  }
+  const { scale } = best;
+  const w = frame.width / scale, h = frame.height / scale;
+  // Whatever the box does not use of the region it is allowed, split evenly, so the
+  // picture sits in the middle of the space it can actually be reached in.
+  const leftoverX = Math.max(w - best.takeW / scale - boxW, 0);
+  const leftoverY = Math.max(h - best.takeH / scale - boxH, 0);
+  return { x: box.x - leftoverX / 2, y: box.y - leftoverY / 2, w, h };
 }
 
 // ZOOM_RANGE bounds how far the viewer can push the frame, as multiples of the
@@ -875,7 +1077,19 @@ function hrefFor(node) {
   return "";
 }
 
-function nodeTitle(node) {
+function nodeTitle(node, notation) {
+  // What the notation calls it, first, because in a projection that is the word the
+  // reader is looking at. Atlas's own name for the kind follows it rather than being
+  // replaced: the projection is a way of speaking about these resources, not a claim
+  // that they are something else.
+  const typed = typeIn(node.kind, notation);
+  if (typed) {
+    const parts = [node.name || node.id, typed.name,
+      `Atlas ${(KIND[node.kind] || {}).label?.split(" — ")[0]?.toLowerCase() || node.kind}`];
+    if (node.state && node.state !== "unbound") parts.push(STATE_TEXT[node.state] || node.state);
+    if (node.reason) parts.push(node.reason);
+    return parts.join(" · ");
+  }
   if (node.kind === "target") {
     // Never its base URL: that is this operator's map of where their infrastructure
     // lives, and a landscape is opened by anybody with modeler access.
@@ -1014,18 +1228,26 @@ export function drillInto(graph, id, hops) {
 //
 // Only what is present is listed, in every group. A legend describing findings the
 // picture does not contain is a legend nobody reads twice.
-function legendEntries(graph) {
+function legendEntries(graph, notation) {
+  const spoken = notationOf(notation?.id ?? notation);
   const present = new Set(graph.nodes.map((n) => n.kind));
   const entries = Object.entries(KIND)
     .filter(([kind]) => present.has(kind))
-    .map(([, style]) => ({
-      group: "kind",
-      tone: "",
-      label: style.label,
-      mark: `<g transform="translate(8,8)">${bodyElement(style.shape, 6,
-        `fill="${style.fill}" stroke="${style.stroke}" stroke-width="2" ` +
-        (style.dashed ? 'stroke-dasharray="3 2"' : ""))}</g>`,
-    }));
+    .map(([kind, style]) => {
+      const typed = typeIn(kind, spoken);
+      return {
+        group: "kind",
+        tone: "",
+        // In a projection the swatch is labelled with the notation's word and keeps
+        // Atlas's own beside it. Replacing it outright would leave a reader unable
+        // to get from the picture back to the thing it is about, which is the whole
+        // reason they opened the landscape.
+        label: typed ? `${typed.name} — ${style.label.split(" — ")[0]}` : style.label,
+        mark: `<g transform="translate(8,8)">${bodyElement(typed?.shape || style.shape, 6,
+          `fill="${style.fill}" stroke="${style.stroke}" stroke-width="2" ` +
+          (style.dashed ? 'stroke-dasharray="3 2"' : ""))}</g>`,
+      };
+    });
 
   const severityPresent = new Set(graph.nodes.map((n) => n.severity).filter(Boolean));
   for (const key of ["critical", "attention", "ok", "unknown"]) {
@@ -1066,10 +1288,11 @@ function legendEntries(graph) {
   return entries;
 }
 
-function legendHTML(graph, layoutMs) {
+function legendHTML(graph, layoutMs, notation) {
+  const spoken = notationOf(notation?.id ?? notation);
   const swatch = (entry) => `<span class="mesh-swatch ${entry.tone}">
     <svg width="16" height="16" aria-hidden="true">${entry.mark}</svg>${esc(entry.label)}</span>`;
-  const entries = legendEntries(graph);
+  const entries = legendEntries(graph, spoken);
   const swatches = entries.filter((e) => e.group === "kind").map(swatch).join("");
 
   const notes = [];
@@ -1119,7 +1342,21 @@ function legendHTML(graph, layoutMs) {
 
   const provenance = entries.filter((e) => e.group === "provenance").map(swatch).join("");
 
+  // A projection has to say that it is one, and say what it drops (ADR-0211 §8). A
+  // picture in somebody else's vocabulary that does not name the vocabulary is a
+  // picture claiming to be a model of it, and the loss list is the difference
+  // between a projection and a lie of omission.
+  const projection = spoken.projection ? `<details class="mesh-projection">
+    <summary><b>Projected into ${esc(spoken.label)}</b>
+      <span class="muted">mapping v${NOTATION_MAPPING_VERSION} · read-only · what it drops</span></summary>
+    <p class="mesh-note">Atlas's own resources, drawn in ${esc(spoken.short)}'s vocabulary.
+      Nothing on this landscape was modelled, and this projection cannot be edited or
+      exported as a ${esc(spoken.short)} document.</p>
+    <ul class="mesh-loss">${spoken.loss.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
+  </details>` : "";
+
   return `<div class="mesh-legend">
+    ${projection}
     <div class="mesh-swatches">${swatches}</div>
     ${severity ? `<div class="mesh-swatches">${severity}</div>` : ""}
     ${provenance ? `<div class="mesh-swatches">${provenance}</div>` : ""}
@@ -1133,7 +1370,19 @@ function legendHTML(graph, layoutMs) {
   </div>`;
 }
 
-function renderGraph(graph, layoutMs, frame, { pinned, from } = {}) {
+function renderGraph(graph, layoutMs, frame, { pinned, from, notation } = {}) {
+  const spoken = notationOf(notation?.id ?? notation);
+  // A projected node carries a second line under its name, so the margin the layout
+  // reserves has to carry it too — otherwise the type annotation is the one thing
+  // that ends up outside the frame.
+  // A projected node carries a second line under its name, and the type is routinely
+  // longer than the thing it is typing — "[Application Component]" against
+  // "Onboarding". Both directions have to grow, or the annotation is the one part of
+  // the picture that ends up over the edge of it.
+  const margin = spoken.projection
+    ? { top: LABEL_MARGIN.top, right: LABEL_MARGIN.right + 44,
+        bottom: LABEL_MARGIN.bottom + 16, left: LABEL_MARGIN.left + 44 }
+    : LABEL_MARGIN;
   // Sized before anything else asks how big they are: connectivity decides the
   // radius, and the world budget, the separation pass and the circle all read it
   // back off the node (see radiusOf) rather than working it out again.
@@ -1144,7 +1393,7 @@ function renderGraph(graph, layoutMs, frame, { pinned, from } = {}) {
   // without letterboxing.
   const world = worldFor(nodes, frame);
   const { width, height } = world;
-  const ms = layout(nodes, graph.edges, { width, height, pinned, from }) + layoutMs;
+  const ms = layout(nodes, graph.edges, { width, height, pinned, from, margin }) + layoutMs;
   const at = new Map(nodes.map((n) => [n.id, n]));
 
   const edges = graph.edges.map((e) => {
@@ -1182,21 +1431,26 @@ function renderGraph(graph, layoutMs, frame, { pinned, from } = {}) {
     // matched. Drawn more faintly so the filter is still answering the question it
     // was asked, and named all the same — context nobody can read is not context.
     const context = graph.matched ? !graph.matched.has(n.id) : false;
+    // What the notation calls this, written under the name. It is C4's own idiom and
+    // ArchiMate's corner icon spelled out, and it is the only thing that makes a
+    // canvas of identical boxes readable at all.
+    const typed = typeIn(n.kind, spoken);
     return `<g transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"
       class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")} mesh-sev-${esc(n.severity || "unknown")}${named ? " mesh-named" : ""}${context ? " mesh-context" : ""}${n.held ? " mesh-pinned" : ""}"
       data-node-id="${esc(n.id)}" data-severity="${esc(n.severity || "unknown")}"
-      tabindex="0" role="button" aria-label="${esc(nodeTitle(n))}">
+      tabindex="0" role="button" aria-label="${esc(nodeTitle(n, spoken))}">
       ${sev.beats ? `<circle class="mesh-beat" r="${r.toFixed(1)}"/>` : ""}
       <circle class="mesh-halo" r="${(r + 6).toFixed(1)}"/>
       ${prov.ring ? `<circle r="${(r + 4).toFixed(1)}" fill="none" stroke="${style.stroke}" stroke-width="1" opacity="0.55"/>` : ""}
-      ${bodyElement(shapeForNode(n), r,
+      ${bodyElement(shapeForNode(n, spoken), r,
         `fill="${prov.ghost ? "none" : style.fill}" stroke="${sev.stroke || style.stroke}" ` +
-        `stroke-width="${sev.stroke ? 3 : 2}" ${style.dashed || prov.ghost ? 'stroke-dasharray="4 3"' : ""}`)}
+        `stroke-width="${sev.stroke ? 3 : 2.2}" ${style.dashed || prov.ghost ? 'stroke-dasharray="4 3"' : ""}`)}
       <circle class="mesh-pin" r="4" cx="${(-r * 0.72).toFixed(1)}" cy="${(r * 0.72).toFixed(1)}"/>
       ${n.children ? `<text class="mesh-count" text-anchor="middle" dy="4">${n.children}</text>` : ""}
       ${badge}
       <text class="mesh-label" text-anchor="middle" dy="${(r + 14).toFixed(1)}"><tspan class="mesh-label-ink">${label}</tspan></text>
-      <title>${esc(nodeTitle(n))}</title></g>`;
+      ${typed ? `<text class="mesh-type" text-anchor="middle" dy="${(r + 28).toFixed(1)}"><tspan class="mesh-label-ink">[${esc(typed.name)}]</tspan></text>` : ""}
+      <title>${esc(nodeTitle(n, spoken))}</title></g>`;
   }).join("");
 
   // Beating is switched on for the whole canvas rather than per node, so the budget
@@ -1207,7 +1461,7 @@ function renderGraph(graph, layoutMs, frame, { pinned, from } = {}) {
   // content inside. The world carries the frame's own aspect ratio, so with
   // preserveAspectRatio's default there is nothing to letterbox — the opening
   // picture is the entire landscape, filling the window.
-  return { ms, world, nodes, svg: `<svg class="mesh-canvas${
+  return { ms, world, nodes, margin, svg: `<svg class="mesh-canvas${
     beating && beating <= PULSE_BUDGET ? " mesh-beating" : ""}" viewBox="0 0 ${width} ${height}"
     role="img" aria-label="Derived landscape mesh">
     <g class="mesh-edges">${edges}</g>${circles}</svg>` };
@@ -1339,13 +1593,17 @@ const SEVERITY_ORDER = { critical: 3, attention: 2, ok: 1, unknown: 0 };
 // point — a highlighted subgraph tells you *which*, a count tells you *how many*,
 // and "17 things depend on this worker" is the sentence somebody repeats in a
 // change-approval meeting.
-function impactPanelHTML(node, result, direction, depth, { pinned = false, graph = null } = {}) {
+function impactPanelHTML(node, result, direction, depth,
+  { pinned = false, graph = null, notation = null } = {}) {
   if (!node) {
     return `<div class="mesh-panel mesh-panel-empty">
       <b>Nothing selected</b>
       <p>Select a node to see what depends on it, and what it depends on.</p></div>`;
   }
-  const kindLabel = (KIND[node.kind] || {}).label || node.kind;
+  const typed = typeIn(node.kind, notation);
+  const kindLabel = typed
+    ? `${typed.name} · ${((KIND[node.kind] || {}).label || node.kind).split(" — ")[0]}`
+    : (KIND[node.kind] || {}).label || node.kind;
   const others = result ? result.nodes.length - 1 : 0;
   const word = direction === "dependents" ? "depend on this" : "are needed by this";
   const drill = node.kind === "process"
@@ -1456,6 +1714,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
         placeholder="Filter by name, kind or process id…" aria-label="Filter the landscape"/>
       <button id="mesh-drill-out" type="button" class="mesh-drill-chip" hidden></button>
       <span id="mesh-count" class="muted"></span>
+      <!-- Which vocabulary the picture is drawn in. Beside the picture rather than in
+           the side column, because it changes the drawing rather than the answer
+           about it (ADR-0211 §8). -->
+      <label class="mesh-notation" for="mesh-notation">Notation</label>
+      <select id="mesh-notation" class="mesh-notation-pick">
+        <option value="atlas">Atlas (derived)</option>
+        <option value="archimate-3.2">ArchiMate 3.2</option>
+        <option value="c4-projection">C4 (projection)</option>
+      </select>
       <!-- Beside the picture's own controls rather than in the side column: what is
            exported is the picture, including whatever the search box and the
            drilldown have done to it. -->
@@ -1537,6 +1804,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const viewForm = document.getElementById("mesh-view-save");
   const viewName = document.getElementById("mesh-view-name");
   const viewNote = document.getElementById("mesh-view-note");
+  const notationPick = document.getElementById("mesh-notation");
   const exportSvgBtn = document.getElementById("mesh-export-svg");
   const exportPngBtn = document.getElementById("mesh-export-png");
 
@@ -1597,8 +1865,42 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     svg.classList.toggle("mesh-names-anchors", tier === "anchors");
   }
 
+  // chromeReserve is how much of the canvas the zoom panel floats over, measured
+  // rather than assumed: it holds a different number of buttons depending on what
+  // the picture can do, and a hard-coded box would be wrong the next time one is
+  // added. The margin is the panel's own inset plus a little air.
+  function chromeReserve() {
+    const panel = surface.parentElement?.querySelector(".mesh-zoom");
+    const box = panel?.getBoundingClientRect();
+    if (!box?.width) return { width: 0, height: 0 };
+    return { width: box.width + 22, height: box.height + 22 };
+  }
+
+  // fitted is what "Fit" means: the drawn nodes, framed in the space they can
+  // actually be read and reached in. Not the world — see contentBox for why the two
+  // stop being the same picture the moment anything is pinned.
+  //
+  // It is *stored* rather than derived on demand, and that is not an optimisation.
+  // Every screen-to-world conversion goes through it, and a drag moves the content
+  // it is computed from — so a view recomputed per call would shift the coordinate
+  // system under the pointer as the node crossed it, and the node would drift away
+  // from the cursor by however much it had already moved the picture's own bounds.
+  // The frame a gesture started in is the frame it finishes in; reframing is
+  // something the reader asks for.
+  let fitted = { x: 0, y: 0, w: 1200, h: 720 };
+  // The room the current notation's labels need, handed back by the render so the
+  // framing reserves exactly what the layout did. A projection's type annotation is
+  // part of the picture, and a frame that cut it off would be a frame that disagreed
+  // with the drawing it is showing.
+  let labelMargin = LABEL_MARGIN;
+  function refit() {
+    fitted = placed.length
+      ? fitView(contentBox(placed, labelMargin), frame, chromeReserve())
+      : { x: 0, y: 0, w: world.width, h: world.height };
+    return fitted;
+  }
   function baseView() {
-    return { x: 0, y: 0, w: world.width, h: world.height };
+    return fitted;
   }
 
   // zoom keeps whatever is under `focus` under it, so the wheel behaves like a map.
@@ -1633,10 +1935,12 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // Where everything currently is, so a repaint while something is pinned carries
     // the picture on screen forward instead of settling a fresh one around the pins.
     const from = new Map(placed.map((n) => [n.id, { x: n.x, y: n.y }]));
-    const painted = renderGraph(shown, 0, frame, { pinned, from });
+    const spoken = notationOf(notationPick.value);
+    const painted = renderGraph(shown, 0, frame, { pinned, from, notation: spoken });
     const { ms, svg } = painted;
     world = painted.world;
     placed = painted.nodes;
+    labelMargin = painted.margin;
     at = new Map(placed.map((n) => [n.id, n]));
     surface.innerHTML = shown.nodes.length
       ? svg
@@ -1646,8 +1950,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // lit has to be cleared with it — otherwise pointing back at the same node would
     // be a no-op and the highlight would never come back.
     lit = null;
+    refit();
     applyView();
-    legendSlot.innerHTML = legendHTML(shown, ms);
+    legendSlot.innerHTML = legendHTML(shown, ms, spoken);
     findingsSlot.innerHTML = findingsHTML(shown);
     paintRanking();
     // Matches and context counted apart. "5 of 101" over a picture where only one
@@ -1700,7 +2005,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     }
     panel.innerHTML = impactPanelHTML(
       shown.nodes.find((n) => n.id === selected) || null, result, direction, depth,
-      { pinned: pinned.has(selected), graph: shown });
+      { pinned: pinned.has(selected), graph: shown, notation: notationOf(notationPick.value) });
   }
 
   // Releasing the one node the panel is about, without disturbing the arrangement
@@ -1940,7 +2245,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // Panning is only meaningful once something is off-screen. At the fitted frame
     // the whole landscape is already visible, so a drag there could only push it
     // out of view and reintroduce the empty space the fit exists to remove.
-    if (!frameView || frameView.w >= world.width) return;
+    if (!frameView || frameView.w >= baseView().w) return;
     const from = pointToFrame(event);
     if (!from) return;
     panning = { from, start: frameView || baseView(), id: event.pointerId };
@@ -2016,7 +2321,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
 
   zoomIn.addEventListener("click", () => zoom(1 / 1.3));
   zoomOut.addEventListener("click", () => zoom(1.3));
-  zoomFit.addEventListener("click", () => { frameView = null; applyView(); });
+  // Fit reframes onto the content as it is now, arrangement included: somebody who
+  // has dragged half the landscape into a shape and then asks to see all of it is
+  // asking about the shape they made, not about the one the layout proposed.
+  zoomFit.addEventListener("click", () => { frameView = null; refit(); applyView(); });
 
   surface.addEventListener("click", (event) => {
     if (dragged) { dragged = false; return; }
@@ -2092,6 +2400,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function exportMeta() {
     const term = search.value.trim();
     const status = graph.status || {};
+    const spoken = notationOf(notationPick.value);
     const scope = drilled
       ? {
           kind: "drill",
@@ -2104,6 +2413,13 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // other dates the save, and an export exists to be read later.
       observedAt: graph.observedAt,
       source: location.host,
+      // Which vocabulary the file is drawn in, and what that vocabulary drops. A
+      // reader who receives a C4-looking picture has no other way to learn that it
+      // was projected from something else.
+      notation: spoken.projection
+        ? { label: spoken.label, short: spoken.short, projection: true,
+            loss: spoken.loss, mappingVersion: NOTATION_MAPPING_VERSION }
+        : null,
       scope,
       drawn: { nodes: shown.nodes.length },
       total: graph.nodes.length,
@@ -2137,7 +2453,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
         // The key travels with the picture. Beside the canvas it is one scroll away;
         // in a file that has been pasted into a ticket there is nothing to scroll to,
         // and a hexagon nobody can name is a shape rather than a worker.
-        legend: legendEntries(shown),
+        legend: legendEntries(shown, notationOf(notationPick.value)),
         css: exportStyles(canvas.outerHTML),
         // The whole world, not the window: the canvas's own viewBox is wherever the
         // reader has zoomed to, and a file cropped to that would drop nodes without
@@ -2157,6 +2473,12 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       toast("export failed: " + e.message, "err");
     }
   }
+
+  // A different vocabulary is a different drawing, so the picture is painted again.
+  // The arrangement survives it: paint() carries the positions on screen forward and
+  // every notation's shape is inscribed in the same reserved circle, so nothing moves
+  // except the outlines.
+  notationPick.addEventListener("change", paint);
 
   exportSvgBtn.addEventListener("click", () => exportPicture("svg"));
   exportPngBtn.addEventListener("click", () => exportPicture("png"));
@@ -2222,6 +2544,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     search.value = v.term || "";
     dirSelect.value = v.direction || "dependents";
     depthSelect.value = v.depth ?? "2";
+    // A view saved before notations existed carries none, and the derived drawing is
+    // what it was looking at.
+    notationPick.value = NOTATIONS[v.notation] ? v.notation : "atlas";
     selected = null;
     pinned.clear();
     frameView = null;
@@ -2279,6 +2604,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       term: search.value.trim(),
       direction: dirSelect.value,
       depth: depthSelect.value,
+      notation: notationPick.value,
       selected,
       frameView,
       world,

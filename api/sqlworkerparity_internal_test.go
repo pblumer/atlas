@@ -72,7 +72,7 @@ func TestTheModelerBuildsEverySQLPanelFromOneDescription(t *testing.T) {
 	for _, kind := range sqlConnectorKinds() {
 		p, ok := sqldb.ProductByName(kind)
 		if !ok {
-			t.Fatalf("connector kind %q is not a sqldb product", kind)
+			t.Fatalf("Worker Type %q is not a sqldb product", kind)
 		}
 		entry := modelerSQLEntryRe(kind).FindStringSubmatch(catalog)
 		if entry == nil {
@@ -112,7 +112,7 @@ func TestTheConsoleCatalogQuotesEachSQLProductsOwnVariables(t *testing.T) {
 	for _, kind := range sqlConnectorKinds() {
 		p, ok := sqldb.ProductByName(kind)
 		if !ok {
-			t.Fatalf("connector kind %q is not a sqldb product", kind)
+			t.Fatalf("Worker Type %q is not a sqldb product", kind)
 		}
 		re := regexp.MustCompile(`id: "` + regexp.QuoteMeta(kind) + `", name: "[^"]*", kind: "[^"]*",\s*\n\s*desc: sqlWorkerTypeDesc\("[^"]*", "([A-Z0-9_]+)", "([^"]+)"`)
 		m := re.FindStringSubmatch(src)
@@ -129,7 +129,7 @@ func TestTheConsoleCatalogQuotesEachSQLProductsOwnVariables(t *testing.T) {
 	}
 }
 
-// The "New connector" form's hint is not mail-only.
+// The "New worker" form's hint is not mail-only.
 //
 // connectorShape writes a hint for Active Directory and for the three databases as well
 // as for mail, and the form wrote every one of them into an element it had just hidden
@@ -141,7 +141,7 @@ func TestTheNewConnectorFormShowsTheHintForEveryKindThatHasOne(t *testing.T) {
 	src := webSource(t, "app.js")
 	i := strings.Index(src, "conn-hint")
 	if i < 0 {
-		t.Fatal("the New connector form has no hint element; the pattern must have changed")
+		t.Fatal("the New worker form has no hint element; the pattern must have changed")
 	}
 	// The element's class list, back to the opening quote.
 	open := strings.LastIndex(src[:i], `class="`)
@@ -150,7 +150,7 @@ func TestTheNewConnectorFormShowsTheHintForEveryKindThatHasOne(t *testing.T) {
 	}
 	classes := src[open+len(`class="`) : i+len("conn-hint")]
 	if strings.Contains(classes, "mail-only") {
-		t.Errorf("the New connector form's hint carries the mail-only class (%q), so the hint connectorShape writes for "+
+		t.Errorf("the New worker form's hint carries the mail-only class (%q), so the hint connectorShape writes for "+
 			"Active Directory and the three database kinds is written into a hidden element", classes)
 	}
 }

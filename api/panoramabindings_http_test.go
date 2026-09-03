@@ -219,7 +219,7 @@ func runtimeBoundArchiMate(runtimeID string) string {
 </model>`
 }
 
-// A connector's endpoint reaches the catalog's source but must never reach a
+// A worker's endpoint reaches the catalog's source but must never reach a
 // binding payload — the same bound the landscape mesh keeps.
 func TestPanoramaBindingCandidatesCarryNoEndpoint(t *testing.T) {
 	ts := newTestServer(t)
@@ -228,7 +228,7 @@ func TestPanoramaBindingCandidatesCarryNoEndpoint(t *testing.T) {
 		`{"name":"ops-mail","kind":"mail","endpoint":"smtp://internal-relay.corp.example:587","sender":"ops@example.test"}`,
 		"application/json")
 	if code != http.StatusOK && code != http.StatusCreated {
-		t.Fatalf("create connector status = %d, body = %s", code, body)
+		t.Fatalf("create worker status = %d, body = %s", code, body)
 	}
 	code, body = doReq(t, ts, http.MethodPost, "/api/v1/applications", `{"name":"EA"}`, "application/json")
 	if code != http.StatusOK && code != http.StatusCreated {
@@ -258,10 +258,28 @@ func TestPanoramaBindingCandidatesCarryNoEndpoint(t *testing.T) {
 	if !strings.Contains(string(raw), "ops-mail") {
 		t.Errorf("candidates = %s, want the configured worker", raw)
 	}
-	// The port is checked with its colon. A bare "587" is three digits, and the ids in
-	// this response are random hex — "3f6d114ad5c5879f" contains it — so the bare form
-	// failed this test on roughly one run in a few hundred, for a reason that had
-	// nothing to do with an endpoint leaking.
+	// The property is what a candidate *carries*: an id and a name, which is what a
+	// picker needs, and nothing about how to reach the thing.
+	var listed struct {
+		Candidates []map[string]any `json:"candidates"`
+	}
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		t.Fatalf("decode candidates %s: %v", raw, err)
+	}
+	if len(listed.Candidates) != 1 {
+		t.Fatalf("candidates = %s, want exactly the one configured worker", raw)
+	}
+	for _, candidate := range listed.Candidates {
+		for field := range candidate {
+			if field != "id" && field != "name" {
+				t.Errorf("a candidate carries %q, which a picker does not need: %s", field, raw)
+			}
+		}
+	}
+	// The port below is checked with its colon. A bare "587" is three digits, and the
+	// ids in this response are random hex — "3f6d114ad5c5879f" contains it — so the
+	// bare form failed this test on roughly one run in a few hundred, for a reason that
+	// had nothing to do with an endpoint leaking.
 	for _, leak := range []string{"internal-relay", "corp.example", "smtp://", ":587"} {
 		if strings.Contains(string(raw), leak) {
 			t.Errorf("candidates leak %q: %s", leak, raw)

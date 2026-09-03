@@ -26,7 +26,7 @@ const adSecretPrefix = "ATLAS_CONNECTOR_"
 //
 // Unlike mail, SQL and Entra there is nothing to validate at startup, and that is a
 // property of AD's shape rather than an omission: a reference is authored per *task*,
-// not per connector name, so the worker cannot know which references the models it
+// not per worker name, so the worker cannot know which references the models it
 // will serve use — and an anonymous bind authors no reference at all. A reference
 // nothing answers to fails that job with the variable named, which is the same
 // failure the in-process path gives today.
@@ -50,7 +50,7 @@ func adSecretFromEnv(env func(string) string) ad.SecretResolver {
 // nil for a worker that serves only tasks carrying their own url.
 func RunADJob(ctx context.Context, j Job, dialer ad.Dialer, secret ad.SecretResolver, dirs *ad.Registry) (map[string]any, error) {
 	if j.Connector == nil {
-		return nil, fmt.Errorf("ad: the job carried no resolved connector detail; is this server offloading the ad kind?")
+		return nil, fmt.Errorf("ad: the job carried no resolved worker detail; is this server offloading the ad kind?")
 	}
 	raw, err := json.Marshal(j.Connector.Fields)
 	if err != nil {
@@ -176,7 +176,7 @@ func adDialerFromEnv(env func(string) string) (ad.Dialer, *ad.MockDirectory, err
 }
 
 // adMockSeed reads the seed file, if one was named. It is parsed by the directory-file
-// connector's own reader (ADR-0171), so LDIF and DSML mean one thing in Atlas rather
+// worker's own reader (ADR-0171), so LDIF and DSML mean one thing in Atlas rather
 // than one thing per package.
 func adMockSeed(path string) ([]ad.Entry, error) {
 	if path == "" {

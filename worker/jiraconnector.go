@@ -42,16 +42,16 @@ func jiraRegistryFromEnv(env func(string) string) (*jira.Registry, []string, err
 		key := jiraEnvPrefix + envFold(name) + "_"
 		url, email, apiToken, token := env(key+"URL"), env(key+"EMAIL"), env(key+"API_TOKEN"), env(key+"TOKEN")
 		if url == "" {
-			return nil, nil, fmt.Errorf("worker: jira connector %q is missing its URL: set %sURL", name, key)
+			return nil, nil, fmt.Errorf("worker: jira worker %q is missing its URL: set %sURL", name, key)
 		}
 		cloud := email != "" || apiToken != ""
 		switch {
 		case cloud && token != "":
-			return nil, nil, fmt.Errorf("worker: jira connector %q sets both a Cloud credential and a Data Center token: set %sEMAIL with %sAPI_TOKEN, or %sTOKEN alone", name, key, key, key)
+			return nil, nil, fmt.Errorf("worker: jira worker %q sets both a Cloud credential and a Data Center token: set %sEMAIL with %sAPI_TOKEN, or %sTOKEN alone", name, key, key, key)
 		case cloud && (email == "" || apiToken == ""):
-			return nil, nil, fmt.Errorf("worker: jira connector %q has half a Cloud credential: set both %sEMAIL and %sAPI_TOKEN", name, key, key)
+			return nil, nil, fmt.Errorf("worker: jira worker %q has half a Cloud credential: set both %sEMAIL and %sAPI_TOKEN", name, key, key)
 		case !cloud && token == "":
-			return nil, nil, fmt.Errorf("worker: jira connector %q is missing its credential: set %sEMAIL with %sAPI_TOKEN for Jira Cloud, or %sTOKEN for a Data Center personal access token", name, key, key, key)
+			return nil, nil, fmt.Errorf("worker: jira worker %q is missing its credential: set %sEMAIL with %sAPI_TOKEN for Jira Cloud, or %sTOKEN for a Data Center personal access token", name, key, key, key)
 		}
 		reg.Register(name, jira.NewHTTPClient(jira.Connector{
 			BaseURL:  url,
@@ -73,7 +73,7 @@ func jiraRegistryFromEnv(env func(string) string) (*jira.Registry, []string, err
 // what a resolved Jira task means — only about which credentials are in reach.
 func RunJiraJob(ctx context.Context, j Job, reg *jira.Registry) (map[string]any, error) {
 	if j.Connector == nil {
-		return nil, fmt.Errorf("jira: the job carried no resolved connector detail; is this server offloading the jira kind?")
+		return nil, fmt.Errorf("jira: the job carried no resolved worker detail; is this server offloading the jira kind?")
 	}
 	raw, err := json.Marshal(j.Connector.Fields)
 	if err != nil {

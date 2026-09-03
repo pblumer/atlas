@@ -36,7 +36,7 @@ const (
 )
 
 // Default object classes for the two create operations. AD requires objectClass on
-// every entry and rejects an add without it, so the connector supplies the standard
+// every entry and rejects an add without it, so the worker supplies the standard
 // chain when the authored attributes do not — a forgotten objectClass is the single
 // most common way a first create-user fails, and it is not a business decision worth
 // making the author repeat. An authored objectClass always wins.
@@ -48,7 +48,7 @@ var (
 	contactObjectClass = []string{"top", "person", "organizationalPerson", "contact"}
 )
 
-// Handler builds a job handler that performs an Active Directory connector task.
+// Handler builds a job handler that performs an Active Directory worker task.
 // Register it with a [job.Runner] under the reserved [compiler.AdJobTypeIndex] via
 // HandleWithOutput; the runner then pulls activatable AD jobs, and for each the handler
 // resolves the task's url / bind DN / operation / DNs from the compiled process, dials

@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:soapConnector> extension is a SOAP / Web Services
-// connector task (ADR-0165): it invokes a SOAP operation against the model-authored
+// task (ADR-0165): it invokes a SOAP operation against the model-authored
 // web-service endpoint via the job path rather than delegating to an external
 // service-task worker.
 const soapConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>

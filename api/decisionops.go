@@ -96,7 +96,7 @@ func (s *Server) handleDeployedDecisions(w http.ResponseWriter, _ *http.Request)
 		}
 		// Usage: fold every retained evaluation, grouping by decision id. Attaching the
 		// evaluation's own process (via its process-definition key) covers decisions the
-		// deployment sweep misses — a central/connector decision has no local model, so
+		// deployment sweep misses — a central/worker decision has no local model, so
 		// it is not in BusinessRuleDecisions, but its evaluations still tie it to the
 		// process that ran it.
 		scanErr = s.store.EachDecisionEvaluation(func(_ uint64, ts int64, v *model.DecisionEvaluationValue) error {

@@ -10,38 +10,38 @@ import (
 	"unicode"
 )
 
-// This file guards the Modeler's understanding of the connector extensions the
+// This file guards the Modeler's understanding of the worker extensions the
 // engine executes. The two are wired through separate files that nothing forces to
 // agree:
 //
-//   - compiler/parse.go decides which <atlas:*Connector> elements the engine reads.
+//   - compiler/parse.go decides which <atlas:*Worker> elements the engine reads.
 //   - api/web/atlas-moddle.json decides which of them bpmn-js can parse and
 //     re-serialize.
 //   - api/web/editor.js (SERVICE_TASK_KINDS) decides which of them the properties
 //     panel can display and edit.
 //
-// A connector missing from the moddle is not a cosmetic gap — it is silent data
+// A worker missing from the moddle is not a cosmetic gap — it is silent data
 // loss. bpmn-js drops an extension element it cannot parse, so merely opening a
 // process in the Modeler and pressing Save (or Deploy, or Auto-layout) strips the
-// connector's whole configuration and leaves an empty <extensionElements/>. That
-// happened to the user-provisioning connector: it shipped with a compiler branch
+// worker's whole configuration and leaves an empty <extensionElements/>. That
+// happened to the user-provisioning worker: it shipped with a compiler branch
 // and a worker, but no moddle type, so the intake process's "Konto anlegen" task
 // would lose its configuration on any Modeler round trip — and the panel showed it
 // as an unconfigured job worker, because the extension was gone before the panel
 // ever looked.
 
-// connectorExtRe matches the connector extension elements compiler/parse.go reads,
+// connectorExtRe matches the worker extension elements compiler/parse.go reads,
 // e.g. `xml:"extensionElements>userConnector"`.
 var connectorExtRe = regexp.MustCompile(`xml:"extensionElements>([a-zA-Z]+Connector)"`)
 
-// nonServiceTaskConnectors are connector extensions that are deliberately absent
+// nonServiceTaskConnectors are worker extensions that are deliberately absent
 // from the Modeler's service-task catalog, with the reason. They are still required
 // to be in the moddle — the round-trip rule has no exceptions.
 var nonServiceTaskConnectors = map[string]string{
-	"temisConnector": "a business rule task's central-DMN binding, configured in the decision panel rather than the service-task connector picker (ADR-0050)",
+	"temisConnector": "a business rule task's central-DMN binding, configured in the decision panel rather than the service-task worker picker (ADR-0050)",
 }
 
-// compilerConnectorTags returns the connector extension tags the compiler parses.
+// compilerConnectorTags returns the worker extension tags the compiler parses.
 func compilerConnectorTags(t *testing.T) []string {
 	t.Helper()
 	src, err := os.ReadFile("../compiler/parse.go")
@@ -57,7 +57,7 @@ func compilerConnectorTags(t *testing.T) []string {
 		}
 	}
 	if len(tags) == 0 {
-		t.Fatal("found no connector extensions in compiler/parse.go; the pattern must have changed")
+		t.Fatal("found no worker extensions in compiler/parse.go; the pattern must have changed")
 	}
 	sort.Strings(tags)
 	return tags
@@ -83,7 +83,7 @@ func serializedTagFor(typeName string) string {
 	return string(r)
 }
 
-// moddleConnectorTypes returns the connector type names the atlas moddle declares.
+// moddleConnectorTypes returns the worker type names the atlas moddle declares.
 func moddleConnectorTypes(t *testing.T) []string {
 	t.Helper()
 	raw, err := os.ReadFile("web/atlas-moddle.json")
@@ -109,7 +109,7 @@ func moddleConnectorTypes(t *testing.T) []string {
 }
 
 // TestCompilerReadsWhatTheModelerWrites is the sharper half of the round-trip rule:
-// it is not enough that the moddle declares a connector — the tag bpmn-js
+// it is not enough that the moddle declares a worker — the tag bpmn-js
 // *serializes* must be a tag the compiler *parses*, byte for byte.
 //
 // This caught a real defect: the moddle type SharePointConnector serializes as
@@ -130,14 +130,14 @@ func TestCompilerReadsWhatTheModelerWrites(t *testing.T) {
 		}
 	}
 	if len(unread) > 0 {
-		t.Fatalf("the Modeler writes %d connector tag(s) the compiler ignores:\n\t%s\n\n"+
+		t.Fatalf("the Modeler writes %d worker tag(s) the compiler ignores:\n\t%s\n\n"+
 			"Go's XML matching is case-sensitive, so such a task compiles as an unconfigured "+
 			"service task with its configuration silently ignored. Make compiler/parse.go read the tag.",
 			len(unread), strings.Join(unread, "\n\t"))
 	}
 }
 
-// TestModdleDeclaresEveryCompilerConnector is the data-loss guard: every connector
+// TestModdleDeclaresEveryCompilerConnector is the data-loss guard: every worker
 // extension the engine executes must be declared in the Modeler's moddle, or
 // opening and saving a process that uses it silently destroys its configuration.
 func TestModdleDeclaresEveryCompilerConnector(t *testing.T) {
@@ -153,7 +153,7 @@ func TestModdleDeclaresEveryCompilerConnector(t *testing.T) {
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		t.Fatalf("decode atlas-moddle.json: %v", err)
 	}
-	// Match case-insensitively: this test asks whether the moddle knows the connector
+	// Match case-insensitively: this test asks whether the moddle knows the worker
 	// at all (the data-loss question). Exact tag agreement is the separate, stricter
 	// concern of TestCompilerReadsWhatTheModelerWrites, so a deliberate spelling
 	// alias does not trip this one twice.
@@ -169,17 +169,17 @@ func TestModdleDeclaresEveryCompilerConnector(t *testing.T) {
 		}
 	}
 	if len(missing) > 0 {
-		t.Fatalf("api/web/atlas-moddle.json does not declare %d connector extension(s) the compiler executes:\n\t%s\n\n"+
+		t.Fatalf("api/web/atlas-moddle.json does not declare %d worker extension(s) the compiler executes:\n\t%s\n\n"+
 			"bpmn-js drops an extension it cannot parse, so opening such a process in the Modeler and saving it "+
-			"silently strips the connector's configuration. Add the type to atlas-moddle.json.",
+			"silently strips the worker's configuration. Add the type to atlas-moddle.json.",
 			len(missing), strings.Join(missing, "\n\t"))
 	}
 }
 
-// TestModelerPanelKnowsEveryConnector guards the second half: a connector the
+// TestModelerPanelKnowsEveryConnector guards the second half: a worker the
 // Modeler can round-trip but not display shows up as an unconfigured job worker,
-// which is how the user-provisioning connector looked before it was catalogued. A
-// connector that is genuinely not a service-task kind belongs in
+// which is how the user-provisioning worker looked before it was catalogued. A
+// worker that is genuinely not a service-task kind belongs in
 // nonServiceTaskConnectors with its reason.
 func TestModelerPanelKnowsEveryConnector(t *testing.T) {
 	src, err := os.ReadFile("web/editor.js")
@@ -202,16 +202,16 @@ func TestModelerPanelKnowsEveryConnector(t *testing.T) {
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
-		t.Fatalf("api/web/editor.js (SERVICE_TASK_KINDS) has no entry for %d connector(s): %s\n\n"+
+		t.Fatalf("api/web/editor.js (SERVICE_TASK_KINDS) has no entry for %d worker(s): %s\n\n"+
 			"Without a catalog entry the properties panel falls back to \"Job worker\" and shows an empty Job type, "+
-			"hiding a fully configured connector. Add a kind, or record an exemption in nonServiceTaskConnectors.",
+			"hiding a fully configured worker. Add a kind, or record an exemption in nonServiceTaskConnectors.",
 			len(missing), strings.Join(missing, ", "))
 	}
 }
 
 // TestNonServiceTaskConnectorsAreReal keeps the exemption list honest: an entry
 // that no longer matches a compiler extension is stale and must be removed, so the
-// list cannot silently excuse a connector that was renamed away.
+// list cannot silently excuse a worker that was renamed away.
 func TestNonServiceTaskConnectorsAreReal(t *testing.T) {
 	known := map[string]bool{}
 	for _, tag := range compilerConnectorTags(t) {
@@ -227,12 +227,12 @@ func TestNonServiceTaskConnectorsAreReal(t *testing.T) {
 	}
 }
 
-// connectorAttrRe matches the attributes one xml*Connector struct parses, e.g.
+// connectorAttrRe matches the attributes one xml*Worker struct parses, e.g.
 // `xml:"baseDN,attr"`.
 var connectorAttrRe = regexp.MustCompile(`xml:"([a-zA-Z]+),attr"`)
 
 // TestModdleKnowsEveryConnectorAttribute guards the same round trip one level down: a
-// connector *type* the moddle declares but an *attribute* it does not is the same
+// worker *type* the moddle declares but an *attribute* it does not is the same
 // silent data loss, in a smaller box. bpmn-js drops an attribute it has no property
 // for, so opening a task and pressing Save strips exactly that one setting — and the
 // task keeps working, addressing whatever the missing attribute no longer says.
@@ -242,7 +242,7 @@ var connectorAttrRe = regexp.MustCompile(`xml:"([a-zA-Z]+),attr"`)
 // nowhere in the moddle.
 //
 // The list is the extensions whose attributes have since changed under this check
-// rather than every connector — widening it the rest of the way is worth doing on its
+// rather than every worker — widening it the rest of the way is worth doing on its
 // own. Jira joined it with the account search (ADR-0223), which
 // added the `query` attribute: an operation that adds an attribute is exactly the change
 // this guards, so covering it is the guard for that change and not a drive-by.

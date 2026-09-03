@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas worker create-body e2e harness</title>
+    <!-- Drives the real api/web/workerdialog.js workerCreateBody against a form
+         shaped like the Console's "New worker" row. The page scaffolding is the
+         test's own — app.js boots the whole console on import and cannot be loaded
+         here — so this proves what a create carries, not app.js's wiring of it.
+
+         The point of the fixture is the hidden connection-string field: the real form
+         keeps it in the DOM for every kind and only hides it, so it can still hold a
+         DSN typed for a kind picked earlier, or one a password manager filled into a
+         type="password" input nobody can see. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <form id="f">
+      <input name="name" />
+      <select name="kind">
+        <option value="temis">temis</option>
+        <option value="mail">mail</option>
+        <option value="jira">jira</option>
+        <option value="postgres">postgres</option>
+      </select>
+      <input name="endpoint" />
+      <input name="sender" />
+      <input name="credentialsRef" />
+      <select name="provider">
+        <option value="smtp">smtp</option>
+        <option value="gmail">gmail</option>
+      </select>
+      <!-- hidden exactly as the real form hides it: display:none, still submitted -->
+      <label class="sql-only" style="display:none">
+        <input name="connectionString" type="password" />
+      </label>
+    </form>
+    <pre id="out"></pre>
+    <script type="module">
+      import { workerCreateBody, workerShape } from "/workerdialog.js";
+
+      const form = document.getElementById("f");
+      const out = document.getElementById("out");
+
+      // set({kind, name, ...}) fills the form; build() renders the body the Console
+      // would POST, so a test reads exactly what the server would receive.
+      window.set = (values) => {
+        for (const [k, v] of Object.entries(values)) {
+          const el = form.elements[k];
+          if (el) el.value = v;
+        }
+      };
+      window.build = () => {
+        const body = workerCreateBody(form);
+        out.textContent = JSON.stringify(body);
+        return body;
+      };
+      // The shape drives what the form *shows*: which fields appear, and the example
+      // in each. A database's connection string has no syntax in common across the
+      // three products, so the example is the only thing on screen that says which
+      // one is expected.
+      window.shape = (kind, provider) => workerShape(kind, provider);
+      window.__ready = true;
+    </script>
+  </body>
+</html>

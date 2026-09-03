@@ -66,10 +66,10 @@ func TestAConnectorCallDoesNotHoldTheRunLoop(t *testing.T) {
 	select {
 	case code := <-served:
 		if code != http.StatusOK {
-			t.Errorf("a request served during a connector call got status %d", code)
+			t.Errorf("a request served during a worker call got status %d", code)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("the run loop was held for the duration of a connector call — the stall step 6 removes")
+		t.Fatal("the run loop was held for the duration of a worker call — the stall step 6 removes")
 	}
 
 	close(release)

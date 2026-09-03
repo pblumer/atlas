@@ -4,34 +4,42 @@ import (
 	"github.com/pblumer/atlas/api/sidecar"
 )
 
-// connectorKindTemis is the central DMN decision connector kind (ADR-0050);
-// connectorKindClio is the clio event-store connector kind (ADR-0036). Both are
-// wired into the runtime and configurable in the Console: a connector record of
+// connectorKindTemis is the central DMN decision Worker Type (ADR-0050);
+// connectorKindClio is the clio event-store Worker Type (ADR-0036). Both are
+// wired into the runtime and configurable in the Console: a worker record of
 // either kind resolves to a live client with its token from the vault. The
 // http.rest kind is model-authored (its endpoint lives in the model, not a record),
 // so it is not a managed kind here.
-// connectorKindMail is the outbound mail connector kind (ADR-0079/0081): a managed
+// connectorKindMail is the outbound mail Worker Type (ADR-0079/0081): a managed
 // record of this kind resolves to a live mail client whose credential is read from
 // the vault. Like clio, its provider and secret are managed here, never in the model;
 // only the message (recipients, subject, body) is model-authored. The provider is
 // SMTP (the default), Gmail, Microsoft Graph, or preview — see mail.Provider* and
 // mail.NewProviderClient, which own provider dispatch.
-// connectorKindSharePoint is the SharePoint connector kind (ADR-0141): a managed
+// connectorKindSharePoint is the SharePoint Worker Type (ADR-0141): a managed
 // record of this kind resolves to a live Microsoft Graph client whose OAuth
 // credential is read from the vault. Like mail, its Graph base and secret are managed
 // here, never in the model; only the target (site, list, item fields) is
 // model-authored. See sharepoint.NewProviderClient, which owns provider dispatch.
-// connectorKindRemedy is the BMC Remedy connector kind (ADR-0106): a managed record
+// connectorKindRemedy is the BMC Remedy Worker Type (ADR-0106): a managed record
 // of this kind resolves to a live Remedy AR System client whose credential bundle
 // (username/password JSON) is read from the vault. Like clio and mail, its base URL
 // and credentials are managed here, never in the model; only the form and its field
 // values are model-authored.
-// connectorKindJira is the Atlassian Jira connector kind (ADR-0201): a
+// connectorKindJira is the Atlassian Jira Worker Type (ADR-0201): a
 // managed record of this kind resolves to a live Jira REST client whose credential
 // bundle — {email, apiToken} for Jira Cloud or {token} for a Data Center personal
 // access token — is read from the vault. Like Remedy, its base URL and credential are
 // managed here, never in the model; only the operation and its values are
 // model-authored.
+// connectorKindGoogleSheets is the Google Sheets Worker Type
+// (ADR-0235): a configured record of this kind resolves to a
+// live client speaking Sheets v4 and Drive v3, whose OAuth credential bundle — a
+// service account's {clientEmail, privateKey}, or a {clientId, clientSecret,
+// refreshToken} for a consumer account — is read from the vault. Like Jira, only the
+// operation and its values are model-authored; the credential is configured here and
+// never in a model. (The identifier keeps the connectorKind* prefix its siblings in
+// this block carry; renaming that family is its own step of the ADR-0203 migration.)
 const (
 	connectorKindTemis      = "temis"
 	connectorKindClio       = "clio"
@@ -39,8 +47,11 @@ const (
 	connectorKindSharePoint = "sharepoint"
 	connectorKindRemedy     = "remedy"
 	connectorKindJira       = "jira"
-	connectorKindEntra      = "entra"
-	// connectorKindAD is the Active Directory connector kind
+	// Documented above the block: it needs no endpoint, only a credentialsRef, because
+	// Google's API bases are not a per-tenant address.
+	connectorKindGoogleSheets = "googlesheets"
+	connectorKindEntra        = "entra"
+	// connectorKindAD is the Active Directory Worker Type
 	// (ADR-0206). A record holds the directory's LDAP URL
 	// and a credentialsRef naming a vault {bindDN, password} bundle; the model names
 	// the record and nothing else about the directory. Worker-only like Entra: the
@@ -53,7 +64,7 @@ const (
 // uses to execute job-backed work. The explicit name distinguishes this durable
 // design-time configuration from runtime Worker Instances and from the worker package.
 //
-// Persisted JSON deliberately stays byte-compatible with the historical connector
+// Persisted JSON deliberately stays byte-compatible with the historical worker
 // record. CredentialsRef is only a reference to secret material, never the secret
 // value itself (I6); disabled Workers remain durable but are not registered.
 type configuredWorker struct {
@@ -81,11 +92,11 @@ type configuredWorker struct {
 	// vocabulary in the product instead of two.
 	//
 	// A record written before this carries none of them, and that is a meaningful
-	// state rather than a gap: an ownerless connector is an administrator's to manage
+	// state rather than a gap: an ownerless worker is an administrator's to manage
 	// until one is assigned. See connectorRole for why this departs from ADR-0071's
 	// treatment of legacy artifacts.
 	//
-	// Nothing the runtime does consults these. A service task resolving a connector
+	// Nothing the runtime does consults these. A service task resolving a worker
 	// by name, the registries and the inbound bridge read the store directly:
 	// execution is not authoring.
 	OwnerID    string          `json:"ownerId,omitempty"`
@@ -96,7 +107,7 @@ type configuredWorker struct {
 
 // connector is the compatibility name used by the existing connector-oriented API
 // and implementation while ADR-0203 is migrated incrementally. It is an alias, not a
-// second record type, so connector and configured-Worker code share one JSON
+// second record type, so worker and configured-Worker code share one JSON
 // representation and one durable store.
 type connector = configuredWorker
 

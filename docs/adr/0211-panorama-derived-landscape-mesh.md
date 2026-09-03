@@ -17,7 +17,10 @@
   the mesh payload carries the observation time that export has to render; amended
   2026-09-02 — §6's impact answer gains a severity breakdown, the names of the
   nodes in it, and a ranking of every node's radius, and states why "is this the
-  only way" is not a question this graph can be asked)
+  only way" is not a question this graph can be asked; amended 2026-09-03 — §7's
+  legibility half gains canvas ink, a fit that frames the picture rather than the
+  world, and a reachable chrome corner, and §8's projection is extended to the
+  derived landscape under the same four constraints)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -603,6 +606,43 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 [ADR-0127](0127-layered-layout-pipeline-and-invariants.md)) already exists for BPMN
 — not a bundler and not a CDN dependency.
 
+> **Amendment (2026-09-03): the picture is legible, it fills the sheet, and every
+> node on it can be reached.**
+> Three defects in §7's legibility half, and all three had the same shape: a rule
+> that was right about one thing measured against the wrong thing.
+>
+> - **The canvas has its own ink.** The unremarkable outlines and every edge were
+>   drawn in the token used for a hairline between two panels — correct at a hand's
+>   width, invisible on a canvas — so a landscape showed its findings sharply and
+>   its structure barely at all. Two canvas tokens now carry them, on the same
+>   argument the amber status mark already rests on: a border is read, a mark is
+>   noticed, and the two want different values. Context nodes and the nodes outside
+>   an impact set were also faded past the point of being seen at all; an impact set
+>   is a part of a whole, and the whole has to stay legible for the part to mean
+>   anything.
+> - **"Fit" frames the picture, not the world.** The world is an area budget the
+>   layout settles in, and the layout normally spreads the content across it — so
+>   the two coincided and framing the world framed the picture. They stop coinciding
+>   the moment a node is pinned, because the fit is skipped then to keep pins under
+>   the spots they were dropped on. From the first drag onward, "Fit" showed the
+>   picture in a corner of a mostly empty sheet. It now frames what is drawn.
+> - **A node under the zoom controls could not be picked up.** The panel floats over
+>   the canvas, so it is also in front of it: the press landed on chrome. That is not
+>   a coincidence but a consequence of fitting — the fit pushes content to the edges
+>   by construction — and it bit hardest in a filtered or drilled picture, where
+>   there are few enough nodes for one of them to be the one being reached for. The
+>   fitted view now holds that corner clear, and the panel passes pointers through
+>   except on its own buttons. Reserving it costs one dimension rather than two: the
+>   largest rectangle avoiding a corner gives up either its width or its height, and
+>   subtracting both would hand a quarter of a wide canvas to a panel a few hundred
+>   pixels across.
+>
+> The framing is a pure function of the drawn box, the viewport and the chrome's
+> footprint, and it is *stored* rather than recomputed on demand. Every screen-to-
+> world conversion goes through it and a drag moves the content it is computed from,
+> so a view derived per call would shift the coordinate system under the pointer as
+> the node crossed it.
+
 ### 8. C4 is a read-only projection, not a theme
 
 Panorama may render a **C4 projection** of an ArchiMate model. It is constrained so
@@ -626,6 +666,44 @@ inverse does not hold, which is precisely why the projection is one-directional.
 Any *authorable* second notation, UAF included, remains what ADR-0189 §7 says it is:
 a separate profile with its own metamodel and its own record. This decision does not
 open that door.
+
+> **Amendment (2026-09-03): the derived landscape may be projected too, and it is
+> the smaller case rather than a wider one.**
+> This section was written for a projection *of an ArchiMate model*. The landscape
+> asks the same question of something with no model behind it at all, and the answer
+> is yes under the same four constraints — which bind more tightly here, not less.
+>
+> A projection of a model has a source document whose fidelity can be argued about.
+> A projection of the derived landscape has none, so the only thing that can be
+> misread is the vocabulary itself: a reader handed a C4-looking picture of Atlas's
+> own resources may take it for a C4 model of the system. That is the whole risk, and
+> it is what the constraints are pointed at:
+>
+> - **Nothing becomes authorable.** There is no ArchiMate and no C4 document behind a
+>   projected landscape, none can be exported from one, and the projection is not
+>   editable — as it never was, since nothing on this landscape was drawn to begin
+>   with.
+> - **The mapping is one table per notation, versioned**, and a mesh kind the
+>   notation has no element for is simply *absent from it*: the node keeps its
+>   derived shape rather than being dressed as something it is not. Inventing a row
+>   would be the silent drop the theme ban exists to prevent. Restricted and
+>   unresolved placeholders are the two — they are findings about the picture rather
+>   than architecture, and no notation should have a word for them.
+> - **The loss is listed beside the picture and inside the export**, in the
+>   notation's own terms: untyped relationships, a worker's Application Service with
+>   no Technology Service behind it, C4's levels shown on one canvas, C4's external
+>   systems absent because Atlas holds no model of what is behind a worker.
+> - **The vocabulary is stated wherever the picture goes.** The legend says "Atlas's
+>   own resources, drawn in ArchiMate's vocabulary; nothing here was modelled", and
+>   the export's stamp carries the same sentence with the mapping version — the file
+>   travels, and there is nobody beside it to ask.
+>
+> Each notation's own idiom is honoured as far as a landscape can: ArchiMate's
+> structure/behaviour rectangle split, C4's uniform box told apart by the annotation
+> under the name. Two deviations are stated rather than papered over — ArchiMate's
+> corner icon is written out, because an icon at this magnification is a smudge, and
+> every shape stays inscribed in the circle the layout reserved, so a change of
+> vocabulary can never make two nodes overlap that did not overlap before.
 
 ### 9. Placement in the shell
 

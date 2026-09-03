@@ -16,7 +16,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// remedyThenWaitProcess: Start → Remedy connector task (writes ResultVar) → plain
+// remedyThenWaitProcess: Start → Remedy task (writes ResultVar) → plain
 // service task (parks, so the instance stays alive) → End. Parking after the Remedy
 // task lets a test read the written entry id before the instance ends.
 func remedyThenWaitProcess(t *testing.T, cfg compiler.RemedyConfig) (*compiler.CompiledProcess, int32) {
@@ -174,14 +174,14 @@ func TestResolveRefusesATaskWithNoDetail(t *testing.T) {
 	}
 }
 
-// Run reports an unconfigured connector ahead of an unresolved form. Both are real
+// Run reports an unconfigured worker ahead of an unresolved form. Both are real
 // failures, but only one of them is the operator's to fix, and a task that has both
 // must not send them looking at the model first.
 func TestRunReportsAnUnconfiguredConnectorBeforeAnUnresolvedForm(t *testing.T) {
 	reg := remedy.NewRegistry()
 	_, err := remedy.Run(context.Background(), remedy.Job{Connector: "helix"}, reg)
 	if err == nil || !strings.Contains(err.Error(), "helix") {
-		t.Fatalf("error = %v, want one naming the unconfigured connector", err)
+		t.Fatalf("error = %v, want one naming the unconfigured worker", err)
 	}
 
 	rc := &recordingClient{id: "INC1"}

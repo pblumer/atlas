@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:remedyConnector> extension is a BMC Remedy
-// connector task (ADR-0106): it creates an entry (e.g. an incident) in a Remedy form
+// task (ADR-0106): it creates an entry (e.g. an incident) in a Remedy form
 // through the AR System REST API via the job path, mirroring clio's and mail's
 // registry-managed endpoint (the Remedy base URL and credentials live server-side,
 // never in the model) while the form and its field values are model-authored like
@@ -48,7 +48,7 @@ func TestParseRemedyConnectorTask(t *testing.T) {
 		t.Errorf("jobType index = %d, want the reserved RemedyJobTypeIndex %d", d.JobType, RemedyJobTypeIndex)
 	}
 	if got := cp.Intern(d.Connector); got != "helix-itsm" {
-		t.Errorf("connector = %q, want helix-itsm", got)
+		t.Errorf("worker = %q, want helix-itsm", got)
 	}
 	if d.RemedyForm.Expr != nil || d.RemedyForm.Literal != "HPD:IncidentInterface_Create" {
 		t.Errorf("form = %+v, want the literal form name", d.RemedyForm)
@@ -123,7 +123,7 @@ func TestParseRemedyConnectorErrors(t *testing.T) {
 </bpmn:definitions>`
 	}
 	cases := map[string]string{
-		"missing connector":    `<atlas:remedyConnector form="HPD:Help Desk"><atlas:remedyField name="A" value="x"/></atlas:remedyConnector>`,
+		"missing worker":       `<atlas:remedyConnector form="HPD:Help Desk"><atlas:remedyField name="A" value="x"/></atlas:remedyConnector>`,
 		"missing form":         `<atlas:remedyConnector connector="r"><atlas:remedyField name="A" value="x"/></atlas:remedyConnector>`,
 		"malformed FEEL form":  `<atlas:remedyConnector connector="r" form="=("/>`,
 		"malformed FEEL field": `<atlas:remedyConnector connector="r" form="F"><atlas:remedyField name="A" value="=("/></atlas:remedyConnector>`,

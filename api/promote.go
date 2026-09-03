@@ -342,7 +342,7 @@ func (s *Server) bundleForRelease(appName string, rel applicationRelease, outErr
 // this the only answer is the host's trust store, and in a container that is an
 // image change. It never replaces the system roots and it is never a way around
 // verification — the skip-verify switch this file refuses stays refused — and it
-// deliberately reaches no further than a peer Atlas: a connector calling a third
+// deliberately reaches no further than a peer Atlas: a worker calling a third
 // party keeps the host's roots, because its endpoint is somebody else's
 // (ADR-0129, ADR-0191).
 func WithTargetTLSRoots(pool *x509.CertPool) Option {

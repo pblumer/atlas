@@ -31,7 +31,7 @@ func (s *requestSpy) Call(_ context.Context, req Request) (any, error) {
 
 // Graph's advanced query support is two things that must travel together: the
 // ConsistencyLevel: eventual header and $count=true. Sending one without the other
-// is a 400, so the connector never lets a model do that — asking for an advanced
+// is a 400, so the worker never lets a model do that — asking for an advanced
 // query asks for both.
 func TestAdvancedQueryAddsCountAndAsksForEventualConsistency(t *testing.T) {
 	s := &requestSpy{pages: []any{page("")}}
@@ -106,7 +106,7 @@ func TestSearchImpliesAnAdvancedQuery(t *testing.T) {
 		t.Errorf("request = %+v, want an advanced query", got)
 	}
 	// The term travels as authored — quotes included. Graph's $search takes its own
-	// quoting (and compound terms like "a" AND "b"), so this connector encodes the
+	// quoting (and compound terms like "a" AND "b"), so this worker encodes the
 	// value but does not invent quotes around it.
 	if !strings.Contains(got.Path, "$search=%22displayName%3AArno%22") {
 		t.Errorf("path = %q, want the authored search term percent-encoded verbatim", got.Path)

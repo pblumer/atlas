@@ -1,7 +1,7 @@
 {
   "tags": [
     "Organization",
-    "Connectors"
+    "Workers"
   ],
   "summary": {
     "en": "Each connector now shows which processes use it and how many instances are running on them, and deleting one that is still in use is refused instead of quietly breaking those processes.",
