@@ -2,6 +2,52 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "importing-a-uml-class-diagram-reading-what-somebody-else-dre",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Import the UML class diagram you already have",
+        "de": "Das vorhandene UML-Klassendiagramm importieren"
+      },
+      "summary": {
+        "en": "Your data model usually exists long before your first process does — drawn in Enterprise Architect, in Papyrus, in whatever your architecture team uses. Until now the only way to get it into Atlas was to retype it, class by class and attribute by attribute. What gets lost in a retyping is never the class names; it is the business key, the one thing BPMN has no equivalent for and the one everything cross-process depends on. Data › Information model now has an Import button. It reads two documents: the XMI 2.5.1 your UML tool exports, and Atlas's own JSON — which is exactly what the API hands out for a model, so you can also move a model from one application or installation to another. You do not have to tell it which; it reads the document, because a UML tool writes .uml, .xmi and .xml for the same file. Atlas authors a deliberately small part of UML, so a real document always says things it has no place for — an interface, an operation, a relationship with three ends, a multiplicity of 0..5. None of that is a reason to refuse your file, and none of it disappears quietly: every single one comes back as a line naming the element, marked as dropped (not in the model), adjusted (in the model, saying something slightly different) or worth knowing. You read that report before anything is stored, and it comes from the same call that does the storing, so what you read is what you get. Two readings are on purpose rather than literal. An attribute marked as the identifier whose multiplicity the file never states is read as required — the file does say something about it, namely that it identifies the thing, and reading it as optional would throw your business key away. And a document with no diagram geometry is laid out on a grid, because XMI keeps the picture in a separate file and a stack of boxes at the origin is not a diagram. Move them where they belong.",
+        "de": "Ihr Datenmodell existiert meist lange vor Ihrem ersten Prozess — gezeichnet im Enterprise Architect, in Papyrus, in dem Werkzeug, das Ihre Architektur nun einmal verwendet. Bisher führte der einzige Weg nach Atlas über das Abtippen, Klasse für Klasse und Attribut für Attribut. Verloren gehen dabei nie die Klassennamen, sondern der fachliche Schlüssel — das Einzige, wofür BPMN keine Entsprechung hat, und das, worauf alles Prozessübergreifende beruht. Data › Information model hat jetzt eine Schaltfläche „Import…“. Sie liest zwei Dokumente: das XMI 2.5.1, das Ihr UML-Werkzeug exportiert, und Atlas' eigenes JSON — genau das, was die API zu einem Modell herausgibt, womit sich ein Modell auch von einer Applikation oder Installation in eine andere bewegen lässt. Welches von beidem, müssen Sie nicht sagen: Atlas liest es am Dokument ab, denn UML-Werkzeuge schreiben .uml, .xmi und .xml für dieselbe Datei. Atlas modelliert bewusst nur einen kleinen Teil von UML, und ein echtes Dokument sagt darum immer Dinge, für die es hier keinen Platz gibt — eine Schnittstelle, eine Operation, eine Beziehung mit drei Enden, eine Multiplizität 0..5. Nichts davon ist ein Grund, Ihre Datei abzulehnen, und nichts davon verschwindet stillschweigend: Jede einzelne Stelle kommt als Zeile zurück, die das Element benennt und als verworfen, angepasst oder wissenswert markiert ist. Diesen Bericht lesen Sie, bevor irgendetwas gespeichert wird — und er stammt aus demselben Aufruf, der auch speichert, sodass Sie bekommen, was Sie gelesen haben. Zwei Lesarten sind Absicht statt Wörtlichkeit. Ein als Identifikator markiertes Attribut, dessen Multiplizität die Datei nie nennt, wird als Pflichtfeld gelesen: Die Datei sagt sehr wohl etwas über dieses Merkmal, nämlich dass es das Ding identifiziert — es als optional zu lesen, würfe Ihren fachlichen Schlüssel weg. Und ein Dokument ohne Diagrammgeometrie wird auf einem Raster angeordnet, denn XMI verwahrt das Bild in einer eigenen Datei, und ein Stapel Kästen im Nullpunkt ist kein Diagramm. Schieben Sie sie dorthin, wo sie hingehören."
+      },
+      "link": {
+        "label": "ADR-0230",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
+      },
+      "tags": [
+        "Data",
+        "Modeling",
+        "Import"
+      ],
+      "tutorial": {
+        "en": [
+          "Export your class diagram from your UML tool as XMI (.xmi, .uml or .xml — all three are read).",
+          "Open Data › Information model and press “Import…”. Choose the application the model should belong to, then pick your file.",
+          "Read the report: how many classes, relationships and data stores arrived, and every element the subset would not take. Nothing is stored yet.",
+          "Adjust the model name if you want one other than the document's, then press “Import into …”.",
+          "The class canvas opens. Check the business keys, retype anything the report marked as adjusted, and drag the boxes into an arrangement you can read."
+        ],
+        "de": [
+          "Exportieren Sie Ihr Klassendiagramm aus Ihrem UML-Werkzeug als XMI (.xmi, .uml oder .xml — alle drei werden gelesen).",
+          "Öffnen Sie Data › Information model und drücken Sie „Import…“. Wählen Sie die Applikation, zu der das Modell gehören soll, und danach Ihre Datei.",
+          "Lesen Sie den Bericht: wie viele Klassen, Beziehungen und Data Stores angekommen sind — und jedes Element, das der Sprachumfang nicht aufnimmt. Gespeichert ist noch nichts.",
+          "Passen Sie den Modellnamen an, falls Sie einen anderen als den des Dokuments möchten, und drücken Sie „Import into …“.",
+          "Die Klassenfläche öffnet sich. Prüfen Sie die fachlichen Schlüssel, korrigieren Sie, was der Bericht als angepasst markiert hat, und ordnen Sie die Kästen lesbar an."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Data öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "a-variable-named-after-one-of-your-data-objects-is-now-flagg",
       "version": "Unreleased",
       "date": null,
@@ -441,52 +487,6 @@
           "de": "Konnektoren öffnen"
         },
         "route": "#/console/connectors"
-      }
-    },
-    {
-      "id": "see-what-a-mockup-run-asked-the-database",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See exactly what a mockup run asked your database",
-        "de": "Sehen, was ein Mockup-Lauf die Datenbank gefragt hat"
-      },
-      "summary": {
-        "en": "When you run a process against the database mockup, you now get to see what it actually asked. Operations, Mock database: one card per worker, every statement in order, and beneath each one the values the process bound to it. The interesting ones are red — those had no prepared answer, so they failed, and reading one and pasting it into the answers under Workers is how you build the seed. That loop now lives entirely in the Console instead of running through the worker's log. Two things are worth knowing before you open it. There is no table to browse: the mockup answers statements and executes none, so an INSERT does not change what a later SELECT returns; what you get is the sequence, not a snapshot of data. And the page is admin-only on purpose, because it shows the values your process bound — a password on its way into a table is a bound parameter like any other, and nothing can tell it apart from an id. Nothing here is stored: restart the worker and its journal is empty, restart Atlas and the view is.",
-        "de": "Wenn Sie einen Prozess gegen den Datenbank-Mockup laufen lassen, sehen Sie jetzt, was er tatsächlich gefragt hat. Betrieb, Mock database: pro Worker eine Karte, jede Anweisung in ihrer Reihenfolge, und darunter die Werte, die der Prozess gebunden hat. Interessant sind die roten — für die gab es keine hinterlegte Antwort, sie sind gescheitert, und eine davon zu lesen und in die Antworten unter Workers zu übernehmen ist der Weg, wie die Startdatei entsteht. Diese Schleife läuft jetzt vollständig in der Konsole statt über das Worker-Log. Zwei Dinge sollten Sie vorher wissen. Es gibt keine Tabelle zum Blättern: Der Mockup beantwortet Anweisungen und führt keine aus, ein INSERT ändert also nicht, was ein späteres SELECT liefert — Sie bekommen die Abfolge, keine Momentaufnahme von Daten. Und die Seite ist bewusst Administratoren vorbehalten, denn sie zeigt die gebundenen Werte: Ein Passwort auf dem Weg in eine Tabelle ist ein gebundener Parameter wie jeder andere, und nichts kann ihn von einer Id unterscheiden. Gespeichert wird nichts: Worker-Neustart leert das Journal, Atlas-Neustart die Ansicht."
-      },
-      "link": {
-        "label": "ADR-0224",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0224-sql-mock-journal.md"
-      },
-      "tags": [
-        "Operations",
-        "Databases",
-        "Testing"
-      ],
-      "tutorial": {
-        "en": [
-          "Turn the mockup on under Organization › Workers, the Databases card, and press Example for a seed if you have none.",
-          "Start a process with a database task — examples/mssql-eintrittsmeldung.bpmn does the job.",
-          "Open Operations › Mock database. The statements your process ran are there, newest last, with the values it bound.",
-          "Now start one with input your seed does not answer for. That statement turns up in red with its reason.",
-          "Copy it into the Databases card's answers, save, and run it again — the red entry is gone."
-        ],
-        "de": [
-          "Schalten Sie den Mockup unter Organisation › Workers auf der Karte Databases ein und drücken Sie Example, falls Sie noch keinen Seed haben.",
-          "Starten Sie einen Prozess mit einem Datenbank-Task — examples/mssql-eintrittsmeldung.bpmn genügt.",
-          "Öffnen Sie Betrieb › Mock database. Dort stehen die Anweisungen Ihres Prozesses, neueste zuletzt, mit den gebundenen Werten.",
-          "Starten Sie dann eine Instanz mit Eingaben, für die nichts hinterlegt ist. Diese Anweisung erscheint rot samt Grund.",
-          "Übernehmen Sie sie in die Antworten auf der Karte Databases, speichern, nochmal starten — der rote Eintrag ist weg."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Mock database",
-          "de": "Mock database öffnen"
-        },
-        "route": "#/operations/sql-mock"
       }
     }
   ]
