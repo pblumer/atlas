@@ -15,6 +15,8 @@
 // way of saying everything the document already says. So the editor holds the model,
 // and Save sends it back against the revision it read.
 
+import { groupifyPanel, groupController } from "./pgroup.js";
+
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -209,6 +211,41 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // ---- the side panel ------------------------------------------------------
   const storeById = (id) => (state.model.stores || []).find((s) => s.id === id);
 
+  // The panel is the Modeler's: an element header naming what is selected, then
+  // collapsible property groups (pgroup.js, shared with api/web/editor.js). A person
+  // moves between the two surfaces in one session, so the two panels having their own
+  // idea of what a group looks like was a difference with nothing behind it.
+  // Every group starts open. This panel has three sections at most, and one of them
+  // is the class's attributes — so collapsing is worth offering and not worth doing
+  // by default, which is the opposite of the Modeler's dozen groups.
+  const groupCtl = groupController(sideEl, "all");
+
+  // paint puts a panel on screen and turns its <h3> sections into those groups. Every
+  // renderer goes through it, so the grouping happens in one place rather than being
+  // remembered in five.
+  function paint(html) {
+    sideEl.innerHTML = html;
+    const body = sideEl.querySelector(".psec");
+    if (body) groupifyPanel(body, groupCtl);
+  }
+
+  // The element header, the same shape the Modeler's panel uses: a type chip, the kind
+  // in small type, the element's own name in bold, and whatever acts on it as a whole.
+  function pheadHTML(chip, kindLabel, name, actions = "") {
+    return `<div class="phead">
+      <span class="ptype" title="${esc(kindLabel)}">${chip}</span>
+      <div><div class="kv">${esc(kindLabel)}</div><b>${esc(name || "unnamed")}</b></div>
+      <span style="flex:1"></span>${actions}</div>`;
+  }
+
+  // Two letters for the chip: the initials of a multi-word kind, the first two letters
+  // of a single-word one. Derived rather than tabulated, so a stereotype the server
+  // adds tomorrow gets a chip without this file being edited.
+  const abbrev = (label) => {
+    const words = String(label || "?").trim().split(/\s+/);
+    return (words.length > 1 ? words.map((w) => w[0]).join("") : words[0].slice(0, 2)).toUpperCase();
+  };
+
   function renderSide() {
     if (state.schemaFor) return renderSchema();
     if (!state.selected) return renderNothingSelected();
@@ -225,20 +262,22 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   }
 
   function renderNothingSelected() {
-    sideEl.innerHTML = `
-      <div class="im-panel">
-        <h3>${esc(state.model.name)}</h3>
+    paint(`
+      ${pheadHTML("◫", "Information model", state.model.name)}
+      <div class="psec">
+        <h3>General</h3>
         <p class="muted">${state.model.documentation
           ? esc(state.model.documentation)
           : "Select a class or a relationship to edit it, or add one from the toolbar."}</p>
-        <label class="im-field"><span>Documentation</span>
+        <label class="field"><span>Documentation</span>
           <textarea id="im-model-doc" rows="4"
             placeholder="What this model covers — which part of the business these classes describe.">${esc(state.model.documentation || "")}</textarea></label>
+
+        <h3>This is a subset of UML</h3>
         <div class="im-note">
-          <b>This is a subset of UML.</b>
           <ul>${subset.limits.map((l) => `<li><b>${esc(l.area)}.</b> ${esc(l.reason)}</li>`).join("")}</ul>
         </div>
-      </div>`;
+      </div>`);
   }
 
   function renderClassPanel(c) {
@@ -268,22 +307,24 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         <td><button type="button" class="icon-btn" data-act="del-attr" title="Remove">✕</button></td>
       </tr>`).join("");
 
-    sideEl.innerHTML = `
-      <div class="im-panel">
-        <div class="im-panel-head"><h3>Class</h3>
-          <button type="button" class="btn ghost small" data-act="del-class">Delete</button></div>
-        <label class="im-field"><span>Name</span>
+    paint(`
+      ${pheadHTML(abbrev(kind.label), kind.label, c.name,
+        `<button type="button" class="icon-btn" data-act="del-class" title="Delete this class">✕</button>`)}
+      <div class="psec">
+        <h3>General</h3>
+        <label class="field"><span>Name</span>
           <input id="im-c-name" value="${esc(c.name)}" placeholder="Order"/></label>
-        <label class="im-field"><span>Kind</span>
+        <label class="field"><span>Kind</span>
           <select id="im-c-stereo">
             ${subset.stereotypes.map((s) => `<option value="${esc(s.stereotype)}"${s.stereotype === c.stereotype ? " selected" : ""}>${esc(s.label)}</option>`).join("")}
           </select></label>
         <p class="im-meaning">${esc(kind.meaning)}</p>
-        <label class="im-field"><span>Documentation</span>
+        <label class="field"><span>Documentation</span>
           <textarea id="im-c-doc" rows="3" placeholder="What this is, in the words the business uses.">${esc(c.documentation || "")}</textarea></label>
 
         ${kind.hasAttributes ? `
-          <div class="im-panel-head"><h4>Attributes</h4>
+          <h3>Attributes</h3>
+          <div class="field-actions">
             <button type="button" class="btn ghost small" data-act="add-attr">+ Attribute</button></div>
           <table class="im-attrs"><thead><tr>
             <th></th><th>Name</th><th>Type</th><th>Card.</th><th title="Business key">⚿</th><th></th>
@@ -293,7 +334,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             equivalent for, and what a data store and a cross-process lookup will resolve against.</p>` : ""}
           <button type="button" class="btn ghost small" data-act="schema">View JSON Schema</button>
         ` : `
-          <div class="im-panel-head"><h4>Literals</h4>
+          <h3>Literals</h3>
+          <div class="field-actions">
             <button type="button" class="btn ghost small" data-act="add-literal">+ Literal</button></div>
           <table class="im-attrs"><tbody>
             ${(c.literals || []).map((lit, i) => `<tr data-lit="${i}">
@@ -304,9 +346,11 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           </tbody></table>
         `}
 
-        ${findings.length ? `<div class="im-panel-problems">${findings.map((f) =>
-          `<div class="im-problem ${esc(f.reason)}">${esc(f.message)}</div>`).join("")}</div>` : ""}
-      </div>`;
+        ${findings.length ? `
+          <h3>Problems</h3>
+          <div class="im-panel-problems">${findings.map((f) =>
+            `<div class="im-problem ${esc(f.reason)}">${esc(f.message)}</div>`).join("")}</div>` : ""}
+      </div>`);
   }
 
   // A store is two sentences: which class it keeps, and what keeps it. The panel is
@@ -319,13 +363,14 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       (c) => c.stereotype === "businessObject" && (c.identity || []).length > 0);
     const chosen = state.model.classes.find((c) => c.name === st.class);
     const keyless = chosen && !storable.includes(chosen);
-    sideEl.innerHTML = `
-      <div class="im-panel">
-        <div class="im-panel-head"><h3>Data store</h3>
-          <button type="button" class="btn ghost small" data-act="del-store">Delete</button></div>
-        <label class="im-field"><span>Name</span>
+    paint(`
+      ${pheadHTML("⛁", "Data store", st.name,
+        `<button type="button" class="icon-btn" data-act="del-store" title="Delete this store">✕</button>`)}
+      <div class="psec">
+        <h3>General</h3>
+        <label class="field"><span>Name</span>
           <input id="im-s-name" value="${esc(st.name)}" placeholder="Orders"/></label>
-        <label class="im-field"><span>Holds</span>
+        <label class="field"><span>Holds</span>
           <select id="im-s-class">
             <option value=""${st.class ? "" : " selected"}>— choose a class —</option>
             ${storable.map((c) => `<option value="${esc(c.name)}"${c.name === st.class ? " selected" : ""}>${esc(c.name)}</option>`).join("")}
@@ -334,20 +379,25 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           </select></label>
         <p class="im-meaning">Only a <b>business object with a business key</b> can be kept in a store: a process
           reads from one by naming which thing it wants, and the key is the only thing that names one.</p>
-        <label class="im-field"><span>Backed by <span class="muted">(a Worker)</span></span>
+        <label class="field"><span>Documentation</span>
+          <textarea id="im-s-doc" rows="3" placeholder="What is kept here, and for whom.">${esc(st.documentation || "")}</textarea></label>
+
+        <h3>Where it is kept</h3>
+        <label class="field"><span>Backed by <span class="muted">(a Worker)</span></span>
           <input id="im-s-worker" value="${esc(st.worker || "")}" placeholder="clio-main"/></label>
         <p class="im-meaning">The configured Worker that keeps it — a clio event store, a database, a SharePoint
           list. Leave it empty while the store is drawn but not yet wired; a deploy says so rather than refusing.</p>
-        <label class="im-field"><span>Mode</span>
+        <label class="field"><span>Mode</span>
           <select id="im-s-mode">
             ${(subset.storeModes || []).map((m) => `<option value="${esc(m.mode)}"${m.mode === st.mode ? " selected" : ""}>${esc(m.label)}</option>`).join("")}
           </select></label>
         <p class="im-meaning">${esc(storeModeOf(st.mode).meaning || "")}</p>
-        <label class="im-field"><span>Documentation</span>
-          <textarea id="im-s-doc" rows="3" placeholder="What is kept here, and for whom.">${esc(st.documentation || "")}</textarea></label>
-        ${findings.length ? `<div class="im-panel-problems">${findings.map((f) =>
-          `<div class="im-problem ${esc(f.reason)}">${esc(f.message)}</div>`).join("")}</div>` : ""}
-      </div>`;
+
+        ${findings.length ? `
+          <h3>Problems</h3>
+          <div class="im-panel-problems">${findings.map((f) =>
+            `<div class="im-problem ${esc(f.reason)}">${esc(f.message)}</div>`).join("")}</div>` : ""}
+      </div>`);
   }
 
   function renderAssociationPanel(a) {
@@ -359,38 +409,44 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     const endFields = (side, end, otherName) => `
       <fieldset class="im-end">
         <legend>${esc(side === "from" ? from.name : to.name)}</legend>
-        <label class="im-field"><span>Role</span>
+        <label class="field"><span>Role</span>
           <input class="im-end-in" data-side="${side}" data-f="role" value="${esc(end.role || "")}"
             placeholder="how ${esc(otherName)} refers to it"/></label>
-        <label class="im-field"><span>Multiplicity</span>
+        <label class="field"><span>Multiplicity</span>
           <select class="im-end-in" data-side="${side}" data-f="multiplicity">
             <option value=""${end.multiplicity ? "" : " selected"}>unsaid</option>
             ${subset.multiplicities.map((m) => `<option value="${esc(m.multiplicity)}"${m.multiplicity === end.multiplicity ? " selected" : ""}>${esc(m.multiplicity)} — ${esc(m.label)}</option>`).join("")}
           </select></label>
       </fieldset>`;
 
-    sideEl.innerHTML = `
-      <div class="im-panel">
-        <div class="im-panel-head"><h3>Relationship</h3>
-          <button type="button" class="btn ghost small" data-act="del-assoc">Delete</button></div>
+    paint(`
+      ${pheadHTML("→", kind.label, a.name || `${from.name} → ${to.name}`,
+        `<button type="button" class="icon-btn" data-act="del-assoc" title="Delete this relationship">✕</button>`)}
+      <div class="psec">
+        <h3>General</h3>
         <p class="im-reading"><b>${esc(from.name)}</b> → <b>${esc(to.name)}</b></p>
-        <label class="im-field"><span>Kind</span>
+        <label class="field"><span>Kind</span>
           <select id="im-a-kind">
             ${subset.associationKinds.map((k) => `<option value="${esc(k.kind)}"${k.kind === a.kind ? " selected" : ""}
               ${allow.includes(k.kind) ? "" : " disabled"}>${esc(k.label)}${allow.includes(k.kind) ? "" : " — not between these"}</option>`).join("")}
           </select></label>
         <p class="im-meaning">${esc(kind.rule)}</p>
-        <label class="im-field"><span>Name</span>
+        <label class="field"><span>Name</span>
           <input id="im-a-name" value="${esc(a.name || "")}" placeholder="places"/></label>
+        <div class="field-actions">
+          <button type="button" class="btn ghost small" data-act="flip">⇄ Reverse direction</button></div>
+
+        <h3>Ends</h3>
         ${a.kind === "generalization"
           ? `<p class="im-hint-text">A generalization has no roles or multiplicities: “is a kind of” is not a
              counted relationship. ${esc(to.name)} is the general class.</p>`
           : endFields("from", a.from, to.name) + endFields("to", a.to, from.name)}
-        <button type="button" class="btn ghost small" data-act="flip">⇄ Reverse direction</button>
-        ${findings.length ? `<div class="im-panel-problems">${findings.map((f) =>
-          `<div class="im-problem ${esc(f.reason)}">${esc(f.message)}</div>`).join("")}</div>` : ""}
-      </div>`;
 
+        ${findings.length ? `
+          <h3>Problems</h3>
+          <div class="im-panel-problems">${findings.map((f) =>
+            `<div class="im-problem ${esc(f.reason)}">${esc(f.message)}</div>`).join("")}</div>` : ""}
+      </div>`);
   }
 
   // The panel's controls are wired once, by delegation, and read the current
@@ -699,29 +755,33 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // says what it dropped — a JSON document is a tree and a class model is a graph,
   // so only composition survives as containment.
   async function renderSchema() {
-    sideEl.innerHTML = `<div class="im-panel"><p class="muted">Projecting ${esc(state.schemaFor)}…</p></div>`;
+    paint(`<div class="psec"><p class="muted">Projecting ${esc(state.schemaFor)}…</p></div>`);
     let projection;
     try {
       projection = await api("GET",
         `/api/v1/infomodel/models/${encodeURIComponent(id)}/schema?class=${encodeURIComponent(state.schemaFor)}`);
     } catch (e) {
-      sideEl.innerHTML = `<div class="im-panel">
-        <div class="im-panel-head"><h3>JSON Schema</h3>
-          <button type="button" class="btn ghost small" data-act="close-schema">Close</button></div>
-        <p class="muted">${esc(e.message)}</p>
-        <p class="im-hint-text">A schema is derived from a saved model, so save the diagram — and fix anything the
-          problems bar lists — before projecting it.</p></div>`;
+      paint(`
+        ${pheadHTML("{ }", "JSON Schema", state.schemaFor,
+          `<button type="button" class="btn ghost small" data-act="close-schema">Close</button>`)}
+        <div class="psec">
+          <p class="muted">${esc(e.message)}</p>
+          <p class="im-hint-text">A schema is derived from a saved model, so save the diagram — and fix anything the
+            problems bar lists — before projecting it.</p></div>`);
       return;
     }
-    sideEl.innerHTML = `<div class="im-panel">
-      <div class="im-panel-head"><h3>JSON Schema · ${esc(projection.class)}</h3>
-        <button type="button" class="btn ghost small" data-act="close-schema">Close</button></div>
-      <p class="im-hint-text">Derived, never edited. This is what a <i>value</i> of this class is checked against;
-        the diagram is what a person reads.</p>
-      <pre class="im-schema">${esc(JSON.stringify(projection.schema, null, 2))}</pre>
-      <h4>What the projection could not carry</h4>
-      ${projection.loss.map((n) => `<div class="im-loss"><b>${esc(n.area)}.</b> ${esc(n.reason)}</div>`).join("")}
-    </div>`;
+    paint(`
+      ${pheadHTML("{ }", "JSON Schema", projection.class,
+        `<button type="button" class="btn ghost small" data-act="close-schema">Close</button>`)}
+      <div class="psec">
+        <h3>Schema</h3>
+        <p class="im-hint-text">Derived, never edited. This is what a <i>value</i> of this class is checked against;
+          the diagram is what a person reads.</p>
+        <pre class="im-schema">${esc(JSON.stringify(projection.schema, null, 2))}</pre>
+
+        <h3>What the projection could not carry</h3>
+        ${projection.loss.map((n) => `<div class="im-loss"><b>${esc(n.area)}.</b> ${esc(n.reason)}</div>`).join("")}
+      </div>`);
   }
 
   // ---- interaction ---------------------------------------------------------

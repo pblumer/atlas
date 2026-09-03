@@ -14,6 +14,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The class diagram's properties panel is the Modeler's panel.** Selecting a class, a
+  data store or a relationship under **Data › Information model** now gives you the same
+  panel the BPMN Modeler does: a header naming what is selected — its kind in small
+  type, its own name in bold, a type chip beside it — and collapsible property groups
+  below, each with a chevron and a filled dot when it carries content. Fields look like
+  fields do everywhere else in Atlas.
+
+  It is the same panel because it is the **same code**, not a lookalike. The Modeler had
+  grown the shape first, as a function inside `editor.js` that turns a rendered panel's
+  sections into groups. That is exactly the kind of thing worth having once: a copy
+  drifts from its model the first time either side is touched, and then two panels a
+  person uses in one sitting disagree about what a group is. It moved to
+  `api/web/pgroup.js`, and both panels call it.
+
+  What the two panels do *not* share is which groups start open, because the honest
+  answer differs. A BPMN element has a dozen sections and opening one of them is the
+  point, so only **General** starts open. A class has three, and one of them is its
+  attributes — the attributes *are* the class, so hiding them behind a click on every
+  selection would be worse than having no groups at all. So the class panel opens
+  everything, and collapsing is there for when a long attribute list is in the way.
+
 - **SOAP tasks run on a worker now**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 4).
   A call to somebody else's web service no longer happens on the loop that owns the

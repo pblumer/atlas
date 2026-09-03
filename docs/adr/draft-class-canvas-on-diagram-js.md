@@ -130,12 +130,31 @@ types, multiplicities, roles and the business key, and it was made to reorder
 attributes by hand in the change immediately before this one — and a form is what it
 should be; bpmn-js's own properties panel is HTML for the same reason.
 
-That leaves one half of the complaint that prompted this record unanswered: the
-panel's chrome is still Atlas's own rather than the Modeler's collapsible groups. That
-is deliberately separate. It is a stylesheet change with no behaviour behind it, and
-folding it in here would mix it with a port that replaces the canvas's whole
-substrate — where a visual difference is evidence and needs to be read, not explained
-away by a restyle landing in the same commit.
+That left one half of the complaint that prompted this record unanswered: the panel's
+chrome was still Atlas's own rather than the Modeler's collapsible groups. That was
+deliberately separate — folding it in would have mixed it with a port that replaces
+the canvas's whole substrate, where a visual difference is evidence and needs to be
+read, not explained away by a restyle landing in the same commit.
+
+**It was done in the change immediately after, and not by copying.** The Modeler's
+panel already had the shape: a `<h3>` per section, a header that toggles it, a chevron,
+a filled dot when the section carries content. That was a function inside
+`api/web/editor.js` operating on already-rendered markup, which is exactly what makes
+it shareable — a panel emits plain sections and something else turns them into groups,
+so no renderer has to know about grouping. It moved to `api/web/pgroup.js` and both
+panels call it. The element header (`.phead`, `.ptype`, `.kv`) and the property body
+(`.psec`) became shared CSS the same way.
+
+A lookalike was the alternative and is the worse one: it drifts from its model the
+first time either side is touched, and then two panels a person uses in one session
+disagree about what a group is.
+
+The one thing that is *not* shared is which groups start open, because the answer
+genuinely differs. A BPMN element has a dozen sections and opening one of them is the
+point, so only General starts open. A class has three, and one of them is its
+attributes — the attributes *are* the class, so hiding them behind a click on every
+selection would make the panel worse than one with no groups at all. So the controller
+takes that as a parameter, and the class panel opens everything.
 
 ## Consequences
 
