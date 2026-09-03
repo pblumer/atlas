@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -99,3 +100,34 @@ func TestVariableValueUnwrapsEachStoredKind(t *testing.T) {
 		t.Errorf("unparseable JSON = %#v, want nil", got)
 	}
 }
+
+// failingClioClient is an event store that answers every call with an error, which is
+// what an unreachable or refusing store looks like from here.
+type failingClioClient struct{ err error }
+
+func (c *failingClioClient) WriteEvent(context.Context, clio.Event) error { return c.err }
+func (c *failingClioClient) ReadEvents(context.Context, clio.ReadEventsRequest) ([]clio.InboundEvent, error) {
+	return nil, c.err
+}
+func (c *failingClioClient) GetState(context.Context, string, string) (map[string]any, error) {
+	return nil, c.err
+}
+func (c *failingClioClient) Query(context.Context, string, string) (any, error) { return nil, c.err }
+
+// A store that refuses the write fails the job, so it is retried and then raised as
+// an incident (ADR-0061). Completing it would tell the process the event is durable
+// somewhere else, which is the one thing a clio write is for.
+func TestRunClioJobFailsWhenTheStoreDoes(t *testing.T) {
+	job := clioJobFrom(t, clio.Job{Connector: "events", Operation: clio.OpWrite, Subject: "/kunden/42"})
+
+	_, err := RunClioJob(context.Background(), job, clioRegistryWith(&failingClioClient{err: errClioRefused}))
+	if err == nil {
+		t.Fatal("a write the store refused completed as if it had been stored")
+	}
+	if !strings.Contains(err.Error(), "refused") {
+		t.Errorf("error = %v, want the store's own failure", err)
+	}
+}
+
+// errClioRefused stands for whatever the store said no with.
+var errClioRefused = errors.New("clio: the store refused this event")
