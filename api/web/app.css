@@ -4457,7 +4457,7 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .im-side { width: 340px; flex: none; border-left: 1px solid var(--border); overflow: auto; background: var(--bg); }
 
 /* The class canvas. The drawing is diagram-js now
-   (ADR-draft-class-canvas-on-diagram-js), so these style what the Atlas renderer in
+   (ADR-0237), so these style what the Atlas renderer in
    api/web/vendor/uml/ emits; the selection outline and the hit layer are the
    library's own. */
 .im-canvas .djs-container { background: var(--bg); }

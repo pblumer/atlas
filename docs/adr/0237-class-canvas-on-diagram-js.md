@@ -1,4 +1,4 @@
-# ADR-DRAFT: The class canvas on diagram-js
+# ADR-0237: The class canvas on diagram-js
 
 - **Status:** Proposed
 - **Date:** 2026-09-03
