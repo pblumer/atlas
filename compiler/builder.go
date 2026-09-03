@@ -867,7 +867,7 @@ func (b *Builder) AddTemisDecisionTask(connector, decisionId, resultVar string, 
 
 // addBusinessRuleTask is the shared constructor for local and central business
 // rule tasks. An empty worker selects local evaluation (the DMN job type,
-// ADR-0014); a named worker selects central evaluation (the temis-connector job
+// ADR-0014); a named worker selects central evaluation (the temis job
 // type, ADR-0050) and records the worker name.
 func (b *Builder) addBusinessRuleTask(connector, decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32, binding DecisionBinding) (int32, error) {
 	inputsIdx := int32(-1)

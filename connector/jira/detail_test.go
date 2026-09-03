@@ -155,7 +155,7 @@ func TestHandlerOnANonConnectorElement(t *testing.T) {
 		`<atlas:jiraConnector connector="acme" operation="get-issue" issueKey="OPS-1" resultVariable="t"/>`)
 	rd.ei.ElementId = 0 // the start event
 	if _, err := jira.Handler(rd, lookup, jira.NewRegistry())(job.Job{Key: 1, ElementInstanceKey: 42}); err == nil {
-		t.Fatal("handler accepted a job on an element that is not a task")
+		t.Fatal("handler accepted a job on an element that is not a worker task")
 	}
 }
 

@@ -278,9 +278,15 @@ func TestTheBasePathCanBeOverridden(t *testing.T) {
 	if w := do(h, "GET", "/pets/7", "", nil); w.Code != http.StatusOK {
 		t.Errorf("with the base path stripped, GET /pets/7 = %d", w.Code)
 	}
-	_, h = serve(t, openapimock.WithBasePath("/api/"))
+
+	srv, h := serve(t, openapimock.WithBasePath("/api/"))
 	if w := do(h, "GET", "/api/pets/7", "", nil); w.Code != http.StatusOK {
 		t.Errorf("with an overridden base path, GET /api/pets/7 = %d", w.Code)
+	}
+	// The prefix is readable back, because a banner has to print the URLs a caller
+	// actually reaches rather than the ones the document states.
+	if got := srv.BasePath(); got != "/api" {
+		t.Errorf("BasePath() = %q, want /api", got)
 	}
 }
 
@@ -350,5 +356,34 @@ func TestAnOperationWithoutAnIDIsNamedByItsRoute(t *testing.T) {
 	do(srv.Handler(), "GET", "/pets/7", "", nil)
 	if got := srv.Calls()[0].Operation; got != "GET /pets/{id}" {
 		t.Errorf("operation = %q, want the route", got)
+	}
+}
+
+func TestAnUnserveableMediaTypeIsRefusedRatherThanMislabelled(t *testing.T) {
+	// Found against Swagger's own Petstore: the mock answered Accept: application/xml
+	// with JSON bytes under an XML content type.
+	spec, err := openapimock.Load([]byte(`
+openapi: 3.0.0
+info: {title: Petstore, version: '1'}
+paths:
+  /pet/{id}:
+    get:
+      responses:
+        '200':
+          description: a pet
+          content:
+            application/json: {schema: {type: object, properties: {id: {type: integer}}}}
+            application/xml: {schema: {type: object, properties: {id: {type: integer}}}}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := openapimock.New(spec).Handler()
+	w := do(h, "GET", "/pet/7", "", map[string]string{"Accept": "application/xml"})
+	if w.Code != http.StatusNotAcceptable {
+		t.Errorf("Accept: application/xml = %d %s, want 406", w.Code, w.Body)
+	}
+	if w := do(h, "GET", "/pet/7", "", nil); w.Header().Get("Content-Type") != "application/json" {
+		t.Errorf("content-type = %q", w.Header().Get("Content-Type"))
 	}
 }

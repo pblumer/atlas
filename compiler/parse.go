@@ -120,7 +120,7 @@ func restAuth(taskID string, c *xmlRestConnector) (RestAuth, error) {
 	return connectorAuth(taskID, "rest worker", c.AuthType, c.AuthUsername, c.AuthApiKeyName, c.AuthSecret)
 }
 
-// restOAuth2 builds a REST worker task's client-credentials config (ADR-0152):
+// restOAuth2 builds a REST task's client-credentials config (ADR-0152):
 // the token endpoint and client id are model data; the client secret is a reference
 // (secrets live server-side, ADR-0041). Scope is optional.
 func restOAuth2(taskID string, c *xmlRestConnector) (RestAuth, error) {
@@ -142,7 +142,7 @@ func restOAuth2(taskID string, c *xmlRestConnector) (RestAuth, error) {
 	}, nil
 }
 
-// connectorAuth builds an HTTP-based worker task's authentication config from its
+// connectorAuth builds an HTTP-based task's authentication config from its
 // authType and credential-reference fields, shared by REST and SCIM. authType selects
 // the scheme; an unknown scheme is rejected, and a scheme that needs a secret
 // reference must name one (secrets live server-side, ADR-0041, so the model always
@@ -1724,7 +1724,7 @@ type xmlIntermediateCatchEvent struct {
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
 	// Link, when present, makes this a link catch event: the landing point of a link throw
-	// with the same name in the same scope — an off-page connector / goto (ADR-0133). A
+	// with the same name in the same scope — an off-page worker / goto (ADR-0133). A
 	// pointer so an absent one is nil.
 	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
 	// Conditional, when present, makes this a conditional catch event: it waits until its
@@ -1756,7 +1756,7 @@ type xmlIntermediateThrowEvent struct {
 	// on its outgoing flow (ADR-0125). A pointer so an absent one is nil.
 	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
 	// Link, when present, makes this a link throw event: a goto to the link catch of the same
-	// name in the same scope — an off-page connector (ADR-0133). A pointer so an absent one is nil.
+	// name in the same scope — an off-page worker (ADR-0133). A pointer so an absent one is nil.
 	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
 }
 
@@ -2052,7 +2052,7 @@ func (st xmlServiceTask) sharePointConn() *xmlSharePointConnector {
 // per-activity wiring loop treat the two identically; only the compiled node type differs.
 type xmlSendTask = xmlServiceTask
 
-// A clio worker task's parameters, carried on a service task as an
+// A clio task's parameters, carried on a service task as an
 // <atlas:clioConnector connector="..." operation="..." .../> extension element.
 // worker names a server-registered worker (its endpoint and credentials live
 // in the server config, never in the model). operation is "write" (default),
@@ -2072,12 +2072,12 @@ type xmlClioConnector struct {
 	ReduceSpec     string `xml:"reduceSpec,attr"`
 	Limit          string `xml:"limit,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
 
-// An HTTP-REST worker task's parameters, carried on a service task as an
+// An HTTP-REST task's parameters, carried on a service task as an
 // <atlas:restConnector> extension element (ADR-0067). method is the HTTP method;
 // url is the full request URL, authored in the model; resultVariable, if set, is
 // the process variable the JSON response is written back into. Header and
@@ -2100,7 +2100,7 @@ type xmlRestConnector struct {
 	AuthScope      string      `xml:"authScope,attr"`
 	Headers        []xmlHTTPKV `xml:"httpHeader"`
 	QueryParams    []xmlHTTPKV `xml:"queryParam"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2125,7 +2125,7 @@ type xmlScimConnector struct {
 	AuthUsername   string `xml:"authUsername,attr"`
 	AuthApiKeyName string `xml:"authApiKeyName,attr"`
 	AuthSecret     string `xml:"authSecret,attr"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2149,7 +2149,7 @@ type xmlSoapConnector struct {
 	AuthUsername   string `xml:"authUsername,attr"`
 	AuthApiKeyName string `xml:"authApiKeyName,attr"`
 	AuthSecret     string `xml:"authSecret,attr"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2196,7 +2196,7 @@ type xmlAdConnector struct {
 	ResultVariable string `xml:"resultVariable,attr"`
 	MaxEntries     string `xml:"maxEntries,attr"`
 	ObjectSecurity string `xml:"objectSecurity,attr"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2217,7 +2217,7 @@ type xmlSqlConnector struct {
 	ParametersVariable string `xml:"parametersVariable,attr"`
 	ResultVariable     string `xml:"resultVariable,attr"`
 	MaxRows            string `xml:"maxRows,attr"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2233,7 +2233,7 @@ type xmlLdifConnector struct {
 	Operation      string `xml:"operation,attr"`
 	Source         string `xml:"source,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2269,7 +2269,7 @@ type xmlEntraConnector struct {
 	Search             string `xml:"search,attr"`
 	AdvancedQuery      string `xml:"advancedQuery,attr"`
 	DeltaLink          string `xml:"deltaLink,attr"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2304,7 +2304,7 @@ type xmlLdapConnector struct {
 	// plus private key) for a TLS client-certificate bind. Like bindSecret it is a
 	// reference, never a value (ADR-0041).
 	ClientCertSecret string `xml:"clientCertSecret,attr"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2316,7 +2316,7 @@ type xmlHTTPKV struct {
 	Value string `xml:"value,attr"`
 }
 
-// An outbound mail worker task's parameters, carried on a service task as an
+// An outbound mail task's parameters, carried on a service task as an
 // <atlas:mailConnector connector="..." to="..." .../> extension element (ADR-0079).
 // worker names a server-registered mail provider (its host and credentials live
 // on the server, never in the model). to (required) is a comma-separated recipient
@@ -2335,7 +2335,7 @@ type xmlMailConnector struct {
 	// which stays the plain-text alternative; blank means the message is text-only,
 	// exactly as before the field existed.
 	BodyHtml string `xml:"bodyHtml,attr"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2350,12 +2350,12 @@ type xmlUserConnector struct {
 	DisplayName string `xml:"displayName,attr"`
 	Roles       string `xml:"roles,attr"`
 	Password    string `xml:"password,attr"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
 
-// A CSV-to-JSON worker task's parameters, carried on a service task as an
+// A CSV-to-JSON task's parameters, carried on a service task as an
 // <atlas:csvConnector source="..." delimiter="," .../> extension element (ADR-0139).
 // source names the process variable holding the raw CSV text (default "csvText");
 // delimiter is the single-character field separator (default ","); hasHeader is
@@ -2473,7 +2473,7 @@ func csvHasHeader(attr string) bool {
 	return s == "" || strings.EqualFold(s, "true")
 }
 
-// A SharePoint worker task's parameters, carried on a service task as an
+// A SharePoint task's parameters, carried on a service task as an
 // <atlas:sharepointConnector connector="..." site="..." list="..."> extension
 // element (ADR-0141). worker names a server-registered SharePoint provider (its
 // Graph base and OAuth credential live on the server, never in the model). site
@@ -2488,12 +2488,12 @@ type xmlSharePointConnector struct {
 	List           string      `xml:"list,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"itemField"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
 
-// A BMC Remedy worker task's parameters, carried on a service task as an
+// A BMC Remedy task's parameters, carried on a service task as an
 // <atlas:remedyConnector connector="..." form="..." resultVariable="..."> extension
 // element with <atlas:remedyField name="..." value="..."/> children (ADR-0106).
 // worker names a server-registered Remedy instance (its base URL and credentials
@@ -2502,7 +2502,7 @@ type xmlSharePointConnector struct {
 // resultVariable, if set, receives the created entry's id. form and every field value
 // is literal or, with a leading '=', a FEEL expression over the instance's variables
 // at call time (the fx toggle, ADR-0067).
-// A Jira worker task's parameters, carried on a service task as an
+// A Jira task's parameters, carried on a service task as an
 // <atlas:jiraConnector connector="..." operation="..." .../> extension element
 // (ADR-0201). worker names a server-registered Jira instance (its
 // base URL and credential live on the server, never in the model) and operation is the
@@ -2535,7 +2535,7 @@ type xmlJiraConnector struct {
 	MaxResults     string      `xml:"maxResults,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"jiraField"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
@@ -2545,25 +2545,45 @@ type xmlRemedyConnector struct {
 	Form           string      `xml:"form,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"remedyField"`
-	// Retries is the worker task's own retry budget (ADR-0135), overriding a
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }
 
-// A web-scraping worker task's parameters, carried on a service task as an
-// <atlas:webscrapeConnector> extension (ADR-0118/0190). url and resultVariable are
-// always required. format is a structural literal (html by default, rss, or atom);
-// maxItems is an optional non-negative structural bound. HTML requires selector and
-// may name attribute; RSS/Atom prohibit both. url and the HTML selector may be
-// literal-or-FEEL; format, maxItems, and attribute are compiled structure.
+// A web-scraping task's parameters, carried on a service task as an
+// <atlas:webscrapeConnector> extension (ADR-0118/0190,
+// ADR-0231). url and resultVariable are always
+// required. format is a structural literal (html by default, rss, or atom); maxItems
+// is an optional non-negative structural bound. HTML requires selector and may name
+// attribute; RSS/Atom prohibit both. url and the HTML selector may be
+// literal-or-FEEL; everything else is compiled structure.
+//
+// Fields are the optional <atlas:scrapeField> children. With any, selector picks
+// *items* and each match becomes an object of these fields rather than a string —
+// which is why they are structure and not a runtime value: they are the result's
+// shape. absoluteLinks (HTML) resolves href/src reads against the fetched document's
+// final URL; plainText (feeds) strips markup from an entry's description.
 type xmlWebScrapeConnector struct {
-	Url            string `xml:"url,attr"`
-	Selector       string `xml:"selector,attr"`
-	Attribute      string `xml:"attribute,attr"`
-	Format         string `xml:"format,attr"`
-	MaxItems       string `xml:"maxItems,attr"`
-	ResultVariable string `xml:"resultVariable,attr"`
-	Retries        string `xml:"retries,attr"`
+	Url            string           `xml:"url,attr"`
+	Selector       string           `xml:"selector,attr"`
+	Attribute      string           `xml:"attribute,attr"`
+	Format         string           `xml:"format,attr"`
+	MaxItems       string           `xml:"maxItems,attr"`
+	AbsoluteLinks  string           `xml:"absoluteLinks,attr"`
+	PlainText      string           `xml:"plainText,attr"`
+	Fields         []xmlScrapeField `xml:"scrapeField"`
+	ResultVariable string           `xml:"resultVariable,attr"`
+	Retries        string           `xml:"retries,attr"`
+}
+
+// One <atlas:scrapeField> child of a web-scraping task: the object key its
+// value lands under, the optional CSS selector evaluated within the matched item
+// (empty = the item element itself), and the optional attribute read from it (empty =
+// that element's text).
+type xmlScrapeField struct {
+	Name      string `xml:"name,attr"`
+	Selector  string `xml:"selector,attr"`
+	Attribute string `xml:"attribute,attr"`
 }
 
 type xmlTaskDefinition struct {

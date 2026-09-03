@@ -13,7 +13,7 @@ import (
 // that evaluates a *central* business rule task's decision on a remote temis
 // instance and writes the result back as the resultVariable process variable
 // (ADR-0050). Register it with a [job.Runner] via HandleCompleting for the reserved
-// temis-connector job type ([compiler.TemisDecisionJobTypeIndex]).
+// temis job type ([compiler.TemisDecisionJobTypeIndex]).
 //
 // It reuses [dmn.DecisionHandler] for the shared input/output-mapping semantics
 // (ADR-0039) — static-input + variable-mapping merge, result → resultVariable — so

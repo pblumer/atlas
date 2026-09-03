@@ -15,12 +15,13 @@ type errReader struct{}
 
 func (errReader) Read([]byte) (int, error) { return 0, errors.New("boom") }
 
-// A read failure while parsing the page body is surfaced as an error (the job is
-// retried), not swallowed as an empty result.
+// A read failure while reading the page body is surfaced as an error (the job is
+// retried), not swallowed as an empty result. The charset sniff reads first, so the
+// failure is reported as a decode failure — either way it names the read.
 func TestExtractParseError(t *testing.T) {
 	_, err := extract(errReader{}, ".x", "")
-	if err == nil || !strings.Contains(err.Error(), "parse html") {
-		t.Fatalf("extract error = %v, want a parse-html error", err)
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("extract error = %v, want the read failure surfaced", err)
 	}
 }
 

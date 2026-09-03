@@ -78,7 +78,7 @@ func TestAdHandlerNotAConnectorTask(t *testing.T) {
 	r := &fakeReader{ei: &model.ElementInstanceValue{ProcessDefKey: cp.Key, ElementId: startID}, eiOK: true}
 	h := ad.Handler(r, func(uint64) *compiler.CompiledProcess { return cp }, &fakeDialer{conn: &fakeConn{}}, noSecret, nil)
 	if _, err := h(job.Job{ElementInstanceKey: 1}); err == nil {
-		t.Fatal("want an error when the element is not a task")
+		t.Fatal("want an error when the element is not a worker task")
 	}
 }
 

@@ -5,7 +5,10 @@ import (
 	"testing"
 )
 
-func parseWebScrapeExtension(t *testing.T, ext string) *ConnectorTaskDetail {
+// parseWebScrapeProcess compiles a one-task model carrying the given extension. It
+// returns the whole compiled process, because a field list is read back through its
+// string table (Intern) and not from the detail alone.
+func parseWebScrapeProcess(t *testing.T, ext string) *CompiledProcess {
 	t.Helper()
 	bpmn := `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
@@ -21,8 +24,19 @@ func parseWebScrapeExtension(t *testing.T, ext string) *ConnectorTaskDetail {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
+	return cp
+}
+
+// webScrapeDetail is the compiled worker detail of that model's single task.
+func webScrapeDetail(t *testing.T, cp *CompiledProcess) *ConnectorTaskDetail {
+	t.Helper()
 	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
 	return cp.ConnectorTask(cp.Node(task).Detail)
+}
+
+func parseWebScrapeExtension(t *testing.T, ext string) *ConnectorTaskDetail {
+	t.Helper()
+	return webScrapeDetail(t, parseWebScrapeProcess(t, ext))
 }
 
 func parseWebScrapeError(t *testing.T, ext, want string) {
