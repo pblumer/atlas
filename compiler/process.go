@@ -459,6 +459,10 @@ type UserTaskDetail struct {
 //     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
 //     values (literal-or-FEEL) an incident/entry is created with through the AR System
 //     REST API; ResultVar, if set, receives the created entry's id (ADR-0106).
+//   - Google Sheets (JobType == GoogleSheetsJobType): Connector names the
+//     server-registered Google credential; SheetsOp is the spreadsheet operation and
+//     the Sheets* fields below are the values and the shape it takes; ResultVar, if
+//     set, receives what Google returned.
 //   - Jira (JobType == JiraJobType): Connector names the server-registered Jira
 //     instance; JiraOp is the issue-tracker operation and the Jira* fields below are
 //     the values it takes (all literal-or-FEEL); ResultVar, if set, receives what Jira
@@ -807,6 +811,44 @@ type ConnectorTaskDetail struct {
 	JiraQuery       RestExpr
 	JiraMaxResults  int32
 	JiraFields      []RestKV
+	// Google Sheets connector fields (JobType == GoogleSheetsJobType,
+	// ADR-draft-google-sheets-worker). Connector (above) names the server-registered
+	// Google credential, which lives in the managed connector store and the vault,
+	// never in a model. SheetsOp is the interned operation ("create-spreadsheet"|
+	// "add-sheet"|"read-range"|"write-range"|"append-row"|"clear-range"|"delete-sheet"|
+	// "delete-spreadsheet"), and it decides which of the rest are populated; the
+	// compiler refuses a value on an operation that does not use it, so a field can
+	// never be quietly ignored at call time.
+	//
+	// SheetsID addresses the spreadsheet (every operation but create). SheetsTab is a
+	// tab title — the tab added or deleted, or the first tab of a new file — and
+	// SheetsRange the A1 range the four cell-level operations act on, which may name
+	// its own sheet ("Anträge!A2:F"). SheetsTitle and SheetsFolder are a new
+	// spreadsheet's name and the Drive folder it is moved into. SheetsValues is what
+	// the two writing operations write: one literal-or-FEEL value whose result is a
+	// list of rows, a list of objects, or one row of cells.
+	//
+	// SheetsColumns, SheetsInput and SheetsHeader are compiled structure rather than
+	// authored values, because each decides the *shape* of a call rather than its
+	// content, and a shape that differed per token would not be one. SheetsColumns
+	// names the fields and their order a list of objects is projected through;
+	// SheetsInput is the interned value-input mode ("user"|"raw", already defaulted so
+	// the runtime interprets nothing, I5); SheetsHeader makes a read answer with
+	// objects keyed by the range's first row instead of raw rows.
+	//
+	// Each RestExpr is a literal-or-FEEL value evaluated over the variables the task
+	// sees at call time; all are the zero value for a non-Sheets task. ResultVar
+	// (above) receives what Google returned, for the operations that return anything.
+	SheetsOp      int32
+	SheetsID      RestExpr
+	SheetsTab     RestExpr
+	SheetsRange   RestExpr
+	SheetsTitle   RestExpr
+	SheetsFolder  RestExpr
+	SheetsValues  RestExpr
+	SheetsColumns []string
+	SheetsInput   int32
+	SheetsHeader  bool
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
