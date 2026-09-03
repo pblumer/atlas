@@ -3484,7 +3484,7 @@ func (boundaryEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *
 	// message or broadcast takes its outgoing flow again. Fire it the way a recurring
 	// timer boundary fires (fireRecurringBoundary, ADR-0054) — spawn the reminder token
 	// and re-open the subscription, without ever completing the element instance
-	// (ADR-draft-repeating-non-interrupting-boundary-events).
+	// (ADR-0236).
 	//
 	// Completing it and arming a fresh instance would look equivalent and is not: the
 	// replacement is only a queued command while the rest of the batch runs, so a host

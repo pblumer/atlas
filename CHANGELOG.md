@@ -82,7 +82,7 @@ _Changed_ / _Removed_ for each version.
   `temis`.
 
 - **A non-interrupting message or signal boundary event now fires every time, not once**
-  ([ADR-draft-repeating-non-interrupting-boundary-events](docs/adr/draft-repeating-non-interrupting-boundary-events.md),
+  ([ADR-0236](docs/adr/0236-repeating-non-interrupting-boundary-events.md),
   refining [ADR-0040](docs/adr/0040-boundary-events.md)). Non-interrupting is how a model
   says *reminder*: fire beside the host activity and leave it running. For as long as the
   host runs, every occurrence should fire it again — and a recurring **timer** boundary
@@ -1071,6 +1071,26 @@ _Changed_ / _Removed_ for each version.
   extension elements are still `<atlas:jiraConnector>` and friends.
 
 ### Fixed
+
+- **The Data area's Import button did nothing at all.** Its click handler called a
+  helper that a change to the Console had removed in the meantime — the picker for
+  which application a new model belongs to, which became a dialog rather than a
+  numbered `window.prompt`. Git merged both changes without a word, because neither
+  touched the other's lines. The result was a reference error thrown inside an async
+  listener: no file dialog, no message, nothing on the page to say what had happened
+  ([ADR-0232](docs/adr/0232-uml-model-import.md)).
+
+  The flow now uses the same dialog as the rest of the Console, and it asks for the
+  file **first** — a browser will not open a file picker from a task that no longer
+  counts as a user gesture, and a dialog in front of it costs exactly that. With one
+  writable application there is nothing to ask and the picker is skipped.
+
+  It also moved out of `app.js` into `api/web/infomodel-import.js`, for the reason
+  `pickmodal.js` and `connectordialog.js` did: `app.js` boots the whole Console on
+  import, so anything left inside it is only ever exercised by hand. The new
+  `e2e/infomodel-import.spec.mjs` drives the real Console — a click has to open a file
+  dialog, and a chosen file has to produce the report — which is the crude assertion
+  that would have caught this and did not exist.
 
 - **A data association drawn inside a subprocess was thrown away at compile time.** A
   `<dataInputAssociation>` or `<dataOutputAssociation>` is drawn on the *activity*, and
