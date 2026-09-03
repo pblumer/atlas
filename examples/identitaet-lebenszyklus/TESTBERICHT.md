@@ -251,7 +251,42 @@ Vor einem Rollout auf 50.000 sind drei Dinge zu klären:
    Prozessinstanz her, verbunden über dieselbe `identityId` — nicht in die
    Identitäts-Instanz hinein.
 
-## 8. Zustand von server01 nach dem Test
+## 8. Was seit dem Test behoben ist
+
+Der Test hat drei Defekte und einen Engpass gefunden. Drei davon sind auf dem
+Branch behoben, jeder mit einem Test, der ohne den Fix fehlschlägt.
+
+| Befund | Stand |
+|---|---|
+| Daten-Assoziationen in Subprozessen werden still verworfen (§3.1) | **behoben** — der Compiler verdrahtet sie jetzt durch den ganzen Scope-Baum, wie er es für `ioMapping` und Multi-Instance längst tat |
+| `ioMapping` am Ereignis-Subprozess überschreibt mit `null` (§3.2) | **behoben** — die vorgehaltene Wächter-Instanz trägt die Element-Id des Handlers und bekam deshalb dessen Zuordnungen; sie gehören der Handler-Ausführung |
+| Instanzsuche blockiert die Engine (§5) | **behoben** — Abfragen laufen auf einer konsistenten Momentaufnahme ausserhalb des Run-Loops |
+| Nicht-unterbrechender Message-Boundary feuert nur einmal (§3.3) | **offen** — Re-Arm gibt es nur für Timer; das ist eine BPMN-Abweichung und ein eigener Change |
+
+Beim Optimieren kam ein vierter, gravierenderer Fund dazu, den der Test nicht
+zeigen konnte, weil wir den Seeder nie terminiert haben: `terminateChildInstance`
+suchte das Kind einer Call-Activity durch einen Vollscan **aller** lebenden
+Instanzen — einmal je abzubauender Call-Activity, im Prozessor. Der Abbruch des
+10.000er-Seeders hätte in der Grössenordnung 10⁸ Vergleiche gekostet, mit
+stehender Engine. Dafür gibt es jetzt einen Rückwärts-Index.
+
+**Gemessen** (50.000 aktive + 50.000 abgeschlossene Instanzen, acht Variablen je
+Instanz, Suche über alle):
+
+| | |
+|---|---|
+| die Suche selbst | ~2,0 s (unverändert — sie läuft weiterhin durch) |
+| längste Wartezeit für alles andere auf dem Run-Loop | **200–479 µs** |
+| derselbe Durchlauf im Loop, wie vorher | **1,8–1,9 s**, für alle |
+
+Die Suche ist nicht schneller geworden. Der Unterschied ist, dass die Engine
+nicht mehr auf sie wartet.
+
+**Wichtig:** Das alles liegt auf dem Branch, nicht auf server01. Der Server läuft
+weiter mit dem Build von vor dem Test — die 11.000 Instanzen dort zeigen also
+unverändert das alte Verhalten, bis der Branch deployed ist.
+
+## 9. Zustand von server01 nach dem Test
 
 Auf ausdrücklichen Wunsch **nicht aufgeräumt**. Auf dem Server stehen:
 

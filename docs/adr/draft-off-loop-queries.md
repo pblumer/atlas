@@ -91,6 +91,20 @@ counted.** They are complements, not alternatives:
   view collected every instance and sorted afterwards to display a bounded page;
   it now scans both instance families descending, bounded by the same limit.
 
+### Measured
+
+On a store seeded with 50.000 active plus 50.000 finished instances carrying eight
+variables each (800.000 variable records), searching by variable over all of them:
+
+| | |
+|---|---|
+| the search itself | ~2,0 s (unchanged — it still walks) |
+| worst wait for anything else on the run loop, while it runs | **200–479 µs** |
+| the same walk dispatched onto the loop, as before | **1,8–1,9 s**, for everything |
+
+The query did not get faster. What changed is that the rest of the engine no
+longer waits for it — which is the property the change is for.
+
 ### Consequences
 
 - **Positive:** No API read holds the run loop for work proportional to the
