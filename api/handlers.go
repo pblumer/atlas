@@ -20,6 +20,7 @@ import (
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/jira"
+	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
@@ -5356,6 +5357,23 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"attributes": j.Attributes, "baseDN": j.BaseDN, "filter": j.Filter,
 			"scope": j.Scope, "cookie": j.Cookie, "cookieVariable": j.CookieVariable,
 			"maxEntries": j.MaxEntries, "objectSecurity": j.ObjectSecurity,
+			"resultVariable": j.ResultVariable,
+		}}
+	case compiler.LdapJobTypeIndex:
+		// LDAP authors its own server (ADR-0154), so like AD the endpoint travels and
+		// the credentials do not: the bind-password and client-certificate
+		// *references* travel and whoever runs the job resolves them, so an offloaded
+		// LDAP task never reads the engine's vault (ADR-0168).
+		j, err := ldap.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "ldap", Fields: map[string]any{
+			"url": j.URL, "startTLS": j.StartTLS, "bindDN": j.BindDN,
+			"bindSecretRef": j.BindSecret, "clientCertSecretRef": j.ClientCertSecret,
+			"operation": j.Operation, "dn": j.DN, "attributes": j.Attributes,
+			"newPassword": j.NewPassword, "baseDN": j.BaseDN, "scope": j.Scope,
+			"filter": j.Filter, "pageSize": j.PageSize, "maxEntries": j.MaxEntries,
 			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.EntraJobTypeIndex:

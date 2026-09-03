@@ -124,7 +124,6 @@ idempotency key that de-duplicates the retry.
 |---|---|
 | `sharepoint` | Worker half |
 | `scim` | Worker half |
-| `ldap` | Worker half |
 | `soap` | Worker half |
 | `temis` | Worker half |
 

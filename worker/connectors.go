@@ -15,6 +15,7 @@ import (
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/envname"
+	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
@@ -64,6 +65,23 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.CsvImportJobType] = ExecFunc(runCSV)
 		case "ldif":
 			built.Handlers[compiler.LdifJobType] = ExecFunc(runLdif)
+		case "ldap":
+			// Nothing to configure, and nothing to report as a held worker name: an
+			// LDAP task authors its own server (ADR-0154), so what this worker needs
+			// is a way to bind — the secret references the models name, resolved from
+			// its own environment — rather than a directory somebody registered here.
+			//
+			// The pool is the one piece of state worth keeping: ADR-0154 pooled binds
+			// because they are expensive, and a worker that dialled per job would give
+			// that back the moment the work moved out of the engine. Nothing closes it
+			// explicitly — idle connections expire on the pool's own TTL, and a worker
+			// process ending releases the rest — which is why it needs no lifecycle
+			// hook here that no other kind has.
+			pool := ldap.NewPool(ldap.NewDialer(), ldap.PoolOptions{})
+			secret := ldapSecretFromEnv(env)
+			built.Handlers[compiler.LdapJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunLdapJob(ctx, j, pool, secret)
+			})
 		case "webscrape":
 			// Nothing to configure: the reach is the worker's network position, not a
 			// credential, so there is no environment to read and nothing to report as
@@ -328,7 +346,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "clio", "csv", "entra", "jira", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "webscrape"}
+	return []string{"ad", "clio", "csv", "entra", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

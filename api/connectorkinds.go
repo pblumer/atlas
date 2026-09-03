@@ -466,10 +466,19 @@ var offloadableKinds = map[string][]int32{
 // AD's answer (restWorkerEnv). LDIF needs no answer: it reads and writes a file, and a
 // supervised worker is a child on the same host.
 //
+// LDAP is the ninth, and it is AD's way exactly (ADR-0233, slice 3). The two kinds
+// share a shape — a task authors its own directory URL and bind DN, and names its
+// bind password and client certificate as vault *references* — so it was excluded for
+// the same reason AD was and is included now on the same condition: ldapWorkerEnv
+// hands the child exactly the references the deployed models name. A bind, a modify
+// and a close against a directory somebody else operates is the same work AD's
+// argument was about; that one kind speaks it through Microsoft's dialect and the
+// other through the standard one changes nothing about where it belongs.
+//
 // The credential-bearing kinds the engine cannot yet hand over stay in the engine
 // until an operator moves their secrets themselves, with --offload-connectors.
 func DefaultOffloadedKinds() []string {
-	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldif", connectorKindMail, connectorKindRemedy, "rest", "script", "webscrape"}
+	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "script", "webscrape"}
 }
 
 // DefaultSupervisedWorkerOnlyKinds are the worker-only Worker Types Atlas supervises
