@@ -6,10 +6,10 @@
              xmlns:atlas="http://atlas.dev/schema/1.0"
              id="defs_rest_connector" targetNamespace="http://atlas/playground">
   <process id="rest-connector" name="REST connector" isExecutable="true">
-    <documentation>Playground fixture for isolation: the task names a URL that must never be fetched. A sandbox registers no connectors at all, so the call cannot happen — the stub answers instead.</documentation>
+    <documentation>Playground fixture for isolation: the task names a URL that must never be fetched. A sandbox registers no workers at all, so the call cannot happen — the stub answers instead.</documentation>
     <startEvent id="start" name="Start"/>
     <serviceTask id="score" name="Fetch score">
-      <documentation>A REST connector task. In a sandbox its URL is inert: there is nothing registered that could dial it.</documentation>
+      <documentation>A REST task. In a sandbox its URL is inert: there is nothing registered that could dial it.</documentation>
       <extensionElements>
         <atlas:restConnector method="GET" url="http://127.0.0.1:1/score" resultVariable="score"/>
       </extensionElements>

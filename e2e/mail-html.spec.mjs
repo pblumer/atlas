@@ -1,4 +1,4 @@
-// End-to-end coverage for the mail connector's HTML body in the Modeler
+// End-to-end coverage for the mail worker's HTML body in the Modeler
 // (api/web/editor.js, ADR-0079 amended). The field is the one place an author writes
 // markup, so it must behave like the code field it is — highlighted, F2-able into the
 // Developer View (ADR-0145) — and it must write back to the attribute the compiler
@@ -35,7 +35,7 @@ test("the HTML body is read from the model and highlighted as markup", async ({ 
   expect(page.__errors).toEqual([]);
 });
 
-test("editing the HTML body writes it back to the connector extension", async ({ page }) => {
+test("editing the HTML body writes it back to the worker extension", async ({ page }) => {
   await page.locator("#f-st-bodyHtml").fill('<p>Hallo <b>Anna</b></p>');
   await page.locator("#f-st-bodyHtml").blur();
 

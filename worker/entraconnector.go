@@ -40,7 +40,7 @@ func entraRegistryFromEnv(env func(string) string) (*entra.Registry, []string, e
 		tenant, clientID, secret := env(key+"TENANT_ID"), env(key+"CLIENT_ID"), env(key+"CLIENT_SECRET")
 		for what, v := range map[string]string{"TENANT_ID": tenant, "CLIENT_ID": clientID, "CLIENT_SECRET": secret} {
 			if v == "" {
-				return nil, nil, fmt.Errorf("worker: entra connector %q is missing its %s: set %s%s", name, what, key, what)
+				return nil, nil, fmt.Errorf("worker: entra worker %q is missing its %s: set %s%s", name, what, key, what)
 			}
 		}
 		scope := env(key + "SCOPE")
@@ -54,7 +54,7 @@ func entraRegistryFromEnv(env func(string) string) (*entra.Registry, []string, e
 			ClientID:   clientID,
 			// A confidential client acting as itself: the only grant that makes sense
 			// for unattended provisioning, so unlike mail and SharePoint this
-			// connector offers no choice of grant.
+			// worker offers no choice of grant.
 			ClientSecret: secret,
 			Scope:        scope,
 		}), nil)
@@ -70,7 +70,7 @@ func entraRegistryFromEnv(env func(string) string) (*entra.Registry, []string, e
 // identical call.
 func RunEntraJob(ctx context.Context, j Job, reg *entra.Registry) (map[string]any, error) {
 	if j.Connector == nil {
-		return nil, fmt.Errorf("entra: the job carried no resolved connector detail; is this server running a version that resolves Entra tasks?")
+		return nil, fmt.Errorf("entra: the job carried no resolved worker detail; is this server running a version that resolves Entra tasks?")
 	}
 	raw, err := json.Marshal(j.Connector.Fields)
 	if err != nil {

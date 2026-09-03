@@ -75,7 +75,7 @@ func TestAWorkerRunsASQLTaskEndToEnd(t *testing.T) {
 }
 
 // Named binding is the one thing SQL Server has that MariaDB and PostgreSQL do not, so
-// it is the one part of this connector no other product's test can cover. It travels
+// it is the one part of this worker no other product's test can cover. It travels
 // as a JSON object from a process variable, through the payload's `named` field, to
 // sql.Named on the driver — three hops that each drop a map quietly if they are wrong.
 func TestAnMsSqlTaskBindsNamedParametersEndToEnd(t *testing.T) {

@@ -264,7 +264,7 @@ textarea::placeholder {
 .field.inline input { width: auto; margin: 0; }
 
 /* Entra attribute capture mask (ADR-0172, amended): a per-operation form that assembles
-   the connector's attributes JSON. Each row stacks a caption, an input, and a hint to
+   the worker's attributes JSON. Each row stacks a caption, an input, and a hint to
    match the .field look; a dashed rule sets off the "Weitere Attribute" escape hatch,
    and an error line flags a malformed escape-hatch JSON. */
 .entra-mask { display: block; margin-top: 6px; }
@@ -433,19 +433,19 @@ textarea::placeholder {
    columns evenly — which put the status halfway across the row and stranded the actions
    an inch of empty table away from it. */
 .conn-status-col { width: 220px; }
-/* Why a stored connector is not usable, under its status pill (ADR-0158). */
+/* Why a stored worker is not usable, under its status pill (ADR-0158). */
 .conn-problem {
   margin-top: 3px; max-width: 340px; color: var(--danger);
   font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere;
 }
-/* The connector a parked task resolves through, named on the incident itself
-   (ADR-0160). An operator reading "no connector registered as X" has to know which
+/* The worker a parked task resolves through, named on the incident itself
+   (ADR-0160). An operator reading "no worker registered as X" has to know which
    integration X is before they can go and fix it, and the incident is where they are
    standing. Amber when the model references a name nobody configured. */
 .inc-conn { margin: 4px 0 6px; }
 .inc-conn .pill { font-weight: 600; }
-/* The shared connector dialog (ADR-0160): the same form whether it is opened from
-   Organization › Connectors or from the incident a misconfigured connector parked. */
+/* The shared worker dialog (ADR-0160): the same form whether it is opened from
+   Console › Workers or from the incident a misconfigured worker parked. */
 .conn-modal { max-width: 640px; width: 92vw; }
 .conn-fields { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
 .conn-fields .field { margin: 0; }
@@ -455,7 +455,7 @@ textarea::placeholder {
 }
 .conn-enabled { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 12.5px; }
 .conn-enabled input { width: auto; margin: 0; }
-/* Which deployed processes resolve through a connector, under its row (ADR-0163) —
+/* Which deployed processes resolve through a worker, under its row (ADR-0163) —
    the line that turns Delete from a click into a decision. It is a count on a chip
    rather than the list itself: spelled out, a worker twenty-one deployed definitions
    reference drew fourteen wrapped lines of links, and the endpoint, the status and the
@@ -1792,9 +1792,9 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* Implementation-type marker the editor draws on a task in the Implement view (and the
    runtime views), so its executable nature reads at a glance — a script task's language
-   (PowerShell/Python/JavaScript) or a service task's connector kind (REST) (drawImplBadges).
+   (PowerShell/Python/JavaScript) or a service task's Worker Type (REST) (drawImplBadges).
    A round disc carrying the type icon, sized and placed to sit over the shape's own
-   top-left BPMN marker — the corner-glyph look of a connector task, not a floating label. */
+   top-left BPMN marker — the corner-glyph look of a worker task, not a floating label. */
 .impl-badge {
   display: grid; place-items: center; width: 26px; height: 26px;
   background: var(--surface); border-radius: 50%; box-shadow: 0 0 0 1px var(--border-strong);
@@ -1863,7 +1863,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 
 /* Type icon in the service-task kind picker (serviceTaskKindHTML) — the same disc as
-   the canvas marker so the picker and the diagram show the connector kind identically.
+   the canvas marker so the picker and the diagram show the Worker Type identically.
    Carries a `glyph` SVG when the kind has one (REST), else the kind's letter/emoji. */
 .stkind-icon {
   flex: 0 0 22px; height: 22px; display: grid; place-items: center;
@@ -2352,7 +2352,7 @@ tr[hidden] { display: none; }
 .pgroup-all:hover { color: var(--accent); text-decoration: underline; }
 .pgroup-all-sep { color: var(--border-strong); font-size: 11px; }
 
-/* A caption naming the section the groups below it belong to (e.g. the chosen connector
+/* A caption naming the section the groups below it belong to (e.g. the chosen Worker Type
    above its Mail provider / Message / Failure handling groups). It is a label, not a
    control: no chevron, no hover, not focusable — so it never suggests a collapse it
    cannot do. Deliberately unlike .pgroup-head (smaller, uppercase, muted) so the two
@@ -3086,7 +3086,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .code-editor:hover .dev-open, .code-editor:focus-within .dev-open { opacity: 1; }
 .code-editor .dev-open:hover { color: var(--accent); border-color: var(--accent); }
 
-/* The verdict of a connector check, under the connector form (ADR-0150). It says
+/* The verdict of a worker check, under the worker form (ADR-0150). It says
    what was proved, so it is a sentence and not a status dot — and a failure keeps the
    provider's own words, which is the part that tells an operator what to change. */
 .conn-test-result { font: 12.5px/1.5 system-ui, sans-serif; overflow-wrap: anywhere; }
@@ -3177,7 +3177,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 
 /* ---------- Secret shape hints (ADR-0155) ---------- */
 /* A vault secret is a name and an opaque string, so the form has to say what the
-   string is for: which connector resolves it and what shape that connector needs. */
+   string is for: which worker resolves it and what shape that worker needs. */
 .secret-hint { margin: 0 0 10px; font-size: 12.5px; line-height: 1.55; }
 .secret-hint p { margin: 0 0 6px; }
 .secret-skeleton {
@@ -3191,7 +3191,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   width: 100%; resize: vertical;
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-/* Why a value cannot be what the connector needs, said where it was typed. */
+/* Why a value cannot be what the worker needs, said where it was typed. */
 .secret-error {
   margin: 8px 0 0; padding: 8px 10px; border-radius: 6px;
   border: 1px solid var(--danger); background: #fdecea; color: var(--danger);
@@ -3413,7 +3413,7 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
   font-size: 12px; white-space: pre-wrap; word-break: break-word;
 }
 
-/* What the configured clio connector holds, under the in-memory tail. Separated by a
+/* What the configured clio worker holds, under the in-memory tail. Separated by a
    rule rather than a card, because they are the same rows from two places and the
    distinction that matters is only "this run" versus "before it". */
 .wkjob-history { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
@@ -3455,10 +3455,10 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 }
 .warn-note code { font-family: ui-monospace, monospace; font-size: 12px; }
 
-/* Connector ownership (ADR-0205): who else may configure one, inline in its row. */
+/* Worker ownership (ADR-0205): who else may configure one, inline in its row. */
 .conn-share { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
 .conn-share-head { font-size: 13px; font-weight: 600; }
-/* A connector somebody else configures: present, referenceable, and visibly not yours. */
+/* A worker somebody else configures: present, referenceable, and visibly not yours. */
 .conn-foreign td { opacity: .72; }
 
 /* Panorama's derived landscape mesh (ADR-0211). The graph is computed by the

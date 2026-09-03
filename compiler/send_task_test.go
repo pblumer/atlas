@@ -76,9 +76,9 @@ func TestParseSendTaskDefaultRetries(t *testing.T) {
 	}
 }
 
-// TestParseSendTaskConnector checks that a connector extension on a send task takes the
-// connector path exactly as on a service task — an <atlas:mailConnector> send task compiles
-// to a TypeConnectorTask, so outbound-send connectors author on a send task unchanged
+// TestParseSendTaskConnector checks that a worker extension on a send task takes the
+// worker path exactly as on a service task — an <atlas:mailConnector> send task compiles
+// to a TypeConnectorTask, so outbound-send workers author on a send task unchanged
 // (ADR-0112).
 func TestParseSendTaskConnector(t *testing.T) {
 	const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -103,7 +103,7 @@ func TestParseSendTaskConnector(t *testing.T) {
 	}
 	node := nodeByBpmnId(t, cp, "notify")
 	if node.Type != TypeConnectorTask {
-		t.Fatalf("connector send task type = %v, want ConnectorTask", node.Type)
+		t.Fatalf("worker send task type = %v, want ConnectorTask", node.Type)
 	}
 	if got := cp.Intern(cp.ConnectorTask(node.Detail).JobType); got != MailJobType {
 		t.Errorf("jobType = %q, want %q", got, MailJobType)
@@ -274,7 +274,7 @@ func TestParseSendTaskMessageBoundaryRejected(t *testing.T) {
 }
 
 // TestParseSendTaskNoTaskDefinition rejects a bare send task (no task definition, no
-// connector): like a service task with no taskDefinition type, it cannot execute, so it is a
+// worker): like a service task with no taskDefinition type, it cannot execute, so it is a
 // deploy error naming the send task (ADR-0112).
 func TestParseSendTaskNoTaskDefinition(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">

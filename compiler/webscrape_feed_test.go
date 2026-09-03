@@ -27,7 +27,7 @@ func parseWebScrapeProcess(t *testing.T, ext string) *CompiledProcess {
 	return cp
 }
 
-// webScrapeDetail is the compiled connector detail of that model's single task.
+// webScrapeDetail is the compiled worker detail of that model's single task.
 func webScrapeDetail(t *testing.T, cp *CompiledProcess) *ConnectorTaskDetail {
 	t.Helper()
 	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target

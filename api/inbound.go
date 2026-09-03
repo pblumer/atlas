@@ -23,12 +23,12 @@ func feelExpr(s string) string {
 }
 
 // handleListInboundSubscriptions lists the inbound event subscriptions of one clio
-// connector, oldest first.
+// worker, oldest first.
 func (s *Server) handleListInboundSubscriptions(w http.ResponseWriter, r *http.Request) {
 	connID := r.PathValue("id")
-	// A subscription list is every message name this connector publishes under, and
+	// A subscription list is every message name this worker publishes under, and
 	// a message name is the whole key an inbound event is delivered by. Reading it is
-	// therefore reading the connector's configuration, and needs viewer (ADR-0205).
+	// therefore reading the worker's configuration, and needs viewer (ADR-0205).
 	if _, code, msg := s.authorizeConnector(r, connID, ScopeRoleViewer); code != 0 {
 		httpapi.Error(w, code, msg)
 		return
@@ -59,14 +59,14 @@ func (s *Server) handleListInboundSubscriptions(w http.ResponseWriter, r *http.R
 }
 
 // handleCreateInboundSubscription creates an inbound subscription for a clio
-// connector (ADR-0075). It validates that the connector exists and is a clio
-// connector, that a message name and watched subject are given, and that the
+// worker (ADR-0075). It validates that the worker exists and is a clio
+// worker, that a message name and watched subject are given, and that the
 // correlation key (if any) compiles — a bad FEEL expression is rejected at config
 // time, not left to fail on every poll.
 func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.Request) {
 	connID := r.PathValue("id")
-	// Pointing a connector at a message name is the act this whole measure exists
-	// for: it decides which processes its events start. Editor on the connector
+	// Pointing a worker at a message name is the act this whole measure exists
+	// for: it decides which processes its events start. Editor on the worker
 	// (ADR-0205).
 	if _, code, msg := s.authorizeConnector(r, connID, ScopeRoleEditor); code != 0 {
 		httpapi.Error(w, code, msg)
@@ -111,7 +111,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 			return
 		}
 	}
-	// What the rest of the shape must be depends on the connector's kind, and the kind
+	// What the rest of the shape must be depends on the worker's kind, and the kind
 	// is in the store — so it is read before the record is built rather than checked
 	// after it (ADR-0214).
 	var (
@@ -129,7 +129,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		}
 	})
 	if kindErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "read connector: "+kindErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read worker: "+kindErr.Error())
 		return
 	}
 	id, err := newID()
@@ -172,7 +172,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 	)
 	s.do(func() {
 		// The claim on a message name, from the other side (ADR-0205): pointing this
-		// connector at a name some definition the claimant cannot reach already
+		// worker at a name some definition the claimant cannot reach already
 		// listens for would deliver their events to it, silently.
 		if claimed, saveErr = s.definitionBlockingClaim(r, rec.MessageName); saveErr != nil || claimed {
 			return
@@ -341,12 +341,12 @@ func (s *Server) handleDeleteInboundSubscription(w http.ResponseWriter, r *http.
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// authorizeSubscription authorizes a request against the connector a subscription
-// belongs to (ADR-0205). A subscription is governed by its connector's scope, the
+// authorizeSubscription authorizes a request against the worker a subscription
+// belongs to (ADR-0205). A subscription is governed by its worker's scope, the
 // way an artifact is governed by its project's — it has no sharing of its own,
 // because "who may point this mailbox somewhere" is a fact about the mailbox.
 //
-// A subscription that does not exist passes: there is no connector to authorize
+// A subscription that does not exist passes: there is no worker to authorize
 // against and nothing to protect, and the handler behind this already has its own
 // answer for a missing record — its own 404, or an idempotent delete. Refusing here
 // would replace those with an answer about access, which is the wrong thing to tell

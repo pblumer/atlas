@@ -190,7 +190,7 @@ func TestServeRefusesHalfATLSPair(t *testing.T) {
 }
 
 // serveForTest boots the real serve with everything that would reach outside this
-// process turned off: no auth, no vault, no docs, no metrics, and connectors in
+// process turned off: no auth, no vault, no docs, no metrics, and workers in
 // process rather than in supervised children.
 func serveForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsConfig) error {
 	return serve(ctx, addr, dataDir, 5*time.Second,

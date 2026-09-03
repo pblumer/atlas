@@ -219,10 +219,10 @@ func TestAnUnnamedWorkerGetsAUsableSubject(t *testing.T) {
 }
 
 // An exporter nobody configured is nil, and every call site tolerates that — which is
-// what keeps the ordinary server, the one that names no connector, unchanged.
+// what keeps the ordinary server, the one that names no worker, unchanged.
 func TestNoConnectorMeansNoExporter(t *testing.T) {
 	if e := newHistoryExporter("  ", HistoryScopeAll, nil); e != nil {
-		t.Fatal("a blank connector produced an exporter")
+		t.Fatal("a blank worker produced an exporter")
 	}
 	var nilExporter *historyExporter
 	nilExporter.offer(jobRun{Outcome: jobRunCompleted}) // must not panic
@@ -246,7 +246,7 @@ func TestTheHistoryEndpointSaysWhenNoneIsConfigured(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	if out.Configured {
-		t.Error("a server with no history connector reported one")
+		t.Error("a server with no history worker reported one")
 	}
 	if !strings.Contains(out.Note, "--worker-history") {
 		t.Errorf("note = %q, want it to name the flag that turns this on", out.Note)
@@ -298,7 +298,7 @@ func TestAnUnreachableHistoryIsReportedNotSwallowed(t *testing.T) {
 	}
 }
 
-// A connector named but not configured is the operator's likeliest mistake, and it
+// A worker named but not configured is the operator's likeliest mistake, and it
 // must not read as an empty history either.
 func TestANamedButUnconfiguredConnectorIsReported(t *testing.T) {
 	srv, _ := newValidateServer(t)
@@ -306,7 +306,7 @@ func TestANamedButUnconfiguredConnectorIsReported(t *testing.T) {
 
 	_, _, err := srv.historyOf(context.Background(), "w1")
 	if err == nil || !strings.Contains(err.Error(), "telemetry") {
-		t.Errorf("err = %v, want it to name the connector that is missing", err)
+		t.Errorf("err = %v, want it to name the worker that is missing", err)
 	}
 }
 
@@ -380,8 +380,8 @@ func TestAnUnrecognisedScopeMeansEverything(t *testing.T) {
 	}
 }
 
-// WithWorkerHistory names the connector on the command line, but resolves it at write
-// time. That is the whole difference between "create the clio connector before you
+// WithWorkerHistory names the worker on the command line, but resolves it at write
+// time. That is the whole difference between "create the clio worker before you
 // start Atlas" and "create it whenever you like": an operator who adds it in the
 // Console while the server runs gets history from that moment, not from the next
 // restart.
@@ -391,10 +391,10 @@ func TestWorkerHistoryResolvesItsConnectorAtWriteTimeNotAtStartup(t *testing.T) 
 		t.Fatal("WithWorkerHistory built no exporter")
 	}
 
-	// The server started with no such connector, so the lookup misses — and misses
+	// The server started with no such worker, so the lookup misses — and misses
 	// without blocking anything, which is what makes starting in this order safe.
 	if _, ok := srv.history.client(); ok {
-		t.Fatal("the exporter resolved a connector nobody has created yet")
+		t.Fatal("the exporter resolved a worker nobody has created yet")
 	}
 
 	// The operator creates it. Nothing restarts.
@@ -403,25 +403,25 @@ func TestWorkerHistoryResolvesItsConnectorAtWriteTimeNotAtStartup(t *testing.T) 
 
 	got, ok := srv.history.client()
 	if !ok {
-		t.Fatal("the exporter still resolves nothing after the connector was created")
+		t.Fatal("the exporter still resolves nothing after the worker was created")
 	}
 	if got != clio.Client(c) {
-		t.Errorf("the exporter resolved %v, want the connector it was named for", got)
+		t.Errorf("the exporter resolved %v, want the worker it was named for", got)
 	}
 
-	// And only the connector it was named for: a second one does not become the history.
+	// And only the worker it was named for: a second one does not become the history.
 	srv.do(func() { srv.clioRegistry.Replace(map[string]clio.Client{"somewhere-else": &fakeClio{}}) })
 	if _, ok := srv.history.client(); ok {
-		t.Error("the exporter resolved a connector it was not named for")
+		t.Error("the exporter resolved a worker it was not named for")
 	}
 }
 
-// A blank connector name means an operator asked for no history at all, and every call
+// A blank worker name means an operator asked for no history at all, and every call
 // site checks for the nil that produces — offering a run to it must stay free.
 func TestWithWorkerHistoryAndNoConnectorNameBuildsNoExporter(t *testing.T) {
 	srv, _ := newValidateServer(t, WithWorkerHistory("  ", HistoryScopeAll))
 	if srv.history != nil {
-		t.Errorf("history = %+v, want none for a blank connector name", srv.history)
+		t.Errorf("history = %+v, want none for a blank worker name", srv.history)
 	}
 	srv.history.offer(jobRun{Outcome: jobRunFailed}) // must not panic
 }

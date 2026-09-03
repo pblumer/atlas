@@ -136,7 +136,7 @@ func unnamespacedExtensions(t *testing.T, path string) []string {
 // The namespace test above catches a model the Modeler cannot read. This one catches
 // the other half: a model *nothing* can run. Until now no test parsed the shipped
 // BPMN at all, so a typo in an extension attribute — a filter that is not FEEL, an
-// operation the connector does not have — shipped as a file that looks like an
+// operation the worker does not have — shipped as a file that looks like an
 // example and fails the moment someone deploys it.
 //
 // It walks the same tree as the namespace test, so the per-scenario subdirectories

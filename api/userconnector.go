@@ -24,7 +24,7 @@ type userConnStore interface {
 	VariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error
 }
 
-// This file implements the user-provisioning connector worker (ADR-0123): the
+// This file implements the user-provisioning worker (ADR-0123): the
 // in-process side of an <atlas:userConnector> task. It create/set-password/disables
 // an Atlas login through the internal user store.
 //
@@ -33,7 +33,7 @@ type userConnStore interface {
 // (ADR-0122), only for these three bounded operations, and only when an operator
 // opts in (WithUserProvisioning). It reuses the same store rails the admin API uses
 // (password length, uniqueness, the last-enabled-admin lockout guard), so the
-// connector can never provision a weaker or more dangerous account than an admin
+// worker can never provision a weaker or more dangerous account than an admin
 // could by hand.
 //
 // Execution model: the single-binary server drives jobs synchronously on the
@@ -41,7 +41,7 @@ type userConnStore interface {
 // run-loop-owned user store directly — never through s.do, which would deadlock
 // (server.go loop/do).
 
-// userConnectorHandler builds the job handler for user-provisioning connector tasks.
+// userConnectorHandler builds the job handler for user-provisioning worker tasks.
 // Register it for the reserved compiler.UserConnectorJobTypeIndex only when
 // provisioning is enabled.
 func (s *Server) userConnectorHandler(store userConnStore) job.Handler {
@@ -55,28 +55,28 @@ func (s *Server) userConnectorHandler(store userConnStore) job.Handler {
 		}
 		cp := s.processLookup(ei.ProcessDefKey)
 		if cp == nil {
-			return fmt.Errorf("user connector: no compiled process for def %d", ei.ProcessDefKey)
+			return fmt.Errorf("user worker: no compiled process for def %d", ei.ProcessDefKey)
 		}
 		// Gate: only the protected system project's processes may provision users
-		// (ADR-0122/0123). A tenant model that declared the connector fails here.
+		// (ADR-0122/0123). A tenant model that declared the worker fails here.
 		if !s.systemPIDs[cp.ProcessId()] {
-			return fmt.Errorf("user connector: process %q is not a system process; user provisioning is restricted to the system project", cp.ProcessId())
+			return fmt.Errorf("user worker: process %q is not a system process; user provisioning is restricted to the system project", cp.ProcessId())
 		}
 		detail, err := cp.ConnectorTaskOf(ei.ElementId)
 		if err != nil {
-			return fmt.Errorf("user connector: %w", err)
+			return fmt.Errorf("user worker: %w", err)
 		}
 		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
 		// The variables the task sees, up its scope chain, so its own input-mapped
 		// locals shadow what it inherits (ADR-0068).
 		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
 		if err != nil {
-			return fmt.Errorf("user connector: read variables: %w", err)
+			return fmt.Errorf("user worker: read variables: %w", err)
 		}
 		op := cp.Intern(detail.UserOp)
 		username := strings.TrimSpace(userResolve(detail.UserName, piKey, scopeVars))
 		if username == "" {
-			return fmt.Errorf("user connector: resolved an empty username")
+			return fmt.Errorf("user worker: resolved an empty username")
 		}
 		now := time.Now().Unix()
 		switch op {
@@ -108,7 +108,7 @@ func (s *Server) userConnectorHandler(store userConnStore) job.Handler {
 				slog.Uint64("instance", piKey), slog.String("username", username))
 			return nil
 		default:
-			return fmt.Errorf("user connector: unknown operation %q", op)
+			return fmt.Errorf("user worker: unknown operation %q", op)
 		}
 	}
 }
@@ -125,13 +125,13 @@ func (s *Server) provisionCreateUser(username, email, displayName string, roles 
 		return existing.ID, false, nil // idempotent: already provisioned
 	}
 	if len(password) < minPasswordLen {
-		return "", false, fmt.Errorf("user connector: password must be at least %d characters", minPasswordLen)
+		return "", false, fmt.Errorf("user worker: password must be at least %d characters", minPasswordLen)
 	}
 	if email != "" {
 		if _, ok, err := s.users.byEmail(email); err != nil {
 			return "", false, err
 		} else if ok {
-			return "", false, fmt.Errorf("user connector: email %q already taken", email)
+			return "", false, fmt.Errorf("user worker: email %q already taken", email)
 		}
 	}
 	hash, err := hashPassword(password)
@@ -164,14 +164,14 @@ func (s *Server) provisionCreateUser(username, email, displayName string, roles 
 // operation). The user must exist; the minimum length applies.
 func (s *Server) provisionSetPassword(username, password string, now int64) error {
 	if len(password) < minPasswordLen {
-		return fmt.Errorf("user connector: password must be at least %d characters", minPasswordLen)
+		return fmt.Errorf("user worker: password must be at least %d characters", minPasswordLen)
 	}
 	u, ok, err := s.users.byUsername(username)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return fmt.Errorf("user connector: no user named %q", username)
+		return fmt.Errorf("user worker: no user named %q", username)
 	}
 	hash, err := hashPassword(password)
 	if err != nil {
@@ -191,7 +191,7 @@ func (s *Server) provisionDisableUser(username string, now int64) error {
 		return err
 	}
 	if !ok {
-		return fmt.Errorf("user connector: no user named %q", username)
+		return fmt.Errorf("user worker: no user named %q", username)
 	}
 	if u.Disabled {
 		return nil // idempotent
@@ -202,7 +202,7 @@ func (s *Server) provisionDisableUser(username string, now int64) error {
 			return err
 		}
 		if enabledAdminCount(all, u.ID) == 0 {
-			return fmt.Errorf("user connector: cannot disable the last enabled admin")
+			return fmt.Errorf("user worker: cannot disable the last enabled admin")
 		}
 	}
 	u.Disabled = true
@@ -236,7 +236,7 @@ func splitRoles(s string) []string {
 // and REST workers).
 const userBuiltinProcessInstanceKey = "processInstanceKey"
 
-// userResolve turns a connector field value into a string: a literal verbatim, or a
+// userResolve turns a worker field value into a string: a literal verbatim, or a
 // FEEL expression evaluated over the scope's variables and coerced to its string
 // form. A FEEL null (absent variable or failed evaluation) becomes "" — the same
 // null-propagating contract the mail/REST workers use.

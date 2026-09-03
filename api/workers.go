@@ -38,7 +38,7 @@ type workerStat struct {
 	// Types counts jobs leased per job type, which is how an operator sees what a
 	// worker actually subscribes to rather than what it was configured for.
 	Types map[string]int64 `json:"types"`
-	// Connectors are the connector configurations this worker reports holding —
+	// Workers are the worker configurations this worker reports holding —
 	// the providers it can reach. Empty for a worker that serves only plain job
 	// types, which need no credential of their own.
 	Connectors []string `json:"connectors,omitempty"`
@@ -94,9 +94,9 @@ func (r *workerRegistry) seen(worker string) *workerStat {
 	return st
 }
 
-// holdsConnectors records the connector names a worker reports holding. It replaces
+// holdsConnectors records the worker names a worker reports holding. It replaces
 // rather than merges: the report is that worker's current configuration, so a
-// connector removed from it should stop being counted as served rather than linger
+// worker removed from it should stop being counted as served rather than linger
 // from an earlier poll.
 func (r *workerRegistry) holdsConnectors(worker string, names []string) {
 	if worker == "" && len(names) == 0 {
@@ -299,7 +299,7 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 //
 // It exists because a deploy supersedes its predecessor without removing it — the
 // registry is the deploy history, not the current state of the models. Reading
-// connector coverage over all of it means a name an author corrected two versions ago
+// worker coverage over all of it means a name an author corrected two versions ago
 // is reported forever, under the process's *current* name, which reads as an
 // accusation against a model that is fine. A superseded version creates no jobs on its
 // own: an instance starts on the newest version, and a call activity resolves the
@@ -348,7 +348,7 @@ func (s *Server) reachableDeployments() (map[uint64]bool, error) {
 	return out, nil
 }
 
-// unservedConnector is a connector name a deployed model references that nothing on
+// unservedConnector is a worker name a deployed model references that nothing on
 // this server can currently serve.
 type unservedConnector struct {
 	Name      string     `json:"name"`
@@ -356,11 +356,11 @@ type unservedConnector struct {
 	Processes []typeUser `json:"processes"`
 }
 
-// unservedConnectors names the connectors deployed models reference that neither the
+// unservedConnectors names the workers deployed models reference that neither the
 // engine nor any worker seen pulling can serve.
 //
 // This exists because moving a credential onto a worker (ADR-0168) took a check away
-// from the engine. It used to refuse an unconfigured connector at lease time, since
+// from the engine. It used to refuse an unconfigured worker at lease time, since
 // it held every credential; once a kind is offloaded it holds none and cannot read a
 // worker's environment. So the answer has to be assembled from two halves: the names
 // models reference, which only the engine knows, and the names workers hold, which
@@ -368,16 +368,16 @@ type unservedConnector struct {
 //
 // A kind the engine still serves itself is left out. There the engine's own registry
 // is the authority and already refuses at deploy and at lease time (ADR-0163);
-// listing it here would say "missing" about a connector that works.
+// listing it here would say "missing" about a worker that works.
 //
-// A worker that has never polled reports nothing, so a connector is listed until the
+// A worker that has never polled reports nothing, so a worker is listed until the
 // worker holding it is first seen. That is the honest reading — an operator looking
 // at a queue that is not moving wants to know that nothing has claimed it — and it
 // resolves itself on the first poll.
 //
 // Only the definitions in `reachable` are read (see reachableDeployments): the
 // registry is the whole deploy history, and a superseded version nothing runs on
-// creates no jobs, so it has no connector left to serve.
+// creates no jobs, so it has no worker left to serve.
 //
 // Runs on the run-loop goroutine, over the in-memory deployment registry.
 func (s *Server) unservedConnectors(reachable map[uint64]bool) []unservedConnector {
@@ -402,10 +402,10 @@ func (s *Server) unservedConnectors(reachable map[uint64]bool) []unservedConnect
 				continue
 			}
 			if strings.HasPrefix(strings.TrimSpace(ref.Connector), "=") {
-				// A connector authored as a FEEL expression (entra, ADR-0172) names no
-				// fixed connector to match against what workers hold — the tenant is
+				// A worker authored as a FEEL expression (entra, ADR-0172) names no
+				// fixed worker to match against what workers hold — the tenant is
 				// resolved from the instance's variables at call time. Listing "= tenant"
-				// as unserved would be a false alarm; the runtime unresolved-connector
+				// as unserved would be a false alarm; the runtime unresolved-worker
 				// incident stands in for it, exactly as the deploy-time preflight does.
 				continue
 			}
@@ -515,7 +515,7 @@ func (s *Server) jobTypeUsers() map[int32][]typeUser {
 //
 // It used to be service and send tasks alone, on the reasoning that those are "the only
 // elements carrying a job type the model authored" (ADR-0157). That is true of the
-// *string* and false of the job: a connector task, a script task, a business rule task
+// *string* and false of the job: a task, a script task, a business rule task
 // and a user task each carry a reserved type instead of an authored one, and each
 // creates a job under it. So the Workers view's Processes column — the thing that is
 // supposed to make a row actionable, since "an engine with fifty job types has fifty

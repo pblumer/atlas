@@ -219,7 +219,7 @@ func runtimeBoundArchiMate(runtimeID string) string {
 </model>`
 }
 
-// A connector's endpoint reaches the catalog's source but must never reach a
+// A worker's endpoint reaches the catalog's source but must never reach a
 // binding payload — the same bound the landscape mesh keeps.
 func TestPanoramaBindingCandidatesCarryNoEndpoint(t *testing.T) {
 	ts := newTestServer(t)
@@ -228,7 +228,7 @@ func TestPanoramaBindingCandidatesCarryNoEndpoint(t *testing.T) {
 		`{"name":"ops-mail","kind":"mail","endpoint":"smtp://internal-relay.corp.example:587","sender":"ops@example.test"}`,
 		"application/json")
 	if code != http.StatusOK && code != http.StatusCreated {
-		t.Fatalf("create connector status = %d, body = %s", code, body)
+		t.Fatalf("create worker status = %d, body = %s", code, body)
 	}
 	code, body = doReq(t, ts, http.MethodPost, "/api/v1/applications", `{"name":"EA"}`, "application/json")
 	if code != http.StatusOK && code != http.StatusCreated {

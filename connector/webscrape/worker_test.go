@@ -19,7 +19,7 @@ type fixedClock struct{ t int64 }
 
 func (c *fixedClock) Now() int64 { c.t++; return c.t }
 
-// recordingClient captures the scrape requests a connector task makes and returns a
+// recordingClient captures the scrape requests a task makes and returns a
 // canned list of extracted values.
 type recordingClient struct {
 	requests []webscrape.Request

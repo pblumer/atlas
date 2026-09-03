@@ -130,13 +130,21 @@ splits the old word into three: a **Worker Type** is a capability (`jira`, `mail
 task states — and a **Worker Instance** is a process leasing its jobs. Scaling adds
 Worker Instances, never a second Worker.
 
-The old spelling stays in the contracts that cannot change without breaking deployed
-models: these package paths, the `connector="…"` BPMN attribute, `atlas worker
---connector`, the `ATLAS_*_CONNECTORS` variables and the `/api/v1/connectors` routes
-(aliased by `/api/v1/configured-workers`). Renaming the packages is slice 7 of
+Everything a person reads now says Worker: the Console, the Modeler, the handbook,
+the CLI help, deploy and incident messages, and the comments in this tree. The old
+spelling stays only in the contracts that cannot change without breaking deployed
+models: these package paths, Go identifiers built on them, the `connector="…"` BPMN
+attribute and the `atlas:*Connector` extension elements, `atlas worker --connector`,
+`--offload-connectors` / `--in-process-connectors` / `--supervise-connector`, the
+`ATLAS_*_CONNECTORS` and `ATLAS_CONNECTOR_<REF>_TOKEN` variables, the `connectors`
+field a worker registration carries, and the `/api/v1/connectors` routes (aliased by
+`/api/v1/configured-workers`). Renaming those is slice 6 of
 [the migration](docs/architecture/worker-execution-migration.md); do not start it as
 a side effect of another change. Records written before ADR-0203 keep their wording —
-they are immutable, and `docs/adr/README.md` carries the mapping.
+they are immutable, and `docs/adr/README.md` carries the mapping. Beware the three
+words that are somebody else's and must not be touched: BPMN's **off-page connector**
+(link events), an AI client's **custom connector** (MCP, ADR-0200), and Microsoft
+Identity Manager's **connector** in `docs/comparisons/mim.md`.
 
 **A new API area is a service, not more `Server` methods** (ADR-0147). Give it its
 own package under `api/`, hold a `*runloop.Loop` and take every other dependency

@@ -1,6 +1,6 @@
 {
   "tags": [
-    "Connectors",
+    "Workers",
     "Operations"
   ],
   "title": {
@@ -13,7 +13,7 @@
   },
   "tutorial": {
     "en": [
-      "Set your Remedy instance up under Console › Connectors: its AR System base URL, and a vault credential holding the service account's username and password.",
+      "Set your Remedy instance up under Console › Workers: its AR System base URL, and a vault credential holding the service account's username and password.",
       "Open Operations › Workers: the worker named remedy is running there, started by Atlas itself.",
       "That view lists the instances each worker holds, so a connector name your models use and nothing serves is visible there rather than in a failed job."
     ],

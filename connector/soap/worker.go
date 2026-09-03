@@ -26,7 +26,7 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // compiled process — only its reference does.
 type SecretResolver func(ref string) string
 
-// Handler builds a job handler that performs a SOAP / Web Services connector task.
+// Handler builds a job handler that performs a SOAP / Web Services worker task.
 // Register it with a [job.Runner] under the reserved [compiler.SoapJobTypeIndex] via
 // HandleWithOutput; the runner then pulls activatable SOAP jobs, and for each the
 // handler resolves the task's endpoint / operation / SOAPAction / body / version /

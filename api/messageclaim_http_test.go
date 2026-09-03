@@ -12,8 +12,8 @@ import (
 
 // The claim on a message name (ADR-0205, measure M11 step two).
 //
-// Step one gave a connector an owner, and stopped there: a stranger could no
-// longer *configure* somebody's inbound connector, but could still deploy a
+// Step one gave a worker an owner, and stopped there: a stranger could no
+// longer *configure* somebody's inbound worker, but could still deploy a
 // process whose message-start event named the same message and receive its events.
 // The message name was the whole key, and the name is not a secret.
 //
@@ -70,7 +70,7 @@ func deployAs(t *testing.T, c *http.Client, base, xml string) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
-// subscribeAs creates an inbound subscription on a clio connector.
+// subscribeAs creates an inbound subscription on a clio worker.
 func subscribeAs(t *testing.T, c *http.Client, base, connID, messageName string) (int, string) {
 	t.Helper()
 	body := `{"watchedSubject":"mail/inbox","messageName":"` + messageName + `","enabled":true}`
@@ -183,7 +183,7 @@ func TestAClaimDoesNotStopSomebodyWhoMayReachIt(t *testing.T) {
 		t.Fatalf("subscribe = %d: %s", status, body)
 	}
 
-	// An administrator reaches every connector, so the claim is not a stranger's to
+	// An administrator reaches every worker, so the claim is not a stranger's to
 	// them and the deploy stands.
 	if status, body := deployAs(t, admin, ts.URL, messageStartBPMN("adminProzess", "gemeinsame-post")); status != http.StatusOK {
 		t.Errorf("= %d, want 200: an administrator was refused by a claim they can read\n%s", status, body)
@@ -415,7 +415,7 @@ func TestTheClaimDoorsSurviveABrokenDataDirectory(t *testing.T) {
 	})
 }
 
-// TestAClaimOnAConnectorThatIsGoneHoldsNothing: a subscription whose connector was
+// TestAClaimOnAConnectorThatIsGoneHoldsNothing: a subscription whose worker was
 // deleted is an orphan the bridge already ignores, so it must not go on holding a
 // message name against everybody.
 func TestAClaimOnAConnectorThatIsGoneHoldsNothing(t *testing.T) {
@@ -430,10 +430,10 @@ func TestAClaimOnAConnectorThatIsGoneHoldsNothing(t *testing.T) {
 	if status, body := subscribeAs(t, anna, ts.URL, connID, "verwaister-name"); status != http.StatusOK {
 		t.Fatalf("subscribe = %d: %s", status, body)
 	}
-	// Deleting the connector cascades its grants but leaves the subscription record;
-	// the claim it carried must fall with the connector, not outlive it.
+	// Deleting the worker cascades its grants but leaves the subscription record;
+	// the claim it carried must fall with the worker, not outlive it.
 	if got := statusOf(t, anna, http.MethodDelete, ts.URL+"/api/v1/connectors/"+connID+"?force=true", ""); got != http.StatusNoContent {
-		t.Fatalf("delete connector = %d", got)
+		t.Fatalf("delete worker = %d", got)
 	}
 	if status, body := deployAs(t, bert, ts.URL, messageStartBPMN("nachzuegler", "verwaister-name")); status != http.StatusOK {
 		t.Errorf("= %d, want 200: an orphaned subscription still held a message name\n%s", status, body)

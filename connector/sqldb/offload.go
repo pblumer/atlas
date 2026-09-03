@@ -26,7 +26,7 @@ type VarStore interface {
 // point: the engine resolves a Job and hands it over without ever having held a
 // database credential (ADR-0173).
 type Job struct {
-	// Connector names the database the *worker* is configured for. A name and not an
+	// Worker names the database the *worker* is configured for. A name and not an
 	// address, because an address is half a credential.
 	Connector string `json:"connector"`
 	// Product is the operator-facing kind name ("mssql"|"mariadb"|"postgres"),
@@ -42,19 +42,19 @@ type Job struct {
 	ResultVariable string         `json:"resultVariable,omitempty"`
 }
 
-// Resolve turns a compiled SQL connector task into a [Job]: the authored statement
+// Resolve turns a compiled SQL task into a [Job]: the authored statement
 // from the detail, and the parameters read up the task's scope chain. It is engine
 // work by necessity — the compiled process and the scope live only there.
 //
 // The statement needs no resolving. It is literal by construction, which is the whole
-// of this connector's injection defence (ADR-0173).
+// of this worker's injection defence (ADR-0173).
 func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64) (Job, error) {
 	if detail == nil {
-		return Job{}, fmt.Errorf("sqldb: connector task has no detail")
+		return Job{}, fmt.Errorf("sqldb: task has no detail")
 	}
 	product, ok := ProductByJobType(cp.Intern(detail.JobType))
 	if !ok {
-		return Job{}, fmt.Errorf("sqldb: job type %q is not a SQL connector", cp.Intern(detail.JobType))
+		return Job{}, fmt.Errorf("sqldb: job type %q is not a SQL worker", cp.Intern(detail.JobType))
 	}
 	j := Job{
 		Connector:      cp.Intern(detail.Connector),
@@ -160,7 +160,7 @@ func jsonScalar(v any) any {
 // Run executes a resolved job through the caller's own registry and returns the
 // variables the job completes with. It is the whole of the worker's half.
 //
-// The connector lookup comes first, as it does for mail: an unconfigured name is the
+// The worker lookup comes first, as it does for mail: an unconfigured name is the
 // actionable failure, and reporting it ahead of anything about the statement keeps
 // the message pointed at the fix.
 func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
@@ -169,7 +169,7 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 		return nil, reg.Unresolved("sqldb", j.Connector)
 	}
 	if got := client.Product().Name; got != j.Product {
-		return nil, fmt.Errorf("sqldb: the task is a %s task but connector %q is a %s database", j.Product, j.Connector, got)
+		return nil, fmt.Errorf("sqldb: the task is a %s task but worker %q is a %s database", j.Product, j.Connector, got)
 	}
 	args, err := bindArgs(j, client.Product())
 	if err != nil {

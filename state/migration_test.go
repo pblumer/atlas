@@ -114,7 +114,7 @@ func TestMigrateInstanceRewritesEveryBoundRecord(t *testing.T) {
 	}
 
 	// The incident's element index is what every operator surface resolves to a diagram
-	// element — and, since ADR-0160, to the connector behind it.
+	// element — and, since ADR-0160, to the worker behind it.
 	inc, err := s.GetIncident(migElA)
 	if err != nil || inc == nil {
 		t.Fatalf("GetIncident: %v (nil=%v)", err, inc == nil)

@@ -313,7 +313,7 @@ func Open(opts Options) (*Sandbox, error) {
 	for name, cfg := range opts.Stubs.Pools {
 		s.pools[name] = &poolState{cfg: cfg, stat: PoolStat{Capacity: cfg.Capacity}}
 	}
-	// No connector registry, no vault, no job runner, no HTTP client: a service
+	// No worker registry, no vault, no job runner, no HTTP client: a service
 	// task in here has nothing that could reach the outside, which is how the
 	// sandbox's side-effect freedom is guaranteed rather than configured.
 	s.proc = engine.New(partition, log, store, clock)

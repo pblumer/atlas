@@ -131,7 +131,7 @@ func (r failingReader) GetElementInstance(key uint64) (*model.ElementInstanceVal
 	return &model.ElementInstanceValue{FlowScopeKey: parent}, true, nil
 }
 
-// TestVisibleVariablesMapAndLocals covers the two map-shaped reads every connector
+// TestVisibleVariablesMapAndLocals covers the two map-shaped reads every worker
 // worker uses: the scope-chain one a worker binds FEEL against (nearest scope wins),
 // and the single-scope one an outbound body uses when its task maps its inputs
 // (ADR-0174) — which must inherit nothing.

@@ -62,9 +62,9 @@ type deployResp struct {
 	Version     int32             `json:"version"`
 	Deployments []deployedProcess `json:"deployments"`
 	// Warnings are things that deployed fine but will not run as written — today, a
-	// connector reference naming something that is not configured, or is configured
+	// worker reference naming something that is not configured, or is configured
 	// as another kind, or cannot be built. The deploy succeeds anyway (a model is
-	// routinely deployed before its connectors exist), but the author is told now
+	// routinely deployed before its workers exist), but the author is told now
 	// rather than by the first token to park (ADR-0158).
 	Warnings []string `json:"warnings,omitempty"`
 }
@@ -207,12 +207,12 @@ type runtimeIncident struct {
 	ElementID          string `json:"elementId"`
 	RaisedAt           int64  `json:"raisedAt"`
 	Message            string `json:"message"`
-	// Connector names the server-registered connector the stuck task refers to, and
+	// Worker names the server-registered worker the stuck task refers to, and
 	// ConnectorKind the kind it needs; ConnectorID is the configured record's id when
-	// one exists under that name and kind. A connector task's incident is usually a
-	// connector problem, and the fix is a field on the connector — so the operator gets
+	// one exists under that name and kind. A worker task's incident is usually a
+	// worker problem, and the fix is a field on the worker — so the operator gets
 	// there from the incident instead of reading the name out of a message (ADR-0160).
-	// All three are empty for a task that names no connector.
+	// All three are empty for a task that names no worker.
 	Connector     string `json:"connector,omitempty"`
 	ConnectorKind string `json:"connectorKind,omitempty"`
 	ConnectorID   string `json:"connectorId,omitempty"`
@@ -509,9 +509,9 @@ type incidentView struct {
 	Type     string `json:"type"`
 	RaisedAt int64  `json:"raisedAt"`
 	Message  string `json:"message"`
-	// Connector / ConnectorKind / ConnectorID are the server-registered connector the
+	// Worker / ConnectorKind / ConnectorID are the server-registered worker the
 	// stuck task refers to, so the fix is one click from the incident rather than a
-	// name read out of a message (ADR-0160). Empty when the task names no connector,
+	// name read out of a message (ADR-0160). Empty when the task names no worker,
 	// and ConnectorID alone is empty when nothing is configured under that name.
 	Connector     string `json:"connector,omitempty"`
 	ConnectorKind string `json:"connectorKind,omitempty"`
@@ -784,7 +784,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 			Version:     deployed[0].Version,
 			Deployments: deployed,
 		}
-		// Still on the run loop, where the connector store and the registries may be
+		// Still on the run loop, where the worker store and the registries may be
 		// read (I3), and with every pool of a collaboration already registered.
 		// The information model of the application this deploy files under, resolved
 		// once for every pool: what a data object's itemSubjectRef points at. An
@@ -811,8 +811,8 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	case persistErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
 	case claimed != "":
-		claimRefusal(w, claimed, "An inbound connector you cannot reach publishes under this "+
-			"message name. Rename the message in your model, or ask whoever owns that connector to share it.")
+		claimRefusal(w, claimed, "An inbound worker you cannot reach publishes under this "+
+			"message name. Rename the message in your model, or ask whoever owns that worker to share it.")
 	default:
 		httpapi.JSON(w, http.StatusOK, resp)
 	}
@@ -1161,7 +1161,7 @@ func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) 
 // The work is bounded twice, by how far it reads and by how much it returns, because
 // this runs on the run loop under a 1.5-second poll: a definition whose own tokens are
 // healthy must not pay an unbounded scan because some other definition has thousands
-// parked behind a broken connector. A bound that bites marks the page truncated, which
+// parked behind a broken worker. A bound that bites marks the page truncated, which
 // is what tells the browser its per-element counts are a floor rather than a total.
 func (s *Server) collectDefIncidents(defKey uint64, add func(uint64, *model.IncidentValue) bool, resp *runtimeResp) error {
 	scanned := 0
@@ -1237,7 +1237,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			return e
 		}
 
-		// One resolver for the whole overlay, so the connector store is read once for
+		// One resolver for the whole overlay, so the worker store is read once for
 		// the page rather than once per parked token (ADR-0160).
 		connectorFor := s.incidentConnectorLookup()
 		// addIncident records one parked element instance on the overlay: a count on
@@ -2385,7 +2385,7 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		s.proc.SetVariables(key, scopeKey, actor, vars...)
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
-	// where a connector's outbound call happens, and holding the single writer for
+	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
 		runErr = s.drive()
@@ -4098,7 +4098,7 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
-	// where a connector's outbound call happens, and holding the single writer for
+	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
 		runErr = s.drive()
@@ -4223,7 +4223,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
-	// where a connector's outbound call happens, and holding the single writer for
+	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
 		runErr = s.drive()
@@ -4273,7 +4273,7 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 		s.proc.ResolveIncident(key, retries)
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
-	// where a connector's outbound call happens, and holding the single writer for
+	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
 		runErr = s.drive()
@@ -4343,8 +4343,8 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 			cp        *compiler.CompiledProcess
 		}
 		resolved := map[uint64]instanceCtx{}
-		// One resolver for the whole page: the connector store is read once, not once
-		// per parked token, and not at all when nothing on the page is on a connector
+		// One resolver for the whole page: the worker store is read once, not once
+		// per parked token, and not at all when nothing on the page is on a worker
 		// task (ADR-0159).
 		connectorFor := s.incidentConnectorLookup()
 		lookup := func(piKey uint64) (instanceCtx, error) {
@@ -4446,7 +4446,7 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		s.proc.CompleteJob(key, vars...)
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
-	// where a connector's outbound call happens, and holding the single writer for
+	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
 		runErr = s.drive()
@@ -4551,7 +4551,7 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request, assignee str
 		s.proc.AssignJob(key, assignee)
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
-	// where a connector's outbound call happens, and holding the single writer for
+	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
 	if runErr == nil {
 		runErr = s.drive()
@@ -5036,7 +5036,7 @@ type pulledJob struct {
 	// distinguishable from the first, which the worker id alone cannot do.
 	LeaseToken uint64         `json:"leaseToken"`
 	Variables  map[string]any `json:"variables"`
-	// Connector is a connector task resolved into plain values, present only for a
+	// Worker is a task resolved into plain values, present only for a
 	// job whose kind Atlas no longer serves itself (ADR-0168). Absent for a plain
 	// job-worker task, where there is nothing authored to resolve.
 	Connector *connectorPayload `json:"connector,omitempty"`
@@ -5066,7 +5066,7 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		// WaitMs long-polls: how long to hold the request open waiting for a job of
 		// this type before answering empty. 0 (or absent) answers immediately.
 		WaitMs int64 `json:"waitMs"`
-		// Connectors names the connector configurations this worker holds — the
+		// Workers names the worker configurations this worker holds — the
 		// providers it can actually reach. Only the worker knows this: once a kind is
 		// offloaded the engine holds no credential for it and cannot read another
 		// process's environment. Reporting it here is what lets the Workers view say
@@ -5160,7 +5160,7 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			// worker was actually given.
 			s.workers.recordLease(body.Worker, jobs)
 			// Recorded on every poll, not just a productive one: an idle worker still
-			// holds its connectors, and it is exactly the idle case an operator is
+			// holds its workers, and it is exactly the idle case an operator is
 			// looking at when work is not moving.
 			s.workers.holdsConnectors(body.Worker, body.Connectors)
 		})
@@ -5214,14 +5214,14 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// connectorPayload is a connector task resolved into plain values: everything the
+// connectorPayload is a task resolved into plain values: everything the
 // worker needs to do the work, and nothing that only the engine can understand.
 type connectorPayload struct {
 	Kind   string         `json:"kind"`
 	Fields map[string]any `json:"fields"`
 }
 
-// resolveConnectorTask turns a leased connector job into the payload a worker can
+// resolveConnectorTask turns a leased worker job into the payload a worker can
 // act on, or nil when there is nothing to resolve.
 //
 // This is the split ADR-0168 draws. Finding a task's detail in the compiled process
@@ -5238,7 +5238,7 @@ type connectorPayload struct {
 // registry are readable.
 func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *model.ElementInstanceValue, cp *compiler.CompiledProcess) *connectorPayload {
 	node := cp.Node(ei.ElementId)
-	// A script task is its own node type rather than a connector task, but it resolves
+	// A script task is its own node type rather than a task, but it resolves
 	// the same way and for the same reason: the source is in the compiled process and
 	// the variables it sees come from walking the scope chain, neither of which a
 	// worker has. What it needs on the far side is an interpreter, not a credential.
@@ -5280,7 +5280,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}}
 	case compiler.MailJobTypeIndex:
 		// The message travels; the SMTP host and password do not. What names the
-		// credential is the connector's name, which the worker resolves against its
+		// credential is the worker's name, which the worker resolves against its
 		// own configuration — the whole of ADR-0168's decision, in one field.
 		j, err := mail.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
@@ -5294,7 +5294,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The form and its field values travel; the AR System base URL and the service
 		// account's password do not. Remedy is mail's situation exactly — one
 		// operator-managed instance behind a name (ADR-0106) — so what names the
-		// credential is the connector's name, resolved against the worker's own
+		// credential is the worker's name, resolved against the worker's own
 		// configuration.
 		j, err := remedy.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
@@ -5308,7 +5308,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The operation and its values travel; the site URL and the {email, apiToken}
 		// or personal-access token do not. Jira is Remedy's situation exactly — one
 		// operator-managed instance behind a name (ADR-0201) — so what names the
-		// credential is the connector's name, resolved against the worker's own
+		// credential is the worker's name, resolved against the worker's own
 		// configuration. That is also what lets the worker operate as a different
 		// Atlassian account from anything the engine holds.
 		j, err := jira.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
@@ -5362,7 +5362,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			return nil
 		}
 		return &connectorPayload{Kind: "ad", Fields: map[string]any{
-			// The connector name, for a task that addresses a Console-configured
+			// The worker name, for a task that addresses a Console-configured
 			// directory instead of carrying its own url (ADR-0206): the worker holds
 			// that directory's URL and credentials under this name, so without it the
 			// job reaches a worker with nothing to dial.

@@ -15,7 +15,7 @@ import (
 //
 // A change-tracking read is the one Graph call whose *failure modes* matter as much as
 // its happy path, because its answer is consumed as "everything that changed" and its
-// cursor is persisted for the next run. A page this connector misreads does not produce
+// cursor is persisted for the next run. A page this worker misreads does not produce
 // a visible error later — it produces a short change set a process acts on confidently,
 // and a cursor that resumes from the wrong place. So each refusal below is a real
 // outcome an operator can meet, and each says which of the two it is protecting.

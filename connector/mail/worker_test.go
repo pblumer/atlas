@@ -20,7 +20,7 @@ type fixedClock struct{ t int64 }
 
 func (c *fixedClock) Now() int64 { c.t++; return c.t }
 
-// recordingClient captures the messages a mail connector task sends.
+// recordingClient captures the messages a mail task sends.
 type recordingClient struct{ sent []mail.Message }
 
 func (r *recordingClient) Send(_ context.Context, m mail.Message) error {
@@ -71,7 +71,7 @@ func active(t *testing.T, s *state.Store) (pi, ei int) {
 	return pi, ei
 }
 
-// mailProcess: Start → mail connector task → End (the token finishes once the
+// mailProcess: Start → mail task → End (the token finishes once the
 // message is sent, since a mail task produces no result variable).
 func mailProcess(t *testing.T, cfg compiler.MailConfig) (*compiler.CompiledProcess, int32) {
 	t.Helper()
@@ -117,7 +117,7 @@ func drive(t *testing.T, cp *compiler.CompiledProcess, jobType int32, reg *mail.
 	return runner.Drive()
 }
 
-// TestMailConnectorSendsMessage is the vertical slice end to end: a mail connector
+// TestMailConnectorSendsMessage is the vertical slice end to end: a mail worker
 // task creates a job, the in-process mail worker resolves the named provider and
 // sends the model-authored message keyed by the job key, and the token finishes.
 func TestMailConnectorSendsMessage(t *testing.T) {
@@ -273,7 +273,7 @@ func TestMailConnectorNoRecipient(t *testing.T) {
 	}
 }
 
-// TestMailConnectorUnknownConnector proves a task naming an unregistered connector
+// TestMailConnectorUnknownConnector proves a task naming an unregistered worker
 // fails the job (retry, then incident) rather than dropping the message silently.
 func TestMailConnectorUnknownConnector(t *testing.T) {
 	log, store := openStore(t)
@@ -288,7 +288,7 @@ func TestMailConnectorUnknownConnector(t *testing.T) {
 		t.Fatalf("Drive: %v", err)
 	}
 	if pi := mustActiveProcs(t, store); pi != 1 {
-		t.Errorf("active instances = %d, want 1 (job parked: connector not registered)", pi)
+		t.Errorf("active instances = %d, want 1 (job parked: worker not registered)", pi)
 	}
 }
 
@@ -352,7 +352,7 @@ func TestMailHandlerElementInstanceGone(t *testing.T) {
 	}
 }
 
-// compileFEEL compiles one FEEL source into the compiled form a connector field
+// compileFEEL compiles one FEEL source into the compiled form a worker field
 // carries, failing the test rather than the assertion when the source is bad.
 func compileFEEL(t *testing.T, src string) *expr.Compiled {
 	t.Helper()

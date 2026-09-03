@@ -6,7 +6,7 @@
 // the operator picks a target version, sees the derived mapping and every reason it
 // would be refused *before* committing, gives a reason, and confirms.
 //
-// It lives in its own module for the reason the connector dialog does: app.js boots the
+// It lives in its own module for the reason the worker dialog does: app.js boots the
 // whole console on import, so anything left in it is only ever exercised by hand. Here
 // it is reachable from a test.
 

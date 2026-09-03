@@ -13,17 +13,17 @@ import (
 )
 
 // ProcessLookup resolves a process-definition key to its compiled process. The
-// worker uses it to find the connector name, site, list, and item fields a
+// worker uses it to find the worker name, site, list, and item fields a
 // SharePoint job belongs to, so one handler serves every deployed process.
 type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
-// Handler builds a job handler that performs a SharePoint connector task. Register it
+// Handler builds a job handler that performs a SharePoint worker task. Register it
 // with a [job.Runner] under the reserved [compiler.SharePointJobTypeIndex] via
 // HandleWithOutput; the runner then pulls activatable SharePoint jobs, and for each
 // the handler resolves the task's connector/site/list/fields from the compiled
 // process — evaluating any FEEL value over the variables the task sees, up its scope
 // chain (the fx toggle,
-// ADR-0067) — resolves the named connector's Graph client from reg, creates the list
+// ADR-0067) — resolves the named worker's Graph client from reg, creates the list
 // item, and (when the task names a result variable) returns the created item's JSON
 // as that variable to be written back on completion. Returning an error leaves the
 // job pending (retry, then an incident, ADR-0061); the runner completes it only on
@@ -80,7 +80,7 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Output
 // reference processInstanceKey.
 const builtinProcessInstanceKey = "processInstanceKey"
 
-// resolveValue turns a connector field value into a string: a literal verbatim, or a
+// resolveValue turns a worker field value into a string: a literal verbatim, or a
 // FEEL expression evaluated over the scope's variables and coerced to its string
 // form. A FEEL null — an absent variable or a failed evaluation — becomes the empty
 // string, matching the engine's null-propagating contract (as the REST worker's
@@ -97,7 +97,7 @@ func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model
 	return text
 }
 
-// resolveKVs resolves a list of named connector values (item fields) into a map,
+// resolveKVs resolves a list of named worker values (item fields) into a map,
 // evaluating any FEEL values. Returns nil for an empty list.
 func resolveKVs(kvs []compiler.RestKV, piKey uint64, scopeVars map[string]model.VariableValue) map[string]string {
 	if len(kvs) == 0 {

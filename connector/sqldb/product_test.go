@@ -33,7 +33,7 @@ func TestProductEnvironmentVocabulary(t *testing.T) {
 	}
 }
 
-// A connector name is folded the way every other kind's is (envname.Key), so a name
+// A worker name is folded the way every other kind's is (envname.Key), so a name
 // with punctuation in it addresses one variable rather than an unspellable one.
 func TestDSNEnvFoldsTheConnectorName(t *testing.T) {
 	p := mustProduct(t, "postgres")

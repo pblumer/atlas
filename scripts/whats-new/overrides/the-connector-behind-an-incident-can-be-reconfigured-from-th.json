@@ -1,7 +1,7 @@
 {
   "tags": [
     "Operations",
-    "Connectors"
+    "Workers"
   ],
   "summary": {
     "en": "When a step is stuck because the system it calls is unreachable, you can now fix that connector directly from the incident — test the connection, save, and retry in one place. The change takes effect immediately, no redeploy.",

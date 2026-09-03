@@ -8,7 +8,7 @@ import (
 )
 
 // Stub is how the sandbox answers one job — the stand-in for the worker,
-// connector or person that would answer it in production.
+// worker or person that would answer it in production.
 //
 // It is deliberately the same vocabulary as the mockup service task (ADR-0120):
 // a duration band, an optional result, an optional failure. The difference is

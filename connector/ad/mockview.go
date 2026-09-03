@@ -34,7 +34,7 @@ import (
 
 // MockEntry is one entry as a snapshot carries it. It is [Entry] with names a JSON
 // reader would choose; the two are kept apart on purpose, so the wire shape of the
-// view is not hostage to a type the connector uses internally.
+// view is not hostage to a type the worker uses internally.
 type MockEntry struct {
 	DN         string              `json:"dn"`
 	Attributes map[string][]string `json:"attributes,omitempty"`

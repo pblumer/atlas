@@ -64,7 +64,7 @@ func dns(d *ad.MockDirectory) []string {
 	return out
 }
 
-// A create-user lands in the directory with the object classes the connector
+// A create-user lands in the directory with the object classes the worker
 // supplies, and a second create of the same DN is refused — Active Directory refuses
 // it, and job delivery is at-least-once, so a mock that quietly accepted a replay
 // would hide the one failure a create actually has.
@@ -81,7 +81,7 @@ func TestMockCreateThenRefusesTheReplay(t *testing.T) {
 		t.Errorf("sAMAccountName = %v, want the authored value", got)
 	}
 	if got := e.Attributes["objectClass"]; len(got) == 0 || got[len(got)-1] != "user" {
-		t.Errorf("objectClass = %v, want the connector's user chain", got)
+		t.Errorf("objectClass = %v, want the worker's user chain", got)
 	}
 
 	err := runErr(t, d, create)
@@ -139,7 +139,7 @@ func TestMockSetPasswordNeedsAnEncryptedChannel(t *testing.T) {
 
 // A unicodePwd written by hand — through update-attributes rather than through
 // set-password — must carry AD's encoding. Checking it is what lets the mock prove
-// the connector's encoding is right without keeping the password.
+// the worker's encoding is right without keeping the password.
 func TestMockRejectsAPasswordThatIsNotADsEncoding(t *testing.T) {
 	d := ad.NewMockDirectory(ad.Entry{DN: arnoDN})
 	err := runErr(t, d, ad.Job{
@@ -355,7 +355,7 @@ func TestMockSyncReportsADeletion(t *testing.T) {
 }
 
 // A cookie no pass of this directory wrote fails the job rather than silently
-// starting over — the same refusal the real connector gives a corrupted one, and for
+// starting over — the same refusal the real worker gives a corrupted one, and for
 // the same reason: a full directory presented as a change set is worse than an error.
 func TestMockSyncRefusesAForeignCookie(t *testing.T) {
 	d := ad.NewMockDirectory(ad.Entry{DN: arnoDN})

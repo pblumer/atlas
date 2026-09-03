@@ -8,8 +8,8 @@ import (
 // Retries is a property of every task that creates a job (ADR-0135): the number of
 // attempts the engine grants the job before its failure parks the token behind an
 // incident (ADR-0061). It is authored where the task's implementation is configured
-// — <zeebe:taskDefinition retries> on a job-worker service/send task, the connector
-// extension's own retries attribute on a connector task, <atlas:jobScript retries>
+// — <zeebe:taskDefinition retries> on a job-worker service/send task, the worker
+// extension's own retries attribute on a task, <atlas:jobScript retries>
 // on a polyglot script task, <zeebe:calledDecision retries> on a business rule task
 // — and every one of them defaults to defaultRetries when omitted.
 
@@ -92,60 +92,60 @@ func TestTaskRetriesAuthored(t *testing.T) {
 			want: 2,
 		},
 		{
-			name: "rest connector task",
+			name: "rest task",
 			task: `<bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:restConnector method="GET" url="https://example.com" retries="6"/></bpmn:extensionElements></bpmn:serviceTask>`,
 			want: 6,
 		},
 		{
-			name: "rest connector task default",
+			name: "rest task default",
 			task: `<bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:restConnector method="GET" url="https://example.com"/></bpmn:extensionElements></bpmn:serviceTask>`,
 			want: defaultRetries,
 		},
 		{
-			name: "mail connector task",
+			name: "mail task",
 			task: `<bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:mailConnector connector="office365" to="ops@example.com" retries="9"/></bpmn:extensionElements></bpmn:serviceTask>`,
 			want: 9,
 		},
 		{
-			name: "clio connector task",
+			name: "clio task",
 			task: `<bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:clioConnector connector="c" subject="orders/new" eventType="Placed" retries="8"/></bpmn:extensionElements></bpmn:serviceTask>`,
 			want: 8,
 		},
 		{
-			name: "sharepoint connector task",
+			name: "sharepoint task",
 			task: `<bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:sharepointConnector connector="contoso" site="s" list="l" retries="2"/></bpmn:extensionElements></bpmn:serviceTask>`,
 			want: 2,
 		},
 		{
-			name: "remedy connector task",
+			name: "remedy task",
 			task: `<bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:remedyConnector connector="helix" form="HPD:Create" retries="4"/></bpmn:extensionElements></bpmn:serviceTask>`,
 			want: 4,
 		},
 		{
-			name: "webscrape connector task",
+			name: "webscrape task",
 			task: `<bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:webscrapeConnector url="https://example.com" selector=".x" resultVariable="hits" retries="5"/></bpmn:extensionElements></bpmn:serviceTask>`,
 			want: 5,
 		},
 		{
-			name: "csv connector task",
+			name: "csv task",
 			task: `<bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:csvConnector source="csvText" resultVariable="rows" retries="1"/></bpmn:extensionElements></bpmn:serviceTask>`,
 			want: 1,
 		},
 		{
-			name: "user connector task",
+			name: "user task",
 			task: `<bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:userConnector operation="disable" username="anna" retries="2"/></bpmn:extensionElements></bpmn:serviceTask>`,
 			want: 2,
 		},
 		{
-			// A connector task may still carry a <zeebe:taskDefinition> (hand-authored
-			// models predate the connector attribute); the connector's own retries wins
+			// A task may still carry a <zeebe:taskDefinition> (hand-authored
+			// models predate the worker attribute); the worker's own retries wins
 			// when both are set, and the task definition's is honoured when it is not.
-			name: "connector retries override the task definition",
+			name: "worker retries override the task definition",
 			task: `<bpmn:serviceTask id="t"><bpmn:extensionElements><zeebe:taskDefinition type="ignored" retries="3"/><atlas:restConnector method="GET" url="https://example.com" retries="11"/></bpmn:extensionElements></bpmn:serviceTask>`,
 			want: 11,
 		},
 		{
-			name: "connector inherits the task definition's retries",
+			name: "worker inherits the task definition's retries",
 			task: `<bpmn:serviceTask id="t"><bpmn:extensionElements><zeebe:taskDefinition type="ignored" retries="12"/><atlas:restConnector method="GET" url="https://example.com"/></bpmn:extensionElements></bpmn:serviceTask>`,
 			want: 12,
 		},
@@ -205,12 +205,12 @@ func TestTaskRetriesInvalid(t *testing.T) {
 			want: `business rule task "t" has retries 0`,
 		},
 		{
-			name: "rest connector task, not a number",
+			name: "rest task, not a number",
 			task: `<bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:restConnector method="GET" url="https://example.com" retries="many"/></bpmn:extensionElements></bpmn:serviceTask>`,
 			want: `service task "t" has invalid retries "many"`,
 		},
 		{
-			name: "csv connector task, zero",
+			name: "csv task, zero",
 			task: `<bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:csvConnector source="csvText" resultVariable="rows" retries="0"/></bpmn:extensionElements></bpmn:serviceTask>`,
 			want: `service task "t" has retries 0`,
 		},

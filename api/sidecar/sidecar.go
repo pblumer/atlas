@@ -1,6 +1,6 @@
 // Package sidecar is the durable-file discipline Atlas's design-time stores share.
 //
-// Deployments, drafts, projects, forms, connectors, the secret vault and the rest
+// Deployments, drafts, projects, forms, workers, the secret vault and the rest
 // all persist small records as one file per key under a directory (ADR-0019,
 // ADR-0021). They differ in what they store and agree completely on how to put it
 // on disk: temp file, fsync, rename, fsync the directory. That sequence lives here

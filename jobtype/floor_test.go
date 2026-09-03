@@ -9,10 +9,10 @@ import (
 
 // The reserved range must be able to grow without ever reaching an index already
 // issued to a model-authored type. That is what a fixed floor buys: adding a
-// built-in connector moves the reserved count, never the boundary new assignments
+// built-in worker moves the reserved count, never the boundary new assignments
 // are made from.
 
-// The floor sits far above the reserved names, so a great many connectors can be
+// The floor sits far above the reserved names, so a great many workers can be
 // added before it could matter again.
 func TestTheDynamicFloorLeavesRoomForNewBuiltIns(t *testing.T) {
 	reserved := int32(len(compiler.ReservedJobTypes()))

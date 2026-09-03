@@ -1,6 +1,6 @@
 {
   "tags": [
-    "Connectors",
+    "Workers",
     "Operations"
   ],
   "title": {
@@ -13,21 +13,21 @@
   },
   "tutorial": {
     "en": [
-      "Open Connectors and find the Active Directory card.",
+      "Open Workers and find the Active Directory card.",
       "Tick \"Serve Active Directory tasks against a mockup\" and save — the AD worker restarts within seconds.",
       "Start your process. Operations › Workers shows the worker with a warning that it writes to no directory, then one line per simulated operation."
     ],
     "de": [
-      "Öffnen Sie Connectors und suchen Sie die Active-Directory-Karte.",
+      "Öffnen Sie Workers und suchen Sie die Active-Directory-Karte.",
       "Haken bei „Serve Active Directory tasks against a mockup\" setzen und speichern — der AD-Worker startet in Sekunden neu.",
       "Starten Sie Ihren Prozess. Unter Betrieb › Workers steht der Worker mit der Warnung, dass er in kein Verzeichnis schreibt, danach eine Zeile je simulierter Operation."
     ]
   },
   "try": {
     "label": {
-      "en": "Open Connectors",
-      "de": "Connectors öffnen"
+      "en": "Open Workers",
+      "de": "Workers öffnen"
     },
-    "route": "#/console/connectors"
+    "route": "#/console/workers"
   }
 }

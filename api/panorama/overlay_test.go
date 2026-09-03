@@ -17,7 +17,7 @@ func nodeProvenance(t *testing.T, g Graph, id string) string {
 }
 
 // The landscape both the mesh and the overlay tests work from: one application
-// with one process, and one configured connector it uses.
+// with one process, and one configured worker it uses.
 func overlayLandscape() Landscape {
 	p := proc(1, "invoice", "Invoice", "a1")
 	p.Workers = []WorkerUse{{ElementID: "Task_1", Name: "ops-mail", TargetID: "c1"}}
@@ -61,9 +61,9 @@ func TestOverlayCountsPresentButUnmodeled(t *testing.T) {
 	if got := nodeProvenance(t, g, "process:1"); got != ProvenanceDerived {
 		t.Errorf("unmodeled process provenance = %q, want %q", got, ProvenanceDerived)
 	}
-	// The application is modeled; the process and the connector are not.
+	// The application is modeled; the process and the worker are not.
 	if g.Unmodeled != 2 {
-		t.Errorf("Unmodeled = %d, want the process and the connector", g.Unmodeled)
+		t.Errorf("Unmodeled = %d, want the process and the worker", g.Unmodeled)
 	}
 }
 
@@ -115,7 +115,7 @@ func TestOverlayMatchesAWorker(t *testing.T) {
 	}
 }
 
-// The mesh draws applications, processes and connectors. A binding to a release, a
+// The mesh draws applications, processes and workers. A binding to a release, a
 // deployment target or a runtime is not absent — it is at an altitude this picture
 // does not cover, and calling it absent would invent drift. It is counted
 // separately so the number is visible rather than silently dropped.

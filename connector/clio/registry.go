@@ -1,10 +1,10 @@
 // Package clio integrates a clio event store as a server-registered Atlas
-// connector: a BPMN clio "write-events" connector task appends an event to a
+// worker: a BPMN clio "write-events" task appends an event to a
 // configured clio instance through the job path (ADR-0036), mirroring how the
 // dmn package delegates a decision to temis (ADR-0014). The integration inherits
 // the job protocol's durability and non-blocking properties (ADR-0007):
 //
-//   - A connector task creates a job carrying the reserved
+//   - A task creates a job carrying the reserved
 //     [compiler.ClioWriteJobType]. The processor never performs the outbound call
 //     itself, so it stays allocation-free (invariant I1) and free of any HTTP
 //     dependency.
@@ -13,7 +13,7 @@
 //     never inside applyToState / I4), and completes the job, which drives the
 //     token onward.
 //   - The clio endpoint and credentials live in a server-side [Registry] keyed by
-//     connector name, so a model refers to a connector by name only and never
+//     worker name, so a model refers to a worker by name only and never
 //     carries a URL or secret (ADR-0036).
 //
 // Delivery is at-least-once (a crash between "clio accepted" and "job completed"
@@ -37,7 +37,7 @@ import (
 	"github.com/pblumer/atlas/connector/clientreg"
 )
 
-// Event is one event a connector task appends to clio. IdempotencyKey is
+// Event is one event a task appends to clio. IdempotencyKey is
 // deterministic (the job key), so an at-least-once retry is de-duplicated by
 // clio rather than appended twice.
 type Event struct {
@@ -65,7 +65,7 @@ type InboundEvent struct {
 
 // ReadEventsRequest selects the events a read returns: a Subject, an optional
 // exclusive AfterID cursor ("" reads from the start), whether to include the
-// subject's subtree, an optional type filter, and a Limit (0 = the connector's
+// subject's subtree, an optional type filter, and a Limit (0 = the worker's
 // default).
 type ReadEventsRequest struct {
 	Subject   string
@@ -76,7 +76,7 @@ type ReadEventsRequest struct {
 }
 
 // Client talks to one clio instance. It is an interface so the worker and the
-// inbound bridge are testable without a live clio and so a connector name binds to
+// inbound bridge are testable without a live clio and so a worker name binds to
 // exactly one endpoint. WriteEvent appends a domain event; GetState reads a
 // projection; Query runs a stored query; ReadEvents reads a subject's events.
 type Client interface {
@@ -86,20 +86,20 @@ type Client interface {
 	ReadEvents(ctx context.Context, req ReadEventsRequest) ([]InboundEvent, error)
 }
 
-// Registry resolves a connector name to the [Client] for this kind. Connectors are
+// Registry resolves a worker name to the [Client] for this kind. Workers are
 // registered at the server from managed configuration (endpoint plus credentials), so
-// a model refers to a connector by name only (ADR-0036/0041).
+// a model refers to a worker by name only (ADR-0036/0041).
 //
 // It is the shared [clientreg.Registry], which also carries *why* a configured
-// connector is missing from it — the difference between "never configured" and
+// worker is missing from it — the difference between "never configured" and
 // "configured and broken", which is what a parked token has to be able to say
 // (ADR-0158).
 type Registry = clientreg.Registry[Client]
 
-// NewRegistry creates an empty connector registry.
+// NewRegistry creates an empty worker registry.
 func NewRegistry() *Registry { return clientreg.New[Client]() }
 
-// Connector is the server-side configuration of one clio connector: the base
+// Connector is the server-side configuration of one clio worker: the base
 // endpoint of the clio instance and an optional bearer token for it.
 type Connector struct {
 	Endpoint string
@@ -123,8 +123,8 @@ type KeyRequest struct {
 
 // MintKey creates a new clio API key and returns its full, once-shown secret
 // (clio's "kid.secret"). It is a standalone call — not a [Client] method — because
-// it authenticates with a clio **admin** token, distinct from a connector's read
-// token, and exists only to provision a connector's credential (ADR-0092) without an operator
+// it authenticates with a clio **admin** token, distinct from a worker's read
+// token, and exists only to provision a worker's credential (ADR-0092) without an operator
 // copy-pasting one. The caller must never persist adminToken; only the returned
 // scoped key is stored (sealed in the vault). Delivery is not idempotent, so a
 // caller should mint once per provisioning action.
@@ -176,7 +176,7 @@ type HTTPClient struct {
 	http *http.Client
 }
 
-// NewHTTPClient builds a clio HTTP client for a configured connector.
+// NewHTTPClient builds a clio HTTP client for a configured worker.
 func NewHTTPClient(conn Connector) *HTTPClient {
 	return &HTTPClient{conn: conn, http: nettimeout.HTTPClient()}
 }
@@ -311,7 +311,7 @@ func (c *HTTPClient) ReadEvents(ctx context.Context, r ReadEventsRequest) ([]Inb
 	return out, nil
 }
 
-// authorize adds the connector's bearer token to a request when one is configured.
+// authorize adds the worker's bearer token to a request when one is configured.
 func (c *HTTPClient) authorize(req *http.Request) {
 	if c.conn.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.conn.Token)

@@ -12,7 +12,7 @@ import (
 )
 
 // TestOffloadedKindIsLeasableByAWorker is the prerequisite ADR-0168 exposed: a
-// connector kind cannot move to a worker while an in-process handler serves it,
+// Worker Type cannot move to a worker while an in-process handler serves it,
 // because the pull refuses such a type — that refusal is what keeps work from being
 // done twice. Turning the handler off is therefore the operative act of relocating
 // a kind, and it has to be something an operator can do.
@@ -60,7 +60,7 @@ func TestOffloadedKindIsReportedAsLeasable(t *testing.T) {
 // and the work would keep running in the engine.
 func TestOffloadingAnUnknownKindFails(t *testing.T) {
 	if _, err := newServerWithOptionsErr(t, WithOffloadedConnectorKinds([]string{"no-such-kind"})); err == nil {
-		t.Error("offloading an unknown connector kind succeeded, want an error naming it")
+		t.Error("offloading an unknown Worker Type succeeded, want an error naming it")
 	}
 }
 
@@ -80,10 +80,10 @@ func TestEveryManagedKindCanBeOffloaded(t *testing.T) {
 	})
 }
 
-// TestEveryInProcessHandlerIsOffloadable is the guard the SOAP connector needed and
+// TestEveryInProcessHandlerIsOffloadable is the guard the SOAP worker needed and
 // did not have. TestEveryManagedKindCanBeOffloaded above walks offloadableKinds and
 // checks each listed kind goes away, so it says nothing at all about a job type the
-// map never mentions: a connector added with a handler but no entry passes it
+// map never mentions: a worker added with a handler but no entry passes it
 // silently, and the kind is then one an operator can neither name nor relocate.
 //
 // This walks the other direction — from the handlers a booted server actually
@@ -104,7 +104,7 @@ func TestEveryInProcessHandlerIsOffloadable(t *testing.T) {
 			named[jt] = name
 		}
 	}
-	// The user-provisioning connector is deliberately absent from the map: it mutates
+	// The user-provisioning worker is deliberately absent from the map: it mutates
 	// the run-loop-owned user store directly (ADR-0123), so there is nothing for a
 	// worker to hold and no endpoint for it to reach. Every other handler must be
 	// namable. The exception is recorded once, in engineOnlyJobTypes, because the
@@ -148,7 +148,7 @@ func TestOffloadingIgnoresBlankEntries(t *testing.T) {
 
 // TestEveryDefaultOffloadedKindCanBeServedByItsWorker is the safety property behind
 // making the default opt-out. A supervised worker inherits this process's environment
-// but not its connector store, so a managed kind — whose endpoint and password live
+// but not its worker store, so a managed kind — whose endpoint and password live
 // in that store — can only be defaulted if the engine hands that configuration to the
 // child at spawn. Default a managed kind the engine does not provision and every task
 // of it fails on a worker nobody configured, which is the one outcome the opt-out
@@ -165,7 +165,7 @@ func TestEveryDefaultOffloadedKindCanBeServedByItsWorker(t *testing.T) {
 		}
 		if _, handed := provisioned[kind]; managed[kind] && !handed {
 			t.Errorf("default kind %q is managed but not provisioned: its credentials live in the "+
-				"connector store, which a supervised worker cannot read and is not handed", kind)
+				"worker store, which a supervised worker cannot read and is not handed", kind)
 		}
 	}
 }
@@ -183,7 +183,7 @@ func TestEveryDefaultSupervisedWorkerOnlyKindCanBeServed(t *testing.T) {
 	for _, kind := range DefaultSupervisedWorkerOnlyKinds() {
 		k, ok := byName[kind]
 		if !ok {
-			t.Errorf("worker-only default %q is not a managed connector kind", kind)
+			t.Errorf("worker-only default %q is not a managed Worker Type", kind)
 			continue
 		}
 		if !k.workerOnly {
@@ -200,9 +200,9 @@ func TestEveryDefaultSupervisedWorkerOnlyKindCanBeServed(t *testing.T) {
 // engine hands its bind passwords over (ADR-0182).
 //
 // AD is not a managed kind, so the property above does not cover it: it holds no
-// connector record, and its secret is a per-task *reference* the model authors. That
+// worker record, and its secret is a per-task *reference* the model authors. That
 // reference resolves out of the vault, which a supervised worker cannot read any more
-// than it can read the connector store — so defaulting AD without provisioning it
+// than it can read the worker store — so defaulting AD without provisioning it
 // would move every vault-backed directory task to a worker with nothing to bind with,
 // which is the same outcome the property above exists to prevent, reached by a
 // different route.
@@ -272,7 +272,7 @@ func TestJiraIsOffloadedByDefaultAndKeepsItsInProcessFallback(t *testing.T) {
 // TestPullingARemedyJobResolvesTheTaskAndCarriesNoCredential is the engine's half of
 // ADR-0106's move onto a worker, checked where the engine hands the work over.
 //
-// What a leased Remedy job carries is the *resolved* task: the connector's name, the
+// What a leased Remedy job carries is the *resolved* task: the worker's name, the
 // form, the field values with their FEEL already evaluated against the instance, and
 // the job key as the X-Request-ID an at-least-once replay repeats. What it does not
 // carry — and has nowhere to put — is the AR System's base URL or its service account.
@@ -297,14 +297,14 @@ func TestPullingARemedyJobResolvesTheTaskAndCarriesNoCredential(t *testing.T) {
 	}
 	j := got.Jobs[0]
 	if j.Connector == nil {
-		t.Fatal("the leased job carries no resolved connector detail; the worker would have nothing to file")
+		t.Fatal("the leased job carries no resolved worker detail; the worker would have nothing to file")
 	}
 	if j.Connector.Kind != connectorKindRemedy {
 		t.Errorf("kind = %q, want %q", j.Connector.Kind, connectorKindRemedy)
 	}
 	f := j.Connector.Fields
 	if f["connector"] != "helix" {
-		t.Errorf("connector = %v, want the name the model authored", f["connector"])
+		t.Errorf("worker = %v, want the name the model authored", f["connector"])
 	}
 	if f["form"] != "HPD:IncidentInterface_Create" {
 		t.Errorf("form = %v, want the authored form", f["form"])
@@ -330,7 +330,7 @@ func TestPullingARemedyJobResolvesTheTaskAndCarriesNoCredential(t *testing.T) {
 	}
 }
 
-// remedyPullBPMN is a Remedy connector task with one literal field and one FEEL field,
+// remedyPullBPMN is a Remedy task with one literal field and one FEEL field,
 // so a resolved payload shows both halves of what the engine evaluates.
 const remedyPullBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -355,7 +355,7 @@ const remedyPullBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 // giving Jira a worker at all (ADR-0201/0203), checked where the engine hands the work
 // over.
 //
-// What a leased Jira job carries is the *resolved* task: the connector's name, the
+// What a leased Jira job carries is the *resolved* task: the worker's name, the
 // operation, every authored value with its FEEL already evaluated against the instance,
 // and the job key as the X-Request-ID an at-least-once replay repeats. What it does not
 // carry — and has nowhere to put — is the site URL, an email or an API token. Before
@@ -381,7 +381,7 @@ func TestPullingAJiraJobResolvesTheTaskAndCarriesNoCredential(t *testing.T) {
 	}
 	j := got.Jobs[0]
 	if j.Connector == nil {
-		t.Fatal("the leased job carries no resolved connector detail; the worker would have nothing to perform")
+		t.Fatal("the leased job carries no resolved worker detail; the worker would have nothing to perform")
 	}
 	if j.Connector.Kind != connectorKindJira {
 		t.Errorf("kind = %q, want %q", j.Connector.Kind, connectorKindJira)
@@ -413,7 +413,7 @@ func TestPullingAJiraJobResolvesTheTaskAndCarriesNoCredential(t *testing.T) {
 	}
 }
 
-// jiraPullBPMN is a Jira connector task with literal values and one FEEL value, so a
+// jiraPullBPMN is a Jira task with literal values and one FEEL value, so a
 // resolved payload shows both halves of what the engine evaluates.
 const jiraPullBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"

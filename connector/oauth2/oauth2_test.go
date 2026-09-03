@@ -133,7 +133,7 @@ func TestCachingRefreshesNearExpiry(t *testing.T) {
 }
 
 // A response with no expires_in is never cached: pretending it lasts forever would
-// wedge the connector on the first expiry.
+// wedge the worker on the first expiry.
 func TestNoTTLIsNeverCached(t *testing.T) {
 	ts := newTokenServer(t, 0)
 	ts.body = `{"access_token":"tok"}`
@@ -167,7 +167,7 @@ func TestCachingWithTheDefaultClock(t *testing.T) {
 	}
 }
 
-// A misconfigured credential must fail the call rather than let the connector act
+// A misconfigured credential must fail the call rather than let the worker act
 // unauthenticated, so every unhappy answer from the endpoint is an error.
 func TestPostFormErrors(t *testing.T) {
 	base := func(t *testing.T) Config {
@@ -252,7 +252,7 @@ func srvHijackClose(w http.ResponseWriter) {
 }
 
 // The kind prefixes every message, so an operator reading a log knows which
-// connector produced it even though the code is shared.
+// worker produced it even though the code is shared.
 func TestErrorsNameTheCallingConnector(t *testing.T) {
 	ts := newTokenServer(t, 3600)
 	ts.status, ts.body = 500, "boom"

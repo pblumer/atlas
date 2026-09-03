@@ -110,7 +110,7 @@ func TestRepairFormIsSeparateFromAUserTaskForm(t *testing.T) {
 }
 
 // TestRepairFormOnAConnectorTask covers the case the record was actually written for: a
-// connector task is the one that parks with an incident most often, and it compiles
+// task is the one that parks with an incident most often, and it compiles
 // down a different arm of the task walk than a plain service task does. Both arms must
 // record the form, or the feature works only for the tasks least likely to need it.
 func TestRepairFormOnAConnectorTask(t *testing.T) {
@@ -134,10 +134,10 @@ func TestRepairFormOnAConnectorTask(t *testing.T) {
 	}
 	notify := nodeIndexByBpmnId(t, cp, "notify")
 	if cp.Node(notify).Type != TypeConnectorTask {
-		t.Fatalf("notify compiled as %s, want a connector task", cp.Node(notify).Type)
+		t.Fatalf("notify compiled as %s, want a task", cp.Node(notify).Type)
 	}
 	if got := cp.RepairForm(notify); got != "fix-recipient" {
-		t.Errorf("connector task's repair form = %q, want %q", got, "fix-recipient")
+		t.Errorf("worker task's repair form = %q, want %q", got, "fix-recipient")
 	}
 }
 

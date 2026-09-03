@@ -399,10 +399,10 @@ func runtimeTools() []Tool {
 		},
 		{
 			Name: "atlas_mail_outbox",
-			Description: "List what a mail connector on the \"preview\" provider delivered in-server instead of " +
+			Description: "List what a mail worker on the \"preview\" provider delivered in-server instead of " +
 				"sending (ADR-0150) — how a scenario checks what a mail task actually produced, with no mail " +
 				"server, no credential, and no real recipient involved. Newest first; each message carries its " +
-				"connector, addressing, subject, bodies, and the framed RFC 5322 source that would have gone " +
+				"worker, addressing, subject, bodies, and the framed RFC 5322 source that would have gone " +
 				"out on the wire. Optional 'limit' returns only the newest n. Returns {messages, truncated}.",
 			InputSchema: map[string]any{
 				"type": "object",

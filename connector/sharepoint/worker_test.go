@@ -19,7 +19,7 @@ type fixedClock struct{ t int64 }
 
 func (c *fixedClock) Now() int64 { c.t++; return c.t }
 
-// recordingClient captures the item-creation requests a connector task makes and
+// recordingClient captures the item-creation requests a task makes and
 // returns a canned created item.
 type recordingClient struct {
 	requests []sharepoint.ItemRequest
@@ -106,7 +106,7 @@ func readVar(t *testing.T, s *state.Store, scope uint64, name string) *model.Var
 	return found
 }
 
-// spProcess: Start → SharePoint connector task → End.
+// spProcess: Start → SharePoint task → End.
 func spProcess(t *testing.T, cfg compiler.SharePointConfig) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	b := compiler.NewBuilder(spDefKey, "incidents", 1)
@@ -167,7 +167,7 @@ func compileExpr(t *testing.T, src string) *expr.Compiled {
 }
 
 // TestSharePointConnectorCreatesItem is the vertical slice end to end: a SharePoint
-// connector task creates a job, the in-process worker resolves the named provider and
+// task creates a job, the in-process worker resolves the named provider and
 // creates the model-authored list item keyed by the job key, writes the created
 // item's JSON into the result variable, and the token advances (parking on a
 // following task so the written variable is still readable).
@@ -280,7 +280,7 @@ func TestSharePointConnectorNoResultVariable(t *testing.T) {
 }
 
 // TestSharePointConnectorUnknownConnector proves a task naming an unregistered
-// connector fails the job (retry, then incident) rather than dropping it silently.
+// worker fails the job (retry, then incident) rather than dropping it silently.
 func TestSharePointConnectorUnknownConnector(t *testing.T) {
 	log, store := openStore(t)
 	cp, jobType := spProcess(t, compiler.SharePointConfig{
@@ -293,7 +293,7 @@ func TestSharePointConnectorUnknownConnector(t *testing.T) {
 		t.Fatalf("Drive: %v", err)
 	}
 	if pi := mustActiveProcs(t, store); pi != 1 {
-		t.Errorf("active instances = %d, want 1 (job parked: connector not registered)", pi)
+		t.Errorf("active instances = %d, want 1 (job parked: worker not registered)", pi)
 	}
 }
 

@@ -2,12 +2,12 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Atlas connector placement e2e harness</title>
+    <title>Atlas worker placement e2e harness</title>
     <!-- Drives the *real* api/web/editor.js against a mock `api` that
          answers GET /api/v1/connector-kinds the way a configured server would: one kind
          run in the engine, one offloaded onto a worker, one born on a worker, one with
          no out-of-process form at all, plus a script language per placement and both
-         decision bindings. The connector picker used to state this from a constant in the
+         decision bindings. The worker picker used to state this from a constant in the
          browser, which no install could contradict, and the script and decision panels
          said nothing at all; these tests hold all three to the server's answer
          (ADR-0164/0168/0173). Mounted in deployment mode (key set,
@@ -115,7 +115,7 @@
 
       // What a server with --offload-connectors mail,webscrape would answer. rest is
       // still run in the engine, mssql was born on a worker, and the user-provisioning
-      // connector has no out-of-process form at all.
+      // worker has no out-of-process form at all.
       const KINDS = {
         kinds: [
           { id: "rest", placement: "engine" },

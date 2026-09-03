@@ -20,8 +20,8 @@ import (
 // Dynamic client registration, RFC 7591 (ADR-0200, step 2).
 //
 // This is the endpoint that lets a client register *itself*, so a person can point
-// a hosted MCP connector at an Atlas and connect without an administrator entering
-// anything first. It is what the connector dialogs of the AI tools reach for when
+// a hosted MCP worker at an Atlas and connect without an administrator entering
+// anything first. It is what the worker dialogs of the AI tools reach for when
 // they are given nothing but a URL.
 //
 // It is also the one unauthenticated endpoint in this server that writes durable
@@ -78,7 +78,7 @@ const (
 // it, registering evicts the oldest one nobody approved — see the eviction rule
 // above for why it is not a refusal.
 //
-// Sized for what it is: an installation has a handful of connectors, not hundreds,
+// Sized for what it is: an installation has a handful of workers, not hundreds,
 // and every one somebody actually approved is exempt from the cap's eviction
 // anyway. An operator who needs more registers them by hand, which has no cap.
 const MaxDynamicClients = 16

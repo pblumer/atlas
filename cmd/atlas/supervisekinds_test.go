@@ -8,10 +8,10 @@ import (
 )
 
 // The gap these cover, named as a follow-up by ADR-0181 itself: trying the AD
-// connector's mock mode "requires --offload-connectors ad and a worker". Offloading
+// worker's mock mode "requires --offload-connectors ad and a worker". Offloading
 // alone only parks the jobs — the server supervises a worker for the four default
 // kinds and for nothing else, and `--supervise id=type=command` cannot name a
-// built-in connector. On a server with --auth an external worker cannot fill the gap
+// built-in worker. On a server with --auth an external worker cannot fill the gap
 // either: the job pull is authenticated, and the only bearer credentials are this
 // server's ephemeral internal token (handed to its own children) and a deploy token
 // allowlisted to two endpoints. So the kind's jobs park forever.
@@ -41,7 +41,7 @@ func TestSuperviseConnectorAsksForAWorkerAndStopsRunningItHere(t *testing.T) {
 	got := specs[0]
 	if got.ID != "ad" || len(got.Kinds) != 1 || got.Kinds[0] != "ad" ||
 		len(got.Connectors) != 1 || got.Connectors[0] != "ad" {
-		t.Fatalf("spec = %+v, want a worker serving the ad connector under its own id", got)
+		t.Fatalf("spec = %+v, want a worker serving the ad worker under its own id", got)
 	}
 	if len(offload) != 1 || offload[0] != "ad" {
 		t.Fatalf("offload = %v, want [ad] so the engine stops handling those jobs", offload)
@@ -105,7 +105,7 @@ func TestNoKindsAsksForNothing(t *testing.T) {
 }
 
 // TestSupervisingRemedyPairsTheWorkerWithTheOffload is the operator-facing half of
-// moving the Remedy connector onto a worker (ADR-0106 amended / ADR-0168). Unlike
+// moving the Remedy worker onto a worker (ADR-0106 amended / ADR-0168). Unlike
 // entra, Remedy still has an in-process handler — so asking for its worker must also
 // take the kind off the engine, or the two would race for the same jobs.
 func TestSupervisingRemedyPairsTheWorkerWithTheOffload(t *testing.T) {
@@ -115,7 +115,7 @@ func TestSupervisingRemedyPairsTheWorkerWithTheOffload(t *testing.T) {
 	}
 	if len(specs) != 1 || specs[0].ID != "remedy" ||
 		len(specs[0].Connectors) != 1 || specs[0].Connectors[0] != "remedy" {
-		t.Fatalf("specs = %v, want a worker configured for the remedy connector", specIDs(specs))
+		t.Fatalf("specs = %v, want a worker configured for the remedy worker", specIDs(specs))
 	}
 	if len(offload) != 1 || offload[0] != "remedy" {
 		t.Fatalf("offload = %v, want [remedy] so the engine stops filing the tickets itself", offload)

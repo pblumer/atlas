@@ -512,7 +512,7 @@ func waitTypeIndex(t *testing.T, srv *Server, name string) int32 {
 
 // TestALeasedConnectorJobCarriesItsResolvedDetail is the mechanism ADR-0168 rests
 // on. A worker has neither the compiled process nor the instance's scope chain, so
-// it cannot find a connector task's configuration or evaluate it. The engine does
+// it cannot find a worker task's configuration or evaluate it. The engine does
 // that — it is the only one who can — and only the *result* travels: plain values a
 // worker can act on with no engine concepts in them.
 func TestALeasedConnectorJobCarriesItsResolvedDetail(t *testing.T) {
@@ -530,7 +530,7 @@ func TestALeasedConnectorJobCarriesItsResolvedDetail(t *testing.T) {
 	}
 	conn := got.Jobs[0].Connector
 	if conn == nil {
-		t.Fatal("the leased connector job carried no resolved detail, so a worker could not act on it")
+		t.Fatal("the leased worker job carried no resolved detail, so a worker could not act on it")
 	}
 	if conn.Kind != "csv" {
 		t.Errorf("kind = %q, want %q", conn.Kind, "csv")
@@ -544,7 +544,7 @@ func TestALeasedConnectorJobCarriesItsResolvedDetail(t *testing.T) {
 	}
 }
 
-// A plain job-worker task carries no connector detail: there is nothing to resolve,
+// A plain job-worker task carries no worker detail: there is nothing to resolve,
 // and an empty object would invite a worker to look for one.
 func TestALeasedPlainJobCarriesNoConnectorDetail(t *testing.T) {
 	srv := jobPullSrv(t, "send-email", `{}`)
@@ -553,11 +553,11 @@ func TestALeasedPlainJobCarriesNoConnectorDetail(t *testing.T) {
 		t.Fatalf("pulled %d jobs, want 1", len(got.Jobs))
 	}
 	if got.Jobs[0].Connector != nil {
-		t.Errorf("a plain job-worker task carried a connector detail: %+v", got.Jobs[0].Connector)
+		t.Errorf("a plain job-worker task carried a worker detail: %+v", got.Jobs[0].Connector)
 	}
 }
 
-// csvConnectorBPMN is a process whose service task is a CSV-to-JSON connector.
+// csvConnectorBPMN is a process whose service task is a CSV-to-JSON worker.
 const csvConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">

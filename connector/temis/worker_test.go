@@ -34,7 +34,7 @@ func (c *fakeClient) Evaluate(_ context.Context, _ string, inputs map[string]any
 	return map[string]any{"Risk": risk}, nil
 }
 
-// loanProcess builds Start → BusinessRuleTask(temis connector "risk-service",
+// loanProcess builds Start → BusinessRuleTask(temis worker "risk-service",
 // decision "Risk", result "risk", input Amount ← amount) → ExclusiveGateway with a
 // High branch to End and a default branch that parks on an unworked service task.
 // The gateway routing is the observable proof the central decision's result reached
@@ -94,7 +94,7 @@ func openEngine(t *testing.T) (*engine.Processor, *state.Store) {
 }
 
 // TestTemisConnectorRoutesOnResult is the end-to-end proof of the central path: a
-// connector business rule task sends its mapped input to a (fake) temis service and
+// worker business rule task sends its mapped input to a (fake) temis service and
 // the returned Risk — written back as the process variable "risk" — drives a
 // downstream exclusive gateway. A high amount routes to End (instance completes); a
 // low amount falls to the default and parks.
@@ -140,7 +140,7 @@ func TestTemisConnectorRoutesOnResult(t *testing.T) {
 }
 
 // TestTemisConnectorUnregistered leaves the job pending (Drive errors) when the
-// task's connector is not registered — a misconfiguration surfaces as a worker
+// task's worker is not registered — a misconfiguration surfaces as a worker
 // error, not a silent no-op.
 func TestTemisConnectorUnregistered(t *testing.T) {
 	p, store := openEngine(t)
@@ -155,7 +155,7 @@ func TestTemisConnectorUnregistered(t *testing.T) {
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "150"})
 	if err := runner.Drive(); err != nil {
-		t.Fatalf("Drive with an unregistered connector: %v, want nil (failure routed to an incident, ADR-0061)", err)
+		t.Fatalf("Drive with an unregistered worker: %v, want nil (failure routed to an incident, ADR-0061)", err)
 	}
 	// The token is still parked on the business rule task, now with an incident.
 	ei, err := store.ActiveElementInstanceCount()

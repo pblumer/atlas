@@ -124,7 +124,7 @@ func TestHandleBackupLogsStreamFailure(t *testing.T) {
 }
 
 // TestBackupRestoreRequireAdmin: a backup is every draft, form, decision and
-// connector of the whole installation in one file, and a restore overwrites them.
+// worker of the whole installation in one file, and a restore overwrites them.
 // Both are an administrator's act.
 //
 // Asserted at the boundary, because that is where it is decided now: the routes

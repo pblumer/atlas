@@ -16,7 +16,7 @@ import (
 // and every other value — string, number, bool, null, nested object or array — is a
 // literal. Turning the whole template into one FEEL context means it is parsed and
 // compiled once at deploy (invariant I5) and evaluated to the request body once at
-// runtime, reusing the same RestExpr the connector's other authored values use.
+// runtime, reusing the same RestExpr the worker's other authored values use.
 //
 // An empty template returns the zero RestExpr: the task then falls back to its
 // attributesVariable, so the two ways of supplying a body stay mutually exclusive.
@@ -28,18 +28,18 @@ func entraAttributesExpr(taskID, raw string) (RestExpr, error) {
 	dec.UseNumber()
 	var v any
 	if err := dec.Decode(&v); err != nil {
-		return RestExpr{}, fmt.Errorf("compiler: entra connector task %q has an invalid attributes JSON: %w", taskID, err)
+		return RestExpr{}, fmt.Errorf("compiler: entra task %q has an invalid attributes JSON: %w", taskID, err)
 	}
 	if _, ok := v.(map[string]any); !ok {
-		return RestExpr{}, fmt.Errorf("compiler: entra connector task %q attributes must be a JSON object of directory properties, not a %T", taskID, v)
+		return RestExpr{}, fmt.Errorf("compiler: entra task %q attributes must be a JSON object of directory properties, not a %T", taskID, v)
 	}
 	feel, err := jsonTemplateToFeel(v)
 	if err != nil {
-		return RestExpr{}, fmt.Errorf("compiler: entra connector task %q attributes: %w", taskID, err)
+		return RestExpr{}, fmt.Errorf("compiler: entra task %q attributes: %w", taskID, err)
 	}
 	e, err := expr.CompileAuto(feel)
 	if err != nil {
-		return RestExpr{}, fmt.Errorf("compiler: entra connector task %q attributes did not compile (a value's =expression may be malformed): %w", taskID, err)
+		return RestExpr{}, fmt.Errorf("compiler: entra task %q attributes did not compile (a value's =expression may be malformed): %w", taskID, err)
 	}
 	return RestExpr{Expr: e}, nil
 }

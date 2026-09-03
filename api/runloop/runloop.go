@@ -1,7 +1,7 @@
 // Package runloop carries Atlas's single-writer boundary for design-time and
 // API state.
 //
-// HTTP handlers are concurrent; the processor, the state store and the connector
+// HTTP handlers are concurrent; the processor, the state store and the worker
 // registries have exactly one owner (invariant 3, ADR-0002/0006). A [Loop] is
 // that owner: one goroutine draining a queue of closures, and [Loop.Do] is the
 // only way to put work on it. A caller holding a *Loop can reach shared state

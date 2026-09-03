@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// The three SQL connector products, and what a task of each compiles to. They share a
+// The three SQL worker products, and what a task of each compiles to. They share a
 // shape exactly, so every table-driven case below runs against all three: a rule that
 // held for only one of them would be the drift this table exists to prevent.
 var sqlProductCases = []struct {
@@ -15,12 +15,12 @@ var sqlProductCases = []struct {
 	jobType  string
 	jobIndex int32
 }{
-	{"mssqlConnector", "mssql connector", MsSqlJobType, MsSqlJobTypeIndex},
-	{"mariadbConnector", "mariadb connector", MariaDBJobType, MariaDBJobTypeIndex},
-	{"postgresConnector", "postgres connector", PostgresJobType, PostgresJobTypeIndex},
+	{"mssqlConnector", "mssql", MsSqlJobType, MsSqlJobTypeIndex},
+	{"mariadbConnector", "mariadb", MariaDBJobType, MariaDBJobTypeIndex},
+	{"postgresConnector", "postgres", PostgresJobType, PostgresJobTypeIndex},
 }
 
-// sqlTaskBPMN builds a one-task model from a raw connector extension element, so each
+// sqlTaskBPMN builds a one-task model from a raw worker extension element, so each
 // case states only the attributes it is about.
 func sqlTaskBPMN(ext string) string {
 	return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -35,7 +35,7 @@ func sqlTaskBPMN(ext string) string {
 </bpmn:definitions>`
 }
 
-// sqlDetail parses a one-task model and returns the task's connector detail.
+// sqlDetail parses a one-task model and returns the task's worker detail.
 func sqlDetail(t *testing.T, ext string) (*CompiledProcess, *ConnectorTaskDetail) {
 	t.Helper()
 	cp, err := Parse(1, 1, strings.NewReader(sqlTaskBPMN(ext)))
@@ -49,9 +49,9 @@ func sqlDetail(t *testing.T, ext string) (*CompiledProcess, *ConnectorTaskDetail
 	return cp, cp.ConnectorTask(node.Detail)
 }
 
-// A service task bearing one of the three SQL connector extensions is a connector
+// A service task bearing one of the three SQL worker extensions is a worker
 // task of that product (ADR-0173): it runs one statement against a database the
-// *worker* is configured for, so the model names a connector and never an address.
+// *worker* is configured for, so the model names a worker and never an address.
 func TestParseSqlConnectorTask(t *testing.T) {
 	for _, p := range sqlProductCases {
 		t.Run(p.elem, func(t *testing.T) {
@@ -66,7 +66,7 @@ func TestParseSqlConnectorTask(t *testing.T) {
 				t.Errorf("jobType index = %d, want the reserved %d", d.JobType, p.jobIndex)
 			}
 			if got := cp.Intern(d.Connector); got != "hr-db" {
-				t.Errorf("connector = %q, want hr-db", got)
+				t.Errorf("worker = %q, want hr-db", got)
 			}
 			if got := cp.Intern(d.SqlOp); got != "query" {
 				t.Errorf("operation = %q, want query", got)
@@ -115,7 +115,7 @@ func TestSqlConnectorRejectsFeelStatement(t *testing.T) {
 
 func TestSqlConnectorValidation(t *testing.T) {
 	for _, tc := range []struct{ name, attrs, want string }{
-		{"no connector", `operation="query" statement="SELECT 1" resultVariable="r"`, "connector"},
+		{"no worker", `operation="query" statement="SELECT 1" resultVariable="r"`, "worker"},
 		{"no operation", `connector="db" statement="SELECT 1" resultVariable="r"`, "operation"},
 		{"unknown operation", `connector="db" operation="drop" statement="SELECT 1" resultVariable="r"`, "unknown operation"},
 		{"no statement", `connector="db" operation="query" resultVariable="r"`, "statement"},

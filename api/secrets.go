@@ -70,11 +70,11 @@ func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
 		if meta, saveErr = s.vault.Set(name, p.Value); saveErr != nil {
 			return
 		}
-		// A rotated secret must reach the live connector clients immediately — a
-		// managed connector holds only a reference to this value, and its client was
+		// A rotated secret must reach the live worker clients immediately — a
+		// managed worker holds only a reference to this value, and its client was
 		// built with the old one. Rebuild the registries in the same run-loop step
 		// that saved the secret, so a bridge/worker picks up the new token without the
-		// operator re-saving the connector.
+		// operator re-saving the worker.
 		saveErr = s.rebuildConnectorRegistries()
 	})
 	if saveErr != nil {
@@ -88,8 +88,8 @@ func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, meta)
 }
 
-// handleDeleteSecret removes a secret from the vault and rebuilds the connector
-// registries, so a connector that referenced it resolves to no token again (and
+// handleDeleteSecret removes a secret from the vault and rebuilds the worker
+// registries, so a worker that referenced it resolves to no token again (and
 // parks) at once, without waiting for a re-save.
 func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 	if s.vault == nil {

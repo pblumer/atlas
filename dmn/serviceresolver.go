@@ -27,7 +27,7 @@ type ServiceResolver struct {
 	// <BaseURL>/risk-score.dmn.
 	BaseURL string
 	// Client is the HTTP client to use; nil uses a client bounded by the shared
-	// connector call budget (nettimeout.Default), never an unbounded one — this
+	// worker call budget (nettimeout.Default), never an unbounded one — this
 	// resolver is called from the DMN worker on the run-loop goroutine.
 	Client *http.Client
 	// Token, if set, is sent as an "Authorization: Bearer <Token>" header — the

@@ -3,9 +3,9 @@
 //
 // # What it is for
 //
-// It is Entra's counterpart to the Active Directory connector (ADR-0166), and it
+// It is Entra's counterpart to the Active Directory worker (ADR-0166), and it
 // exists for the same reason that one does. A process *could* reach Graph with the
-// generic REST connector: it speaks HTTP and JSON, and ADR-0152 gave REST an OAuth2
+// generic REST worker: it speaks HTTP and JSON, and ADR-0152 gave REST an OAuth2
 // client-credentials grant. What it cannot do is say what the operation *means*.
 // Disabling an account in Entra is a PATCH of `accountEnabled` to false; removing a
 // group member is a DELETE of a `$ref` sub-resource whose URL nobody remembers. A
@@ -18,14 +18,14 @@
 // single call: list-users is a Graph *collection*, which is paged. Following
 // @odata.nextLink is this package's work rather than a model's — a process looping
 // over a continuation token would be carrying Graph's paging protocol in its
-// diagram, which is the encoding this connector exists to keep out of one. So a
+// diagram, which is the encoding this worker exists to keep out of one. So a
 // result variable receives the whole listing as one array, and never a page of it.
 //
 // Two bounds keep that honest. maxUsers caps what may reach a process variable and
 // *fails* when exceeded rather than truncating (a short result set is a wrong
 // answer, not a partial one), and [maxListPages] ends a chain of pages that never
 // does. A third bound is [GraphClient]'s: a continuation may only stay on the
-// connector's own endpoint, so a redirected page cannot carry the directory-wide
+// worker's own endpoint, so a redirected page cannot carry the directory-wide
 // bearer to another host.
 //
 // # Advanced queries
@@ -44,8 +44,8 @@
 //
 // # Worker-only
 //
-// Like the SQL connectors (ADR-0173) and unlike everything built before them, this
-// kind has no in-process handler: [ADR-0164] decided that new connector kinds are
+// Like the SQL workers (ADR-0173) and unlike everything built before them, this
+// kind has no in-process handler: [ADR-0164] decided that new Worker Types are
 // built worker-first. The tenant id, client id and client secret live in the
 // worker's own environment, so the engine holds no Entra credential — which matters
 // more here than almost anywhere, because an app registration with
@@ -55,7 +55,7 @@
 // [ADR-0168]'s split applies as it does everywhere else: [Resolve] is engine work
 // (find the task detail, evaluate its FEEL against the instance's variables, read
 // the attributes variable) and produces a [Job] of plain values; [Run] is worker
-// work (resolve the connector name against the worker's own registry, call Graph).
+// work (resolve the worker name against the worker's own registry, call Graph).
 // A [Job] has nowhere to put a client secret.
 //
 // [ADR-0164]: https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md

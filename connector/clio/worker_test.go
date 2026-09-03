@@ -20,7 +20,7 @@ type fixedClock struct{ t int64 }
 
 func (c *fixedClock) Now() int64 { c.t++; return c.t }
 
-// recordingClient captures the events a connector task writes and serves canned
+// recordingClient captures the events a task writes and serves canned
 // read/query results back.
 type recordingClient struct {
 	events     []clio.Event
@@ -95,10 +95,10 @@ func active(t *testing.T, s *state.Store) (pi, ei int) {
 	return pi, ei
 }
 
-// TestConnectorTaskWritesToClio is the vertical slice end to end: a connector
+// TestConnectorTaskWritesToClio is the vertical slice end to end: a worker
 // task creates a job, the in-process clio worker appends the instance's
-// variables to the registered connector, completes the job, and the instance
-// finishes — proving Atlas drives a clio connector through the normal job path.
+// variables to the registered worker, completes the job, and the instance
+// finishes — proving Atlas drives a clio worker through the normal job path.
 func TestConnectorTaskWritesToClio(t *testing.T) {
 	dir := t.TempDir()
 	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
@@ -156,7 +156,7 @@ func TestConnectorTaskWritesToClio(t *testing.T) {
 
 // TestConnectorTaskRecoversAcrossRestart runs to the waiting clio job, simulates
 // a crash (reopen log and store), recovers by replaying the log, then lets the
-// worker write the event and finish the instance — proving the connector job
+// worker write the event and finish the instance — proving the worker job
 // survives recovery like any other job. The idempotency key (the job key) is
 // stable across replay, so a re-run after a crash would not double-write.
 func TestConnectorTaskRecoversAcrossRestart(t *testing.T) {
@@ -183,9 +183,9 @@ func TestConnectorTaskRecoversAcrossRestart(t *testing.T) {
 	if err := p1.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle 1: %v", err)
 	}
-	// The instance is parked on the connector job (nothing completed it yet).
+	// The instance is parked on the worker job (nothing completed it yet).
 	if pi := mustActiveProcs(t, store1); pi != 1 {
-		t.Fatalf("before crash: active=%d, want 1 (waiting on connector job)", pi)
+		t.Fatalf("before crash: active=%d, want 1 (waiting on worker job)", pi)
 	}
 	store1.Close()
 	log1.Close()
@@ -222,9 +222,9 @@ func TestConnectorTaskRecoversAcrossRestart(t *testing.T) {
 	}
 }
 
-// TestConnectorUnregistered proves that a connector task whose connector is not
+// TestConnectorUnregistered proves that a task whose worker is not
 // registered leaves the job pending (the handler errors), so nothing is lost:
-// the instance stays parked and can proceed once the connector is configured.
+// the instance stays parked and can proceed once the worker is configured.
 func TestConnectorUnregistered(t *testing.T) {
 	dir := t.TempDir()
 	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
@@ -249,7 +249,7 @@ func TestConnectorUnregistered(t *testing.T) {
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
-		t.Fatalf("Drive with an unregistered connector: %v, want nil (failure routed to an incident)", err)
+		t.Fatalf("Drive with an unregistered worker: %v, want nil (failure routed to an incident)", err)
 	}
 	if pi := mustActiveProcs(t, store); pi != 1 {
 		t.Fatalf("after failed Drive: active=%d, want 1 (job still pending)", pi)
@@ -367,7 +367,7 @@ func clioReadThenWaitProcess(t *testing.T, add func(b *compiler.Builder) int32) 
 }
 
 // TestClioQueryTaskWritesResult drives a clio query task end to end: the worker runs
-// the query on the registered connector and writes the result into the task's result
+// the query on the registered worker and writes the result into the task's result
 // variable, which the parked instance still holds.
 func TestClioQueryTaskWritesResult(t *testing.T) {
 	dir := t.TempDir()

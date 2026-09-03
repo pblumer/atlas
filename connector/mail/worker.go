@@ -14,16 +14,16 @@ import (
 )
 
 // ProcessLookup resolves a process-definition key to its compiled process. The
-// worker uses it to find the connector name and message fields a mail job belongs
+// worker uses it to find the worker name and message fields a mail job belongs
 // to, so one handler serves every deployed process.
 type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
-// Handler builds a job handler that performs an outbound mail connector task.
+// Handler builds a job handler that performs an outbound mail worker task.
 // Register it with a [job.Runner] for the reserved [compiler.MailJobTypeIndex]; the
 // runner then pulls activatable mail jobs, and for each the handler resolves the
 // task's connector/recipients/subject/body from the compiled process — evaluating
 // any FEEL field over the variables the task sees, up its scope chain (the fx
-// toggle, ADR-0067/0068) — resolves the named connector's provider client from reg,
+// toggle, ADR-0067/0068) — resolves the named worker's provider client from reg,
 // and sends the message keyed by the job key so an at-least-once retry de-duplicates
 // (ADR-0079). Returning an error
 // leaves the job pending (retry, then an incident, ADR-0061); the runner completes it

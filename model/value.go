@@ -550,7 +550,7 @@ func (v *DataObjectValue) decode(src []byte) error {
 // produced, and the temis trace explaining which rules fired. The three payloads
 // are canonical JSON text (InputsJSON and OutputsJSON are objects; TraceJSON is the
 // temis trace tree, or "" when the evaluator produced none — e.g. a literal-
-// expression decision or a remote decision whose connector returned no trace).
+// expression decision or a remote decision whose worker returned no trace).
 //
 // It is keyed under its owning ProcessInstanceKey as append-only history — one
 // record per evaluation, never overwritten — so an operator can inspect after the
@@ -1009,7 +1009,7 @@ type MessageFlowValue struct {
 func (*MessageFlowValue) ValueType() ValueType { return VTMessageFlow }
 
 // InboundDeliveryValue advances an external event source's inbound high-water mark
-// (ADR-0075). SourceID is an opaque per-source identifier (e.g. a clio connector +
+// (ADR-0075). SourceID is an opaque per-source identifier (e.g. a clio worker +
 // watched subject) the engine never interprets; SourceSeq is that source's
 // monotonic sequence up to which delivery has been applied. Folding these into a
 // per-source high-water mark lets a replayed at-least-once publish be skipped.

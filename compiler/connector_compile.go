@@ -7,31 +7,31 @@ import (
 	"strings"
 )
 
-// connectorCompiler compiles one connector flavor of a job-worker task (service or
-// send task). A service task bearing a connector extension delegates to a
-// server-registered connector via the job path rather than to an external
+// connectorCompiler compiles one worker flavor of a job-worker task (service or
+// send task). A service task bearing a worker extension delegates to a
+// server-registered worker via the job path rather than to an external
 // service-task worker; each flavor validates its own extension and emits its own
-// connector-task node.
+// worker-task node.
 //
-// The ordered connectorCompilers table is the single place the set of connector
+// The ordered connectorCompilers table is the single place the set of worker
 // flavors lives, so adding one is a new entry here plus its compile function — not
 // another arm grafted into registerJobWorkerTask. Order is preserved (the first
 // present extension wins, as when the arms were inlined), so it stays stable.
 type connectorCompiler struct {
-	// present reports whether st carries this connector's extension.
+	// present reports whether st carries this worker's extension.
 	present func(st xmlServiceTask) bool
-	// retries reads this connector extension's own retries attribute (ADR-0135),
+	// retries reads this worker extension's own retries attribute (ADR-0135),
 	// which overrides a <zeebe:taskDefinition retries> on the same task. It is called
 	// only when present(st) is true, so it may dereference the extension pointer
 	// directly; an empty string means the attribute was omitted.
 	retries func(st xmlServiceTask) string
-	// compile validates the extension's fields and adds the connector-task node,
+	// compile validates the extension's fields and adds the worker-task node,
 	// returning its node id. It is called only when present(st) is true, so it may
 	// dereference the extension pointer directly.
 	compile func(b *Builder, st xmlServiceTask, retries int32) (int32, error)
 }
 
-// connectorCompilers is the ordered registry of connector flavors a job-worker task
+// connectorCompilers is the ordered registry of worker flavors a job-worker task
 // can take. registerJobWorkerTask consults it before falling through to the plain
 // external-worker task.
 var connectorCompilers = []connectorCompiler{
@@ -121,7 +121,7 @@ var connectorCompilers = []connectorCompiler{
 }
 
 // The directory-file formats and directions a model can author. They are spelled here
-// as well as in connector/ldif because the compiler cannot import the connector (the
+// as well as in connector/ldif because the compiler cannot import the worker (the
 // dependency runs the other way); TestLdifFormatsMatchTheConnector guards the seam.
 const (
 	ldifFormatLDIF     = "ldif"
@@ -139,23 +139,23 @@ func compileLdifConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	// guessing from the bytes is how a malformed file becomes a plausible-looking
 	// empty result.
 	if format == "" {
-		return 0, fmt.Errorf("compiler: ldif connector task %q needs a format (%s or %s)", st.Id, ldifFormatDSML, ldifFormatLDIF)
+		return 0, fmt.Errorf("compiler: ldif task %q needs a format (%s or %s)", st.Id, ldifFormatDSML, ldifFormatLDIF)
 	}
 	if format != ldifFormatLDIF && format != ldifFormatDSML {
-		return 0, fmt.Errorf("compiler: ldif connector task %q has an unknown format %q (want %s or %s)", st.Id, cn.Format, ldifFormatDSML, ldifFormatLDIF)
+		return 0, fmt.Errorf("compiler: ldif task %q has an unknown format %q (want %s or %s)", st.Id, cn.Format, ldifFormatDSML, ldifFormatLDIF)
 	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
 		op = ldifOperationRead
 	}
 	if op != ldifOperationRead && op != ldifOperationWrite {
-		return 0, fmt.Errorf("compiler: ldif connector task %q has an unknown operation %q (want %s or %s)", st.Id, cn.Operation, ldifOperationRead, ldifOperationWrite)
+		return 0, fmt.Errorf("compiler: ldif task %q has an unknown operation %q (want %s or %s)", st.Id, cn.Operation, ldifOperationRead, ldifOperationWrite)
 	}
 	if strings.TrimSpace(cn.Source) == "" {
-		return 0, fmt.Errorf("compiler: ldif connector task %q needs a source variable", st.Id)
+		return 0, fmt.Errorf("compiler: ldif task %q needs a source variable", st.Id)
 	}
 	if strings.TrimSpace(cn.ResultVariable) == "" {
-		return 0, fmt.Errorf("compiler: ldif connector task %q needs a resultVariable to receive the %s", st.Id,
+		return 0, fmt.Errorf("compiler: ldif task %q needs a resultVariable to receive the %s", st.Id,
 			map[string]string{ldifOperationRead: "entries", ldifOperationWrite: "rendered file"}[op])
 	}
 	return b.AddLdifConnectorTask(LdifConfig{
@@ -220,12 +220,12 @@ var entraOps = map[string]entraOp{
 
 // The listing bounds a model inherits when it authors none.
 //
-// maxUsers defaults on for the reason the LDAP connector's entry cap does: an
+// maxUsers defaults on for the reason the LDAP worker's entry cap does: an
 // unbounded directory listing into a process variable is the failure this hardens
 // against, and a truncated one would be a wrong answer rather than a partial one.
 // pageSize defaults *off* — absent means no $top, which leaves Graph its own page
 // size (100 for /users). Unlike LDAP there is nothing to work around: Graph pages a
-// collection whether asked to or not, and this connector follows every page.
+// collection whether asked to or not, and this worker follows every page.
 const (
 	defaultEntraPageSize = 0
 	defaultEntraMaxUsers = 1000
@@ -248,64 +248,64 @@ func entraOpNames() []string {
 
 // compileEntraConnectorTask compiles an <atlas:entraConnector> task: one Microsoft
 // Entra ID lifecycle operation through Graph (ADR-0172). The model names a tenant
-// connector and the operation; the tenant id, client id and client secret live on the
+// worker and the operation; the tenant id, client id and client secret live on the
 // worker, so there is nothing here to validate about a credential.
 func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Entra
 	if strings.TrimSpace(cn.Connector) == "" {
-		return 0, fmt.Errorf("compiler: entra connector task %q needs a connector (the name the worker holds the tenant credential under)", st.Id)
+		return 0, fmt.Errorf("compiler: entra task %q needs a worker (the name the Worker Instance holds the tenant credential under)", st.Id)
 	}
-	// The connector is normally a static name, but may be a FEEL expression (a leading
+	// The worker is normally a static name, but may be a FEEL expression (a leading
 	// '=') so one process can serve more than one tenant, resolving the name from its
 	// own variables at call time. This is entra-only: the kind is worker-only, so no
 	// deploy-time credential lookup keys off a fixed name (ADR-0172).
-	connectorExpr, err := connectorValue(st.Id, "entra connector", "connector", cn.Connector)
+	connectorExpr, err := connectorValue(st.Id, "entra worker", "connector", cn.Connector)
 	if err != nil {
 		return 0, err
 	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
-		return 0, fmt.Errorf("compiler: entra connector task %q needs an operation (%s)", st.Id, strings.Join(entraOpNames(), ", "))
+		return 0, fmt.Errorf("compiler: entra task %q needs an operation (%s)", st.Id, strings.Join(entraOpNames(), ", "))
 	}
 	spec, ok := entraOps[op]
 	if !ok {
-		return 0, fmt.Errorf("compiler: entra connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(entraOpNames(), ", "))
+		return 0, fmt.Errorf("compiler: entra task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(entraOpNames(), ", "))
 	}
 	if spec.needsUser && strings.TrimSpace(cn.UserID) == "" {
-		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs a userId (a user principal name or object id)", st.Id, op)
+		return 0, fmt.Errorf("compiler: entra task %q operation %q needs a userId (a user principal name or object id)", st.Id, op)
 	}
 	if spec.needsGroup && strings.TrimSpace(cn.GroupID) == "" {
-		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs a groupId", st.Id, op)
+		return 0, fmt.Errorf("compiler: entra task %q operation %q needs a groupId", st.Id, op)
 	}
 	hasInlineAttrs := strings.TrimSpace(cn.Attributes) != ""
 	hasAttrsVar := strings.TrimSpace(cn.AttributesVariable) != ""
 	if spec.needsAttributes && !hasInlineAttrs && !hasAttrsVar {
-		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs its directory properties — an inline attributes JSON or an attributesVariable naming them", st.Id, op)
+		return 0, fmt.Errorf("compiler: entra task %q operation %q needs its directory properties — an inline attributes JSON or an attributesVariable naming them", st.Id, op)
 	}
 	if hasInlineAttrs && hasAttrsVar {
-		return 0, fmt.Errorf("compiler: entra connector task %q sets both inline attributes and an attributesVariable; use one, not both", st.Id)
+		return 0, fmt.Errorf("compiler: entra task %q sets both inline attributes and an attributesVariable; use one, not both", st.Id)
 	}
 	if !spec.needsAttributes && (hasInlineAttrs || hasAttrsVar) {
-		return 0, fmt.Errorf("compiler: entra connector task %q sets attributes on operation %q, which sends no body (attributes apply to create/update and create-channel)", st.Id, op)
+		return 0, fmt.Errorf("compiler: entra task %q sets attributes on operation %q, which sends no body (attributes apply to create/update and create-channel)", st.Id, op)
 	}
 	attrs, err := entraAttributesExpr(st.Id, cn.Attributes)
 	if err != nil {
 		return 0, err
 	}
 	if spec.needsPassword && strings.TrimSpace(cn.NewPassword) == "" {
-		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs a newPassword (the value to set, typically a FEEL variable)", st.Id, op)
+		return 0, fmt.Errorf("compiler: entra task %q operation %q needs a newPassword (the value to set, typically a FEEL variable)", st.Id, op)
 	}
 	if !spec.needsPassword && strings.TrimSpace(cn.NewPassword) != "" {
-		return 0, fmt.Errorf("compiler: entra connector task %q sets newPassword on operation %q, which sets no password (newPassword applies to reset-password)", st.Id, op)
+		return 0, fmt.Errorf("compiler: entra task %q sets newPassword on operation %q, which sets no password (newPassword applies to reset-password)", st.Id, op)
 	}
 	if (spec.isList || spec.isDelta) && strings.TrimSpace(cn.ResultVariable) == "" {
-		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs a resultVariable (a directory read that discards its result is one nothing asked for)", st.Id, op)
+		return 0, fmt.Errorf("compiler: entra task %q operation %q needs a resultVariable (a directory read that discards its result is one nothing asked for)", st.Id, op)
 	}
 	if err := entraFieldGating(st.Id, op, spec, cn); err != nil {
 		return 0, err
 	}
 	// select, pageSize and maxUsers apply to a listing or a delta query — both return a
-	// collection this connector pages.
+	// collection this worker pages.
 	listOrDelta := spec.isList || spec.isDelta
 	pageSize, err := entraListBound(st.Id, op, listOrDelta, "pageSize", cn.PageSize, defaultEntraPageSize, maxEntraPageSize)
 	if err != nil {
@@ -315,27 +315,27 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if err != nil {
 		return 0, err
 	}
-	userID, err := connectorValue(st.Id, "entra connector", "userId", cn.UserID)
+	userID, err := connectorValue(st.Id, "entra worker", "userId", cn.UserID)
 	if err != nil {
 		return 0, err
 	}
-	groupID, err := connectorValue(st.Id, "entra connector", "groupId", cn.GroupID)
+	groupID, err := connectorValue(st.Id, "entra worker", "groupId", cn.GroupID)
 	if err != nil {
 		return 0, err
 	}
-	newPassword, err := connectorValue(st.Id, "entra connector", "newPassword", cn.NewPassword)
+	newPassword, err := connectorValue(st.Id, "entra worker", "newPassword", cn.NewPassword)
 	if err != nil {
 		return 0, err
 	}
-	filter, err := connectorValue(st.Id, "entra connector", "filter", cn.Filter)
+	filter, err := connectorValue(st.Id, "entra worker", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
 	}
-	search, err := connectorValue(st.Id, "entra connector", "search", cn.Search)
+	search, err := connectorValue(st.Id, "entra worker", "search", cn.Search)
 	if err != nil {
 		return 0, err
 	}
-	deltaLink, err := connectorValue(st.Id, "entra connector", "deltaLink", cn.DeltaLink)
+	deltaLink, err := connectorValue(st.Id, "entra worker", "deltaLink", cn.DeltaLink)
 	if err != nil {
 		return 0, err
 	}
@@ -387,11 +387,11 @@ func entraAdvancedQuery(taskID string, cn *xmlEntraConnector) (bool, error) {
 		return true, nil
 	case "false":
 		if hasSearch {
-			return false, fmt.Errorf("compiler: entra connector task %q sets a search with advancedQuery=\"false\", but Graph runs a $search only as an advanced query", taskID)
+			return false, fmt.Errorf("compiler: entra task %q sets a search with advancedQuery=\"false\", but Graph runs a $search only as an advanced query", taskID)
 		}
 		return false, nil
 	default:
-		return false, fmt.Errorf("compiler: entra connector task %q has a non-boolean advancedQuery %q (want true or false)", taskID, cn.AdvancedQuery)
+		return false, fmt.Errorf("compiler: entra task %q has a non-boolean advancedQuery %q (want true or false)", taskID, cn.AdvancedQuery)
 	}
 }
 
@@ -414,14 +414,14 @@ func entraFieldGating(taskID, op string, spec entraOp, cn *xmlEntraConnector) er
 		{"advancedQuery", cn.AdvancedQuery},
 	} {
 		if strings.TrimSpace(a.raw) != "" && !spec.isList {
-			return fmt.Errorf("compiler: entra connector task %q sets %s on operation %q, which is not a listing (%s applies to list-users and list-groups)", taskID, a.what, op, a.what)
+			return fmt.Errorf("compiler: entra task %q sets %s on operation %q, which is not a listing (%s applies to list-users and list-groups)", taskID, a.what, op, a.what)
 		}
 	}
 	if strings.TrimSpace(cn.Select) != "" && !spec.isList && !spec.isDelta {
-		return fmt.Errorf("compiler: entra connector task %q sets select on operation %q, which returns no collection (select applies to list-users, list-groups and the delta operations)", taskID, op)
+		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which returns no collection (select applies to list-users, list-groups and the delta operations)", taskID, op)
 	}
 	if strings.TrimSpace(cn.DeltaLink) != "" && !spec.isDelta {
-		return fmt.Errorf("compiler: entra connector task %q sets deltaLink on operation %q, which is not a change-tracking query (deltaLink applies to delta-users and delta-groups)", taskID, op)
+		return fmt.Errorf("compiler: entra task %q sets deltaLink on operation %q, which is not a change-tracking query (deltaLink applies to delta-users and delta-groups)", taskID, op)
 	}
 	return nil
 }
@@ -443,22 +443,22 @@ func entraListBound(taskID, op string, isList bool, what, raw string, def, max i
 		return 0, nil
 	}
 	if !isList {
-		return 0, fmt.Errorf("compiler: entra connector task %q sets %s on operation %q, which returns no collection (%s applies to list-users, list-groups and the delta operations)", taskID, what, op, what)
+		return 0, fmt.Errorf("compiler: entra task %q sets %s on operation %q, which returns no collection (%s applies to list-users, list-groups and the delta operations)", taskID, what, op, what)
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {
-		return 0, fmt.Errorf("compiler: entra connector task %q has a non-numeric %s %q", taskID, what, raw)
+		return 0, fmt.Errorf("compiler: entra task %q has a non-numeric %s %q", taskID, what, raw)
 	}
 	if n < 0 {
-		return 0, fmt.Errorf("compiler: entra connector task %q has a negative %s %d", taskID, what, n)
+		return 0, fmt.Errorf("compiler: entra task %q has a negative %s %d", taskID, what, n)
 	}
 	if max > 0 && int32(n) > max {
-		return 0, fmt.Errorf("compiler: entra connector task %q has a %s of %d, above the %d Graph accepts for /users", taskID, what, n, max)
+		return 0, fmt.Errorf("compiler: entra task %q has a %s of %d, above the %d Graph accepts for /users", taskID, what, n, max)
 	}
 	return int32(n), nil
 }
 
-// sqlProduct is one of the three SQL connector products: how a task of it is named
+// sqlProduct is one of the three SQL worker products: how a task of it is named
 // in errors, which extension it is read from, and which reserved job type it
 // compiles to. Everything else about the three is identical, which is why they share
 // one compile function rather than three that would drift.
@@ -470,9 +470,9 @@ type sqlProduct struct {
 
 // sqlProducts is the product table, keyed by reserved job type.
 var sqlProducts = map[string]sqlProduct{
-	MsSqlJobType:    {kind: "mssql connector", jobType: MsSqlJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.MsSql }},
-	MariaDBJobType:  {kind: "mariadb connector", jobType: MariaDBJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.MariaDB }},
-	PostgresJobType: {kind: "postgres connector", jobType: PostgresJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.Postgres }},
+	MsSqlJobType:    {kind: "mssql", jobType: MsSqlJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.MsSql }},
+	MariaDBJobType:  {kind: "mariadb", jobType: MariaDBJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.MariaDB }},
+	PostgresJobType: {kind: "postgres", jobType: PostgresJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.Postgres }},
 }
 
 // sqlConnectorCompiler is the registry entry for one SQL product. All three read the
@@ -489,13 +489,13 @@ func sqlConnectorCompiler(jobType string) connectorCompiler {
 	}
 }
 
-// sqlOps is the set of operations a SQL connector task can author. query returns
+// sqlOps is the set of operations a SQL task can author. query returns
 // rows, query-one a single row, execute an affected-row count.
 var sqlOps = map[string]bool{"query": true, "query-one": true, "execute": true}
 
-// compileSqlConnectorTask compiles a SQL connector task of one product: it runs one
+// compileSqlConnectorTask compiles a SQL task of one product: it runs one
 // statement against a database a *worker* is configured for (ADR-0173). The model
-// names a connector and authors the statement; the DSN and its credential never
+// names a worker and authors the statement; the DSN and its credential never
 // enter the engine, so there is nothing here to validate about an address.
 //
 // The statement is literal by construction. A FEEL statement would let a process
@@ -506,7 +506,7 @@ var sqlOps = map[string]bool{"query": true, "query-one": true, "execute": true}
 func compileSqlConnectorTask(b *Builder, st xmlServiceTask, retries int32, p sqlProduct) (int32, error) {
 	cn := p.ext(st)
 	if strings.TrimSpace(cn.Connector) == "" {
-		return 0, fmt.Errorf("compiler: %s task %q needs a connector (the name the worker holds the DSN under)", p.kind, st.Id)
+		return 0, fmt.Errorf("compiler: %s task %q needs a worker (the name the Worker Instance holds the DSN under)", p.kind, st.Id)
 	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
@@ -544,7 +544,7 @@ func compileSqlConnectorTask(b *Builder, st xmlServiceTask, retries int32, p sql
 
 // sqlMaxRows reads the authored row cap. It applies to query alone: query-one is
 // capped at one row by its own definition and execute returns a count, so a cap on
-// either is an author believing something the connector will not do — reported rather
+// either is an author believing something the worker will not do — reported rather
 // than ignored.
 func sqlMaxRows(kind, taskID, op, raw string) (int32, error) {
 	raw = strings.TrimSpace(raw)
@@ -564,13 +564,13 @@ func sqlMaxRows(kind, taskID, op, raw string) (int32, error) {
 	return int32(n), nil
 }
 
-// adOps is the set of Active Directory provisioning operations a connector task can
+// adOps is the set of Active Directory provisioning operations a task can
 // author, and what each requires of a model.
 //
-// Most are AD-specific primitives the generic LDAP connector cannot express directly
+// Most are AD-specific primitives the generic LDAP worker cannot express directly
 // (unicodePwd, userAccountControl, incremental group membership). The lifecycle
 // operations added later — update-attributes, move, delete, create-group — are not,
-// and they are here anyway: an identity process that has to leave the AD connector
+// and they are here anyway: an identity process that has to leave the AD worker
 // and pick up the LDAP one to rename an account has been handed two ways to bind to
 // the same directory, which is a worse answer than a little overlap (ADR-0166,
 // amended).
@@ -645,7 +645,7 @@ func adOpNames() []string {
 // search — take a baseDN and a result variable instead.
 func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Ad
-	// A task addresses its directory one of two ways: by the name of a connector an
+	// A task addresses its directory one of two ways: by the name of a worker an
 	// operator configured in the Console (the way every other credential-bearing kind
 	// is addressed), or by carrying url/bindDN/bindSecret itself — the original form,
 	// still accepted so models written before this keep compiling
@@ -658,17 +658,17 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	inline := strings.TrimSpace(cn.URL) != "" || strings.TrimSpace(cn.BindDN) != "" || strings.TrimSpace(cn.BindSecret) != ""
 	switch {
 	case named != "" && inline:
-		return 0, fmt.Errorf("compiler: ad connector task %q names a connector %q *and* carries its own url/bindDN/bindSecret; keep one — the connector, unless the model must hold the directory itself", st.Id, named)
+		return 0, fmt.Errorf("compiler: ad task %q names a worker %q *and* carries its own url/bindDN/bindSecret; keep one — the worker, unless the model must hold the directory itself", st.Id, named)
 	case named == "" && strings.TrimSpace(cn.URL) == "":
-		return 0, fmt.Errorf("compiler: ad connector task %q needs a connector (the name of a directory configured in the Console), or a url (ldaps://host for a password set)", st.Id)
+		return 0, fmt.Errorf("compiler: ad task %q needs a worker (the name of a directory configured in the Console), or a url (ldaps://host for a password set)", st.Id)
 	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
-		return 0, fmt.Errorf("compiler: ad connector task %q needs an operation (%s)", st.Id, strings.Join(adOpNames(), ", "))
+		return 0, fmt.Errorf("compiler: ad task %q needs an operation (%s)", st.Id, strings.Join(adOpNames(), ", "))
 	}
 	spec, ok := adOps[op]
 	if !ok {
-		return 0, fmt.Errorf("compiler: ad connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(adOpNames(), ", "))
+		return 0, fmt.Errorf("compiler: ad task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(adOpNames(), ", "))
 	}
 	// The two reading operations address a subtree by baseDN; every other operation
 	// addresses an existing or to-be-created entry by dn — including move, where dn is
@@ -676,24 +676,24 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	switch {
 	case spec.isSync:
 		if strings.TrimSpace(cn.BaseDN) == "" {
-			return 0, fmt.Errorf("compiler: ad connector task %q operation sync needs a baseDN (the naming context root the delta is read from)", st.Id)
+			return 0, fmt.Errorf("compiler: ad task %q operation sync needs a baseDN (the naming context root the delta is read from)", st.Id)
 		}
 		if strings.TrimSpace(cn.CookieVariable) == "" {
-			return 0, fmt.Errorf("compiler: ad connector task %q operation sync needs a cookieVariable; without one every pass re-reads the whole directory", st.Id)
+			return 0, fmt.Errorf("compiler: ad task %q operation sync needs a cookieVariable; without one every pass re-reads the whole directory", st.Id)
 		}
 		if strings.TrimSpace(cn.ResultVariable) == "" {
-			return 0, fmt.Errorf("compiler: ad connector task %q operation sync needs a resultVariable to receive the changes", st.Id)
+			return 0, fmt.Errorf("compiler: ad task %q operation sync needs a resultVariable to receive the changes", st.Id)
 		}
 	case spec.isSearch:
 		if strings.TrimSpace(cn.BaseDN) == "" {
-			return 0, fmt.Errorf("compiler: ad connector task %q operation search needs a baseDN (where in the tree to look)", st.Id)
+			return 0, fmt.Errorf("compiler: ad task %q operation search needs a baseDN (where in the tree to look)", st.Id)
 		}
 		if strings.TrimSpace(cn.ResultVariable) == "" {
-			return 0, fmt.Errorf("compiler: ad connector task %q operation search needs a resultVariable to receive what it found; a directory read that discards its result is one nothing asked for", st.Id)
+			return 0, fmt.Errorf("compiler: ad task %q operation search needs a resultVariable to receive what it found; a directory read that discards its result is one nothing asked for", st.Id)
 		}
 	default:
 		if strings.TrimSpace(cn.DN) == "" {
-			return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a dn", st.Id, op)
+			return 0, fmt.Errorf("compiler: ad task %q operation %q needs a dn", st.Id, op)
 		}
 	}
 	scope, err := adSearchScope(st.Id, op, spec.isSearch, cn.Scope)
@@ -705,46 +705,46 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 		return 0, err
 	}
 	if spec.needsEntry && strings.TrimSpace(cn.EntryVariable) == "" {
-		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
+		return 0, fmt.Errorf("compiler: ad task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
 	}
 	if spec.needsPassword && strings.TrimSpace(cn.NewPassword) == "" {
-		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a newPassword", st.Id, op)
+		return 0, fmt.Errorf("compiler: ad task %q operation %q needs a newPassword", st.Id, op)
 	}
 	if spec.needsMember && strings.TrimSpace(cn.MemberDN) == "" {
-		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a memberDN", st.Id, op)
+		return 0, fmt.Errorf("compiler: ad task %q operation %q needs a memberDN", st.Id, op)
 	}
 	if spec.needsNewDN && strings.TrimSpace(cn.NewDN) == "" {
-		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a newDN (the entry's new distinguished name)", st.Id, op)
+		return 0, fmt.Errorf("compiler: ad task %q operation %q needs a newDN (the entry's new distinguished name)", st.Id, op)
 	}
-	url, err := connectorValue(st.Id, "ad connector", "url", cn.URL)
+	url, err := connectorValue(st.Id, "ad worker", "url", cn.URL)
 	if err != nil {
 		return 0, err
 	}
-	bindDN, err := connectorValue(st.Id, "ad connector", "bindDN", cn.BindDN)
+	bindDN, err := connectorValue(st.Id, "ad worker", "bindDN", cn.BindDN)
 	if err != nil {
 		return 0, err
 	}
-	dn, err := connectorValue(st.Id, "ad connector", "dn", cn.DN)
+	dn, err := connectorValue(st.Id, "ad worker", "dn", cn.DN)
 	if err != nil {
 		return 0, err
 	}
-	newDN, err := connectorValue(st.Id, "ad connector", "newDN", cn.NewDN)
+	newDN, err := connectorValue(st.Id, "ad worker", "newDN", cn.NewDN)
 	if err != nil {
 		return 0, err
 	}
-	baseDN, err := connectorValue(st.Id, "ad connector", "baseDN", cn.BaseDN)
+	baseDN, err := connectorValue(st.Id, "ad worker", "baseDN", cn.BaseDN)
 	if err != nil {
 		return 0, err
 	}
-	filter, err := connectorValue(st.Id, "ad connector", "filter", cn.Filter)
+	filter, err := connectorValue(st.Id, "ad worker", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
 	}
-	memberDN, err := connectorValue(st.Id, "ad connector", "memberDN", cn.MemberDN)
+	memberDN, err := connectorValue(st.Id, "ad worker", "memberDN", cn.MemberDN)
 	if err != nil {
 		return 0, err
 	}
-	newPassword, err := connectorValue(st.Id, "ad connector", "newPassword", cn.NewPassword)
+	newPassword, err := connectorValue(st.Id, "ad worker", "newPassword", cn.NewPassword)
 	if err != nil {
 		return 0, err
 	}
@@ -773,7 +773,7 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 
 // adMaxEntries reads the authored cap on what an operation returns. It applies to the
 // two reading operations; on any other it is an author believing something the
-// connector will not do, reported rather than ignored.
+// worker will not do, reported rather than ignored.
 func adMaxEntries(taskID, op string, spec adOp, raw string) (int32, error) {
 	reads := spec.isSync || spec.isSearch
 	raw = strings.TrimSpace(raw)
@@ -784,14 +784,14 @@ func adMaxEntries(taskID, op string, spec adOp, raw string) (int32, error) {
 		return 0, nil
 	}
 	if !reads {
-		return 0, fmt.Errorf("compiler: ad connector task %q sets maxEntries on operation %q, which returns no entries (maxEntries applies to sync and search)", taskID, op)
+		return 0, fmt.Errorf("compiler: ad task %q sets maxEntries on operation %q, which returns no entries (maxEntries applies to sync and search)", taskID, op)
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {
-		return 0, fmt.Errorf("compiler: ad connector task %q has a non-numeric maxEntries %q", taskID, raw)
+		return 0, fmt.Errorf("compiler: ad task %q has a non-numeric maxEntries %q", taskID, raw)
 	}
 	if n < 0 {
-		return 0, fmt.Errorf("compiler: ad connector task %q has a negative maxEntries %d", taskID, n)
+		return 0, fmt.Errorf("compiler: ad task %q has a negative maxEntries %d", taskID, n)
 	}
 	return int32(n), nil
 }
@@ -807,7 +807,7 @@ func adSearchScope(taskID, op string, isSearch bool, raw string) (string, error)
 	scope := strings.ToLower(strings.TrimSpace(raw))
 	if !isSearch {
 		if scope != "" {
-			return "", fmt.Errorf("compiler: ad connector task %q sets a scope on operation %q, which addresses one entry rather than a subtree (scope applies to search)", taskID, op)
+			return "", fmt.Errorf("compiler: ad task %q sets a scope on operation %q, which addresses one entry rather than a subtree (scope applies to search)", taskID, op)
 		}
 		return "", nil
 	}
@@ -815,12 +815,12 @@ func adSearchScope(taskID, op string, isSearch bool, raw string) (string, error)
 		return "sub", nil
 	}
 	if !directoryScopes[scope] {
-		return "", fmt.Errorf("compiler: ad connector task %q has an unknown scope %q (want base, one, or sub)", taskID, raw)
+		return "", fmt.Errorf("compiler: ad task %q has an unknown scope %q (want base, one, or sub)", taskID, raw)
 	}
 	return scope, nil
 }
 
-// soapVersions is the set of SOAP protocol versions a connector task can author. 1.1
+// soapVersions is the set of SOAP protocol versions a task can author. 1.1
 // sends text/xml with a quoted SOAPAction header; 1.2 sends application/soap+xml with
 // the action as a Content-Type parameter (envelope namespaces differ too).
 var soapVersions = map[string]bool{"1.1": true, "1.2": true}
@@ -834,34 +834,34 @@ var soapVersions = map[string]bool{"1.1": true, "1.2": true}
 func compileSoapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Soap
 	if strings.TrimSpace(cn.Endpoint) == "" {
-		return 0, fmt.Errorf("compiler: soap connector task %q needs an endpoint (the web-service URL)", st.Id)
+		return 0, fmt.Errorf("compiler: soap task %q needs an endpoint (the web-service URL)", st.Id)
 	}
 	if strings.TrimSpace(cn.Operation) == "" {
-		return 0, fmt.Errorf("compiler: soap connector task %q needs an operation", st.Id)
+		return 0, fmt.Errorf("compiler: soap task %q needs an operation", st.Id)
 	}
 	if strings.TrimSpace(cn.Body) == "" {
-		return 0, fmt.Errorf("compiler: soap connector task %q needs a body (the SOAP request payload)", st.Id)
+		return 0, fmt.Errorf("compiler: soap task %q needs a body (the SOAP request payload)", st.Id)
 	}
 	version := strings.TrimSpace(cn.Version)
 	if version == "" {
 		version = "1.1"
 	}
 	if !soapVersions[version] {
-		return 0, fmt.Errorf("compiler: soap connector task %q has an unknown soapVersion %q (want 1.1 or 1.2)", st.Id, cn.Version)
+		return 0, fmt.Errorf("compiler: soap task %q has an unknown soapVersion %q (want 1.1 or 1.2)", st.Id, cn.Version)
 	}
-	endpoint, err := connectorValue(st.Id, "soap connector", "endpoint", cn.Endpoint)
+	endpoint, err := connectorValue(st.Id, "soap worker", "endpoint", cn.Endpoint)
 	if err != nil {
 		return 0, err
 	}
-	action, err := connectorValue(st.Id, "soap connector", "soapAction", cn.Action)
+	action, err := connectorValue(st.Id, "soap worker", "soapAction", cn.Action)
 	if err != nil {
 		return 0, err
 	}
-	body, err := connectorValue(st.Id, "soap connector", "body", cn.Body)
+	body, err := connectorValue(st.Id, "soap worker", "body", cn.Body)
 	if err != nil {
 		return 0, err
 	}
-	auth, err := connectorAuth(st.Id, "soap connector", cn.AuthType, cn.AuthUsername, cn.AuthApiKeyName, cn.AuthSecret)
+	auth, err := connectorAuth(st.Id, "soap worker", cn.AuthType, cn.AuthUsername, cn.AuthApiKeyName, cn.AuthSecret)
 	if err != nil {
 		return 0, err
 	}
@@ -877,7 +877,7 @@ func compileSoapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	}), nil
 }
 
-// ldapOps is the set of directory operations an LDAP connector task can author.
+// ldapOps is the set of directory operations an LDAP task can author.
 //
 // modify, add-values and delete-values are the same LDAP modify with different change
 // operations: modify *replaces* an attribute wholesale, while the other two change
@@ -907,7 +907,7 @@ const (
 )
 
 // directoryScopes is the set of LDAP search scopes a model may author, shared by the
-// two connectors that search a directory. An empty scope defaults to "sub" (the whole
+// two workers that search a directory. An empty scope defaults to "sub" (the whole
 // subtree) at compile time.
 var directoryScopes = map[string]bool{"base": true, "one": true, "sub": true}
 
@@ -920,37 +920,37 @@ var directoryScopes = map[string]bool{"base": true, "one": true, "sub": true}
 func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Ldap
 	if strings.TrimSpace(cn.URL) == "" {
-		return 0, fmt.Errorf("compiler: ldap connector task %q needs a url (ldap://host or ldaps://host)", st.Id)
+		return 0, fmt.Errorf("compiler: ldap task %q needs a url (ldap://host or ldaps://host)", st.Id)
 	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
-		return 0, fmt.Errorf("compiler: ldap connector task %q needs an operation (%s)", st.Id, strings.Join(ldapOpNames(), ", "))
+		return 0, fmt.Errorf("compiler: ldap task %q needs an operation (%s)", st.Id, strings.Join(ldapOpNames(), ", "))
 	}
 	if !ldapOps[op] {
-		return 0, fmt.Errorf("compiler: ldap connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(ldapOpNames(), ", "))
+		return 0, fmt.Errorf("compiler: ldap task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(ldapOpNames(), ", "))
 	}
 	scope := strings.ToLower(strings.TrimSpace(cn.Scope))
 	if op == "search" {
 		if strings.TrimSpace(cn.BaseDN) == "" {
-			return 0, fmt.Errorf("compiler: ldap connector task %q operation search needs a baseDN", st.Id)
+			return 0, fmt.Errorf("compiler: ldap task %q operation search needs a baseDN", st.Id)
 		}
 		if scope == "" {
 			scope = "sub"
 		}
 		if !directoryScopes[scope] {
-			return 0, fmt.Errorf("compiler: ldap connector task %q has an unknown scope %q (want base, one, or sub)", st.Id, cn.Scope)
+			return 0, fmt.Errorf("compiler: ldap task %q has an unknown scope %q (want base, one, or sub)", st.Id, cn.Scope)
 		}
 	} else {
 		scope = ""
 		if strings.TrimSpace(cn.DN) == "" {
-			return 0, fmt.Errorf("compiler: ldap connector task %q operation %q needs a dn", st.Id, op)
+			return 0, fmt.Errorf("compiler: ldap task %q operation %q needs a dn", st.Id, op)
 		}
 	}
 	if ldapEntryOps[op] && strings.TrimSpace(cn.EntryVariable) == "" {
-		return 0, fmt.Errorf("compiler: ldap connector task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
+		return 0, fmt.Errorf("compiler: ldap task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
 	}
 	if op == "modify-password" && strings.TrimSpace(cn.NewPassword) == "" {
-		return 0, fmt.Errorf("compiler: ldap connector task %q operation modify-password needs a newPassword", st.Id)
+		return 0, fmt.Errorf("compiler: ldap task %q operation modify-password needs a newPassword", st.Id)
 	}
 	pageSize, err := ldapSearchBound(st.Id, op, "pageSize", cn.PageSize, defaultLdapPageSize)
 	if err != nil {
@@ -960,27 +960,27 @@ func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if err != nil {
 		return 0, err
 	}
-	url, err := connectorValue(st.Id, "ldap connector", "url", cn.URL)
+	url, err := connectorValue(st.Id, "ldap worker", "url", cn.URL)
 	if err != nil {
 		return 0, err
 	}
-	bindDN, err := connectorValue(st.Id, "ldap connector", "bindDN", cn.BindDN)
+	bindDN, err := connectorValue(st.Id, "ldap worker", "bindDN", cn.BindDN)
 	if err != nil {
 		return 0, err
 	}
-	dn, err := connectorValue(st.Id, "ldap connector", "dn", cn.DN)
+	dn, err := connectorValue(st.Id, "ldap worker", "dn", cn.DN)
 	if err != nil {
 		return 0, err
 	}
-	baseDN, err := connectorValue(st.Id, "ldap connector", "baseDN", cn.BaseDN)
+	baseDN, err := connectorValue(st.Id, "ldap worker", "baseDN", cn.BaseDN)
 	if err != nil {
 		return 0, err
 	}
-	filter, err := connectorValue(st.Id, "ldap connector", "filter", cn.Filter)
+	filter, err := connectorValue(st.Id, "ldap worker", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
 	}
-	newPassword, err := connectorValue(st.Id, "ldap connector", "newPassword", cn.NewPassword)
+	newPassword, err := connectorValue(st.Id, "ldap worker", "newPassword", cn.NewPassword)
 	if err != nil {
 		return 0, err
 	}
@@ -1019,7 +1019,7 @@ func ldapOpNames() []string {
 // authored number otherwise — including 0, which is how a model says unbounded.
 //
 // A bound on a non-search operation is rejected rather than ignored: it is an author
-// believing something the connector will not do, and silently dropping it is how a
+// believing something the worker will not do, and silently dropping it is how a
 // model comes to look bounded without being it.
 func ldapSearchBound(taskID, op, what, raw string, def int32) (int32, error) {
 	raw = strings.TrimSpace(raw)
@@ -1030,19 +1030,19 @@ func ldapSearchBound(taskID, op, what, raw string, def int32) (int32, error) {
 		return 0, nil
 	}
 	if op != "search" {
-		return 0, fmt.Errorf("compiler: ldap connector task %q sets %s on operation %q, which returns no entries (%s applies to search)", taskID, what, op, what)
+		return 0, fmt.Errorf("compiler: ldap task %q sets %s on operation %q, which returns no entries (%s applies to search)", taskID, what, op, what)
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {
-		return 0, fmt.Errorf("compiler: ldap connector task %q has a non-numeric %s %q", taskID, what, raw)
+		return 0, fmt.Errorf("compiler: ldap task %q has a non-numeric %s %q", taskID, what, raw)
 	}
 	if n < 0 {
-		return 0, fmt.Errorf("compiler: ldap connector task %q has a negative %s %d", taskID, what, n)
+		return 0, fmt.Errorf("compiler: ldap task %q has a negative %s %d", taskID, what, n)
 	}
 	return int32(n), nil
 }
 
-// scimOps is the set of SCIM 2.0 operations a connector task can author. create/get/
+// scimOps is the set of SCIM 2.0 operations a task can author. create/get/
 // replace/patch/delete/search map to the provider's POST/GET/PUT/PATCH/DELETE and a
 // filtered GET (RFC 7644 §3).
 var scimOps = map[string]bool{"create": true, "get": true, "replace": true, "patch": true, "delete": true, "search": true}
@@ -1057,41 +1057,41 @@ var scimOps = map[string]bool{"create": true, "get": true, "replace": true, "pat
 func compileScimConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Scim
 	if strings.TrimSpace(cn.BaseUrl) == "" {
-		return 0, fmt.Errorf("compiler: scim connector task %q needs a baseUrl", st.Id)
+		return 0, fmt.Errorf("compiler: scim task %q needs a baseUrl", st.Id)
 	}
 	if strings.TrimSpace(cn.Resource) == "" {
-		return 0, fmt.Errorf("compiler: scim connector task %q needs a resource (e.g. Users)", st.Id)
+		return 0, fmt.Errorf("compiler: scim task %q needs a resource (e.g. Users)", st.Id)
 	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
-		return 0, fmt.Errorf("compiler: scim connector task %q needs an operation (create, get, replace, patch, delete, or search)", st.Id)
+		return 0, fmt.Errorf("compiler: scim task %q needs an operation (create, get, replace, patch, delete, or search)", st.Id)
 	}
 	if !scimOps[op] {
-		return 0, fmt.Errorf("compiler: scim connector task %q has an unknown operation %q (want create, get, replace, patch, delete, or search)", st.Id, cn.Operation)
+		return 0, fmt.Errorf("compiler: scim task %q has an unknown operation %q (want create, get, replace, patch, delete, or search)", st.Id, cn.Operation)
 	}
 	if strings.TrimSpace(cn.ResourceId) == "" {
 		switch op {
 		case "get", "replace", "patch", "delete":
-			return 0, fmt.Errorf("compiler: scim connector task %q operation %q needs a resourceId", st.Id, op)
+			return 0, fmt.Errorf("compiler: scim task %q operation %q needs a resourceId", st.Id, op)
 		}
 	}
-	baseURL, err := connectorValue(st.Id, "scim connector", "baseUrl", cn.BaseUrl)
+	baseURL, err := connectorValue(st.Id, "scim worker", "baseUrl", cn.BaseUrl)
 	if err != nil {
 		return 0, err
 	}
-	resource, err := connectorValue(st.Id, "scim connector", "resource", cn.Resource)
+	resource, err := connectorValue(st.Id, "scim worker", "resource", cn.Resource)
 	if err != nil {
 		return 0, err
 	}
-	resourceID, err := connectorValue(st.Id, "scim connector", "resourceId", cn.ResourceId)
+	resourceID, err := connectorValue(st.Id, "scim worker", "resourceId", cn.ResourceId)
 	if err != nil {
 		return 0, err
 	}
-	filter, err := connectorValue(st.Id, "scim connector", "filter", cn.Filter)
+	filter, err := connectorValue(st.Id, "scim worker", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
 	}
-	auth, err := connectorAuth(st.Id, "scim connector", cn.AuthType, cn.AuthUsername, cn.AuthApiKeyName, cn.AuthSecret)
+	auth, err := connectorAuth(st.Id, "scim worker", cn.AuthType, cn.AuthUsername, cn.AuthApiKeyName, cn.AuthSecret)
 	if err != nil {
 		return 0, err
 	}
@@ -1110,7 +1110,7 @@ func compileScimConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 
 // firstNonBlank returns the first value that is not empty once trimmed — the
 // precedence rule for an attribute a task can carry in more than one place (a
-// connector's own retries over its task definition's, ADR-0135).
+// worker's own retries over its task definition's, ADR-0135).
 func firstNonBlank(vals ...string) string {
 	for _, v := range vals {
 		if strings.TrimSpace(v) != "" {
@@ -1147,20 +1147,20 @@ func parseRetries(label, id, attr string) (int32, error) {
 
 // serviceTaskRetries reads the retries count from a job-worker task's
 // <taskDefinition>, defaulting to defaultRetries when it is omitted. label names the
-// element ("service task"/"send task") for diagnostics. A connector extension on the
+// element ("service task"/"send task") for diagnostics. A worker extension on the
 // same task may override it with its own retries attribute (ADR-0135).
 func serviceTaskRetries(st xmlServiceTask, label string) (int32, error) {
 	return parseRetries(label, st.Id, st.TaskDefinition.Retries)
 }
 
 // compileClioConnectorTask compiles an <atlas:clioConnector> task: it delegates to a
-// server-registered clio connector via the job path (ADR-0036), not to an external
+// server-registered clio worker via the job path (ADR-0036), not to an external
 // service-task worker. operation selects the clio call (write/query/read); write is
 // the default for back-compatibility with the original write-only element.
 func compileClioConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Clio
 	if cn.Connector == "" {
-		return 0, fmt.Errorf("compiler: clio connector task %q needs a connector", st.Id)
+		return 0, fmt.Errorf("compiler: clio task %q needs a worker", st.Id)
 	}
 	switch op := clioOperation(cn.Operation); op {
 	case "write":
@@ -1189,7 +1189,7 @@ func compileClioConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		}
 		return b.AddClioReadTask(cn.Connector, cn.Subject, strings.TrimSpace(cn.ResultVariable), limit, retries), nil
 	default:
-		return 0, fmt.Errorf("compiler: clio connector task %q has unknown operation %q (want write, query, or read)", st.Id, op)
+		return 0, fmt.Errorf("compiler: clio task %q has unknown operation %q (want write, query, or read)", st.Id, op)
 	}
 }
 
@@ -1200,11 +1200,11 @@ func compileClioConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 func compileRestConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Rest
 	if strings.TrimSpace(cn.Url) == "" {
-		return 0, fmt.Errorf("compiler: rest connector task %q needs a url", st.Id)
+		return 0, fmt.Errorf("compiler: rest task %q needs a url", st.Id)
 	}
 	method, err := normalizeHTTPMethod(cn.Method)
 	if err != nil {
-		return 0, fmt.Errorf("compiler: rest connector task %q: %w", st.Id, err)
+		return 0, fmt.Errorf("compiler: rest task %q: %w", st.Id, err)
 	}
 	url, err := restValue(st.Id, "url", cn.Url)
 	if err != nil {
@@ -1235,16 +1235,16 @@ func compileRestConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 
 // compileMailConnectorTask compiles an <atlas:mailConnector> task: it sends a
 // model-authored message through a server-registered mail provider via the job path
-// (ADR-0079). The provider (host, credentials) is resolved server-side by connector
+// (ADR-0079). The provider (host, credentials) is resolved server-side by worker
 // name, like clio; only the message (recipients, subject, and the text and/or HTML
 // body) lives in the model.
 func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Mail
 	if strings.TrimSpace(cn.Connector) == "" {
-		return 0, fmt.Errorf("compiler: mail connector task %q needs a connector", st.Id)
+		return 0, fmt.Errorf("compiler: mail task %q needs a worker", st.Id)
 	}
 	if strings.TrimSpace(cn.To) == "" {
-		return 0, fmt.Errorf("compiler: mail connector task %q needs a to recipient", st.Id)
+		return 0, fmt.Errorf("compiler: mail task %q needs a to recipient", st.Id)
 	}
 	to, err := restValue(st.Id, "to", cn.To)
 	if err != nil {
@@ -1291,7 +1291,7 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 // the in-process user-provisioning worker via the job path (ADR-0123), which mutates
 // the internal user store. operation selects the action; username is always required,
 // and create/set-password additionally require a password. The field values are
-// literal-or-FEEL (like the mail connector); no connector name or credential is
+// literal-or-FEEL (like the mail worker); no worker name or credential is
 // authored — the worker uses the local store, gated to the system project.
 func compileUserConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.User
@@ -1299,13 +1299,13 @@ func compileUserConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	switch op {
 	case "create", "set-password", "disable":
 	default:
-		return 0, fmt.Errorf("compiler: user connector task %q has unknown operation %q (want create, set-password, or disable)", st.Id, op)
+		return 0, fmt.Errorf("compiler: user task %q has unknown operation %q (want create, set-password, or disable)", st.Id, op)
 	}
 	if strings.TrimSpace(cn.Username) == "" {
-		return 0, fmt.Errorf("compiler: user connector task %q needs a username", st.Id)
+		return 0, fmt.Errorf("compiler: user task %q needs a username", st.Id)
 	}
 	if (op == "create" || op == "set-password") && strings.TrimSpace(cn.Password) == "" {
-		return 0, fmt.Errorf("compiler: user connector task %q (%s) needs a password", st.Id, op)
+		return 0, fmt.Errorf("compiler: user task %q (%s) needs a password", st.Id, op)
 	}
 	username, err := restValue(st.Id, "username", cn.Username)
 	if err != nil {
@@ -1341,18 +1341,18 @@ func compileUserConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 // compileSharePointConnectorTask compiles an <atlas:sharepointConnector> task: it
 // creates a list item in a model-authored site/list through a server-registered
 // SharePoint provider (Microsoft Graph) via the job path (ADR-0141). The provider
-// (Graph base, OAuth credential) is resolved server-side by connector name, like mail;
+// (Graph base, OAuth credential) is resolved server-side by worker name, like mail;
 // only the target (site, list, item fields) lives in the model.
 func compileSharePointConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.sharePointConn()
 	if strings.TrimSpace(cn.Connector) == "" {
-		return 0, fmt.Errorf("compiler: sharepoint connector task %q needs a connector", st.Id)
+		return 0, fmt.Errorf("compiler: sharepoint task %q needs a worker", st.Id)
 	}
 	if strings.TrimSpace(cn.Site) == "" {
-		return 0, fmt.Errorf("compiler: sharepoint connector task %q needs a site", st.Id)
+		return 0, fmt.Errorf("compiler: sharepoint task %q needs a site", st.Id)
 	}
 	if strings.TrimSpace(cn.List) == "" {
-		return 0, fmt.Errorf("compiler: sharepoint connector task %q needs a list", st.Id)
+		return 0, fmt.Errorf("compiler: sharepoint task %q needs a list", st.Id)
 	}
 	site, err := restValue(st.Id, "site", cn.Site)
 	if err != nil {
@@ -1379,15 +1379,15 @@ func compileSharePointConnectorTask(b *Builder, st xmlServiceTask, retries int32
 // compileRemedyConnectorTask compiles an <atlas:remedyConnector> task: it creates an
 // entry (e.g. an incident) in a Remedy form through the AR System REST API via the job
 // path (ADR-0106). The Remedy base URL and credentials are resolved server-side by
-// connector name, like clio and mail; only the form and its field values live in the
+// worker name, like clio and mail; only the form and its field values live in the
 // model.
 func compileRemedyConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Remedy
 	if strings.TrimSpace(cn.Connector) == "" {
-		return 0, fmt.Errorf("compiler: remedy connector task %q needs a connector", st.Id)
+		return 0, fmt.Errorf("compiler: remedy task %q needs a worker", st.Id)
 	}
 	if strings.TrimSpace(cn.Form) == "" {
-		return 0, fmt.Errorf("compiler: remedy connector task %q needs a form", st.Id)
+		return 0, fmt.Errorf("compiler: remedy task %q needs a form", st.Id)
 	}
 	form, err := restValue(st.Id, "form", cn.Form)
 	if err != nil {
@@ -1413,10 +1413,10 @@ func compileRemedyConnectorTask(b *Builder, st xmlServiceTask, retries int32) (i
 func compileWebScrapeConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.WebScrape
 	if strings.TrimSpace(cn.Url) == "" {
-		return 0, fmt.Errorf("compiler: webscrape connector task %q needs a url", st.Id)
+		return 0, fmt.Errorf("compiler: webscrape task %q needs a url", st.Id)
 	}
 	if strings.TrimSpace(cn.ResultVariable) == "" {
-		return 0, fmt.Errorf("compiler: webscrape connector task %q needs a resultVariable", st.Id)
+		return 0, fmt.Errorf("compiler: webscrape task %q needs a resultVariable", st.Id)
 	}
 	format, err := webScrapeFormat(st.Id, cn.Format)
 	if err != nil {
@@ -1443,28 +1443,28 @@ func compileWebScrapeConnectorTask(b *Builder, st xmlServiceTask, retries int32)
 	switch format {
 	case WebScrapeFormatHTML:
 		if !hasSelector {
-			return 0, fmt.Errorf("compiler: webscrape connector task %q needs a selector for html format", st.Id)
+			return 0, fmt.Errorf("compiler: webscrape task %q needs a selector for html format", st.Id)
 		}
 		// With fields, each one states its own attribute; a task-level attribute would
 		// have nothing left to mean, so it is refused rather than silently dropped.
 		if hasAttribute && len(fields) > 0 {
-			return 0, fmt.Errorf("compiler: webscrape connector task %q has both an attribute and scrapeField children; each field carries its own attribute", st.Id)
+			return 0, fmt.Errorf("compiler: webscrape task %q has both an attribute and scrapeField children; each field carries its own attribute", st.Id)
 		}
 		if plainText {
-			return 0, fmt.Errorf("compiler: webscrape connector task %q format %q does not use plainText, which strips markup from a feed entry's description", st.Id, format.String())
+			return 0, fmt.Errorf("compiler: webscrape task %q format %q does not use plainText, which strips markup from a feed entry's description", st.Id, format.String())
 		}
 	case WebScrapeFormatRSS, WebScrapeFormatAtom:
 		if hasSelector {
-			return 0, fmt.Errorf("compiler: webscrape connector task %q format %q does not use a selector", st.Id, format.String())
+			return 0, fmt.Errorf("compiler: webscrape task %q format %q does not use a selector", st.Id, format.String())
 		}
 		if hasAttribute {
-			return 0, fmt.Errorf("compiler: webscrape connector task %q format %q does not use an attribute", st.Id, format.String())
+			return 0, fmt.Errorf("compiler: webscrape task %q format %q does not use an attribute", st.Id, format.String())
 		}
 		if len(fields) > 0 {
-			return 0, fmt.Errorf("compiler: webscrape connector task %q format %q returns feed entries and does not use scrapeField children", st.Id, format.String())
+			return 0, fmt.Errorf("compiler: webscrape task %q format %q returns feed entries and does not use scrapeField children", st.Id, format.String())
 		}
 		if absoluteLinks {
-			return 0, fmt.Errorf("compiler: webscrape connector task %q format %q does not use absoluteLinks; a feed's link is already absolute", st.Id, format.String())
+			return 0, fmt.Errorf("compiler: webscrape task %q format %q does not use absoluteLinks; a feed's link is already absolute", st.Id, format.String())
 		}
 	}
 	url, err := restValue(st.Id, "url", cn.Url)
@@ -1505,10 +1505,10 @@ func webScrapeFields(taskID string, fields []xmlScrapeField) ([]WebScrapeFieldCo
 	for _, f := range fields {
 		name := strings.TrimSpace(f.Name)
 		if name == "" {
-			return nil, fmt.Errorf("compiler: webscrape connector task %q has a scrapeField without a name", taskID)
+			return nil, fmt.Errorf("compiler: webscrape task %q has a scrapeField without a name", taskID)
 		}
 		if seen[name] {
-			return nil, fmt.Errorf("compiler: webscrape connector task %q has two scrapeFields named %q", taskID, name)
+			return nil, fmt.Errorf("compiler: webscrape task %q has two scrapeFields named %q", taskID, name)
 		}
 		seen[name] = true
 		out = append(out, WebScrapeFieldConfig{
@@ -1530,7 +1530,7 @@ func webScrapeFlag(taskID, attr, raw string) (bool, error) {
 	case "true":
 		return true, nil
 	default:
-		return false, fmt.Errorf("compiler: webscrape connector task %q has a non-boolean %s %q (want true or false)", taskID, attr, raw)
+		return false, fmt.Errorf("compiler: webscrape task %q has a non-boolean %s %q (want true or false)", taskID, attr, raw)
 	}
 }
 
@@ -1543,7 +1543,7 @@ func webScrapeFormat(taskID, raw string) (WebScrapeFormat, error) {
 	case "atom":
 		return WebScrapeFormatAtom, nil
 	default:
-		return WebScrapeFormatHTML, fmt.Errorf("compiler: webscrape connector task %q has an unknown format %q (want html, rss, or atom)", taskID, raw)
+		return WebScrapeFormatHTML, fmt.Errorf("compiler: webscrape task %q has an unknown format %q (want html, rss, or atom)", taskID, raw)
 	}
 }
 
@@ -1554,10 +1554,10 @@ func webScrapeMaxItems(taskID, raw string) (int32, error) {
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {
-		return 0, fmt.Errorf("compiler: webscrape connector task %q has a non-numeric maxItems %q", taskID, raw)
+		return 0, fmt.Errorf("compiler: webscrape task %q has a non-numeric maxItems %q", taskID, raw)
 	}
 	if n < 0 {
-		return 0, fmt.Errorf("compiler: webscrape connector task %q has a negative maxItems %d", taskID, n)
+		return 0, fmt.Errorf("compiler: webscrape task %q has a negative maxItems %d", taskID, n)
 	}
 	return int32(n), nil
 }
@@ -1576,7 +1576,7 @@ const jiraDefaultMaxResults int32 = 50
 // sent. "Takes" is the half that is easy to forget and expensive to have forgotten — a
 // comment authored on a search, or a project on a transition, would otherwise compile
 // and then be silently dropped at call time, which from the author's side is
-// indistinguishable from a connector that ignored it.
+// indistinguishable from a worker that ignored it.
 type jiraOp struct {
 	needsIssue      bool
 	needsProject    bool // project and issue type: what an issue is created in and as
@@ -1641,20 +1641,20 @@ func jiraOpNames() []string {
 // compileJiraConnectorTask compiles an <atlas:jiraConnector> task: one issue-tracker
 // operation against a server-registered Jira instance via the job path
 // (ADR-0201). The base URL and credential are resolved server-side by
-// connector name, like Remedy's and SharePoint's; only the operation and its values
+// worker name, like Remedy's and SharePoint's; only the operation and its values
 // live in the model.
 func compileJiraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Jira
 	if strings.TrimSpace(cn.Connector) == "" {
-		return 0, fmt.Errorf("compiler: jira connector task %q needs a connector (the name the server holds the Jira base URL and credential under)", st.Id)
+		return 0, fmt.Errorf("compiler: jira task %q needs a worker (the name the server holds the Jira base URL and credential under)", st.Id)
 	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
-		return 0, fmt.Errorf("compiler: jira connector task %q needs an operation (%s)", st.Id, strings.Join(jiraOpNames(), ", "))
+		return 0, fmt.Errorf("compiler: jira task %q needs an operation (%s)", st.Id, strings.Join(jiraOpNames(), ", "))
 	}
 	spec, ok := jiraOps[op]
 	if !ok {
-		return 0, fmt.Errorf("compiler: jira connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(jiraOpNames(), ", "))
+		return 0, fmt.Errorf("compiler: jira task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(jiraOpNames(), ", "))
 	}
 	// One pass over every authored value: required where the operation needs it,
 	// refused where it does not use it. A single table means neither half can be
@@ -1684,22 +1684,22 @@ func compileJiraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	for _, v := range values {
 		set := strings.TrimSpace(v.raw) != ""
 		if v.required && !set {
-			return 0, fmt.Errorf("compiler: jira connector task %q operation %q needs a %s (%s)", st.Id, op, v.attr, v.why)
+			return 0, fmt.Errorf("compiler: jira task %q operation %q needs a %s (%s)", st.Id, op, v.attr, v.why)
 		}
 		if set && !v.allowed {
-			return 0, fmt.Errorf("compiler: jira connector task %q operation %q does not use %s (%s); remove it rather than leaving a value the connector ignores",
+			return 0, fmt.Errorf("compiler: jira task %q operation %q does not use %s (%s); remove it rather than leaving a value the worker ignores",
 				st.Id, op, v.attr, v.why)
 		}
 	}
 	if len(cn.Fields) > 0 && !spec.takesFields {
-		return 0, fmt.Errorf("compiler: jira connector task %q operation %q does not use jiraField values; remove them rather than leaving values the connector ignores", st.Id, op)
+		return 0, fmt.Errorf("compiler: jira task %q operation %q does not use jiraField values; remove them rather than leaving values the worker ignores", st.Id, op)
 	}
 	fields, err := httpKVList(st.Id, "jira field", cn.Fields)
 	if err != nil {
 		return 0, err
 	}
 	if spec.needsChange && strings.TrimSpace(cn.Summary) == "" && strings.TrimSpace(cn.Description) == "" && len(fields) == 0 {
-		return 0, fmt.Errorf("compiler: jira connector task %q operation %q changes nothing: give it a summary, a description, or at least one jiraField", st.Id, op)
+		return 0, fmt.Errorf("compiler: jira task %q operation %q changes nothing: give it a summary, a description, or at least one jiraField", st.Id, op)
 	}
 	maxResults := int32(0)
 	if spec.takesSearch {
@@ -1737,7 +1737,7 @@ func compileJiraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		if strings.TrimSpace(v.raw) == "" {
 			continue
 		}
-		val, err := connectorValue(st.Id, "jira connector", v.what, v.raw)
+		val, err := connectorValue(st.Id, "jira worker", v.what, v.raw)
 		if err != nil {
 			return 0, err
 		}
@@ -1756,10 +1756,10 @@ func jiraMaxResults(taskID, raw string) (int32, error) {
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {
-		return 0, fmt.Errorf("compiler: jira connector task %q has a non-numeric maxResults %q", taskID, raw)
+		return 0, fmt.Errorf("compiler: jira task %q has a non-numeric maxResults %q", taskID, raw)
 	}
 	if n < 0 {
-		return 0, fmt.Errorf("compiler: jira connector task %q has a negative maxResults %d", taskID, n)
+		return 0, fmt.Errorf("compiler: jira task %q has a negative maxResults %d", taskID, n)
 	}
 	return int32(n), nil
 }

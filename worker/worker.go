@@ -3,20 +3,20 @@
 // (ADR-0157 step 5, over the protocol of ADR-0007).
 //
 // It exists so that a service task's work does not have to run on the engine's
-// single writer. An in-process connector's outbound call is charged to the whole
+// single writer. An in-process worker's outbound call is charged to the whole
 // engine for its duration; a job this worker takes is charged to the worker.
 //
 // **What it does not do, and why.** ADR-0157 says the standard worker is "the same
 // binary running the *existing* handler code". That turned out not to be reachable
-// for the connector kinds: every one of them resolves its configuration from the
+// for the Worker Types: every one of them resolves its configuration from the
 // compiled process through a ProcessLookup over the local state store
 // (`mail.Handler(store, lookup, registry)` and its siblings), which a process
-// outside the engine has neither of. Relocating those needs the connector detail to
+// outside the engine has neither of. Relocating those needs the worker detail to
 // travel with the job — its own slice. What this worker serves instead is the kind
 // that has always been meant for an external worker: a **model-authored** job type,
 // a `<zeebe:taskDefinition type>` whose work is the customer's own code.
 //
-// The contract for that code is the one the script connector already established:
+// The contract for that code is the one the script worker already established:
 // the job arrives as JSON on stdin, and whatever JSON object the command writes to
 // stdout becomes the variables the job completes with. A non-zero exit fails the
 // job, carrying the command's stderr as the message an operator reads on the
@@ -51,13 +51,13 @@ type Job struct {
 	Retries            int32          `json:"retries"`
 	LeaseToken         uint64         `json:"leaseToken"`
 	Variables          map[string]any `json:"variables"`
-	// Connector is a connector task the engine resolved into plain values, present
+	// Worker is a task the engine resolved into plain values, present
 	// only for a kind the server no longer serves itself (ADR-0168). Nil for a plain
 	// job-worker task, whose work is the customer's own command.
 	Connector *ConnectorPayload `json:"connector,omitempty"`
 }
 
-// ConnectorPayload is a resolved connector task: what to do, with no engine concepts
+// ConnectorPayload is a resolved task: what to do, with no engine concepts
 // in it.
 type ConnectorPayload struct {
 	Kind   string         `json:"kind"`
@@ -101,7 +101,7 @@ type Options struct {
 	// MaxJobs is how many jobs one poll may lease. Keep it to what this worker can
 	// actually run: leased work nobody is running is work nobody else can take either.
 	MaxJobs int
-	// Connectors are the connector names this worker holds credentials for, reported
+	// Workers are the worker names this worker holds credentials for, reported
 	// to the engine on every poll. Only the worker knows them — once a kind is
 	// offloaded the engine holds no credential for it — and the Workers view
 	// subtracts them from what deployed models reference to show which names are

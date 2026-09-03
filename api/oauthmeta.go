@@ -14,7 +14,7 @@ import (
 // it points at is oauthserver.go.
 //
 // What it buys is that a refusal explains itself. A hosted MCP client — a
-// connector on somebody else's infrastructure, driven by a person in a browser —
+// worker on somebody else's infrastructure, driven by a person in a browser —
 // has nowhere to put an API token, so it goes looking for an authorization flow
 // when it is refused. Without a pointer it has to guess, and what it guesses is
 // /authorize: before this existed Atlas served no such route, and the operator saw

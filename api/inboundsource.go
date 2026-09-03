@@ -675,13 +675,13 @@ func driveFileFields(rec inboundSubscription, file map[string]any, field string)
 	}
 }
 
-// validateInboundWatch checks a watch against the kind of connector it names, returning
+// validateInboundWatch checks a watch against the kind of worker it names, returning
 // the message to refuse it with or "" when it is usable. The kind is the discriminator
 // (ADR-0214), so this is where a clio watch's subject and a jira watch's query are each
 // required — and where each is refused on the other's kind, so a watch cannot be saved
 // carrying a field nothing will ever read.
 //
-// It normalizes in place, the way the connector validators do: an unset cursor field
+// It normalizes in place, the way the worker validators do: an unset cursor field
 // becomes the default rather than a value every reader has to defend against.
 func validateInboundWatch(kind string, rec *inboundSubscription) string {
 	switch kind {
@@ -736,9 +736,9 @@ func validateInboundWatch(kind string, rec *inboundSubscription) string {
 		return validateGoogleWatch(rec)
 
 	case "":
-		return "no connector with that id"
+		return "no worker with that id"
 	default:
-		return "the Worker Type " + kind + " has no inbound half: only clio, jira and googlesheets Workers can carry a watch"
+		return "Worker Type " + kind + " has no inbound half: only clio, jira and googlesheets workers can carry a watch"
 	}
 }
 

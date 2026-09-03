@@ -337,7 +337,7 @@ func TestRunErrors(t *testing.T) {
 
 	// An unconfigured name is the actionable failure and is reported first.
 	if _, err := Run(context.Background(), Job{Connector: "nope", Product: "postgres", Operation: "query"}, NewRegistry()); err == nil {
-		t.Error("an unregistered connector must fail")
+		t.Error("an unregistered worker must fail")
 	}
 	// A product mismatch cannot come from the modeler, but can from a hand-edited
 	// worker configuration, and binding $1 against SQL Server would fail obscurely.

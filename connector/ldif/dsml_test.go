@@ -130,7 +130,7 @@ func TestRenderDSMLObjectClassOnce(t *testing.T) {
 }
 
 // A file read as LDIF writes back as DSML and vice versa: both carry the same entry
-// shape, which is the whole reason they are one connector.
+// shape, which is the whole reason they are one worker.
 func TestFormatsInterchange(t *testing.T) {
 	const ldifIn = "dn: uid=ada,dc=x\nobjectClass: person\ncn: Ada\n"
 	entries, err := Parse(FormatLDIF, []byte(ldifIn))

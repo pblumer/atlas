@@ -1,9 +1,9 @@
-// Package oauth2 is the OAuth2 token machinery every Atlas connector that speaks to
+// Package oauth2 is the OAuth2 token machinery every Atlas worker that speaks to
 // a token-protected API shares: an expiry-aware cache, the token-endpoint exchange,
 // and the two grants that are not specific to any one vendor.
 //
-// It exists because three connectors needed the same hundred lines. The mail
-// connector grew them first (ADR-0093), the SharePoint connector copied them
+// It exists because three workers needed the same hundred lines. The mail
+// worker grew them first (ADR-0093), the SharePoint worker copied them
 // (ADR-0141), and a third copy for Entra ID (ADR-0172) would have made a token
 // caching or refresh bug something to fix in three places and remember in a fourth.
 //
@@ -12,15 +12,15 @@
 // Shared is the *mechanism*: when to refresh, how to post a form grant, how to read
 // a token response, and the client-credentials and refresh-token grants themselves.
 //
-// Not shared is *policy*: which grants a connector accepts, what its credential
+// Not shared is *policy*: which grants a worker accepts, what its credential
 // bundle looks like, and what its endpoint defaults are. Those are per-connector
-// decisions and they stay in the connector. A caller may also supply its own
+// decisions and they stay in the worker. A caller may also supply its own
 // [Fetcher] for a grant nobody else has — the Google service-account JWT-bearer
 // assertion was that case until a second caller needed it, which is how it came to
 // live here as [ServiceAccount] instead (ADR-draft-google-sheets-worker).
 //
 // Every error is prefixed with the caller's kind, so a message an operator reads
-// still names the connector that produced it.
+// still names the worker that produced it.
 package oauth2
 
 import (
@@ -98,11 +98,11 @@ type tokenResponse struct {
 }
 
 // PostForm posts an OAuth2 form grant to tokenURL and returns the access token and
-// its lifetime. kind prefixes every error with the calling connector's name.
+// its lifetime. kind prefixes every error with the calling worker's name.
 //
 // A non-2xx status or a missing access_token is an error, so a misconfigured
 // credential fails the call — leaving the job pending for a retry — rather than
-// letting the connector proceed unauthenticated.
+// letting the worker proceed unauthenticated.
 func PostForm(ctx context.Context, httpc *http.Client, kind, tokenURL string, form url.Values) (string, time.Duration, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {

@@ -74,7 +74,7 @@ func (r Result) Variables() (map[string]any, error) {
 // unset delimiter or result variable means.
 //
 // A missing source or an unparseable file is an error, never an empty batch: a
-// silently empty result is the failure this connector exists to avoid.
+// silently empty result is the failure this worker exists to avoid.
 func Run(j Job) (Result, error) {
 	cfg, err := configOf(j)
 	if err != nil {
@@ -132,7 +132,7 @@ func configOf(j Job) (Config, error) {
 		// Without a header row the listed columns *are* the file's order — that is the
 		// only thing "list your columns" can mean for a headerless file, and it is what
 		// the modeler asks for. The CSV parser requires an explicit index in that case,
-		// and nothing was supplying one, so a headerless CSV connector task failed at
+		// and nothing was supplying one, so a headerless CSV task failed at
 		// runtime with "column needs an index" despite the model being exactly what the
 		// compiler demands (ADR-0139).
 		if !hasHeader && col.Index == nil {
@@ -144,12 +144,12 @@ func configOf(j Job) (Config, error) {
 	return cfg, nil
 }
 
-// Resolve turns a compiled CSV connector task into a [Job]: the authored layout from
+// Resolve turns a compiled CSV task into a [Job]: the authored layout from
 // the detail, and the source text read up the task's scope chain. It is engine work
 // by necessity — both of its inputs live only there.
 func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64) (Job, error) {
 	if detail == nil {
-		return Job{}, fmt.Errorf("csv-import: connector task has no detail")
+		return Job{}, fmt.Errorf("csv-import: task has no detail")
 	}
 	vars, err := scopeChainVars(store, elementInstanceKey)
 	if err != nil {

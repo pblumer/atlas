@@ -49,7 +49,7 @@ func newVaultServer(t *testing.T) *Server {
 }
 
 // TestSecretHandlersCRUD drives the HTTP surface end to end and asserts no response
-// ever carries the secret value, and that a stored secret resolves as a connector
+// ever carries the secret value, and that a stored secret resolves as a worker
 // credential.
 func TestSecretHandlersCRUD(t *testing.T) {
 	srv := newVaultServer(t)
@@ -100,9 +100,9 @@ func TestSecretHandlersCRUD(t *testing.T) {
 }
 
 // TestSecretUpdateRebuildsConnectorClients proves a rotated secret reaches the live
-// connector clients immediately: setting (or deleting) the secret a clio connector
+// worker clients immediately: setting (or deleting) the secret a clio worker
 // references rebuilds the registry, so the bridge/worker picks up the new token
-// without the operator re-saving the connector. The Authorization header the clio
+// without the operator re-saving the worker. The Authorization header the clio
 // client sends is the observable proof of which token is live.
 func TestSecretUpdateRebuildsConnectorClients(t *testing.T) {
 	var gotAuth string
@@ -122,14 +122,14 @@ func TestSecretUpdateRebuildsConnectorClients(t *testing.T) {
 		return rec.Code
 	}
 
-	// Seed the token, then a clio connector referencing it (create builds the client).
+	// Seed the token, then a clio worker referencing it (create builds the client).
 	if put("clio-token", "tokenA") != http.StatusOK {
 		t.Fatal("seed secret")
 	}
 	x := deployTestHarness{t, h}
 	if code, cb := x.do(http.MethodPost, "/api/v1/connectors",
 		`{"name":"events","kind":"clio","endpoint":"`+ts.URL+`","credentialsRef":"clio-token"}`); code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 
 	// Fire the live client at the test server and read back the token it carried.
@@ -147,7 +147,7 @@ func TestSecretUpdateRebuildsConnectorClients(t *testing.T) {
 		t.Fatalf("before rotation: Authorization=%q, want Bearer tokenA", gotAuth)
 	}
 
-	// Rotate the secret WITHOUT touching the connector: the rebuild must swap the client.
+	// Rotate the secret WITHOUT touching the worker: the rebuild must swap the client.
 	if put("clio-token", "tokenB") != http.StatusOK {
 		t.Fatal("rotate secret")
 	}
@@ -170,9 +170,9 @@ func TestSecretUpdateRebuildsConnectorClients(t *testing.T) {
 }
 
 // TestProvisionClioKey drives one-click provisioning end to end: an admin token
-// mints a scoped read key on a fake clio, the key is sealed as the connector's
+// mints a scoped read key on a fake clio, the key is sealed as the worker's
 // credential, and the live clio client carries the minted token at once — no
-// copy-paste, and the connector needed no credentialsRef beforehand.
+// copy-paste, and the worker needed no credentialsRef beforehand.
 func TestProvisionClioKey(t *testing.T) {
 	var mintAuth, mintPath, writeAuth string
 	var mintBody map[string]any
@@ -198,7 +198,7 @@ func TestProvisionClioKey(t *testing.T) {
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors",
 		`{"name":"events","kind":"clio","endpoint":"`+clioSrv.URL+`"}`) // no credentialsRef yet
 	if code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 	var conn connector
 	_ = json.Unmarshal(cb, &conn)
@@ -240,8 +240,8 @@ func TestProvisionClioKey(t *testing.T) {
 		t.Errorf("live client Authorization = %q, want Bearer kid_new.minted (rebuild did not happen)", writeAuth)
 	}
 
-	// A second provision on the now-referenced connector exercises the path where the
-	// credentialsRef already exists (no connector re-save, just re-seal + rebuild).
+	// A second provision on the now-referenced worker exercises the path where the
+	// credentialsRef already exists (no worker re-save, just re-seal + rebuild).
 	if code, pb := x.do(http.MethodPost, "/api/v1/connectors/"+conn.ID+"/provision-clio-key",
 		`{"adminToken":"ADMIN","subject":"/employees","recursive":false}`); code != http.StatusOK {
 		t.Fatalf("re-provision: %d %s", code, pb)
@@ -265,7 +265,7 @@ func TestProvisionClioKeyRequireAdmin(t *testing.T) {
 }
 
 // TestProvisionClioKeyErrors covers the provisioning handler's rejection paths:
-// missing fields, bad JSON, a non-clio/unknown connector, a clio that refuses the
+// missing fields, bad JSON, a non-clio/unknown worker, a clio that refuses the
 // mint (502), and the vault-disabled 503.
 func TestProvisionClioKeyErrors(t *testing.T) {
 	forbid := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -295,12 +295,12 @@ func TestProvisionClioKeyErrors(t *testing.T) {
 		t.Errorf("read-body error: want 400, got %d", rrec.Code)
 	}
 
-	// A clio connector saved without an endpoint → 400.
+	// A clio worker saved without an endpoint → 400.
 	srv.do(func() {
 		_ = srv.connectors.Save(connector{ID: "noep", Name: "noep", Kind: connectorKindClio, Enabled: true, CreatedAt: 9})
 	})
 	if post(base+"noep/provision-clio-key", `{"adminToken":"a","subject":"/e"}`) != http.StatusBadRequest {
-		t.Error("connector with no endpoint: want 400")
+		t.Error("worker with no endpoint: want 400")
 	}
 
 	if post(base+clioConn.ID+"/provision-clio-key", `{"subject":"/e"}`) != http.StatusBadRequest {
@@ -313,17 +313,17 @@ func TestProvisionClioKeyErrors(t *testing.T) {
 		t.Error("invalid JSON: want 400")
 	}
 	if post(base+temisConn.ID+"/provision-clio-key", `{"adminToken":"a","subject":"/e"}`) != http.StatusBadRequest {
-		t.Error("temis connector: want 400")
+		t.Error("temis worker: want 400")
 	}
 	if post(base+"missing/provision-clio-key", `{"adminToken":"a","subject":"/e"}`) != http.StatusBadRequest {
-		t.Error("unknown connector: want 400")
+		t.Error("unknown worker: want 400")
 	}
-	// A corrupt connector record makes the load error → 500.
+	// A corrupt worker record makes the load error → 500.
 	srv.do(func() {
 		_ = os.WriteFile(srv.connectors.FileFor("corrupt"), []byte("{not json"), 0o644)
 	})
 	if post(base+"corrupt/provision-clio-key", `{"adminToken":"a","subject":"/e"}`) != http.StatusInternalServerError {
-		t.Error("corrupt connector record: want 500")
+		t.Error("corrupt worker record: want 500")
 	}
 	if post(base+clioConn.ID+"/provision-clio-key", `{"adminToken":"a","subject":"/e"}`) != http.StatusBadGateway {
 		t.Error("clio refuses the mint: want 502")

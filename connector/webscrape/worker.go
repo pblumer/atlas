@@ -17,7 +17,7 @@ import (
 // one handler serves every deployed process.
 type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
-// Handler builds a job handler that performs a web-scraping connector task. Register
+// Handler builds a job handler that performs a web-scraping worker task. Register
 // it under [compiler.WebScrapeJobTypeIndex] via HandleWithOutput. The handler resolves
 // model data against the task's visible variables, runs the network/document work off
 // the processor, and returns one durable result variable. HTML remains a JSON array
@@ -59,10 +59,10 @@ func Handler(store state.Reader, lookup ProcessLookup, client Client) job.Output
 // reference processInstanceKey.
 const builtinProcessInstanceKey = "processInstanceKey"
 
-// resolveValue turns a connector field value into a string: a literal verbatim, or a
+// resolveValue turns a worker field value into a string: a literal verbatim, or a
 // FEEL expression evaluated over the scope's variables and coerced to its string
 // form. A FEEL null becomes the empty string, matching the engine's existing
-// null-propagating connector contract.
+// null-propagating worker contract.
 func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue) string {
 	if rv.Expr == nil {
 		return rv.Literal

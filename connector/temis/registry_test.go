@@ -24,7 +24,7 @@ func TestRegistry(t *testing.T) {
 	}
 }
 
-// TestRegistryReplace covers swapping the whole connector set at once (ADR-0041):
+// TestRegistryReplace covers swapping the whole worker set at once (ADR-0041):
 // a fresh map replaces the previous registrations, and a nil map clears them.
 func TestRegistryReplace(t *testing.T) {
 	reg := temis.NewRegistry()
@@ -33,10 +33,10 @@ func TestRegistryReplace(t *testing.T) {
 	next := temis.NewHTTPClient(temis.Connector{Endpoint: "http://new"})
 	reg.Replace(map[string]temis.Client{"new": next})
 	if _, ok := reg.Client("old"); ok {
-		t.Error("after Replace: old connector still registered, want it swapped out")
+		t.Error("after Replace: old worker still registered, want it swapped out")
 	}
 	if got, ok := reg.Client("new"); !ok || got != next {
-		t.Error("after Replace: new connector not registered")
+		t.Error("after Replace: new worker not registered")
 	}
 
 	reg.Replace(nil) // nil clears

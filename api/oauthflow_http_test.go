@@ -64,7 +64,7 @@ func signedInClient(t *testing.T, base string) *http.Client {
 // registerClient registers an OAuth client and returns its id and secret.
 func registerClient(t *testing.T, c *http.Client, base string) (string, string) {
 	t.Helper()
-	body := strings.NewReader(`{"name":"Test Connector","redirectUris":["` + testRedirect + `"]}`)
+	body := strings.NewReader(`{"name":"Test Worker","redirectUris":["` + testRedirect + `"]}`)
 	resp, err := c.Post(base+"/api/v1/oauth-clients", "application/json", body)
 	if err != nil {
 		t.Fatalf("register client: %v", err)
@@ -171,7 +171,7 @@ func TestOAuthFlowGrantsTheApproverIdentity(t *testing.T) {
 	if ctx["error"] != nil {
 		t.Fatalf("a valid request was reported as invalid: %v", ctx["error"])
 	}
-	if ctx["clientName"] != "Test Connector" || ctx["signedInAs"] != "root" {
+	if ctx["clientName"] != "Test Worker" || ctx["signedInAs"] != "root" {
 		t.Errorf("consent context = %v, want the client name and the signed-in person", ctx)
 	}
 
@@ -336,7 +336,7 @@ func TestOAuthGrantRevocationStopsTheToken(t *testing.T) {
 	var grants []struct{ ID, ClientName string }
 	_ = json.NewDecoder(listResp.Body).Decode(&grants)
 	listResp.Body.Close()
-	if len(grants) != 1 || grants[0].ClientName != "Test Connector" {
+	if len(grants) != 1 || grants[0].ClientName != "Test Worker" {
 		t.Fatalf("grants = %v, want the one just approved", grants)
 	}
 
@@ -631,7 +631,7 @@ func grantFor(t *testing.T, person *http.Client, base, clientID, clientSecret st
 // maintained rather than merely taken.
 //
 // A grant can stand for months. If disabling an account only ended its browser
-// sessions, the person would keep acting through their connector — which is
+// sessions, the person would keep acting through their worker — which is
 // precisely what disabling an account is supposed to prevent, and the failure
 // would be invisible: no session, no login, just a token that keeps working.
 func TestDisablingAPersonKillsTheirGrant(t *testing.T) {
@@ -653,7 +653,7 @@ func TestDisablingAPersonKillsTheirGrant(t *testing.T) {
 }
 
 // TestRoleChangeReachesAStandingGrant: the other half of maintaining the snapshot.
-// Taking a role away has to reach the connector too, and giving one has to as
+// Taking a role away has to reach the worker too, and giving one has to as
 // well — otherwise an administrative edit would silently mean something different
 // depending on which door the person came through.
 func TestRoleChangeReachesAStandingGrant(t *testing.T) {
@@ -895,7 +895,7 @@ func TestOAuthAdministrationIsGated(t *testing.T) {
 }
 
 // TestGroupMembershipReachesAStandingGrant: a group grant has to arrive at a
-// connector the way it arrives at a browser session.
+// worker the way it arrives at a browser session.
 //
 // Group membership is the one part of a session that Atlas keeps live rather than
 // snapshotting at login (ADR-0185), because an access decision that waits for a
@@ -1048,7 +1048,7 @@ func visible(t *testing.T, base, appID, token string) bool {
 
 // TestGrantsAndClientsSurviveARestart is why these are durable at all.
 //
-// A connector must not be signed out because the server was restarted. Sessions
+// A worker must not be signed out because the server was restarted. Sessions
 // are in memory and a restart logs everybody out of their browser — that is a
 // documented limitation people can live with, because they log back in. A grant
 // has nobody to log back in: if a restart dropped it, an operator would learn
@@ -1361,7 +1361,7 @@ func TestOAuthSurvivesABrokenDataDirectory(t *testing.T) {
 
 // TestServerRefusesToStartOnABrokenOAuthStore: the same failure at startup is not
 // a 500 but a refusal to serve at all. A server that came up without its grants
-// would answer 401 to every connector, which reads as a mass revocation nobody
+// would answer 401 to every worker, which reads as a mass revocation nobody
 // ordered.
 func TestServerRefusesToStartOnABrokenOAuthStore(t *testing.T) {
 	dir := t.TempDir()
