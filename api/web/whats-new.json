@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "scim-tasks-run-on-a-worker-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "User provisioning moved out of the engine",
+        "de": "User-Provisionierung ist aus der Engine ausgezogen"
+      },
+      "summary": {
+        "en": "Creating a user at an identity provider, looking one up, searching for one — until now Atlas did all of it from the process that runs the engine, so a slow provider held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the credential your task references is handed to that worker, exactly as it already is for REST and SOAP.",
+        "de": "Einen Benutzer beim Identity Provider anlegen, einen nachschlagen, nach einem suchen — bisher machte Atlas all das im Prozess, der die Engine ausführt, sodass ein langsamer Provider Arbeit aufhielt, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Das Credential, das Ihr Task referenziert, wird an diesen Worker übergeben — genau wie bei REST und SOAP schon."
+      },
+      "link": {
+        "label": "ADR-0233",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "sharepoint-tasks-run-on-a-worker-now",
       "version": "Unreleased",
       "date": null,
@@ -316,73 +345,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "example-capturing-mortgage-rates-daily",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A worked example: capturing a rate table every morning",
-        "de": "Ein durchgespieltes Beispiel: eine Zinstabelle jeden Morgen erfassen"
-      },
-      "summary": {
-        "en": "The new example reads a bank's mortgage rates once a day and turns each table row into a record. It also answers the two questions every scraping process runs into: how to address the table you mean when six of them look alike (by what it contains, not by where it sits), and what should happen on the day the page is rebuilt and the selector matches nothing — here a branch that ends visibly, rather than a run that files an empty row and lets weeks pass unnoticed. The step that writes the rows away is deliberately left simulated, so the process runs end to end before a credential exists.",
-        "de": "Das neue Beispiel liest einmal täglich die Hypothekarzinsen einer Bank und macht aus jeder Tabellenzeile einen Datensatz. Es beantwortet nebenbei die zwei Fragen, auf die jeder Scraping-Prozess stösst: wie man die gemeinte Tabelle adressiert, wenn sechs davon gleich aussehen (über ihren Inhalt, nicht über ihre Position), und was am Tag passieren soll, an dem die Seite umgebaut ist und der Selektor nichts mehr trifft — hier ein Zweig, der sichtbar endet, statt eines Laufs, der eine leere Zeile ablegt und wochenlang unbemerkt bleibt. Der Schritt, der die Zeilen wegschreibt, ist bewusst simuliert: So läuft der Prozess vollständig durch, bevor es ein Credential gibt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Examples"
-      ]
-    },
-    {
-      "id": "data-stores-saying-where-a-class-is-kept",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Say where your data is kept, once for the whole application",
-        "de": "Einmal für die ganze Applikation sagen, wo die Daten liegen"
-      },
-      "summary": {
-        "en": "BPMN has a box for \"this outlives the process\" — a data store — and says nothing at all about what it holds or what keeps it. Atlas did not even read it before. Now you declare a data store in your application's information model, next to your classes: it names the class it keeps, and the Worker that actually keeps it, and every process that draws that box means the same store. It sits beside the classes rather than inside one on purpose. An Order is an Order wherever it lives, so the class itself stays free of any statement about storage — the store is the only place that says where. On the diagram it appears as a cylinder with a dashed line to the class it holds, deliberately not the same shape as a class and deliberately not an association, because nothing in the model relates those two things. There is one rule worth knowing: a store may only keep a business object that has a business key. A process reads from a store by naming which thing it wants, and the key is the only thing that names one — so a store over a class with no identity could be filled and never read from, which is why it is refused. When you deploy, a process naming a store the application has not declared, or one no Worker backs yet, gets a warning rather than a refusal: you draw a process before the store exists, and model the store before someone wires it, and those are different days. For now a store is for reading. Writing back through one is a transaction against something outside Atlas, whose promise of durability ends at its own log, and that deserves its own decision rather than a quiet second option in a dropdown.",
-        "de": "BPMN hat einen Kasten für „das überlebt den Prozess“ — einen Data Store — und sagt kein Wort darüber, was darin liegt oder wer ihn führt. Atlas hat ihn bisher nicht einmal gelesen. Jetzt deklarieren Sie einen Data Store im Informationsmodell Ihrer Applikation, neben Ihren Klassen: Er nennt die Klasse, die er verwahrt, und den Worker, der das tatsächlich tut — und jeder Prozess, der diesen Kasten zeichnet, meint denselben Store. Dass er neben den Klassen steht und nicht in einer, ist Absicht. Eine Bestellung ist eine Bestellung, wo immer sie liegt; die Klasse bleibt also frei von jeder Aussage über Speicherung, und der Store ist die einzige Stelle, die sagt wo. Auf dem Diagramm erscheint er als Zylinder mit gestrichelter Linie zu seiner Klasse — bewusst nicht dieselbe Form wie eine Klasse, und bewusst keine Assoziation, denn im Modell steht nichts, was diese beiden in Beziehung setzt. Eine Regel lohnt sich zu kennen: Ein Store darf nur ein Geschäftsobjekt verwahren, das einen fachlichen Schlüssel hat. Ein Prozess liest aus einem Store, indem er benennt, welches Ding er will, und der Schlüssel ist das Einzige, was eines benennt — ein Store über einer Klasse ohne Identität liesse sich also füllen und nie lesen, und darum wird er abgelehnt. Beim Deployen bekommt ein Prozess, der einen nicht deklarierten Store nennt oder einen, hinter dem noch kein Worker steht, eine Warnung statt einer Ablehnung: Man zeichnet den Prozess, bevor der Store existiert, und modelliert den Store, bevor ihn jemand verkabelt — das sind verschiedene Tage. Vorerst ist ein Store zum Lesen da. Zurückzuschreiben ist eine Transaktion gegen etwas ausserhalb von Atlas, dessen Haltbarkeitsversprechen am eigenen Log endet, und das verdient eine eigene Entscheidung statt einer stillen zweiten Auswahl in einem Dropdown."
-      },
-      "link": {
-        "label": "ADR-0230",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
-      },
-      "tags": [
-        "Data",
-        "Modeling",
-        "Workers"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data › Model and make sure the class you want to keep is a business object with at least one attribute ticked as its business key.",
-          "Press “+ Data store” in the toolbar. A cylinder appears and its panel opens.",
-          "Name it (Orders), choose the class it holds — only classes with a key are offered — and type the Worker that keeps it, e.g. a clio connector's name.",
-          "Save. The dashed line from the store to its class appears on the canvas.",
-          "In a process of the same application, draw a Data Store Reference and name it the same. Deploy it and read the warnings: if the names disagree, or no Worker is set, the deploy says so and still succeeds."
-        ],
-        "de": [
-          "Öffnen Sie Data › Model und stellen Sie sicher, dass die Klasse, die Sie verwahren wollen, ein Geschäftsobjekt mit mindestens einem als fachlicher Schlüssel markierten Attribut ist.",
-          "Drücken Sie in der Leiste „+ Data store“. Ein Zylinder erscheint, und sein Panel öffnet sich.",
-          "Benennen Sie ihn (Orders), wählen Sie die Klasse — angeboten werden nur solche mit Schlüssel — und tragen Sie den Worker ein, der ihn führt, etwa den Namen eines clio-Connectors.",
-          "Speichern. Die gestrichelte Linie vom Store zu seiner Klasse erscheint auf der Fläche.",
-          "Zeichnen Sie in einem Prozess derselben Applikation eine Data Store Reference und benennen Sie sie gleich. Deployen Sie und lesen Sie die Warnungen: Stimmen die Namen nicht überein oder fehlt der Worker, sagt der Deploy es — und gelingt trotzdem."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Data öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]

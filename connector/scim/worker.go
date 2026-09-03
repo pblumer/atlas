@@ -59,66 +59,18 @@ func Handler(store state.Reader, lookup ProcessLookup, client Client, secret Sec
 		if err != nil {
 			return nil, fmt.Errorf("scim: %w", err)
 		}
-		op := cp.Intern(detail.ScimOp)
-		method, hasBody := methodForOp(op)
-		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
-		// Read the variables the task sees once — up its scope chain, so its own
-		// input-mapped locals shadow what it inherits (ADR-0068). The base-url,
-		// resource, id and filter FEEL values and the request body all evaluate
-		// against them, off the hot path.
-		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
-		if err != nil {
-			return nil, fmt.Errorf("scim: read variables for element %d: %w", j.ElementInstanceKey, err)
-		}
-		endpoint, err := resourceURL(op,
-			resolveValue(detail.ScimBaseURL, piKey, scopeVars),
-			resolveValue(detail.ScimResource, piKey, scopeVars),
-			resolveValue(detail.ScimResourceID, piKey, scopeVars))
+		task, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey, j.Key)
 		if err != nil {
 			return nil, err
 		}
-		headers, err := applyAuth(nil, cp.Intern(detail.Auth), secret)
+		// The same Resolve/Run pair the worker uses (ADR-0168), so relocating the work
+		// cannot change what a resolved SCIM task means — only which process holds the
+		// credential behind the reference.
+		res, err := Run(context.Background(), task, client, secret)
 		if err != nil {
 			return nil, err
 		}
-		var query map[string]string
-		if op == "search" {
-			if filter := resolveValue(detail.ScimFilter, piKey, scopeVars); filter != "" {
-				query = map[string]string{"filter": filter}
-			}
-		}
-		var body map[string]any
-		if hasBody {
-			bodyVars := scopeVars
-			if cp.Intern(detail.ScimBody) == "" && len(cp.IOInputs(ei.ElementId)) > 0 {
-				// No body variable named, but the task maps its inputs: those mappings
-				// are the body — exactly the activity-local scope they wrote, inheriting
-				// nothing (ADR-0174).
-				if bodyVars, err = state.LocalVariablesMap(store, j.ElementInstanceKey); err != nil {
-					return nil, fmt.Errorf("scim: read mapped inputs for element %d: %w", j.ElementInstanceKey, err)
-				}
-			}
-			body, err = requestBody(cp.Intern(detail.ScimBody), bodyVars)
-			if err != nil {
-				return nil, err
-			}
-		}
-		resp, err := client.Do(context.Background(), Request{
-			Method:         method,
-			URL:            endpoint,
-			Headers:        headers,
-			Query:          query,
-			Body:           body,
-			IdempotencyKey: strconv.FormatUint(j.Key, 10),
-		})
-		if err != nil {
-			return nil, err
-		}
-		resultVar := cp.Intern(detail.ResultVar)
-		if resultVar == "" {
-			return nil, nil // the model discards the response
-		}
-		return []model.VariableValue{responseVariable(resultVar, resp.Body)}, nil
+		return res.Variables(), nil
 	}
 }
 

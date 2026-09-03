@@ -14,6 +14,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **SCIM tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 6).
+  Creating, reading or searching a user at an identity provider no longer happens on
+  the loop that owns the partition's state. `scim` joins the kinds Atlas offloads and
+  supervises by itself.
+
+  It is REST's slice a third time, and the collector says so: `scimWorkerEnv` is the
+  third caller of one function rather than a third copy of it, and a test now deploys
+  a REST, a SOAP and a SCIM task together and holds that each worker gets its own
+  kind's secret and none of the others' — the failure a shared implementation makes
+  easy, and one that every per-kind test would pass.
+
+  One choice is deliberate: the payload carries the **authored** operation, base URL,
+  resource, id and filter, not the HTTP method and URL derived from them. A parked
+  job's payload is something an operator reads, and "operation: create, resource:
+  Users" answers what they came to ask where "POST .../Users" makes them work
+  backwards — and the derivation's own refusals (a `get` with no id would otherwise
+  become a list of every user) belong in `Run`, where both halves reach them.
+
+  One kind remains in-engine for want of a worker: `temis`.
+
 - **SharePoint tasks run on a worker now**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 5).
   Creating a list item — a token fetch and an HTTP round trip to Microsoft Graph — no
