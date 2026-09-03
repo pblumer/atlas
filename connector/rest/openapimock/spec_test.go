@@ -226,7 +226,7 @@ func TestLoadRefusesWhatItCannotServe(t *testing.T) {
 		"no paths":               {"openapi: 3.0.0\ninfo: {title: x, version: '1'}\n", "no paths"},
 		"relative path":          {"openapi: 3.0.0\npaths:\n  pets:\n    get: {responses: {}}\n", "must start with"},
 		"unknown ref":            {"openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        '200':\n          content:\n            application/json:\n              schema: {$ref: '#/components/schemas/Nope'}\n", "#/components/schemas/Nope"},
-		"remote ref":             {"openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        '200':\n          content:\n            application/json:\n              schema: {$ref: 'other.yaml#/Pet'}\n", "only local"},
+		"a url":                  {"openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        '200':\n          content:\n            application/json:\n              schema: {$ref: 'https://example.com/spec.yaml#/Pet'}\n", "files, not URLs"},
 		"bad status":             {"openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        okay: {description: x}\n", "status"},
 		"operation is not a map": {"openapi: 3.0.0\npaths:\n  /x:\n    get: 7\n", "get"},
 	}
@@ -328,6 +328,12 @@ func TestLoadReportsWhereTheProblemIs(t *testing.T) {
 			"openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        '200': oops\n", `response "200"`},
 		"a media type that is not a mapping": {
 			"openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        '200':\n          content:\n            application/json: oops\n", "application/json"},
+		"a path item that refs nowhere": {
+			"openapi: 3.0.0\npaths:\n  /x: {$ref: '#/components/pathItems/Gone'}\n", "#/components/pathItems/Gone"},
+		"a response that refs nowhere": {
+			"openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        '200': {$ref: '#/components/responses/Gone'}\n", "#/components/responses/Gone"},
+		"references that point in a circle": {
+			"openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        '200': {$ref: '#/components/responses/A'}\ncomponents:\n  responses:\n    A: {$ref: '#/components/responses/B'}\n    B: {$ref: '#/components/responses/A'}\n", "circle"},
 		"a server url that is not a url": {
 			"openapi: 3.0.0\nservers: [{url: '://nope'}]\npaths:\n  /x:\n    get:\n      responses:\n        '200': {description: ok}\n", "server url"},
 		"broken JSON": {
@@ -490,5 +496,122 @@ func TestLoadAcceptsAMediaTypeThatDescribesNothing(t *testing.T) {
 	}
 	if got := spec.Operations[0].Responses[0]; len(got.Body) != 0 || got.Media != "application/json" {
 		t.Errorf("response = %+v, want an empty body", got)
+	}
+}
+
+// The cases below come from running the mock against real published documents —
+// Swagger's own Petstore, Asana, Stripe, DocuSign, Kubernetes and DigitalOcean. Two of
+// them served something wrong rather than refusing, which is the one thing this mock
+// must not do (ADR-0217). DigitalOcean's — a document split across a tree of files — is
+// read rather than refused since; see multifile_test.go.
+
+func TestLoadFollowsRefsToPathItemsOperationsAndResponses(t *testing.T) {
+	// A large document routinely factors its operations and responses out into
+	// components and refers to them. Reading the reference as an empty object leaves an
+	// operation that answers nothing, which is how a mock silently stops mocking.
+	spec, err := openapimock.Load([]byte(`
+openapi: 3.1.0
+info: {title: Refs, version: '1'}
+paths:
+  /pets:
+    $ref: '#/components/pathItems/Pets'
+  /pets/{id}:
+    get:
+      $ref: '#/components/operations/GetPet'
+components:
+  pathItems:
+    Pets:
+      get:
+        operationId: listPets
+        responses:
+          '200':
+            $ref: '#/components/responses/PetList'
+  operations:
+    GetPet:
+      operationId: getPet
+      responses:
+        '200':
+          description: one pet
+          content:
+            application/json:
+              example: {id: 7}
+  responses:
+    PetList:
+      description: every pet
+      content:
+        application/json:
+          example: [{id: 7}]
+`))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(spec.Operations) != 2 {
+		t.Fatalf("got %d operations, want 2: %+v", len(spec.Operations), spec.Operations)
+	}
+	for _, op := range spec.Operations {
+		if len(op.Responses) != 1 || len(op.Responses[0].Body) == 0 {
+			t.Errorf("%s %s answers nothing: %+v", op.Method, op.Path, op.Responses)
+		}
+	}
+}
+
+func TestLoadWillNotLabelGeneratedJSONAsSomethingElse(t *testing.T) {
+	// The Petstore describes its responses as both JSON and XML. This mock generates
+	// JSON, so serving those bytes under application/xml would be a lie the caller
+	// cannot see through — the media type is dropped instead, and the document's own
+	// text examples still travel as themselves.
+	spec, err := openapimock.Load([]byte(`
+openapi: 3.0.0
+info: {title: Petstore, version: '1'}
+paths:
+  /pet/{id}:
+    get:
+      operationId: getPet
+      responses:
+        '200':
+          description: a pet
+          content:
+            application/json: {schema: {type: object, properties: {id: {type: integer}}}}
+            application/xml: {schema: {type: object, properties: {id: {type: integer}}}}
+            text/plain: {schema: {type: string}}
+            text/csv: {example: "id\n7\n"}
+`))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	var media []string
+	for _, resp := range spec.Operations[0].Responses {
+		media = append(media, resp.Media)
+	}
+	want := []string{"application/json", "text/csv", "text/plain"}
+	if strings.Join(media, ",") != strings.Join(want, ",") {
+		t.Errorf("media types = %v, want %v (xml cannot be generated)", media, want)
+	}
+	// What was dropped is said out loud, so a person starting the mock is told rather
+	// than left to notice a 406 later.
+	if len(spec.Skipped) != 1 || !strings.Contains(spec.Skipped[0], "application/xml") {
+		t.Errorf("Skipped = %v, want the xml response named", spec.Skipped)
+	}
+}
+
+func TestAStatusWhoseOnlyMediaTypeIsUnserveableStillAnswers(t *testing.T) {
+	spec, err := openapimock.Load([]byte(`
+openapi: 3.0.0
+info: {title: X, version: '1'}
+paths:
+  /x:
+    get:
+      responses:
+        '200':
+          description: xml only
+          content:
+            application/xml: {schema: {type: object}}
+`))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	resp := spec.Operations[0].Responses[0]
+	if resp.Status != 200 || resp.Media != "" || len(resp.Body) != 0 {
+		t.Errorf("response = %+v, want a 200 with no body", resp)
 	}
 }
