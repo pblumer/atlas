@@ -14,6 +14,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **SOAP tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 4).
+  A call to somebody else's web service no longer happens on the loop that owns the
+  partition's state. `soap` joins the kinds Atlas offloads and supervises by itself.
+
+  It is REST's slice with an envelope around it, and that is the whole argument: the
+  endpoint, the SOAPAction and the body are model data and travel resolved with the
+  job, while the credential behind the task's `authSecret` is a vault **reference**
+  that is resolved where it is used. `soapWorkerEnv` is `restWorkerEnv` with a
+  different job type — the two collectors are now one function called twice rather
+  than two that drift, and a test holds that neither picks up the other kind's tasks.
+
+  Both halves go through one `soap.Resolve`/`soap.Run` pair; the in-process handler
+  was rewritten onto it, and the result travels through `soap.Result` so a task naming
+  no result variable completes with nothing rather than with an empty object.
+
+  Three kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `temis`.
+
 - **LDAP tasks run on a worker now**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 3).
   A bind, a search or a modify against a directory somebody else operates no longer

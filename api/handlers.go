@@ -26,6 +26,7 @@ import (
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
 	"github.com/pblumer/atlas/connector/script"
+	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/engine"
@@ -5375,6 +5376,19 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"newPassword": j.NewPassword, "baseDN": j.BaseDN, "scope": j.Scope,
 			"filter": j.Filter, "pageSize": j.PageSize, "maxEntries": j.MaxEntries,
 			"resultVariable": j.ResultVariable,
+		}}
+	case compiler.SoapJobTypeIndex:
+		// REST's arm exactly, and for REST's reason: everything about the call is model
+		// data and travels resolved, while the credential behind authSecret stays a
+		// reference for whoever runs the job to resolve (ADR-0168).
+		j, err := soap.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "soap", Fields: map[string]any{
+			"endpoint": j.Endpoint, "operation": j.Operation, "action": j.Action,
+			"version": j.Version, "body": j.Body, "auth": j.Auth,
+			"resultVariable": j.Result,
 		}}
 	case compiler.EntraJobTypeIndex:
 		// The operation and the ids travel; the tenant's app credential does not

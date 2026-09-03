@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "soap-tasks-run-on-a-worker-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Web service calls moved out of the engine",
+        "de": "Web-Service-Aufrufe sind aus der Engine ausgezogen"
+      },
+      "summary": {
+        "en": "A SOAP call went out from the process that runs the engine, so a slow web service held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the credential your task references is handed to that worker, exactly as it already is for REST.",
+        "de": "Ein SOAP-Aufruf ging bisher aus dem Prozess hinaus, der die Engine ausführt — ein langsamer Web-Service hielt also Arbeit auf, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Das Credential, das Ihr Task referenziert, wird an diesen Worker übergeben — genau wie bei REST schon."
+      },
+      "link": {
+        "label": "ADR-0233",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "ldap-tasks-run-on-a-worker-now",
       "version": "Unreleased",
       "date": null,
@@ -398,54 +427,6 @@
           "Schauen Sie in die Problems-Leiste unten: Sie nennt Aufgabe, Klasse und Feld. Ein Klick auf den Befund springt zum Element.",
           "Löschen Sie jetzt die Assoziation und lassen Sie nur eine Aufgabe stehen, die das Objekt liest — die Leiste sagt Ihnen, dass es niemand schreibt.",
           "Deployen Sie trotzdem. Es gelingt, und dieselben Sätze kommen als Deploy-Warnungen zurück."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Data öffnen"
-        },
-        "route": "#/data"
-      }
-    },
-    {
-      "id": "atlas-can-now-say-what-the-data-in-a-process-actually-is",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Say what an Order is — once, for every process",
-        "de": "Sagen, was eine Bestellung ist — einmal, für alle Prozesse"
-      },
-      "summary": {
-        "en": "BPMN lets you draw a data object and give it a type name, and then says nothing about what that type is. So two processes that both handle an order share the word \"Order\" and nothing else — no fields, no rules, no way to tell whether they mean the same thing. There is now a Data area with a class diagram in it: you draw an Order once, give it its fields with their types, and mark which of them is its business key — the thing that makes ORD-1 the same order in the ordering process, the invoicing process and the returns process. Three kinds of class carry the difference that matters: something the business can point at and identify, a structured value like an address that is just its contents, and a closed list of values like draft/approved/rejected. The canvas will not let you draw a relationship that makes no sense — you cannot point an arrow at a list of values, and an address cannot own parts, because it has no existence of its own to own them with — and when it refuses it tells you why, in the same words the server would use. It also says plainly which refusals are the notation talking and which are just what this version does not do yet. Every class can be shown as a JSON Schema, which is what a value gets checked against, and that view is honest about what it cannot express: a document is a tree, and two things that merely refer to each other are not.",
-        "de": "BPMN lässt Sie ein Datenobjekt zeichnen und ihm einen Typnamen geben — und sagt danach nichts darüber, was dieser Typ ist. Zwei Prozesse, die beide eine Bestellung bearbeiten, teilen sich also das Wort „Order\" und sonst nichts: keine Felder, keine Regeln, keine Möglichkeit festzustellen, ob dasselbe gemeint ist. Es gibt jetzt einen Bereich „Data\" mit einem Klassendiagramm darin: Sie zeichnen eine Bestellung einmal, geben ihr ihre Felder mit Typen und markieren, welches davon ihr fachlicher Schlüssel ist — das, was ORD-1 im Bestellprozess, im Fakturaprozess und im Retourenprozess zur selben Bestellung macht. Drei Klassenarten tragen den Unterschied, auf den es ankommt: etwas, das die Fachseite benennen und identifizieren kann; ein strukturierter Wert wie eine Adresse, der nur aus seinem Inhalt besteht; und eine abgeschlossene Werteliste wie Entwurf/freigegeben/abgelehnt. Die Zeichenfläche lässt keine Beziehung zu, die keinen Sinn ergibt — auf eine Werteliste zeigt kein Pfeil, und eine Adresse kann keine Teile besitzen, weil sie selbst keine eigene Existenz hat — und wenn sie ablehnt, sagt sie warum, mit denselben Worten wie der Server. Sie sagt auch klar, welche Ablehnung die Notation selbst ist und welche nur das, was diese Version noch nicht kann. Jede Klasse lässt sich als JSON Schema anzeigen — das, woran ein Wert geprüft wird — und diese Ansicht ist ehrlich darüber, was sie nicht ausdrücken kann: ein Dokument ist ein Baum, und zwei Dinge, die nur aufeinander verweisen, sind keiner."
-      },
-      "link": {
-        "label": "ADR-0230",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
-      },
-      "tags": [
-        "Data",
-        "Modeling",
-        "UML"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data in the app drawer. The Model tab lists the information models; create one and pick the application it belongs to.",
-          "Press “+ Business object” and name it Order. Add its attributes in the panel on the right — an id as text, a date, an amount as a number.",
-          "Tick the ⚿ box next to id. That is the business key: what makes two of these the same one.",
-          "Add a second class, then press a relationship button in the toolbar and click the two boxes to connect them. Try pointing one at an enumeration — it will refuse and tell you why.",
-          "Press “View JSON Schema” on a class to see the contract a value of it is checked against, and what the projection had to leave out.",
-          "Switch to the Instances tab to see the data objects your running processes are actually carrying, grouped by the type they declare."
-        ],
-        "de": [
-          "Öffnen Sie „Data\" in der App-Leiste. Der Reiter „Model\" listet die Informationsmodelle; legen Sie eines an und wählen Sie die Applikation dazu.",
-          "Drücken Sie „+ Business object\" und nennen Sie die Klasse Order. Ergänzen Sie rechts im Panel ihre Attribute — eine id als Text, ein Datum, einen Betrag als Zahl.",
-          "Setzen Sie das Häkchen ⚿ neben id. Das ist der fachliche Schlüssel: das, was zwei davon zur selben Sache macht.",
-          "Legen Sie eine zweite Klasse an, drücken Sie in der Leiste eine Beziehungsart und klicken Sie die beiden Kästen an. Versuchen Sie ruhig, auf eine Aufzählung zu zeigen — es wird abgelehnt, mit Begründung.",
-          "Drücken Sie bei einer Klasse „View JSON Schema\", um den Vertrag zu sehen, an dem ein Wert geprüft wird — und was die Projektion weglassen musste.",
-          "Wechseln Sie auf „Instances\", um zu sehen, welche Datenobjekte Ihre laufenden Prozesse tatsächlich tragen, gruppiert nach dem Typ, den sie deklarieren."
         ]
       },
       "try": {

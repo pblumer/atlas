@@ -19,6 +19,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
 )
@@ -382,13 +383,13 @@ func TestAnUnresolvableFeelFieldTravelsAsNullRatherThanBlockingTheLease(t *testi
 // into a stated one: if a kind is later offloaded without adding its arm, the worker
 // gets a job with nothing on it, and this test is where that shows up.
 func TestAKindWithNoArmResolvesToNoPayload(t *testing.T) {
-	// SOAP, one of the kinds ADR-0233's table still owes a worker half. It stood as
-	// ldap here until ldap got its slice, which is the table shrinking working as
-	// intended: this test names whichever kind is still in-engine, and the day the
-	// last one moves it has nothing left to assert.
-	got := leaseConnectorPayloadOrNil(t, "soap-proc",
-		`<atlas:soapConnector endpoint="https://example.com/svc" operation="GetRate" body="&lt;req/&gt;" resultVariable="found"/>`,
-		compiler.SoapJobType, `{"variables":{}}`)
+	// SharePoint, one of the kinds ADR-0233's table still owes a worker half. It stood
+	// as ldap, then as soap, and moves again each time one of them gets its slice —
+	// which is the table shrinking working as intended: this test names whichever kind
+	// is still in-engine, and the day the last one moves it has nothing left to assert.
+	got := leaseConnectorPayloadOrNil(t, "sharepoint-proc",
+		`<atlas:sharepointConnector connector="intranet" site="https://contoso.sharepoint.com/sites/hr" list="Onboarding" resultVariable="found"/>`,
+		compiler.SharePointJobType, `{"variables":{}}`)
 	if got != nil {
 		t.Errorf("payload = %#v, want none: this kind has no arm in resolveConnectorTask", *got)
 	}
@@ -463,6 +464,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.ClioWriteJobTypeIndex", clio.Job{}},
 		{"compiler.WebScrapeJobTypeIndex", webscrape.Job{}},
 		{"compiler.RestJobTypeIndex", rest.Job{}},
+		{"compiler.SoapJobTypeIndex", soap.Job{}},
 	} {
 		t.Run(tc.arm, func(t *testing.T) {
 			sent, ok := arms[tc.arm]

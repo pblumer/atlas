@@ -475,10 +475,16 @@ var offloadableKinds = map[string][]int32{
 // argument was about; that one kind speaks it through Microsoft's dialect and the
 // other through the standard one changes nothing about where it belongs.
 //
+// SOAP is the tenth, and it is REST's way exactly (ADR-0233, slice 4) — the same call
+// in an envelope, over the same protocol, with the same one thing that cannot travel:
+// the credential behind its authSecret. soapWorkerEnv is restWorkerEnv with a
+// different job type, which is the sense in which this slice was already decided when
+// REST's was.
+//
 // The credential-bearing kinds the engine cannot yet hand over stay in the engine
 // until an operator moves their secrets themselves, with --offload-connectors.
 func DefaultOffloadedKinds() []string {
-	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "script", "webscrape"}
+	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "script", "soap", "webscrape"}
 }
 
 // DefaultSupervisedWorkerOnlyKinds are the worker-only Worker Types Atlas supervises
