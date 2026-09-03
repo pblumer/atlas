@@ -734,6 +734,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **An application you had just created was missing from the dialog that asked which
+  application to use.** Creating an information model, creating or importing an
+  architecture model, and promoting a release all asked their question through a
+  `window.prompt` whose body was the choices as a numbered list, with "enter a number"
+  underneath. A browser truncates a prompt body once it grows past a handful of lines
+  and ends it with an ellipsis — so on a server with a dozen applications the newest
+  ones, which sort last, were simply not in the list somebody was being told to choose
+  from. Nothing said they had been cut off; the application looked missing, and the
+  three trailing dots looked like a rendering quirk.
+
+  All four are now the same small dialog: a real drop-down of the applications you can
+  write to, and the name beside it in one step instead of a second prompt. The
+  suggested name follows the picker until you type your own. Nothing has to be counted,
+  a list of any length fits, and Escape, Cancel or a click outside all mean the same
+  thing as before.
+
 - **A type a modeling tool wrote in its own namespace read back as a GUID.** BPMN gives
   an `<itemDefinition>` no name of its own — a root element carries an id and nothing
   else — so `structureRef` is the only slot the specification offers for the name of the
