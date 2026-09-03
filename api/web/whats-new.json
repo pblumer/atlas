@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "sharepoint-tasks-run-on-a-worker-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "SharePoint writes moved out of the engine",
+        "de": "SharePoint-Schreibvorgänge sind aus der Engine ausgezogen"
+      },
+      "summary": {
+        "en": "Adding a row to a SharePoint list means fetching a token and calling Microsoft Graph, and until now Atlas did both from the process that runs the engine — so a slow or throttled Graph held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the site you set up in Connectors is handed to that worker. An instance whose credential you have not finished storing is simply not served yet, rather than stopping the worker.",
+        "de": "Eine Zeile in eine SharePoint-Liste zu schreiben heisst, ein Token zu holen und Microsoft Graph aufzurufen — bisher machte Atlas beides im Prozess, der die Engine ausführt, sodass ein langsames oder gebremstes Graph Arbeit aufhielt, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Die Site, die Sie unter Connectors eingerichtet haben, wird an diesen Worker übergeben. Eine Instanz, deren Credential Sie noch nicht fertig hinterlegt haben, wird einfach noch nicht bedient — statt den Worker aufzuhalten."
+      },
+      "link": {
+        "label": "ADR-0233",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "soap-tasks-run-on-a-worker-now",
       "version": "Unreleased",
       "date": null,
@@ -362,54 +391,6 @@
           "de": "Data › Instances öffnen"
         },
         "route": "#/data/instances"
-      }
-    },
-    {
-      "id": "an-instance-s-data-drawn-as-objects",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See a running instance's data as a picture",
-        "de": "Die Daten einer laufenden Instanz als Bild"
-      },
-      "summary": {
-        "en": "The Data tab of an instance listed what the process was carrying. It now also draws it. Each data object becomes a box with its name underlined — which is how UML says \"this is an actual thing, not a type\" — showing the fields its class declares, in the order the class declares them, with the business key marked. A field the value simply does not have says \"not set\", because that is a different fact from having it and it being empty. Two kinds of line appear between the boxes, and they mean different things, so they look different. A solid line with a diamond means one thing is part of another and lives inside its value: an order and its lines. A dashed line means one object is holding another's business key — the order says its customer is C-7, and a customer here is C-7 — which is an inference from two values agreeing rather than something written down anywhere. And when an order points at a customer that is not in this instance, the diagram says so underneath instead of quietly leaving the line out: that customer is in another instance or in a data store, and knowing where the picture ends is what makes the rest of it worth trusting. This is the same model you drew under Data › Model, one level down: that diagram says what an Order is, this one says which orders are here.",
-        "de": "Der Reiter „Data\" einer Instanz hat aufgelistet, was der Prozess mit sich führt. Jetzt zeichnet er es auch. Jedes Datenobjekt wird zu einem Kasten mit unterstrichenem Namen — so sagt UML „das ist ein konkretes Ding, kein Typ\" — und zeigt die Felder, die seine Klasse deklariert, in der Reihenfolge der Klasse, mit markiertem fachlichem Schlüssel. Ein Feld, das der Wert schlicht nicht hat, sagt „not set\", denn das ist eine andere Aussage als vorhanden und leer. Zwischen den Kästen erscheinen zwei Arten von Linien, die Verschiedenes bedeuten und deshalb verschieden aussehen. Eine durchgezogene Linie mit Raute heisst: das eine ist Teil des anderen und liegt in dessen Wert — eine Bestellung und ihre Positionen. Eine gestrichelte Linie heisst: ein Objekt hält den fachlichen Schlüssel eines anderen — die Bestellung nennt als Kunden C-7, und ein Kunde hier ist C-7 — was ein Schluss aus zwei übereinstimmenden Werten ist und nirgends so notiert steht. Und wenn eine Bestellung auf einen Kunden zeigt, den es in dieser Instanz nicht gibt, sagt das Diagramm das darunter, statt die Linie still wegzulassen: Dieser Kunde steckt in einer anderen Instanz oder in einem Data Store, und zu wissen, wo das Bild aufhört, ist das, was den Rest davon vertrauenswürdig macht. Es ist dasselbe Modell, das Sie unter Data › Model gezeichnet haben, eine Ebene tiefer: Jenes Diagramm sagt, was eine Bestellung ist — dieses, welche Bestellungen hier sind."
-      },
-      "link": {
-        "label": "ADR-0230",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
-      },
-      "tags": [
-        "Operations",
-        "Data",
-        "UML"
-      ],
-      "tutorial": {
-        "en": [
-          "Under Data › Model, give your application an Order with an id as its business key, and a Customer with a number as its own.",
-          "Draw a composition from Order to an OrderLine and name the end lines, and an association between Customer and Order whose Order-side role is customer.",
-          "In the Modeler, set the data objects' Type to those classes, and have a task write an order value that carries an id, a customer key and a lines list.",
-          "Start an instance, open it under Operations › Instances, and go to the Data tab.",
-          "Press Diagram. The order, its line and the customer are drawn, with the two kinds of line between them.",
-          "Point the order's customer at a key nothing in the instance carries and look underneath — the diagram tells you where that object must be instead."
-        ],
-        "de": [
-          "Geben Sie Ihrer Applikation unter Data › Model eine Order mit id als fachlichem Schlüssel und eine Customer mit number als ihrem.",
-          "Zeichnen Sie eine Komposition von Order zu einer OrderLine und benennen Sie das Ende „lines\", sowie eine Assoziation zwischen Customer und Order, deren Rolle auf der Order-Seite „customer\" heisst.",
-          "Setzen Sie im Modeler „Type\" der Datenobjekte auf diese Klassen und lassen Sie eine Aufgabe einen Order-Wert schreiben, der id, Kundenschlüssel und eine lines-Liste trägt.",
-          "Starten Sie eine Instanz, öffnen Sie sie unter Betrieb › Instanzen und gehen Sie auf den Reiter „Data\".",
-          "Drücken Sie „Diagram\". Die Bestellung, ihre Position und der Kunde werden gezeichnet, mit den zwei Linienarten dazwischen.",
-          "Lassen Sie die Bestellung auf einen Schlüssel zeigen, den die Instanz nicht trägt, und schauen Sie darunter — das Diagramm sagt Ihnen, wo dieses Objekt stattdessen sein muss."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Instances",
-          "de": "Instanzen öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]

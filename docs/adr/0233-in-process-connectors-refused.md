@@ -122,7 +122,6 @@ idempotency key that de-duplicates the retry.
 
 | Kind | Owed |
 |---|---|
-| `sharepoint` | Worker half |
 | `scim` | Worker half |
 | `temis` | Worker half |
 

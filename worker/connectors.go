@@ -237,6 +237,24 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 					return RunClioJob(ctx, j, reg)
 				})
 			}
+		case "sharepoint":
+			reg, names, err := sharepointRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve SharePoint, holding no site to create items in. Not an
+				// error, for the reason mail's and Jira's identical branches are not:
+				// this worker very likely serves other kinds, and a site nobody has
+				// configured yet must park its tasks rather than take down the kinds
+				// that are configured.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.SharePointJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunSharePointJob(ctx, j, reg)
+			})
 		case "remedy":
 			reg, names, err := remedyRegistryFromEnv(env)
 			if err != nil {
@@ -359,7 +377,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "clio", "csv", "entra", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "soap", "webscrape"}
+	return []string{"ad", "clio", "csv", "entra", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "sharepoint", "soap", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.
