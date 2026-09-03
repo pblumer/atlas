@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Workers",
+    "Connectors"
+  ],
+  "title": {
+    "en": "Directory tasks moved out of the engine",
+    "de": "Verzeichnis-Tasks sind aus der Engine ausgezogen"
+  },
+  "summary": {
+    "en": "Searching a directory, adding an entry, changing a password — until now Atlas did all three from the process that runs the engine, so a slow or unreachable directory held up work that had nothing to do with it. They run in a worker Atlas starts and supervises itself now. Nothing to configure: the bind passwords and client certificates your models reference are handed to that worker, and the pooled connections that make repeat binds cheap move along with them.",
+    "de": "Ein Verzeichnis durchsuchen, einen Eintrag anlegen, ein Passwort ändern — bisher machte Atlas alle drei im Prozess, der die Engine ausführt, sodass ein langsames oder nicht erreichbares Verzeichnis Arbeit aufhielt, die nichts damit zu tun hatte. Sie laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Die Bind-Passwörter und Client-Zertifikate, die Ihre Modelle referenzieren, werden an diesen Worker übergeben — und die gepoolten Verbindungen, die wiederholte Binds günstig machen, ziehen mit um."
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Worker öffnen"
+    },
+    "route": "#/console/workers"
+  }
+}

@@ -14,6 +14,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **LDAP tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 3).
+  A bind, a search or a modify against a directory somebody else operates no longer
+  happens on the loop that owns the partition's state. `ldap` joins the kinds Atlas
+  offloads and supervises by itself, so a fresh install gets it without configuring
+  anything.
+
+  It is Active Directory's handover exactly (ADR-0182), because the two kinds share a
+  shape: an LDAP task authors its own server and bind DN, so those travel with the
+  job, while its bind password and client certificate are vault **references** — and a
+  reference is resolved where it is used. `ldapWorkerEnv` renders the references the
+  deployed models actually name, resolved through the vault, under the
+  `ATLAS_CONNECTOR_<REF>_TOKEN` names the worker already reads. Both flavours are
+  covered: a certificate reference nothing answers to is a bind that cannot present an
+  identity, which is no better an outcome than a missing password.
+
+  The worker keeps the connection pool ADR-0154 introduced, so relocating the work
+  does not give back the reason binds were pooled in the first place. And both halves
+  now go through one `ldap.Resolve`/`ldap.Run` pair — the in-process handler was
+  rewritten onto it — so an offloaded search and an in-engine one cannot drift about
+  what an LDAP task means.
+
+  Four kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `soap`,
+  `temis`.
+
 - **clio tasks run on a worker now**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 2).
   Writing an event, folding a subject's state, reading its history: three round trips
