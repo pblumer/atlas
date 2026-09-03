@@ -58,7 +58,7 @@ _Changed_ / _Removed_ for each version.
   `temis`.
 
 - **A non-interrupting message or signal boundary event now fires every time, not once**
-  ([ADR-draft-repeating-non-interrupting-boundary-events](docs/adr/draft-repeating-non-interrupting-boundary-events.md),
+  ([ADR-0236](docs/adr/0236-repeating-non-interrupting-boundary-events.md),
   refining [ADR-0040](docs/adr/0040-boundary-events.md)). Non-interrupting is how a model
   says *reminder*: fire beside the host activity and leave it running. For as long as the
   host runs, every occurrence should fire it again — and a recurring **timer** boundary

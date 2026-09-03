@@ -1,4 +1,4 @@
-# ADR-DRAFT: A non-interrupting message or signal boundary event stays armed
+# ADR-0236: A non-interrupting message or signal boundary event stays armed
 
 - **Status:** Accepted
 - **Date:** 2026-09-03

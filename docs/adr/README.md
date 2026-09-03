@@ -289,6 +289,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0233](0233-in-process-connectors-refused.md) | Finish ADR-0164 — in-process connector work becomes a finite list, then nothing | Proposed |
 | [0234](0234-google-inbound-watch.md) | Google Sheets and Drive as inbound event sources — a polled row watch and a polled folder watch | Proposed |
 | [0235](0235-google-sheets-worker.md) | Google Sheets as a Worker Type — a spreadsheet is a process data source | Proposed |
+| [0236](0236-repeating-non-interrupting-boundary-events.md) | A non-interrupting message or signal boundary event stays armed | Accepted |
 
 ## Status values
 
