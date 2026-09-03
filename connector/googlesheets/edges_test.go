@@ -85,7 +85,7 @@ func TestNullValuesFailRatherThanWriteNothing(t *testing.T) {
 }
 
 // TestLiteralValuesAreNeverParsed: a literal is a literal. Text that happens to look
-// like JSON is one cell of that text, which is the rule every other connector follows.
+// like JSON is one cell of that text, which is the rule every other Worker Type follows.
 func TestLiteralValuesAreNeverParsed(t *testing.T) {
 	rd, lookup := workerFixture(t,
 		`<atlas:googleSheetsConnector connector="acme" operation="write-range" spreadsheet="1B" range="A1" values="{nicht json}"/>`)
@@ -194,7 +194,7 @@ func TestErrorBodyThatIsNotGooglesEnvelope(t *testing.T) {
 		_, _ = w.Write([]byte("<html>proxy error</html>"))
 	}))
 	defer srv.Close()
-	c := gs.NewHTTPClient(gs.Connector{Tokens: staticToken("tok"), SheetsBase: srv.URL, DriveBase: srv.URL})
+	c := gs.NewHTTPClient(gs.Account{Tokens: staticToken("tok"), SheetsBase: srv.URL, DriveBase: srv.URL})
 	_, err := c.Do(context.Background(), gs.Request{Operation: "clear-range", Spreadsheet: "1B", Range: "A1"})
 	if err == nil || !strings.Contains(err.Error(), "proxy error") {
 		t.Errorf("a non-JSON error body: want it carried through, got %v", err)
@@ -208,7 +208,7 @@ func TestEmptyAnswerIsNotAResult(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer srv.Close()
-	c := gs.NewHTTPClient(gs.Connector{Tokens: staticToken("tok"), SheetsBase: srv.URL, DriveBase: srv.URL})
+	c := gs.NewHTTPClient(gs.Account{Tokens: staticToken("tok"), SheetsBase: srv.URL, DriveBase: srv.URL})
 	got, err := c.Do(context.Background(), gs.Request{Operation: "add-sheet", Spreadsheet: "1B", Sheet: "S"})
 	if err != nil || got != nil {
 		t.Errorf("an empty answer = %#v, %v; want nil, nil", got, err)
@@ -222,7 +222,7 @@ func TestUndecodableAnswer(t *testing.T) {
 		_, _ = w.Write([]byte("nicht json"))
 	}))
 	defer srv.Close()
-	c := gs.NewHTTPClient(gs.Connector{Tokens: staticToken("tok"), SheetsBase: srv.URL, DriveBase: srv.URL})
+	c := gs.NewHTTPClient(gs.Account{Tokens: staticToken("tok"), SheetsBase: srv.URL, DriveBase: srv.URL})
 	if _, err := c.Do(context.Background(), gs.Request{Operation: "read-range", Spreadsheet: "1B", Range: "A1"}); err == nil {
 		t.Error("an undecodable 200: want an error, got nil")
 	}

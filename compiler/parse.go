@@ -2025,8 +2025,8 @@ type xmlServiceTask struct {
 	// (ADR-0201): one issue-tracker operation against a
 	// server-registered Jira instance.
 	Jira *xmlJiraConnector `xml:"extensionElements>jiraConnector"`
-	// GoogleSheets, when present, marks this service task a Google Sheets connector
-	// task: one spreadsheet operation against a server-registered Google credential.
+	// GoogleSheets, when present, marks this service task a Google Sheets task: one
+	// spreadsheet operation against a Worker an operator configured.
 	GoogleSheets *xmlGoogleSheetsConnector `xml:"extensionElements>googleSheetsConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
@@ -2543,11 +2543,12 @@ type xmlJiraConnector struct {
 	Retries string `xml:"retries,attr"`
 }
 
-// A Google Sheets connector task's parameters, carried on a service task as an
+// A Google Sheets task's parameters, carried on a service task as an
 // <atlas:googleSheetsConnector connector="..." operation="..." .../> extension element
-// (ADR-draft-google-sheets-worker). connector names a server-registered Google
-// credential (which lives on the server, never in the model) and operation is the
-// spreadsheet operation the task performs.
+// (ADR-draft-google-sheets-worker). The connector attribute names the Worker (whose
+// credential lives on the server, never in the model) and operation is the spreadsheet
+// operation the task performs. Element and attribute keep the pre-ADR-0203 spelling
+// their siblings carry: both are authored in deployed models.
 //
 // Which of the remaining attributes apply is decided by the operation, and only by it:
 // spreadsheet addresses an existing file by id or by its URL (everything but

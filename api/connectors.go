@@ -327,10 +327,10 @@ func (s *Server) buildJiraClients() (map[string]jira.Client, map[string]string, 
 	return clients, problems, nil
 }
 
-// buildGoogleSheetsClients builds the live Google client for every enabled
-// googlesheets connector, resolving each one's OAuth credential bundle from the vault
-// (ADR-0041) — so a model names a connector and never a key. A connector whose bundle
-// is missing or malformed is skipped with the reason recorded, which is what lets the
+// buildGoogleSheetsClients builds the live Google client for every enabled Google
+// Sheets Worker, resolving each one's OAuth credential bundle from the vault
+// (ADR-0041) — so a model names a Worker and never a key. A Worker whose bundle is
+// missing or malformed is skipped with the reason recorded, which is what lets the
 // list say "configured but not working" instead of leaving it to be discovered by a
 // token parking on it (ADR-0158).
 func (s *Server) buildGoogleSheetsClients() (map[string]googlesheets.Client, map[string]string, error) {
@@ -362,12 +362,12 @@ func (s *Server) buildGoogleSheetsClients() (map[string]googlesheets.Client, map
 	return clients, problems, nil
 }
 
-// googleSheetsCredentials is the shape of a Google connector's credential bundle held
-// in the vault under its credentialsRef (ADR-draft-google-sheets-worker): a service
+// googleSheetsCredentials is the shape of a Google Worker's credential bundle held in
+// the vault under its credentialsRef (ADR-draft-google-sheets-worker): a service
 // account's signing key, or a consumer account's refresh token. Only a *reference* to
-// this bundle is stored in the connector record; the values live in the vault, never
-// in a model or the record (I6). It mirrors the connector package's own unexported
-// bundle type, which is what the shape test holds it to.
+// this bundle is stored in the Worker record; the values live in the vault, never in a
+// model or the record (I6). It mirrors connector/googlesheets' own unexported bundle
+// type, which is what the shape test holds it to.
 type googleSheetsCredentials struct {
 	Method       string `json:"method"`
 	TokenURL     string `json:"tokenUrl,omitempty"`

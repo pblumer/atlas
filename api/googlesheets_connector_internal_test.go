@@ -28,12 +28,12 @@ func googleKeyPEM(t *testing.T) string {
 	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
 }
 
-// TestGoogleSheetsBundleShapeMatchesTheConnector is the drift guard between this
+// TestGoogleSheetsBundleShapeMatchesTheWorker is the drift guard between this
 // package's description of the credential bundle — which is what the Console's shape
 // hint and the vault documentation are written from — and the decoder that actually
-// reads it. The two are separate types because the connector's is unexported, so
-// nothing but a test holds them together.
-func TestGoogleSheetsBundleShapeMatchesTheConnector(t *testing.T) {
+// reads it. The two are separate types because connector/googlesheets' is unexported,
+// so nothing but a test holds them together.
+func TestGoogleSheetsBundleShapeMatchesTheWorker(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		bundle googleSheetsCredentials
@@ -55,17 +55,17 @@ func TestGoogleSheetsBundleShapeMatchesTheConnector(t *testing.T) {
 				t.Fatalf("marshal: %v", err)
 			}
 			if _, err := googlesheets.NewProviderClient(googlesheets.ProviderConfig{Secret: string(raw)}); err != nil {
-				t.Fatalf("the connector package rejected a bundle this package describes (%s): %v", raw, err)
+				t.Fatalf("connector/googlesheets rejected a bundle this package describes (%s): %v", raw, err)
 			}
 		})
 	}
 }
 
-// TestValidateGoogleSheetsConnectorNeedsACredential: for this kind the credential *is*
-// the whole configuration — Google's API bases are the same for everyone — so a record
-// without one is a Worker that can never do anything, and the refusal names both
-// bundle shapes rather than leaving an operator to guess.
-func TestValidateGoogleSheetsConnectorNeedsACredential(t *testing.T) {
+// TestValidateGoogleSheetsWorkerNeedsACredential: for this Worker Type the credential
+// *is* the whole configuration — Google's API bases are the same for everyone — so a
+// record without one is a Worker that can never do anything, and the refusal names
+// both bundle shapes rather than leaving an operator to guess.
+func TestValidateGoogleSheetsWorkerNeedsACredential(t *testing.T) {
 	p := &createConnectorParams{Kind: connectorKindGoogleSheets, Provider: "gmail", Sender: "x@y"}
 	msg := validateGoogleSheetsConnector(p)
 	if !strings.Contains(msg, "credentialsRef") {
@@ -76,8 +76,8 @@ func TestValidateGoogleSheetsConnectorNeedsACredential(t *testing.T) {
 			t.Errorf("message %q should name the %s bundle shape", msg, want)
 		}
 	}
-	// The mail-only fields are cleared rather than stored on a kind that has no use
-	// for them.
+	// The mail-only fields are cleared rather than stored on a Worker Type that has no
+	// use for them.
 	if p.Provider != "" || p.Sender != "" {
 		t.Errorf("params = %+v; want the mail-only fields cleared", p)
 	}
@@ -88,13 +88,13 @@ func TestValidateGoogleSheetsConnectorNeedsACredential(t *testing.T) {
 	}
 }
 
-// TestGoogleSheetsIsAManagedKind ties the registry entry to the reserved job type it
-// serves: an entry naming the wrong index would compile and then leave every Google
-// Sheets task unhandled.
-func TestGoogleSheetsIsAManagedKind(t *testing.T) {
+// TestGoogleSheetsIsAConfigurableWorkerType ties the registry entry to the reserved
+// job type it serves: an entry naming the wrong index would compile and then leave
+// every Google Sheets task unhandled.
+func TestGoogleSheetsIsAConfigurableWorkerType(t *testing.T) {
 	kind, ok := lookupManagedConnectorKind(connectorKindGoogleSheets)
 	if !ok {
-		t.Fatal("googlesheets is not a managed connector kind")
+		t.Fatal("googlesheets is not an operator-configurable Worker Type")
 	}
 	if kind.workerOnly {
 		t.Error("googlesheets is marked worker-only, but the engine registers a handler for it")
@@ -104,10 +104,10 @@ func TestGoogleSheetsIsAManagedKind(t *testing.T) {
 	}
 }
 
-// TestBuildGoogleSheetsClients keeps a connector out of the registry unless it is
-// enabled and its credentialsRef resolves to a usable bundle. Each exclusion records
-// *why* on the connector instead (ADR-0158), because "no connector registered as X"
-// reads as "you never configured it" when the truth is that the key is malformed.
+// TestBuildGoogleSheetsClients keeps a Worker out of the registry unless it is enabled
+// and its credentialsRef resolves to a usable bundle. Each exclusion records *why* on
+// the Worker instead (ADR-0158), because "nothing registered under that name" reads as
+// "you never configured it" when the truth is that the key is malformed.
 //
 // Unlike Jira there is no endpoint to be missing: Google's API bases are the same for
 // everyone, so a record with only a credential is complete.
@@ -148,7 +148,7 @@ func TestBuildGoogleSheetsClients(t *testing.T) {
 		{"nocred", "no credential"},
 		{"broken", "not valid JSON"},
 		{"halfbundle", "clientEmail and privateKey"},
-		{"amail", "not \"googlesheets\""}, // a mail connector named by a Sheets task
+		{"amail", "not \"googlesheets\""}, // a mail Worker named by a Sheets task
 	} {
 		got, ok := problems[tc.name]
 		if !ok {

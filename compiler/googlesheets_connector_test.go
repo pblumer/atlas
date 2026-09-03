@@ -6,11 +6,10 @@ import (
 )
 
 // A service task bearing an <atlas:googleSheetsConnector> extension is a Google Sheets
-// connector task (ADR-draft-google-sheets-worker): it performs one spreadsheet
-// operation against a server-registered Google credential via the job path. The
-// credential lives server-side, like Jira's and SharePoint's (ADR-0141/0201); only
-// what the task is *about* — the operation, the spreadsheet, the range and the values
-// — is authored in the model.
+// task (ADR-draft-google-sheets-worker): it performs one spreadsheet operation against
+// a Worker an operator configured, via the job path. The credential lives server-side,
+// like Jira's and SharePoint's (ADR-0141/0201); only what the task is *about* — the
+// operation, the spreadsheet, the range and the values — is authored in the model.
 const googleSheetsConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
@@ -122,7 +121,7 @@ func TestGoogleSheetsCreateSpreadsheet(t *testing.T) {
 // ignored it.
 func TestGoogleSheetsRefusesBadModels(t *testing.T) {
 	for name, tc := range map[string]struct{ attrs, want string }{
-		"no connector":       {`operation="read-range" spreadsheet="1B" range="A1" resultVariable="r"`, "needs a connector"},
+		"no worker":          {`operation="read-range" spreadsheet="1B" range="A1" resultVariable="r"`, "naming the Worker"},
 		"no operation":       {`connector="acme" spreadsheet="1B"`, "needs an operation"},
 		"unknown operation":  {`connector="acme" operation="pivot"`, "unknown operation"},
 		"no spreadsheet":     {`connector="acme" operation="read-range" range="A1" resultVariable="r"`, "needs a spreadsheet"},

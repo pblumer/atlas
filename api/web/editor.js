@@ -3130,8 +3130,8 @@ const SERVICE_TASK_KINDS = [
     id: "googlesheets", name: "Google Sheets", group: "Applications",
     desc: "Create, read, write, append to, clear and delete Google spreadsheets and their sheets",
     icon: "S",
-    // A grid on Google Sheets green: the table itself, which is what this connector is
-    // about — its counterpart to Jira's ticked issue and REST's globe. The
+    // A grid on Google Sheets green: the table itself, which is what this Worker Type
+    // is about — its counterpart to Jira's ticked issue and REST's globe. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white rules.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f9d58"/><rect x="3.4" y="3.8" width="9.2" height="8.4" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 6.6h9.2M3.4 9.4h9.2M8 3.8v8.4" stroke="#fff" stroke-width="1"/></svg>`,

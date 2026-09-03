@@ -11,18 +11,18 @@ import (
 
 // TokenSource yields a valid OAuth2 bearer access token for the Sheets and Drive APIs.
 // The mechanism — caching, refresh timing, the token exchange, the JWT-bearer
-// assertion — is the shared [oauth2] package's; what stays here is this connector's
+// assertion — is the shared [oauth2] package's; what stays here is this Worker Type's
 // policy: which grants it accepts and what its credential bundle looks like.
 type TokenSource = oauth2.TokenSource
 
-// OAuth2 grant methods a Google connector supports
+// OAuth2 grant methods a Google Worker supports
 // (ADR-draft-google-sheets-worker). serviceAccount is the normal shape for a server
 // workflow: a service account signs a JWT-bearer assertion with its own key and acts
 // as itself, or — with subject — as a Workspace user through domain-wide delegation.
 // refreshToken exchanges a pre-obtained refresh token, which is how a consumer Google
 // account is reached without a browser.
 //
-// The client-credentials grant the Microsoft connectors use has no counterpart here:
+// The client-credentials grant the Microsoft Worker Types use has no counterpart here:
 // Google does not issue app-only tokens that way, and offering the name would only
 // produce a confusing failure at the token endpoint.
 const (
@@ -43,12 +43,12 @@ const (
 	googleScope    = "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive"
 )
 
-// credentialBundle is the JSON an operator stores in the vault under a Google
-// connector's credentialsRef. method selects the OAuth2 grant; the remaining fields
+// credentialBundle is the JSON an operator stores in the vault under a Google Worker's
+// credentialsRef. method selects the OAuth2 grant; the remaining fields
 // configure it. Non-secret fields (the account address, the impersonated subject) and
 // secret ones (privateKey, clientSecret, refreshToken) live together in this one vault
 // secret, so a model never carries any of them (I6). tokenUrl and scope are optional
-// overrides; the connector supplies Google's defaults.
+// overrides; this package supplies Google's defaults.
 //
 // The field names are deliberately those of the JSON key file Google hands out —
 // client_email and private_key, camel-cased — so an operator transcribing one is
@@ -66,7 +66,7 @@ type credentialBundle struct {
 }
 
 // newTokenSource builds a cached TokenSource for a fully-resolved credential bundle
-// (the connector has already filled in the tokenUrl and scope defaults). It validates
+// (the defaults for tokenUrl and scope have already been filled in). It validates
 // the fields the chosen method requires, so a misconfigured bundle fails here — where
 // the operator is looking — rather than on the first job that reaches Google. httpc and
 // now are injected so the token flow is testable without a live endpoint.

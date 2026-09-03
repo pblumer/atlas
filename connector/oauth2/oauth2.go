@@ -16,7 +16,7 @@
 // bundle looks like, and what its endpoint defaults are. Those are per-connector
 // decisions and they stay in the connector. A caller may also supply its own
 // [Fetcher] for a grant nobody else has — the Google service-account JWT-bearer
-// assertion was that case until a second connector needed it, which is how it came to
+// assertion was that case until a second caller needed it, which is how it came to
 // live here as [ServiceAccount] instead (ADR-draft-google-sheets-worker).
 //
 // Every error is prefixed with the caller's kind, so a message an operator reads

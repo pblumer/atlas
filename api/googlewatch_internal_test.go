@@ -452,12 +452,12 @@ func TestGoogleWatchCadenceDefaultsToAMinute(t *testing.T) {
 	}
 }
 
-// TestOtherKindsStillRefuseAWatch: the message names the kinds that do have an inbound
-// half, because the usual cause is a watch on the wrong connector.
+// TestOtherKindsStillRefuseAWatch: the message names the Worker Types that do have an
+// inbound half, because the usual cause is a watch on the wrong Worker.
 func TestOtherKindsStillRefuseAWatch(t *testing.T) {
 	rec := inboundSubscription{}
 	msg := validateInboundWatch(connectorKindMail, &rec)
 	if !strings.Contains(msg, "googlesheets") {
-		t.Errorf("message %q should name every kind that can carry a watch", msg)
+		t.Errorf("message %q should name every Worker Type that can carry a watch", msg)
 	}
 }

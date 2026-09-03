@@ -34,7 +34,7 @@ func testKeyPEM(t *testing.T) string {
 
 // TestParseRSAPrivateKey covers the formats a service-account key arrives in, and the
 // two ways one can be wrong. The kind prefixes the error so an operator reading it
-// still learns which connector refused the key.
+// still learns which Worker Type refused the key.
 func TestParseRSAPrivateKey(t *testing.T) {
 	if _, err := oauth2.ParseRSAPrivateKey("sheets", testKeyPEM(t)); err != nil {
 		t.Errorf("PKCS#8 RSA key: unexpected error %v", err)

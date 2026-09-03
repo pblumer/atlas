@@ -45,7 +45,7 @@ that was asked.
   type index. Anything more than that is a defect in the change, not in the seam.
 - **No credential in a model (I6).** A service account's private key is the most
   dangerous secret in this integration. It belongs in the vault, resolved server-side
-  by connector name, and it must never reach a BPMN file, an event, or a variable.
+  by Worker name, and it must never reach a BPMN file, an event, or a variable.
 - **Off the hot path (I1/I2/I3/I4).** The call is network I/O: it happens in a job
   worker, after fsync, never on the processor goroutine and never inside
   `applyToState`.
@@ -59,7 +59,7 @@ that was asked.
 ## Considered options
 
 1. **A Google Sheets Worker Type with a fixed operation table**, spanning Sheets v4 and
-   Drive v3 behind one connector kind and one Google credential.
+   Drive v3 behind one Worker Type and one Google credential.
 2. **Extend the REST Worker Type with a Google service-account auth method**, and let
    models author Google's URLs and request bodies themselves.
 3. **A script task** (ADR-0047) calling a Google client library from Python.
@@ -104,7 +104,7 @@ permanent delete is deliberately not offered.
 ### The shape of values
 
 `write-range` and `append-row` take a `values` literal-or-FEEL value. Sheets writes a
-list of rows, each a list of cells, and a FEEL value reaching this connector is one of
+list of rows, each a list of cells, and a FEEL value reaching this Worker Type is one of
 three shapes:
 
 - a **list of lists** — used as the rows verbatim;
@@ -126,9 +126,30 @@ row is read as column names and the result variable receives a list of contexts,
 is what a multi-instance subprocess or a gateway can actually use. Without it, the
 result is the raw rows.
 
+### What keeps the old spelling
+
+ADR-0203 replaced the word *connector* with Worker Type / Worker / Worker Instance, and
+this record uses those throughout. Three things here keep the old spelling, each
+because changing it would break something:
+
+- the package path `connector/googlesheets`, the `connectorKind*` and
+  `managedConnectorKind` identifiers, and the `Add*ConnectorTask` builder method — they
+  are entries in families ADR-0203's migration renames wholesale in its own step, and a
+  single renamed member of a sixteen-member table is worse than a consistent old name;
+- the BPMN extension element `<atlas:googleSheetsConnector>` and its `connector="…"`
+  attribute — authored in deployed models, and, less obviously, the moddle drift guard
+  that keeps bpmn-js from silently dropping an extension only recognizes elements whose
+  name ends in `Connector`. A differently named element would compile, deploy, run, and
+  quietly lose its configuration on the first Modeler round trip;
+- the `"connector"` key in the offload job payload, which every Worker Type hands its
+  Worker Instances.
+
+Everything a person reads — the panel, the Console, the handbook, deploy-time errors —
+says Worker.
+
 ### The credential
 
-One vault bundle per connector, the same shape the mail Worker Type already uses for
+One vault bundle per Worker, the same shape the mail Worker Type already uses for
 Gmail (ADR-0093): `serviceAccount` (a `clientEmail` and a PEM `privateKey`, with an
 optional `subject` to impersonate a Workspace user through domain-wide delegation), or
 `refreshToken` for a consumer account that has granted access once. The scopes are
@@ -148,7 +169,7 @@ a JWT signer is precisely the duplication that package was extracted to end.
   eight operations and the values each takes, so an author is guided rather than left
   composing Google URLs.
 - **Positive:** the service-account grant becomes shared machinery, so a token-refresh
-  defect is fixed once rather than in two connectors.
+  defect is fixed once rather than in two Worker Types.
 - **Negative / trade-offs accepted:** **delivery is at-least-once, and a spreadsheet has
   no idempotency key.** A crash between "Sheets appended the row" and "job completed"
   replays the append and the row appears twice. Google offers nothing to prevent it —
@@ -156,7 +177,7 @@ a JWT signer is precisely the duplication that package was extracted to end.
   duplicate row must write a mark column and read before it appends, and this is a
   property of the target, not a defect this Worker Type can hide. It is stated in the
   handbook next to the operation rather than left to be discovered in production.
-- **Negative:** one connector kind spans two Google APIs, so which operations work
+- **Negative:** one Worker Type spans two Google APIs, so which operations work
   depends on the scopes the operator granted. A `drive.file`-scoped credential can
   create and then reach its own spreadsheets but not one a person shares with it; the
   failure surfaces as a 403 from Google on the operation, not at configuration time.
@@ -185,7 +206,7 @@ a JWT signer is precisely the duplication that package was extracted to end.
   thing a business reader is supposed to be able to read.
 - Bad: it makes the REST Worker Type the place vendor auth accumulates, which is how a
   generic tool becomes a pile of special cases.
-- Not rejected as a future step: a service-account auth method on the REST connector is
+- Not rejected as a future step: a service-account auth method on the REST Worker Type is
   still the right way to reach the *rest* of Google, and this record's move of the grant
   into `connector/oauth2` is what would make it cheap.
 

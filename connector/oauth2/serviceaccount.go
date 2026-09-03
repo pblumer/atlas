@@ -21,11 +21,11 @@ import (
 // (ADR-draft-google-sheets-worker).
 //
 // This package's doc comment used to name it as the one grant deliberately left with
-// its caller — "the mail connector's Google service-account JWT-bearer assertion is
-// the one such case". A second connector needs it now, and two copies of a JWT signer
-// is the duplication this package was extracted to end, so the mechanism moved here
-// and the policy stayed with each connector: which grants it accepts, what its
-// credential bundle looks like, and what its endpoint and scope defaults are.
+// its caller — "the mail Worker Type's Google service-account JWT-bearer assertion is
+// the one such case". A second caller needs it now, and two copies of a JWT signer is
+// the duplication this package was extracted to end, so the mechanism moved here and
+// the policy stayed with each caller: which grants it accepts, what its credential
+// bundle looks like, and what its endpoint and scope defaults are.
 
 // assertionTTL is how long a signed assertion claims to be valid. One hour is the
 // maximum Google honours, and the assertion is exchanged immediately, so its lifetime
@@ -112,7 +112,7 @@ func (f *saFetcher) signAssertion() (string, error) {
 
 // ParseRSAPrivateKey decodes a PEM-encoded RSA private key for JWT signing: PKCS#8, as
 // a Google service-account JSON file carries it, or PKCS#1. kind prefixes the error so
-// an operator reading it learns which connector refused the key.
+// an operator reading it learns which Worker Type refused the key.
 func ParseRSAPrivateKey(kind, pemStr string) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode([]byte(pemStr))
 	if block == nil {

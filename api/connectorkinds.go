@@ -277,13 +277,12 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes: []int32{compiler.JiraJobTypeIndex},
 	},
 	{
-		// A Google Sheets connector task performs one spreadsheet operation against a
-		// server-registered Google credential (ADR-draft-google-sheets-worker) and
-		// writes what Google returned into the task's result variable
-		// (HandleWithOutput) — for the operations that answer with something. The
-		// credential bundle lives in the managed connector store as a reference and is
-		// resolved from the vault at build time (ADR-0041), so a model carries neither
-		// an address nor a key.
+		// A Google Sheets task performs one spreadsheet operation against a Worker an
+		// operator configured (ADR-draft-google-sheets-worker) and writes what Google
+		// returned into the task's result variable (HandleWithOutput) — for the
+		// operations that answer with something. The credential bundle lives in the
+		// Worker store as a reference and is resolved from the vault at build time
+		// (ADR-0041), so a model carries neither an address nor a key.
 		name:           connectorKindGoogleSheets,
 		validateCreate: validateGoogleSheetsConnector,
 		newRegistry:    func(s *Server) { s.googleSheetsRegistry = googlesheets.NewRegistry() },
@@ -639,15 +638,18 @@ func validateJiraConnector(p *createConnectorParams) string {
 	return ""
 }
 
-// validateGoogleSheetsConnector validates a Google Sheets create request. Unlike Jira
-// or Remedy it needs no endpoint: Google's API bases are the same for everyone, and
-// the endpoint field stays an override for an operator behind a proxy. What it does
-// need is the credentialsRef, because for this kind the credential *is* the whole
-// configuration (ADR-draft-google-sheets-worker). Provider/Sender are mail-only.
+// validateGoogleSheetsConnector validates a Google Sheets Worker an operator is
+// adding. Unlike Jira or Remedy it needs no endpoint: Google's API bases are the same
+// for everyone, and the endpoint field stays an override for an operator behind a
+// proxy. What it does need is the credentialsRef, because for this Worker Type the
+// credential *is* the whole configuration (ADR-draft-google-sheets-worker).
+// Provider/Sender are mail-only.
+//
+// The function keeps the validate*Connector name its siblings in this table carry.
 func validateGoogleSheetsConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.CredentialsRef == "" {
-		return "a googlesheets connector requires a credentialsRef naming a vault bundle: " +
+		return "a Google Sheets Worker requires a credentialsRef naming a vault bundle: " +
 			"{method:\"serviceAccount\", clientEmail, privateKey} for a service account, " +
 			"or {method:\"refreshToken\", clientId, clientSecret, refreshToken} for a consumer account"
 	}

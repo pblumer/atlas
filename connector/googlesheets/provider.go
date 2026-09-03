@@ -8,34 +8,34 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
-// ProviderConfig is the per-connector data the server resolves before building a
-// client: an optional Sheets API base override (Endpoint, for an operator behind a
-// proxy) and the resolved Secret — the OAuth credential JSON bundle held in the vault
-// under the connector's credentialsRef. The secret lives only here at build time,
-// never in a model or an event (I6).
+// ProviderConfig is the per-Worker data the server resolves before building a client:
+// an optional Sheets API base override (Endpoint, for an operator behind a proxy) and
+// the resolved Secret — the OAuth credential JSON bundle held in the vault under the
+// Worker's credentialsRef. The secret lives only here at build time, never in a model
+// or an event (I6).
 type ProviderConfig struct {
 	Endpoint string
 	Secret   string
 }
 
-// NewProviderClient builds the Google client for a managed connector: it parses the
+// NewProviderClient builds the Google client for one configured Worker: it parses the
 // credential bundle, applies Google's token-endpoint and scope defaults, builds a
 // token source, and returns a client speaking Sheets v4 and Drive v3. A misconfigured
-// connector returns an error so the caller can skip it — its tasks then park with a
+// Worker returns an error so the caller can skip it — its tasks then park with a
 // reason (ADR-0158) rather than acting wrongly.
 func NewProviderClient(cfg ProviderConfig) (Client, error) {
 	tokens, err := tokenSource(cfg)
 	if err != nil {
 		return nil, err
 	}
-	return NewHTTPClient(Connector{Tokens: tokens, SheetsBase: cfg.Endpoint}), nil
+	return NewHTTPClient(Account{Tokens: tokens, SheetsBase: cfg.Endpoint}), nil
 }
 
-// tokenSource parses a connector's credential bundle from the resolved secret, applies
+// tokenSource parses a Worker's credential bundle from the resolved secret, applies
 // Google's defaults, and builds a cached token source.
 func tokenSource(cfg ProviderConfig) (TokenSource, error) {
 	if strings.TrimSpace(cfg.Secret) == "" {
-		return nil, fmt.Errorf("googlesheets: connector has no credential " +
+		return nil, fmt.Errorf("googlesheets: this Worker has no credential " +
 			"(set credentialsRef to a JSON auth bundle in the vault)")
 	}
 	var b credentialBundle

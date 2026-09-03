@@ -1694,7 +1694,7 @@ func jiraMaxResults(taskID, raw string) (int32, error) {
 }
 
 // The value-input modes a Google Sheets task may author. They are spelled here as well
-// as in connector/googlesheets because the compiler cannot import the connector (the
+// as in connector/googlesheets because the compiler cannot import that package (the
 // dependency runs the other way); the drift test guards the seam.
 //
 // user is the default because a process writing a date or an amount into a sheet
@@ -1707,14 +1707,14 @@ const (
 // googleSheetsOp describes what one spreadsheet operation requires of a model, and
 // what it is allowed to carry. The table is the compiler's half of
 // connector/googlesheets's Ops table; the drift test
-// TestGoogleSheetsOpsMatchTheConnector keeps the two from disagreeing about the
+// TestGoogleSheetsOpsMatchTheWorkerType keeps the two from disagreeing about the
 // operation set, which is the failure this shape exists to prevent.
 //
 // Both halves matter. "Needs" is the familiar one: a write with no values cannot be
 // sent. "Takes" is the half that is easy to forget and expensive to have forgotten — a
 // header authored on a write, or a range on a create, would otherwise compile and then
 // be silently dropped at call time, which from the author's side is indistinguishable
-// from a connector that ignored it.
+// from a Worker that ignored it.
 type googleSheetsOp struct {
 	needsSpreadsheet bool
 	needsTitle       bool
@@ -1761,22 +1761,27 @@ func googleSheetsOpNames() []string {
 }
 
 // compileGoogleSheetsConnectorTask compiles an <atlas:googleSheetsConnector> task: one
-// spreadsheet operation against a server-registered Google credential via the job path
-// (ADR-draft-google-sheets-worker). The credential is resolved server-side by
-// connector name, like Jira's and SharePoint's; only the operation and its values live
-// in the model.
+// spreadsheet operation against a Worker an operator configured, via the job path
+// (ADR-draft-google-sheets-worker). The credential is resolved server-side by Worker
+// name, like Jira's and SharePoint's; only the operation and its values live in the
+// model.
+//
+// The element and the function keep the …Connector spelling their sixteen siblings
+// carry: the element is authored in deployed models, and the moddle drift guard that
+// keeps bpmn-js from silently dropping an extension only recognizes elements named
+// that way.
 func compileGoogleSheetsConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.GoogleSheets
 	if strings.TrimSpace(cn.Connector) == "" {
-		return 0, fmt.Errorf("compiler: google sheets connector task %q needs a connector (the name the server holds the Google credential under)", st.Id)
+		return 0, fmt.Errorf("compiler: google sheets task %q needs a connector attribute naming the Worker the server holds the Google credential under", st.Id)
 	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
-		return 0, fmt.Errorf("compiler: google sheets connector task %q needs an operation (%s)", st.Id, strings.Join(googleSheetsOpNames(), ", "))
+		return 0, fmt.Errorf("compiler: google sheets task %q needs an operation (%s)", st.Id, strings.Join(googleSheetsOpNames(), ", "))
 	}
 	spec, ok := googleSheetsOps[op]
 	if !ok {
-		return 0, fmt.Errorf("compiler: google sheets connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(googleSheetsOpNames(), ", "))
+		return 0, fmt.Errorf("compiler: google sheets task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(googleSheetsOpNames(), ", "))
 	}
 	// One pass over every authored value: required where the operation needs it,
 	// refused where it does not use it. A single table means neither half can be
@@ -1805,11 +1810,11 @@ func compileGoogleSheetsConnectorTask(b *Builder, st xmlServiceTask, retries int
 	for _, v := range values {
 		set := strings.TrimSpace(v.raw) != ""
 		if v.required && !set {
-			return 0, fmt.Errorf("compiler: google sheets connector task %q operation %q needs %s (%s)",
+			return 0, fmt.Errorf("compiler: google sheets task %q operation %q needs %s (%s)",
 				st.Id, op, v.noun, googleSheetsWhy(v.attr))
 		}
 		if set && !v.allowed {
-			return 0, fmt.Errorf("compiler: google sheets connector task %q operation %q does not use %s (%s); remove it rather than leaving a value the connector ignores",
+			return 0, fmt.Errorf("compiler: google sheets task %q operation %q does not use %s (%s); remove it rather than leaving a value the Worker ignores",
 				st.Id, op, v.attr, googleSheetsWhy(v.attr))
 		}
 	}
@@ -1822,7 +1827,7 @@ func compileGoogleSheetsConnectorTask(b *Builder, st xmlServiceTask, retries int
 		return 0, err
 	}
 	cfg := GoogleSheetsConfig{
-		Connector: strings.TrimSpace(cn.Connector),
+		Worker:    strings.TrimSpace(cn.Connector),
 		Operation: op,
 		Columns:   googleSheetsColumns(cn.Columns),
 		Input:     input,
@@ -1847,7 +1852,7 @@ func compileGoogleSheetsConnectorTask(b *Builder, st xmlServiceTask, retries int
 		if strings.TrimSpace(v.raw) == "" {
 			continue
 		}
-		val, err := connectorValue(st.Id, "google sheets connector", v.what, v.raw)
+		val, err := connectorValue(st.Id, "google sheets", v.what, v.raw)
 		if err != nil {
 			return 0, err
 		}
@@ -1915,7 +1920,7 @@ func googleSheetsInput(taskID, op, raw string, takes bool) (string, error) {
 	case sheetsInputUser, sheetsInputRaw:
 		return mode, nil
 	default:
-		return "", fmt.Errorf("compiler: google sheets connector task %q operation %q has an unknown valueInput %q (want %q or %q)",
+		return "", fmt.Errorf("compiler: google sheets task %q operation %q has an unknown valueInput %q (want %q or %q)",
 			taskID, op, raw, sheetsInputUser, sheetsInputRaw)
 	}
 }
@@ -1932,7 +1937,7 @@ func googleSheetsBool(taskID, op, attr, raw string) (bool, error) {
 	case "false":
 		return false, nil
 	default:
-		return false, fmt.Errorf("compiler: google sheets connector task %q operation %q has a non-boolean %s %q (want true or false)",
+		return false, fmt.Errorf("compiler: google sheets task %q operation %q has a non-boolean %s %q (want true or false)",
 			taskID, op, attr, raw)
 	}
 }

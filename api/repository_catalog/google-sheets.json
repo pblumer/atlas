@@ -12,8 +12,8 @@
     "id": "atlas.google-sheets",
     "appliesTo": ["bpmn:ServiceTask"],
     "properties": [
-      { "label": "Connector", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:connector" },
-        "description": "Name of the server-registered Google credential (Console → Workers), never a key." },
+      { "label": "Worker", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:connector" },
+        "description": "Name of the configured Google Sheets Worker (Console → Workers), never a key. The attribute behind this field is spelled connector for compatibility with models already deployed." },
       { "label": "Operation", "type": "Dropdown", "value": "read-range", "binding": { "type": "property", "name": "atlas:operation" },
         "choices": [
           { "name": "Read range", "value": "read-range" },

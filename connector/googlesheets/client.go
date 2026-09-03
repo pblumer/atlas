@@ -1,25 +1,29 @@
-// Package googlesheets integrates Google Sheets as a server-registered Atlas Worker
-// Type: a BPMN connector task performs one spreadsheet operation — create a
-// spreadsheet, add a sheet to one, read a range, write a range, append rows, clear a
-// range, delete a sheet, or trash the whole file — against a configured Google
-// credential via the job path (ADR-draft-google-sheets-worker). It mirrors how the
-// jira package delegates one operation to a registry-managed instance (ADR-0201) and
-// inherits the job protocol's durability and non-blocking properties (ADR-0007):
+// Package googlesheets integrates Google Sheets as a Worker Type (ADR-0203): a BPMN
+// service task performs one spreadsheet operation — create a spreadsheet, add a sheet
+// to one, read a range, write a range, append rows, clear a range, delete a sheet, or
+// trash the whole file — against a Worker an operator configured, via the job path
+// (ADR-draft-google-sheets-worker). It mirrors how the jira package delegates one
+// operation to a registry-managed Worker (ADR-0201) and inherits the job protocol's
+// durability and non-blocking properties (ADR-0007):
 //
-//   - A connector task creates a job carrying the reserved
-//     [compiler.GoogleSheetsJobType]. The processor never performs the outbound call
-//     itself, so it stays allocation-free (invariant I1) and free of any HTTP
-//     dependency.
-//   - The in-process [Handler] — a job worker — pulls those jobs, calls Google off the
-//     processor goroutine and after fsync (invariant I2, never inside applyToState /
-//     I4), and completes the job, writing what Google returned into the task's result
-//     variable, which drives the token onward.
-//   - The credential lives in a server-side [Registry] keyed by connector name, so a
-//     model refers to a Google account by name only and never carries a key
-//     (ADR-0036/0041). Only what the task is *about* — the operation, the spreadsheet,
-//     the range and the values — is authored in the model.
+//   - The task creates a job carrying the reserved [compiler.GoogleSheetsJobType]. The
+//     processor never performs the outbound call itself, so it stays allocation-free
+//     (invariant I1) and free of any HTTP dependency.
+//   - The in-process [Handler] — a Worker Instance inside the server — pulls those
+//     jobs, calls Google off the processor goroutine and after fsync (invariant I2,
+//     never inside applyToState / I4), and completes the job, writing what Google
+//     returned into the task's result variable, which drives the token onward.
+//   - The credential lives in a server-side [Registry] keyed by Worker name, so a model
+//     names a Worker and never carries a key (ADR-0036/0041). Only what the task is
+//     *about* — the operation, the spreadsheet, the range and the values — is authored
+//     in the model.
 //
-// # Two APIs behind one connector
+// (The BPMN attribute a task states its Worker in is spelled `connector="…"`, and the
+// extension element is <atlas:googleSheetsConnector>. Both keep the pre-ADR-0203
+// spelling on purpose: they are authored in deployed models, and renaming them is a
+// separate step of that migration, not a side effect of adding a Worker Type.)
+//
+// # Two APIs behind one Worker
 //
 // A spreadsheet is cells and it is also a file. The cell-level work is the Sheets API
 // v4, addressed by spreadsheet id; creating one in a folder and deleting one are Drive
@@ -56,7 +60,7 @@ import (
 //
 // The compiler holds its own copy (compiler.googleSheetsOps) because the dependency
 // runs one way: this package imports the compiler, so the compiler cannot import it.
-// The behavioural drift test TestGoogleSheetsOpsMatchTheConnector keeps the two honest.
+// The behavioural drift test TestGoogleSheetsOpsMatchTheWorkerType keeps the two honest.
 type Op struct {
 	// NeedsSpreadsheet marks every operation that addresses an existing spreadsheet —
 	// all but create-spreadsheet, which is the one that brings one into being.
@@ -165,11 +169,11 @@ type Request struct {
 }
 
 // Client performs one operation against a configured Google account. It is an
-// interface so the worker is testable without a live Google and so a connector name
+// interface so the worker is testable without a live Google and so a Worker name
 // binds to exactly one credential.
 //
 // The shape is a single Do rather than a method per operation for the reason the Entra
-// connector gives (ADR-0172): this is a typed façade over two REST APIs, and the value
+// Worker Type gives (ADR-0172): this is a typed façade over two REST APIs, and the value
 // it adds is at the *model* level — naming the operations and building their URLs and
 // bodies — not in wrapping eight HTTP calls in eight Go signatures.
 type Client interface {
@@ -183,15 +187,14 @@ type Client interface {
 	ListFiles(ctx context.Context, q FileQuery) ([]map[string]any, error)
 }
 
-// Registry resolves a connector name to the [Client] for this kind. Connectors are
-// registered at the server from managed configuration (a credential reference), so a
-// model refers to a connector by name only (ADR-0036/0041).
+// Registry resolves a Worker name to the [Client] behind it. Workers are registered at
+// the server from operator-managed configuration (a credential reference), so a model
+// names a Worker and nothing else about the account (ADR-0036/0041).
 //
-// It is the shared [clientreg.Registry], which also carries *why* a configured
-// connector is missing from it — the difference between "never configured" and
-// "configured and broken", which is what a parked token has to be able to say
-// (ADR-0158).
+// It is the shared [clientreg.Registry], which also carries *why* a configured Worker
+// is missing from it — the difference between "never configured" and "configured and
+// broken", which is what a parked token has to be able to say (ADR-0158).
 type Registry = clientreg.Registry[Client]
 
-// NewRegistry creates an empty connector registry.
+// NewRegistry creates an empty Worker registry.
 func NewRegistry() *Registry { return clientreg.New[Client]() }

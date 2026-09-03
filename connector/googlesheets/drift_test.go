@@ -8,14 +8,14 @@ import (
 	gs "github.com/pblumer/atlas/connector/googlesheets"
 )
 
-// TestGoogleSheetsOpsMatchTheConnector is the drift guard between this package's [Ops]
+// TestGoogleSheetsOpsMatchTheWorkerType is the drift guard between this package's [Ops]
 // table and the compiler's own copy of the operation rules.
 //
 // The compiler cannot import this package — connector/googlesheets imports compiler,
 // so the dependency only runs one way — which is why the rules exist twice. The check
 // is therefore behavioural: for every operation, a model supplying exactly what Ops
 // says is required must compile, and a model missing any one of those values must not.
-func TestGoogleSheetsOpsMatchTheConnector(t *testing.T) {
+func TestGoogleSheetsOpsMatchTheWorkerType(t *testing.T) {
 	// attrsFor builds the smallest model that satisfies one operation, optionally
 	// leaving out the one value named by omit.
 	attrsFor := func(op string, spec gs.Op, omit string) string {
@@ -115,7 +115,7 @@ func TestGoogleSheetsOpsMatchTheConnector(t *testing.T) {
 // so a routed operation fails on the *transport*; only an unrouted one is reported as
 // unknown, which is what this separates.
 func TestEveryOpIsImplemented(t *testing.T) {
-	c := gs.NewHTTPClient(gs.Connector{Tokens: staticToken("tok"), SheetsBase: "http://127.0.0.1:1", DriveBase: "http://127.0.0.1:1"})
+	c := gs.NewHTTPClient(gs.Account{Tokens: staticToken("tok"), SheetsBase: "http://127.0.0.1:1", DriveBase: "http://127.0.0.1:1"})
 	for op := range gs.Ops {
 		_, err := c.Do(t.Context(), gs.Request{Operation: op, Spreadsheet: "1B", Range: "A1", Sheet: "S", Title: "T"})
 		if err == nil {

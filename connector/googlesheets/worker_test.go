@@ -48,7 +48,7 @@ func (r *recordingClient) Do(_ context.Context, req gs.Request) (any, error) {
 	return r.result, r.err
 }
 
-// ListFiles is the inbound half of the interface; the outbound worker never calls it.
+// ListFiles is the inbound half of the interface; the outbound handler never calls it.
 func (r *recordingClient) ListFiles(context.Context, gs.FileQuery) ([]map[string]any, error) {
 	return r.files, r.err
 }
@@ -160,7 +160,7 @@ func TestHandlerProjectsAScalarRow(t *testing.T) {
 
 // TestHandlerFailsAValuesShapeItCannotWrite: the refusal belongs to the resolve step,
 // where the message can name the fix, rather than to Google as a 400 on a request the
-// connector should never have built.
+// client should never have built.
 func TestHandlerFailsAValuesShapeItCannotWrite(t *testing.T) {
 	rd, lookup := workerFixture(t,
 		`<atlas:googleSheetsConnector connector="acme" operation="append-row" spreadsheet="1B" range="A:C" values="=zeilen"/>`,
@@ -197,14 +197,14 @@ func TestHandlerDiscardsWhenNoResultVariable(t *testing.T) {
 	}
 }
 
-// TestHandlerUnknownConnectorSaysSo: the name in the model and the names the server
+// TestHandlerUnknownWorkerSaysSo: the name in the model and the names the server
 // holds have drifted, and that is the actionable half of the failure (ADR-0158).
-func TestHandlerUnknownConnectorSaysSo(t *testing.T) {
+func TestHandlerUnknownWorkerSaysSo(t *testing.T) {
 	rd, lookup := workerFixture(t,
 		`<atlas:googleSheetsConnector connector="woanders" operation="clear-range" spreadsheet="1B" range="A2:F"/>`)
 	_, err := gs.Handler(rd, lookup, registered(&recordingClient{}))(job.Job{Key: 1, ElementInstanceKey: 42})
 	if err == nil || !strings.Contains(err.Error(), "woanders") {
-		t.Errorf("unknown connector: want an error naming it, got %v", err)
+		t.Errorf("unknown Worker: want an error naming it, got %v", err)
 	}
 }
 

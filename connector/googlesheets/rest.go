@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
-// The two API bases this connector speaks. Sheets owns cells; Drive owns the file the
+// The two API bases this Worker Type speaks. Sheets owns cells; Drive owns the file the
 // cells live in — which is why creating one in a folder and trashing one are Drive
 // calls even though the object is a spreadsheet
 // (ADR-draft-google-sheets-worker).
@@ -27,11 +27,11 @@ const (
 // mail or a task description.
 const driveFileFields = "id,name,parents,webViewLink,mimeType"
 
-// Connector is the server-side configuration of one Google account: a token source and
+// Account is the server-side configuration of one Google identity: a token source and
 // the two API bases (empty means Google's own, overridden only by tests and by an
 // operator behind a proxy). The credential itself lives behind Tokens and is never
 // persisted (I6).
-type Connector struct {
+type Account struct {
 	Tokens     TokenSource
 	SheetsBase string
 	DriveBase  string
@@ -40,15 +40,15 @@ type Connector struct {
 // HTTPClient calls the real Sheets and Drive APIs. It is stateless beyond its cached
 // token source, so it is safe for concurrent use by the worker.
 type HTTPClient struct {
-	conn Connector
+	conn Account
 	http *http.Client
 }
 
-// NewHTTPClient builds a Google client for a configured connector, bounded by the
-// shared connector call budget (ADR-0149). The worker may run on the run-loop
+// NewHTTPClient builds a Google client for one configured account, bounded by the
+// shared outbound call budget (ADR-0149). The worker may run on the run-loop
 // goroutine, so an unbounded call would let a hung Google stall the whole engine; see
 // the nettimeout package doc.
-func NewHTTPClient(conn Connector) *HTTPClient {
+func NewHTTPClient(conn Account) *HTTPClient {
 	conn.SheetsBase = base(conn.SheetsBase, sheetsDefaultBase)
 	conn.DriveBase = base(conn.DriveBase, driveDefaultBase)
 	return &HTTPClient{conn: conn, http: nettimeout.HTTPClient()}
@@ -249,7 +249,7 @@ func (c *HTTPClient) batchUpdate(ctx context.Context, req Request, request map[s
 		map[string]any{"requests": []any{request}}, req)
 }
 
-// sheetURL, valuesURL and driveURL build the three URL shapes this connector uses. The
+// sheetURL, valuesURL and driveURL build the three URL shapes this Worker Type uses. The
 // range is path-escaped: A1 notation carries '!' and ':' which Google reads, and a
 // sheet title carries whatever a person typed.
 func (c *HTTPClient) sheetURL(id string, q url.Values) string {

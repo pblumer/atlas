@@ -405,12 +405,11 @@ type Server struct {
 	// jobs on the run loop, so it needs no lock.
 	jiraRegistry *jira.Registry
 
-	// googleSheetsRegistry resolves a connector name to a Google client (Sheets v4 and
-	// Drive v3) for Google Sheets connector tasks
-	// (ADR-draft-google-sheets-worker), built from the managed connector store at
-	// startup and rebuilt on every connector change, with each connector's OAuth
-	// credential bundle resolved from the vault (ADR-0041). Read only while driving
-	// jobs on the run loop, so it needs no lock.
+	// googleSheetsRegistry resolves a Worker name to a Google client (Sheets v4 and
+	// Drive v3) for Google Sheets tasks (ADR-draft-google-sheets-worker), built from
+	// the Worker store at startup and rebuilt on every change to it, with each
+	// Worker's OAuth credential bundle resolved from the vault (ADR-0041). Read only
+	// while driving jobs on the run loop, so it needs no lock.
 	googleSheetsRegistry *googlesheets.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the

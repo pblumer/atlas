@@ -5326,15 +5326,15 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The operation, the spreadsheet, the range and the already-projected rows
 		// travel; the service account's private key does not. Google Sheets is Jira's
 		// situation exactly — one operator-managed credential behind a name
-		// (ADR-draft-google-sheets-worker) — so what names it is the connector's name,
-		// resolved against the worker's own configuration. That is also what lets a
-		// worker act as a different Google identity from anything the engine holds.
+		// (ADR-draft-google-sheets-worker) — so what travels is the *Worker's* name,
+		// resolved against the Worker Instance's own configuration. That is also what
+		// lets it act as a different Google identity from anything the engine holds.
 		j, err := googlesheets.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
 		return &connectorPayload{Kind: "googlesheets", Fields: map[string]any{
-			"connector": j.Connector, "operation": j.Operation, "spreadsheet": j.Spreadsheet,
+			"connector": j.Worker, "operation": j.Operation, "spreadsheet": j.Spreadsheet,
 			"sheet": j.Sheet, "range": j.Range, "title": j.Title, "folder": j.Folder,
 			"values": j.Values, "input": j.Input, "header": j.Header,
 			"requestId": j.RequestID, "resultVariable": j.ResultVariable,

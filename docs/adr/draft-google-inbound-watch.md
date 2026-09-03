@@ -69,7 +69,7 @@ one skipped publish rather than one duplicated process.
   never inside `applyToState` (I4). The publish is durable before it is acted on (I2).
 - **Correctness under at-least-once.** A re-read must not double-start a process — and
   must not silently drop an event either, which is the half that is easy to get wrong.
-- **No new credential surface.** The watch names a connector; the credential stays in
+- **No new credential surface.** The watch names a Worker; the credential stays in
   the vault.
 - **The loop guard applies unchanged.** A process started by a row that writes a row is
   a feedback loop, and [ADR-0225](0225-inbound-watch-budget.md)'s per-hour ceiling
@@ -78,7 +78,7 @@ one skipped publish rather than one duplicated process.
 ## Considered options
 
 1. **Two polled watches on the existing bridge** — a sheet row watch and a Drive folder
-   watch, sharing one connector kind and one credential.
+   watch, sharing one Worker Type and one credential.
 2. **Google Drive push notifications** (`changes.watch`), which POST to a public HTTPS
    endpoint Atlas would have to expose.
 3. **A Google Apps Script** on the sheet, posting to `POST /api/v1/messages`.
@@ -90,7 +90,7 @@ Chosen option: **1 — two polled watches on the existing bridge**, distinguishe
 target the subscription names, with the row watch on the scalar mark and the folder
 watch on a per-file mark.
 
-A subscription on a `googlesheets` connector names **exactly one** of:
+A subscription on a `googlesheets` Worker names **exactly one** of:
 
 - `spreadsheetId` (with an optional `watchRange` and `headerRow`) — a **row watch**.
   The cursor is the number of rows seen; each row beyond it is one event, sequenced by
@@ -102,8 +102,8 @@ A subscription on a `googlesheets` connector names **exactly one** of:
   timestamp in milliseconds.
 
 Naming both, or neither, is refused when the watch is created — the same place a clio
-watch is refused a `jql`. Which set of fields applies is decided by the connector's
-kind plus the target, never by a discriminator column, so no stored record needs a
+watch is refused a `jql`. Which set of fields applies is decided by the Worker's type
+plus the target, never by a discriminator column, so no stored record needs a
 migration.
 
 ### Why polling, again

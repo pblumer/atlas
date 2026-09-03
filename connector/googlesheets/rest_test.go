@@ -65,7 +65,7 @@ func newFakeGoogle(t *testing.T, routes map[string]string) *fakeGoogle {
 }
 
 func (f *fakeGoogle) client() *gs.HTTPClient {
-	return gs.NewHTTPClient(gs.Connector{Tokens: staticToken("tok"), SheetsBase: f.srv.URL, DriveBase: f.srv.URL})
+	return gs.NewHTTPClient(gs.Account{Tokens: staticToken("tok"), SheetsBase: f.srv.URL, DriveBase: f.srv.URL})
 }
 
 const sheetID = "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
@@ -265,7 +265,7 @@ func TestClearRange(t *testing.T) {
 
 // TestDeleteSheetResolvesTitleToID: Sheets deletes a tab by numeric id, and a model
 // tied to a numeric id is tied to one spreadsheet's internals — so the title is
-// resolved first, the way the Jira connector resolves a transition name.
+// resolved first, the way the Jira Worker Type resolves a transition name.
 func TestDeleteSheetResolvesTitleToID(t *testing.T) {
 	f := newFakeGoogle(t, map[string]string{
 		"GET /v4/spreadsheets/" + sheetID:                   `{"sheets":[{"properties":{"sheetId":0,"title":"Tabelle1"}},{"properties":{"sheetId":13,"title":"Alt"}}]}`,
@@ -328,7 +328,7 @@ func TestErrorsCarryGooglesMessage(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":{"code":403,"message":"Request had insufficient authentication scopes."}}`))
 	}))
 	defer srv.Close()
-	c := gs.NewHTTPClient(gs.Connector{Tokens: staticToken("tok"), SheetsBase: srv.URL, DriveBase: srv.URL})
+	c := gs.NewHTTPClient(gs.Account{Tokens: staticToken("tok"), SheetsBase: srv.URL, DriveBase: srv.URL})
 	_, err := c.Do(context.Background(), gs.Request{Operation: "read-range", Spreadsheet: sheetID, Range: "A1"})
 	if err == nil {
 		t.Fatal("a 403: want an error, got nil")
@@ -341,10 +341,10 @@ func TestErrorsCarryGooglesMessage(t *testing.T) {
 	}
 }
 
-// TestUnknownOperationLists what the connector does implement — the same courtesy the
+// TestUnknownOperationLists what this package does implement — the same courtesy the
 // compiler already extends at deploy.
 func TestUnknownOperation(t *testing.T) {
-	c := gs.NewHTTPClient(gs.Connector{Tokens: staticToken("tok")})
+	c := gs.NewHTTPClient(gs.Account{Tokens: staticToken("tok")})
 	_, err := c.Do(context.Background(), gs.Request{Operation: "pivot"})
 	if err == nil || !strings.Contains(err.Error(), "read-range") {
 		t.Errorf("unknown operation: want an error listing the operations, got %v", err)
@@ -352,10 +352,10 @@ func TestUnknownOperation(t *testing.T) {
 }
 
 // TestTokenFailureIsNotACall: a credential that cannot mint a token must fail before
-// any request, so a broken connector never reaches Google at all.
+// any request, so a broken Worker never reaches Google at all.
 func TestTokenFailureIsNotACall(t *testing.T) {
 	f := newFakeGoogle(t, map[string]string{})
-	c := gs.NewHTTPClient(gs.Connector{Tokens: failingToken{}, SheetsBase: f.srv.URL, DriveBase: f.srv.URL})
+	c := gs.NewHTTPClient(gs.Account{Tokens: failingToken{}, SheetsBase: f.srv.URL, DriveBase: f.srv.URL})
 	if _, err := c.Do(context.Background(), gs.Request{Operation: "read-range", Spreadsheet: sheetID, Range: "A1"}); err == nil {
 		t.Fatal("want the token error, got nil")
 	}

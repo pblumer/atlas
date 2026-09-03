@@ -738,11 +738,11 @@ func validateInboundWatch(kind string, rec *inboundSubscription) string {
 	case "":
 		return "no connector with that id"
 	default:
-		return "connector kind " + kind + " has no inbound half: only clio, jira and googlesheets connectors can carry a watch"
+		return "the Worker Type " + kind + " has no inbound half: only clio, jira and googlesheets Workers can carry a watch"
 	}
 }
 
-// validateGoogleWatch checks a watch on a Google connector. The subscription names
+// validateGoogleWatch checks a watch on a Google Worker. The subscription names
 // exactly one target, and which one it is decides everything else about the watch
 // (ADR-draft-google-inbound-watch) — so naming both, or neither, is refused here
 // rather than resolved by a precedence rule nobody would remember.

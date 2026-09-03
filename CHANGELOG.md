@@ -21,6 +21,13 @@ _Changed_ / _Removed_ for each version.
   Google needs a signed JWT-bearer assertion, which the generic REST Worker Type's
   bearer/basic/apiKey surface cannot produce, so the gap was structural.
 
+  Everything a person reads about it says **Worker**, per ADR-0203. The old spelling
+  survives only where changing it would break something: the `connector/` package path,
+  the `connector="…"` attribute and the `<atlas:googleSheetsConnector>` element (both
+  authored in deployed models, and the guard that stops bpmn-js silently dropping an
+  extension only recognizes `*Connector` elements), and the `"connector"` key in the
+  offload payload.
+
   **Outbound** ([ADR-draft-google-sheets-worker](docs/adr/draft-google-sheets-worker.md))
   is eight operations that are steps a process takes: create a spreadsheet, add a tab,
   read a range, write one, append rows, clear a range, delete a tab, move the file to
@@ -50,9 +57,9 @@ _Changed_ / _Removed_ for each version.
   place; the sheets people watch are the append-only ones.
 
 - **The Google service-account grant is now shared machinery.** `connector/oauth2` had
-  named it "the one such case" a caller supplies its own `Fetcher` for. A second
-  connector needs it, and two copies of a JWT signer is the duplication that package was
-  extracted to end, so it moved into `oauth2.ServiceAccount` and the mail connector
+  named it "the one such case" a caller supplies its own `Fetcher` for. A second caller
+  needs it, and two copies of a JWT signer is the duplication that package was
+  extracted to end, so it moved into `oauth2.ServiceAccount` and the mail Worker Type
   delegates to it.
 
 - **Data stores: saying where a class is kept.** BPMN has a `<dataStoreReference>` —

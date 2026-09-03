@@ -15,16 +15,16 @@ import (
 )
 
 // ProcessLookup resolves a process-definition key to its compiled process. The worker
-// uses it to find the connector name, operation and authored values a Google Sheets
-// job belongs to, so one handler serves every deployed process.
+// uses it to find the Worker name, operation and authored values a Google Sheets job
+// belongs to, so one handler serves every deployed process.
 type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
-// Handler builds a job handler that performs a Google Sheets connector task. Register
+// Handler builds a job handler that performs a Google Sheets task. Register
 // it with a [job.Runner] under the reserved [compiler.GoogleSheetsJobTypeIndex] via
 // HandleWithOutput; the runner then pulls activatable jobs, and for each the handler
-// resolves the task's connector and authored values from the compiled process —
+// resolves the task's Worker and authored values from the compiled process —
 // evaluating any FEEL value over the variables the task sees, up its scope chain (the
-// fx toggle, ADR-0067/0068) — resolves the named connector's client from reg, performs
+// fx toggle, ADR-0067/0068) — resolves the named Worker's client from reg, performs
 // the one operation, and (when the task names a result variable and Google returned
 // something) returns what Google answered as that variable to be written back on
 // completion.
@@ -71,11 +71,11 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Output
 // processInstanceKey — which is what puts a traceable back-reference into a row.
 const builtinProcessInstanceKey = "processInstanceKey"
 
-// resolveValue turns an authored connector value into a string: a literal verbatim, or
+// resolveValue turns an authored task value into a string: a literal verbatim, or
 // a FEEL expression evaluated over the scope's variables and coerced to its string
 // form. A FEEL null — an absent variable or a failed evaluation — becomes the empty
 // string, matching the engine's null-propagating contract (as the REST, SharePoint and
-// Jira workers' values do).
+// Jira Worker Types' values do).
 func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue) string {
 	if rv.Expr == nil {
 		return rv.Literal

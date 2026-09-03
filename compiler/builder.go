@@ -350,7 +350,7 @@ const JiraJobType = "io.atlas.jira"
 // the mail worker uses MailJobTypeIndex.
 const JiraJobTypeIndex int32 = 25
 
-// GoogleSheetsJobType is the reserved job type a Google Sheets connector task carries
+// GoogleSheetsJobType is the reserved job type a Google Sheets task carries
 // (ADR-draft-google-sheets-worker). One job type serves every spreadsheet operation —
 // create a spreadsheet, add a sheet, read, write, append, clear, delete a sheet or
 // trash the file — because they share a credential and an error envelope; the
@@ -1777,10 +1777,11 @@ func (b *Builder) AddJiraConnectorTask(cfg JiraConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// GoogleSheetsConfig is the deploy-time configuration of a Google Sheets connector
-// task (ADR-draft-google-sheets-worker). Connector names the server-registered Google
-// credential (which lives server-side, never in the model) and Operation is the
-// spreadsheet operation. The remaining values are the ones that operation takes —
+// GoogleSheetsConfig is the deploy-time configuration of a Google Sheets task
+// (ADR-draft-google-sheets-worker). Worker names the Google identity an operator
+// configured (whose credential lives server-side, never in the model) and Operation is
+// the spreadsheet operation. It is read from the task's `connector="…"` attribute,
+// which keeps the pre-ADR-0203 spelling because it is authored in deployed models. The remaining values are the ones that operation takes —
 // literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over the
 // variables the task sees at call time.
 //
@@ -1790,7 +1791,7 @@ func (b *Builder) AddJiraConnectorTask(cfg JiraConfig) int32 {
 // the runtime interprets nothing (I5). ResultVar, if set, is the process variable what
 // Google returned is written back into.
 type GoogleSheetsConfig struct {
-	Connector   string
+	Worker      string
 	Operation   string
 	Spreadsheet RestExpr
 	Sheet       RestExpr
@@ -1805,19 +1806,22 @@ type GoogleSheetsConfig struct {
 	Retries     int32
 }
 
-// AddGoogleSheetsConnectorTask adds a Google Sheets connector task and returns its
-// element id. Like a service task it creates a job on activation and waits; the job
-// carries the reserved GoogleSheetsJobType so the in-process Google Sheets worker
-// picks it up, evaluates the authored literal-or-FEEL values over the variables the
-// task sees, resolves the named connector's client, performs the one operation, writes
-// what Google returned into ResultVar (empty = discard it), and completes the job. The
-// credential is resolved server-side from the named connector, never authored in the
-// model — mirroring Jira and SharePoint (ADR-0141/0201).
+// AddGoogleSheetsConnectorTask adds a Google Sheets task and returns its element id.
+// Like a service task it creates a job on activation and waits; the job carries the
+// reserved GoogleSheetsJobType so the in-process Google Sheets handler picks it up,
+// evaluates the authored literal-or-FEEL values over the variables the task sees,
+// resolves the named Worker's client, performs the one operation, writes what Google
+// returned into ResultVar (empty = discard it), and completes the job. The credential
+// is resolved server-side from the named Worker, never authored in the model —
+// mirroring Jira and SharePoint (ADR-0141/0201).
+//
+// The method keeps the Add*ConnectorTask name its sixteen siblings on this Builder
+// carry; renaming that family is its own step of the ADR-0203 migration.
 func (b *Builder) AddGoogleSheetsConnectorTask(cfg GoogleSheetsConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
 		JobType:       b.intern(GoogleSheetsJobType),
-		Connector:     b.intern(cfg.Connector),
+		Connector:     b.intern(cfg.Worker),
 		Subject:       -1, // not a clio task
 		EventType:     -1,
 		ClioQuery:     -1,

@@ -459,8 +459,8 @@ type UserTaskDetail struct {
 //     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
 //     values (literal-or-FEEL) an incident/entry is created with through the AR System
 //     REST API; ResultVar, if set, receives the created entry's id (ADR-0106).
-//   - Google Sheets (JobType == GoogleSheetsJobType): Connector names the
-//     server-registered Google credential; SheetsOp is the spreadsheet operation and
+//   - Google Sheets (JobType == GoogleSheetsJobType): Connector names the Worker whose
+//     Google credential the server holds; SheetsOp is the spreadsheet operation and
 //     the Sheets* fields below are the values and the shape it takes; ResultVar, if
 //     set, receives what Google returned.
 //   - Jira (JobType == JiraJobType): Connector names the server-registered Jira
@@ -811,10 +811,10 @@ type ConnectorTaskDetail struct {
 	JiraQuery       RestExpr
 	JiraMaxResults  int32
 	JiraFields      []RestKV
-	// Google Sheets connector fields (JobType == GoogleSheetsJobType,
-	// ADR-draft-google-sheets-worker). Connector (above) names the server-registered
-	// Google credential, which lives in the managed connector store and the vault,
-	// never in a model. SheetsOp is the interned operation ("create-spreadsheet"|
+	// Google Sheets fields (JobType == GoogleSheetsJobType,
+	// ADR-draft-google-sheets-worker). Connector (above) names the Worker — the field
+	// keeps that name because the BPMN attribute it is read from does; its credential
+	// lives in the Worker store and the vault, never in a model. SheetsOp is the interned operation ("create-spreadsheet"|
 	// "add-sheet"|"read-range"|"write-range"|"append-row"|"clear-range"|"delete-sheet"|
 	// "delete-spreadsheet"), and it decides which of the rest are populated; the
 	// compiler refuses a value on an operation that does not use it, so a field can
