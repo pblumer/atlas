@@ -5383,8 +5383,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			// format and maxItems are compile-time structural data (ADR-0190) and
 			// decide what the worker *does*: without the format it fetches a feed as
 			// HTML and compiles the (empty) selector, which fails the job with a
-			// complaint about a CSS selector the task never authored.
+			// complaint about a CSS selector the task never authored. fields decides
+			// the same for the result's *shape* — objects or strings
+			// (ADR-draft-webscrape-structured-extraction).
 			"format": j.Format, "maxItems": j.MaxItems,
+			"fields": j.Fields, "absoluteLinks": j.AbsoluteLinks, "plainText": j.PlainText,
 			"resultVariable": j.Result,
 		}}
 	case compiler.RestJobTypeIndex:

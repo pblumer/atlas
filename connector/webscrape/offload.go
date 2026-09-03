@@ -20,29 +20,41 @@ import (
 // with a leased job. Format is always explicit for newly resolved work; an empty
 // value remains HTML for backwards compatibility with pre-ADR-0190 payloads.
 type Job struct {
-	URL       string `json:"url"`
-	Selector  string `json:"selector,omitempty"`
-	Attribute string `json:"attribute,omitempty"`
-	Format    string `json:"format,omitempty"`
-	MaxItems  int32  `json:"maxItems,omitempty"`
+	URL       string  `json:"url"`
+	Selector  string  `json:"selector,omitempty"`
+	Attribute string  `json:"attribute,omitempty"`
+	Fields    []Field `json:"fields,omitempty"`
+	Format    string  `json:"format,omitempty"`
+	MaxItems  int32   `json:"maxItems,omitempty"`
+	// AbsoluteLinks resolves href/src reads against the fetched document's final URL
+	// (HTML); PlainText strips markup from a feed entry's description. Both are
+	// compile-time structure like Format, and both default to the behavior every
+	// model authored before ADR-draft-webscrape-structured-extraction has.
+	AbsoluteLinks bool `json:"absoluteLinks,omitempty"`
+	PlainText     bool `json:"plainText,omitempty"`
 	// Result names the process variable the scraped values are written to; empty
 	// means the task writes nothing back.
 	Result string `json:"resultVariable,omitempty"`
 }
 
-// Result is what running a Job produces. HTML keeps Values as the historical
-// string array; RSS/Atom populate Entries instead. Format tells the handler which
-// result shape to persist without inspecting the returned content.
+// Result is what running a Job produces. HTML with no fields keeps Values as the
+// historical string array; a field scrape populates Records and RSS/Atom populate
+// Entries instead. Format tells the handler which result shape to persist without
+// inspecting the returned content; Records is non-nil for every field scrape, so an
+// empty field result is still a list of objects and not of strings.
 type Result struct {
 	ResultVariable string
 	Format         string
 	Values         []string
+	Records        []map[string]string
 	Entries        []FeedEntry
 }
 
 // Items is what a run's result becomes as the value of the process variable: the
-// scraped strings for an HTML scrape, or the feed's entries as
-// {title, link, description, published} objects for RSS/Atom (ADR-0190).
+// scraped strings for an HTML scrape with no fields, one object per match for a
+// scrape that authored fields (ADR-draft-webscrape-structured-extraction), or the
+// feed's entries as {title, link, description, published, guid, author, categories,
+// image} objects for RSS/Atom (ADR-0190, extended).
 //
 // Both halves call it. The in-process worker renders it through expr and one leased by
 // another process sends it as JSON on the wire, but *what a scrape means* is decided
@@ -50,16 +62,37 @@ type Result struct {
 // list from Values alone, so a feed reached a model as an empty array even on the days
 // the format survived the hand-over at all.
 func Items(res Result) []any {
+	if res.Records != nil {
+		items := make([]any, len(res.Records))
+		for i, record := range res.Records {
+			// Copied into a map[string]any rather than handed over as-is, so the value
+			// crossing into expr is the same kind of thing a feed entry is.
+			fields := make(map[string]any, len(record))
+			for name, value := range record {
+				fields[name] = value
+			}
+			items[i] = fields
+		}
+		return items
+	}
 	if res.Format == formatRSS || res.Format == formatAtom {
 		items := make([]any, len(res.Entries))
 		for i, entry := range res.Entries {
-			// Spelled out rather than marshalled from the struct, so the four keys a
-			// model reads are a decision here and not a consequence of field tags.
+			// Spelled out rather than marshalled from the struct, so the keys a model
+			// reads are a decision here and not a consequence of field tags.
+			categories := make([]any, len(entry.Categories))
+			for c, category := range entry.Categories {
+				categories[c] = category
+			}
 			items[i] = map[string]any{
 				"title":       entry.Title,
 				"link":        entry.Link,
 				"description": entry.Description,
 				"published":   entry.Published,
+				"guid":        entry.Guid,
+				"author":      entry.Author,
+				"categories":  categories,
+				"image":       entry.Image,
 			}
 		}
 		return items
@@ -89,13 +122,34 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		return Job{}, fmt.Errorf("webscrape: compiled task has unknown format %d", detail.ScrapeFormat)
 	}
 	return Job{
-		URL:       resolveValue(detail.Url, piKey, scopeVars),
-		Selector:  resolveValue(detail.ScrapeSelector, piKey, scopeVars),
-		Attribute: cp.Intern(detail.ScrapeAttribute),
-		Format:    format,
-		MaxItems:  detail.ScrapeMaxItems,
-		Result:    cp.Intern(detail.ResultVar),
+		URL:           resolveValue(detail.Url, piKey, scopeVars),
+		Selector:      resolveValue(detail.ScrapeSelector, piKey, scopeVars),
+		Attribute:     cp.Intern(detail.ScrapeAttribute),
+		Fields:        resolveFields(cp, detail.ScrapeFields),
+		Format:        format,
+		MaxItems:      detail.ScrapeMaxItems,
+		AbsoluteLinks: detail.ScrapeAbsoluteLinks,
+		PlainText:     detail.ScrapePlainText,
+		Result:        cp.Intern(detail.ResultVar),
 	}, nil
+}
+
+// resolveFields reads the compiled field list back into the names and selectors a
+// worker acts on. Nil stays nil: a task with no fields is the ADR-0118 string result,
+// and that distinction is what the whole result shape turns on.
+func resolveFields(cp *compiler.CompiledProcess, fields []compiler.ScrapeField) []Field {
+	if len(fields) == 0 {
+		return nil
+	}
+	out := make([]Field, 0, len(fields))
+	for _, f := range fields {
+		out = append(out, Field{
+			Name:      cp.Intern(f.Name),
+			Selector:  cp.Intern(f.Selector),
+			Attribute: cp.Intern(f.Attribute),
+		})
+	}
+	return out
 }
 
 // Run fetches and extracts. The in-process path calls it too, so there is one
@@ -106,14 +160,33 @@ func Run(ctx context.Context, j Job, client Client) (Result, error) {
 		format = formatHTML
 	}
 	req := Request{
-		URL:       j.URL,
-		Selector:  j.Selector,
-		Attribute: j.Attribute,
-		Format:    format,
-		MaxItems:  j.MaxItems,
+		URL:           j.URL,
+		Selector:      j.Selector,
+		Attribute:     j.Attribute,
+		Fields:        j.Fields,
+		Format:        format,
+		MaxItems:      j.MaxItems,
+		AbsoluteLinks: j.AbsoluteLinks,
+		PlainText:     j.PlainText,
 	}
 	switch format {
 	case formatHTML:
+		if len(j.Fields) > 0 {
+			recordClient, ok := client.(RecordClient)
+			if !ok {
+				return Result{}, fmt.Errorf("webscrape: client does not support per-item field extraction")
+			}
+			records, err := recordClient.ScrapeRecords(ctx, req)
+			if err != nil {
+				return Result{}, err
+			}
+			// Never nil for a field scrape, so Items renders objects even when the
+			// selector matched nothing — an empty list of records, not of strings.
+			if records == nil {
+				records = []map[string]string{}
+			}
+			return Result{ResultVariable: j.Result, Format: format, Records: records}, nil
+		}
 		values, err := client.Scrape(ctx, req)
 		if err != nil {
 			return Result{}, err

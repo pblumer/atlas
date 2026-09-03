@@ -24,16 +24,23 @@
       <bpmn:extensionElements><atlas:webscrapeConnector url="https://example.com/feed.xml" format="rss" maxItems="3" resultVariable="headlines"/></bpmn:extensionElements>
       <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:endEvent id="End_1"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:serviceTask id="Activity_rates" name="Read rates">
+      <bpmn:extensionElements><atlas:webscrapeConnector url="https://example.com/zinsen" selector="tr.row" absoluteLinks="true" resultVariable="zinsen"><atlas:scrapeField name="laufzeit" selector="td.term"/><atlas:scrapeField name="link" selector="a" attribute="href"/></atlas:webscrapeConnector></bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_1"><bpmn:incoming>f2</bpmn:incoming></bpmn:endEvent>
     <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Activity_feed"/>
-    <bpmn:sequenceFlow id="f1" sourceRef="Activity_feed" targetRef="End_1"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Activity_feed" targetRef="Activity_rates"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="Activity_rates" targetRef="End_1"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="webscrape-feed">
     <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Activity_feed_di" bpmnElement="Activity_feed"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="420" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_rates_di" bpmnElement="Activity_rates"><dc:Bounds x="420" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="580" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="520" y="138"/><di:waypoint x="580" y="138"/></bpmndi:BPMNEdge>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
@@ -48,8 +55,12 @@
       };
 
       window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });
-      window.__selectFeed = () =>
-        window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get("Activity_feed"));
+      const select = (id) =>
+        window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get(id));
+      window.__selectFeed = () => select("Activity_feed");
+      // The structured-HTML task: item selector plus scrapeField children
+      // (ADR-draft-webscrape-structured-extraction).
+      window.__selectRates = () => select("Activity_rates");
       window.__xml = async () => (await window.__atlasModeler.saveXML({ format: true })).xml;
       window.__ready = true;
     </script>

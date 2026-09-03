@@ -14,6 +14,48 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Web scraping: one row is one record, and the fetch survives the real web**
+  ([ADR-draft-webscrape-structured-extraction](docs/adr/draft-webscrape-structured-extraction.md)).
+  An `<atlas:webscrapeConnector>` now takes `<atlas:scrapeField>` children. With at
+  least one, the selector picks **items** rather than values and every match becomes
+  an object carrying the named fields — title *and* link off the same row, instead of
+  two tasks returning two arrays that a following script re-zips by index (and pairs
+  wrongly from the first item that has no link). With no fields the task is exactly
+  what ADR-0118 described: an array of strings.
+
+  Two switches and three fewer failures come with it:
+
+  - `absoluteLinks="true"` (HTML) resolves `href`/`src` reads against the URL the page
+    was actually served from — a relative path is not something a process can open,
+    mail, or store.
+  - `plainText="true"` (RSS/Atom) strips the markup from a feed entry's `description`,
+    where that text is put in front of a person.
+  - Feed entries additionally carry `guid`, `author`, `categories` and `image`. `guid`
+    is the identity a daily run deduplicates on; a title cannot do that, because
+    publishers edit titles.
+  - **Character sets:** a feed declaring `encoding="ISO-8859-1"` used to fail outright
+    (`Decoder.CharsetReader is nil`), and a Latin-1 page arrived in the process as
+    mojibake. Both are now decoded as the document declares.
+  - **RSS 1.0/RDF** (`<rdf:RDF>`, `dc:date`, `dc:creator`) is read under
+    `format="rss"`, and `&nbsp;` or a bare `&` no longer rejects a document every
+    reader renders.
+  - **Identity and bounds:** requests carry their own `User-Agent` instead of Go's
+    anonymous default, which a large share of sites answer with 403; a document past
+    32 MiB fails the job instead of being truncated into a plausible half-result. And
+    fetching an HTML page as a feed now says *which setting* to change, rather than
+    reporting an XML syntax error at line 1.
+
+  The Modeler offers all three: field rows (name / selector / attribute), both
+  switches, and it clears the other mode's settings on a switch instead of leaving a
+  model the compiler rightly rejects.
+
+- **Example: capturing mortgage rates daily**
+  ([`examples/hypothekarzinsen-migrosbank.bpmn`](examples/hypothekarzinsen-migrosbank.bpmn)).
+  A timer start (`0 6 * * *`), a three-field scrape of Migros Bank's rate table, a
+  gateway for the day the selector stops matching, and a still-simulated step that
+  files the rows. It also shows how to address *the* table when six of them share a
+  CSS class: by what it contains (`table:has(th:contains('…'))`), not by where it sits.
+
 - **Data stores: saying where a class is kept.** BPMN has a `<dataStoreReference>` —
   the box on the diagram meaning "this outlives the process" — and says nothing about
   what it holds or what keeps it. Atlas did not even parse it. It does now, and a

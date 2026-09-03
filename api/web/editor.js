@@ -3134,8 +3134,9 @@ const SERVICE_TASK_KINDS = [
   // fill and the white web strokes.
   glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5b5bd6"/><g fill="none" stroke="#fff" stroke-width="1.1"><path d="M8 2.4v11.2M2.4 8h11.2M4 4l8 8M12 4l-8 8"/><circle cx="8" cy="8" r="2.6"/><circle cx="8" cy="8" r="5"/></g></svg>`,
   ext: "atlas:WebscrapeConnector",
-  // Feed formats do not have HTML selector semantics (ADR-0190). Normalizing
-  // before the generic upsert means switching modes cannot leave hidden HTML
+  // Feed formats do not have HTML selector semantics (ADR-0190), and HTML has no
+  // feed description to strip (ADR-draft-webscrape-structured-extraction).
+  // Normalizing before the generic upsert means switching modes cannot leave hidden
   // attributes behind and produce a model the compiler correctly rejects.
   normalize: (props) => {
     const feed = props.format === "rss" || props.format === "atom";
@@ -3143,6 +3144,13 @@ const SERVICE_TASK_KINDS = [
     if (feed) {
       props.selector = undefined;
       props.attribute = undefined;
+      props.fields = undefined;
+      props.absoluteLinks = undefined;
+    } else {
+      props.plainText = undefined;
+      // With fields, each one carries its own attribute; the task-level one would be
+      // ignored, and the compiler refuses the pair rather than ignoring it quietly.
+      if (Array.isArray(props.fields) && props.fields.length > 0) props.attribute = undefined;
     }
   },
   fields: [
@@ -3154,11 +3162,46 @@ const SERVICE_TASK_KINDS = [
       hint: "Selects the parser explicitly. Atlas does not auto-detect a response format at runtime (ADR-0190).",
     },
     { group: "Extraction" },
-    { key: "selector", label: "CSS selector", placeholder: ".headline a", fx: true, showIf: (v) => !v.format || v.format === "html", hint: "HTML only: the CSS selector whose matching elements are extracted. May be a FEEL expression (fx)." },
-    { key: "attribute", label: "Attribute", placeholder: "leave empty for the element's text", showIf: (v) => !v.format || v.format === "html", hint: "HTML only: the attribute read from each match (for example href). Leave empty for text content." },
-    { key: "maxItems", label: "Max items", type: "number", min: 0, placeholder: "0 = unlimited", hint: "Keep only the first N matches or feed entries in document order. Empty or 0 means unlimited." },
+    {
+      key: "selector", label: "CSS selector", placeholder: ".headline a", fx: true,
+      showIf: (v) => !v.format || v.format === "html",
+      hint: (v) => (Array.isArray(v.fields) && v.fields.length > 0
+        ? "HTML only: the CSS selector picking one ITEM per match — each match becomes one object built from the fields below. May be a FEEL expression (fx)."
+        : "HTML only: the CSS selector whose matching elements are extracted. May be a FEEL expression (fx). Add item fields below to get one object per match instead of one string."),
+    },
+    {
+      key: "attribute", label: "Attribute", placeholder: "leave empty for the element's text",
+      showIf: (v) => (!v.format || v.format === "html") && !(Array.isArray(v.fields) && v.fields.length > 0),
+      hint: "HTML only: the attribute read from each match (for example href). Leave empty for text content.",
+    },
+    {
+      key: "fields", label: "Item fields", type: "map", childType: "atlas:ScrapeField",
+      valueKey: "selector", extraKey: "attribute",
+      namePlaceholder: "field name", valuePlaceholder: "selector within the item (empty = the item itself)",
+      extraPlaceholder: "attribute",
+      showIf: (v) => !v.format || v.format === "html",
+      hint: "HTML only: with at least one field, the selector above picks items and each match becomes an object with these keys — title AND link from one row, instead of two tasks returning two arrays. A field whose selector matches nothing is present and empty.",
+    },
+    {
+      key: "absoluteLinks", label: "Absolute links", type: "select",
+      options: [{ v: "", l: "No — keep the page's own spelling" }, { v: "true", l: "Yes — resolve href/src against the page URL" }],
+      showIf: (v) => !v.format || v.format === "html",
+      hint: "HTML only: turns a relative href like /de/detail into the full URL, which is what a mail, a link in a task, or a stored value needs.",
+    },
+    {
+      key: "plainText", label: "Description as plain text", type: "select",
+      options: [{ v: "", l: "No — as the publisher wrote it" }, { v: "true", l: "Yes — strip the HTML markup" }],
+      showIf: (v) => v.format === "rss" || v.format === "atom",
+      hint: "RSS/Atom only: feed descriptions usually contain HTML. Strip it where the text is shown to a person — a mail body, a user task.",
+    },
+    { key: "maxItems", label: "Max items", type: "number", min: 0, placeholder: "0 = unlimited", hint: "Keep only the first N matches, items or feed entries in document order. Empty or 0 means unlimited." },
     { group: "Output" },
-    { key: "resultVariable", label: "Result variable", resultType: "array", placeholder: "matches", hint: "HTML writes an array of strings. RSS/Atom write an array of objects with title, link, description, and published." },
+    {
+      key: "resultVariable", label: "Result variable", resultType: "array", placeholder: "matches",
+      hint: (v) => (Array.isArray(v.fields) && v.fields.length > 0
+        ? "One object per match, carrying the item fields above."
+        : "HTML writes an array of strings. RSS/Atom write an array of objects with title, link, description, published, guid, author, categories, and image."),
+    },
   ],
 },
   {
@@ -3236,13 +3279,22 @@ function selectOption(o) {
   return typeof o === "string" ? { v: o, l: o } : o;
 }
 
-// stMapRowHTML renders one key/value row of a map field (a header or query param).
-// The value is a 1-row textarea so the fx toggle can upgrade it to a FEEL editor in
-// place (a plain input can't host the code editor).
-function stMapRowHTML(fieldKey, name, value) {
-  return `<div class="st-map-row" data-field="${esc(fieldKey)}" style="display:flex;gap:6px;margin-bottom:6px;align-items:start">
-    <input type="text" class="st-map-name" value="${esc(name || "")}" placeholder="name" style="flex:0 0 40%"/>
-    <textarea class="st-map-value" rows="1" spellcheck="false" placeholder="value" style="flex:1;resize:none">${esc(value || "")}</textarea>
+// stMapRowHTML renders one row of a map field (a header, a query param, a scrape
+// field). The value is a 1-row textarea so the fx toggle can upgrade it to a FEEL
+// editor in place (a plain input can't host the code editor).
+//
+// A map is name/value by default. A field that declares valueKey/extraKey writes its
+// row into differently named moddle attributes and gets a third cell — which is how a
+// web-scrape field says name + selector + attribute in one row without a second
+// bespoke editor.
+function stMapRowHTML(f, name, value, extra) {
+  const extraCell = f.extraKey
+    ? `<input type="text" class="st-map-extra" value="${esc(extra || "")}" placeholder="${esc(f.extraPlaceholder || f.extraKey)}" style="flex:0 0 22%"/>`
+    : "";
+  return `<div class="st-map-row" data-field="${esc(f.key)}" style="display:flex;gap:6px;margin-bottom:6px;align-items:start">
+    <input type="text" class="st-map-name" value="${esc(name || "")}" placeholder="${esc(f.namePlaceholder || "name")}" style="flex:0 0 ${f.extraKey ? "26%" : "40%"}"/>
+    <textarea class="st-map-value" rows="1" spellcheck="false" placeholder="${esc(f.valuePlaceholder || "value")}" style="flex:1;resize:none">${esc(value || "")}</textarea>
+    ${extraCell}
     <button type="button" class="st-map-del" title="Remove" style="flex:0 0 auto">✕</button>
   </div>`;
 }
@@ -3371,7 +3423,8 @@ function stKindFieldsHTML(cur, ext) {
       : field;
     if (f.type === "map") {
       const list = Array.isArray(ext[f.key]) ? ext[f.key] : [];
-      const rowsHTML = list.map((kv) => stMapRowHTML(f.key, kv.name, kv.value)).join("");
+      const valueKey = f.valueKey || "value";
+      const rowsHTML = list.map((kv) => stMapRowHTML(f, kv.name, kv[valueKey], f.extraKey ? kv[f.extraKey] : "")).join("");
       fields += `<div class="field"><span>${esc(f.label)}</span>
         <div class="st-map" data-field="${esc(f.key)}" data-childtype="${esc(f.childType)}">
           <div class="st-map-rows">${rowsHTML}</div>
@@ -6061,10 +6114,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // from its rows, keeping only rows with a name (an unnamed row is incomplete).
     const readMapField = (f) => {
       const out = [];
+      const valueKey = f.valueKey || "value";
       body.querySelectorAll(`.st-map-row[data-field="${f.key}"]`).forEach((r) => {
         const name = (r.querySelector(".st-map-name").value || "").trim();
         if (!name) return;
-        out.push(stModdle.create(f.childType, { name, value: r.querySelector(".st-map-value").value || "" }));
+        const props = { name };
+        const value = r.querySelector(".st-map-value").value || "";
+        // An empty header value is a header the author wrote; an empty scrape-field
+        // selector means "the item itself" and is better left off the element than
+        // written as selector="".
+        if (value !== "" || valueKey === "value") props[valueKey] = value;
+        if (f.extraKey) {
+          const extra = (r.querySelector(".st-map-extra").value || "").trim();
+          if (extra) props[f.extraKey] = extra;
+        }
+        out.push(stModdle.create(f.childType, props));
       });
       return out;
     };
@@ -6163,7 +6227,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       cont.addEventListener("click", (e) => {
         if (e.target.closest(".st-map-add")) {
           e.preventDefault();
-          cont.querySelector(".st-map-rows").insertAdjacentHTML("beforeend", stMapRowHTML(f.key, "", ""));
+          cont.querySelector(".st-map-rows").insertAdjacentHTML("beforeend", stMapRowHTML(f, "", "", ""));
           if (f.fx) stAttachFx(cont.querySelector(".st-map-row:last-child .st-map-value"));
         } else if (e.target.closest(".st-map-del")) {
           e.preventDefault();

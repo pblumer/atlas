@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Hypothekarzinsen der Migros Bank (ADR-0118 + ADR-draft-webscrape-structured-extraction)
+  — eine HTML-Tabelle als Prozessdaten, jeden Morgen.
+
+  Das Gegenstück zu blick-schlagzeilen.bpmn: dort liefert die Quelle einen fertig
+  strukturierten RSS-Feed, hier gibt es nur eine HTML-Seite. Trotzdem kommt pro
+  Tabellenzeile **ein Objekt** heraus und nicht drei unabhängige String-Listen,
+  die ein Folgeskript nach Index wieder zusammenfädeln müsste.
+
+    Timer-Start "täglich 06:00"        timeCycle 0 6 * * * (ADR-0051)
+     -> [webscrape html]  holt die Zinsseite, Selektor trifft die *Zeilen* der
+                          Online-Hypothek-Tabelle, je Zeile drei scrapeField
+                          -> `zinssaetze` = [ { laufzeit, vorzugszins, standardzins } ]
+     -> (Zinssätze gefunden?)  count(zinssaetze) = 0 -> Ende "nichts gefunden"
+     -> [Script]          `tabellenzeilen` = dieselben Zeilen mit Abrufdatum und
+                          als Zahl geparstem Zinssatz — die Gestalt, die ein
+                          Tabellenblatt erwartet
+     -> [Mockup]          "In Google-Sheet ablegen" — der noch offene Schritt
+     -> Ende "abgelegt"
+
+  Vier Dinge, die das Beispiel zeigt:
+
+  1. **Ein Treffer ist ein Datensatz.** Der Selektor wählt die Tabellenzeile, die
+     scrapeField-Kinder wählen darin die einzelnen Zellen. Ohne Felder wäre der Task das,
+     was er vor ADR-draft-webscrape-structured-extraction war: eine flache Liste von
+     Strings. Beides gibt es weiterhin; welche Gestalt herauskommt, entscheidet das
+     Modell.
+  2. **Der Selektor identifiziert die Tabelle über ihren Inhalt.** Die Seite trägt
+     sechs Tabellen mit identischer Klasse `Table table table-hover` — Online-Hypothek,
+     Eco-Vergünstigung, Forward, SARON, Variable, Hypolimite. `table:has(th:contains(…))`
+     greift genau die heraus, deren Kopfzeile "Online-Hypothek" nennt. Ein
+     `table:nth-of-type(1)` täte das *nicht*: jede Tabelle ist die erste ihres
+     eigenen Elternelements, der Selektor träfe also alle sechs. Das ist der
+     Unterschied zwischen "die Tabelle, die ich meine" und "die Tabelle, die heute
+     zufällig zuoberst steht".
+  3. **Ein leeres Ergebnis ist ein Fall, kein Fehler.** Baut die Bank ihre Seite um,
+     trifft der Selektor nichts — der Scrape ist erfolgreich, das Ergebnis eine leere
+     Liste. Ohne das Gateway würde still eine leere Zeile ins Tabellenblatt wandern
+     und niemand merkte, dass seit Wochen nichts mehr ankommt.
+  4. **Zahl statt Text, einmal und früh.** Die Seite schreibt "1.130 %". Ein
+     Tabellenblatt, das damit rechnen soll, braucht 1.13 — also parst das Skript
+     den Wert an der Stelle, an der er ankommt, und nicht in jeder späteren Formel.
+     Das Rohfeld bleibt daneben stehen: was die Quelle sagte, ist ebenso Teil des
+     Belegs wie das, was Atlas daraus gemacht hat.
+
+  **Der offene Schritt.** "In Google-Sheet ablegen" ist ein Mockup-Task (ADR-0120):
+  die Engine simuliert ihn selbst, damit der Prozess heute schon end-to-end läuft.
+  Zu ersetzen ist genau dieser eine Task — durch einen REST-Task auf
+  `POST https://sheets.googleapis.com/v4/spreadsheets/{id}/values/{tab}:append?valueInputOption=USER_ENTERED`
+  mit einem OAuth-Credential aus dem Vault (ADR-0041/0069), dessen Body die
+  `tabellenzeilen` als `{"values": [[…], …]}` schickt. Alles davor bleibt, wie es
+  ist: der Prozess weiss bereits, *was* abzulegen ist.
+
+  Läuft ohne Konfiguration: webscrape ist einer der standardmässig ausgelagerten
+  Worker-Typen (ADR-0164), Atlas startet die Worker-Instanz also selbst. Kein
+  Credential nötig — die URL steht im Modell, ein Scrape ist ein GET, und ein Retry
+  holt ihn schlicht neu.
+
+  Zum Timer: `0 6 * * *` ist ein Cron-Zyklus, also wanduhr-gebunden — 06:00, und
+  nicht "24 Stunden nach dem Deployment" (das wäre `R/PT24H`). Wer die Seite öfter
+  beobachten will, ändert nur diese fünf Felder.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_hypothekarzinsen_migrosbank"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="proc_hypothekarzinsen_migrosbank" name="Hypothekarzinsen erfassen (Migros Bank)" isExecutable="true">
+    <bpmn:documentation>Liest jeden Morgen um 06:00 die Tabelle "Hypothekarzinsen Online-Hypothek" von migrosbank.ch und legt eine Zeile je Laufzeit ab. Der Web-Scraping-Task liefert dank scrapeField-Kindern pro Tabellenzeile ein Objekt {laufzeit, vorzugszins, standardzins}; ein Inline-FEEL-Skript ergänzt das Abrufdatum und die als Zahl geparsten Zinssätze. Findet der Selektor nichts — etwa nach einem Umbau der Seite — endet der Lauf sichtbar auf "nichts gefunden", statt eine leere Zeile abzulegen. Der Schritt "In Google-Sheet ablegen" ist noch simuliert (Mockup) und durch einen REST-Task auf die Google-Sheets-API zu ersetzen.</bpmn:documentation>
+
+    <bpmn:startEvent id="start_taeglich" name="täglich 06:00">
+      <bpmn:documentation>Cron-Zyklus 0 6 * * *: der Timer erzeugt die Instanz, die Wanduhrzeit ist massgeblich (ADR-0051). Ein Deployment mitten am Tag verschiebt die Uhrzeit also nicht.</bpmn:documentation>
+      <bpmn:outgoing>f_start_holen</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="timer_taeglich">
+        <bpmn:timeCycle>0 6 * * *</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="zinsen_holen" name="Hypothekarzinsen holen">
+      <bpmn:documentation>Der Selektor wählt die Zeilen der Tabelle, deren Kopfzeile "Online-Hypothek" nennt — nicht die erste Tabelle der Seite, denn davon gibt es sechs mit identischer Klasse. Jede Zeile wird zu einem Objekt: die drei scrapeField-Kinder lesen die Zellen 1 bis 3. Ein Feld, dessen Selektor nichts trifft, ist leer statt zu fehlen, deshalb hat jede Zeile dieselbe Gestalt. maxItems="20" ist die Schranke gegen eine Seite, die eines Tages hundert Laufzeiten führt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:webscrapeConnector url="https://www.migrosbank.ch/de/privatpersonen/hypotheken/aktuelle-hypothekarzinsen.html"
+                                  selector="table:has(th:contains('Online-Hypothek')) tr.Table--row"
+                                  maxItems="20"
+                                  resultVariable="zinssaetze"
+                                  retries="3">
+          <atlas:scrapeField name="laufzeit" selector="td:nth-child(1)" />
+          <atlas:scrapeField name="vorzugszins" selector="td:nth-child(2)" />
+          <atlas:scrapeField name="standardzins" selector="td:nth-child(3)" />
+        </atlas:webscrapeConnector>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_holen</bpmn:incoming>
+      <bpmn:outgoing>f_holen_gw</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="gw_gefunden" name="Zinssätze gefunden?" default="f_gw_leer">
+      <bpmn:documentation>Trennt "die Bank hat heute nichts geändert" von "der Selektor trifft nichts mehr". Ein erfolgreicher Scrape mit leerem Ergebnis ist kein Incident — er ist ein Fall, den das Modell benennen muss, sonst fällt der stille Ausfall erst Wochen später auf.</bpmn:documentation>
+      <bpmn:incoming>f_holen_gw</bpmn:incoming>
+      <bpmn:outgoing>f_gw_aufbereiten</bpmn:outgoing>
+      <bpmn:outgoing>f_gw_leer</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:scriptTask id="zeilen_aufbereiten" name="Tabellenzeilen aufbereiten">
+      <bpmn:documentation>Baut aus jedem Treffer die Zeile, die ins Tabellenblatt geht: Abrufdatum, Laufzeit, beide Zinssätze als Zahl und beide im Wortlaut der Quelle. Das Parsen entfernt alles ausser Ziffern, Punkt und Komma und macht aus dem Komma einen Punkt — "1.130 %" wird 1.13, ein "1,130 %" ebenso. Bleibt ein Feld unlesbar, ist die Zahl null und das Rohfeld verrät, warum.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script resultVariable="tabellenzeilen"
+                      expression="= for z in zinssaetze return {datum: string(today()), laufzeit: z.laufzeit, vorzugszins: number(replace(replace(z.vorzugszins, &#34;[^0-9,.]&#34;, &#34;&#34;), &#34;,&#34;, &#34;.&#34;)), standardzins: number(replace(replace(z.standardzins, &#34;[^0-9,.]&#34;, &#34;&#34;), &#34;,&#34;, &#34;.&#34;)), vorzugszinsRoh: z.vorzugszins, standardzinsRoh: z.standardzins}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_gw_aufbereiten</bpmn:incoming>
+      <bpmn:outgoing>f_aufbereiten_sheet</bpmn:outgoing>
+    </bpmn:scriptTask>
+
+    <bpmn:serviceTask id="sheet_ablegen" name="In Google-Sheet ablegen">
+      <bpmn:documentation>Der offene Schritt. Heute simuliert die Engine ihn (ADR-0120), damit der Prozess ohne Google-Credential vollständig durchläuft; die simulierte Antwort nennt nur, wie viele Zeilen angehängt worden wären. Zu ersetzen durch einen REST-Task: POST auf https://sheets.googleapis.com/v4/spreadsheets/{id}/values/{tab}:append?valueInputOption=USER_ENTERED, OAuth-Credential aus dem Vault, Body {"values": [[datum, laufzeit, vorzugszins, standardzins], …]} aus tabellenzeilen. Alles davor bleibt unverändert.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
+                               resultExpression="={ tabelle: &#34;Hypothekarzinsen&#34;, angehaengteZeilen: count(tabellenzeilen), stand: string(today()) }"
+                               resultVariable="sheetAntwort" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_aufbereiten_sheet</bpmn:incoming>
+      <bpmn:outgoing>f_sheet_ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="ende_abgelegt" name="abgelegt">
+      <bpmn:incoming>f_sheet_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="ende_leer" name="nichts gefunden">
+      <bpmn:documentation>Der Lauf endet ohne Ablage. In der Instanzliste ist er von einem erfolgreichen Lauf unterscheidbar — genau das ist der Zweck dieses Zweigs.</bpmn:documentation>
+      <bpmn:incoming>f_gw_leer</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start_holen" sourceRef="start_taeglich" targetRef="zinsen_holen" />
+    <bpmn:sequenceFlow id="f_holen_gw" sourceRef="zinsen_holen" targetRef="gw_gefunden" />
+    <bpmn:sequenceFlow id="f_gw_aufbereiten" name="gefunden" sourceRef="gw_gefunden" targetRef="zeilen_aufbereiten">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"
+                                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">= count(zinssaetze) &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_gw_leer" name="keine" sourceRef="gw_gefunden" targetRef="ende_leer" />
+    <bpmn:sequenceFlow id="f_aufbereiten_sheet" sourceRef="zeilen_aufbereiten" targetRef="sheet_ablegen" />
+    <bpmn:sequenceFlow id="f_sheet_ende" sourceRef="sheet_ablegen" targetRef="ende_abgelegt" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_hypothekarzinsen_migrosbank">
+      <bpmndi:BPMNShape id="di_start_taeglich" bpmnElement="start_taeglich">
+        <dc:Bounds x="152" y="140" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="136" y="180" width="70" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_zinsen_holen" bpmnElement="zinsen_holen">
+        <dc:Bounds x="240" y="118" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_gefunden" bpmnElement="gw_gefunden" isMarkerVisible="true">
+        <dc:Bounds x="410" y="133" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="392" y="98" width="86" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_zeilen_aufbereiten" bpmnElement="zeilen_aufbereiten">
+        <dc:Bounds x="510" y="118" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_sheet_ablegen" bpmnElement="sheet_ablegen">
+        <dc:Bounds x="680" y="118" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_abgelegt" bpmnElement="ende_abgelegt">
+        <dc:Bounds x="850" y="140" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="840" y="180" width="58" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_leer" bpmnElement="ende_leer">
+        <dc:Bounds x="417" y="280" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="399" y="320" width="74" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f_start_holen" bpmnElement="f_start_holen">
+        <di:waypoint x="188" y="158" /><di:waypoint x="240" y="158" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_holen_gw" bpmnElement="f_holen_gw">
+        <di:waypoint x="360" y="158" /><di:waypoint x="410" y="158" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_aufbereiten" bpmnElement="f_gw_aufbereiten">
+        <di:waypoint x="460" y="158" /><di:waypoint x="510" y="158" />
+        <bpmndi:BPMNLabel><dc:Bounds x="463" y="138" width="46" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_leer" bpmnElement="f_gw_leer">
+        <di:waypoint x="435" y="183" /><di:waypoint x="435" y="280" />
+        <bpmndi:BPMNLabel><dc:Bounds x="442" y="200" width="32" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_aufbereiten_sheet" bpmnElement="f_aufbereiten_sheet">
+        <di:waypoint x="630" y="158" /><di:waypoint x="680" y="158" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_sheet_ende" bpmnElement="f_sheet_ende">
+        <di:waypoint x="800" y="158" /><di:waypoint x="850" y="158" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
