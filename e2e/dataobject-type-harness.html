@@ -68,15 +68,37 @@
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
+      // The vocabulary the Type field points at: a class with a business key and one
+      // without, so the card has both readings to show.
+      const MODEL = {
+        id: "m1", name: "Sales data", documentation: "", revision: 3, associations: [], stores: [],
+        classes: [
+          { id: "c1", name: "Order", stereotype: "businessObject", identity: ["id"],
+            attributes: [
+              { name: "id", type: "string", multiplicity: "1" },
+              { name: "total", type: "number", multiplicity: "0..1" },
+            ] },
+          { id: "c2", name: "Customer", stereotype: "businessObject", identity: [],
+            attributes: [{ name: "name", type: "string", multiplicity: "1" }] },
+        ],
+      };
+
       window.__validated = [];
-      const api = async (method, url) => {
+      window.__put = [];
+      const api = async (method, url, body) => {
         if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
         if (method === "GET" && /\/processes$/.test(url)) return [];
         if (method === "GET" && /\/drafts$/.test(url)) return [];
         if (method === "GET" && /\/decisions/.test(url)) return [];
         if (method === "GET" && /\/infomodel\/models\?/.test(url)) return [{ id: "m1", name: "Sales data" }];
-        if (method === "GET" && /\/infomodel\/models\/m1$/.test(url)) {
-          return { id: "m1", classes: [{ id: "c1", name: "Order" }, { id: "c2", name: "Customer" }], associations: [] };
+        if (method === "GET" && /\/infomodel\/models\/m1$/.test(url)) return structuredClone(MODEL);
+        // The class canvas's own write: read, append, put back against the revision.
+        // Mocked here so "Model it now" is exercised end to end rather than stubbed.
+        if (method === "PUT" && /\/infomodel\/models\/m1$/.test(url)) {
+          window.__put.push(structuredClone(body));
+          MODEL.classes = body.classes;
+          MODEL.revision = (MODEL.revision || 0) + 1;
+          return structuredClone(MODEL);
         }
         if (method === "POST" && /\/validate/.test(url)) {
           window.__validated.push(url);

@@ -33,6 +33,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **A data object can be pointed at a class you can see.** The **Type** of a data object
+  in the Modeler is the link the whole information model turns on — it is what lets two
+  processes agree that their `order` is the same kind of thing, and what a write to a
+  member of it is checked against. It was made by remembering a class name and typing it
+  into a box labelled *optional*, with the modelled classes hidden in a `<datalist>` that
+  nothing on the field mentioned.
+
+  The field now offers **the classes this application models**, grouped by the model they
+  live in and each carrying its business key — the fact that tells two similarly named
+  classes apart, and the thing you are actually trying to recall. It fills a free-text
+  field rather than replacing it: a diagram is routinely drawn before the vocabulary it
+  names exists, and typing a class nothing models yet has to stay possible
+  ([ADR-0230](docs/adr/0230-process-information-model.md)).
+
+  Below it, **the class itself is shown** — its kind, its members with their types and
+  cardinalities, and its business key marked exactly as the class canvas marks it — with
+  a link that opens the model in a new tab. Reading a name back tells you nothing about
+  whether it is the right class; its business key does, and that was one application of
+  the console away.
+
+  And when the type names a class nothing models yet, **Model it now** adds it where it
+  belongs instead of sending you off to do it by hand. It is added as a business object
+  with no attributes and no business key: those are the author's to choose, and guessing
+  them would be worse than leaving them open.
+
 - **A data object's value opens as formatted JSON.** In an instance's **Data** tab, a
   structured value showed as `{3 fields}` and the whole of it was reachable only as a
   tooltip — unreadable past a few lines, impossible to scroll, select or copy from, and
