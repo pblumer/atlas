@@ -627,12 +627,12 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   try {
     if (draftId != null) {
       const xml = await api("GET", `/api/v1/drafts/${encodeURIComponent(draftId)}/xml`);
-      await modeler.importXML(repairItemDefinitions(typeof xml === "string" ? xml : String(xml)));
+      await modeler.importXML(repairModel(typeof xml === "string" ? xml : String(xml)));
     } else if (key == null) {
       await modeler.importXML(blankXML());
     } else {
       const xml = await api("GET", `/api/v1/processes/${key}/xml`);
-      await modeler.importXML(repairItemDefinitions(typeof xml === "string" ? xml : String(xml)));
+      await modeler.importXML(repairModel(typeof xml === "string" ? xml : String(xml)));
     }
     modeler.get("canvas").zoom("fit-viewport");
     const pbo = rootProcess(modeler);
@@ -772,6 +772,48 @@ function ensureItemDefinition(modeler, name) {
   created.$parent = defs;
   defs.rootElements.push(created);
   return created;
+}
+
+// repairModel rewrites a model's XML *before* it is imported, declaring what a
+// dangling reference implies. Both repairs exist for the same reason: the bpmn moddle
+// resolves reference attributes on import and silently drops the ones it cannot
+// resolve, so a model that arrives with a dangling reference does not merely look
+// wrong — it comes back from the next save with the reference gone too, and the loss
+// compounds quietly. Repairing on the way in is what stops that.
+function repairModel(xml) {
+  return repairDataObjects(repairItemDefinitions(xml));
+}
+
+// repairDataObjects declares a <dataObject> for every <dataObjectReference> pointing
+// at one the model does not contain.
+//
+// A data object is two elements: the <dataObject> that declares it and holds its
+// type, and the <dataObjectReference> that places it on the canvas with its name, its
+// data state and its shape. Only the second is drawn, so only the second is obviously
+// there — and a model can arrive having lost the first, leaving a box that reads
+// correctly to every human but names nothing the engine can find. Until now that
+// model was refused at deploy with a message about an id nobody had ever typed, and
+// the type set in the panel had nowhere to be written and vanished on every save.
+//
+// The declaration is inserted immediately before the reference, so it lands in the
+// same <process> without this having to work out which process that is. The name goes
+// on it because a data object's identity is its name, and the reference is the half
+// that still knows it.
+function repairDataObjects(xml) {
+  const declared = new Set([...xml.matchAll(/<(?:\w+:)?dataObject\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
+  let repaired = "";
+  let last = 0;
+  for (const m of xml.matchAll(/<((?:\w+:)?)dataObjectReference\b[^>]*>/g)) {
+    const ref = m[0];
+    const id = (ref.match(/\bdataObjectRef="([^"]+)"/) || [])[1];
+    if (!id || declared.has(id)) continue;
+    declared.add(id); // two references may share one lost declaration
+    const name = (ref.match(/\bname="([^"]*)"/) || [])[1];
+    repaired += xml.slice(last, m.index)
+      + `<${m[1]}dataObject id="${id}"${name ? ` name="${name}"` : ""} />`;
+    last = m.index;
+  }
+  return repaired ? repaired + xml.slice(last) : xml;
 }
 
 // repairItemDefinitions rewrites a model's XML *before* it is imported, declaring an

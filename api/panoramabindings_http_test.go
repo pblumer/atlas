@@ -259,9 +259,7 @@ func TestPanoramaBindingCandidatesCarryNoEndpoint(t *testing.T) {
 		t.Errorf("candidates = %s, want the configured worker", raw)
 	}
 	// The property is what a candidate *carries*: an id and a name, which is what a
-	// picker needs, and nothing about how to reach the thing. Checking the fields is
-	// also what makes this stable — a minted id is hex, so one containing "587" made a
-	// substring search for the bare port fail against an answer that leaked nothing.
+	// picker needs, and nothing about how to reach the thing.
 	var listed struct {
 		Candidates []map[string]any `json:"candidates"`
 	}
@@ -278,6 +276,10 @@ func TestPanoramaBindingCandidatesCarryNoEndpoint(t *testing.T) {
 			}
 		}
 	}
+	// The port below is checked with its colon. A bare "587" is three digits, and the
+	// ids in this response are random hex — "3f6d114ad5c5879f" contains it — so the
+	// bare form failed this test on roughly one run in a few hundred, for a reason that
+	// had nothing to do with an endpoint leaking.
 	for _, leak := range []string{"internal-relay", "corp.example", "smtp://", ":587"} {
 		if strings.Contains(string(raw), leak) {
 			t.Errorf("candidates leak %q: %s", leak, raw)

@@ -48,6 +48,24 @@
       }
     },
     {
+      "id": "a-variable-named-after-one-of-your-data-objects-is-now-flagg",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A variable named after one of your data objects is now flagged.",
+        "de": "A variable named after one of your data objects is now flagged."
+      },
+      "summary": {
+        "en": "The new rule variable.shadows-data-object raises a warning where the two collide: draw a data object Kunde, have a task write its result into a variable Kunde — or read the object back into a variable of the same name — and the diagram shows one thing while the instance holds two.",
+        "de": "The new rule variable.shadows-data-object raises a warning where the two collide: draw a data object Kunde, have a task write its result into a variable Kunde — or read the object back into a variable of the same name — and the diagram shows one thing while the instance holds two."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "web-scraping-one-row-is-one-record-and-the-fetch-survives-th",
       "version": "Unreleased",
       "date": null,
@@ -469,52 +487,6 @@
           "de": "Konnektoren öffnen"
         },
         "route": "#/console/connectors"
-      }
-    },
-    {
-      "id": "see-what-a-mockup-run-asked-the-database",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See exactly what a mockup run asked your database",
-        "de": "Sehen, was ein Mockup-Lauf die Datenbank gefragt hat"
-      },
-      "summary": {
-        "en": "When you run a process against the database mockup, you now get to see what it actually asked. Operations, Mock database: one card per worker, every statement in order, and beneath each one the values the process bound to it. The interesting ones are red — those had no prepared answer, so they failed, and reading one and pasting it into the answers under Workers is how you build the seed. That loop now lives entirely in the Console instead of running through the worker's log. Two things are worth knowing before you open it. There is no table to browse: the mockup answers statements and executes none, so an INSERT does not change what a later SELECT returns; what you get is the sequence, not a snapshot of data. And the page is admin-only on purpose, because it shows the values your process bound — a password on its way into a table is a bound parameter like any other, and nothing can tell it apart from an id. Nothing here is stored: restart the worker and its journal is empty, restart Atlas and the view is.",
-        "de": "Wenn Sie einen Prozess gegen den Datenbank-Mockup laufen lassen, sehen Sie jetzt, was er tatsächlich gefragt hat. Betrieb, Mock database: pro Worker eine Karte, jede Anweisung in ihrer Reihenfolge, und darunter die Werte, die der Prozess gebunden hat. Interessant sind die roten — für die gab es keine hinterlegte Antwort, sie sind gescheitert, und eine davon zu lesen und in die Antworten unter Workers zu übernehmen ist der Weg, wie die Startdatei entsteht. Diese Schleife läuft jetzt vollständig in der Konsole statt über das Worker-Log. Zwei Dinge sollten Sie vorher wissen. Es gibt keine Tabelle zum Blättern: Der Mockup beantwortet Anweisungen und führt keine aus, ein INSERT ändert also nicht, was ein späteres SELECT liefert — Sie bekommen die Abfolge, keine Momentaufnahme von Daten. Und die Seite ist bewusst Administratoren vorbehalten, denn sie zeigt die gebundenen Werte: Ein Passwort auf dem Weg in eine Tabelle ist ein gebundener Parameter wie jeder andere, und nichts kann ihn von einer Id unterscheiden. Gespeichert wird nichts: Worker-Neustart leert das Journal, Atlas-Neustart die Ansicht."
-      },
-      "link": {
-        "label": "ADR-0224",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0224-sql-mock-journal.md"
-      },
-      "tags": [
-        "Operations",
-        "Databases",
-        "Testing"
-      ],
-      "tutorial": {
-        "en": [
-          "Turn the mockup on under Organization › Workers, the Databases card, and press Example for a seed if you have none.",
-          "Start a process with a database task — examples/mssql-eintrittsmeldung.bpmn does the job.",
-          "Open Operations › Mock database. The statements your process ran are there, newest last, with the values it bound.",
-          "Now start one with input your seed does not answer for. That statement turns up in red with its reason.",
-          "Copy it into the Databases card's answers, save, and run it again — the red entry is gone."
-        ],
-        "de": [
-          "Schalten Sie den Mockup unter Organisation › Workers auf der Karte Databases ein und drücken Sie Example, falls Sie noch keinen Seed haben.",
-          "Starten Sie einen Prozess mit einem Datenbank-Task — examples/mssql-eintrittsmeldung.bpmn genügt.",
-          "Öffnen Sie Betrieb › Mock database. Dort stehen die Anweisungen Ihres Prozesses, neueste zuletzt, mit den gebundenen Werten.",
-          "Starten Sie dann eine Instanz mit Eingaben, für die nichts hinterlegt ist. Diese Anweisung erscheint rot samt Grund.",
-          "Übernehmen Sie sie in die Antworten auf der Karte Databases, speichern, nochmal starten — der rote Eintrag ist weg."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Mock database",
-          "de": "Mock database öffnen"
-        },
-        "route": "#/operations/sql-mock"
       }
     }
   ]
