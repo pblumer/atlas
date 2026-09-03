@@ -699,6 +699,9 @@ export function attachPlayground(root, { api, toast, modeler }) {
   function drawProfile() {
     const slot = el("pg-profile");
     if (slot) slot.innerHTML = arrivalProfileHTML();
+    // A stream the planner refuses is step 2's readout as much as it is the missing
+    // picture, so the two are never out of step with each other.
+    drawSteps();
   }
 
   // profileTimer debounces the boxes that feed the sparkline. A count is typed a
@@ -1167,7 +1170,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       <div class="pg-timing"><span class="muted" style="flex:1">queue at ${esc(p)} at most</span>
         <input type="number" min="0" step="1" data-queue="${esc(p)}" value="${esc(state.expect.queue[p] || "")}" /></div>`).join("");
     return `
-      <div class="pg-sec"><b>Expectations</b> <span class="muted">optional</span></div>
+      ${stepHeadHTML(3)}
       <label class="pg-check"><input type="checkbox" id="pg-x-finish" ${state.expect.allFinish ? "checked" : ""} />
         every case finishes</label>
       <label class="pg-check"><input type="checkbox" id="pg-x-inc" ${state.expect.noIncidents ? "checked" : ""} />
@@ -1343,7 +1346,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
         : `<label class="field"><span>Cases (JSON list)</span>
              <textarea id="pg-cases" rows="5" spellcheck="false">${esc(state.cases)}</textarea></label>`;
     return `
-      <div class="pg-sec"><b>Dataset</b></div>
+      ${stepHeadHTML(1)}
       <div class="pg-source">${tab("list", "A list")}${tab("generated", "Generated")}${tab("csv", "A CSV file")}</div>
       ${body}`;
   }
@@ -1428,6 +1431,137 @@ export function attachPlayground(root, { api, toast, modeler }) {
       <p class="muted">The first ${p.rows.length} of ${p.total} — these are the cases the run carries.</p>`;
   }
 
+  // The setup is three steps, and each of them says where it stands.
+  //
+  // The panel is one column somebody scrolls, not a wizard that hides its later
+  // pages — every step is always visible and editable, because the third one is
+  // usually the reason to go back and change the first. What the numbering buys is
+  // an answer to "is this ready?" without reading three sections of boxes: each step
+  // carries a one-line readout of what it will contribute to the run, or of what is
+  // wrong with it.
+  //
+  // A step reports { ok, note, bad }: ok means it will contribute what the note says,
+  // bad means the note is a fault rather than a summary, and neither means it is
+  // simply not filled in yet. The first two must be ok before a run can start; the
+  // third never has to be, because a run nobody asserts anything about is a run
+  // somebody reads rather than a mistake.
+  const STEPS = [
+    { n: 1, title: "Dataset", read: () => dataStep() },
+    { n: 2, title: "Timing", read: () => timingStep() },
+    { n: 3, title: "Expectations", read: () => expectStep() },
+  ];
+
+  function stepHeadHTML(n) {
+    const spec = STEPS[n - 1];
+    const step = spec.read();
+    return `<div class="pg-sec pg-step" id="pg-step-${n}">
+      <span class="pg-step-n${step.ok ? " done" : ""}">${n}</span>
+      <b>${esc(spec.title)}</b>
+      <span class="pg-step-note${step.bad ? " bad" : ""}">${esc(step.note)}</span>
+    </div>`;
+  }
+
+  // drawSteps repaints the three heads and re-gates the button, and nothing else.
+  //
+  // Every box in the column feeds one of them, and most of those boxes are typed in
+  // — so this runs on input, where a full render would take the caret out of the box
+  // being typed in. A head carries no input of its own, so replacing one while
+  // somebody types into the section below it is safe.
+  function drawSteps() {
+    for (const spec of STEPS) {
+      const head = el(`pg-step-${spec.n}`);
+      if (head) head.outerHTML = stepHeadHTML(spec.n);
+    }
+    gateRun();
+  }
+
+  // gateRun stops the button offering a run the setup cannot start. What is missing
+  // is named in the step that is missing it, so the button says only that.
+  function gateRun() {
+    const batch = el("pg-batch");
+    if (!batch || batch.hidden) return;
+    const blocked = setupBlocked();
+    batch.disabled = state.busy || blocked;
+    batch.title = blocked
+      ? "The setup steps say what is still missing"
+      : "Run the dataset in the panel";
+  }
+
+  // dataStep is what the run will carry, from whichever of the three sources is
+  // driving it — and what is wrong with it, which for a typed list is a question the
+  // panel can answer without asking the server.
+  function dataStep() {
+    if (state.source === "csv") {
+      return state.csv ? { ok: true, note: state.csv.name } : { note: "choose a file" };
+    }
+    if (state.source === "generated") {
+      const count = plannedCases();
+      if (count < 1) return { bad: true, note: "how many cases?" };
+      // The same two rules the generator itself applies. A row with no name is not
+      // one of them: it is a row somebody has not filled in yet, and it is left out
+      // of the request rather than refused. A name used twice is a mistake — a case
+      // carries one value per name — and it is the one a copied row makes.
+      const named = state.gen.fields.map((f) => (f.name || "").trim()).filter(Boolean);
+      const twice = named.find((name, i) => named.indexOf(name) !== i);
+      if (twice) return { bad: true, note: `two fields are called "${twice}"` };
+      return {
+        ok: true,
+        note: `${count} generated · ${named.length
+          ? `${named.length} field${named.length === 1 ? "" : "s"}`
+          : "no variables"}`,
+      };
+    }
+    let rows;
+    try { rows = JSON.parse(state.cases); } catch { return { bad: true, note: "not valid JSON" }; }
+    if (!Array.isArray(rows)) return { bad: true, note: "not a list of cases" };
+    if (!rows.length) return { bad: true, note: "the list is empty" };
+    return { ok: true, note: `${rows.length} case${rows.length === 1 ? "" : "s"} listed` };
+  }
+
+  // timingStep is the arrival stream in words. Its validity is the server's answer
+  // rather than a second opinion about it: the profile call the sparkline is drawn
+  // from refuses exactly what the run would refuse, so a stream that cannot be
+  // planned is flagged here by the planner itself.
+  function timingStep() {
+    if (state.profileError) return { bad: true, note: state.profileError };
+    const a = ARRIVALS.find((x) => x.mode === state.arrival);
+    // The calendar is not in the note. It is fixed for the sandbox's life, so it is
+    // not what a readout is watching — and the sparkline underneath shows it better
+    // than words do, as the flat stretch where the stream stops overnight. Naming it
+    // here only cost the line a wrap, which orphaned the last word of it.
+    const param = a && a.param ? ` ${state.arrivalN} ${a.param}` : "";
+    return { ok: true, note: `${a ? a.label : state.arrival}${param}` };
+  }
+
+  // expectStep counts what the run will be judged on.
+  //
+  // Asserting nothing is not a fault — it is a run somebody is going to read — so it
+  // is stated rather than flagged, and it does not stop the run. A rule with nothing
+  // after "then" is a fault: the verdict refuses it, and saying so here beats saying
+  // it once the run is over.
+  function expectStep() {
+    const e = state.expect;
+    const rules = (e.rules || []).filter((r) => (r.when || "").trim() || (r.then || "").trim());
+    if (rules.some((r) => !(r.then || "").trim())) {
+      return { bad: true, note: "a rule says nothing the case has to show" };
+    }
+    let checks = 0;
+    for (const on of [e.allFinish, e.noIncidents]) if (on) checks++;
+    for (const text of [e.p90Hours, e.mustReach]) if (String(text).trim()) checks++;
+    for (const bound of Object.values(e.queue)) if (String(bound).trim()) checks++;
+    if (!checks && !rules.length) return { note: "nothing asserted — the run is read, not judged" };
+    const parts = [];
+    if (checks) parts.push(`${checks} check${checks === 1 ? "" : "s"}`);
+    if (rules.length) parts.push(`${rules.length} rule${rules.length === 1 ? "" : "s"}`);
+    return { ok: true, note: parts.join(" · ") };
+  }
+
+  // setupBlocked reports whether the run has something to run at all. The
+  // expectations are not in it: a run with none is the ordinary case.
+  function setupBlocked() {
+    return !dataStep().ok || !timingStep().ok;
+  }
+
   // batchSetupHTML is what decides the run: the data, when it arrives, what it has
   // to show, and the scenario all three are stored in.
   function batchSetupHTML() {
@@ -1437,7 +1571,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const param = arrival ? arrival.param : null;
     return `
       ${datasetHTML()}
-      <div class="pg-sec"><b>Timing</b></div>
+      ${stepHeadHTML(2)}
       <div class="pg-timing">
         <select id="pg-arrival">${modes}</select>
         ${param ? `<input type="number" min="1" step="1" id="pg-arrival-n" value="${esc(state.arrivalN)}" />
@@ -1822,6 +1956,8 @@ export function attachPlayground(root, { api, toast, modeler }) {
     el("pg-body").innerHTML = analysisColumnHTML();
     if (!results.hidden) el("pg-results-body").innerHTML = resultsStripHTML();
     if (!overlayBar.hidden) el("pg-overlay-body").innerHTML = overlayStripHTML();
+    // A setup that cannot run says so before the button is pressed rather than after.
+    gateRun();
     // The sparkline is fetched off the render rather than off each box that feeds
     // it. It is a no-op unless the timing actually changed, and it re-renders once
     // the answer lands.
@@ -2053,6 +2189,9 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (t.dataset.seats != null) {
       state.pools[t.dataset.seats] = { ...state.pools[t.dataset.seats], seats: t.value };
     }
+    // The heads read what was just typed. They are repainted rather than re-rendered
+    // for the reason nothing else here re-renders on input: the caret.
+    drawSteps();
   };
 
   const onPaneChange = (e) => {
@@ -2078,6 +2217,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       state.expect.rules[Number(t.dataset.ruleEnd)].then = `end = ${JSON.stringify(t.value)}`;
       render();
     }
+    drawSteps();
   };
 
   // One panel in three places: the same handlers, bound to each of them.
