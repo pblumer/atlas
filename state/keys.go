@@ -45,6 +45,7 @@ const (
 	cfHistoryExpiry          columnFamily = 0x20 // histExp:<purgeDueDate>:<piKey> → nil (ADR-0146)
 	cfRuntimeTotal           columnFamily = 0x21 // rtTotal:<kind> → int64 engine-wide live count (merge, ADR-0142)
 	cfOperatorAction         columnFamily = 0x22 // opAct:<piKey>:<ts>:<pos> → OperatorActionValue (ADR-0159)
+	cfChildByParent          columnFamily = 0x23 // childByParent:<callElKey>:<childPiKey> → nil (ADR-0238)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -143,6 +144,23 @@ func keyElementInstance(key uint64) []byte {
 
 func keyElByProc(procKey, elKey uint64) []byte {
 	return appendBE64(elByProcPrefix(procKey), elKey)
+}
+
+// keyChildByParent keys the reverse call-activity link: the child process instance
+// a call-activity element instance started (ADR-0076). The child records its parent
+// on its own record; this index records the other direction, so "which instance did
+// this call activity start?" is a prefix scan of one element's children instead of a
+// walk of every live instance.
+//
+// The child key is part of the key rather than the value so the entry is
+// self-describing and the write needs no read-modify-write.
+func keyChildByParent(callElKey, childPiKey uint64) []byte {
+	return appendBE64(childByParentPrefix(callElKey), childPiKey)
+}
+
+// childByParentPrefix scans one call-activity element instance's children.
+func childByParentPrefix(callElKey uint64) []byte {
+	return appendBE64([]byte{byte(cfChildByParent)}, callElKey)
 }
 
 // keyIncident keys an incident by the element instance it is attached to — one

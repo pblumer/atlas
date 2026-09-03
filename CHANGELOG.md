@@ -12,6 +12,25 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A widened Properties column in the form editor gave its width to white space, not
+  to the panel.** The Design tab's side columns are resizable — our own affordance on
+  top of the vendored form-js Playground ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)) —
+  and the drag sets the width of the *column*. But form-js pins the properties panel
+  inside that column to a fixed `--properties-panel-width: 250px`. So an author who
+  pulled the divider left to get room for a long FEEL expression got a 510px column
+  holding a 250px panel, and 260px of blank white between the panel and the window's
+  right edge, which stayed there across sessions because the width is remembered. The
+  mirror case was worse and quieter: dragged narrower than 250px, the panel was clipped
+  by the column rather than shrunk with it, so the rightmost part of every property row
+  was simply not reachable.
+
+  The panel now follows the column it lives in. The palette on the other side always
+  did — its content is fluid — which is why only one of the two columns showed it.
+  `e2e/form-side-columns.spec.mjs` holds the outcome at the default width, after a real
+  drag, for a width a previous session saved, and with the column collapsed to its rail.
+
 ### Changed
 
 - **A data object's value opens as formatted JSON.** In an instance's **Data** tab, a
