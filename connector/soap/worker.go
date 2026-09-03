@@ -56,43 +56,18 @@ func Handler(store state.Reader, lookup ProcessLookup, client Client, secret Sec
 		if err != nil {
 			return nil, fmt.Errorf("soap: %w", err)
 		}
-		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
-		// Read the variables the task sees once — up its scope chain, so its own
-		// input-mapped locals shadow what it inherits (ADR-0068). The endpoint,
-		// action and body FEEL values all evaluate against them, off the hot path.
-		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
-		if err != nil {
-			return nil, fmt.Errorf("soap: read variables for element %d: %w", j.ElementInstanceKey, err)
-		}
-		endpoint := resolveValue(detail.SoapEndpoint, piKey, scopeVars)
-		if strings.TrimSpace(endpoint) == "" {
-			return nil, fmt.Errorf("soap: task has no endpoint (its FEEL endpoint evaluated to empty)")
-		}
-		op := cp.Intern(detail.SoapOp)
-		action := resolveValue(detail.SoapAction, piKey, scopeVars)
-		if strings.TrimSpace(action) == "" {
-			action = op // the operation name is the default SOAPAction
-		}
-		headers, err := applyAuth(nil, cp.Intern(detail.Auth), secret)
+		task, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey)
 		if err != nil {
 			return nil, err
 		}
-		resp, err := client.Do(context.Background(), Request{
-			Endpoint:  endpoint,
-			Operation: op,
-			Action:    action,
-			Version:   cp.Intern(detail.SoapVersion),
-			Body:      resolveValue(detail.SoapBody, piKey, scopeVars),
-			Headers:   headers,
-		})
+		// The same Resolve/Run pair the worker uses (ADR-0168), so relocating the work
+		// cannot change what a resolved SOAP task means — only which process holds the
+		// credential behind the reference.
+		res, err := Run(context.Background(), task, client, secret)
 		if err != nil {
 			return nil, err
 		}
-		resultVar := cp.Intern(detail.ResultVar)
-		if resultVar == "" {
-			return nil, nil // the model discards the response
-		}
-		return []model.VariableValue{responseVariable(resultVar, resp.Body)}, nil
+		return res.Variables(), nil
 	}
 }
 

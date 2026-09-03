@@ -112,6 +112,7 @@ connector/mail/        Outbound mail: SMTP, Gmail, Microsoft Graph (ADR-0079/009
 connector/sharepoint/  SharePoint list items via Graph (ADR-0141)
 connector/remedy/      BMC Remedy AR System (ADR-0106)
 connector/jira/        Atlassian Jira issues (ADR-0201)
+connector/googlesheets/ Google Sheets and Drive (ADR-0235)
 connector/webscrape/   Web scraping (ADR-0118)
 connector/clio/        clio event store: read, write, query (ADR-0036)
 connector/temis/       temis decision service (ADR-0050)

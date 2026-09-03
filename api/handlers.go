@@ -16,14 +16,18 @@ import (
 	"github.com/pblumer/atlas/api/layout"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
+	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/entra"
+	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
+	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
 	"github.com/pblumer/atlas/connector/script"
+	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/engine"
@@ -5049,6 +5053,23 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"assignee": j.Assignee, "jql": j.JQL, "query": j.Query, "maxResults": j.MaxResults,
 			"fields": j.Fields, "requestId": j.RequestID, "resultVariable": j.ResultVariable,
 		}}
+	case compiler.GoogleSheetsJobTypeIndex:
+		// The operation, the spreadsheet, the range and the already-projected rows
+		// travel; the service account's private key does not. Google Sheets is Jira's
+		// situation exactly — one operator-managed credential behind a name
+		// (ADR-0235) — so what travels is the *Worker's* name,
+		// resolved against the Worker Instance's own configuration. That is also what
+		// lets it act as a different Google identity from anything the engine holds.
+		j, err := googlesheets.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "googlesheets", Fields: map[string]any{
+			"connector": j.Worker, "operation": j.Operation, "spreadsheet": j.Spreadsheet,
+			"sheet": j.Sheet, "range": j.Range, "title": j.Title, "folder": j.Folder,
+			"values": j.Values, "input": j.Input, "header": j.Header,
+			"requestId": j.RequestID, "resultVariable": j.ResultVariable,
+		}}
 	case compiler.MsSqlJobTypeIndex, compiler.MariaDBJobTypeIndex, compiler.PostgresJobTypeIndex:
 		// The statement and its bound parameters travel; the DSN does not exist here
 		// to travel. SQL is the first kind with no in-process handler at all, so this
@@ -5085,6 +5106,36 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"maxEntries": j.MaxEntries, "objectSecurity": j.ObjectSecurity,
 			"resultVariable": j.ResultVariable,
 		}}
+	case compiler.LdapJobTypeIndex:
+		// LDAP authors its own server (ADR-0154), so like AD the endpoint travels and
+		// the credentials do not: the bind-password and client-certificate
+		// *references* travel and whoever runs the job resolves them, so an offloaded
+		// LDAP task never reads the engine's vault (ADR-0168).
+		j, err := ldap.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "ldap", Fields: map[string]any{
+			"url": j.URL, "startTLS": j.StartTLS, "bindDN": j.BindDN,
+			"bindSecretRef": j.BindSecret, "clientCertSecretRef": j.ClientCertSecret,
+			"operation": j.Operation, "dn": j.DN, "attributes": j.Attributes,
+			"newPassword": j.NewPassword, "baseDN": j.BaseDN, "scope": j.Scope,
+			"filter": j.Filter, "pageSize": j.PageSize, "maxEntries": j.MaxEntries,
+			"resultVariable": j.ResultVariable,
+		}}
+	case compiler.SoapJobTypeIndex:
+		// REST's arm exactly, and for REST's reason: everything about the call is model
+		// data and travels resolved, while the credential behind authSecret stays a
+		// reference for whoever runs the job to resolve (ADR-0168).
+		j, err := soap.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "soap", Fields: map[string]any{
+			"endpoint": j.Endpoint, "operation": j.Operation, "action": j.Action,
+			"version": j.Version, "body": j.Body, "auth": j.Auth,
+			"resultVariable": j.Result,
+		}}
 	case compiler.EntraJobTypeIndex:
 		// The operation and the ids travel; the tenant's app credential does not
 		// exist here to travel. Worker-only, like the SQL kinds (ADR-0172).
@@ -5098,6 +5149,23 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"filter": j.Filter, "select": j.Select, "pageSize": j.PageSize, "maxUsers": j.MaxUsers,
 			"search": j.Search, "advancedQuery": j.Advanced, "deltaLink": j.DeltaLink,
 			"resultVariable": j.ResultVariable,
+		}}
+	case compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex:
+		// One arm for the three clio operations: the resolved job says which it is, so
+		// a worker dispatches on the payload rather than on a job-type index it would
+		// have to keep in step with the compiler. The endpoint and token stay with the
+		// worker under the connector's name (ADR-0036/0168); what travels is what only
+		// the engine has — including a write's event body, which is the task's input
+		// mappings or the variables it sees, and exists nowhere but in engine state.
+		j, err := clio.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "clio", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "subject": j.Subject,
+			"eventType": j.EventType, "query": j.Query, "reduceSpec": j.ReduceSpec,
+			"limit": j.Limit, "data": j.Data, "idempotencyKey": j.IdempotencyKey,
+			"resultVariable": j.Result,
 		}}
 	case compiler.WebScrapeJobTypeIndex:
 		// No credential at all here — what the worker adds is network reach. A page

@@ -1,0 +1,38 @@
+uml-canvas.js is Atlas's pre-built UML class-diagram canvas: diagram-js plus the
+Atlas-owned renderer, rules and viewer for the information model's notation
+(ADR-draft-class-canvas-on-diagram-js).
+
+It contains:
+
+  - diagram-js@15.26.0
+  - the Atlas-owned UML class renderer, subset-driven rules provider and
+    ClassCanvas in src/index.js
+
+Unlike the ArchiMate canvas beside it, this one edits locally. That canvas never
+creates anything, because the server owns the document and the view is re-read; an
+information model is a working copy with an explicit Save, which is what lets
+somebody draw three classes and two relationships and then decide, and what makes an
+undo stack mean anything. So create, connect, move and delete are permitted here —
+and the rules still refuse whatever the served subset refuses, at the point of
+drawing rather than at the point of writing.
+
+There is a second copy of diagram-js in this binary: the ArchiMate bundle carries
+its own. Merging the two into one bundle that exports both viewers is the named
+follow-up in the record above; it was left out of the change that created this file
+so that change would not touch Panorama's shipped canvas.
+
+diagram-js and its bundled dependencies are MIT licensed (see LICENSE). The Atlas
+renderer and rules remain part of Atlas. Only the output is loaded at runtime: Atlas
+remains a single, buildless, offline-capable binary (ADR-0012).
+
+Do not edit uml-canvas.js by hand. To rebuild:
+
+  npm install --no-save --no-package-lock diagram-js@15.26.0 esbuild@0.25.9
+  npx esbuild api/web/vendor/uml/src/index.js --bundle --format=iife \
+    --global-name=AtlasUml --minify --legal-comments=none \
+    --outfile=api/web/vendor/uml/uml-canvas.js
+  cp node_modules/diagram-js/assets/diagram-js.css \
+    api/web/vendor/uml/diagram-js.css
+
+SHA-256 uml-canvas.js:
+e3b7fb90fc57cccf2bfa48b6d6d58a09a9289f92697dff9c0c4ff3bf0cb9f7a7

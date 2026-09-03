@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas UML class canvas e2e harness</title>
+    <!-- Drives the real api/web/vendor/uml/uml-canvas.js: the diagram-js bundle the
+         class canvas is built on (ADR-0237). It is
+         exercised here rather than through the editor because the editor is the
+         thing being ported onto it — this pins the substrate's own contract, which
+         is what the port then depends on. -->
+    <link rel="stylesheet" href="/vendor/uml/diagram-js.css" />
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; }
+      #canvas { height: 100vh; background: var(--surface, #fff); }
+    </style>
+  </head>
+  <body>
+    <div id="canvas"></div>
+    <script src="/vendor/uml/uml-canvas.js"></script>
+    <script>
+      // Two business objects, a value type and an enumeration, so the matrix has
+      // something to refuse; a store so the derived link has something to draw.
+      const SUBSET = { matrix: {
+        "businessObject>businessObject": ["association", "aggregation", "composition", "generalization"],
+        "businessObject>valueType": ["association", "aggregation", "composition"],
+        "businessObject>enumeration": [],
+        "valueType>businessObject": ["association"],
+      } };
+      window.__model = () => ({
+        id: "m1",
+        classes: [
+          { id: "c1", name: "Customer", stereotype: "businessObject", identity: ["kdnr"], x: 40, y: 40,
+            attributes: [
+              { name: "kdnr", type: "string", multiplicity: "1" },
+              { name: "name", type: "string", multiplicity: "0..1" },
+            ] },
+          { id: "c2", name: "Order", stereotype: "businessObject", identity: [], x: 340, y: 40,
+            attributes: [{ name: "id", type: "string", multiplicity: "1" }] },
+          { id: "c3", name: "OrderStatus", stereotype: "enumeration", x: 340, y: 300,
+            literals: ["draft", "approved"] },
+        ],
+        stores: [{ id: "s1", name: "Orders", class: "Order", worker: "clio-main", mode: "read", x: 40, y: 300 }],
+        associations: [{ id: "a1", kind: "composition", name: "places",
+          from: { classId: "c1" }, to: { classId: "c2" } }],
+      });
+
+      window.__selected = null;
+      window.__changes = 0;
+      window.__mount = () => {
+        window.__canvas = new AtlasUml.ClassCanvas(document.getElementById("canvas"), {
+          subset: SUBSET,
+          onSelection: (bo) => { window.__selected = bo ? (bo.name || bo.kind) : null; },
+          onChange: () => { window.__changes += 1; },
+        });
+        window.__canvas.render(window.__model(), []);
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

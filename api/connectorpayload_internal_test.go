@@ -12,11 +12,14 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
+	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/jira"
+	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
 )
@@ -148,6 +151,37 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 			fields: map[string]any{
 				"operation": "search", "baseDN": "ou=groups,dc=example,dc=com",
 				"scope": "one", "filter": "(cn=Vertrieb)", "resultVariable": "gruppe",
+			},
+		},
+		{
+			// A clio write. The event *body* is the one payload field no worker could
+			// reconstruct: it is the task's input mappings, or every variable it sees,
+			// which lives only in engine state (ADR-0036/0174). The idempotency key
+			// travels for the same reason REST's does — it is the job key, and a retry
+			// must write the same event once.
+			name:    "clio-write",
+			element: `<atlas:clioConnector connector="events" operation="write" subject="/kunden/42" eventType="kunde.angelegt"/>`,
+			jobType: compiler.ClioWriteJobType,
+			want:    "clio",
+			fields: map[string]any{
+				"connector": "events", "operation": "write",
+				"subject": "/kunden/42", "eventType": "kunde.angelegt",
+				"data": map[string]any{
+					"userDN": "cn=ada,dc=example,dc=com", "tenant": "contoso",
+					"impact": "2-Significant", "ldifText": `dn: cn=ada\nobjectClass: person`,
+				},
+			},
+		},
+		{
+			// A clio read: no body, a limit, and a result variable — the half a write
+			// does not have, and the half the worker writes back.
+			name:    "clio-read",
+			element: `<atlas:clioConnector connector="events" operation="read" subject="/kunden/42" limit="25" resultVariable="ereignisse"/>`,
+			jobType: compiler.ClioReadJobType,
+			want:    "clio",
+			fields: map[string]any{
+				"connector": "events", "operation": "read", "subject": "/kunden/42",
+				"limit": float64(25), "resultVariable": "ereignisse",
 			},
 		},
 		{
@@ -349,9 +383,13 @@ func TestAnUnresolvableFeelFieldTravelsAsNullRatherThanBlockingTheLease(t *testi
 // into a stated one: if a kind is later offloaded without adding its arm, the worker
 // gets a job with nothing on it, and this test is where that shows up.
 func TestAKindWithNoArmResolvesToNoPayload(t *testing.T) {
-	got := leaseConnectorPayloadOrNil(t, "ldap-proc",
-		`<atlas:ldapConnector url="ldaps://dc.example.com" connector="corp" operation="search" baseDN="dc=example,dc=com" filter="(objectClass=person)" resultVariable="found"/>`,
-		compiler.LdapJobType, `{"variables":{}}`)
+	// SharePoint, one of the kinds ADR-0233's table still owes a worker half. It stood
+	// as ldap, then as soap, and moves again each time one of them gets its slice —
+	// which is the table shrinking working as intended: this test names whichever kind
+	// is still in-engine, and the day the last one moves it has nothing left to assert.
+	got := leaseConnectorPayloadOrNil(t, "sharepoint-proc",
+		`<atlas:sharepointConnector connector="intranet" site="https://contoso.sharepoint.com/sites/hr" list="Onboarding" resultVariable="found"/>`,
+		compiler.SharePointJobType, `{"variables":{}}`)
 	if got != nil {
 		t.Errorf("payload = %#v, want none: this kind has no arm in resolveConnectorTask", *got)
 	}
@@ -421,9 +459,12 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.JiraJobTypeIndex", jira.Job{}},
 		{"compiler.MsSqlJobTypeIndex", sqldb.Job{}},
 		{"compiler.AdJobTypeIndex", ad.Job{}},
+		{"compiler.LdapJobTypeIndex", ldap.Job{}},
 		{"compiler.EntraJobTypeIndex", entra.Job{}},
+		{"compiler.ClioWriteJobTypeIndex", clio.Job{}},
 		{"compiler.WebScrapeJobTypeIndex", webscrape.Job{}},
 		{"compiler.RestJobTypeIndex", rest.Job{}},
+		{"compiler.SoapJobTypeIndex", soap.Job{}},
 	} {
 		t.Run(tc.arm, func(t *testing.T) {
 			sent, ok := arms[tc.arm]

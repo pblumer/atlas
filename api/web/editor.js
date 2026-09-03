@@ -3169,6 +3169,109 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "googlesheets", name: "Google Sheets", group: "Applications",
+    desc: "Create, read, write, append to, clear and delete Google spreadsheets and their sheets",
+    icon: "S",
+    // A grid on Google Sheets green: the table itself, which is what this Worker Type
+    // is about — its counterpart to Jira's ticked issue and REST's globe. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white rules.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f9d58"/><rect x="3.4" y="3.8" width="9.2" height="8.4" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 6.6h9.2M3.4 9.4h9.2M8 3.8v8.4" stroke="#fff" stroke-width="1"/></svg>`,
+    ext: "atlas:GoogleSheetsConnector",
+    fields: [
+      { group: "Google Sheets worker" },
+      {
+        key: "connector", label: "Worker", datalist: "googlesheets", placeholder: "acme",
+        hint: "The configured Google Sheets Worker this task runs through, by the name it has under Workers in the Console. Its credential — a service account's key, or a refresh token — lives on the server, never in the model.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "read-range", l: "Read range" },
+          { v: "append-row", l: "Append rows" },
+          { v: "write-range", l: "Write range" },
+          { v: "clear-range", l: "Clear range" },
+          { v: "create-spreadsheet", l: "Create spreadsheet" },
+          { v: "add-sheet", l: "Add sheet" },
+          { v: "delete-sheet", l: "Delete sheet" },
+          { v: "delete-spreadsheet", l: "Delete spreadsheet (to trash)" },
+        ],
+      },
+      {
+        key: "spreadsheet", label: "Spreadsheet", placeholder: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms", fx: true,
+        // Every operation but create addresses an existing file.
+        showIf: (v) => v.operation && v.operation !== "create-spreadsheet",
+        hint: "The spreadsheet, by its id or by the whole URL out of the browser's address bar — both work. Often a FEEL expression (fx) naming the variable an earlier Create spreadsheet wrote, e.g. =datei.spreadsheetId.",
+      },
+      {
+        key: "title", label: "Title", placeholder: "Anträge 2026", fx: true,
+        showIf: (v) => v.operation === "create-spreadsheet",
+        hint: "What the new spreadsheet is called. May be a FEEL expression (fx).",
+      },
+      {
+        key: "folder", label: "Drive folder", placeholder: "leave empty for the credential's root", fx: true,
+        showIf: (v) => v.operation === "create-spreadsheet",
+        hint: "Optional. The Drive folder the new spreadsheet is moved into, by its id or the URL of the folder page. The credential must be able to write there — for a service account that usually means the folder is shared with its address.",
+      },
+      {
+        key: "sheet", label: "Sheet", placeholder: "Eingang", fx: true,
+        showIf: (v) => ["create-spreadsheet", "add-sheet", "delete-sheet"].includes(v.operation),
+        hint: (v) => (v.operation === "create-spreadsheet"
+          ? "Optional. Names the new spreadsheet's first tab; without it Google names it itself."
+          : "The tab, by the title shown on its own tab in Google Sheets. May be a FEEL expression (fx)."),
+      },
+      {
+        key: "range", label: "Range", placeholder: "Anträge!A2:F", fx: true,
+        showIf: (v) => ["read-range", "write-range", "append-row", "clear-range"].includes(v.operation),
+        hint: (v) => (v.operation === "append-row"
+          ? "The table the rows are appended after, in A1 notation — a whole-column range like Anträge!A:F is what you usually want, since Google appends after the last row that has anything in it. May be a FEEL expression (fx)."
+          : "The cells in A1 notation, optionally naming their sheet (Anträge!A2:F). Without a sheet name Google uses the first tab. May be a FEEL expression (fx)."),
+      },
+      {
+        key: "values", label: "Values", placeholder: "=zeilen", fx: true,
+        showIf: (v) => v.operation === "write-range" || v.operation === "append-row",
+        hint: "What to write. A FEEL list of lists is the rows; a flat list is one row; a list of objects is written through the Columns below. A single value writes one cell.",
+      },
+      {
+        key: "columns", label: "Columns", placeholder: "name, betrag, status",
+        showIf: (v) => v.operation === "write-range" || v.operation === "append-row",
+        hint: "Only for a list of objects: the fields to write and, just as importantly, their order — which is what has to match the sheet. Without it a list of objects is refused at deploy rather than written in an order nobody chose.",
+      },
+      {
+        key: "valueInput", label: "Interpret values", type: "select",
+        options: [{ v: "", l: "As typed (dates, numbers, formulas)" }, { v: "raw", l: "Verbatim — store the text as given" }],
+        showIf: (v) => v.operation === "write-range" || v.operation === "append-row",
+        hint: "As typed is Google's USER_ENTERED: \"3,50 €\" becomes a currency number and \"=SUM(A1:A9)\" becomes a formula. Verbatim stores exactly the characters given, which is what you want for an id that starts with a zero.",
+      },
+      {
+        key: "header", label: "First row is a header", type: "select",
+        options: [{ v: "", l: "No — answer with the raw rows" }, { v: "true", l: "Yes — answer with objects keyed by the first row" }],
+        showIf: (v) => v.operation === "read-range",
+        hint: "With a header the result is a list of objects (=zeilen[1].name), which is what a multi-instance subprocess iterates. Without it, a list of lists (=zeilen[1][1]). Include the header row in the range when you turn this on.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable",
+        resultType: (v) => (v.operation === "read-range" ? "array" : "object"),
+        placeholder: "zeilen",
+        // The two deletes answer with nothing a process needs, so the panel offers no
+        // variable to put it in — the compiler refuses one there too.
+        showIf: (v) => v.operation && !["delete-sheet", "delete-spreadsheet"].includes(v.operation),
+        hint: (v) => {
+          switch (v.operation) {
+            case "read-range":
+              return "The rows are written into this process variable. FEEL lists are 1-based, so the first row is =zeilen[1].";
+            case "create-spreadsheet":
+              return "The created spreadsheet is written into this process variable, so a later task can address it as =datei.spreadsheetId. Leave empty to discard it.";
+            default:
+              return "What Google returned is written into this process variable (leave empty to discard it).";
+          }
+        },
+      },
+    ],
+  },
+  {
   id: "webscrape", name: "Web Scraping", group: "Web & API", desc: "Extract HTML or read an RSS/Atom feed", icon: "W",
   // A spider-web mark on an indigo tile reads "web scraping" at a glance — this
   // Worker Type's counterpart to REST's globe and mail's envelope. The

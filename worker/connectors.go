@@ -15,11 +15,13 @@ import (
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/envname"
+	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/rest"
 	"github.com/pblumer/atlas/connector/script"
+	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/logging"
@@ -64,6 +66,23 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.CsvImportJobType] = ExecFunc(runCSV)
 		case "ldif":
 			built.Handlers[compiler.LdifJobType] = ExecFunc(runLdif)
+		case "ldap":
+			// Nothing to configure, and nothing to report as a held worker name: an
+			// LDAP task authors its own server (ADR-0154), so what this worker needs
+			// is a way to bind — the secret references the models name, resolved from
+			// its own environment — rather than a directory somebody registered here.
+			//
+			// The pool is the one piece of state worth keeping: ADR-0154 pooled binds
+			// because they are expensive, and a worker that dialled per job would give
+			// that back the moment the work moved out of the engine. Nothing closes it
+			// explicitly — idle connections expire on the pool's own TTL, and a worker
+			// process ending releases the rest — which is why it needs no lifecycle
+			// hook here that no other kind has.
+			pool := ldap.NewPool(ldap.NewDialer(), ldap.PoolOptions{})
+			secret := ldapSecretFromEnv(env)
+			built.Handlers[compiler.LdapJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunLdapJob(ctx, j, pool, secret)
+			})
 		case "webscrape":
 			// Nothing to configure: the reach is the worker's network position, not a
 			// credential, so there is no environment to read and nothing to report as
@@ -98,6 +117,18 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			})
 			built.Handlers[compiler.RestJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return runREST(ctx, j, client, secret)
+			})
+		case "soap":
+			// REST's branch exactly, and for REST's reason: the authored auth arrives
+			// with the job and the secret behind its reference is read here, from this
+			// process's own environment, under the same ATLAS_CONNECTOR_<REF>_TOKEN
+			// name the engine uses.
+			client := soap.NewHTTPClient()
+			secret := soap.SecretResolver(func(ref string) string {
+				return env(envname.ConnectorToken(ref))
+			})
+			built.Handlers[compiler.SoapJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return runSoap(ctx, j, client, secret)
 			})
 		case "mail":
 			reg, names, err := mailRegistryFromEnv(env)
@@ -184,6 +215,28 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.EntraJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunEntraJob(ctx, j, reg)
 			})
+		case "clio":
+			reg, names, err := clioRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve clio, holding no event store to reach. Not an error,
+				// for the reason mail's and Remedy's identical branches do not error:
+				// this worker very likely serves other kinds, and a store nobody has
+				// configured yet must park its tasks rather than take down the kinds
+				// that are configured.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			// One kind, three job types: write, query and read are the same connector
+			// and the same registry, and the resolved job says which of them it is.
+			for _, jobType := range []string{compiler.ClioWriteJobType, compiler.ClioQueryJobType, compiler.ClioReadJobType} {
+				built.Handlers[jobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+					return RunClioJob(ctx, j, reg)
+				})
+			}
 		case "remedy":
 			reg, names, err := remedyRegistryFromEnv(env)
 			if err != nil {
@@ -306,7 +359,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "csv", "entra", "jira", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "webscrape"}
+	return []string{"ad", "clio", "csv", "entra", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "soap", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.
@@ -599,6 +652,39 @@ func runREST(ctx context.Context, j Job, client rest.Client, secret rest.SecretR
 		return nil, nil // the model discards the response
 	}
 	return map[string]any{res.ResultVariable: res.Body}, nil
+}
+
+// runSoap performs a resolved SOAP job. It is runREST's shape because the two kinds
+// have one: everything about the call travels resolved, and the credential behind the
+// task's authSecret is read here, from this worker's own environment.
+func runSoap(ctx context.Context, j Job, client soap.Client, secret soap.SecretResolver) (map[string]any, error) {
+	if j.Connector == nil {
+		return nil, fmt.Errorf("soap: the job carried no resolved worker detail; is this server offloading the soap kind?")
+	}
+	raw, err := json.Marshal(j.Connector.Fields)
+	if err != nil {
+		return nil, err
+	}
+	var task soap.Job
+	if err := json.Unmarshal(raw, &task); err != nil {
+		return nil, fmt.Errorf("soap: cannot read the resolved detail: %w", err)
+	}
+	res, err := soap.Run(ctx, task, client, secret)
+	if err != nil {
+		return nil, err
+	}
+	// Through Result.Variables rather than the raw body, so an offloaded call writes
+	// what an in-engine one writes — and a task naming no result variable completes
+	// with nothing rather than with an empty object.
+	vars := res.Variables()
+	if len(vars) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]any, len(vars))
+	for _, v := range vars {
+		out[v.Name] = variableValue(v)
+	}
+	return out, nil
 }
 
 // announceADMock says once, at startup, that this worker writes to no directory, and

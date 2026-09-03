@@ -113,6 +113,11 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Jira.Retries },
 		compile: compileJiraConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.GoogleSheets != nil },
+		retries: func(st xmlServiceTask) string { return st.GoogleSheets.Retries },
+		compile: compileGoogleSheetsConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here
@@ -1757,4 +1762,253 @@ func jiraMaxResults(taskID, raw string) (int32, error) {
 		return 0, fmt.Errorf("compiler: jira task %q has a negative maxResults %d", taskID, n)
 	}
 	return int32(n), nil
+}
+
+// The value-input modes a Google Sheets task may author. They are spelled here as well
+// as in connector/googlesheets because the compiler cannot import that package (the
+// dependency runs the other way); the drift test guards the seam.
+//
+// user is the default because a process writing a date or an amount into a sheet
+// people read wants it to *be* a date, not a string that looks like one.
+const (
+	sheetsInputUser = "user"
+	sheetsInputRaw  = "raw"
+)
+
+// googleSheetsOp describes what one spreadsheet operation requires of a model, and
+// what it is allowed to carry. The table is the compiler's half of
+// connector/googlesheets's Ops table; the drift test
+// TestGoogleSheetsOpsMatchTheWorkerType keeps the two from disagreeing about the
+// operation set, which is the failure this shape exists to prevent.
+//
+// Both halves matter. "Needs" is the familiar one: a write with no values cannot be
+// sent. "Takes" is the half that is easy to forget and expensive to have forgotten — a
+// header authored on a write, or a range on a create, would otherwise compile and then
+// be silently dropped at call time, which from the author's side is indistinguishable
+// from a Worker that ignored it.
+type googleSheetsOp struct {
+	needsSpreadsheet bool
+	needsTitle       bool
+	needsSheet       bool
+	takesSheet       bool
+	needsRange       bool
+	needsValues      bool
+	takesColumns     bool
+	takesInput       bool
+	takesHeader      bool
+	takesFolder      bool
+	// needsResult marks an operation whose whole point is what it returns: a read that
+	// discards its answer is a call made for nothing. takesResult marks one that
+	// returns something a model may keep or discard — and, by its absence, the two
+	// deletes, where a result variable would name a value nobody has a use for.
+	needsResult bool
+	takesResult bool
+}
+
+// googleSheetsOps is the operation table: the loop a process actually runs against a
+// spreadsheet — make one, give it a tab, read what is in it, change what is in it, add
+// to it, empty part of it, and take either the tab or the file away again. It mirrors
+// connector/googlesheets.Ops, which the drift test keeps honest.
+var googleSheetsOps = map[string]googleSheetsOp{
+	"create-spreadsheet": {needsTitle: true, takesSheet: true, takesFolder: true, takesResult: true},
+	"add-sheet":          {needsSpreadsheet: true, needsSheet: true, takesResult: true},
+	"read-range":         {needsSpreadsheet: true, needsRange: true, takesHeader: true, needsResult: true, takesResult: true},
+	"write-range":        {needsSpreadsheet: true, needsRange: true, needsValues: true, takesColumns: true, takesInput: true, takesResult: true},
+	"append-row":         {needsSpreadsheet: true, needsRange: true, needsValues: true, takesColumns: true, takesInput: true, takesResult: true},
+	"clear-range":        {needsSpreadsheet: true, needsRange: true, takesResult: true},
+	"delete-sheet":       {needsSpreadsheet: true, needsSheet: true},
+	"delete-spreadsheet": {needsSpreadsheet: true},
+}
+
+// googleSheetsOpNames lists the operations, sorted, for the messages that have to say
+// what was expected.
+func googleSheetsOpNames() []string {
+	out := make([]string, 0, len(googleSheetsOps))
+	for name := range googleSheetsOps {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// compileGoogleSheetsConnectorTask compiles an <atlas:googleSheetsConnector> task: one
+// spreadsheet operation against a Worker an operator configured, via the job path
+// (ADR-0235). The credential is resolved server-side by Worker
+// name, like Jira's and SharePoint's; only the operation and its values live in the
+// model.
+//
+// The element and the function keep the …Connector spelling their sixteen siblings
+// carry: the element is authored in deployed models, and the moddle drift guard that
+// keeps bpmn-js from silently dropping an extension only recognizes elements named
+// that way.
+func compileGoogleSheetsConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.GoogleSheets
+	if strings.TrimSpace(cn.Connector) == "" {
+		return 0, fmt.Errorf("compiler: google sheets task %q needs a connector attribute naming the Worker the server holds the Google credential under", st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: google sheets task %q needs an operation (%s)", st.Id, strings.Join(googleSheetsOpNames(), ", "))
+	}
+	spec, ok := googleSheetsOps[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: google sheets task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(googleSheetsOpNames(), ", "))
+	}
+	// One pass over every authored value: required where the operation needs it,
+	// refused where it does not use it. A single table means neither half can be
+	// forgotten for a field, and an added field is one row rather than two checks in
+	// two places. noun is how the "needs" message reads; attr is the attribute the
+	// "does not use" message names, because those are the two different things an
+	// author has to be told.
+	values := []struct {
+		attr     string
+		noun     string
+		raw      string
+		required bool
+		allowed  bool
+	}{
+		{"spreadsheet", "a spreadsheet", cn.Spreadsheet, spec.needsSpreadsheet, spec.needsSpreadsheet},
+		{"sheet", "a sheet", cn.Sheet, spec.needsSheet, spec.needsSheet || spec.takesSheet},
+		{"range", "a range", cn.Range, spec.needsRange, spec.needsRange},
+		{"title", "a title", cn.Title, spec.needsTitle, spec.needsTitle},
+		{"folder", "a folder", cn.Folder, false, spec.takesFolder},
+		{"values", "values to write", cn.Values, spec.needsValues, spec.needsValues},
+		{"columns", "columns", cn.Columns, false, spec.takesColumns},
+		{"valueInput", "a valueInput", cn.ValueInput, false, spec.takesInput},
+		{"header", "a header", cn.Header, false, spec.takesHeader},
+		{"resultVariable", "a resultVariable", cn.ResultVariable, spec.needsResult, spec.takesResult},
+	}
+	for _, v := range values {
+		set := strings.TrimSpace(v.raw) != ""
+		if v.required && !set {
+			return 0, fmt.Errorf("compiler: google sheets task %q operation %q needs %s (%s)",
+				st.Id, op, v.noun, googleSheetsWhy(v.attr))
+		}
+		if set && !v.allowed {
+			return 0, fmt.Errorf("compiler: google sheets task %q operation %q does not use %s (%s); remove it rather than leaving a value the Worker ignores",
+				st.Id, op, v.attr, googleSheetsWhy(v.attr))
+		}
+	}
+	input, err := googleSheetsInput(st.Id, op, cn.ValueInput, spec.takesInput)
+	if err != nil {
+		return 0, err
+	}
+	header, err := googleSheetsBool(st.Id, op, "header", cn.Header)
+	if err != nil {
+		return 0, err
+	}
+	cfg := GoogleSheetsConfig{
+		Worker:    strings.TrimSpace(cn.Connector),
+		Operation: op,
+		Columns:   googleSheetsColumns(cn.Columns),
+		Input:     input,
+		Header:    header,
+		ResultVar: strings.TrimSpace(cn.ResultVariable),
+		Retries:   retries,
+	}
+	// Each authored value is literal or FEEL (the fx toggle, ADR-0067), compiled once
+	// here and evaluated over the variables the task sees at call time.
+	for _, v := range []struct {
+		what string
+		raw  string
+		into *RestExpr
+	}{
+		{"spreadsheet", cn.Spreadsheet, &cfg.Spreadsheet},
+		{"sheet", cn.Sheet, &cfg.Sheet},
+		{"range", cn.Range, &cfg.Range},
+		{"title", cn.Title, &cfg.Title},
+		{"folder", cn.Folder, &cfg.Folder},
+		{"values", cn.Values, &cfg.Values},
+	} {
+		if strings.TrimSpace(v.raw) == "" {
+			continue
+		}
+		val, err := connectorValue(st.Id, "google sheets", v.what, v.raw)
+		if err != nil {
+			return 0, err
+		}
+		*v.into = val
+	}
+	return b.AddGoogleSheetsConnectorTask(cfg), nil
+}
+
+// googleSheetsWhy explains one attribute, so both halves of the check above — the
+// missing value and the ignored one — say the same thing about it in one place.
+func googleSheetsWhy(attr string) string {
+	switch attr {
+	case "spreadsheet":
+		return "the spreadsheet the operation addresses, by id or by its URL"
+	case "sheet":
+		return "a tab title: the tab added or deleted, or a new spreadsheet's first tab"
+	case "range":
+		return "the cells in A1 notation, optionally naming their sheet (e.g. Anträge!A2:F)"
+	case "title":
+		return "what the new spreadsheet is called"
+	case "folder":
+		return "the Drive folder the new spreadsheet is moved into, by id or by its URL"
+	case "values":
+		return "the rows to write: a list of rows, a list of objects, or one row of cells"
+	case "columns":
+		return "the fields and their order a list of objects is written through"
+	case "valueInput":
+		return `whether a written value is interpreted as typed ("user") or stored verbatim ("raw")`
+	case "header":
+		return "read the range's first row as column names and answer with objects"
+	default:
+		return "the process variable receiving what Google returned"
+	}
+}
+
+// googleSheetsColumns splits the authored column list into the projection order. The
+// spacing an author leaves around a comma is theirs; an empty entry is dropped rather
+// than becoming a column with no name.
+func googleSheetsColumns(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// googleSheetsInput reads the value-input mode, applying the default when a model
+// authors none so the runtime interprets nothing (I5). A mode that is neither is
+// refused at deploy rather than silently read as the default at call time, where the
+// difference is a formula stored as text.
+func googleSheetsInput(taskID, op, raw string, takes bool) (string, error) {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	if !takes {
+		return "", nil
+	}
+	switch mode {
+	case "":
+		return sheetsInputUser, nil
+	case sheetsInputUser, sheetsInputRaw:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("compiler: google sheets task %q operation %q has an unknown valueInput %q (want %q or %q)",
+			taskID, op, raw, sheetsInputUser, sheetsInputRaw)
+	}
+}
+
+// googleSheetsBool reads a structural boolean attribute. Anything that is neither
+// "true" nor "false" is refused rather than read as false, because a misspelling that
+// silently turns a flag off is a defect that looks like a working model.
+func googleSheetsBool(taskID, op, attr, raw string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "":
+		return false, nil
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, fmt.Errorf("compiler: google sheets task %q operation %q has a non-boolean %s %q (want true or false)",
+			taskID, op, attr, raw)
+	}
 }

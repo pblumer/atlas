@@ -1,6 +1,7 @@
 package ldap
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -28,11 +29,14 @@ type SecretResolver func(ref string) string
 // it with a [job.Runner] under the reserved [compiler.LdapJobTypeIndex] via
 // HandleWithOutput; the runner then pulls activatable LDAP jobs, and for each the
 // handler resolves the task's url / bind DN / operation / DNs from the compiled
-// process, dials and binds through dialer — evaluating any FEEL values over the
-// instance's variables (ADR-0067) and resolving the bind password from a secret
-// reference (ADR-0041) — performs the operation, and for a search returns the entries
-// as the task's result variable. Returning an error fails the job (retry, then an
-// incident, ADR-0061); the runner completes it only on success.
+// process — evaluating any FEEL values over the instance's variables (ADR-0067) —
+// and performs the operation, returning a search's entries as the task's result
+// variable. Returning an error fails the job (retry, then an incident, ADR-0061);
+// the runner completes it only on success.
+//
+// It goes through the same [Resolve] and [Run] pair the worker half uses, so
+// relocating the work cannot change what a resolved LDAP task means — only which
+// process holds the credentials behind the references (ADR-0168).
 func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret SecretResolver) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
@@ -50,92 +54,15 @@ func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret Sec
 		if err != nil {
 			return nil, fmt.Errorf("ldap: %w", err)
 		}
-		op := cp.Intern(detail.LdapOp)
-		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
-		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
-		if err != nil {
-			return nil, fmt.Errorf("ldap: read variables for element %d: %w", j.ElementInstanceKey, err)
-		}
-		serverURL := resolveValue(detail.LdapURL, piKey, scopeVars)
-		if serverURL == "" {
-			return nil, fmt.Errorf("ldap: %s has an empty url", op)
-		}
-		bindDN := resolveValue(detail.LdapBindDN, piKey, scopeVars)
-		bindPassword := ""
-		if ref := cp.Intern(detail.LdapBindSecret); ref != "" {
-			bindPassword = resolveSecret(secret, ref)
-			if bindPassword == "" {
-				return nil, fmt.Errorf("ldap: bind secret %q is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN)", ref)
-			}
-		}
-		clientCert := ""
-		if ref := cp.Intern(detail.LdapClientCertSecret); ref != "" {
-			clientCert = resolveSecret(secret, ref)
-			if clientCert == "" {
-				return nil, fmt.Errorf("ldap: client certificate secret %q is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN)", ref)
-			}
-		}
-		conn, err := dialer.Dial(DialOptions{
-			URL:          serverURL,
-			StartTLS:     detail.LdapStartTLS,
-			BindDN:       bindDN,
-			BindPassword: bindPassword,
-			ClientCert:   clientCert,
-		})
+		task, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey)
 		if err != nil {
 			return nil, err
 		}
-		defer conn.Close()
-		return dispatch(cp, detail, op, piKey, scopeVars, conn)
-	}
-}
-
-// dispatch performs the authored operation over the bound connection and returns a
-// search's result variable (nil for the mutating operations, which write nothing
-// back).
-func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, op string, piKey uint64, scopeVars map[string]model.VariableValue, conn Conn) ([]model.VariableValue, error) {
-	switch op {
-	case "search":
-		entries, err := conn.Search(SearchRequest{
-			BaseDN:     resolveValue(detail.LdapBaseDN, piKey, scopeVars),
-			Scope:      cp.Intern(detail.LdapScope),
-			Filter:     resolveValue(detail.LdapFilter, piKey, scopeVars),
-			PageSize:   detail.LdapPageSize,
-			MaxEntries: detail.LdapMaxEntries,
-		})
+		res, err := Run(context.Background(), task, dialer, secret)
 		if err != nil {
 			return nil, err
 		}
-		resultVar := cp.Intern(detail.ResultVar)
-		if resultVar == "" {
-			return nil, nil // the model discards the entries
-		}
-		return []model.VariableValue{responseVariable(resultVar, entriesToJSON(entries))}, nil
-	case "add":
-		attrs, err := attrsFromVar(cp.Intern(detail.LdapEntryVar), scopeVars)
-		if err != nil {
-			return nil, err
-		}
-		return nil, conn.Add(resolveValue(detail.LdapDN, piKey, scopeVars), attrs)
-	case "modify", "add-values", "delete-values":
-		attrs, err := attrsFromVar(cp.Intern(detail.LdapEntryVar), scopeVars)
-		if err != nil {
-			return nil, err
-		}
-		if len(attrs) == 0 {
-			return nil, fmt.Errorf("ldap: %s resolved no attributes to change", op)
-		}
-		return nil, conn.Modify(resolveValue(detail.LdapDN, piKey, scopeVars), modsFor(op, attrs))
-	case "delete":
-		return nil, conn.Delete(resolveValue(detail.LdapDN, piKey, scopeVars))
-	case "modify-password":
-		newPassword := resolveValue(detail.LdapNewPassword, piKey, scopeVars)
-		if newPassword == "" {
-			return nil, fmt.Errorf("ldap: modify-password resolved an empty newPassword")
-		}
-		return nil, conn.SetPassword(resolveValue(detail.LdapDN, piKey, scopeVars), newPassword)
-	default:
-		return nil, fmt.Errorf("ldap: unknown operation %q", op)
+		return res.Variables(), nil
 	}
 }
 
