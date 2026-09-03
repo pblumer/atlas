@@ -18,6 +18,11 @@ coverage.*
 go.work
 go.work.sum
 
+# The vendored canvas bundles are rebuilt with a root `npm install` (see
+# api/web/vendor/*/ATLAS-VENDORED.txt), so following that recipe leaves a
+# node_modules here. The built artifact is committed; what built it is not.
+/node_modules/
+
 # Profiling
 *.prof
 *.pprof

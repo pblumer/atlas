@@ -4448,47 +4448,63 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .im-dirty { font: 11px/1.5 system-ui, sans-serif; color: var(--muted); font-style: italic; }
 
 .im-body { display: flex; flex: 1; min-height: 0; border: 1px solid var(--border); }
-.im-canvas { flex: 1; overflow: auto; background: var(--bg); min-width: 0; }
+.im-canvas { flex: 1; overflow: hidden; background: var(--bg); min-width: 0; position: relative; }
+/* Over the drawing, not on it: diagram-js fits the viewport to its content, and a
+   sentence drawn on the sheet would be zoomed to fill the window. */
+.im-empty-hint { position: absolute; z-index: 1; inset: 40px 40px auto 40px; margin: 0;
+  max-width: 44ch; color: var(--muted); font-size: 13px; line-height: 1.5; pointer-events: none; }
 .im-canvas.connecting { cursor: crosshair; }
 .im-side { width: 340px; flex: none; border-left: 1px solid var(--border); overflow: auto; background: var(--bg); }
 
-.im-svg { display: block; }
-.im-hint { fill: var(--muted); font: 13px/1.5 system-ui, sans-serif; }
+/* The class canvas. The drawing is diagram-js now
+   (ADR-draft-class-canvas-on-diagram-js), so these style what the Atlas renderer in
+   api/web/vendor/uml/ emits; the selection outline and the hit layer are the
+   library's own. */
+.im-canvas .djs-container { background: var(--bg); }
 
 /* A class box. The three kinds are told apart by the colour of their header strip
    rather than by shape, because shape is what the notation already uses. */
-.im-class { cursor: grab; }
-.im-class .im-box { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
-.im-class .im-sep { stroke: var(--border); }
-.im-class .im-stereo { fill: var(--muted); font: 10px/1.4 system-ui, sans-serif; letter-spacing: .02em; }
-.im-class .im-cname { fill: var(--text); font: 600 13px/1.4 system-ui, sans-serif; }
-.im-class .im-attr { font: 12px/1.4 ui-monospace, monospace; }
-.im-class .im-attr-name { fill: var(--text); }
-.im-class .im-attr-type { fill: var(--muted); }
-.im-class .im-attr-mult { fill: var(--muted); }
-.im-class .im-attr.key .im-attr-name { font-weight: 700; }
-.im-class .im-literal { fill: var(--text); font: 12px/1.4 ui-monospace, monospace; }
-.im-class .im-empty { fill: var(--muted); font: italic 11.5px/1.4 system-ui, sans-serif; }
-.im-class.selected .im-box { stroke: var(--accent); stroke-width: 2; }
-.im-class.invalid .im-box { stroke: #d93025; stroke-dasharray: 4 3; }
+.uml-class .uml-box { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+.uml-class .uml-sep { stroke: var(--border); }
+.uml-class .uml-stereo { fill: var(--muted); font: 10px/1.4 system-ui, sans-serif; letter-spacing: .02em; }
+.uml-class .uml-cname { fill: var(--text); font: 600 13px/1.4 system-ui, sans-serif; }
+.uml-class .uml-attr { font: 12px/1.4 ui-monospace, monospace; }
+.uml-class .uml-attr-name { fill: var(--text); }
+.uml-class .uml-attr-type { fill: var(--muted); }
+.uml-class .uml-attr-mult { fill: var(--muted); }
+.uml-class .uml-attr.key .uml-attr-name { font-weight: 700; }
+.uml-class .uml-literal { fill: var(--text); font: 12px/1.4 ui-monospace, monospace; }
+.uml-class .uml-empty { fill: var(--muted); font: italic 11.5px/1.4 system-ui, sans-serif; }
+.uml-class.invalid .uml-box { stroke: #d93025; stroke-dasharray: 4 3; }
 /* While a relationship is being drawn, a class the matrix would refuse fades: the
    canvas offers only what the server would accept. */
-.im-class.unreachable { opacity: .35; }
-.im-class.businessObject .im-box { fill: color-mix(in srgb, var(--accent-soft) 60%, var(--bg)); }
-.im-class.valueType .im-box { fill: var(--bg); stroke-dasharray: 0; }
-.im-class.enumeration .im-box { fill: color-mix(in srgb, #b26a00 8%, var(--bg)); }
+.uml-class.unreachable { opacity: .35; }
+.uml-class.businessObject .uml-box { fill: color-mix(in srgb, var(--accent-soft) 60%, var(--bg)); }
+.uml-class.valueType .uml-box { fill: var(--bg); stroke-dasharray: 0; }
+.uml-class.enumeration .uml-box { fill: color-mix(in srgb, #b26a00 8%, var(--bg)); }
 
-.im-line { stroke: var(--text); stroke-width: 1.4; }
-.im-line.generalization { stroke-width: 1.2; }
-.im-line-hit { stroke: transparent; stroke-width: 12; cursor: pointer; }
-.im-mark { stroke: var(--text); stroke-width: 1.2; }
-.im-mark.filled { fill: var(--text); }
-.im-mark.open { fill: var(--bg); }
-.im-edge.selected .im-line { stroke: var(--accent); stroke-width: 2.2; }
-.im-edge.selected .im-mark { stroke: var(--accent); }
-.im-edge.selected .im-mark.filled { fill: var(--accent); }
-.im-edge-label { fill: var(--text); font: 600 11px/1.4 system-ui, sans-serif; text-anchor: middle; }
-.im-end-label { fill: var(--muted); font: 11px/1.4 ui-monospace, monospace; text-anchor: middle; }
+.uml-edge .uml-edge-line { stroke: var(--text); stroke-width: 1.4; fill: none; }
+.uml-edge.generalization .uml-edge-line { stroke-width: 1.2; }
+.uml-edge-label { fill: var(--text); font: 600 11px/1.4 system-ui, sans-serif; text-anchor: middle; }
+.uml-end-label { fill: var(--muted); font: 11px/1.4 ui-monospace, monospace; text-anchor: middle; }
+
+/* A store is kept visibly unlike a class, because it is not one: a cylinder, joined
+   to the class it holds by a dashed annotation rather than by an association. */
+.uml-store .uml-store-body { fill: color-mix(in srgb, var(--muted) 12%, var(--bg)); stroke: var(--border); }
+.uml-store .uml-store-lip { stroke: var(--border); }
+.uml-store .uml-store-name { fill: var(--text); font: 600 12px/1.4 system-ui, sans-serif; }
+.uml-store .uml-store-sub { fill: var(--muted); font: 11px/1.4 system-ui, sans-serif; }
+.uml-store.invalid .uml-store-body { stroke: #d93025; stroke-dasharray: 4 3; }
+.uml-store.unreachable { opacity: .35; }
+/* A store's line to its class is an annotation, not a relationship: a store and its
+   class do not relate, one *is kept in* the other (ADR-0230 §7). Dashed says so. */
+.uml-store-link .uml-edge-line { stroke: var(--muted); stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; }
+
+/* diagram-js draws the selection, so the box does not have to. A line gets no
+   outline from the library, so which relationship is being edited is said here. */
+.djs-element.selected .uml-box,
+.djs-element.selected .uml-store-body { stroke: var(--accent); stroke-width: 2; }
+.djs-element.selected .uml-edge-line { stroke: var(--accent); stroke-width: 2.2; }
 
 /* The properties panel. */
 .im-panel { padding: 12px 14px 20px; }
@@ -4520,6 +4536,19 @@ table.im-attrs { width: 100%; border-collapse: collapse; font-size: 12px; }
   background: var(--bg); color: var(--text);
 }
 .im-attrs .im-key-cell { text-align: center; width: 24px; }
+
+/* Reordering an attribute or a literal. The grip is the only thing that starts a
+   drag, so the text inputs beside it keep their own selection; the drop line marks
+   the edge the row will land against. */
+.im-attrs .im-grip {
+  width: 16px; padding: 2px 0 2px 2px; cursor: grab; user-select: none;
+  color: var(--muted); font-size: 11px; line-height: 1; text-align: center;
+}
+.im-attrs .im-grip:active { cursor: grabbing; }
+.im-attrs tr:hover .im-grip { color: var(--text); }
+.im-attrs tr.im-dragging { opacity: .45; }
+.im-attrs tr.im-drop-before td { box-shadow: inset 0 2px 0 0 var(--accent); }
+.im-attrs tr.im-drop-after td { box-shadow: inset 0 -2px 0 0 var(--accent); }
 .im-end { border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px 2px; margin-bottom: 10px; }
 .im-end legend { font: 600 11px/1.5 system-ui, sans-serif; color: var(--muted); padding: 0 4px; }
 .im-note { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; font: 12px/1.55 system-ui, sans-serif; color: var(--muted); }

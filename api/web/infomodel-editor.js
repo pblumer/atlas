@@ -15,34 +15,47 @@
 // way of saying everything the document already says. So the editor holds the model,
 // and Save sends it back against the revision it read.
 
-const SVG_NS = "http://www.w3.org/2000/svg";
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-// Box geometry. A class is as wide as it needs to be and as tall as its members
-// make it, so the diagram's shape carries information rather than a grid does.
+// How wide a class is drawn. It is the one piece of geometry this file still needs,
+// to place a new box where there is room; the rest lives with the drawing, in
+// api/web/vendor/uml/src/index.js.
 const BOX_W = 200;
-const HEAD_H = 34;
-const ROW_H = 20;
-const PAD = 10;
-// A store is one line about where a class is kept, so it is a band rather than a box.
-const STORE_H = 52;
 
-const el = (tag, attrs = {}, text) => {
-  const node = document.createElementNS(SVG_NS, tag);
-  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
-  if (text != null) node.textContent = text;
-  return node;
-};
+// The canvas bundle is loaded on demand, the way the Modeler loads bpmn-js: it is
+// a hundred kilobytes that only this view needs, and the model list beside it should
+// not pay for them.
+let canvasReady;
+function loadCanvas() {
+  if (canvasReady) return canvasReady;
+  canvasReady = new Promise((resolve, reject) => {
+    const href = "vendor/uml/diagram-js.css";
+    if (!document.querySelector(`link[href="${href}"]`)) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = href;
+      document.head.appendChild(link);
+    }
+    if (window.AtlasUml) { resolve(window.AtlasUml); return; }
+    const script = document.createElement("script");
+    script.src = "vendor/uml/uml-canvas.js";
+    script.onload = () => resolve(window.AtlasUml);
+    script.onerror = () => reject(new Error("failed to load the class canvas assets"));
+    document.head.appendChild(script);
+  });
+  return canvasReady;
+}
 
 export async function mountClassDiagram(root, { api, toast, id }) {
   root.innerHTML = `<div class="card"><p class="muted">Loading class diagram…</p></div>`;
 
-  let doc, subset;
+  let doc, subset, AtlasUml;
   try {
-    [doc, subset] = await Promise.all([
+    [doc, subset, AtlasUml] = await Promise.all([
       api("GET", `/api/v1/infomodel/models/${encodeURIComponent(id)}`),
       api("GET", "/api/v1/infomodel/subset"),
+      loadCanvas(),
     ]);
   } catch (e) {
     root.innerHTML = `<div class="card empty"><h1>Could not open this model</h1>
@@ -66,11 +79,6 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   const classById = (cid) => state.model.classes.find((c) => c.id === cid);
   const allowed = (from, to) => subset.matrix[`${from}>${to}`] || [];
 
-  // A class is only as tall as its members; an enumeration lists literals where the
-  // others list attributes.
-  const rowsOf = (c) => (stereotypeOf(c.stereotype).hasAttributes ? c.attributes || [] : c.literals || []);
-  const boxH = (c) => HEAD_H + PAD + Math.max(1, rowsOf(c).length) * ROW_H + PAD / 2;
-
   root.innerHTML = `
     <div class="im-editor" id="im-editor">
       <div class="im-bar">
@@ -83,13 +91,17 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         <button class="btn" id="im-save" disabled title="Save the diagram (Ctrl/⌘ + S)">Save</button>
       </div>
       <div class="im-body">
-        <div class="im-canvas" id="im-canvas"></div>
+        <div class="im-canvas" id="im-canvas">
+          <p class="im-empty-hint" id="im-empty" hidden>No classes yet. Add a business object — an Order, a
+            Customer, a Claim — and give it a business key.</p>
+        </div>
         <div class="im-side" id="im-side"></div>
       </div>
       <div class="im-problems" id="im-problems"></div>
     </div>`;
 
   const canvasEl = root.querySelector("#im-canvas");
+  const emptyEl = root.querySelector("#im-empty");
   const sideEl = root.querySelector("#im-side");
   const problemsEl = root.querySelector("#im-problems");
   const saveBtn = root.querySelector("#im-save");
@@ -109,6 +121,54 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       `<button type="button" class="im-connect" data-kind="${esc(k.kind)}"
          title="${esc(k.rule)}">${esc(k.label)}</button>`).join("");
 
+  // The canvas. Everything a modeler expects of one — zoom, pan, marquee, multi-select
+  // move, undo of a move, keyboard nudging — comes from diagram-js; what Atlas owns is
+  // how a class is drawn and what the served subset permits between two of them
+  // (ADR-draft-class-canvas-on-diagram-js).
+  const canvas = new AtlasUml.ClassCanvas(canvasEl, {
+    subset,
+    onSelection: (bo) => onCanvasSelection(bo),
+    onChange: () => absorbMoves(),
+  });
+
+  // syncCanvas brings the drawing up to date with the model. It is a reconciliation
+  // rather than a redraw because the panel edits on every keystroke: a redraw would
+  // take the viewport, the selection and the undo stack with it each time, so typing
+  // a class name would zoom back to fit and deselect the class being renamed.
+  function syncCanvas() {
+    // Deaf to the canvas for the whole sync, not just the last line of it. Selecting
+    // through the canvas is what tells the panel, so a selection the panel already
+    // knows about is applied without being told back — and reconciling relationships
+    // means removing them, which the canvas reports as "nothing is selected now". Were
+    // that heard, typing in a relationship's name would deselect it on the first key.
+    applyingSelection = true;
+    try {
+      canvas.sync(state.model, state.validation.findings || [], { unreachable: unreachableNow() });
+      // An empty canvas says what to do with it. It is HTML over the drawing rather
+      // than text in it: diagram-js fits the viewport to the content, so a sentence
+      // drawn on the sheet would be zoomed to fill it.
+      emptyEl.hidden = (state.model.classes || []).length > 0;
+      canvas.select(state.selected ? state.selected.id : null);
+    } finally {
+      applyingSelection = false;
+    }
+  }
+
+  // While a relationship is being drawn, everything it could not land on fades. The
+  // rule is the served matrix, read here rather than in the drawing — the canvas is
+  // told what to show, and there stays one copy of the matrix, on the server.
+  function unreachableNow() {
+    if (!state.connecting) return [];
+    // A store is never an end of a relationship, so it is out for the whole gesture.
+    const out = (state.model.stores || []).map((st) => st.id);
+    if (!state.connecting.fromId) return out;
+    const from = classById(state.connecting.fromId) || {};
+    for (const c of state.model.classes) {
+      if (!allowed(from.stereotype, c.stereotype).includes(state.connecting.kind)) out.push(c.id);
+    }
+    return out;
+  }
+
   function markDirty() {
     state.dirty = true;
     dirtyEl.hidden = false;
@@ -117,214 +177,12 @@ export async function mountClassDiagram(root, { api, toast, id }) {
 
   // ---- rendering -----------------------------------------------------------
   function render() {
-    renderCanvas();
+    syncCanvas();
     renderSide();
     renderProblems();
     root.querySelectorAll(".im-connect").forEach((b) =>
       b.classList.toggle("active", !!state.connecting && state.connecting.kind === b.dataset.kind));
     canvasEl.classList.toggle("connecting", !!state.connecting);
-  }
-
-  function renderCanvas() {
-    const classes = state.model.classes;
-    const stores = state.model.stores || [];
-    const width = Math.max(900, ...classes.map((c) => c.x + BOX_W + 60), ...stores.map((st) => st.x + BOX_W + 60));
-    const height = Math.max(520, ...classes.map((c) => c.y + boxH(c) + 60), ...stores.map((st) => st.y + STORE_H + 60));
-
-    const svg = el("svg", { class: "im-svg", width, height, viewBox: `0 0 ${width} ${height}` });
-    svg.appendChild(markerDefs());
-
-    if (!classes.length) {
-      svg.appendChild(el("text", { x: 40, y: 60, class: "im-hint" },
-        "No classes yet. Add a business object — an Order, a Customer, a Claim — and give it a business key."));
-    }
-
-    // Edges first so a box always covers a line rather than the other way round.
-    const edgeLayer = el("g", {});
-    for (const a of state.model.associations) drawAssociation(edgeLayer, a);
-    for (const st of stores) drawStoreLink(edgeLayer, st);
-    svg.appendChild(edgeLayer);
-    for (const c of classes) svg.appendChild(drawClass(c));
-    for (const st of stores) svg.appendChild(drawStore(st));
-
-    canvasEl.innerHTML = "";
-    canvasEl.appendChild(svg);
-  }
-
-  // markerDefs holds the three line ends UML gives meaning to: a filled diamond for
-  // ownership, a hollow one for grouping, a hollow triangle for "is a kind of".
-  function markerDefs() {
-    const defs = el("defs", {});
-    const marker = (mid, path, cls, refX, w, h) => {
-      const m = el("marker", {
-        id: mid, markerWidth: w, markerHeight: h, refX, refY: h / 2,
-        orient: "auto-start-reverse", markerUnits: "userSpaceOnUse",
-      });
-      m.appendChild(el("path", { d: path, class: cls }));
-      return m;
-    };
-    defs.appendChild(marker("im-diamond-filled", "M0,6 L8,1 L16,6 L8,11 Z", "im-mark filled", 16, 18, 12));
-    defs.appendChild(marker("im-diamond-open", "M0,6 L8,1 L16,6 L8,11 Z", "im-mark open", 16, 18, 12));
-    defs.appendChild(marker("im-triangle", "M0,1 L14,7 L0,13 Z", "im-mark open", 14, 16, 14));
-    return defs;
-  }
-
-  // border clips a line from one box's centre to another's, so an edge touches the
-  // rectangle rather than disappearing under it.
-  function border(c, towardX, towardY) {
-    const cx = c.x + BOX_W / 2;
-    const cy = c.y + boxH(c) / 2;
-    const dx = towardX - cx;
-    const dy = towardY - cy;
-    if (!dx && !dy) return { x: cx, y: cy };
-    const hw = BOX_W / 2;
-    const hh = boxH(c) / 2;
-    const scale = Math.min(hw / Math.abs(dx || 1e-6), hh / Math.abs(dy || 1e-6));
-    return { x: cx + dx * scale, y: cy + dy * scale };
-  }
-
-  function drawAssociation(layer, a) {
-    const from = classById(a.from.classId);
-    const to = classById(a.to.classId);
-    if (!from || !to) return;
-    const g = el("g", { class: `im-edge${state.selected && state.selected.kind === "association" && state.selected.id === a.id ? " selected" : ""}` });
-    g.dataset.assoc = a.id;
-
-    let path, labelAt, fromAt, toAt;
-    if (from.id === to.id) {
-      // A class related to its own kind loops out of its right edge and back into
-      // its top — the shape UML uses, and the only one that stays readable.
-      const x = from.x + BOX_W;
-      const y = from.y + boxH(from) / 2;
-      const tx = from.x + BOX_W - 40;
-      const ty = from.y;
-      path = `M${x},${y} C${x + 70},${y} ${tx + 70},${ty - 60} ${tx},${ty}`;
-      labelAt = { x: x + 60, y: y - 34 };
-      fromAt = { x: x + 14, y: y - 6 };
-      toAt = { x: tx + 6, y: ty - 10 };
-    } else {
-      const p1 = border(from, to.x + BOX_W / 2, to.y + boxH(to) / 2);
-      const p2 = border(to, from.x + BOX_W / 2, from.y + boxH(from) / 2);
-      path = `M${p1.x},${p1.y} L${p2.x},${p2.y}`;
-      labelAt = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 - 6 };
-      fromAt = { x: p1.x + (p2.x - p1.x) * 0.16, y: p1.y + (p2.y - p1.y) * 0.16 - 6 };
-      toAt = { x: p1.x + (p2.x - p1.x) * 0.84, y: p1.y + (p2.y - p1.y) * 0.84 - 6 };
-    }
-
-    // The marker sits at the end the meaning belongs to: at the whole for a
-    // composition or an aggregation, at the general class for a generalization.
-    const line = el("path", { d: path, class: `im-line ${a.kind}`, fill: "none" });
-    if (a.kind === "composition") line.setAttribute("marker-start", "url(#im-diamond-filled)");
-    if (a.kind === "aggregation") line.setAttribute("marker-start", "url(#im-diamond-open)");
-    if (a.kind === "generalization") line.setAttribute("marker-end", "url(#im-triangle)");
-    g.appendChild(el("path", { d: path, class: "im-line-hit", fill: "none" }));
-    g.appendChild(line);
-
-    if (a.name) g.appendChild(el("text", { x: labelAt.x, y: labelAt.y, class: "im-edge-label" }, a.name));
-    // A generalization's ends carry no roles or multiplicities: "is a kind of" is
-    // not a counted relationship.
-    if (a.kind !== "generalization") {
-      const endLabel = (end, at) => {
-        const parts = [end.role, end.multiplicity].filter(Boolean).join(" ");
-        if (parts) g.appendChild(el("text", { x: at.x, y: at.y, class: "im-end-label" }, parts));
-      };
-      endLabel(a.from, fromAt);
-      endLabel(a.to, toAt);
-    }
-    layer.appendChild(g);
-  }
-
-  // A data store is drawn as the notation draws a persistent thing: an open-ended
-  // cylinder, unmistakably not a class. It says what it holds and what keeps it,
-  // because those are the two facts a store *is*.
-  function drawStore(st) {
-    const selected = state.selected && state.selected.kind === "store" && state.selected.id === st.id;
-    const bad = state.validation.findings.some((f) => f.storeId === st.id);
-    const g = el("g", {
-      class: `im-store${selected ? " selected" : ""}${bad ? " invalid" : ""}${state.connecting ? " unreachable" : ""}`,
-      transform: `translate(${st.x},${st.y})`,
-    });
-    g.dataset.store = st.id;
-    g.dataset.name = st.name || "";
-    g.appendChild(el("path", {
-      class: "im-store-body",
-      d: `M0,10 A${BOX_W / 2},10 0 0 1 ${BOX_W},10 L${BOX_W},${STORE_H - 10}` +
-        ` A${BOX_W / 2},10 0 0 1 0,${STORE_H - 10} Z`,
-    }));
-    g.appendChild(el("path", { class: "im-store-lip", fill: "none", d: `M0,10 A${BOX_W / 2},10 0 0 0 ${BOX_W},10` }));
-    g.appendChild(el("text", { x: BOX_W / 2, y: 30, class: "im-store-name", "text-anchor": "middle" },
-      st.name || "unnamed"));
-    const holds = st.class ? `«${storeModeOf(st.mode).mode || "read"}» ${st.class}` : "holds nothing yet";
-    g.appendChild(el("text", { x: BOX_W / 2, y: 44, class: "im-store-sub", "text-anchor": "middle" }, holds));
-    return g;
-  }
-
-  // The line from a store to the class it holds. It is not an association — nothing
-  // in the model relates those two — so it is drawn as the annotation it is.
-  function drawStoreLink(layer, st) {
-    const target = state.model.classes.find((c) => c.name === st.class);
-    if (!target) return;
-    const from = { x: st.x + BOX_W / 2, y: st.y + STORE_H / 2 };
-    const p = border(target, from.x, from.y);
-    const g = el("g", { class: "im-store-link" });
-    g.appendChild(el("path", { class: "im-store-line", fill: "none", d: `M${from.x},${from.y} L${p.x},${p.y}` }));
-    layer.appendChild(g);
-  }
-
-  function drawClass(c) {
-    const kind = stereotypeOf(c.stereotype);
-    const h = boxH(c);
-    const bad = state.validation.findings.some((f) => f.classId === c.id);
-    const selected = state.selected && state.selected.kind === "class" && state.selected.id === c.id;
-    const connectable = state.connecting
-      ? (state.connecting.fromId
-        ? allowed((classById(state.connecting.fromId) || {}).stereotype, c.stereotype).includes(state.connecting.kind)
-        : true)
-      : true;
-
-    const g = el("g", {
-      class: `im-class ${c.stereotype}${selected ? " selected" : ""}${bad ? " invalid" : ""}` +
-        `${state.connecting && !connectable ? " unreachable" : ""}`,
-      transform: `translate(${c.x},${c.y})`,
-    });
-    g.dataset.class = c.id;
-    // The name rides on the group as data so a test — and a future "find a class"
-    // box — can address one exactly, rather than by matching the text of a label
-    // that is a prefix of another class's.
-    g.dataset.name = c.name || "";
-
-    g.appendChild(el("rect", { x: 0, y: 0, width: BOX_W, height: h, rx: 6, class: "im-box" }));
-    g.appendChild(el("line", { x1: 0, y1: HEAD_H, x2: BOX_W, y2: HEAD_H, class: "im-sep" }));
-    // The stereotype rides above the name in guillemets, which is how UML says
-    // "this is what kind of classifier that is".
-    g.appendChild(el("text", { x: BOX_W / 2, y: 14, class: "im-stereo", "text-anchor": "middle" },
-      `«${kind.stereotype}»`));
-    g.appendChild(el("text", { x: BOX_W / 2, y: 28, class: "im-cname", "text-anchor": "middle" },
-      c.name || "unnamed"));
-
-    const rows = rowsOf(c);
-    if (!rows.length) {
-      g.appendChild(el("text", { x: PAD, y: HEAD_H + PAD + 12, class: "im-empty" },
-        kind.hasAttributes ? "no attributes yet" : "no literals yet"));
-    }
-    rows.forEach((row, i) => {
-      const y = HEAD_H + PAD + i * ROW_H + 13;
-      if (!kind.hasAttributes) {
-        g.appendChild(el("text", { x: PAD, y, class: "im-literal" }, row));
-        return;
-      }
-      const isKey = (c.identity || []).includes(row.name);
-      // The business key is marked on the box because it is the fact the whole model
-      // turns on: it is what makes Order#ORD-1 the same order in two processes.
-      const t = el("text", { x: PAD, y, class: `im-attr${isKey ? " key" : ""}` });
-      t.appendChild(el("tspan", { class: "im-attr-name" }, `${isKey ? "⚿ " : ""}${row.name}`));
-      t.appendChild(el("tspan", { class: "im-attr-type" }, `: ${row.type}`));
-      if (row.multiplicity && row.multiplicity !== "1") {
-        t.appendChild(el("tspan", { class: "im-attr-mult" }, ` [${row.multiplicity}]`));
-      }
-      g.appendChild(t);
-    });
-    return g;
   }
 
   // ---- problems ------------------------------------------------------------
@@ -388,6 +246,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     const findings = state.validation.findings.filter((f) => f.classId === c.id);
     const attrRows = (c.attributes || []).map((a, i) => `
       <tr data-attr="${i}">
+        <td class="im-grip" title="Drag to reorder — the order is the order the class box reads in"
+            aria-label="Reorder">⠿</td>
         <td><input class="im-in" data-f="name" value="${esc(a.name)}" placeholder="name"/></td>
         <td><select class="im-in" data-f="type">
           ${subset.primitives.map((p) => `<option value="${esc(p.type)}"${p.type === a.type ? " selected" : ""}>${esc(p.label)}</option>`).join("")}
@@ -426,8 +286,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           <div class="im-panel-head"><h4>Attributes</h4>
             <button type="button" class="btn ghost small" data-act="add-attr">+ Attribute</button></div>
           <table class="im-attrs"><thead><tr>
-            <th>Name</th><th>Type</th><th>Card.</th><th title="Business key">⚿</th><th></th>
-          </tr></thead><tbody>${attrRows || `<tr><td colspan="5" class="muted">No attributes yet.</td></tr>`}</tbody></table>
+            <th></th><th>Name</th><th>Type</th><th>Card.</th><th title="Business key">⚿</th><th></th>
+          </tr></thead><tbody>${attrRows || `<tr><td colspan="6" class="muted">No attributes yet.</td></tr>`}</tbody></table>
           ${kind.hasIdentity ? `<p class="im-hint-text"><b>The business key</b> is what makes two of these the
             same one — <code>Order#ORD-1</code> in this process and in the next. It is the part BPMN has no
             equivalent for, and what a data store and a cross-process lookup will resolve against.</p>` : ""}
@@ -437,6 +297,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             <button type="button" class="btn ghost small" data-act="add-literal">+ Literal</button></div>
           <table class="im-attrs"><tbody>
             ${(c.literals || []).map((lit, i) => `<tr data-lit="${i}">
+              <td class="im-grip" title="Drag to reorder" aria-label="Reorder">⠿</td>
               <td><input class="im-in" data-f="literal" value="${esc(lit)}" placeholder="approved"/></td>
               <td><button type="button" class="icon-btn" data-act="del-literal" title="Remove">✕</button></td>
             </tr>`).join("") || `<tr><td class="muted">No literals yet.</td></tr>`}
@@ -570,7 +431,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       markDirty();
       // The name and the class are on the drawing; the rest is not, so only those
       // two are worth a redraw while somebody is still typing.
-      if (field === "name" || field === "class") renderCanvas();
+      if (field === "name" || field === "class") syncCanvas();
       if (field === "class") renderProblems();
       return;
     }
@@ -586,7 +447,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           for (const a of other.attributes || []) if (a.type === before) a.type = target.value;
         }
         c.name = target.value;
-        markDirty(); renderCanvas(); renderProblems();
+        markDirty(); syncCanvas(); renderProblems();
         return;
       }
       if (target.id === "im-c-stereo") {
@@ -622,7 +483,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           if (a[target.dataset.f] === target.value) return;
           a[target.dataset.f] = target.value;
         }
-        markDirty(); renderCanvas();
+        markDirty(); syncCanvas();
         return;
       }
       const lit = target.closest("[data-lit]");
@@ -630,7 +491,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         const i = Number(lit.dataset.lit);
         if (c.literals[i] === target.value) return;
         c.literals[i] = target.value;
-        markDirty(); renderCanvas();
+        markDirty(); syncCanvas();
       }
       return;
     }
@@ -646,14 +507,14 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     if (target.id === "im-a-name") {
       if ((a.name || "") === target.value) return;
       a.name = target.value;
-      markDirty(); renderCanvas();
+      markDirty(); syncCanvas();
       return;
     }
     if (target.classList.contains("im-end-in")) {
       const end = a[target.dataset.side];
       if ((end[target.dataset.f] || "") === target.value) return;
       end[target.dataset.f] = target.value;
-      markDirty(); renderCanvas();
+      markDirty(); syncCanvas();
     }
   }
 
@@ -720,6 +581,119 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   sideEl.addEventListener("input", onSideEdit);
   sideEl.addEventListener("change", onSideEdit);
   sideEl.addEventListener("click", onSideClick);
+
+  // ---- reordering attributes and literals -----------------------------------
+  // The order is not a view setting. A class box reads top to bottom, and which
+  // attribute comes first is a statement about the class — a business key usually
+  // belongs at the top, the way a reader expects to find it. `attributes` and
+  // `literals` are already ordered arrays in the document, so moving a row is a
+  // model edit like any other: it marks the model dirty and the canvas redraws.
+  //
+  // Only the grip starts a drag. Making the whole row draggable would take the
+  // pointer away from the text inputs inside it, so selecting a word in a name
+  // would drag the attribute instead.
+
+  // listAt answers which list a row belongs to and what it is indexed by, so the
+  // drag, the drop and the keyboard move all read one description of the table.
+  const listAt = (row) => {
+    const c = selectedClass();
+    if (!c || !row) return null;
+    if (row.dataset.attr !== undefined) {
+      return { list: c.attributes || [], index: Number(row.dataset.attr), attr: "attr" };
+    }
+    if (row.dataset.lit !== undefined) {
+      return { list: c.literals || [], index: Number(row.dataset.lit), attr: "lit" };
+    }
+    return null;
+  };
+
+  // move takes the entry at `from` and puts it at `to`, closing the gap it left.
+  // A move onto its own position is not an edit, so it does not dirty the model.
+  const move = (list, from, to) => {
+    if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return false;
+    list.splice(to, 0, list.splice(from, 1)[0]);
+    markDirty();
+    render();
+    return true;
+  };
+
+  let dragging = null; // { attr, index } while a row is in flight
+
+  sideEl.addEventListener("pointerdown", (e) => {
+    const row = e.target.closest("tr[data-attr], tr[data-lit]");
+    if (row) row.draggable = !!e.target.closest(".im-grip");
+  });
+
+  sideEl.addEventListener("dragstart", (e) => {
+    const row = e.target.closest("tr[data-attr], tr[data-lit]");
+    const at = listAt(row);
+    if (!at) return;
+    dragging = { attr: at.attr, index: at.index };
+    row.classList.add("im-dragging");
+    // Firefox starts no drag at all without data on the transfer.
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", String(at.index)); } catch { /* not settable here */ }
+    }
+  });
+
+  sideEl.addEventListener("dragover", (e) => {
+    if (!dragging) return;
+    const row = e.target.closest("tr[data-attr], tr[data-lit]");
+    const at = listAt(row);
+    if (!at || at.attr !== dragging.attr) return;
+    e.preventDefault(); // without this the drop never fires
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    // The line marks the edge the row would land against, which is the half of the
+    // hovered row the pointer is in — the same gesture every list reorder uses.
+    const box = row.getBoundingClientRect();
+    const after = e.clientY > box.top + box.height / 2;
+    for (const r of sideEl.querySelectorAll(".im-drop-before, .im-drop-after")) {
+      r.classList.remove("im-drop-before", "im-drop-after");
+    }
+    row.classList.add(after ? "im-drop-after" : "im-drop-before");
+  });
+
+  sideEl.addEventListener("drop", (e) => {
+    if (!dragging) return;
+    const row = e.target.closest("tr[data-attr], tr[data-lit]");
+    const at = listAt(row);
+    if (!at || at.attr !== dragging.attr) return;
+    e.preventDefault();
+    const box = row.getBoundingClientRect();
+    const after = e.clientY > box.top + box.height / 2;
+    // Dropping *after* a row that sits above the dragged one lands on that row's
+    // index; below it, the gap the dragged row leaves has already shifted it up.
+    let to = at.index + (after ? 1 : 0);
+    if (dragging.index < to) to -= 1;
+    const from = dragging.index;
+    dragging = null;
+    move(at.list, from, to);
+  });
+
+  sideEl.addEventListener("dragend", () => {
+    dragging = null;
+    for (const r of sideEl.querySelectorAll(".im-dragging, .im-drop-before, .im-drop-after")) {
+      r.classList.remove("im-dragging", "im-drop-before", "im-drop-after");
+    }
+  });
+
+  // Alt+Up / Alt+Down move the row a field is in, so reordering is reachable
+  // without a pointer — and without leaving the field being edited.
+  sideEl.addEventListener("keydown", (e) => {
+    if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    const at = listAt(e.target.closest("tr[data-attr], tr[data-lit]"));
+    if (!at) return;
+    const to = at.index + (e.key === "ArrowUp" ? -1 : 1);
+    if (to < 0 || to >= at.list.length) return;
+    e.preventDefault();
+    const field = e.target.dataset && e.target.dataset.f;
+    if (!move(at.list, at.index, to)) return;
+    // render() replaced the row, so put the caret back where the author left it.
+    const moved = sideEl.querySelector(`tr[data-${at.attr}="${to}"]`);
+    const focus = moved && (field ? moved.querySelector(`[data-f="${field}"]`) : moved.querySelector(".im-in"));
+    if (focus) focus.focus();
+  });
 
   // renderSchema shows the derived contract beside the drawing. It is read-only and
   // says what it dropped — a JSON document is a tree and a class model is a graph,
@@ -799,47 +773,53 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     }
   });
 
-  canvasEl.addEventListener("click", (e) => {
-    const box = e.target.closest("[data-class]");
-    const edge = e.target.closest("[data-assoc]");
-    const store = e.target.closest("[data-store]");
-    if (state.connecting) {
-      if (!box) { state.connecting = null; render(); return; }
-      const cid = box.dataset.class;
-      if (!state.connecting.fromId) {
-        state.connecting.fromId = cid;
-        render();
-        return;
-      }
-      const from = classById(state.connecting.fromId);
-      const to = classById(cid);
-      const kind = state.connecting.kind;
-      if (!allowed(from.stereotype, to.stereotype).includes(kind)) {
-        // The matrix the server enforces is the matrix that refuses here, and it
-        // refuses in the server's own words.
-        toast(refusalFor(kind, from, to), "err");
-        state.connecting = null;
-        render();
-        return;
-      }
-      const a = {
-        id: `new-${Math.random().toString(36).slice(2, 10)}`, kind, name: "",
-        from: { classId: from.id, role: "", multiplicity: kind === "generalization" ? "" : "1" },
-        to: { classId: to.id, role: "", multiplicity: kind === "generalization" ? "" : "0..*" },
-      };
-      state.model.associations.push(a);
-      state.selected = { kind: "association", id: a.id };
-      state.connecting = null;
-      markDirty(); render();
-      return;
-    }
-    if (box) state.selected = { kind: "class", id: box.dataset.class };
-    else if (store) state.selected = { kind: "store", id: store.dataset.store };
-    else if (edge) state.selected = { kind: "association", id: edge.dataset.assoc };
-    else state.selected = null;
+  // Selecting on the canvas and selecting in the panel are the same selection, so
+  // the round trip is guarded: telling the panel what the canvas selected must not
+  // tell the canvas back and start again.
+  let applyingSelection = false;
+
+  function onCanvasSelection(bo) {
+    if (applyingSelection) return;
+    if (state.connecting) { connectStep(bo); return; }
+    state.selected = bo && bo.element && bo.element !== "store-link"
+      ? { kind: bo.element, id: bo.id }
+      : null;
     state.schemaFor = "";
     render();
-  });
+  }
+
+  // connectStep is the two-click draw. The first click names the end it starts from,
+  // the second the end it lands on; anything else cancels, because a half-drawn
+  // relationship left on screen is a mode nobody asked to stay in.
+  function connectStep(bo) {
+    if (!bo || bo.element !== "class") { state.connecting = null; render(); return; }
+    if (!state.connecting.fromId) {
+      state.connecting.fromId = bo.id;
+      render();
+      return;
+    }
+    const from = classById(state.connecting.fromId);
+    const to = classById(bo.id);
+    const kind = state.connecting.kind;
+    if (!from || !to || from.id === to.id) { state.connecting = null; render(); return; }
+    if (!allowed(from.stereotype, to.stereotype).includes(kind)) {
+      // The matrix the server enforces is the matrix that refuses here, and it
+      // refuses in the server's own words.
+      toast(refusalFor(kind, from, to), "err");
+      state.connecting = null;
+      render();
+      return;
+    }
+    const a = {
+      id: `new-${Math.random().toString(36).slice(2, 10)}`, kind, name: "",
+      from: { classId: from.id, role: "", multiplicity: kind === "generalization" ? "" : "1" },
+      to: { classId: to.id, role: "", multiplicity: kind === "generalization" ? "" : "0..*" },
+    };
+    state.model.associations.push(a);
+    state.selected = { kind: "association", id: a.id };
+    state.connecting = null;
+    markDirty(); render();
+  }
 
   // refusalFor turns a matrix miss into the sentence the server would have sent. It
   // reads the served tables rather than restating a rule, so the two cannot drift.
@@ -858,47 +838,21 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       "Make it a business object, or draw the relationship the other way round.";
   }
 
-  // Dragging a box is the only direct manipulation on the canvas; everything else
-  // is a selection. Layout is part of the document, so a move is a change to save.
-  //
-  // Deliberately without setPointerCapture. Capturing retargets the pointer stream
-  // to the captured element, and the click the browser synthesizes afterwards is
-  // aimed at the *common ancestor* of the down and up targets — which, once the SVG
-  // has captured, is the SVG. So capturing makes every click on a class land on the
-  // canvas background, and nothing is ever selected. Tracking the drag on the window
-  // instead leaves the click where it belongs.
-  let drag = null;
-  canvasEl.addEventListener("pointerdown", (e) => {
-    if (state.connecting || e.button !== 0) return;
-    const shape = e.target.closest("[data-class]") || e.target.closest("[data-store]");
-    if (!shape) return;
-    const c = shape.dataset.class ? classById(shape.dataset.class) : storeById(shape.dataset.store);
-    if (!c) return;
-    const rect = canvasEl.querySelector("svg").getBoundingClientRect();
-    drag = { c, dx: e.clientX - rect.left - c.x, dy: e.clientY - rect.top - c.y, moved: false };
-  });
-  const onMove = (e) => {
-    if (!drag) return;
-    const svg = canvasEl.querySelector("svg");
-    if (!svg) return;
-    const rect = svg.getBoundingClientRect();
-    const x = Math.max(0, Math.round(e.clientX - rect.left - drag.dx));
-    const y = Math.max(0, Math.round(e.clientY - rect.top - drag.dy));
-    // A press that has not travelled is a selection, not a move — otherwise the
-    // pixel of jitter between pressing and releasing marks the diagram unsaved.
-    if (Math.abs(x - drag.c.x) + Math.abs(y - drag.c.y) < 3 && !drag.moved) return;
-    drag.moved = true;
-    drag.c.x = x;
-    drag.c.y = y;
-    renderCanvas();
-  };
-  const endDrag = () => {
-    if (drag && drag.moved) markDirty();
-    drag = null;
-  };
-  window.addEventListener("pointermove", onMove);
-  window.addEventListener("pointerup", endDrag);
-  window.addEventListener("pointercancel", endDrag);
+  // A shape the author dragged is written back into the document, so the arrangement
+  // is saved with the model — a diagram somebody laid out is one they can read again.
+  // The canvas reports what actually moved, so a box dragged away and back reports
+  // nothing and no revision is spent on it.
+  function absorbMoves() {
+    const moves = canvas.moved();
+    if (!moves.length) return;
+    for (const m of moves) {
+      const target = m.kind === "store" ? storeById(m.id) : classById(m.id);
+      if (!target) continue;
+      target.x = m.x;
+      target.y = m.y;
+    }
+    markDirty();
+  }
 
   problemsEl.addEventListener("click", (e) => {
     const p = e.target.closest(".im-problem");
@@ -967,14 +921,15 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     if (e.key === "Escape" && state.connecting) { state.connecting = null; render(); }
   };
   document.addEventListener("keydown", onKey);
-  // The canvas listens on the window for the drag and on the document for the
-  // shortcut, so it has to let go of both when the router navigates away.
+  // The editor listens on the document for its shortcut and the canvas holds a
+  // diagram of its own, so both are let go of when the router navigates away.
   window.addEventListener("hashchange", () => {
     document.removeEventListener("keydown", onKey);
-    window.removeEventListener("pointermove", onMove);
-    window.removeEventListener("pointerup", endDrag);
-    window.removeEventListener("pointercancel", endDrag);
+    canvas.destroy();
   }, { once: true });
 
+  // One path to the first draw, not two. render() syncs, and a sync with nothing
+  // drawn yet is the first draw — a fresh root, an empty undo stack and a fitted
+  // viewport. Calling canvas.render() here as well would draw the model twice.
   render();
 }
