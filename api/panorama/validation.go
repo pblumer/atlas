@@ -6,6 +6,7 @@ package panorama
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -58,6 +59,80 @@ type pendingReference struct {
 	value string
 }
 
+// unsupportedEncoding is what the decoder is handed when a document declares an
+// encoding other than UTF-8.
+//
+// The alternative is leaving Decoder.CharsetReader nil, which is what this did: the
+// standard library then fails with "encoding \"UTF-16\" declared but
+// Decoder.CharsetReader is nil", and an operator reading that has been told about a
+// field on a Go struct. The refusal itself stays — Panorama stores and re-exports a
+// document byte-for-byte (ADR-0189 §2) and its writers splice into those bytes, so
+// accepting a UTF-16 document at the gate would corrupt it at the first edit — but a
+// refusal has to be a sentence somebody can act on.
+type unsupportedEncoding struct{ label string }
+
+func (e unsupportedEncoding) Error() string { return "unsupported XML encoding " + e.label }
+
+// describeRoot says what a document with the wrong root element *is*, and what to do
+// with it instead.
+//
+// This is the whole of the fix. The refusal was already correct — none of these are
+// ArchiMate Open Exchange documents — but it was written in Clark notation for
+// whoever wrote the parser, and the person holding the file got two namespace URIs
+// and no remedy. The cases below are the files people actually arrive with: a
+// modelling tool's own format, a different notation, an office document, a page.
+//
+// An empty answer means the document is not one this list knows, and the caller
+// falls back to naming the format Atlas does read.
+func describeRoot(space, local string) string {
+	ns := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(space), "/"))
+	switch {
+	case ns == "http://www.opengroup.org/xsd/archimate":
+		// The 2.x exchange namespace. Close enough to the 3.x one that the old
+		// message showed two nearly identical URIs and left the reader to spot the
+		// difference.
+		return "it is an ArchiMate 2.x Model Exchange file, and Atlas reads the 3.x " +
+			"format. Re-export the model as ArchiMate 3 Open Exchange."
+	case strings.Contains(ns, "archimatetool.com"):
+		// Archi's native save format, and the single most likely mistake an
+		// ArchiMate user makes — the file picker even offers .archimate.
+		return "it is Archi's own model file rather than the exchange format. In " +
+			"Archi: File → Export → Model To Open Exchange File, and import the .xml " +
+			"that produces."
+	case strings.Contains(ns, "omg.org/spec/bpmn"):
+		return "it is a BPMN process. Those belong under Modeler; Panorama holds " +
+			"architecture models."
+	case strings.Contains(ns, "omg.org/spec/dmn"):
+		return "it is a DMN decision model. Those are deployed under Decisions."
+	case strings.Contains(ns, "omg.org/spec/xmi") || local == "XMI":
+		return "it is an XMI export. Atlas reads The Open Group's ArchiMate Model " +
+			"Exchange File Format, which most tools offer as a separate export."
+	case strings.Contains(ns, "sparxsystems"):
+		return "it is an Enterprise Architect export in Sparx's own format. Atlas " +
+			"reads The Open Group's ArchiMate Model Exchange File Format."
+	case strings.Contains(ns, "mid.de"):
+		return "it is an export from a MID tool in MID's own format — this one wraps " +
+			"a spreadsheet. Atlas reads The Open Group's ArchiMate Model Exchange " +
+			"File Format, which is a separate export."
+	case strings.Contains(ns, "openxmlformats.org"),
+		strings.Contains(ns, "urn:schemas-microsoft-com:office"),
+		strings.Contains(ns, "spreadsheetml"):
+		return "it is a Microsoft Office document, not an architecture model."
+	case ns == "http://www.w3.org/1999/xhtml", strings.EqualFold(local, "html"):
+		return "it is an HTML page. A login page or an error page saved from a " +
+			"browser is the usual way one of these arrives here."
+	case local == "model" && space == "":
+		// The one that reads as "model; expected model" and looks like a bug in Atlas.
+		return "its root element is <model>, but the document declares no XML " +
+			"namespace at all. An Open Exchange file opens with " +
+			`<model xmlns="` + ExchangeNamespace + `" …>, and a file that has lost ` +
+			"that declaration is no longer one."
+	case local == "model":
+		return "its <model> root belongs to another notation."
+	}
+	return ""
+}
+
 // Validate checks the Open Exchange envelope, the standard ArchiMate type
 // vocabulary, global identifier uniqueness, and the references used by
 // relationships and diagram objects. It never rewrites the input: a model that
@@ -93,6 +168,10 @@ func Validate(data []byte) ValidationResult {
 
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.Strict = true
+	// Not a transcoder — a name for the refusal. See unsupportedEncoding.
+	decoder.CharsetReader = func(label string, _ io.Reader) (io.Reader, error) {
+		return nil, unsupportedEncoding{label: label}
+	}
 
 	identifiers := map[string]string{}
 	elements := map[string]bool{}
@@ -123,13 +202,32 @@ func Validate(data []byte) ValidationResult {
 			break
 		}
 		if err != nil {
+			var encoding unsupportedEncoding
+			if errors.As(err, &encoding) {
+				add("Atlas reads UTF-8 XML, and this document declares %q. Re-save or "+
+					"re-export it as UTF-8 and import it again.", encoding.label)
+				// Nothing was read, so "no root element" and "model name is required"
+				// below would be two more complaints about the same one fact.
+				return result
+			}
 			add("invalid XML: %v", err)
 			break
 		}
 
 		switch tok := token.(type) {
 		case xml.Directive:
-			add("XML directives are not allowed")
+			// The rule stays — a DOCTYPE can name external content, and this validator
+			// resolves nothing — but "not allowed" left the reader with no idea what
+			// they had handed over. An HTML page is by far the most common one.
+			if head := directiveHead(tok); strings.EqualFold(head, "DOCTYPE html") {
+				add("This is an HTML page, not an ArchiMate Open Exchange document. A " +
+					"login page or an error page saved from a browser is the usual way " +
+					"one of these arrives here.")
+				return result
+			}
+			add("XML directives are not accepted: a DOCTYPE can name content outside " +
+				"the document, and Panorama resolves nothing. Remove it and import the " +
+				"model itself.")
 		case xml.StartElement:
 			depth++
 			if depth > maxXMLDepth {
@@ -144,8 +242,22 @@ func Validate(data []byte) ValidationResult {
 				rootSeen = true
 				result.Namespace = tok.Name.Space
 				if tok.Name.Local != "model" || tok.Name.Space != ExchangeNamespace {
-					add("unsupported root element {%s}%s; expected {%s}model",
-						tok.Name.Space, tok.Name.Local, ExchangeNamespace)
+					what := describeRoot(tok.Name.Space, tok.Name.Local)
+					if what == "" {
+						what = "Atlas reads The Open Group's ArchiMate Model Exchange " +
+							"File Format; export the model in that format and import the " +
+							"XML it produces."
+					}
+					where := tok.Name.Space
+					if where == "" {
+						where = "none"
+					}
+					add("This is not an ArchiMate Open Exchange document: %s "+
+						"(root element %q, namespace %s)", what, tok.Name.Local, where)
+					// And nothing else. Every check past this one is about a model, and
+					// this document is not one: "model identifier is required" against a
+					// spreadsheet is noise stacked on the one problem worth reading.
+					return result
 				}
 				result.ModelIdentifier = attribute(tok, "identifier")
 				if strings.TrimSpace(result.ModelIdentifier) == "" {
@@ -259,6 +371,17 @@ func Validate(data []byte) ValidationResult {
 	}
 	result.Valid = len(result.Problems) == 0
 	return result
+}
+
+// directiveHead is the first two words of a directive, which is enough to tell a
+// DOCTYPE for an HTML page from any other one and short enough that a hostile
+// document cannot turn the message into a payload.
+func directiveHead(directive xml.Directive) string {
+	fields := strings.Fields(string(directive))
+	if len(fields) > 2 {
+		fields = fields[:2]
+	}
+	return strings.Join(fields, " ")
 }
 
 func attribute(start xml.StartElement, local string) string {

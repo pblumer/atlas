@@ -172,7 +172,7 @@ func TestServiceEnforcesApplicationAccessAndValidation(t *testing.T) {
 	invalid := requestJSON(t, fx.service.HandleCreate, http.MethodPost, "/api/v1/panorama/models", map[string]any{
 		"applicationId": "app-1", "name": "Broken", "xml": `<model/>`,
 	}, http.StatusBadRequest)
-	if !strings.Contains(invalid.Body.String(), "validation") || !strings.Contains(invalid.Body.String(), "unsupported root element") {
+	if !strings.Contains(invalid.Body.String(), "validation") || !strings.Contains(invalid.Body.String(), "not an ArchiMate Open Exchange document") {
 		t.Fatalf("invalid response = %s", invalid.Body.String())
 	}
 
