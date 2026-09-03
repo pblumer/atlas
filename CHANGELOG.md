@@ -81,6 +81,35 @@ _Changed_ / _Removed_ for each version.
   Four kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `soap`,
   `temis`.
 
+- **A non-interrupting message or signal boundary event now fires every time, not once**
+  ([ADR-draft-repeating-non-interrupting-boundary-events](docs/adr/draft-repeating-non-interrupting-boundary-events.md),
+  refining [ADR-0040](docs/adr/0040-boundary-events.md)). Non-interrupting is how a model
+  says *reminder*: fire beside the host activity and leave it running. For as long as the
+  host runs, every occurrence should fire it again — and a recurring **timer** boundary
+  already did ([ADR-0054](docs/adr/0054-date-cycle-timers-for-catch-and-boundary.md)),
+  as does a non-interrupting event-subprocess trigger
+  ([ADR-0082](docs/adr/0082-event-subprocesses.md)).
+
+  A **message** or **signal** boundary did not. Taking its outgoing flow completed the
+  boundary's element instance, and its subscription retired with it, so the second message
+  correlated to nothing: no incident, no log line, nothing for the sender to see. Two
+  constructions a modeller reasonably reads as interchangeable disagreed about whether
+  "non-interrupting" means "repeatedly".
+
+  It now fires the way a recurring timer boundary fires — take the outgoing flow, re-open
+  the subscription, never complete the element instance. Staying armed rather than
+  completing and arming a replacement is deliberate: a replacement is only a queued
+  command for the rest of the batch, and a boundary instance is counted against its
+  scope, so a host completing in that window would leave an armed instance holding open a
+  scope that has already drained.
+
+  This changes behaviour for deployed models: one that relied on hearing the message once
+  will now hear it each time. The old behaviour was a defect and gave no way to depend on
+  it deliberately; a model that wants exactly one firing has the interrupting flag, or a
+  guard on the reminder branch. The escalation and conditional boundary kinds are
+  untouched — they arm inert and are *found* rather than waiting on a subscription, which
+  is a separate question.
+
 - **clio tasks run on a worker now**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 2).
   Writing an event, folding a subject's state, reading its history: three round trips
@@ -1042,6 +1071,34 @@ _Changed_ / _Removed_ for each version.
   extension elements are still `<atlas:jiraConnector>` and friends.
 
 ### Fixed
+
+- **A data association drawn inside a subprocess was thrown away at compile time.** A
+  `<dataInputAssociation>` or `<dataOutputAssociation>` is drawn on the *activity*, and
+  an activity may sit in any scope a model nests — an ordinary subprocess, an event
+  subprocess, an ad-hoc. The compiler wired I/O mappings by walking the whole scope tree
+  and wired data associations by walking only the process root's element lists. So an
+  activity inside a subprocess kept its `zeebe:ioMapping` and silently lost its
+  associations.
+
+  Nothing said so. The model validated, deployed, started, ran through the activity and
+  finished, and the data object it was drawn as writing stayed empty — the read variable
+  `null` — with no error, no warning and no incident. The two walks are now one function
+  with a comment saying they must stay in step.
+
+- **An event subprocess with a `zeebe:ioMapping` overwrote the variable it was meant to
+  update, with `null`, the first time it fired.** An armed event-subprocess trigger is an
+  element instance whose element id is the *handler container* — that is how it finds the
+  message or timer it waits on. The generic per-activity work is keyed off the element
+  id, so the trigger also ran the handler's input and output mappings as if it were the
+  handler.
+
+  The timing is what made it fatal. A trigger arms when its scope is *entered* — at
+  instance creation for a root-level one — so the input mapping evaluated against a scope
+  where the main flow had not yet written anything, and the output mapping promoted that
+  `null` into the parent scope the moment a message arrived. The handler then read the
+  register the trigger had just destroyed. Data associations on the handler had the same
+  problem. The trigger now runs neither; the handler run applies both, at the moment its
+  values exist.
 
 - **A data object whose declaration went missing took the whole deploy down with it.**
   A data object is two elements: the `<dataObject>` that declares it and carries its

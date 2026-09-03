@@ -89,6 +89,28 @@
       }
     },
     {
+      "id": "a-non-interrupting-message-or-signal-boundary-event-now-fire",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "A reminder attached to a task now fires every time, not just the first",
+        "de": "Eine Erinnerung an einer Aufgabe feuert jetzt jedes Mal, nicht nur beim ersten Mal"
+      },
+      "summary": {
+        "en": "A non-interrupting boundary event is how a model says remind me: it fires beside a running task and leaves the task running. On a timer that repeats it already fired on every occurrence — but on a message or a signal it fired once and then stopped listening, so the second message matched nothing at all: no incident, no log line, and no way for the sender to tell. It now stays armed for as long as its task runs, and every message takes the reminder branch again. A model that only ever expected to hear the first one will now hear them all; an interrupting event, or a condition on the reminder branch, is how you ask for exactly one.",
+        "de": "Ein nicht-unterbrechendes Boundary-Ereignis ist die Art, wie ein Modell «erinnere mich» sagt: Es feuert neben einer laufenden Aufgabe und lässt sie weiterlaufen. Bei einem wiederkehrenden Timer tat es das schon bisher bei jedem Mal — bei einer Nachricht oder einem Signal dagegen genau einmal, danach hörte es auf zuzuhören: Die zweite Nachricht traf auf nichts, ohne Incident, ohne Logzeile und ohne dass der Absender es hätte merken können. Es bleibt jetzt scharf, solange seine Aufgabe läuft, und jede Nachricht nimmt den Erinnerungszweig erneut. Ein Modell, das nur die erste erwartet hat, hört nun alle; wer genau eine will, nimmt ein unterbrechendes Ereignis oder eine Bedingung auf dem Erinnerungszweig."
+      },
+      "link": {
+        "label": "ADR-0040",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0040-boundary-events.md"
+      },
+      "tags": [
+        "Operations",
+        "Modeler"
+      ]
+    },
+    {
       "id": "clio-tasks-run-on-a-worker-now",
       "version": "Unreleased",
       "date": null,
@@ -343,54 +365,6 @@
           "de": "Data öffnen"
         },
         "route": "#/data"
-      }
-    },
-    {
-      "id": "which-instances-are-carrying-this-order",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Find every process handling the same order",
-        "de": "Alle Prozesse finden, die dieselbe Bestellung bearbeiten"
-      },
-      "summary": {
-        "en": "Until now you could ask a process what data it was carrying. You could not ask a piece of data which processes were carrying it. Data › Instances turns the question around: it groups everything the engine holds by the type its model declares, and then by the business key — so order ORD-1 appears once, with every instance under it that has a hand on it, whichever process it belongs to. Search by class, by key, or both, and the link is the address bar, so a found order is something you can send to a colleague. There is a box for including finished instances, and it is worth knowing what that costs, because it costs less than you would think: a finished instance keeps its data until you purge it, and purging is off unless you turned it on. So history is a longer look, not extra storage. Atlas walks the instances rather than keeping a separate lookup table, and it tells you afterwards how many it examined and whether it stopped early — because a list that quietly cut itself short, read as if it were the whole answer, is worse than no list. And the object diagram's one honest admission, where it says a customer is not in this instance, now has a link that goes and finds it.",
-        "de": "Bisher konnten Sie einen Prozess fragen, welche Daten er trägt. Sie konnten nicht ein Datum fragen, welche Prozesse es tragen. „Data › Instances\" dreht die Frage um: Es gruppiert alles, was die Engine hält, nach dem Typ, den ihr Modell nennt, und dann nach dem fachlichen Schlüssel — Bestellung ORD-1 erscheint also einmal, und darunter jede Instanz, die daran arbeitet, gleich in welchem Prozess. Suchen Sie nach Klasse, nach Schlüssel oder beidem; die Adresszeile ist der Link, eine gefundene Bestellung lässt sich also einem Kollegen schicken. Es gibt ein Kästchen für abgeschlossene Instanzen, und es lohnt sich zu wissen, was das kostet — nämlich weniger, als man denkt: Eine abgeschlossene Instanz behält ihre Daten, bis Sie sie löschen lassen, und das ist standardmässig aus. Historie ist also ein längerer Blick, kein zusätzlicher Speicher. Atlas geht dafür die Instanzen durch, statt eine eigene Nachschlagetabelle zu führen, und sagt Ihnen hinterher, wie viele es angeschaut hat und ob es vorzeitig aufgehört hat — denn eine Liste, die sich still selbst abgeschnitten hat und wie die ganze Antwort gelesen wird, ist schlimmer als gar keine. Und das Objektdiagramm, dort wo es ehrlich zugibt, dass ein Kunde nicht in dieser Instanz steckt, hat jetzt einen Link, der ihn suchen geht."
-      },
-      "link": {
-        "label": "ADR-0230",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
-      },
-      "tags": [
-        "Data",
-        "Operations",
-        "Search"
-      ],
-      "tutorial": {
-        "en": [
-          "Model a class under Data › Model and tick one of its attributes as the business key — an Order with an id, say.",
-          "Set that class as the Type of a data object in two different processes of the same application, and let each write an order with the same id.",
-          "Start an instance of each, then open Data › Instances.",
-          "The order appears once under its key, with both instances beneath it. Press Isolate to narrow to that one.",
-          "Tick “Include finished instances” and run it again once an instance has completed — its data is still there.",
-          "Read the line at the bottom: it says how many instances were examined, and whether the sweep stopped early."
-        ],
-        "de": [
-          "Modellieren Sie unter Data › Model eine Klasse und markieren Sie eines ihrer Attribute als fachlichen Schlüssel — etwa eine Order mit id.",
-          "Setzen Sie diese Klasse als „Type\" eines Datenobjekts in zwei verschiedenen Prozessen derselben Applikation und lassen Sie beide eine Bestellung mit derselben id schreiben.",
-          "Starten Sie je eine Instanz und öffnen Sie dann Data › Instances.",
-          "Die Bestellung erscheint einmal unter ihrem Schlüssel, mit beiden Instanzen darunter. „Isolate\" grenzt auf genau diese ein.",
-          "Haken Sie „Include finished instances\" an und suchen Sie erneut, sobald eine Instanz fertig ist — ihre Daten sind noch da.",
-          "Lesen Sie die Zeile unten: Sie nennt die Zahl der geprüften Instanzen und ob der Durchlauf vorzeitig endete."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data › Instances",
-          "de": "Data › Instances öffnen"
-        },
-        "route": "#/data/instances"
       }
     }
   ]
