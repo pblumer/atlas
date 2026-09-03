@@ -17,7 +17,7 @@ import (
 // a connection-oriented binary protocol with no httptest equivalent, so the server is
 // spelled out here rather than vendored (mirroring connector/ldap's testDirectory).
 //
-// It answers the operations the AD connector issues — bind, search (for the
+// It answers the operations the AD worker issues — bind, search (for the
 // userAccountControl read), add, and modify — and records what it was asked, so a test
 // can assert the DN really crossed the wire.
 type testDirectory struct {

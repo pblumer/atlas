@@ -1,11 +1,11 @@
-// Package ldap integrates a generic LDAP directory as a service-task connector: a
-// BPMN LDAP connector task performs a directory operation — search an entry, add /
+// Package ldap integrates a generic LDAP directory as a service-task Worker Type: a
+// BPMN LDAP task performs a directory operation — search an entry, add /
 // modify / delete an entry, or set an entry's password — against a model-authored
 // server through the job path (ADR-0154), the same seam the rest and scim packages
 // use for HTTP (ADR-0067/0151). It inherits the job protocol's durability and
 // non-blocking properties (ADR-0007):
 //
-//   - An LDAP connector task creates a job carrying the reserved [compiler.LdapJobType].
+//   - An LDAP task creates a job carrying the reserved [compiler.LdapJobType].
 //     The processor never performs the directory call itself, so it stays
 //     allocation-free (invariant I1) and free of any LDAP dependency.
 //   - The in-process [Handler] — a job worker — pulls those jobs, dials and binds off
@@ -16,7 +16,7 @@
 // The server URL, bind DN, and target/base DN live in the model as literal-or-FEEL
 // values (the fx toggle, ADR-0067); the bind password is never authored there — it
 // names a server-side secret the worker resolves at runtime (ADR-0041). Every call is
-// bounded by the shared connector budget (nettimeout.Default, ADR-0149), since the
+// bounded by the shared worker budget (nettimeout.Default, ADR-0149), since the
 // worker runs on the run-loop goroutine.
 //
 // Delivery is at-least-once: a crash between "the directory accepted the change" and
@@ -59,12 +59,12 @@ type SearchRequest struct {
 	// MaxEntries caps how many entries may be returned. Exceeding it is an error
 	// rather than a truncation: a short result set is a wrong answer, not a partial
 	// one, and a process branching on the count would branch on it confidently
-	// (the same rule the SQL connectors apply to rows, ADR-0173). 0 is unbounded.
+	// (the same rule the SQL workers apply to rows, ADR-0173). 0 is unbounded.
 	MaxEntries int32
 }
 
 // modOp identifies an LDAP modify change operation, mirroring go-ldap's constants —
-// and the AD connector's Mod, so the two directory connectors express a change the
+// and the AD worker's Mod, so the two directory workers express a change the
 // same way.
 type modOp = uint
 
@@ -125,7 +125,7 @@ type Dialer interface {
 }
 
 // GoDialer dials a real LDAP server through github.com/go-ldap/ldap. The dial and
-// every subsequent operation are bounded by the shared connector call budget
+// every subsequent operation are bounded by the shared worker call budget
 // (nettimeout.Default), since the worker runs on the run-loop goroutine
 // (ADR-0149/0153).
 type GoDialer struct{}
@@ -270,7 +270,7 @@ func capExceeded(got int, max int32, baseDN string) error {
 	return fmt.Errorf("ldap: the search under %s returned more than the %d-entry cap; narrow the filter or raise maxEntries (truncating would be a wrong answer, not a partial one)", baseDN, max)
 }
 
-// buildSearchRequest translates a connector search into a go-ldap request, defaulting
+// buildSearchRequest translates a worker search into a go-ldap request, defaulting
 // an empty filter to "(objectClass=*)" and an unknown scope to the whole subtree.
 //
 // SizeLimit stays 0 — the cap is enforced on the result rather than asked of the

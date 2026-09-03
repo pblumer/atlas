@@ -22,7 +22,7 @@ type VarStore interface {
 }
 
 // ProcessLookup resolves a process-definition key to its compiled process, so the
-// worker can read a CSV connector task's authored layout from the model it belongs to
+// worker can read a CSV worker task's authored layout from the model it belongs to
 // (ADR-0139) — mirroring the mail/rest/DMN workers' ProcessLookup.
 type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
@@ -45,11 +45,11 @@ const (
 //
 // It serves two authoring shapes on the one reserved job type:
 //
-//   - A first-class CSV-to-JSON connector task (ADR-0139): the source variable,
+//   - A first-class CSV-to-JSON task (ADR-0139): the source variable,
 //     delimiter, header handling, columns, and result variable are authored on the
-//     task and compiled into a connector detail, which the worker reads from the
+//     task and compiled into a worker detail, which the worker reads from the
 //     compiled process (like the mail/rest workers). This is preferred when present.
-//   - The ADR-0087 variable convention: with no connector detail, the worker reads
+//   - The ADR-0087 variable convention: with no worker detail, the worker reads
 //     `csvText` and `columnConfig` up the task's scope chain and writes `rows` +
 //     `rowCount`, so already-deployed models keep running unchanged.
 //
@@ -65,10 +65,10 @@ func Handler(store VarStore, lookup ProcessLookup) job.OutputHandler {
 		if !ok {
 			return nil, nil // element instance gone (e.g. already completed); nothing to do
 		}
-		// Prefer the compiled connector detail (ADR-0139) when the task is an
+		// Prefer the compiled worker detail (ADR-0139) when the task is an
 		// atlas:csvConnector; fall back to the ADR-0087 variable convention otherwise.
 		// The runner dispatches this worker by the CSV job type alone, so a
-		// TypeConnectorTask reaching it is always a CSV connector.
+		// TypeConnectorTask reaching it is always a CSV worker.
 		if lookup != nil {
 			if cp := lookup(ei.ProcessDefKey); cp != nil {
 				if node := cp.Node(ei.ElementId); node.Type == compiler.TypeConnectorTask {
@@ -84,7 +84,7 @@ func Handler(store VarStore, lookup ProcessLookup) job.OutputHandler {
 	}
 }
 
-// rowsFromConnector runs a CSV-to-JSON connector task (ADR-0139) in process. It is
+// rowsFromConnector runs a CSV-to-JSON task (ADR-0139) in process. It is
 // the same two steps a worker takes — [Resolve] the task into plain values, then
 // [Run] them — so the in-process path and an out-of-process one cannot disagree
 // about defaults, validation, or what a headerless file's column list means
@@ -160,7 +160,7 @@ func rowsToJSON(rows []map[string]any) (string, error) {
 // scopeChainVars reads the variables an element sees up its scope chain (nearest
 // scope wins), through the shared walk every job worker uses (ADR-0068), so a
 // CSV-import task nested in a subprocess still reads its enclosing scope's
-// csvText/columnConfig (or a connector's source variable).
+// csvText/columnConfig (or a worker's source variable).
 func scopeChainVars(store VarStore, elementInstanceKey uint64) (map[string]model.VariableValue, error) {
 	return state.VisibleVariablesMap(store, elementInstanceKey)
 }

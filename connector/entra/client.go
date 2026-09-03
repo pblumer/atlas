@@ -16,7 +16,7 @@ import (
 )
 
 // DefaultBaseURL is the worldwide Graph endpoint. A national cloud — US Government,
-// or 21Vianet in China — is a different host, which is why a connector can override
+// or 21Vianet in China — is a different host, which is why a worker can override
 // it rather than having the address baked in.
 const DefaultBaseURL = "https://graph.microsoft.com/v1.0"
 
@@ -24,11 +24,11 @@ const DefaultBaseURL = "https://graph.microsoft.com/v1.0"
 const DefaultScope = "https://graph.microsoft.com/.default"
 
 // Client performs one Graph request against a configured tenant. It is an interface
-// so the worker is testable without a live directory, and so a connector name binds
+// so the worker is testable without a live directory, and so a worker name binds
 // to exactly one tenant.
 //
 // The shape is a single Call rather than a method per operation because this
-// connector is a typed façade over Graph REST: the value it adds is at the *model*
+// worker is a typed façade over Graph REST: the value it adds is at the *model*
 // level — naming the lifecycle operations and building their URLs and bodies — not
 // in wrapping nine HTTP calls in nine Go signatures.
 type Client interface {
@@ -36,11 +36,11 @@ type Client interface {
 	Call(ctx context.Context, req Request) (any, error)
 	// BaseURL is the tenant's Graph root. Adding a group member is the one operation
 	// whose *body* carries a URL — the @odata.id of the member being added — so the
-	// caller has to know which cloud this connector talks to, not just its path.
+	// caller has to know which cloud this worker talks to, not just its path.
 	BaseURL() string
 }
 
-// Registry resolves a connector name to the tenant behind it. It is the worker's own
+// Registry resolves a worker name to the tenant behind it. It is the worker's own
 // map: the engine never holds one for this kind (ADR-0172).
 type Registry = clientreg.Registry[Client]
 
@@ -73,7 +73,7 @@ type Request struct {
 }
 
 // consistencyLevelHeader is the header Graph reads for advanced query support, and
-// eventualConsistency its only value this connector sends.
+// eventualConsistency its only value this worker sends.
 const (
 	consistencyLevelHeader = "ConsistencyLevel"
 	eventualConsistency    = "eventual"
@@ -171,7 +171,7 @@ func (c *GraphClient) Call(ctx context.Context, r Request) (any, error) {
 }
 
 // resolve turns what a caller asked for into the URL to request: a path is taken
-// under this connector's own base, and an absolute URL — which is what a paged
+// under this worker's own base, and an absolute URL — which is what a paged
 // listing passes back from @odata.nextLink — only if it stays on that same endpoint.
 //
 // The confinement is the point. This client carries a bearer that can read, create
@@ -189,10 +189,10 @@ func (c *GraphClient) resolve(path string) (string, error) {
 	}
 	base, err := url.Parse(c.baseURL)
 	if err != nil {
-		return "", fmt.Errorf("entra: cannot follow the paged result: this connector's own base URL %q is not a URL", c.baseURL)
+		return "", fmt.Errorf("entra: cannot follow the paged result: this worker's own base URL %q is not a URL", c.baseURL)
 	}
 	if u.Scheme != base.Scheme || u.Host != base.Host {
-		return "", fmt.Errorf("entra: refusing to follow a paged result to %s://%s: a continuation may only stay on this connector's own endpoint (%s://%s)",
+		return "", fmt.Errorf("entra: refusing to follow a paged result to %s://%s: a continuation may only stay on this worker's own endpoint (%s://%s)",
 			u.Scheme, u.Host, base.Scheme, base.Host)
 	}
 	return path, nil

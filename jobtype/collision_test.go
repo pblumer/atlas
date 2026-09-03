@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/jobtype"
 )
 
-// The reserved job-type range grows whenever a built-in connector is added, and
+// The reserved job-type range grows whenever a built-in worker is added, and
 // dynamic indices are issued from one past it. A store written before such an
 // addition can therefore hold a model-authored type on an index that is now a
 // built-in — and the jobs already on disk under that index do not move.

@@ -12,8 +12,8 @@ import (
 //
 // A grant is one person having allowed one client to act as them against one
 // resource. It is the thing that actually reaches anything — the client secret
-// only lets an application *ask*. It is durable because a connector must survive a
-// restart of this server: losing grants on a restart would sign every connector
+// only lets an application *ask*. It is durable because a worker must survive a
+// restart of this server: losing grants on a restart would sign every worker
 // out, and an operator would learn that from a support ticket.
 //
 // The credential shape is ADR-0194's, deliberately: the token is CSPRNG output,

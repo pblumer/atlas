@@ -21,12 +21,12 @@ import (
 	"github.com/pblumer/atlas/connector/webscrape"
 )
 
-// The engine→worker payload contract (ADR-0168): when a worker leases a connector
+// The engine→worker payload contract (ADR-0168): when a worker leases a worker
 // job, the engine has already resolved the task's authored detail against the
 // instance's variables, and only the resulting *values* travel. The credential and
 // the endpoint stay with the worker.
 //
-// resolveConnectorTask is one switch with an arm per connector kind, and each arm
+// resolveConnectorTask is one switch with an arm per Worker Type, and each arm
 // names the exact field set its kind puts on the wire. That field set is a contract
 // with the worker on the far side: rename a key here and the worker reads a zero
 // value, with nothing failing at compile time on either side. Only mail and csv had
@@ -36,7 +36,7 @@ import (
 // These pin one lease per kind: the payload arrives, it carries the kind's own name,
 // and the fields a worker dereferences are populated from what the model authored.
 
-// connectorTaskModel is the smallest model that puts one leasable connector job in
+// connectorTaskModel is the smallest model that puts one leasable worker job in
 // the queue: a start event, one service task carrying the authored element, an end.
 func connectorTaskModel(procID, element string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
@@ -55,7 +55,7 @@ func connectorTaskModel(procID, element string) string {
 }
 
 // leaseConnectorPayload deploys a one-task model, starts an instance of it, and
-// leases the job as an external worker would — returning the connector payload the
+// leases the job as an external worker would — returning the worker payload the
 // engine resolved for it. Every offloadable kind is offloaded so that each kind is
 // leasable from outside rather than served in process.
 func leaseConnectorPayload(t *testing.T, procID, element, jobType, variables string) connectorPayload {
@@ -90,7 +90,7 @@ func leaseConnectorPayload(t *testing.T, procID, element, jobType, variables str
 		t.Fatalf("leased %d jobs of type %s, want 1; body=%s", len(out.Jobs), jobType, raw)
 	}
 	if out.Jobs[0].Connector == nil {
-		t.Fatalf("%s job leased with no connector payload: the worker has nothing to act on", jobType)
+		t.Fatalf("%s job leased with no worker payload: the worker has nothing to act on", jobType)
 	}
 	return *out.Jobs[0].Connector
 }
@@ -195,7 +195,7 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 			element: `<atlas:entraConnector connector="=tenant" operation="list-users" resultVariable="users"/>`,
 			jobType: compiler.EntraJobType,
 			want:    "entra",
-			// The connector *name* travels, never the client secret (ADR-0168), and
+			// The worker *name* travels, never the client secret (ADR-0168), and
 			// the name itself may be authored as FEEL.
 			fields: map[string]any{"connector": "contoso", "operation": "list-users"},
 		},
@@ -241,7 +241,7 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 }
 
 // scriptJobTaskModel is a script task authored in a general-purpose language, which
-// is its own node type rather than a connector task (ADR-0047) but resolves through
+// is its own node type rather than a task (ADR-0047) but resolves through
 // the same switch and for the same reason: the source lives in the compiled process
 // and the variables it sees come from walking the scope chain, neither of which a
 // worker has.
@@ -340,7 +340,7 @@ func TestAnUnresolvableFeelFieldTravelsAsNullRatherThanBlockingTheLease(t *testi
 	}
 }
 
-// Not every connector kind has an arm, and that is deliberate: a kind still served
+// Not every Worker Type has an arm, and that is deliberate: a kind still served
 // in process needs no payload, because the engine makes the call itself and never
 // hands the task to anyone. The switch falls through to nil for those, and a worker
 // that leases one is expected to hold the whole configuration itself.

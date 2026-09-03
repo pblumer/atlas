@@ -65,7 +65,7 @@ import (
 //     a replayed create is not an edge case in an identity process.
 //   - Values keep their types through the file: a seeded 1000000 arrives as an integer,
 //     not as the 1e+06 a float64 round trip produces and nothing matches.
-//   - There are no transactions, matching ADR-0173's connector exactly — one statement
+//   - There are no transactions, matching ADR-0173's worker exactly — one statement
 //     per task, autocommit, nothing spanning two.
 //
 // Nothing here is durable: it is memory, and a restart is an unseeded database.
@@ -377,9 +377,9 @@ func (c *mockConn) Prepare(string) (driver.Stmt, error) {
 }
 func (c *mockConn) Close() error { return nil }
 
-// Begin refuses, matching the connector: a SQL task is one autocommit statement and no
+// Begin refuses, matching the worker: a SQL task is one autocommit statement and no
 // transaction spans two tasks (ADR-0173), so a mock offering one would teach a model
-// something the real connector cannot do.
+// something the real worker cannot do.
 func (c *mockConn) Begin() (driver.Tx, error) {
 	return nil, fmt.Errorf("sqldb: a SQL task is one autocommit statement; no transaction spans two tasks (ADR-0173)")
 }

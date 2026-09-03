@@ -46,7 +46,7 @@ func TestSMTPClientFramesAndSends(t *testing.T) {
 		t.Errorf("addr = %q, want the endpoint", got.addr)
 	}
 	if got.from != "bot@example.com" {
-		t.Errorf("from = %q, want the connector default sender", got.from)
+		t.Errorf("from = %q, want the worker default sender", got.from)
 	}
 	// The envelope is To + Cc + Bcc; a Bcc address is delivered but never headered.
 	if strings.Join(got.to, ",") != "a@example.com,b@example.com,c@example.com,secret@example.com" {
@@ -81,7 +81,7 @@ func TestSMTPClientFramesAndSends(t *testing.T) {
 	}
 }
 
-// A task-authored From overrides the connector's default sender.
+// A task-authored From overrides the worker's default sender.
 func TestSMTPClientFromOverride(t *testing.T) {
 	client := NewSMTPClient(Connector{Endpoint: "smtp.example.com:587", From: "default@example.com"})
 	var got capture

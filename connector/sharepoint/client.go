@@ -1,11 +1,11 @@
 // Package sharepoint integrates Microsoft SharePoint as a server-registered Atlas
-// connector: a BPMN SharePoint connector task creates a list item in a
+// worker: a BPMN SharePoint task creates a list item in a
 // model-authored site and list through a configured provider via the job path
 // (ADR-0141), mirroring how the mail package delegates a send to a registry-managed
 // provider (ADR-0079). The integration inherits the job protocol's durability and
 // non-blocking properties (ADR-0007):
 //
-//   - A connector task creates a job carrying the reserved [compiler.SharePointJobType].
+//   - A task creates a job carrying the reserved [compiler.SharePointJobType].
 //     The processor never performs the outbound call itself, so it stays
 //     allocation-free (invariant I1) and free of any HTTP dependency.
 //   - The in-process [Handler] — a job worker — pulls those jobs, creates the item
@@ -13,7 +13,7 @@
 //     applyToState / I4), and completes the job (writing the created item's JSON into
 //     the task's result variable), which drives the token onward.
 //   - The Graph base and OAuth credential live in a server-side [Registry] keyed by
-//     connector name, so a model refers to a provider by name only and never carries
+//     worker name, so a model refers to a provider by name only and never carries
 //     an endpoint or a secret (ADR-0036/0041). Only the target (site, list, item
 //     fields) is authored in the model, like a REST task's endpoint (ADR-0067).
 //
@@ -34,7 +34,7 @@ import (
 	"github.com/pblumer/atlas/connector/clientreg"
 )
 
-// ItemRequest is one list-item creation a SharePoint connector task performs. Site
+// ItemRequest is one list-item creation a SharePoint task performs. Site
 // and List address the target list (a Graph site id and a list name or id); Fields
 // are the item's column values, already resolved from the model's literal-or-FEEL
 // values by the worker. RequestID is the job key, carried for tracing and any future
@@ -47,22 +47,22 @@ type ItemRequest struct {
 }
 
 // Client creates a list item through one configured SharePoint provider. It is an
-// interface so the worker is testable without a live server and so a connector name
+// interface so the worker is testable without a live server and so a worker name
 // binds to exactly one provider. CreateItem returns the created item as decoded JSON
 // (the shape Graph returns), which the worker writes into the task's result variable.
 type Client interface {
 	CreateItem(ctx context.Context, req ItemRequest) (any, error)
 }
 
-// Registry resolves a connector name to the [Client] for this kind. Connectors are
+// Registry resolves a worker name to the [Client] for this kind. Workers are
 // registered at the server from managed configuration (endpoint plus credentials), so
-// a model refers to a connector by name only (ADR-0036/0041).
+// a model refers to a worker by name only (ADR-0036/0041).
 //
 // It is the shared [clientreg.Registry], which also carries *why* a configured
-// connector is missing from it — the difference between "never configured" and
+// worker is missing from it — the difference between "never configured" and
 // "configured and broken", which is what a parked token has to be able to say
 // (ADR-0158).
 type Registry = clientreg.Registry[Client]
 
-// NewRegistry creates an empty connector registry.
+// NewRegistry creates an empty worker registry.
 func NewRegistry() *Registry { return clientreg.New[Client]() }

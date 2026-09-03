@@ -31,8 +31,8 @@ type Op struct {
 	Method string
 	// NeedsUser, NeedsGroup, NeedsAttributes and NeedsPassword are what the compiler
 	// validates. NeedsPassword marks reset-password, whose new secret is a
-	// literal-or-FEEL value (typically a variable) the connector wraps in a
-	// passwordProfile — the same shape the LDAP connector's modify-password takes, so
+	// literal-or-FEEL value (typically a variable) the worker wraps in a
+	// passwordProfile — the same shape the LDAP worker's modify-password takes, so
 	// a modeler picks the operation rather than authoring the encoding (ADR-0172).
 	NeedsUser       bool
 	NeedsGroup      bool
@@ -40,7 +40,7 @@ type Op struct {
 	NeedsPassword   bool
 	// IsList marks an operation that returns a collection instead of one object or
 	// nothing. It is the class [Run] does not perform with a single call: a collection
-	// is paged, and following those pages is this connector's work rather than
+	// is paged, and following those pages is this worker's work rather than
 	// something a process has to model with a loop. ListPath is the collection such an
 	// operation reads ("/users", "/groups"); it is empty on every non-listing op.
 	IsList bool
@@ -93,7 +93,7 @@ var Ops = map[string]Op{
 	"archive-team":    {Method: "POST", NeedsGroup: true, Label: "archive a team"},
 	// assign-license and assign-role author their body through the attributes variable:
 	// {addLicenses,removeLicenses} for a licence, and the role assignment's
-	// {roleDefinitionId,directoryScopeId} for a role — into which the connector merges
+	// {roleDefinitionId,directoryScopeId} for a role — into which the worker merges
 	// the authored user as the principal, so a model never repeats the id it already gave.
 	"assign-license": {Method: "POST", NeedsUser: true, NeedsAttributes: true, Label: "assign a licence"},
 	"assign-role":    {Method: "POST", NeedsUser: true, NeedsAttributes: true, Label: "assign a directory role"},
@@ -114,7 +114,7 @@ func OpNames() []string {
 // put a tenant id, a client id or a client secret, which is what makes "the engine
 // holds no Entra credential" a property of the type (ADR-0172).
 type Job struct {
-	// Connector names the tenant the *worker* is configured for.
+	// Worker names the tenant the *worker* is configured for.
 	Connector string `json:"connector"`
 	Operation string `json:"operation"`
 	// UserID is a user principal name or object id; GroupID an object id.
@@ -123,7 +123,7 @@ type Job struct {
 	// Attributes is the resolved JSON body for create-user, update-user and
 	// create-group.
 	Attributes map[string]any `json:"attributes,omitempty"`
-	// NewPassword is the resolved secret for reset-password: the value the connector
+	// NewPassword is the resolved secret for reset-password: the value the worker
 	// wraps in a passwordProfile. It is zero on every other operation.
 	NewPassword string `json:"newPassword,omitempty"`
 	// Filter, Select, PageSize and MaxUsers configure list-users and are zero on
@@ -138,7 +138,7 @@ type Job struct {
 	// DeltaLink resumes a change-tracking query (delta-users, delta-groups): the
 	// @odata.deltaLink a previous run returned, empty on the first run. Empty starts a
 	// fresh delta from the collection's /delta path — a full enumeration that also seeds
-	// the cursor; a non-empty link is fetched verbatim (confined to the connector's own
+	// the cursor; a non-empty link is fetched verbatim (confined to the worker's own
 	// endpoint, client.go) and returns only what changed since it was minted. It is zero
 	// on every non-delta operation.
 	DeltaLink string `json:"deltaLink,omitempty"`
@@ -157,13 +157,13 @@ type Job struct {
 	ResultVariable string `json:"resultVariable,omitempty"`
 }
 
-// Resolve turns a compiled Entra connector task into a [Job]: the authored ids
+// Resolve turns a compiled Entra task into a [Job]: the authored ids
 // evaluated against the instance's variables, and the attributes object read up the
 // task's scope chain. It is engine work by necessity — FEEL is compiled at deploy and
 // only the engine has the scope chain.
 func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64) (Job, error) {
 	if detail == nil {
-		return Job{}, fmt.Errorf("entra: connector task has no detail")
+		return Job{}, fmt.Errorf("entra: task has no detail")
 	}
 	op := cp.Intern(detail.EntraOp)
 	spec, ok := Ops[op]
@@ -174,16 +174,16 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 	if err != nil {
 		return Job{}, fmt.Errorf("entra: read variables: %w", err)
 	}
-	// The connector is normally a static name interned at deploy; a task that authored
+	// The worker is normally a static name interned at deploy; a task that authored
 	// it as a FEEL expression resolves the tenant name here, from the instance's own
 	// variables, the same way every other authored value is read (ADR-0172). An
 	// expression that evaluates to nothing is refused rather than sent, so the incident
-	// names the task instead of the worker later failing to find a connector called "".
+	// names the task instead of the worker later failing to find a worker called "".
 	connector := cp.Intern(detail.Connector)
 	if detail.EntraConnector.Expr != nil {
 		connector = resolveValue(detail.EntraConnector, elementInstanceKey, vars)
 		if strings.TrimSpace(connector) == "" {
-			return Job{}, fmt.Errorf("entra: the connector expression evaluated to an empty tenant name; set the variable it reads before this task")
+			return Job{}, fmt.Errorf("entra: the worker expression evaluated to an empty tenant name; set the variable it reads before this task")
 		}
 	}
 	j := Job{
@@ -276,7 +276,7 @@ func attributesOf(v model.VariableValue, name string) (map[string]any, error) {
 // Run performs a resolved job through the caller's own registry and returns the
 // variables the job completes with. It is the whole of the worker's half.
 //
-// The connector lookup comes first, as it does for mail and SQL: an unconfigured name
+// The worker lookup comes first, as it does for mail and SQL: an unconfigured name
 // is the actionable failure, and reporting it ahead of anything about the request
 // keeps the message pointed at the fix.
 func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
@@ -330,7 +330,7 @@ const nextLinkKey = "@odata.nextLink"
 // means something is wrong and saying so is the useful outcome.
 const maxListPages = 1000
 
-// listCollection performs the whole listing: the first request this connector builds,
+// listCollection performs the whole listing: the first request this worker builds,
 // and then every continuation Graph hands back, until there is no next page. It serves
 // every listing operation (users, groups); the collection it reads is spec.ListPath.
 //
@@ -352,7 +352,7 @@ func listCollection(ctx context.Context, j Job, spec Op, client Client) ([]any, 
 		}
 		items = append(items, batch...)
 		// The cap fails the job rather than truncating, for the reason the LDAP
-		// connector's does: a short result set is a wrong answer, not a partial one,
+		// worker's does: a short result set is a wrong answer, not a partial one,
 		// and a process deciding something from it decides it confidently.
 		if j.MaxUsers > 0 && len(items) > int(j.MaxUsers) {
 			return nil, fmt.Errorf("entra: %s returned more than the %d-item maxUsers cap; narrow the filter or raise maxUsers (truncating would be a wrong answer, not a partial one)", j.Operation, j.MaxUsers)
@@ -422,7 +422,7 @@ func listPath(j Job, collection string) string {
 	}
 	// $count=true is not a request for a number here — it is the other half of
 	// Graph's advanced query support, which refuses ConsistencyLevel: eventual
-	// without it. The two are one switch, so the connector never sends half of it.
+	// without it. The two are one switch, so the worker never sends half of it.
 	if j.advanced() {
 		q = append(q, "$count=true")
 	}
@@ -699,11 +699,11 @@ func defaultTeam() map[string]any {
 }
 
 // builtinProcessInstanceKey is the reserved FEEL name that binds to the instance's
-// own key, as it does for every other connector.
+// own key, as it does for every other worker.
 const builtinProcessInstanceKey = "processInstanceKey"
 
-// resolveValue evaluates a literal-or-FEEL connector value against the scope's
-// variables and coerces it to its string form, the same way every other connector's
+// resolveValue evaluates a literal-or-FEEL worker value against the scope's
+// variables and coerces it to its string form, the same way every other worker's
 // authored values are read. A FEEL null — an absent variable or a failed evaluation —
 // becomes the empty string, which the required-field checks then report by name.
 func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model.VariableValue) string {

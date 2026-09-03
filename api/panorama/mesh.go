@@ -23,7 +23,7 @@ const (
 	KindApplication = "application"
 	KindProcess     = "process"
 	// KindWorker is one configured Worker — a target and identity of a Worker Type
-	// (ADR-0203). The store behind it is still the connector store and the model
+	// (ADR-0203). The store behind it is still the worker store and the model
 	// still names it with connector="…"; those are the contracts that cannot move
 	// yet, and this is new surface, so it says Worker.
 	KindWorker   = "worker"

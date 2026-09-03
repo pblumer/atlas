@@ -22,7 +22,7 @@
 //     that waits three days finishes in microseconds.
 //   - A stub policy ([StubSet]) supplied as *run configuration* rather than model
 //     content, so the model under test is byte-for-byte the model that deploys.
-//   - Isolation by absence: a sandbox registers no connectors, no vault, no mail
+//   - Isolation by absence: a sandbox registers no workers, no vault, no mail
 //     transport and no HTTP client. A REST task cannot reach the network because
 //     nothing in a sandbox could dial it. That is a structural property, not a
 //     setting — see TestConnectorTaskIsAnsweredByTheStubAndNeverCalled.

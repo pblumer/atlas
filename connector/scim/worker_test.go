@@ -20,7 +20,7 @@ type fixedClock struct{ t int64 }
 
 func (c *fixedClock) Now() int64 { c.t++; return c.t }
 
-// recordingClient captures the requests a connector task makes and returns a canned
+// recordingClient captures the requests a task makes and returns a canned
 // response.
 type recordingClient struct {
 	requests []scim.Request
@@ -44,7 +44,7 @@ const scimDefKey = 83
 
 const scimBase = "https://idp.example.com/scim/v2"
 
-// scimProcess: Start → SCIM connector task → End.
+// scimProcess: Start → SCIM task → End.
 func scimProcess(t *testing.T, cfg compiler.ScimConfig) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	return scimProcessWith(t, cfg, false)
@@ -378,7 +378,7 @@ func TestScimHandlerElementInstanceGone(t *testing.T) {
 
 // TestScimRecoversAcrossRestart runs to the waiting SCIM job, simulates a crash
 // (reopen log and store), recovers by replaying the log, then lets the worker call
-// the provider and finish the instance — proving the connector job survives recovery
+// the provider and finish the instance — proving the worker job survives recovery
 // like any other job.
 func TestScimRecoversAcrossRestart(t *testing.T) {
 	dir := t.TempDir()

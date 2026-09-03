@@ -24,7 +24,7 @@ import (
 // The secret behind that reference never travels. [Run] resolves it through the
 // caller's own resolver, so a worker reaches an API with a token the engine has
 // never held — which is the shape ADR-0168 argues for, and the reason an offloaded
-// REST connector can live in a network segment the engine is kept out of.
+// REST worker can live in a network segment the engine is kept out of.
 
 // Job is a REST task with everything model-authored already evaluated. It is what
 // travels with a leased job, and it has nowhere to put a secret.
@@ -59,7 +59,7 @@ type Result struct {
 // the split exists to prevent.
 func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64) (Job, error) {
 	if detail == nil {
-		return Job{}, fmt.Errorf("rest: connector task has no detail")
+		return Job{}, fmt.Errorf("rest: task has no detail")
 	}
 	// Read the variables the task sees once — up its scope chain, so its own
 	// input-mapped locals shadow what it inherits (ADR-0068) — and evaluate the url,

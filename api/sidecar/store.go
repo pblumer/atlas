@@ -13,7 +13,7 @@ import (
 // Store is a durable store for one kind of design-time record: one JSON file per
 // key under a single directory, written with the durability discipline above.
 //
-// Atlas has sixteen of these — drafts, projects, forms, connectors, deployments,
+// Atlas has sixteen of these — drafts, projects, forms, workers, deployments,
 // releases, users, deploy tokens and the rest. They differ in what they store,
 // how a record names itself, and what order a listing comes back in. They agreed
 // on everything else, which is what this type now holds: create the directory,

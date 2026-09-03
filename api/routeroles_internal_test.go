@@ -443,7 +443,7 @@ func TestUpgradeLegacyRolesRunsOnce(t *testing.T) {
 
 // TestTheUpgradeReachesAStandingApproval. A grant carries its own snapshot of what
 // the person could do (ADR-0200), so an upgrade that touched only the account would
-// leave somebody's connector able to do less than they can, for a change they never
+// leave somebody's worker able to do less than they can, for a change they never
 // made.
 func TestTheUpgradeReachesAStandingApproval(t *testing.T) {
 	dir := t.TempDir()

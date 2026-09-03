@@ -32,7 +32,7 @@ import { attachPlayground } from "./playground.js";
 // glyph shown on the task shape in the Implement view so the executable language is
 // legible at a glance — a plain bpmn:ScriptTask looks identical whatever language
 // it runs (see makeImplementBadges).
-// The HTML language descriptor, used for the markup fields in the connector catalog
+// The HTML language descriptor, used for the markup fields in the Worker Type catalog
 // (the mail body). Resolved once — the registry is static.
 const htmlLang = devLang("html");
 
@@ -1273,7 +1273,7 @@ function activeTab(root) {
 // Implement / runtime views, or null when the element carries no such type (so the
 // generic BPMN marker shows instead). Two task families have one: a job-script task
 // resolves to its language (a FEEL script task runs in the engine — none); a service
-// task to its connector kind (the plain job worker has none — the gear bpmn-js draws
+// task to its Worker Type (the plain job worker has none — the gear bpmn-js draws
 // IS the service-task symbol). `label` is the tooltip; `icon` is a self-contained SVG.
 function implMarker(bo) {
   if (!bo) return null;
@@ -1289,7 +1289,7 @@ function implMarker(bo) {
     return { label: kind.name, icon: kind.glyph };
   }
   if (bo.$type === "bpmn:SendTask") {
-    // The send task's kind badge (ADR-0112): a message throw, a connector, or (plain job
+    // The send task's kind badge (ADR-0112): a message throw, a Worker Type, or (plain job
     // worker) nothing — the filled send-task arrow bpmn-js draws is that kind's own symbol.
     if (bo.messageRef) return { label: SEND_MESSAGE_KIND.name, icon: SEND_MESSAGE_KIND.glyph };
     const kind = serviceTaskKind(bo);
@@ -1301,7 +1301,7 @@ function implMarker(bo) {
 
 // drawImplBadges marks every element that has an implementation type (see implMarker)
 // with that type's icon, so a task's *executable* nature — PowerShell vs Python, a
-// REST connector vs a plain job worker — reads at a glance. A plain bpmn:ScriptTask or
+// REST worker vs a plain job worker — reads at a glance. A plain bpmn:ScriptTask or
 // bpmn:ServiceTask looks identical whatever it runs; this restores the distinction.
 // Each badge is a bpmn-js overlay (like Operate's execution-count badges), so it tracks
 // the shape through pan/zoom and is torn down with the modeler. Returns the overlay ids
@@ -1335,7 +1335,7 @@ function drawImplBadges(modeler) {
 // makeImplementBadges gates drawImplBadges on the Modeler's Implement tab: the Design
 // view is deliberately descriptive (control flow and BPMN symbols only), but on the
 // Implement tab the difference between a PowerShell and a Python task, or a REST
-// connector and a plain worker, is exactly what the author is working with. Returns a
+// Worker Type and a plain worker, is exactly what the author is working with. Returns a
 // refresh function the tab toggle and diagram-change events call; it is a no-op off the
 // Implement tab, where it clears any badges the author left behind.
 function makeImplementBadges(root, modeler) {
@@ -1476,8 +1476,8 @@ function devVariables(modeler, element) {
     if (js && js.resultVariable) push(js.resultVariable, (js.language || "job") + " script result", "output");
     const cd = bo && findExt(bo, "zeebe:CalledDecision");
     if (cd && cd.resultVariable) push(cd.resultVariable, "decision result", "output");
-    const cr = connectorResultVariable(bo);
-    if (cr) push(cr, "connector result", "output");
+    const cr = workerResultVariable(bo);
+    if (cr) push(cr, "worker result", "output");
   } catch { /* best-effort */ }
   try {
     for (const v of collectDiagramVariables(modeler)) {
@@ -1592,25 +1592,25 @@ function devViewContext(modeler, api, field) {
 // formFieldCache maps a linked form's id to its input-field keys once fetched:
 // null marks a fetch in flight (so each form is requested once), otherwise
 // { name, fields } — the form's display name and its variable-bearing field keys.
-// connectorResultVariable is the variable a task's connector writes what it fetched
+// workerResultVariable is the variable a task's worker writes what it fetched
 // into — Entra's user list, a query's rows, a REST response. Sixteen of the catalog's
 // nineteen kinds have one, and none of them reached the Variables panel: it knew a
-// script's result and a decision's, but nothing a connector produced, so a model whose
+// script's result and a decision's, but nothing a worker produced, so a model whose
 // whole point was `Users` showed no `Users`. Read through the catalog rather than by
 // assuming the attribute is there, so a kind that names the field differently is a
 // catalog question and not a silent omission here.
-function connectorResultVariable(bo) {
-  return connectorResult(bo).name;
+function workerResultVariable(bo) {
+  return workerResult(bo).name;
 }
 
-// connectorResult is the same lookup, plus the *type* the catalog declares that result
+// workerResult is the same lookup, plus the *type* the catalog declares that result
 // has: what a kind writes is a fact about the kind, not about the endpoint it is
 // pointed at, so the model knows it before anything has run. Several kinds write a
 // different shape per operation — a query returns rows, "query one" a row, an execute a
 // count — so a declaration may be a function of the element's own values, exactly as
 // showIf and hint already are. A kind that writes nothing meaningful for the chosen
 // operation declares "", and the panel shows no badge rather than a wrong one.
-function connectorResult(bo) {
+function workerResult(bo) {
   const none = { name: "", type: "" };
   if (!bo) return none;
   const kind = serviceTaskKind(bo);
@@ -1698,7 +1698,7 @@ function collectDiagramVariables(modeler) {
   const seen = new Set();
   // `type` is what the *model* declares this variable holds, where anything declares
   // it: a start variable's own type, a form field's component type, the shape a
-  // connector kind writes. Left empty where nothing does — a FEEL script's result is
+  // Worker Type writes. Left empty where nothing does — a FEEL script's result is
   // whatever its expression evaluates to, and a guess there would be worse than the
   // silence, because a badge reads as knowledge.
   const push = (name, origin, originId, source, category = "Process", type = "") => {
@@ -1728,8 +1728,8 @@ function collectDiagramVariables(modeler) {
       if (js && js.resultVariable) push(js.resultVariable, label, bo.id, (js.language || "job") + " script");
       const cd = findExt(bo, "zeebe:CalledDecision");
       if (cd && cd.resultVariable) push(cd.resultVariable, label, bo.id, "decision result");
-      const cr = connectorResult(bo);
-      if (cr.name) push(cr.name, label, bo.id, "connector result", "Process", cr.type);
+      const cr = workerResult(bo);
+      if (cr.name) push(cr.name, label, bo.id, "worker result", "Process", cr.type);
       const io = findExt(bo, "zeebe:IoMapping");
       for (const p of (io && io.outputParameters) || []) push(p.target, label, bo.id, "output mapping");
       // A data object is first-class per-instance state (ADR-0053): its name is the
@@ -1829,7 +1829,7 @@ function wireEditorVars(root, modeler, api) {
 
     // The observed value, when there is one. A structure opens in place — the shape of
     // it is what an author is looking at it for, and at design time it is the only way
-    // to see one at all: a name tells you a connector writes `kunden`, not that a row
+    // to see one at all: a name tells you a worker writes `kunden`, not that a row
     // carries `kundennr` and not `id`.
     const s = sampleValues && sampleValues[v.name];
     let valHTML = "";
@@ -2335,7 +2335,7 @@ function wireDocumentation(body, modeler, element, bo, id = "f-doc") {
 // incident (ADR-0061). It is one field description appended to every catalog kind,
 // so the property reads, saves and validates identically whichever implementation a
 // task has — the plain job worker stores it on <zeebe:taskDefinition retries>, a
-// connector on its own extension's retries attribute, and the compiler reads both.
+// worker on its own extension's retries attribute, and the compiler reads both.
 const RETRIES_FIELD = {
   key: "retries", label: "Retries", type: "number", min: 1, placeholder: "3",
   hint: "How often the engine hands this task's job to a worker before giving up — the first attempt plus one per remaining count. When they are used up the failure raises an incident that parks the token until an operator resolves it. Leave empty for the default (3); 1 means a single attempt with no retry.",
@@ -2409,10 +2409,10 @@ function sqlServiceTaskKind(p) {
   };
 }
 
-// SERVICE_TASK_KINDS is the catalog of service-task connector kinds the modeler
+// SERVICE_TASK_KINDS is the catalog of service-task Worker Types the modeler
 // can author (ADR-0067). Each entry maps a human-facing kind to the extension
 // element the compiler reads and the typed fields that configure it. Adding a
-// connector kind is one entry here (plus its moddle type, compiler branch, and
+// Worker Type is one entry here (plus its moddle type, compiler branch, and
 // worker) — the searchable picker and the field form are both rendered
 // generically from this data, so no bespoke panel code is needed per kind.
 const SERVICE_TASK_KINDS = [
@@ -2424,7 +2424,7 @@ const SERVICE_TASK_KINDS = [
   {
     id: "rest", name: "REST Outbound", group: "Web & API", desc: "Invoke a REST API", icon: "R",
     // glyph is the canvas type marker shown in the Implement/runtime views (drawImplBadges),
-    // the connector's counterpart to a script task's language icon. The plain job worker
+    // the Worker Type's counterpart to a script task's language icon. The plain job worker
     // has none — the gear bpmn-js already draws IS the service-task symbol. A globe reads
     // "HTTP/web API" at a glance.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#12a594"/><circle cx="8" cy="8" r="4.7" fill="none" stroke="#fff" stroke-width="1.1"/><ellipse cx="8" cy="8" rx="2.3" ry="4.7" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.3 8h9.4M8 3.3v9.4" stroke="#fff" stroke-width="1.1"/></svg>`,
@@ -2455,7 +2455,7 @@ const SERVICE_TASK_KINDS = [
     id: "scim", name: "SCIM Provisioning", group: "Directory & identity", desc: "Create, read, or update a user or group on a SCIM 2.0 provider", icon: "I",
     // A person mark with an outbound arrow reads "push this identity to another
     // system", which is what SCIM is for — distinct from the user-provisioning
-    // connector's plain person, which acts on Atlas's own login store.
+    // Worker Type's plain person, which acts on Atlas's own login store.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#2f6fe0"/><g fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.2" cy="5.9" r="2"/><path d="M2.9 12.3c0-2 1.5-3.1 3.3-3.1s3.3 1.1 3.3 3.1"/><path d="M11.1 6.1h2.5M12.4 4.8l1.3 1.3-1.3 1.3"/></g></svg>`,
     ext: "atlas:ScimConnector",
     fields: [
@@ -2507,7 +2507,7 @@ const SERVICE_TASK_KINDS = [
   {
     id: "ldap", name: "LDAP Directory", group: "Directory & identity", desc: "Search a directory or add, modify, or delete an entry over LDAP", icon: "L",
     // A root node branching into three children reads "directory tree" at a glance —
-    // the hierarchy is what distinguishes LDAP from the flat HTTP connectors.
+    // the hierarchy is what distinguishes LDAP from the flat HTTP Worker Types.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c2620f"/><path d="M8 4.7v1.7M4.6 6.4h6.8M4.6 6.4v2.5M8 6.4v2.5M11.4 6.4v2.5" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/><g fill="#fff"><circle cx="8" cy="3.4" r="1.3"/><circle cx="4.6" cy="10.2" r="1.3"/><circle cx="8" cy="10.2" r="1.3"/><circle cx="11.4" cy="10.2" r="1.3"/></g></svg>`,
     ext: "atlas:LdapConnector",
     fields: [
@@ -2520,7 +2520,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "clientCertSecret", label: "Client certificate reference", placeholder: "LDAP_CLIENT_CERT",
-        hint: "Optional. Names a server-side secret holding one PEM bundle — certificate and private key together — presented to the directory. With no bind DN the certificate is the identity and the connector binds SASL EXTERNAL; with one it is transport only.",
+        hint: "Optional. Names a server-side secret holding one PEM bundle — certificate and private key together — presented to the directory. With no bind DN the certificate is the identity and the worker binds SASL EXTERNAL; with one it is transport only.",
       },
       {
         key: "startTLS", label: "STARTTLS", type: "select",
@@ -2577,7 +2577,7 @@ const SERVICE_TASK_KINDS = [
     id: "soap", name: "SOAP / Web Services", group: "Web & API", desc: "Invoke a SOAP operation on a legacy web service (WSDL)", icon: "W",
     // An envelope mark reads "SOAP envelope" at a glance — the wrapper that distinguishes
     // a SOAP call from the flat REST globe, on a teal tile to stand apart from the HTTP
-    // connectors.
+    // Worker Types.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f8a7e"/><g fill="none" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"><rect x="3" y="4.5" width="10" height="7" rx="0.8"/><path d="M3.2 5l4.8 3.6L12.8 5"/></g></svg>`,
     ext: "atlas:SoapConnector",
     fields: [
@@ -2751,14 +2751,14 @@ const SERVICE_TASK_KINDS = [
       { group: "Output" },
       {
         key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "write" ? "string" : "array"), placeholder: "eintraege",
-        hint: "Reading: the entries land here as a JSON array of {dn, attributes} — the same shape the directory connectors return, so downstream handling is shared. Writing: the rendered file lands here as text. Either way entryCount is also set.",
+        hint: "Reading: the entries land here as a JSON array of {dn, attributes} — the same shape the directory Worker Types return, so downstream handling is shared. Writing: the rendered file lands here as text. Either way entryCount is also set.",
       },
     ],
   },
   {
     id: "entra", name: "Microsoft Entra ID", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete), groups (create, read, list, delta, update, delete, members and owners), Teams (create, add members and owners, channels, archive), and licences and directory-role assignments", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
-    // AD connector, moved to the cloud — the pair should read as siblings.
+    // AD Worker Type, moved to the cloud — the pair should read as siblings.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
     ext: "atlas:EntraConnector",
     fields: [
@@ -2814,7 +2814,7 @@ const SERVICE_TASK_KINDS = [
       {
         key: "newPassword", label: "New password", placeholder: "=tempPassword", fx: true,
         showIf: (v) => v.operation === "reset-password",
-        hint: "The password to set. Almost always a FEEL expression (fx) naming a variable — e.g. =tempPassword — so the secret is a runtime value, never written into the model. The connector wraps it in a passwordProfile and forces a change at next sign-in.",
+        hint: "The password to set. Almost always a FEEL expression (fx) naming a variable — e.g. =tempPassword — so the secret is a runtime value, never written into the model. The worker wraps it in a passwordProfile and forces a change at next sign-in.",
       },
       {
         key: "attributes", label: "Attribute", type: "json", rows: 8,
@@ -2842,7 +2842,7 @@ const SERVICE_TASK_KINDS = [
       {
         key: "search", label: "Suche", placeholder: "\"displayName:Arno\"", fx: true,
         showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
-        hint: "Graphs $search über das Verzeichnis — geschrieben genau so, wie Graph es nimmt, Anführungszeichen inklusive: \"displayName:Arno\", oder zusammengesetzt \"mail:blumer\" AND \"displayName:Arno\". Der Konnektor kodiert den Begriff, erfindet aber keine Anführungszeichen darum, sonst wäre der zusammengesetzte Fall nicht schreibbar. Eine Suche schaltet die erweiterte Abfrage automatisch ein — Graph kennt keinen anderen Weg, sie auszuführen.",
+        hint: "Graphs $search über das Verzeichnis — geschrieben genau so, wie Graph es nimmt, Anführungszeichen inklusive: \"displayName:Arno\", oder zusammengesetzt \"mail:blumer\" AND \"displayName:Arno\". Der Worker kodiert den Begriff, erfindet aber keine Anführungszeichen darum, sonst wäre der zusammengesetzte Fall nicht schreibbar. Eine Suche schaltet die erweiterte Abfrage automatisch ein — Graph kennt keinen anderen Weg, sie auszuführen.",
       },
       {
         key: "advancedQuery", label: "Erweiterte Abfrage", type: "select",
@@ -2874,7 +2874,7 @@ const SERVICE_TASK_KINDS = [
         // Almost always a FEEL variable holding the deltaLink a previous run wrote — the
         // whole point of change tracking is to resume from it. Empty starts a fresh
         // enumeration that seeds a new cursor.
-        hint: "Setzt eine Änderungsverfolgung fort: der @odata.deltaLink, den ein früherer Lauf zurückgab — fast immer eine FEEL-Variable (fx), z.B. =letzterDeltaLink. Leer lassen für den ersten Lauf: dann zählt der Konnektor das Verzeichnis einmal vollständig auf und liefert einen frischen Cursor. Das Ergebnis ist ein Objekt { value: [Änderungen], deltaLink: \"…\" }; den deltaLink persistieren (Datenobjekt) und beim nächsten Lauf hier wieder übergeben. Gelöschte Objekte kommen mit @removed markiert mit.",
+        hint: "Setzt eine Änderungsverfolgung fort: der @odata.deltaLink, den ein früherer Lauf zurückgab — fast immer eine FEEL-Variable (fx), z.B. =letzterDeltaLink. Leer lassen für den ersten Lauf: dann zählt der Worker das Verzeichnis einmal vollständig auf und liefert einen frischen Cursor. Das Ergebnis ist ein Objekt { value: [Änderungen], deltaLink: \"…\" }; den deltaLink persistieren (Datenobjekt) und beim nächsten Lauf hier wieder übergeben. Gelöschte Objekte kommen mit @removed markiert mit.",
       },
       { group: "Output" },
       {
@@ -2937,14 +2937,14 @@ const SERVICE_TASK_KINDS = [
       { key: "query", label: "Query", placeholder: "leave empty for get_state", showIf: (v) => v.operation === "query", hint: "A run_query query string. If empty, get_state is read for the subject above." },
       { key: "reduceSpec", label: "Reduce spec", placeholder: "orderTotals", showIf: (v) => v.operation === "query", hint: "The projection to read for get_state (ignored when a query is set)." },
       { group: "Read", showIf: (v) => v.operation === "read" },
-      { key: "limit", label: "Limit", placeholder: "0 = connector default", showIf: (v) => v.operation === "read" },
+      { key: "limit", label: "Limit", placeholder: "0 = worker default", showIf: (v) => v.operation === "read" },
       { key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "read" ? "array" : "json"), placeholder: "result", showIf: (v) => v.operation === "query" || v.operation === "read", hint: "The query result / events are written into this process variable." },
     ],
   },
   {
     id: "mail", name: "E-Mail Outbound", group: "Messaging & events", desc: "Send an e-mail via a mail provider", icon: "M",
     // An envelope on a warm amber tile reads "outbound mail" at a glance — the mail
-    // connector's counterpart to REST's globe and clio's event stream. The
+    // Worker Type's counterpart to REST's globe and clio's event stream. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white envelope strokes.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#e5484d"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
@@ -2965,7 +2965,7 @@ const SERVICE_TASK_KINDS = [
   {
     id: "csv", name: "Text File", group: "Files", desc: "Read or write a table in a text file: delimited (CSV), fixed-width, or attribute-value pairs", icon: "T",
     // A grid/table mark on a teal tile reads "tabular data ↔ rows" at a glance — the
-    // file connector's counterpart to REST's globe and mail's envelope. The
+    // file Worker Type's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white grid strokes.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#3b82f6"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3 6.4h10M3 9.2h10M6.6 3.6v8.8" stroke="#fff" stroke-width="1.1"/></svg>`,
@@ -3018,7 +3018,7 @@ const SERVICE_TASK_KINDS = [
   {
     id: "sharepoint", name: "SharePoint", group: "Applications", desc: "Create a list item in a SharePoint site", icon: "S",
     // A list/grid mark on a Microsoft-teal tile reads "SharePoint list" at a glance —
-    // this connector's counterpart to REST's globe and mail's envelope. The
+    // this Worker Type's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white list rows.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#038387"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 6.2h9.2M6 3.9v8.2" stroke="#fff" stroke-width="1.1"/></svg>`,
@@ -3038,7 +3038,7 @@ const SERVICE_TASK_KINDS = [
   {
     id: "remedy", name: "BMC Remedy", group: "Applications", desc: "Create an incident/entry in BMC Remedy (Helix ITSM)", icon: "B",
     // A ticket/incident mark on a BMC-orange tile reads "ITSM ticket" at a glance — the
-    // Remedy connector's counterpart to REST's globe and mail's envelope. The
+    // Remedy Worker Type's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white ticket strokes.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#f76808"/><rect x="3" y="4.4" width="10" height="7.2" rx="1.2" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M5.4 7h5.2M5.4 9h3.2" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/></svg>`,
@@ -3056,7 +3056,7 @@ const SERVICE_TASK_KINDS = [
   {
     id: "jira", name: "Jira", group: "Applications", desc: "Create, read, update, transition, comment on, assign, or search Jira issues, and look up the accounts to assign them to", icon: "J",
     // A check-mark inside a rounded square on Atlassian blue: the issue, ticked —
-    // this connector's counterpart to REST's globe and Remedy's ticket. The
+    // this Worker Type's counterpart to REST's globe and Remedy's ticket. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white marks.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#1868db"/><rect x="3.2" y="3.2" width="9.6" height="9.6" rx="1.6" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M5.6 8.2l1.7 1.8 3.2-3.4" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`,
@@ -3110,7 +3110,7 @@ const SERVICE_TASK_KINDS = [
       {
         key: "transition", label: "Transition", placeholder: "Fertig", fx: true,
         showIf: (v) => v.operation === "transition-issue",
-        hint: "The workflow step to perform, by the name Jira shows on the button — the connector looks its id up first, so the model is not tied to one workflow configuration. A value that is all digits is used as the transition id directly. May be a FEEL expression (fx).",
+        hint: "The workflow step to perform, by the name Jira shows on the button — the worker looks its id up first, so the model is not tied to one workflow configuration. A value that is all digits is used as the transition id directly. May be a FEEL expression (fx).",
       },
       {
         key: "comment", label: "Comment", placeholder: "=antwort", fx: true,
@@ -3120,7 +3120,7 @@ const SERVICE_TASK_KINDS = [
       {
         key: "assignee", label: "Assignee", placeholder: "=konto.accountId", fx: true,
         showIf: (v) => v.operation === "assign-issue",
-        hint: "The account the issue is handed to: an accountId on Jira Cloud, a username on Data Center. Which one is not guessed — it follows from the credential the connector holds. May be a FEEL expression (fx).",
+        hint: "The account the issue is handed to: an accountId on Jira Cloud, a username on Data Center. Which one is not guessed — it follows from the credential the worker holds. May be a FEEL expression (fx).",
       },
       {
         key: "jql", label: "JQL", placeholder: "project = OPS AND status = \"To Do\"", fx: true,
@@ -3136,8 +3136,8 @@ const SERVICE_TASK_KINDS = [
         key: "maxResults", label: "Maximum results", placeholder: "50",
         showIf: (v) => v.operation === "search" || v.operation === "search-users",
         hint: (v) => (v.operation === "search-users"
-          ? "Caps what may land in the result variable. The connector follows Jira's paging to that many accounts. Empty uses 50; 0 reads every match."
-          : "Caps what may land in the result variable. The connector follows Jira's paging to that many issues, so the result is the issues themselves, never one page of them. Empty uses 50; 0 reads every match."),
+          ? "Caps what may land in the result variable. The worker follows Jira's paging to that many accounts. Empty uses 50; 0 reads every match."
+          : "Caps what may land in the result variable. The worker follows Jira's paging to that many issues, so the result is the issues themselves, never one page of them. Empty uses 50; 0 reads every match."),
       },
       {
         key: "fields", label: "Further fields", type: "map", childType: "atlas:JiraField", fx: true,
@@ -3171,7 +3171,7 @@ const SERVICE_TASK_KINDS = [
   {
   id: "webscrape", name: "Web Scraping", group: "Web & API", desc: "Extract HTML or read an RSS/Atom feed", icon: "W",
   // A spider-web mark on an indigo tile reads "web scraping" at a glance — this
-  // connector's counterpart to REST's globe and mail's envelope. The
+  // Worker Type's counterpart to REST's globe and mail's envelope. The
   // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
   // fill and the white web strokes.
   glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5b5bd6"/><g fill="none" stroke="#fff" stroke-width="1.1"><path d="M8 2.4v11.2M2.4 8h11.2M4 4l8 8M12 4l-8 8"/><circle cx="8" cy="8" r="2.6"/><circle cx="8" cy="8" r="5"/></g></svg>`,
@@ -3253,8 +3253,8 @@ const SERVICE_TASK_KINDS = [
     // fill and the white figure strokes.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0d7a63"/><g fill="none" stroke="#fff" stroke-width="1.1"><circle cx="8" cy="6" r="2.2"/><path d="M3.8 13c0-2.3 1.9-3.6 4.2-3.6s4.2 1.3 4.2 3.6"/></g></svg>`,
     ext: "atlas:UserConnector",
-    // This connector is gated to the protected system project and mutates the local
-    // user store, so — unlike every other connector — it names no server-registered
+    // This Worker Type is gated to the protected system project and mutates the local
+    // user store, so — unlike every other Worker Type — it names no server-registered
     // provider and carries no credential reference at all (ADR-0122/0123).
     fields: [
       {
@@ -3306,8 +3306,8 @@ const SERVICE_TASK_KINDS = [
 ].map(withRetries);
 
 // serviceTaskKind returns the catalog entry a service task currently represents,
-// detected by which connector extension it carries; the plain job worker is the
-// default when no connector extension is present.
+// detected by which Worker Type extension it carries; the plain job worker is the
+// default when no such extension is present.
 function serviceTaskKind(bo) {
   for (const k of SERVICE_TASK_KINDS) {
     if (k.id !== "worker" && findExt(bo, k.ext)) return k;
@@ -3345,7 +3345,7 @@ function stMapRowHTML(f, name, value, extra) {
 // fields, both from SERVICE_TASK_KINDS. The picker approximates the reference
 // tooling's template chooser within the buildless panel (ADR-0067/0012); the field
 // form is generic over text/select/map fields, section groups, and showIf
-// visibility so a new connector kind needs no bespoke panel code.
+// visibility so a new Worker Type needs no bespoke panel code.
 // fillWorkerDatalist populates a <datalist> with the configured Workers of one Worker
 // Type ("jira" | "mail" | "temis" | …), so the field that names one offers them as a
 // dropdown. The name of a configured Worker is the one thing about a task an author
@@ -3373,7 +3373,7 @@ function fillWorkerDatalist(api, dl, note, kind) {
 }
 
 // placementBadgeHTML is the where-does-this-run badge: beside a kind's name in the
-// connector picker, and beside the field that picks one in the script and decision
+// Worker Type picker, and beside the field that picks one in the script and decision
 // panels. A kind the server said nothing about gets none: silence beats a badge that
 // might be wrong, which is what the compiled-in one turned out to be.
 function placementBadgeHTML(id) {
@@ -3410,7 +3410,7 @@ function stKindRow(k, curId) {
 }
 
 // stKindRowsHTML renders the picker as titled groups rather than one flat run of
-// nineteen. It leads with the kinds this installation actually has a connector
+// nineteen. It leads with the types this installation actually has a worker
 // configured for: on a server with two of them, the author is almost always reaching for
 // one of those and not for the nineteenth entry of a catalog. Those kinds are *moved*
 // there rather than repeated, so no kind appears twice.
@@ -3522,7 +3522,7 @@ function stKindFieldsHTML(cur, ext) {
   return fields;
 }
 
-// Where a connector kind's work runs is a property of the *server*, not of the
+// Where a Worker Type's work runs is a property of the *server*, not of the
 // catalog: --offload-connectors and --in-process-connectors are its command line, and
 // some kinds were born on a worker with no in-engine form at all (ADR-0168/0173). This
 // used to be a constant here — true the day it was written, false a day later — so the
@@ -3551,7 +3551,7 @@ function loadKindPlacement(api) {
 // placementOf returns an authored kind's placement, or "" when the server has not
 // answered or says nothing about it (the plain job worker, whose name is already the
 // statement, and the mockup and a FEEL script, which create no job at all). The id is
-// the server's word for what the author picked: a catalog kind for a connector, a
+// the server's word for what the author picked: a catalog entry for a Worker Type, a
 // language for a script task, "dmn" or "temis" for a decision binding.
 function placementOf(id) { return (KIND_PLACEMENT && KIND_PLACEMENT[id]) || ""; }
 
@@ -3570,7 +3570,7 @@ const PLACEMENT_BADGE = {
 };
 
 // PLACEMENT_LEAD says where the work runs. It is the same sentence wherever it appears,
-// because it is the same fact — a connector call, a script and a decision are all a job
+// because it is the same fact — a worker call, a script and a decision are all a job
 // this server either runs itself or leaves for a worker.
 const PLACEMENT_LEAD = {
   "engine": `Atlas runs this <b>in its own process</b> on this server, so its latency and its
@@ -3582,13 +3582,13 @@ const PLACEMENT_LEAD = {
 };
 
 // PLACEMENT_TAIL is what follows from that, which is *not* the same in the three panels.
-// A worker holds a connector's credential, a script's interpreter and a decision
+// A Worker Instance holds a worker's credential, a script's interpreter and a decision
 // service's endpoint; only some of those are the author's problem, and the advice for an
-// in-engine connector ("prefer a job worker") is not advice a script task can take.
+// in-engine Worker Type ("prefer a job worker") is not advice a script task can take.
 // A missing entry means the lead says it all — the notice never disappears for want of a
 // tail.
 const PLACEMENT_TAIL = {
-  connector: {
+  workerType: {
     "engine": `New models should prefer a <b>Job worker</b> and an <code>atlas worker</code> serving
       that job type; these kinds keep working and are being moved out of the engine.`,
     "engine-only": `Its work changes this server&rsquo;s own state rather than calling anything out,
@@ -3629,7 +3629,7 @@ const PLACEMENT_TAIL = {
 // placement means for the model being authored. It belongs in these panels rather than
 // only in the Workers view because this is where the choice is made; the Workers view
 // can only report the consequence afterwards. `context` picks the wording: the
-// connector catalog, a script language, or one of the two decision bindings.
+// Worker Type catalog, a script language, or one of the two decision bindings.
 function placementNoticeHTML(id, context) {
   const placement = placementOf(id);
   const lead = PLACEMENT_LEAD[placement];
@@ -3666,18 +3666,18 @@ function stKindHeadingHTML(cur) {
 }
 
 // serviceTaskKindHTML renders the searchable kind picker plus the current kind's fields,
-// both from SERVICE_TASK_KINDS (ADR-0067). A new connector kind needs no bespoke panel code.
+// both from SERVICE_TASK_KINDS (ADR-0067). A new Worker Type needs no bespoke panel code.
 function serviceTaskKindHTML(bo) {
   const cur = serviceTaskKind(bo);
   const ext = findExt(bo, cur.ext) || {};
   return `<h3>Worker type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search Worker type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
-    ${stKindHeadingHTML(cur)}${placementNoticeHTML(cur.id, "connector")}${stKindFieldsHTML(cur, ext)}`;
+    ${stKindHeadingHTML(cur)}${placementNoticeHTML(cur.id, "workerType")}${stKindFieldsHTML(cur, ext)}`;
 }
 
 // SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task
-// form. It is not a connector (no ext / fields form) — it is configured by the shared message
+// form. It is not a Worker Type (no ext / fields form) — it is configured by the shared message
 // picker and detected by a messageRef — so it lives outside SERVICE_TASK_KINDS and is prepended
 // to the send task's picker.
 const SEND_MESSAGE_KIND = {
@@ -3687,7 +3687,7 @@ const SEND_MESSAGE_KIND = {
 };
 
 // sendTaskKind returns the kind a send task currently represents (ADR-0112). It is detected by
-// what the task carries: a messageRef → Message; a connector extension → that connector; a
+// what the task carries: a messageRef → Message; a Worker Type extension → that type; a
 // taskDefinition → Job worker. With none of those, the send task is the Message kind by default —
 // so selecting Message (which clears the other kinds' extensions) keeps the message picker visible
 // until a message is chosen, and a fresh send task starts as a plain message send. Without this
@@ -3702,8 +3702,8 @@ function sendTaskKind(bo) {
 }
 
 // sendTaskKindHTML renders the send task's kind picker: the Message kind plus the service
-// task's connector/job-worker catalog, then either the shared message picker (Message kind)
-// or the chosen connector's field form (ADR-0112). The picker reuses the .stkind-row markup,
+// task's Worker Type / job-worker catalog, then either the shared message picker (Message
+// kind) or the chosen type's field form (ADR-0112). The picker reuses the .stkind-row markup,
 // so the existing filter/click wiring drives it.
 function sendTaskKindHTML(modeler, bo) {
   const cur = sendTaskKind(bo);
@@ -3715,17 +3715,17 @@ function sendTaskKindHTML(modeler, bo) {
       "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
   }
   const ext = findExt(bo, cur.ext) || {};
-  return picker + stKindHeadingHTML(cur) + placementNoticeHTML(cur.id, "connector") + stKindFieldsHTML(cur, ext);
+  return picker + stKindHeadingHTML(cur) + placementNoticeHTML(cur.id, "workerType") + stKindFieldsHTML(cur, ext);
 }
 
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
 // kind's extension (seeding select defaults) and removing every other kind's
-// extension, so the compiler sees exactly one connector kind (ADR-0067).
+// extension, so the compiler sees exactly one Worker Type (ADR-0067).
 function applyServiceTaskKind(modeler, element, kindId) {
   const kind = SERVICE_TASK_KINDS.find((k) => k.id === kindId) || SERVICE_TASK_KINDS[0];
   // The retry budget is a property of the task, not of the implementation it happens
   // to have (ADR-0135), so it survives a switch of kind even though each kind stores
-  // it on its own extension — swapping a job worker for a REST connector must not
+  // it on its own extension — swapping a job worker for a REST worker must not
   // silently reset the task to the default three attempts.
   const prev = findExt(element.businessObject, serviceTaskKind(element.businessObject).ext) || {};
   for (const other of SERVICE_TASK_KINDS) {
@@ -3742,10 +3742,10 @@ function applyServiceTaskKind(modeler, element, kindId) {
   upsertExt(modeler, element, kind.ext, defaults);
 }
 
-// applySendTaskKind switches a send task between its Message kind and the connector/job-worker
+// applySendTaskKind switches a send task between its Message kind and the Worker Type / job-worker
 // kinds (ADR-0112). The three kinds are mutually exclusive at compile time, so switching to
-// Message drops every connector/taskDefinition extension (the message picker then sets the
-// messageRef), and switching to a connector/worker clears any messageRef first.
+// Message drops every Worker Type / taskDefinition extension (the message picker then sets
+// the messageRef), and switching to a Worker Type / worker clears any messageRef first.
 function applySendTaskKind(modeler, element, kindId) {
   if (kindId === "message") {
     for (const k of SERVICE_TASK_KINDS) removeExt(modeler, element, k.ext);
@@ -4169,7 +4169,7 @@ function messageFieldsHTML(modeler, med, hint) {
 // fact, so the same process can be started by a Jira watch, a clio subscription, a POST
 // to /api/v1/messages or another process's send task, and swapping one for another is a
 // Console change rather than a redeploy (ADR-0075/0214). The cost of that seam is
-// exactly this: a name typed one character differently here and in Console → Connectors
+// exactly this: a name typed one character differently here and in Console → Workers
 // → Events is two working halves that never meet — no error anywhere, and a process that
 // never starts. The line closes the gap without closing the seam: it reports, it does not
 // bind.
@@ -4190,7 +4190,7 @@ function fillMessageSources(api, el, name) {
     if (!mine.length) {
       el.innerHTML = `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
         + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
-        + `for a Jira or clio event, add a watch under <b>Connectors → Events</b> in the Console.</span>`;
+        + `for a Jira or clio event, add a watch under <b>Workers → Events</b> in the Console.</span>`;
       return;
     }
     const parts = mine.map((s) => {
@@ -4653,7 +4653,7 @@ function escalationDefOf(bo) {
 
 // linkDefOf returns an event's bpmn:LinkEventDefinition, or null. A link intermediate throw
 // jumps to the link intermediate catch of the same name in the same scope — an off-page
-// connector / goto (ADR-0133).
+// worker / goto (ADR-0133).
 function linkDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:LinkEventDefinition") || null;
 }
@@ -5500,7 +5500,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         html += multiInstanceHTML(bo); // wait for the message once per iteration
       } else if (bo.$type === "bpmn:SendTask") {
         // The single outbound element (ADR-0112): a kind picker chooses what it sends —
-        // Message (a correlating throw), or a connector / job worker (a job it waits on).
+        // Message (a correlating throw), or a Worker Type / job worker (a job it waits on).
         html += sendTaskKindHTML(modeler, bo);
         // A message-kind send task is a throw, not an activity the engine can loop
         // (the compiler skips it), so the loop section is offered only for the
@@ -6039,7 +6039,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // The badges describe THIS server, which only the server knows, and the panel is
     // already on screen by the time it answers. So render without them and come back
     // once — every later panel finds the answer cached and is right the first time.
-    // Keyed off the three fields that pick an implementation: the connector picker, a
+    // Keyed off the three fields that pick an implementation: the Worker Type picker, a
     // script task's language, a business rule task's decision binding.
     if (body.querySelector("#f-stkind-list, #f-scriptlang, #f-brt-mode")) {
       const placements = loadKindPlacement(api);
@@ -6112,7 +6112,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // completion, gutter, error markers) and its Run panel wired in the Implement
     // tab's enhancement pass below — see enhanceScript.
 
-    // Service-task connector kind: a searchable picker over SERVICE_TASK_KINDS
+    // Service-task Worker Type: a searchable picker over SERVICE_TASK_KINDS
     // (ADR-0067). Filtering narrows the list; clicking a row switches the kind
     // (swapping which extension the task carries) and re-renders so that kind's
     // fields show. Field edits upsert the current kind's extension generically.
@@ -6218,7 +6218,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       if (f.group || f.type === "map" || !f.fx) continue;
       stAttachFx(body.querySelector("#f-st-" + f.key));
     }
-    // Markup fields (the mail connector's HTML body) get the shared code editor with
+    // Markup fields (the mail worker's HTML body) get the shared code editor with
     // the HTML language module — tag/attribute colouring and variable completion
     // inline, the full Developer View on F2 (ADR-0145).
     for (const f of stKind.fields) {
@@ -6303,9 +6303,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     if (fbinding) fbinding.addEventListener("change", saveDecision);
     if (fbrtretries) fbrtretries.addEventListener("change", saveDecision);
 
-    // Evaluation mode: local (embedded DMN) vs a temis connector (central). The
+    // Evaluation mode: local (embedded DMN) vs a temis worker (central). The
     // choice is the presence of the atlas:temisConnector extension the compiler
-    // reads (ADR-0050); flipping it re-renders so the connector field appears.
+    // reads (ADR-0050); flipping it re-renders so the worker field appears.
     const fmode = body.querySelector("#f-brt-mode");
     if (fmode) {
       fmode.addEventListener("change", () => {
@@ -7549,9 +7549,9 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
   const showDeploySuccess = (message, href, warnings) => {
     dactions.hidden = true;
     derr.textContent = "";
-    // A deploy can succeed and still not run as written — a connector reference
+    // A deploy can succeed and still not run as written — a worker reference
     // naming something nobody configured, or configured as another kind. The server
-    // does not refuse it (deploying before the connectors exist is legitimate), so
+    // does not refuse it (deploying before the workers exist is legitimate), so
     // this is the moment to say it, while the author is still here (ADR-0158).
     const warned = (warnings || []).length
       ? `<div class="deploy-warnings"><b>⚠ Deployed, but this will not run as written:</b>
@@ -10180,7 +10180,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const TOKEN_DOT_STEP = 21;
 
   // Where the row of dots starts. An element carrying an implementation badge — the icon
-  // saying this is a PowerShell script task, or which connector a service task calls —
+  // saying this is a PowerShell script task, or which worker a service task calls —
   // has that badge in its top-left corner, and a token drawn at the same place hid
   // exactly the thing that says what the element does, leaving two overlapping discs
   // that read as neither. So the row starts past it, but only on the elements that

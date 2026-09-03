@@ -46,7 +46,7 @@ const ADMockViewURLEnv = "ATLAS_AD_MOCK_VIEW_URL"
 
 // WorkerIDEnv is this worker's own id, the one the Workers view shows. `atlas worker`
 // takes it from --id and puts it here: a report has to say whose directory it is, and
-// the connectors a worker builds are built from the environment alone.
+// the workers a worker builds are built from the environment alone.
 const WorkerIDEnv = "ATLAS_WORKER_ID"
 
 // maxReportedEntries bounds one report. A mock forest is unbounded — a bulk import

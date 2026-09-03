@@ -61,14 +61,14 @@ func TestCSVConnectorServiceTask(t *testing.T) {
 	}
 
 	// Only the file is seeded — no columnConfig, no script task. The columns are
-	// derived from the header row by the connector.
+	// derived from the header row by the worker.
 	start := `{"variables":{"csvText":"email,group\nada@x.io,users\nbob,ops\n"}}`
 	code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), start, "application/json")
 	if code != http.StatusOK {
 		t.Fatalf("create instance: %d %s", code, body)
 	}
 	if !bytes.Contains(body, []byte(`"activeElementInstances":0`)) {
-		t.Fatalf("instance did not complete (connector worker didn't run?): %s", body)
+		t.Fatalf("instance did not complete (worker didn't run?): %s", body)
 	}
 
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")

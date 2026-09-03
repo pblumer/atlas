@@ -41,7 +41,7 @@ func (s *Server) inboundBridge(every time.Duration) {
 }
 
 // pendingSub is one enabled subscription resolved for a poll: its record, the reader
-// for its connector's kind, that kind's name (which composes the engine's source id),
+// for its worker's kind, that kind's name (which composes the engine's source id),
 // and its compiled correlation-key expression (nil when the subscription is keyless).
 type pendingSub struct {
 	rec    inboundSubscription
@@ -115,7 +115,7 @@ func (s *Server) pollInbound(ctx context.Context) {
 			continue // over the ceiling: the watch is off and the cursor stays put
 		}
 		// A correlated message can start or advance an instance straight into a
-		// connector task, so the driving happens off the run loop (ADR-0157 step 6).
+		// task, so the driving happens off the run loop (ADR-0157 step 6).
 		// The cursor only advances once that succeeded; otherwise it is left where it
 		// was and the events are re-read next tick, which the engine dedupes.
 		if err := s.drive(); err != nil {
@@ -290,8 +290,8 @@ func (s *Server) markInboundPrimed(subID, lastEventID string, primed bool) {
 	_ = s.inboundSubs.Save(rec)
 }
 
-// resolveInboundSubs loads the enabled subscriptions whose connector is an enabled
-// clio connector with a live client, compiling each correlation key. It reads the
+// resolveInboundSubs loads the enabled subscriptions whose worker is an enabled
+// clio worker with a live client, compiling each correlation key. It reads the
 // stores, so it runs on the run-loop goroutine.
 func (s *Server) resolveInboundSubs() []pendingSub {
 	recs, err := s.inboundSubs.LoadAll()
@@ -315,7 +315,7 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 		if !ok || !c.Enabled {
 			continue
 		}
-		// The connector's kind is the discriminator: a watch record carries no kind of
+		// The worker's kind is the discriminator: a watch record carries no kind of
 		// its own, so a clio subscription written before jira watches existed needs no
 		// migration to keep meaning what it meant (ADR-0214).
 		var src inboundSource
@@ -333,7 +333,7 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 			}
 			src = jiraSource{client: client, now: s.inboundNow}
 		default:
-			continue // a kind with no inbound half; its connector is outbound only
+			continue // a kind with no inbound half; its worker is outbound only
 		}
 		var compiled *expr.Compiled
 		if strings.TrimSpace(r.CorrelationKey) != "" {
@@ -424,7 +424,7 @@ func eventVars(fields map[string]any) []model.VariableValue {
 }
 
 // inboundVarKind maps an expr value kind to the stored variable kind (mirrors the
-// connector workers' mapping so the enums evolve independently).
+// workers' mapping so the enums evolve independently).
 func inboundVarKind(k expr.ValueKind) model.VarKind {
 	switch k {
 	case expr.KindBool:

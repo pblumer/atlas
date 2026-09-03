@@ -135,7 +135,7 @@ func TestBindVars(t *testing.T) {
 	}
 }
 
-// The cap fails rather than truncates, for the same reason the SQL connectors'
+// The cap fails rather than truncates, for the same reason the SQL workers'
 // row cap does: a short result set is a wrong answer, not a partial one.
 func TestSearchEntryCap(t *testing.T) {
 	for _, tc := range []struct {

@@ -1,24 +1,24 @@
-// Package ad integrates Active Directory as a service-task connector: a BPMN AD
-// connector task performs an AD-specific provisioning operation — create a user, set
+// Package ad integrates Active Directory as a service-task Worker Type: a BPMN AD
+// task performs an AD-specific provisioning operation — create a user, set
 // a password, enable or disable an account, or add/remove a group member — against a
 // model-authored server through the job path (ADR-0166), the same seam the ldap
-// package uses (ADR-0154). AD speaks LDAP, so this connector dials and binds exactly
-// like the generic LDAP connector; it exists because AD expresses those operations
-// through mechanisms the generic connector cannot: a password is the binary
+// package uses (ADR-0154). AD speaks LDAP, so this worker dials and binds exactly
+// like the generic LDAP worker; it exists because AD expresses those operations
+// through mechanisms the generic worker cannot: a password is the binary
 // `unicodePwd` attribute (UTF-16LE, quote-wrapped, LDAPS only), an account's
 // enabled/disabled state is a bit in `userAccountControl` (a read-modify-write), and
 // group membership is an *incremental* add/delete of a `member` value rather than a
 // whole-attribute replace. It also reads: a DirSync delta, which is AD's own
 // mechanism, and an ordinary search, which is not — a provisioning process has to ask
 // whether a group exists before it can put anybody in it, and making it bind a second
-// connector to the same directory to ask was a seam in the middle of one lifecycle.
+// worker to the same directory to ask was a seam in the middle of one lifecycle.
 //
 // It inherits the job protocol's durability and non-blocking properties (ADR-0007):
 // the processor creates a job carrying [compiler.AdJobType] and never talks to AD
 // itself; the in-process [Handler] pulls the job, dials/binds/operates/closes off the
 // run loop and after fsync, and completes it. The server URL and DNs live in the model
 // as literal-or-FEEL values; the bind password is a server-side secret reference
-// (ADR-0041). Every call is bounded by the shared connector budget (nettimeout.Default,
+// (ADR-0041). Every call is bounded by the shared worker budget (nettimeout.Default,
 // ADR-0149). Delivery is at-least-once, so an operation must tolerate a replay.
 package ad
 
@@ -89,7 +89,7 @@ type DirSyncResult struct {
 // scope ("base"/"one"/"sub"), a filter (empty → "(objectClass=*)"), and the attributes
 // to return (nil → the server's default set).
 //
-// It is the generic LDAP connector's search request, deliberately — the two connectors
+// It is the generic LDAP worker's search request, deliberately — the two workers
 // read a directory the same way, and only what AD *writes* differs.
 type SearchRequest struct {
 	BaseDN     string
@@ -127,9 +127,9 @@ type Conn interface {
 	// because DirSync is Active Directory's own mechanism, not LDAP's.
 	DirSync(req DirSyncRequest) (DirSyncResult, error)
 	// Search reads what is under a base right now. It is an ordinary LDAP search and
-	// the generic connector can do it too; it is here because a provisioning process
+	// the generic worker can do it too; it is here because a provisioning process
 	// has to ask whether an entry exists before it can act on one — and having to bind
-	// a second connector to the same directory to ask is the seam this connector
+	// a second worker to the same directory to ask is the seam this worker
 	// exists to remove (ADR-0166, amended a fifth time).
 	Search(req SearchRequest) ([]Entry, error)
 	Close() error
@@ -142,7 +142,7 @@ type Dialer interface {
 }
 
 // GoDialer dials a real AD server through github.com/go-ldap/ldap, bounded by the
-// shared connector call budget (nettimeout.Default), like the LDAP connector.
+// shared worker call budget (nettimeout.Default), like the LDAP worker.
 type GoDialer struct{}
 
 // NewDialer returns the production AD dialer.
@@ -344,7 +344,7 @@ func searchScope(scope string) int {
 	}
 }
 
-// entriesFrom converts a search result into the connector's entry shape.
+// entriesFrom converts a search result into the worker's entry shape.
 func entriesFrom(res *goldap.SearchResult) []Entry {
 	out := make([]Entry, 0, len(res.Entries))
 	for _, e := range res.Entries {

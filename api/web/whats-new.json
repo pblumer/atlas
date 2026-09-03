@@ -478,15 +478,15 @@
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0225-inbound-watch-budget.md"
       },
       "tags": [
-        "Connectors",
+        "Workers",
         "Operations"
       ],
       "try": {
         "label": {
-          "en": "Open Connectors",
-          "de": "Konnektoren öffnen"
+          "en": "Open Workers",
+          "de": "Workers öffnen"
         },
-        "route": "#/console/connectors"
+        "route": "#/console/workers"
       }
     }
   ]

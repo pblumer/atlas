@@ -28,8 +28,8 @@ func TestConnectorEnvKey(t *testing.T) {
 	}
 }
 
-// TestTemisRegistryFromEnv builds the connector registry from the environment: a
-// listed connector with a URL is registered (under its exact name), one without a
+// TestTemisRegistryFromEnv builds the worker registry from the environment: a
+// listed worker with a URL is registered (under its exact name), one without a
 // URL is skipped, and an unlisted name is absent.
 func TestTemisRegistryFromEnv(t *testing.T) {
 	t.Setenv("ATLAS_TEMIS_CONNECTORS", "risk-service, nourl ,")
@@ -45,12 +45,12 @@ func TestTemisRegistryFromEnv(t *testing.T) {
 		t.Error("nourl registered, want it skipped (no URL)")
 	}
 	if _, ok := reg.Client("other"); ok {
-		t.Error("unlisted connector registered, want absent")
+		t.Error("unlisted worker registered, want absent")
 	}
 }
 
-// centralDecisionBPMN is Start → BusinessRuleTask(central, connector "risk") → End.
-// It needs no local DMN model — the decision is evaluated by the remote connector.
+// centralDecisionBPMN is Start → BusinessRuleTask(central, worker "risk") → End.
+// It needs no local DMN model — the decision is evaluated by the remote worker.
 const centralDecisionBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0">
   <process id="central" isExecutable="true">
@@ -69,8 +69,8 @@ const centralDecisionBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20
 
 // TestServerExecutesCentralDecision is the end-to-end proof of the server wiring: a
 // deployed central business rule task, when a token reaches it, is evaluated by the
-// configured remote temis connector (a fake here) and the instance runs to
-// completion instead of parking — the temis connector worker is driven on the run
+// configured remote temis worker (a fake here) and the instance runs to
+// completion instead of parking — the temis worker is driven on the run
 // loop exactly like the local DMN worker.
 func TestServerExecutesCentralDecision(t *testing.T) {
 	var calls int32
@@ -87,7 +87,7 @@ func TestServerExecutesCentralDecision(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// Configure the "risk" connector to point at the fake temis service. The env is
+	// Configure the "risk" worker to point at the fake temis service. The env is
 	// read when the server is constructed, so it must be set first.
 	t.Setenv("ATLAS_TEMIS_CONNECTORS", "risk")
 	t.Setenv("ATLAS_TEMIS_RISK_URL", ts.URL)

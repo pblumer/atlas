@@ -18,7 +18,7 @@ const (
 // (ADR-0105), keyed by the called bpmn process id. It stores the operator's *intent*
 // — never a raw definition key — so it survives redeploys sensibly: a pin re-resolves
 // its version to a key at load time. It is admin config, the same category as a
-// connector record (ADR-0041): durable on a sidecar, owned by the run-loop goroutine,
+// worker record (ADR-0041): durable on a sidecar, owned by the run-loop goroutine,
 // never in the event log.
 type callOverride struct {
 	CalledProcessID string `json:"calledProcessId"`

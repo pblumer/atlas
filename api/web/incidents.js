@@ -9,7 +9,7 @@
 // budget, so it asks — which also gives room to say that a timer incident re-arms and
 // ignores the count, something window.prompt had nowhere to put.
 
-import { editConnectorFlow } from "./connectordialog.js";
+import { editWorkerFlow } from "./workerdialog.js";
 import { loadFormViewer, formFieldKeys } from "./formviewer.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
@@ -32,38 +32,38 @@ export function incidentPill(inc) {
 // event) as a local timestamp.
 export const fmtRaised = (ns) => (ns ? new Date(ns / 1e6).toLocaleString() : "—");
 
-// incidentConnectorChip names the connector the parked task resolves through, when it
-// has one. An operator reading "no connector registered as X" has to know *which*
-// integration X is before they can go and fix it, and the incident is where they are
-// standing (ADR-0160). It is a plain chip, not a link: the action is the button below.
-export function incidentConnectorChip(inc) {
+// incidentWorkerChip names the worker the parked task resolves through, when it has
+// one. An operator reading "no worker registered as X" has to know *which* integration
+// X is before they can go and fix it, and the incident is where they are standing
+// (ADR-0160). It is a plain chip, not a link: the action is the button below.
+export function incidentWorkerChip(inc) {
   if (!inc.connector) return "";
   const kind = inc.connectorKind ? `${esc(inc.connectorKind)} &middot; ` : "";
   const missing = !inc.connectorId;
   return `<div class="inc-conn"><span class="pill${missing ? " warn" : ""}" title="${missing
-    ? "The model references this connector by name, but no connector of that kind is configured under it"
-    : "The configured connector this task resolves through"}">&#9881; ${kind}${esc(inc.connector)}${missing ? " &mdash; not configured" : ""}</span></div>`;
+    ? "The model references this worker by name, but no worker of that Worker Type is configured under it"
+    : "The configured worker this task resolves through"}">&#9881; ${kind}${esc(inc.connector)}${missing ? " &mdash; not configured" : ""}</span></div>`;
 }
 
-// incidentConnectorAction is the way out of an incident that the others cannot reach:
+// incidentWorkerAction is the way out of an incident that the others cannot reach:
 // change what the task is configured to *talk to*. A mail task parked on an SMTP host
 // that will not authenticate is not fixed by correcting the data, by retrying, or by
-// declaring the work done — it is fixed by pointing its connector somewhere else
-// (ADR-0160). When the referenced connector does not exist at all there is nothing to
+// declaring the work done — it is fixed by pointing its worker somewhere else
+// (ADR-0160). When the referenced worker does not exist at all there is nothing to
 // open, so the button becomes the way to the Console, where it can be created.
 //
 // This is the diagram-side row only. The Operations incidents table puts the same two
 // non-primary actions behind the ⋯ menu every other table there uses, because a third
 // visible button pushed that table past the width of its card (ADR-0163) — so the two
-// surfaces render the action differently on purpose, over the same fixConnectorFlow.
-function incidentConnectorAction(inc) {
+// surfaces render the action differently on purpose, over the same fixWorkerFlow.
+function incidentWorkerAction(inc) {
   if (!inc.connector) return "";
   if (!inc.connectorId) {
-    return `<a class="btn neutral sm" href="#/console/connectors"
-      title="No connector is configured under this name — add one under Console &rsaquo; Connectors">&#9881; Configure &#8599;</a>`;
+    return `<a class="btn neutral sm" href="#/console/workers"
+      title="No worker is configured under this name — add one under Console &rsaquo; Workers">&#9881; Configure &#8599;</a>`;
   }
   return `<button class="btn neutral sm" data-fix-conn="${esc(String(inc.connectorId))}" data-inc="${esc(String(inc.elementInstanceKey))}"
-    title="Change what this task talks to — endpoint, provider, credential — and retry against it">&#9881; Connector&hellip;</button>`;
+    title="Change what this task talks to — endpoint, provider, credential — and retry against it">&#9881; Worker&hellip;</button>`;
 }
 
 // incidentRowHTML is one incident beside a diagram: where it is parked, why, and the
@@ -90,12 +90,12 @@ export function incidentRowHTML(inc, { label = "", showInstance = true } = {}) {
         ${where}
         ${inc.raisedAt ? `<span class="muted">· ${esc(fmtRaised(inc.raisedAt))}</span>` : ""}</div>
       <div class="inc-msg">${esc(inc.message || "(no message)")}</div>
-      ${incidentConnectorChip(inc)}
+      ${incidentWorkerChip(inc)}
       <div class="inc-actions">
         ${incidentRepairAction(inc)}
         <button class="btn neutral sm" data-fix-vars="${esc(String(inc.processInstanceKey))}" data-inc="${esc(String(inc.elementInstanceKey))}"
           title="Correct the instance's variables before retrying — a retry alone repeats whatever failed">&#9998; Fix variables&hellip;</button>
-        ${incidentConnectorAction(inc)}
+        ${incidentWorkerAction(inc)}
         <button class="btn neutral sm" data-resolve="${esc(String(inc.elementInstanceKey))}"
           title="Clear the incident and hand the job one more attempt">&#8635; Resolve &amp; retry</button>
         <button class="btn neutral sm" data-complete="${esc(String(inc.elementInstanceKey))}"
@@ -507,43 +507,43 @@ function askCompletion(inc) {
   });
 }
 
-// fixConnectorFlow reconfigures the integration the parked task resolves through, then
+// fixWorkerFlow reconfigures the integration the parked task resolves through, then
 // retries it. It is the way out an operator needs when the message is about the
-// connector rather than the data — an endpoint that will not answer, a credential that
+// worker rather than the data — an endpoint that will not answer, a credential that
 // expired, a provider that has to change — and until now the only route to it was to
-// leave the incident, find the connector in the Console, guess which one it was, and
+// leave the incident, find the worker in the Console, guess which one it was, and
 // come back (ADR-0160).
 //
-// The connector is looked up fresh rather than carried on the incident: the incident
-// is a fact frozen when the token parked (I6), while the connector is live state that
+// The worker is looked up fresh rather than carried on the incident: the incident
+// is a fact frozen when the token parked (I6), while the worker is live state that
 // may already have been edited. Resolves "resolved" when the incident was also
-// cleared, "saved" when only the connector was changed, and null when nothing happened.
-export async function fixConnectorFlow({ api, toast, incident }) {
-  let connectors = [];
+// cleared, "saved" when only the worker was changed, and null when nothing happened.
+export async function fixWorkerFlow({ api, toast, incident }) {
+  let workers = [];
   try {
-    connectors = (await api("GET", "/api/v1/connectors")) || [];
+    workers = (await api("GET", "/api/v1/connectors")) || [];
   } catch (e) {
-    toast("Could not read the connectors: " + (e && e.message ? e.message : e), "warn");
+    toast("Could not read the workers: " + (e && e.message ? e.message : e), "warn");
     return null;
   }
-  const c = connectors.find((x) => x.id === incident.connectorId)
-    || connectors.find((x) => x.name === incident.connector && x.kind === incident.connectorKind);
+  const c = workers.find((x) => x.id === incident.connectorId)
+    || workers.find((x) => x.name === incident.connector && x.kind === incident.connectorKind);
   if (!c) {
     // It was there when the incident was rendered and is gone now, or was never
     // configured — either way there is nothing to open, and the Console is where one
     // is created.
-    toast(`No connector named "${incident.connector}" is configured — add one in Organization › Connectors`, "warn");
+    toast(`No worker named "${incident.connector}" is configured — add one in Console › Workers`, "warn");
     return null;
   }
-  const res = await editConnectorFlow({
-    api, toast, connector: c,
-    intro: `${incident.elementId || "This task"} is parked on this connector: ${incident.message || "(no message)"}`,
+  const res = await editWorkerFlow({
+    api, toast, worker: c,
+    intro: `${incident.elementId || "This task"} is parked on this worker: ${incident.message || "(no message)"}`,
     extraLabel: "Save & retry",
     okToast: "",
   });
   if (!res) return null;
   if (!res.extra) {
-    toast("Connector updated — the incident is still open", "ok");
+    toast("Worker updated — the incident is still open", "ok");
     return "saved";
   }
   return (await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey })) ? "resolved" : "saved";
@@ -574,7 +574,7 @@ export function bindIncidentActions(root, { api, toast, incidents, onChanged, re
           : btn.dataset.fixVars
             ? !!(await fixVariablesFlow({ api, toast, incident }))
             : btn.dataset.fixConn
-              ? !!(await fixConnectorFlow({ api, toast, incident }))
+              ? !!(await fixWorkerFlow({ api, toast, incident }))
               : resolve === "ask"
                 ? await resolveIncidentFlow({ api, toast, incident })
                 : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });

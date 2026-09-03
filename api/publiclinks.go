@@ -310,7 +310,7 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		found = true
 		s.proc.CreateInstance(d.Key, vars...)
 	})
-	// Off the loop: a started instance may run straight into a connector task, and
+	// Off the loop: a started instance may run straight into a task, and
 	// that call must not hold the single writer (ADR-0157 step 6).
 	if runErr == nil && found {
 		runErr = s.drive()

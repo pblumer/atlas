@@ -530,7 +530,7 @@ func (t *Tx) CompensablesOfScopeDesc(scopeKey uint64, fn func(seq uint64, v *mod
 //     live-token counter that follows it (ADR-0080);
 //   - the correlation-key counter of a message-start instance (ADR-0094);
 //   - each incident's ElementId, which is what an operator surface resolves to a
-//     diagram element and, since ADR-0160, to the connector behind it;
+//     diagram element and, since ADR-0160, to the worker behind it;
 //   - each compensable record's ProcessDefKey, ElementId and HandlerNode — the handler
 //     node is dereferenced against the definition when compensation fires, so a stale
 //     one would activate an element from the version the instance has left.
@@ -603,7 +603,7 @@ func (t *Tx) MigrateInstance(v *model.ProcessMigrationValue) error {
 		}
 		// An incident is keyed by the element instance it parks, so it is reachable
 		// without a scan — and its element index is what every operator surface resolves
-		// to a diagram element, and since ADR-0160 to the connector behind it.
+		// to a diagram element, and since ADR-0160 to the worker behind it.
 		inc, err := t.GetIncident(r.key)
 		if err != nil {
 			return err

@@ -1,14 +1,14 @@
-// Package webscrape integrates web scraping as a service-task connector: a BPMN
-// web-scraping connector task fetches a model-authored URL and extracts the elements
+// Package webscrape integrates web scraping as a service-task worker: a BPMN
+// web-scraping task fetches a model-authored URL and extracts the elements
 // matching a CSS selector through the job path (ADR-0118), mirroring how the rest
 // package calls a model-authored HTTP endpoint (ADR-0067). ADR-0190 extends the same
-// connector with explicit RSS and Atom extraction modes, and
+// worker with explicit RSS and Atom extraction modes, and
 // ADR-0231 adds per-item fields, richer feed
 // entries, and a fetch that copes with the encodings and feed flavors real
 // publishers ship. The integration inherits the job protocol's durability and
 // non-blocking properties (ADR-0007):
 //
-//   - A connector task creates a job carrying the reserved [compiler.WebScrapeJobType].
+//   - A task creates a job carrying the reserved [compiler.WebScrapeJobType].
 //     The processor never performs the outbound fetch itself, so it stays
 //     allocation-free (invariant I1) and free of any HTTP/HTML/XML dependency.
 //   - The in-process [Handler] — a job worker — pulls those jobs, fetches the document
@@ -16,8 +16,8 @@
 //     applyToState / I4), extracts the authored representation, writes it into the
 //     task's result variable, and completes the job, which drives the token onward.
 //
-// Like the REST connector, the URL and extraction settings are authored in the model;
-// there is no server-registered connector and no credential. A scrape is a plain GET,
+// Like the REST worker, the URL and extraction settings are authored in the model;
+// there is no server-registered worker and no credential. A scrape is a plain GET,
 // so an at-least-once retry simply refetches — the operation is idempotent and
 // side-effect-free.
 package webscrape
@@ -52,7 +52,7 @@ const (
 // is the point (ADR-0231).
 const UserAgent = "Atlas-Webscrape/1.0 (+https://github.com/pblumer/atlas)"
 
-// maxBodyBytes bounds one fetched document. In-process connector workers run on the
+// maxBodyBytes bounds one fetched document. In-process workers run on the
 // run-loop goroutine, so an endless response is the same hazard as an unbounded
 // timeout (see connector/nettimeout): it stalls the engine's single writer and
 // balloons memory. 32 MiB is far above any feed or article page and far below trouble.
@@ -68,7 +68,7 @@ type Field struct {
 	Attribute string `json:"attribute,omitempty"`
 }
 
-// Request is one scrape a web-scraping connector task performs. URL is the full,
+// Request is one scrape a web-scraping task performs. URL is the full,
 // model-authored document to fetch. Format is the already-compiled representation
 // (html/rss/atom); empty retains the pre-ADR-0190 HTML default. Selector/Attribute/
 // Fields/AbsoluteLinks apply only to HTML, PlainText only to feeds. MaxItems is the
@@ -112,7 +112,7 @@ type HTTPClient struct {
 	http *http.Client
 }
 
-// NewHTTPClient builds a web-scraping HTTP client bounded by the shared connector
+// NewHTTPClient builds a web-scraping HTTP client bounded by the shared worker
 // call budget (nettimeout.Default). The worker runs on the run-loop goroutine, so an
 // unbounded call would let a hung site stall the whole engine; see nettimeout.
 func NewHTTPClient() *HTTPClient {

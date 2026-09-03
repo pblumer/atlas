@@ -340,7 +340,7 @@ const statusGraph = {
         { elementId: "charge-card", elementType: "ServiceTask", count: 2,
           message: "POST https://payments.example/charge: 502 Bad Gateway" },
         { elementId: "notify-customer", elementType: "SendTask", count: 1,
-          message: "no worker holds the mail connector" },
+          message: "no Worker Instance holds the mail worker" },
       ] },
     { id: "process:2", kind: "process", name: "Dunning", provenance: "derived",
       application: "application:a1", processId: "dunning", version: 1,

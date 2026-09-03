@@ -43,7 +43,7 @@ func TestHTTPClientSendsAnIdentifyingUserAgent(t *testing.T) {
 }
 
 // A page whose charset is declared only in the Content-Type header: the response
-// header is as authoritative as a <meta>, and the connector honors it.
+// header is as authoritative as a <meta>, and the worker honors it.
 func TestHTTPClientDecodesTheResponseCharset(t *testing.T) {
 	body := []byte{'<', 'p', ' ', 'c', 'l', 'a', 's', 's', '=', '"', 'x', '"', '>',
 		'Z', 'i', 'n', 's', 's', 0xE4, 't', 'z', 'e', '<', '/', 'p', '>'} // Latin-1 "Zinssätze"

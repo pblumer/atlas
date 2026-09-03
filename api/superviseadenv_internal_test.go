@@ -13,7 +13,7 @@ import (
 
 // What a supervised Active Directory worker is handed at spawn.
 //
-// AD is the kind whose secret is a *per-task reference* rather than a connector
+// AD is the kind whose secret is a *per-task reference* rather than a worker
 // record (ADR-0166), and the reference resolves against the engine's vault or its
 // environment. A supervised worker inherits the environment and has no vault, so
 // offloading AD by default would have left every vault-backed bind password behind —
@@ -85,7 +85,7 @@ func TestADBindSecretsAreCollectedOncePerReference(t *testing.T) {
 
 // Two references that fold to one variable would silently give one of them the
 // other's password. The second is left out and said out loud, exactly as two mail
-// connectors that collide are.
+// workers that collide are.
 func TestTwoADReferencesThatFoldToOneVariableDoNotShareACredential(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	for ref, value := range map[string]string{"ad-bind": "erste", "AD.BIND": "zweite"} {

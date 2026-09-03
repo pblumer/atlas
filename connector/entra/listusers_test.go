@@ -75,7 +75,7 @@ func idsOf(t *testing.T, v any) []string {
 }
 
 // The whole point of the operation: a listing is *one* result, not one page. The
-// modeler asked for users, so following @odata.nextLink is the connector's job and
+// modeler asked for users, so following @odata.nextLink is the worker's job and
 // not something a process has to model with a loop.
 func TestListUsersFollowsEveryPage(t *testing.T) {
 	const next1 = "https://graph.microsoft.com/v1.0/users?$skiptoken=A"
@@ -95,7 +95,7 @@ func TestListUsersFollowsEveryPage(t *testing.T) {
 		t.Errorf("users = %v, want every page's, in order", ids)
 	}
 	// The continuation is the link Graph handed back, verbatim — not a path this
-	// connector reassembles, which is how a skiptoken gets mangled.
+	// worker reassembles, which is how a skiptoken gets mangled.
 	want := []string{"/users", next1, next2}
 	if strings.Join(c.paths, " ") != strings.Join(want, " ") {
 		t.Errorf("requested %v, want %v", c.paths, want)
@@ -118,7 +118,7 @@ func TestListUsersEmptyIsAnEmptyList(t *testing.T) {
 }
 
 // The authored query becomes Graph's own query parameters — the encoding a modeler
-// would otherwise have to get right by hand, which is this connector's reason to
+// would otherwise have to get right by hand, which is this worker's reason to
 // exist (ADR-0172).
 func TestListUsersBuildsTheQuery(t *testing.T) {
 	for _, tc := range []struct {
@@ -158,7 +158,7 @@ func TestListUsersBuildsTheQuery(t *testing.T) {
 	}
 }
 
-// The cap fails the job rather than truncating, for the reason the LDAP connector's
+// The cap fails the job rather than truncating, for the reason the LDAP worker's
 // does: a short result set is a wrong answer, not a partial one, and a process that
 // decides something from it decides it confidently.
 func TestListUsersCapIsAnErrorNotATruncation(t *testing.T) {
@@ -246,9 +246,9 @@ func TestListUsersNeedsAResultVariable(t *testing.T) {
 	}
 }
 
-// The token this connector holds can read an entire directory. A paged result is the
+// The token this worker holds can read an entire directory. A paged result is the
 // one place a *response* names the next URL, so the guard is that the continuation
-// stays on the endpoint the connector was configured for — a redirected page must
+// stays on the endpoint the worker was configured for — a redirected page must
 // never carry the bearer to another host.
 func TestGraphClientRefusesAForeignContinuation(t *testing.T) {
 	g := newGraphServer(t)
@@ -261,7 +261,7 @@ func TestGraphClientRefusesAForeignContinuation(t *testing.T) {
 	}
 	// Its own origin is followed, absolute or not.
 	if _, err := c.Call(context.Background(), Request{Method: "GET", Path: g.srv.URL + "/users?$skiptoken=A"}); err != nil {
-		t.Errorf("a continuation on the connector's own endpoint must be followed: %v", err)
+		t.Errorf("a continuation on the worker's own endpoint must be followed: %v", err)
 	}
 	if g.path != "/users" {
 		t.Errorf("path = %q, want the absolute continuation to have been requested", g.path)

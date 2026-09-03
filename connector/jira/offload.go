@@ -13,12 +13,12 @@ import (
 // A Jira task resolved into plain values, and the function that performs it.
 //
 // This is ADR-0168's split applied to an issue tracker, and it is what makes the Jira
-// worker type an ordinary external worker rather than a kind the engine alone can run.
+// Worker Type an ordinary external worker rather than one the engine alone can run.
 // Finding the task's detail in the compiled process and evaluating every authored value
 // against the variables the task sees up its scope chain (ADR-0068/0174) needs the
 // compiled process and the store, which only the engine has — so [Resolve] does it and
 // produces plain values. The site URL and the credential are never among them: what
-// travels is the connector's *name*, and [Run] looks that name up in the registry the
+// travels is the worker's *name*, and [Run] looks that name up in the registry the
 // caller was built with.
 //
 // A Jira worker can therefore hold a credential the engine has never seen, and operate
@@ -32,7 +32,7 @@ import (
 // put a base URL, an email or an API token, and that is a property of the type rather
 // than of the code that fills it in.
 type Job struct {
-	// Connector names the Jira instance the *worker* is configured for. A name and not
+	// Worker names the Jira instance the *worker* is configured for. A name and not
 	// a URL, because a URL is half a credential.
 	Connector string `json:"connector"`
 	// Operation is one of [OpNames]; the compiler refused an unknown one at deploy.
@@ -64,7 +64,7 @@ type Job struct {
 	ResultVariable string `json:"resultVariable,omitempty"`
 }
 
-// Resolve turns a compiled Jira connector task into a [Job]: the authored operation and
+// Resolve turns a compiled Jira task into a [Job]: the authored operation and
 // every value it carries, evaluated against the variables the task sees. It is engine
 // work by necessity — FEEL is compiled at deploy (ADR-0008/0015) and the scope lives in
 // the store.
@@ -74,7 +74,7 @@ type Job struct {
 // does; a third check would only be a third message for the same fault.
 func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64) (Job, error) {
 	if detail == nil {
-		return Job{}, fmt.Errorf("jira: connector task has no detail")
+		return Job{}, fmt.Errorf("jira: task has no detail")
 	}
 	// Read the variables the task sees once — up its scope chain, so its own
 	// input-mapped locals shadow what it inherits (ADR-0068) — and evaluate every
@@ -109,7 +109,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 // the worker's half, and the in-process path calls it too, so there is one definition of
 // what a resolved Jira task means rather than two that drift.
 //
-// The connector lookup comes first: an unconfigured name is the more actionable of the
+// The worker lookup comes first: an unconfigured name is the more actionable of the
 // failures a job can carry here, and reporting it ahead of anything the operation itself
 // might be missing keeps the message an operator sees pointed at the fix (ADR-0158).
 func Run(ctx context.Context, j Job, reg *Registry) (any, error) {

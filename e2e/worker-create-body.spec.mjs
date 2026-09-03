@@ -1,8 +1,8 @@
-// e2e for what the Console's "New connector" form actually posts
-// (api/web/connectordialog.js, connectorCreateBody).
+// e2e for what the Console's "New worker" form actually posts
+// (api/web/workerdialog.js, workerCreateBody).
 //
-// The regression these pin: adding a jira connector was refused with
-// "connectionString applies only to a SQL connector (postgres, mariadb, mssql)" —
+// The regression these pin: adding a jira worker was refused with
+// "connectionString applies only to a SQL worker (postgres, mariadb, mssql)" —
 // a message about databases, on a create that had nothing to do with one. The form
 // keeps the connection-string field in the DOM for every kind and only hides it, and
 // the old guard asked whether that field was non-empty rather than whether the kind
@@ -14,7 +14,7 @@ import { test, expect } from "@playwright/test";
 test.beforeEach(async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("/connector-create-body-harness.html");
+  await page.goto("/worker-create-body-harness.html");
   await page.waitForFunction(() => window.__ready === true);
   page._errors = errors;
 });

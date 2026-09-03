@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:csvConnector> extension is a CSV-to-JSON
-// connector task (ADR-0139): the in-process CSV worker parses the named source
+// task (ADR-0139): the in-process CSV worker parses the named source
 // variable's text against the model-authored layout into a rows collection via the
 // job path, the whole layout living in the model rather than a columnConfig variable.
 const csvConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
@@ -102,7 +102,7 @@ func TestParseCsvConnectorDefaults(t *testing.T) {
 	}
 }
 
-// A headerless CSV connector must name its columns (they map by position), so one
+// A headerless CSV worker must name its columns (they map by position), so one
 // without a column list is a compile error. Bad retries also fail the compile.
 func TestParseCsvConnectorErrors(t *testing.T) {
 	wrap := func(inner string) string {

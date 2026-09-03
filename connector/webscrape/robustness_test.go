@@ -215,7 +215,7 @@ func TestExtractRSSSurvivesHTMLEntities(t *testing.T) {
 	}
 }
 
-// The wrong Format is the authoring mistake this connector cannot detect for the
+// The wrong Format is the authoring mistake this worker cannot detect for the
 // author (ADR-0190 keeps the choice explicit), so the error says what the document is
 // and which setting to change — instead of an XML syntax error at line 1.
 func TestFeedParseNamesTheFormatToChange(t *testing.T) {

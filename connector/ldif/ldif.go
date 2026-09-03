@@ -93,10 +93,10 @@ func splitLDIFLine(line string) (name, value string, err error) {
 	}
 	switch {
 	case strings.HasPrefix(rest, "<"):
-		// "attr:< url" fetches the value from a URL. This connector reads a file it
+		// "attr:< url" fetches the value from a URL. This worker reads a file it
 		// was handed, not the network, and quietly producing an empty attribute would
 		// hide the difference.
-		return "", "", fmt.Errorf("ldif: attribute %q reads its value from a URL, which this connector does not fetch", name)
+		return "", "", fmt.Errorf("ldif: attribute %q reads its value from a URL, which this worker does not fetch", name)
 	case strings.HasPrefix(rest, ":"):
 		raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(rest[1:]))
 		if err != nil {

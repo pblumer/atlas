@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/connector/envname"
 )
 
-// Product is one of the three databases a SQL connector task can target. The three
+// Product is one of the three databases a SQL task can target. The three
 // share every line of code in this package and differ in exactly what a database
 // driver forces them to differ in: the driver name, the placeholder syntax a statement
 // is written in, and whether it can bind a parameter by name.

@@ -348,8 +348,8 @@ func TestStatsCountsUnresolvedIncidents(t *testing.T) {
 	}
 }
 
-// TestIncidentCarriesItsConnector: an incident on a connector task is usually a
-// connector problem, and the fix is a field on the connector rather than anything
+// TestIncidentCarriesItsConnector: an incident on a task is usually a
+// worker problem, and the fix is a field on the worker rather than anything
 // about the instance. The incident therefore names it — and says whether a record
 // exists under that name — so the operator gets there in one click instead of
 // reading the name out of the failure message (ADR-0160).
@@ -379,12 +379,12 @@ func TestIncidentCarriesItsConnector(t *testing.T) {
 	if err := json.Unmarshal(body, &deploy); err != nil {
 		t.Fatalf("decode deploy: %v", err)
 	}
-	// The connector is not configured, so the deploy already says so (ADR-0158).
+	// The worker is not configured, so the deploy already says so (ADR-0158).
 	if len(deploy.Warnings) != 1 || !strings.Contains(deploy.Warnings[0], "Patrick Blumer") {
-		t.Errorf("deploy warnings = %v, want one naming the connector", deploy.Warnings)
+		t.Errorf("deploy warnings = %v, want one naming the worker", deploy.Warnings)
 	}
 
-	// Starting it parks the mail task behind an incident: no connector to send with.
+	// Starting it parks the mail task behind an incident: no worker to send with.
 	if code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), "{}", "application/json"); code != http.StatusOK {
 		t.Fatalf("create instance: status=%d body=%s", code, body)
 	}
@@ -393,7 +393,7 @@ func TestIncidentCarriesItsConnector(t *testing.T) {
 		t.Fatalf("incidents = %+v, want the parked mail task", inc)
 	}
 	if inc[0].Connector != "Patrick Blumer" {
-		t.Errorf("connector = %q, want the name the model asks for", inc[0].Connector)
+		t.Errorf("worker = %q, want the name the model asks for", inc[0].Connector)
 	}
 	if inc[0].ConnectorKind != "mail" {
 		t.Errorf("connectorKind = %q, want %q", inc[0].ConnectorKind, "mail")
@@ -405,13 +405,13 @@ func TestIncidentCarriesItsConnector(t *testing.T) {
 	// Configure it, and the incident points at the record to open.
 	created := `{"name":"Patrick Blumer","kind":"mail","provider":"smtp","endpoint":"mx.example.ch:587","sender":"a@b.ch"}`
 	if code, body = doReq(t, ts, http.MethodPost, "/api/v1/connectors", created, "application/json"); code != http.StatusOK {
-		t.Fatalf("create connector: status=%d body=%s", code, body)
+		t.Fatalf("create worker: status=%d body=%s", code, body)
 	}
 	var rec struct {
 		ID string `json:"id"`
 	}
 	if err := json.Unmarshal(body, &rec); err != nil || rec.ID == "" {
-		t.Fatalf("decode connector: %v (%s)", err, body)
+		t.Fatalf("decode worker: %v (%s)", err, body)
 	}
 	if got := listIncidents(t, ts); len(got) != 1 || got[0].ConnectorID != rec.ID {
 		t.Errorf("connectorId = %q, want the configured record %q", got[0].ConnectorID, rec.ID)
@@ -462,10 +462,10 @@ func TestIncidentCarriesItsRepairForm(t *testing.T) {
 	if inc[0].RepairForm != "fix-recipient" {
 		t.Errorf("repairForm = %q, want the form the model bound", inc[0].RepairForm)
 	}
-	// It sits *beside* the connector rather than replacing it: one repairs the data, the
+	// It sits *beside* the worker rather than replacing it: one repairs the data, the
 	// other the integration, and an incident may well need both (ADR-0160/0169).
 	if inc[0].Connector != "Patrick Blumer" {
-		t.Errorf("connector = %q, want it still reported alongside the form", inc[0].Connector)
+		t.Errorf("worker = %q, want it still reported alongside the form", inc[0].Connector)
 	}
 
 	// The same fact on the other surface: the live diagram's runtime overlay, which the

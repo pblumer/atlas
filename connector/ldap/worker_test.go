@@ -78,7 +78,7 @@ const ldapURL = "ldap://dir.example.com:389"
 
 func lit(s string) compiler.RestExpr { return compiler.RestExpr{Literal: s} }
 
-// ldapProcess builds Start → LDAP connector task → (optional park) → End.
+// ldapProcess builds Start → LDAP task → (optional park) → End.
 func ldapProcess(t *testing.T, cfg compiler.LdapConfig, park bool) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	if cfg.Retries == 0 {
@@ -444,7 +444,7 @@ func TestLdapHandlerElementInstanceGone(t *testing.T) {
 }
 
 // TestLdapRecoversAcrossRestart runs to the waiting LDAP job, simulates a crash, and
-// recovers, proving the connector job survives replay like any other job.
+// recovers, proving the worker job survives replay like any other job.
 func TestLdapRecoversAcrossRestart(t *testing.T) {
 	dir := t.TempDir()
 	cp, jobType := ldapProcess(t, compiler.LdapConfig{URL: lit(ldapURL), Op: "delete", DN: lit("uid=x")}, false)

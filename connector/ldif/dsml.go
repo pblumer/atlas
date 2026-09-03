@@ -13,7 +13,7 @@ import (
 // depending on who wrote it, and Go matches on local names when the struct tag names
 // no namespace — which is exactly the leniency this format needs.
 
-// dsmlDocument is the subset of DSML v1 this connector reads.
+// dsmlDocument is the subset of DSML v1 this worker reads.
 type dsmlDocument struct {
 	Entries []dsmlEntry `xml:"directory-entries>entry"`
 }

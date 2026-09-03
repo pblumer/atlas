@@ -27,7 +27,7 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // model or the compiled process — only its reference does.
 type SecretResolver func(ref string) string
 
-// Handler builds a job handler that performs a SCIM 2.0 connector task. Register it
+// Handler builds a job handler that performs a SCIM 2.0 worker task. Register it
 // with a [job.Runner] under the reserved [compiler.ScimJobTypeIndex] via
 // HandleWithOutput; the runner then pulls activatable SCIM jobs, and for each the
 // handler resolves the task's base URL / resource / operation / resource-id /
@@ -166,7 +166,7 @@ func resourceURL(op, baseURL, resource, id string) (string, error) {
 // variable, that variable must hold a JSON object (a SCIM resource or PatchOp) and
 // is sent verbatim; otherwise the variables handed in are the payload — the task's
 // input mappings when it has them, else everything it sees, mirroring the REST
-// connector's body rule (ADR-0067/0152,
+// worker's body rule (ADR-0067/0152,
 // ADR-0174).
 func requestBody(bodyVar string, scopeVars map[string]model.VariableValue) (map[string]any, error) {
 	if bodyVar == "" {
@@ -324,7 +324,7 @@ func toVarKind(k expr.ValueKind) model.VarKind {
 // bodyFromVars turns the already-read variables into a JSON-ready map — the request
 // body a SCIM task sends when it names no body variable. Which variables those are is
 // the handler's decision: the task's input mappings when it has them, else everything
-// it sees — the same rule the REST connector's body follows (ADR-0067/0152,
+// it sees — the same rule the REST worker's body follows (ADR-0067/0152,
 // ADR-0174).
 func bodyFromVars(scopeVars map[string]model.VariableValue) map[string]any {
 	data := make(map[string]any, len(scopeVars))

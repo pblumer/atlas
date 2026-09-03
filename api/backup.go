@@ -26,9 +26,9 @@ import (
 //
 // Deliberately excluded: the WAL and state store (runtime, rebuilt from the WAL
 // on restart), the user accounts and the vault key (secrets, ADR-0044/0070). The
-// connector store is included — it holds design-time connector configuration —
+// worker store is included — it holds design-time worker configuration —
 // but its secrets live in the vault, so a restore onto a fresh instance leaves
-// connectors needing their credentials re-entered.
+// workers needing their credentials re-entered.
 var backupDirs = []string{
 	"deployments",
 	"drafts",

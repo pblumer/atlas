@@ -12,7 +12,7 @@
     "id": "atlas.sharepoint-create-item",
     "appliesTo": ["bpmn:ServiceTask"],
     "properties": [
-      { "label": "Connector", "type": "String", "binding": { "type": "property", "name": "atlas:connector" } },
+      { "label": "Worker", "type": "String", "binding": { "type": "property", "name": "atlas:connector" } },
       { "label": "Site", "type": "String", "feel": "optional", "binding": { "type": "property", "name": "atlas:site" } },
       { "label": "List", "type": "String", "feel": "optional", "binding": { "type": "property", "name": "atlas:list" } },
       { "label": "Result variable", "type": "String", "binding": { "type": "property", "name": "atlas:resultVariable" } }

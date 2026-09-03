@@ -68,9 +68,10 @@ recovery.
 | Worker process / registration | Worker Instance | Live runtime consumer; one Worker may have 0..N instances |
 | Queue | Logical work stream | Derived view of activatable jobs; not an independent durable broker queue |
 
-`connector` remains a compatibility and package-name term during migration. New
-operator-facing concepts and APIs should use the Worker vocabulary unless they are
-maintaining an explicitly deprecated contract.
+`connector` remains a compatibility and package-name term during migration. Every
+operator-facing surface — Console, Modeler, handbook, CLI help, deploy and incident
+messages — now uses the Worker vocabulary; the old spelling survives only where a
+contract carries it (see slice 6).
 
 ## Configuration boundary
 
@@ -100,6 +101,9 @@ silently reverse ADR-0168 and centralize every integration secret in the engine.
 **Done when:** the API can describe Worker Types and Workers without changing
 runtime behavior or recovery output.
 
+**Status: delivered.** `/api/v1/worker-types`, `/api/v1/configured-workers` and the
+deprecation notes in OpenAPI stand beside the unchanged `/api/v1/connectors` routes.
+
 ### Slice 2 — Console information architecture
 
 Replace the operator-facing `Connectors` concept with `Workers`:
@@ -126,6 +130,11 @@ not in design-time configuration.
 Jira account/tenant is configured" and from "three replicas are currently serving
 it".
 
+**Status: delivered.** `#/console/workers` is the canonical route (the old
+`#/console/connectors` redirects to it), the page reads Worker catalog / Configured
+workers, and the DOM-patching adapter that first stood in for this is gone — the
+Console renders the Worker vocabulary itself.
+
 ### Slice 3 — Modeler binding
 
 - Service tasks select a Worker Type / operation and, where a concrete target is
@@ -138,6 +147,11 @@ it".
 
 **Done when:** design time expresses *what/which configured target*, while runtime
 placement and replica count remain operational concerns.
+
+**Status: delivered for vocabulary.** The properties panel labels the field *Worker*,
+the catalog entries dropped their `… Connector` suffix, and every hint names the
+Worker it resolves through. The BPMN attribute behind that field is still spelled
+`connector="…"`, which is slice 6's problem, not design time's.
 
 ### Slice 4 — Logical work-stream observability
 
@@ -174,6 +188,24 @@ process is introduced by this migration.
 
 **Done when:** Atlas can install/enable a capability without conflating package
 installation with configuration or runtime replicas.
+
+### Slice 6 — The contract spellings
+
+Not started, and deliberately last: it is the only slice that can break a deployed
+model or a running worker. It covers, as one considered change with a compatibility
+window each:
+
+- the `connector="…"` BPMN attribute and the `atlas:*Connector` extension elements;
+- the `connector/` package paths and the Go identifiers built on them;
+- `atlas worker --connector`, `--offload-connectors`, `--in-process-connectors` and
+  `--supervise-connector`;
+- the `ATLAS_*_CONNECTORS` and `ATLAS_CONNECTOR_<REF>_TOKEN` variables;
+- the `connectors` field a worker registration and the job-history record carry;
+- the `/api/v1/connectors` routes, once the `/api/v1/configured-workers` aliases have
+  been the documented spelling long enough to drop them.
+
+**Done when:** a model authored today names its worker in the Worker vocabulary, and
+the old spelling is accepted rather than required.
 
 ## Invariants and acceptance criteria
 

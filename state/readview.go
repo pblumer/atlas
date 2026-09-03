@@ -75,7 +75,7 @@ const maxScopeDepth = 64
 // mappings has an empty local scope, so this degenerates to reading the enclosing
 // scope, exactly as a single-scope read did.
 //
-// It takes a [Reader] rather than being a method so every connector worker shares
+// It takes a [Reader] rather than being a method so every worker shares
 // one implementation of the walk — they used to grow a copy each.
 func VisibleVariables(r Reader, elementInstanceKey uint64, fn func(v *model.VariableValue) error) error {
 	seen := map[string]bool{}

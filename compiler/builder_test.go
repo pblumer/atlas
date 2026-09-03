@@ -75,7 +75,7 @@ func TestBuilderWebScrapeTaskCarriesEveryFieldInItsOwnSlot(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	if got := cp.Node(scrape).Type; got != TypeConnectorTask {
-		t.Errorf("node type = %v, want a connector task", got)
+		t.Errorf("node type = %v, want a task", got)
 	}
 	d := cp.ConnectorTask(cp.Node(scrape).Detail)
 	if got := cp.Intern(d.JobType); got != WebScrapeJobType {
@@ -93,8 +93,8 @@ func TestBuilderWebScrapeTaskCarriesEveryFieldInItsOwnSlot(t *testing.T) {
 	if d.Retries != 4 {
 		t.Errorf("retries = %d, want 4", d.Retries)
 	}
-	// A scrape names no registry connector and is not a clio task: those slots stay -1,
-	// or the connector-resolution pass would look for a connector nobody configured.
+	// A scrape names no registry worker and is not a clio task: those slots stay -1,
+	// or the worker-resolution pass would look for a worker nobody configured.
 	for name, got := range map[string]int32{
 		"connector": d.Connector, "subject": d.Subject, "eventType": d.EventType,
 		"clioQuery": d.ClioQuery, "reduceSpec": d.ReduceSpec, "method": d.Method, "auth": d.Auth,

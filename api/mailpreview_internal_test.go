@@ -131,7 +131,7 @@ func TestPreviewConnectorDeliversIntoTheServerOutbox(t *testing.T) {
 	}
 	client, ok := clients["trial"]
 	if !ok {
-		t.Fatalf("preview connector produced no client (got %d clients)", len(clients))
+		t.Fatalf("preview worker produced no client (got %d clients)", len(clients))
 	}
 	if err := client.Send(context.Background(), mail.Message{To: []string{"her@example.com"}, Subject: "Hallo", Body: "Text"}); err != nil {
 		t.Fatalf("Send: %v", err)
@@ -166,7 +166,7 @@ func TestPreviewConnectorDeliversIntoTheServerOutbox(t *testing.T) {
 	}
 	m := out.Messages[0]
 	if m.Connector != "trial" || m.Subject != "Hallo" || !strings.Contains(m.Raw, "Subject: Hallo") {
-		t.Errorf("outbox message = %+v, want the framed message from connector \"trial\"", m)
+		t.Errorf("outbox message = %+v, want the framed message from worker \"trial\"", m)
 	}
 
 	if code, _ := get("/api/v1/mail/outbox?limit=nope"); code != http.StatusBadRequest {
@@ -204,7 +204,7 @@ func TestMisconfiguredMailConnectorIsSkippedNotFatal(t *testing.T) {
 	}
 }
 
-// postTest runs a connector check and returns the status plus the verdict.
+// postTest runs a worker check and returns the status plus the verdict.
 func postTest(t *testing.T, srv *Server, body string) (int, struct {
 	OK     bool   `json:"ok"`
 	Detail string `json:"detail"`
@@ -230,7 +230,7 @@ func postTest(t *testing.T, srv *Server, body string) (int, struct {
 func TestConnectorCheckAnswersBeforeAnythingIsSaved(t *testing.T) {
 	srv, _ := newValidateServer(t)
 
-	// A preview connector has nothing to dial and says so.
+	// A preview worker has nothing to dial and says so.
 	code, res := postTest(t, srv, `{"name":"trial","kind":"mail","provider":"preview","sender":"bot@example.com"}`)
 	if code != http.StatusOK || !res.OK {
 		t.Fatalf("preview check: status=%d ok=%v detail=%q", code, res.OK, res.Detail)
@@ -240,7 +240,7 @@ func TestConnectorCheckAnswersBeforeAnythingIsSaved(t *testing.T) {
 	}
 	// Nothing was saved by checking.
 	if recs, err := srv.connectors.LoadAll(); err != nil || len(recs) != 0 {
-		t.Errorf("the check stored %d connector(s) (err=%v), want none", len(recs), err)
+		t.Errorf("the check stored %d worker(s) (err=%v), want none", len(recs), err)
 	}
 
 	// A recipient turns the check into a real send — for preview, into the outbox.
@@ -254,7 +254,7 @@ func TestConnectorCheckAnswersBeforeAnythingIsSaved(t *testing.T) {
 	}
 }
 
-// TestConnectorCheckReportsAFailureAsAnAnswer: a connector that cannot connect is a
+// TestConnectorCheckReportsAFailureAsAnAnswer: a worker that cannot connect is a
 // 200 carrying ok:false — the request was served, and the answer is "no". Only an
 // unusable *request* is a 400.
 func TestConnectorCheckReportsAFailureAsAnAnswer(t *testing.T) {

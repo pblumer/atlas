@@ -29,7 +29,7 @@ func saveForm(t *testing.T, x deployTestHarness, id, name, schemaPath string) {
 // flow (ADR-0087, ADR-0139): the shipped example decision, process, and forms are
 // deployed as-is; an instance starts and parks at a "CSV hochladen" user task;
 // completing it with the file content (as the Tasks app would from an uploaded file)
-// drives the in-process pipeline — the CSV-to-JSON connector task parses it into rows
+// drives the in-process pipeline — the CSV-to-JSON task parses it into rows
 // with its layout authored on the task, and the multi-instance subprocess validates
 // each row. The invalid row parks on a correction task; correcting it re-validates and
 // runs the instance to completion with all verdicts valid. Loads the example files
@@ -89,7 +89,7 @@ func TestCSVProcessUploadAndCorrection(t *testing.T) {
 		t.Fatalf("complete upload: %d %s", code, cb)
 	}
 
-	// The CSV connector parsed the rows against its authored layout and validation
+	// The CSV worker parsed the rows against its authored layout and validation
 	// ran: exactly the invalid row (bob) parks on a correction task; the clean ada
 	// passed straight through.
 	tasks := listTasks(t, x)

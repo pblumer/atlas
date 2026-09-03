@@ -174,7 +174,7 @@ func regWith(name string, c Client) *Registry {
 }
 
 // Every operation maps to the Graph request an operator would otherwise have to
-// hand-author — which is the reason this connector exists rather than a REST task.
+// hand-author — which is the reason this worker exists rather than a REST task.
 func TestRunMapsEveryOperation(t *testing.T) {
 	for _, tc := range []struct {
 		op         string
@@ -351,7 +351,7 @@ func TestRunErrors(t *testing.T) {
 	c := &recordingClient{}
 	// An unconfigured name is the actionable failure and is reported first.
 	if _, err := Run(context.Background(), Job{Connector: "nope", Operation: "get-user", UserID: "u"}, NewRegistry()); err == nil {
-		t.Error("an unregistered connector must fail")
+		t.Error("an unregistered worker must fail")
 	}
 	if _, err := Run(context.Background(), Job{Connector: "contoso", Operation: "rename"}, regWith("contoso", c)); err == nil {
 		t.Error("an unknown operation must fail")
@@ -478,10 +478,10 @@ func TestResolveEvaluatesFEELIds(t *testing.T) {
 	}
 }
 
-// A connector authored as a FEEL expression resolves the tenant name from the
+// A worker authored as a FEEL expression resolves the tenant name from the
 // instance's variables at call time, so one process can serve several tenants
 // (ADR-0172). An expression that evaluates to nothing is refused at resolve, so the
-// incident names this task rather than the worker later failing to find a connector
+// incident names this task rather than the worker later failing to find a worker
 // called "".
 func TestResolveEvaluatesTheConnectorExpression(t *testing.T) {
 	bpmn := func(connector string) string {
@@ -517,7 +517,7 @@ func TestResolveEvaluatesTheConnectorExpression(t *testing.T) {
 		t.Fatalf("Resolve: %v", err)
 	}
 	if j.Connector != "blumer_net" {
-		t.Errorf("connector = %q, want the resolved tenant blumer_net", j.Connector)
+		t.Errorf("worker = %q, want the resolved tenant blumer_net", j.Connector)
 	}
 
 	// A resolved-empty tenant name is refused rather than sent.
@@ -526,13 +526,13 @@ func TestResolveEvaluatesTheConnectorExpression(t *testing.T) {
 		1: {{Name: "upn", Kind: model.VarString, Text: "arno@blumer.net"}},
 	}}
 	if _, err := Resolve(empty, cp, d, 1); err == nil {
-		t.Error("a connector expression that evaluates to nothing should be an error")
+		t.Error("a worker expression that evaluates to nothing should be an error")
 	}
 
-	// A static connector name still resolves verbatim — the common path is unchanged.
+	// A static worker name still resolves verbatim — the common path is unchanged.
 	cp, d = taskOf(t, bpmn("contoso"))
 	if j, err := Resolve(store, cp, d, 1); err != nil || j.Connector != "contoso" {
-		t.Errorf("static connector: j.Connector=%q err=%v, want contoso/nil", j.Connector, err)
+		t.Errorf("static worker: j.Connector=%q err=%v, want contoso/nil", j.Connector, err)
 	}
 }
 
@@ -820,7 +820,7 @@ func TestEntraAssignRoleKeepsAnAuthoredScope(t *testing.T) {
 	}
 }
 
-// entraTaskBPMN builds a one-task model from raw connector attributes.
+// entraTaskBPMN builds a one-task model from raw worker attributes.
 func entraTaskBPMN(attrs string) string {
 	return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">

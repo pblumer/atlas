@@ -46,7 +46,7 @@ const (
 //
 // It does not retry. A pooled connection the server closed while it sat idle fails
 // its next operation, and that job takes the engine's ordinary retry-then-incident
-// path (ADR-0061). Retrying inside the connector would mean re-sending a write whose
+// path (ADR-0061). Retrying inside the worker would mean re-sending a write whose
 // outcome is unknown, which is a worse failure than the one it would paper over.
 type Pool struct {
 	dialer  Dialer

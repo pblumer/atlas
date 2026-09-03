@@ -12,11 +12,11 @@ import {
 import { enhanceTable } from "./table.js";
 import { copyText } from "./clipboard.js";
 import {
-  incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixConnectorFlow,
-  incidentConnectorChip,
+  incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixWorkerFlow,
+  incidentWorkerChip,
   repairFormFlow,
 } from "./incidents.js";
-import { editConnectorFlow, connectorShape, connectorCreateBody, connectorUsageHTML, openConnectorUsage, deleteConnectorFlow } from "./connectordialog.js";
+import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWorkerUsage, deleteWorkerFlow } from "./workerdialog.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
 import { openPickModal } from "./pickmodal.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
@@ -509,7 +509,7 @@ async function deployDemo() {
 
 // ---------- Apps (Atlas naming; reference product names removed) ----------
 // Each app names the role its screens need, and the drawer offers only the ones
-// this person holds. The Console itself is "any": its dashboard, connectors and AI
+// this person holds. The Console itself is "any": its dashboard, workers and AI
 // access are everybody's, and the admin screens inside it say so individually
 // below.
 const APPS = [
@@ -529,7 +529,7 @@ const TOPNAV = {
     { name: "Logs", route: "#/console/logs", role: "admin" },
     { name: "Backup", route: "#/console/backup", role: "admin" },
     { name: "Organization", route: "#/console/org", role: "admin" },
-    { name: "Connectors", route: "#/console/connectors", role: "any" },
+    { name: "Workers", route: "#/console/workers", role: "any" },
     { name: "AI access", route: "#/console/ai-access", role: "any" },
     { name: "Audit log", route: "#/console/audit", role: "admin" },
   ],
@@ -566,8 +566,8 @@ const TOPNAV = {
   ],
 };
 
-// Connectors are the sibling engines Atlas hands work off to. They live under
-// Organization because they're an org-wide integration, not per-process wiring.
+// The Worker Type catalog: the capabilities Atlas can hand work off to. They live
+// under the Console because they're an org-wide integration, not per-process wiring.
 // "status" is honest about what this single-binary build actually talks to:
 //   active — embedded and used at runtime/deploy time;
 //   planned — a supported integration that this build isn't wired to yet.
@@ -584,7 +584,7 @@ const TOPNAV = {
 // shared, and a fact added here reaches all three.
 function sqlWorkerTypeDesc(product, envPrefix, placeholder, binding) {
   return `Runs one statement against a ${product} database \u2014 query for many rows, query one for a single row, execute for an insert, update or delete \u2014 on a worker, off the processor loop. ` +
-    `The statement is literal by construction: it is the one connector field with no fx toggle, because a statement assembled from process data would be an injection that needs no quoting bug. ` +
+    `The statement is literal by construction: it is the one field with no fx toggle, because a statement assembled from process data would be an injection that needs no quoting bug. ` +
     `Values reach it as bound parameters (${placeholder}). ${binding} ` +
     `A query carries a row cap (1000 by default) and exceeding it fails the task rather than truncating, because a short result set is a wrong business answer and a process that branches on the row count would branch on it confidently. ` +
     `Configure each database below: the whole connection string is the credential, sealed into the vault. ` +
@@ -592,7 +592,7 @@ function sqlWorkerTypeDesc(product, envPrefix, placeholder, binding) {
     `Or a mockup: the Databases switch on Console \u203a Workers makes every database worker answer from prepared answers in its own memory, and a worker you run yourself reads the same decision from ATLAS_${envPrefix}_MOCK — either way a model that reads or writes a database runs end to end before anyone has a connection string.`;
 }
 
-const CONNECTORS = [
+const WORKER_TYPES = [
   {
     id: "temis", name: "temis", kind: "Decision engine",
     desc: "DMN 1.5 / FEEL. Evaluates business-rule tasks off the processor loop and validates a project's DMN references at deploy time.",
@@ -600,7 +600,7 @@ const CONNECTORS = [
   },
   {
     id: "clio", name: "clio", kind: "Event store",
-    desc: "Durable event log with registered schemas and reduce specs. A clio connector task sends, queries, or reads events off the processor loop; the endpoint and token are managed below and resolved from the vault. Authored on a service task with the clio Event Store Worker Type.",
+    desc: "Durable event log with registered schemas and reduce specs. A clio task sends, queries, or reads events off the processor loop; the endpoint and token are managed below and resolved from the vault. Authored on a service task with the clio Event Store Worker Type.",
     refs: "ADR-0036 · ADR-0041", status: "active", statusLabel: "configurable",
   },
   {
@@ -630,7 +630,7 @@ const CONNECTORS = [
   },
   {
     id: "ad", name: "Active Directory", kind: "Directory",
-    desc: "Creates a user, group or contact, sets a password, enables or disables an account, moves or deletes an entry, manages group membership and reads a DirSync delta \u2014 on a worker, off the processor loop. Configure each directory below: its LDAP URL and a vault bundle holding the service account. A model then names the connector and says nothing else about the directory. Tasks written before this that carry their own url and bindDN keep working.",
+    desc: "Creates a user, group or contact, sets a password, enables or disables an account, moves or deletes an entry, manages group membership and reads a DirSync delta \u2014 on a worker, off the processor loop. Configure each directory below: its LDAP URL and a vault bundle holding the service account. A model then names the worker and says nothing else about the directory. Tasks written before this that carry their own url and bindDN keep working.",
     refs: "ADR-0166 \u00b7 ADR-0181", status: "active", statusLabel: "configured below",
   },
   {
@@ -852,10 +852,8 @@ function handbookHelp(path) {
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
   // Organization pointed at the worker chapter only because the worker cards used to
   // sit on it; with those on their own page it points there instead, and Organization
-  // falls through to the Console's own chapter. Both spellings of the route resolve:
-  // #/console/workers is canonical, #/console/connectors the compatibility alias the
-  // legacy router still receives (ADR-0203).
-  if (path.startsWith("#/console/workers") || path.startsWith("#/console/connectors")) return H("formulare", "Forms & workers");
+  // falls through to the Console's own chapter.
+  if (path.startsWith("#/console/workers")) return H("formulare", "Forms & workers");
   if (path.startsWith("#/console")) return H("schnellstart", "Quick start");
   return H("willkommen", "Welcome to Atlas");
 }
@@ -1419,7 +1417,7 @@ async function viewConsoleBackup() {
     <div class="card">
       <h1>Backup &amp; restore</h1>
       <p class="muted">Download a single archive of your design-time data — projects, drafts,
-      deployments, forms, decisions, connectors — to keep or move to another instance.
+      deployments, forms, decisions, workers — to keep or move to another instance.
       User accounts and the secret vault key are never included. With authentication enabled this is admin-only.</p>
       <div class="row" style="gap:12px; align-items:center; margin-top:8px">
         <a class="btn" href="/api/v1/backup" download>Download backup (.tar.gz)</a>
@@ -1428,7 +1426,7 @@ async function viewConsoleBackup() {
       <h3 style="margin:22px 0 6px">Restore</h3>
       <p class="muted">Uploading a backup overwrites artifacts that share an id. Restored drafts,
       projects, forms and decisions appear immediately; <strong>deployed processes take effect after the
-      next server restart</strong>. Connectors keep their configuration but need their secrets re-entered.</p>
+      next server restart</strong>. Workers keep their configuration but need their secrets re-entered.</p>
       <div class="row" style="gap:12px; align-items:center">
         <input type="file" id="restore-file" accept=".gz,.tgz,application/gzip">
         <button class="btn neutral" id="restore-btn" title="Upload the chosen backup archive and restore its artifacts">Restore from file</button>
@@ -1643,23 +1641,23 @@ async function removeGroupMember(groupId, userId, reload) {
   reload();
 }
 
-// viewConsoleConnectors is the Console's Connectors page: what Atlas can delegate to,
+// viewConsoleWorkers is the Console's Workers page: what Atlas can delegate to,
 // what this instance has actually configured, and the vault those configurations
 // resolve their credentials from. The three read in that order because that is the
-// order an operator works in — pick a kind, point it somewhere, give it a credential —
-// and the secrets stay with the connectors because a token *reference* and the secret
-// it resolves to are one setting entered in two places (ADR-0041 · ADR-0069).
+// order an operator works in — pick a Worker Type, point it somewhere, give it a
+// credential — and the secrets stay with the workers because a token *reference* and
+// the secret it resolves to are one setting entered in two places (ADR-0041 · ADR-0069).
 //
 // They were the bottom three cards of Organization, under the user roster, the groups
-// and the colour picker. That page answers "who uses this instance"; a connector is not
+// and the colour picker. That page answers "who uses this instance"; a worker is not
 // a person, and the integrations are what an operator comes back to — past everything
 // they were filed behind.
-async function viewConsoleConnectors() {
+async function viewConsoleWorkers() {
   const gen = navGen;
   const pill = (c) => c.status === "active"
     ? `<span class="pill ok"><span class="dot"></span>${esc(c.statusLabel)}</span>`
     : `<span class="pill warn"><span class="dot"></span>${esc(c.statusLabel)}</span>`;
-  const connectorRow = (c) => `<tr>
+  const workerTypeRow = (c) => `<tr>
       <td>
         <span class="chip">${esc(c.name)}</span>
         <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
@@ -1669,25 +1667,25 @@ async function viewConsoleConnectors() {
       <td style="text-align:right; white-space:nowrap; vertical-align:top">${pill(c)}</td>
     </tr>`;
 
-  // Managed connector instances (ADR-0041): operator-configured integrations,
-  // secret references only. Today the runtime wires the temis decision connector.
-  let connectors = [];
-  try { connectors = (await api("GET", "/api/v1/connectors")) || []; } catch { /* leave empty */ }
-  // What a connector's row shows depends on what this caller may do with it
+  // Configured workers (ADR-0041): operator-configured integrations, secret
+  // references only. Today the runtime wires the temis decision worker.
+  let workers = [];
+  try { workers = (await api("GET", "/api/v1/connectors")) || []; } catch { /* leave empty */ }
+  // What a worker's row shows depends on what this caller may do with it
   // (ADR-0205). The server sends the full record with a `role` to anybody at viewer
-  // or above, and a catalog entry — name, kind, enabled — to everybody else, so that
-  // a modeller can still author against a connector whose configuration is not
+  // or above, and a catalog entry — name, Worker Type, enabled — to everybody else, so
+  // that a modeller can still author against a worker whose configuration is not
   // theirs. `role` is absent exactly in that second case.
-  const connScope = (c) => ({
+  const workerScope = (c) => ({
     role: c.role || "",
     configurable: !!c.role,
     editor: c.role === "editor" || c.role === "owner",
     owner: c.role === "owner",
   });
   const ownershipPill = (c) => {
-    const sc = connScope(c);
+    const sc = workerScope(c);
     if (!sc.configurable) {
-      return `<span class="pill vis" title="Somebody else configures this connector. You can still reference it by name in a model.">not yours</span>`;
+      return `<span class="pill vis" title="Somebody else configures this worker. You can still reference it by name in a model.">not yours</span>`;
     }
     if (!sc.owner) {
       return `<span class="pill vis" title="Shared with you as ${esc(sc.role)}">shared with you</span>`;
@@ -1697,24 +1695,24 @@ async function viewConsoleConnectors() {
       ? `<span class="pill vis" title="Shared with ${shared} other ${shared === 1 ? "principal" : "principals"}">shared · ${shared}</span>`
       : `<span class="pill vis" title="Only you (and administrators) can configure this">private</span>`;
   };
-  // connectorMenu is the row's actions, behind the ⋯ menu every other table in the
+  // workerMenu is the row's actions, behind the ⋯ menu every other table in the
   // console puts them behind (ADR-0163). Drawn on the row they were up to seven buttons
   // wide — a wall of identical blue that made every worker look alike, pushed the two
   // that matter (Test, Delete) to the far edge, and grew the table past the width of its
   // card on a laptop. In the menu they cost no width and can be grouped by what they
   // are: what this Worker Type can do, who may configure it, and the two that change or
   // remove it.
-  const connectorMenu = (c) => {
-    const sc = connScope(c);
+  const workerMenu = (c) => {
+    const sc = workerScope(c);
     const items = [];
     // Kind-specific first: these are the reasons an operator came to this row rather
     // than to any other, and they exist on no other kind.
     if (c.kind === "clio") items.push({ label: "Provision access…", icon: "🔑", act: "provision" });
     if (c.kind === "clio" || c.kind === "jira") items.push({ label: "Events…", icon: "⇄", act: "subs" });
-    // Every kind the check covers: mail connects and authenticates (or sends a test
-    // message), a SQL connector dials its connection string. connectorShape is the one
-    // place that knows, so the menu does not go stale the next kind that gains one.
-    if (connectorShape(c.kind, c.provider).test) items.push({ label: "Test…", icon: "✔", act: "test" });
+    // Every Worker Type the check covers: mail connects and authenticates (or sends a
+    // test message), a SQL worker dials its connection string. workerShape is the one
+    // place that knows, so the menu does not go stale the next type that gains one.
+    if (workerShape(c.kind, c.provider).test) items.push({ label: "Test…", icon: "✔", act: "test" });
     if (items.length && (sc.editor || sc.owner)) items.push({ sep: true });
     if (sc.editor) items.push({ label: "Edit…", icon: "✎", act: "edit" });
     if (sc.owner) items.push({ label: "Share…", icon: "👤", act: "share" });
@@ -1732,7 +1730,7 @@ async function viewConsoleConnectors() {
   // Microsoft Graph) dials no endpoint at all — it authenticates as the sender — so the
   // line names the provider where the endpoint would be, rather than opening with the
   // stray separator of an empty one.
-  const connectorTarget = (c) => {
+  const workerTarget = (c) => {
     const where = c.endpoint || (c.kind === "mail" && c.provider ? c.provider : "");
     const cred = c.credentialsRef ? `token: <code>${esc(c.credentialsRef)}</code>` : "no token";
     return where ? `${esc(where)} · ${cred}` : cred;
@@ -1742,7 +1740,7 @@ async function viewConsoleConnectors() {
   // found the workers it runs through. Collapsed to a count, that text is gone from the
   // cell, so the cell states it: the same words, off the same records, where only the
   // filter reads them.
-  const connectorFilterText = (c) => [
+  const workerFilterText = (c) => [
     c.name, c.kind, c.provider, c.endpoint, c.credentialsRef,
     ...(c.usedBy || []).map((u) => `${u.name || u.processId} v${u.version}`),
   ].filter(Boolean).join(" ");
@@ -1751,23 +1749,23 @@ async function viewConsoleConnectors() {
       : c.problem
         // Stored and enabled, but the runtime could not build its client — so its
         // tasks park. Saying it here is the difference between finding out now and
-        // finding out from an incident that claims the connector does not exist
+        // finding out from an incident that claims the worker does not exist
         // (ADR-0155).
         ? `<span class="pill err"><span class="dot"></span>not usable</span>
            <div class="conn-problem" title="${esc(c.problem)}">${esc(c.problem)}</div>`
         : '<span class="pill ok"><span class="dot"></span>enabled</span>'}</td>`;
-  const managedRow = (c) => connScope(c).configurable
+  const managedRow = (c) => workerScope(c).configurable
     ? `<tr data-id="${esc(c.id)}">
-      <td data-filter="${esc(connectorFilterText(c))}"><span class="chip">${esc(c.name)}</span>
+      <td data-filter="${esc(workerFilterText(c))}"><span class="chip">${esc(c.name)}</span>
         <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
         ${ownershipPill(c)}
-        <div class="muted" style="font-size:12px; margin-top:3px">${connectorTarget(c)}</div>
-        ${connectorUsageHTML(c.usedBy)}
+        <div class="muted" style="font-size:12px; margin-top:3px">${workerTarget(c)}</div>
+        ${workerUsageHTML(c.usedBy)}
         <div class="conn-share" id="share-${esc(c.id)}" hidden></div></td>
       ${statusCell(c)}
-      <td class="row-actions">${dropdown("⋯", "icon-btn", connectorMenu(c))}</td></tr>`
+      <td class="row-actions">${dropdown("⋯", "icon-btn", workerMenu(c))}</td></tr>`
     : `<tr data-id="${esc(c.id)}" class="conn-foreign">
-      <td data-filter="${esc(connectorFilterText(c))}"><span class="chip">${esc(c.name)}</span>
+      <td data-filter="${esc(workerFilterText(c))}"><span class="chip">${esc(c.name)}</span>
         <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
         ${ownershipPill(c)}
         <div class="muted" style="font-size:12px; margin-top:3px">Configured by somebody else.
@@ -1777,21 +1775,22 @@ async function viewConsoleConnectors() {
   const managedCard = `
     <div class="card" style="padding:0; margin-top:18px">
       <div class="between" style="padding:16px 18px 0">
-        <h2>Configured connectors</h2><button class="btn" id="new-connector" title="Configure a new connector">New connector</button>
+        <h2>Configured workers</h2><button class="btn" id="new-worker" title="Configure a new worker">New worker</button>
       </div>
-      <p class="muted" style="padding:0 18px; margin:6px 0 12px">Managed <b>temis</b> decision
-      and <b>clio</b> event-store connectors a task references by name (ADR-0036/0041/0050). The
-      endpoint is stored; the token is a <b>reference</b> resolved from the vault (or
-      <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>) at runtime — never stored here.</p>
-      <div id="connector-form-slot" style="padding:0 18px"></div>
+      <p class="muted" style="padding:0 18px; margin:6px 0 12px">A configured worker binds a
+      <b>Worker Type</b> to one concrete endpoint and identity, and a task references it by name
+      (ADR-0036/0041/0050). The endpoint is stored; the token is a <b>reference</b> resolved from
+      the vault (or <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>) at runtime — never stored
+      here, and never in a process model.</p>
+      <div id="worker-form-slot" style="padding:0 18px"></div>
       <table data-dt-key="connectors">
-        <thead><tr><th>Connector</th><th class="conn-status-col">Status</th><th></th></tr></thead>
-        <tbody id="connector-rows">${connectors.map(managedRow).join("")
-          || `<tr><td colspan="3" class="muted" style="padding:14px 18px">None configured. Business rule tasks marked <i>External (temis connector)</i> resolve by name to these.</td></tr>`}</tbody>
+        <thead><tr><th>Worker</th><th class="conn-status-col">Status</th><th></th></tr></thead>
+        <tbody id="worker-rows">${workers.map(managedRow).join("")
+          || `<tr><td colspan="3" class="muted" style="padding:14px 18px">None configured. Business rule tasks marked <i>External (temis worker)</i> resolve by name to these.</td></tr>`}</tbody>
       </table>
     </div>`;
 
-  // The Active-Directory mockup switch (ADR-0181). It sits with the connectors
+  // The Active-Directory mockup switch (ADR-0181). It sits with the workers
   // because that is where an operator goes to decide what an integration talks to —
   // and because a worker that simulates every write looks, from everywhere else in
   // Atlas, exactly like one that works.
@@ -1907,7 +1906,7 @@ async function viewConsoleConnectors() {
       </div>
     </div>`;
 
-  // Encrypted secret vault (ADR-0069): credentials a connector's token reference
+  // Encrypted secret vault (ADR-0069): credentials a worker's token reference
   // resolves to, sealed at rest. Every op is admin-gated and the vault may be
   // unconfigured (no master key), so distinguish those states from a populated list.
   let secrets = [];
@@ -1918,17 +1917,17 @@ async function viewConsoleConnectors() {
     secretsState = /admin/i.test(e.message) ? "denied" : "unconfigured";
   }
   // A secret's value is write-only, so the one thing the list can still say about it
-  // is what it is *for* — which connector resolves this reference, and therefore what
+  // is what it is *for* — which worker resolves this reference, and therefore what
   // shape the value has to have. Without that a rotation is done blind (ADR-0155).
   // The key line names the *vault master key* — ADR-0069's keyId, a fingerprint of the
   // one active key that seals every secret — not a per-secret key. The same value on
   // every row is therefore the healthy state; a row that differs was sealed under a key
   // that has since been rotated and no longer opens, which is why the line is shown.
   const secretRow = (c) => {
-    const users = (connectors || []).filter((k) => k.credentialsRef === c.name);
+    const users = (workers || []).filter((k) => k.credentialsRef === c.name);
     const usedBy = users.length
       ? users.map((k) => `<span class="chip">${esc(k.name)}</span> <span class="muted">${esc(k.kind)}${k.provider ? " · " + esc(k.provider) : ""}</span>`).join(", ")
-      : `<span class="muted">not referenced by any connector</span>`;
+      : `<span class="muted">not referenced by any worker</span>`;
     return `<tr data-name="${esc(c.name)}">
       <td><span class="chip">${esc(c.name)}</span>
         <div class="muted" style="font-size:12px; margin-top:3px">used by ${usedBy}</div>
@@ -1943,13 +1942,13 @@ async function viewConsoleConnectors() {
     : secretsState === "unconfigured"
     ? `<div class="card" style="margin-top:18px"><h2>Secrets</h2><p class="muted">The encrypted
         secret vault is not configured. Start the server with <code>ATLAS_VAULT_KEY</code> (a
-        32-byte key, base64 or hex) or <code>ATLAS_VAULT_KEY_FILE</code> to store connector
+        32-byte key, base64 or hex) or <code>ATLAS_VAULT_KEY_FILE</code> to store worker
         credentials here, encrypted at rest (ADR-0069).</p></div>`
     : `<div class="card" style="padding:0; margin-top:18px">
         <div class="between" style="padding:16px 18px 0">
           <h2>Secrets</h2><button class="btn" id="new-secret" title="Store a new secret in the encrypted vault">New secret</button>
         </div>
-        <p class="muted" style="padding:0 18px; margin:6px 0 12px">Credentials a connector's
+        <p class="muted" style="padding:0 18px; margin:6px 0 12px">Credentials a worker's
         <b>token reference</b> resolves to, sealed at rest with AES-256-GCM (ADR-0069). The value
         is <b>never</b> shown after it is set — only its name and metadata. A reference resolves
         from the vault first, then <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>.</p>
@@ -1957,26 +1956,29 @@ async function viewConsoleConnectors() {
         <table data-dt-key="secrets">
           <thead><tr><th>Secret</th><th></th></tr></thead>
           <tbody id="secret-rows">${secrets.map(secretRow).join("")
-            || `<tr><td colspan="2" class="muted" style="padding:14px 18px">None stored. Add one, then point a connector's token reference at its name.</td></tr>`}</tbody>
+            || `<tr><td colspan="2" class="muted" style="padding:14px 18px">None stored. Add one, then point a worker's token reference at its name.</td></tr>`}</tbody>
         </table>
       </div>`;
 
-  if (superseded(gen)) return; // navigated away while the connectors/secrets loaded
+  if (superseded(gen)) return; // navigated away while the workers/secrets loaded
   view.innerHTML = `
     <div class="card" style="padding:0">
-      <div class="between" style="padding:16px 18px 0"><h1 style="margin:0">Connectors</h1></div>
-      <p class="muted" style="padding:0 18px; margin:6px 0 12px">Sibling engines Atlas
-      delegates to. Each is an org-wide integration, shared across every process.</p>
-      <table><tbody>${CONNECTORS.map(connectorRow).join("")}</tbody></table>
+      <div class="between" style="padding:16px 18px 0"><h1 style="margin:0">Workers</h1></div>
+      <h2 style="padding:0 18px; margin:12px 0 4px">Worker catalog</h2>
+      <p class="muted" style="padding:0 18px; margin:6px 0 12px">The Worker Types available to
+      this Atlas instance. A <b>Worker Type</b> is a capability; a configured worker below binds
+      that capability to one concrete target and identity, org-wide and shared across every
+      process.</p>
+      <table><tbody>${WORKER_TYPES.map(workerTypeRow).join("")}</tbody></table>
     </div>
     ${managedCard}
     ${adMockCard}
     ${sqlMockCard}
     ${secretsCard}`;
-  wireConnectorManagement(connectors);
+  wireWorkerManagement(workers);
   wireADMock();
   wireSQLMock();
-  wireSecretsManagement(secrets, secretsState, connectors);
+  wireSecretsManagement(secrets, secretsState, workers);
 }
 
 async function viewConsoleOrg() {
@@ -3682,34 +3684,34 @@ function showMIMReport(res) {
   ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
 }
 
-// a "New connector" inline form and per-row Edit / Enable-Disable / Delete. Each
-// change hits the connector API, which rebuilds the runtime registry, then the page
+// a "New worker" inline form and per-row Edit / Enable-Disable / Delete. Each
+// change hits the worker API, which rebuilds the runtime registry, then the page
 // re-renders. Only a token *reference* is ever entered — never a secret value
 // (ADR-0041).
-function wireConnectorManagement(connectors) {
-  const reload = () => viewConsoleConnectors();
-  const slot = document.getElementById("connector-form-slot");
-  const newBtn = document.getElementById("new-connector");
+function wireWorkerManagement(workers) {
+  const reload = () => viewConsoleWorkers();
+  const slot = document.getElementById("worker-form-slot");
+  const newBtn = document.getElementById("new-worker");
   if (newBtn && slot) {
     newBtn.addEventListener("click", () => {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
-      slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+      slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option><option value="preview">Preview (in-app outbox)</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
         <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
-        <button class="btn" type="submit" title="Add this connector">Add</button>
+        <button class="btn" type="submit" title="Add this configured worker">Add worker</button>
         <button class="btn neutral conn-f-test" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
         <p class="conn-test-result" style="flex:1 1 100%;margin:0;font-size:12.5px" hidden></p>
         <p class="muted conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p></form>`;
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
       // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
       // endpoint but a credentialsRef naming a vault JSON auth bundle, and sends as the
-      // sender mailbox. A SharePoint connector likewise defaults its Graph API base
+      // sender mailbox. A SharePoint worker likewise defaults its Graph API base
       // (no endpoint) and needs a credentialsRef naming a vault OAuth bundle. The
       // mail-only fields hide for temis/clio/sharepoint.
       const form = slot.querySelector("form");
@@ -3720,7 +3722,7 @@ function wireConnectorManagement(connectors) {
       const credRefIn = form.querySelector('[name="credentialsRef"]');
       const credRefLabel = form.querySelector(".credref-label");
       const endpointField = form.querySelector(".endpoint-field");
-      // Which fields a kind and provider actually use is one description, shared with
+      // Which fields a Worker Type and provider actually use is one description, shared with
       // the edit dialog (ADR-0160) so a rule changed in one place cannot leave the
       // other asking for a credential nobody needs — or worse, not asking for one
       // that is required. A native mail provider and SharePoint default their API base
@@ -3728,9 +3730,9 @@ function wireConnectorManagement(connectors) {
       // endpoint; preview dials nothing at all, which is the whole point of it
       // (ADR-0150), so a field left standing there would read as if it were used.
       const sync = () => {
-        const sh = connectorShape(kindSel.value, providerSel.value);
+        const sh = workerShape(kindSel.value, providerSel.value);
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = sh.mail ? "" : "none"; });
-        // The connection string is a SQL connector's whole configuration, so it is the
+        // The connection string is a SQL worker's whole configuration, so it is the
         // one field that appears for those kinds and for no other. It is not marked
         // required: an operator who already keeps the DSN in the vault names its key in
         // the reference field instead, and the server refuses a record with neither.
@@ -3762,7 +3764,7 @@ function wireConnectorManagement(connectors) {
         credRefIn.placeholder = sh.credRefPlaceholder;
         credRefLabel.textContent = sh.credRefLabel;
         // What this kind needs, said where it is chosen rather than discovered from a
-        // failed job hours later. The hint is *not* mail-only: connectorShape writes
+        // failed job hours later. The hint is *not* mail-only: workerShape writes
         // one for Active Directory and for the three databases too, and while it
         // carried the mail-only class the form wrote all of them into an element it had
         // just hidden — so the one sentence saying that a database's whole connection
@@ -3795,7 +3797,7 @@ function wireConnectorManagement(connectors) {
             endpoint: (f.get("endpoint") || "").trim(),
             sender: (f.get("sender") || "").trim(),
             credentialsRef: (f.get("credentialsRef") || "").trim(),
-            // A SQL connector's whole configuration is this string, so checking it
+            // A SQL worker's whole configuration is this string, so checking it
             // before it is sealed is the only moment the operator can still fix it in
             // the field they are looking at. The field is disabled for other kinds, so
             // FormData carries nothing for them.
@@ -3810,16 +3812,16 @@ function wireConnectorManagement(connectors) {
       });
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const body = connectorCreateBody(e.target);
+        const body = workerCreateBody(e.target);
         try {
           await api("POST", "/api/v1/connectors", body);
-          toast("Connector added", "ok");
+          toast("Worker added", "ok");
           reload();
-        } catch (err) { toast("Could not add connector: " + err.message, "err"); }
+        } catch (err) { toast("Could not add worker: " + err.message, "err"); }
       });
     });
   }
-  const rows = document.getElementById("connector-rows");
+  const rows = document.getElementById("worker-rows");
   if (rows) {
     rows.addEventListener("click", async (e) => {
       // Two things a row's cell can start: the usage count opens the list behind it,
@@ -3832,10 +3834,10 @@ function wireConnectorManagement(connectors) {
       const row = btn.closest("tr");
       if (!row) return;
       const id = row.dataset.id;
-      const c = (connectors || []).find((x) => x.id === id);
+      const c = (workers || []).find((x) => x.id === id);
       if (!c) return;
       if (usage) {
-        openConnectorUsage({ connector: c });
+        openWorkerUsage({ worker: c });
         return;
       }
       const act = btn.dataset.act;
@@ -3844,7 +3846,7 @@ function wireConnectorManagement(connectors) {
           await toggleInboundSubs(row, id, c.kind);
           return;
         } else if (act === "share") {
-          await toggleConnectorShare(c, viewConsoleConnectors);
+          await toggleWorkerShare(c, viewConsoleWorkers);
           return;
         } else if (act === "provision") {
           toggleProvisionClio(row, id, c.name);
@@ -3870,7 +3872,7 @@ function wireConnectorManagement(connectors) {
               name: c.name, kind: c.kind, provider: c.provider, endpoint: c.endpoint,
               sender: c.sender, credentialsRef: c.credentialsRef, to: to.trim(),
             });
-            toast(res.detail || (res.ok ? "Connector works" : "Check failed"), res.ok ? "ok" : "warn");
+            toast(res.detail || (res.ok ? "Worker works" : "Check failed"), res.ok ? "ok" : "warn");
           } catch (err) {
             toast("Check failed: " + err.message, "warn");
           } finally { btn.disabled = false; }
@@ -3879,28 +3881,28 @@ function wireConnectorManagement(connectors) {
           await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { enabled: !c.enabled });
         } else if (act === "edit") {
           // The same dialog an operator reaches from an incident (ADR-0160) — which is
-          // where most connector edits start, and why it is worth more than the two
+          // where most worker edits start, and why it is worth more than the two
           // window.prompts that used to stand here: it knows which fields this kind
           // and provider actually use, and it can check the result before saving.
-          if (!(await editConnectorFlow({ api, toast, connector: c }))) return;
+          if (!(await editWorkerFlow({ api, toast, worker: c }))) return;
         } else if (act === "delete") {
           // The server refuses a delete that would park deployed models' tasks
           // (ADR-0163), so this asks only about what it can see and lets the refusal
           // carry the rest — the confirm names the processes instead of a bare count.
-          if (!(await deleteConnectorFlow({ api, connector: c }))) return;
+          if (!(await deleteWorkerFlow({ api, worker: c }))) return;
         }
         reload();
-      } catch (err) { toast("Connector update failed: " + err.message, "err"); }
+      } catch (err) { toast("Worker update failed: " + err.message, "err"); }
     });
   }
 }
 
-// toggleProvisionClio expands (or collapses) an inline panel under a clio connector
-// row that provisions the connector's credential in one step: the operator supplies
+// toggleProvisionClio expands (or collapses) an inline panel under a clio worker
+// row that provisions the worker's credential in one step: the operator supplies
 // a clio admin token once, and Atlas mints a scoped read key on the clio instance
-// and seals it as this connector's token — no copy-pasting a key. The admin token is
+// and seals it as this worker's token — no copy-pasting a key. The admin token is
 // sent once and never stored.
-function toggleProvisionClio(row, connectorId, connectorName) {
+function toggleProvisionClio(row, workerId, workerName) {
   const existing = row.nextElementSibling;
   if (existing && existing.classList.contains("provision-row")) {
     existing.remove();
@@ -3912,11 +3914,11 @@ function toggleProvisionClio(row, connectorId, connectorName) {
   const panel = document.createElement("tr");
   panel.className = "provision-row";
   panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
-    <div class="muted" style="margin-bottom:8px">Provision access — Atlas mints a scoped clio key with your admin token and stores it as this connector's credential. The admin token is used once and never stored.</div>
+    <div class="muted" style="margin-bottom:8px">Provision access — Atlas mints a scoped clio key with your admin token and stores it as this worker's credential. The admin token is used once and never stored.</div>
     <form id="prov-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr auto;align-items:end">
       <label class="field" style="margin:0"><span>clio admin token</span><input name="adminToken" type="password" autocomplete="off" placeholder="kid.secret (admin)" required/></label>
       <label class="field" style="margin:0"><span>Read subject</span><input name="subject" placeholder="/employees" required/></label>
-      <button class="btn" type="submit" title="Mint the scoped key and store it as this connector’s credential">Provision</button>
+      <button class="btn" type="submit" title="Mint the scoped key and store it as this worker’s credential">Provision</button>
       <label class="check" style="grid-column:1 / -1;margin:0;display:flex;gap:8px;align-items:center">
         <input type="checkbox" name="recursive" checked/>
         <span>Recursive — grant read on the whole subtree (<code>read:/employees/*</code>), needed to watch child subjects.</span>
@@ -3928,11 +3930,11 @@ function toggleProvisionClio(row, connectorId, connectorName) {
     e.preventDefault();
     const f = new FormData(e.target);
     try {
-      const res = await api("POST", "/api/v1/connectors/" + encodeURIComponent(connectorId) + "/provision-clio-key", {
+      const res = await api("POST", "/api/v1/connectors/" + encodeURIComponent(workerId) + "/provision-clio-key", {
         adminToken: f.get("adminToken") || "",
         subject: (f.get("subject") || "").trim(),
         recursive: f.get("recursive") === "on",
-        keyName: "atlas-" + connectorName,
+        keyName: "atlas-" + workerName,
       });
       toast("Provisioned — token " + (res && res.credentialsRef ? res.credentialsRef : "stored") + " (" + (res && res.scope) + ")", "ok");
       panel.remove();
@@ -3940,20 +3942,20 @@ function toggleProvisionClio(row, connectorId, connectorName) {
   });
 }
 
-// toggleInboundSubs expands (or collapses) an inline panel under a clio connector row
+// toggleInboundSubs expands (or collapses) an inline panel under a clio worker row
 // listing its inbound event subscriptions (ADR-0075) with an add form and per-row
 // delete. A subscription watches a clio subject and republishes each new event as an
 // Atlas message that starts/wakes processes; the correlation key is a FEEL expression
 // over the event body (blank = keyless).
-// toggleConnectorShare opens the panel that decides who else may configure one
-// connector (ADR-0205).
+// toggleWorkerShare opens the panel that decides who else may configure one
+// worker (ADR-0205).
 //
 // It exists because the endpoints alone are not the feature. Ownership landed on
-// connectors so that a person can own a mailbox and share it with whom they choose;
+// workers so that a person can own a mailbox and share it with whom they choose;
 // "whom they choose" through a curl command is a capability only its author has.
 // The same shape as an application's sharing, deliberately: a person who has shared
 // one has already learned this one.
-async function toggleConnectorShare(c, reload) {
+async function toggleWorkerShare(c, reload) {
   const slot = document.getElementById("share-" + c.id);
   if (!slot) return;
   if (!slot.hidden) { slot.hidden = true; slot.innerHTML = ""; return; }
@@ -4001,7 +4003,7 @@ async function toggleConnectorShare(c, reload) {
     ${canPick ? "" : `<p class="muted" style="font-size:12px; margin:8px 0 0">Paste the id of the
       person or group. The directory is administrators-only, so it cannot be offered as a list here.</p>`}
     <p class="muted" style="font-size:12px; margin:8px 0 0">Sharing never reaches a running
-    process: a deployed model resolves this connector by name whoever started it.</p>`;
+    process: a deployed model resolves this worker by name whoever started it.</p>`;
 
   slot.querySelector("[data-share-add]").addEventListener("click", async () => {
     const raw = String(document.getElementById("share-who-" + c.id).value || "").trim();
@@ -4026,13 +4028,13 @@ async function toggleConnectorShare(c, reload) {
   });
 }
 
-async function toggleInboundSubs(row, connectorId, kind) {
+async function toggleInboundSubs(row, workerId, kind) {
   const existing = row.nextElementSibling;
   if (existing && existing.classList.contains("subs-row")) {
     existing.remove();
     return;
   }
-  const subs = (await api("GET", "/api/v1/connectors/" + encodeURIComponent(connectorId) + "/inbound-subscriptions")) || [];
+  const subs = (await api("GET", "/api/v1/connectors/" + encodeURIComponent(workerId) + "/inbound-subscriptions")) || [];
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
       <td><code>${esc(s.jql || s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
@@ -4094,10 +4096,10 @@ async function toggleInboundSubs(row, connectorId, kind) {
         body.watchedSubject = (f.get("watchedSubject") || "").trim();
         body.recursive = f.get("recursive") === "on";
       }
-      await api("POST", "/api/v1/connectors/" + encodeURIComponent(connectorId) + "/inbound-subscriptions", body);
+      await api("POST", "/api/v1/connectors/" + encodeURIComponent(workerId) + "/inbound-subscriptions", body);
       toast("Subscription added", "ok");
       panel.remove();
-      await toggleInboundSubs(row, connectorId, kind);
+      await toggleInboundSubs(row, workerId, kind);
     } catch (err) { toast("Could not add subscription: " + err.message, "err"); }
   });
   panel.querySelector("#subs-body").addEventListener("click", async (e) => {
@@ -4107,7 +4109,7 @@ async function toggleInboundSubs(row, connectorId, kind) {
     try {
       await api("DELETE", "/api/v1/inbound-subscriptions/" + encodeURIComponent(sid));
       panel.remove();
-      await toggleInboundSubs(row, connectorId, kind);
+      await toggleInboundSubs(row, workerId, kind);
     } catch (err) { toast("Could not delete subscription: " + err.message, "err"); }
   });
 }
@@ -4232,7 +4234,7 @@ function wireADMock() {
       toast(enabled
         ? "Mockup on — the AD worker restarts and writes to no directory."
         : "Mockup off — the AD worker restarts and talks to the domain controller again.");
-      await viewConsoleConnectors();
+      await viewConsoleWorkers();
     } catch (e) {
       if (note) note.textContent = e.message;
       save.disabled = false;
@@ -4357,7 +4359,7 @@ function wireSQLMock() {
       toast(enabled
         ? "Mockup on — the SQL workers restart and reach no database."
         : "Mockup off — the SQL workers restart and talk to their databases again.");
-      await viewConsoleConnectors();
+      await viewConsoleWorkers();
     } catch (e) {
       if (note) note.textContent = e.message;
       save.disabled = false;
@@ -4370,9 +4372,9 @@ function wireSQLMock() {
 // have no enable/disable, and are write-only — the value is never read back, so a set
 // is an idempotent PUT and the UI only ever sends values, never displays them. When
 // the vault is denied (non-admin) or unconfigured there is nothing to wire.
-function wireSecretsManagement(secrets, state, connectors) {
+function wireSecretsManagement(secrets, state, workers) {
   if (state !== "ok") return;
-  const reload = () => viewConsoleConnectors();
+  const reload = () => viewConsoleWorkers();
   const put = (name, value) => api("PUT", "/api/v1/secrets/" + encodeURIComponent(name), { value });
   const slot = document.getElementById("secret-form-slot");
   const newBtn = document.getElementById("new-secret");
@@ -4394,11 +4396,11 @@ function wireSecretsManagement(secrets, state, connectors) {
       const hintSlot = form.querySelector("#secret-hint-slot");
       const err = form.querySelector(".secret-error");
       let shape = null;
-      // The name *is* the binding: the moment it matches a connector's token
+      // The name *is* the binding: the moment it matches a worker's token
       // reference, the form knows what the value has to be and says so — before it
       // is typed, rather than after it has failed.
       const syncShape = () => {
-        const next = secretShapeFor(connectors, nameIn.value.trim());
+        const next = secretShapeFor(workers, nameIn.value.trim());
         const kindChanged = Boolean(next && next.skeleton) !== Boolean(shape && shape.skeleton);
         shape = next;
         hintSlot.innerHTML = nameIn.value.trim() ? secretHintHTML(shape) : "";
@@ -4414,7 +4416,7 @@ function wireSecretsManagement(secrets, state, connectors) {
         const f = new FormData(e.target);
         const name = (f.get("name") || "").trim();
         const value = f.get("value") || "";
-        const problem = checkSecretValue(secretShapeFor(connectors, name), value);
+        const problem = checkSecretValue(secretShapeFor(workers, name), value);
         err.hidden = !problem;
         err.textContent = problem;
         if (problem) return;
@@ -4435,10 +4437,10 @@ function wireSecretsManagement(secrets, state, connectors) {
       if (!name) return;
       try {
         if (btn.dataset.sact === "set") {
-          toggleSetSecret(btn.closest("tr"), name, connectors, put, reload);
+          toggleSetSecret(btn.closest("tr"), name, workers, put, reload);
           return;
         } else if (btn.dataset.sact === "delete") {
-          if (!window.confirm(`Delete secret "${name}"? A connector referencing it will resolve to no token.`)) return;
+          if (!window.confirm(`Delete secret "${name}"? A worker referencing it will resolve to no token.`)) return;
           await api("DELETE", "/api/v1/secrets/" + encodeURIComponent(name));
         }
         reload();
@@ -4453,13 +4455,13 @@ function wireSecretsManagement(secrets, state, connectors) {
 // that have to be pasted and read back, and a prompt can say nothing about what the
 // value is supposed to be — so the field that most needed an explanation was the one
 // field in the console that could not carry one.
-function toggleSetSecret(row, name, connectors, put, reload) {
+function toggleSetSecret(row, name, workers, put, reload) {
   const existing = row.nextElementSibling;
   if (existing && existing.classList.contains("secret-set-row")) {
     existing.remove();
     return;
   }
-  const shape = secretShapeFor(connectors, name);
+  const shape = secretShapeFor(workers, name);
   const panel = document.createElement("tr");
   panel.className = "secret-set-row";
   panel.innerHTML = `<td colspan="2" style="background:var(--surface); padding:12px 18px">
@@ -5317,11 +5319,11 @@ function incidentMenu(r, i) {
   }
   items.push({ label: "Fix variables…", icon: "✎", act: "fixvars", data: { row: i } });
   if (r.connector && r.connectorId) {
-    items.push({ label: "Configure connector…", icon: "⚙", act: "fixconn", data: { row: i } });
+    items.push({ label: "Configure worker…", icon: "⚙", act: "fixconn", data: { row: i } });
   } else if (r.connector) {
-    // Nothing to open — the model names a connector nobody configured, so the way out
+    // Nothing to open — the model names a worker nobody configured, so the way out
     // is the Console, where one is created.
-    items.push({ label: "Configure connector ↗", icon: "⚙", href: "#/console/connectors" });
+    items.push({ label: "Configure worker ↗", icon: "⚙", href: "#/console/workers" });
   }
   return items;
 }
@@ -5379,7 +5381,7 @@ async function viewIncidents() {
           <td>${el}</td>
           <td>${cause}</td>
           <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
-          <td>${esc(r.message || "—")}${incidentConnectorChip(r)}</td>
+          <td>${esc(r.message || "—")}${incidentWorkerChip(r)}</td>
           <td class="row-actions">
             <button class="btn sm" data-resolve="${i}" title="Resolve this incident">Resolve…</button>
             ${dropdown("⋯", "icon-btn", incidentMenu(r, i))}</td>
@@ -5401,7 +5403,7 @@ async function viewIncidents() {
     const incident = current[Number(btn.dataset.resolve ?? btn.dataset.row)];
     if (!incident) return;
     // Correcting the variables first is the other half of resolving: a retry alone
-    // repeats whatever failed (ADR-0158). Reconfiguring the connector is the third
+    // repeats whatever failed (ADR-0158). Reconfiguring the worker is the third
     // way, for when the message is about the integration and not the data (ADR-0160).
     // The repair form is the same correction as the first, through the fields the task's
     // author named rather than through raw JSON (ADR-0169).
@@ -5411,7 +5413,7 @@ async function viewIncidents() {
       : act === "fixvars"
         ? !!(await fixVariablesFlow({ api, toast, incident }))
         : act === "fixconn"
-          ? !!(await fixConnectorFlow({ api, toast, incident }))
+          ? !!(await fixWorkerFlow({ api, toast, incident }))
           : await resolveIncidentFlow({ api, toast, incident });
     if (changed) {
       await load();
@@ -5423,7 +5425,7 @@ async function viewIncidents() {
   await load();
 }
 
-// viewMailOutbox is the Operations "Outbox" view: the messages a mail connector on
+// viewMailOutbox is the Operations "Outbox" view: the messages a mail worker on
 // the *preview* provider delivered in-server instead of sending (ADR-0150).
 //
 // It is what makes preview worth having. A first mail task can be modeled, run and
@@ -5530,14 +5532,14 @@ async function viewWorkers() {
     // "Quiet" has to mean *unused*, which is what that sentence was always about — not
     // merely "nothing on the queue right now". A kind the engine serves itself has
     // nothing queued, nothing in flight and no puller (none may pull it), so on a
-    // busy-only test a connector that is working perfectly was folded away and one that
+    // busy-only test a Worker Type that is working perfectly was folded away and one that
     // was failing was not: it appeared when it broke and vanished when it was fixed. An
     // operator looking for their Jira worker found nothing on a page whose whole subject
     // is who is doing the work.
     //
     // A deployed process referencing the type is what says an installation uses it, so
     // that keeps a row visible too. It is the same signal the Processes column shows,
-    // which is why that column had to start counting connector, script, rule and user
+    // which is why that column had to start counting worker, script, rule and user
     // tasks before this could lean on it.
     const busy = (t) => t.parked > 0 || t.inFlight > 0 || t.incidents > 0 || pullersOf(workerRows, t.type).length > 0;
     const inUse = (t) => busy(t) || (t.processes || []).length > 0;
@@ -5592,7 +5594,7 @@ async function viewWorkers() {
       </div>
       ${workerRows.length ? `<table data-dt-key="wk-workers">
         <thead><tr>
-          <th>Worker</th><th>Pulls</th><th>Connectors held</th>
+          <th>Worker Instance</th><th>Pulls</th><th>Workers held</th>
           <th class="wk-num">In flight</th><th class="wk-num">Pulled</th>
           <th class="wk-num">Completed</th><th class="wk-num">Failed</th><th class="wk-num">Last seen</th>
         </tr></thead>
@@ -5613,9 +5615,9 @@ async function viewWorkers() {
         leases its first job &mdash; point one at <span class="pill-kv">POST /api/v1/jobs/activate</span>
         and name the job type it serves.</p>`}
       <p class="wk-note">Counters are since this server started and are not restored on restart.
-        <b>In flight</b> is what a worker holds a lease on right now. <b>Connectors held</b> is what a
-        worker reports it has credentials for &mdash; only it knows, since Atlas holds none for a kind
-        it has handed over. Open a worker\u2019s name for the jobs it ran.</p>`;
+        <b>In flight</b> is what a Worker Instance holds a lease on right now. <b>Workers held</b> is
+        what an instance reports it has credentials for &mdash; only it knows, since Atlas holds none
+        for a Worker Type it has handed over. Open an instance\u2019s name for the jobs it ran.</p>`;
 
     // Opening a worker asks for its recent jobs. They are deliberately not part of the
     // polled payload: the variables in them are process data, the endpoint is
@@ -5650,7 +5652,7 @@ async function viewWorkers() {
         <div class="modal-foot">
           <span class="muted small">The last jobs this worker leased, newest first. The top of the
             list is the server\u2019s memory \u2014 a restart empties it, and older jobs age out.
-            Anything under \u201cEarlier\u201d comes from the configured job-history connector and
+            Anything under \u201cEarlier\u201d comes from the configured job-history worker and
             outlives a restart. The durable account of the run itself stays the instance
             timeline.</span>
           <button type="button" class="btn" data-done title="Close this dialog">Done</button>
@@ -5717,7 +5719,7 @@ async function viewWorkers() {
     }).join("")}</div>`;
   }
 
-  // appendHistory adds what the configured clio connector holds, under the ring.
+  // appendHistory adds what the configured clio worker holds, under the ring.
   //
   // It is a second request rather than part of the first because it reaches another
   // service: a dialog that waited on clio before showing anything would make the ring
@@ -5790,7 +5792,7 @@ async function viewWorkers() {
             <td><span class="pill-kv">${esc(c.nowMeans)}</span></td>
           </tr>`).join("")}</tbody>
         </table>
-        <p class="wk-note">These types were given their index before a built-in connector claimed it.
+        <p class="wk-note">These types were given their index before a built-in Worker Type claimed it.
           Jobs already parked under it still carry it, so the engine would hand them to the built-in
           named above, while new jobs of the same type get a fresh index. Nothing is lost yet and the
           server runs normally &mdash; but do not treat these queues as healthy, and say so before the
@@ -5800,9 +5802,9 @@ async function viewWorkers() {
       collisions.innerHTML = "";
     }
 
-    // Connectors nothing can serve. This is the gap handing a credential to a worker
-    // opens up: Atlas used to refuse an unconfigured connector when it held every
-    // credential itself, and for a kind it has handed over it no longer can. The
+    // Workers nothing can serve. This is the gap handing a credential to a Worker
+    // Instance opens up: Atlas used to refuse an unconfigured worker when it held every
+    // credential itself, and for a Worker Type it has handed over it no longer can. The
     // engine knows which names models ask for and the workers report which they hold;
     // only here do the two halves meet, which is why this is worth a card of its own
     // rather than a column somewhere.
@@ -5815,10 +5817,10 @@ async function viewWorkers() {
     if (missing.length) {
       gaps.hidden = false;
       gaps.innerHTML = `
-        <div class="wk-head"><b>Connectors nothing can serve</b>
+        <div class="wk-head"><b>Workers nothing can serve</b>
           <span class="muted small">${missing.length} name${missing.length === 1 ? "" : "s"}</span></div>
         <table class="no-enhance">
-          <thead><tr><th>Connector</th><th>Kind</th><th>Used by</th></tr></thead>
+          <thead><tr><th>Worker</th><th>Worker type</th><th>Used by</th></tr></thead>
           <tbody>${missing.map((m) => `<tr class="wk-stuck">
             <td><b>${esc(m.name)}</b></td>
             <td><span class="pill-kv">${esc(m.jobType)}</span></td>
@@ -5827,10 +5829,10 @@ async function viewWorkers() {
               || `<span class="muted">&mdash;</span>`}</td>
           </tr>`).join("")}</tbody>
         </table>
-        <p class="wk-note">These models name a connector, and neither Atlas nor any worker seen this run
-          holds a configuration for it &mdash; so their tasks will park. Configure the name on a worker
-          that serves this kind, or point the model at one that is configured. A worker that has not
-          polled yet reports nothing, so a name may clear itself on its first poll. Only versions that
+        <p class="wk-note">These models name a worker, and neither Atlas nor any Worker Instance seen
+          this run holds a configuration for it &mdash; so their tasks will park. Configure the name on
+          an instance that serves this Worker Type, or point the model at one that is configured. An
+          instance that has not polled yet reports nothing, so a name may clear itself on its first poll. Only versions that
           can still create a job are counted: each process&rsquo;s current one, plus any an instance is
           running on or a call activity is pinned to &mdash; a version you superseded is not one of them.</p>`;
     } else {
@@ -5909,7 +5911,7 @@ async function viewMailOutbox() {
         <button class="btn ghost danger" id="clear" title="Delete all messages from the preview outbox">Empty outbox</button>
       </span>
     </div>
-    <p class="muted">Messages a mail connector using the <b>preview</b> provider
+    <p class="muted">Messages a mail worker using the <b>preview</b> provider
     delivered here instead of sending them (ADR-0150) — the zero-configuration way to
     see what a mail task actually produces, before a real provider exists. The message
     is framed by the same code that sends over SMTP or the Gmail API, so what you read
@@ -5930,8 +5932,8 @@ async function viewMailOutbox() {
     }
     const msgs = (data && data.messages) || [];
     if (!msgs.length) {
-      list.innerHTML = `<p class="empty">Nothing here yet. Add a mail connector with the
-        <b>Preview</b> provider under Organization &rsaquo; Connectors, point a mail task at it,
+      list.innerHTML = `<p class="empty">Nothing here yet. Add a mail worker with the
+        <b>Preview</b> provider under Console &rsaquo; Workers, point a mail task at it,
         and every message it sends lands here.</p>`;
       return;
     }
@@ -8160,9 +8162,9 @@ function setTitle(label) {
 // Views with a dynamic subject — a diagram, an instance, a decision — refine it once
 // their data loads (see setTitle calls in the editor/live/replay mounts).
 // viewRepository is the community repository gallery (ADR-0081): browse the
-// curated catalog of connectors, service tasks and script tasks and install one
+// curated catalog of workers, service tasks and script tasks and install one
 // into this server's template store. The trust split is the load-bearing UI
-// signal — a data-only connector/service task installs in one click ("Data only"),
+// signal — a data-only worker/service task installs in one click ("Data only"),
 // while a script task carries code, so it reads "Runs code" and installs through a
 // review affordance (and is admin-gated server-side). No secret ever travels in a
 // shared package.
@@ -8172,16 +8174,16 @@ async function viewRepository() {
       <h1>Repository</h1>
       <button class="btn neutral" id="repo-refresh" title="Reload the repository catalog">Refresh</button>
     </div>
-    <p class="muted">Connectors, service tasks and scripts the community already built,
+    <p class="muted">Workers, service tasks and scripts the community already built,
     packaged as element templates. Install one and it lands in your palette ready to
-    configure. Data-only connectors install in a click; a script task carries code, so it
+    configure. Data-only workers install in a click; a script task carries code, so it
     is imported for review. Credentials never travel in a shared package — you connect
     those on your server.</p>
     <div class="ops-toolbar">
-      <input id="repo-q" class="filter-input" type="search" placeholder="Search connectors, tasks and scripts…" aria-label="Search the repository">
+      <input id="repo-q" class="filter-input" type="search" placeholder="Search workers, tasks and scripts…" aria-label="Search the repository">
       <div class="seg" id="repo-kinds" role="tablist">
         <button class="active" data-kind="" role="tab" title="Show all packages">All</button>
-        <button data-kind="connector" role="tab" title="Show connectors only">Connectors</button>
+        <button data-kind="connector" role="tab" title="Show workers only">Workers</button>
         <button data-kind="service-task" role="tab" title="Show service tasks only">Service tasks</button>
         <button data-kind="script-task" role="tab" title="Show script tasks only">Script tasks</button>
       </div>
@@ -8189,7 +8191,9 @@ async function viewRepository() {
     <div id="repo-grid" class="repo-grid"><div class="card empty">Loading…</div></div>`;
 
   const grid = document.getElementById("repo-grid");
-  const kindLabel = { "connector": "Connector", "service-task": "Service task", "script-task": "Script task" };
+  // The catalog's own "connector" kind keeps its spelling — a package authored
+  // elsewhere carries it — but what an operator reads is the Worker vocabulary.
+  const kindLabel = { "connector": "Worker", "service-task": "Service task", "script-task": "Script task" };
   let packages = [];
   let installed = new Set();
   let kind = "";
@@ -8296,7 +8300,7 @@ function routeTitle(path) {
     [/^#\/console\/logs$/, "Logs · Console"],
     [/^#\/console\/backup$/, "Backup · Console"],
     [/^#\/console\/org$/, "Organization · Console"],
-    [/^#\/console\/connectors$/, "Connectors · Console"],
+    [/^#\/console\/workers$/, "Workers · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
     [/^#\/modeler\/form\//, "Form · Modeler"],
@@ -8332,6 +8336,13 @@ async function route() {
   navGen++; // supersede any view handler still awaiting from a previous navigation
 
   const hash = location.hash || "#/console";
+  // #/console/connectors is the pre-ADR-0203 spelling of the Workers page. A
+  // bookmark or an old link still resolves, by rewriting the hash rather than by
+  // carrying a second route: one page, one name, and the old URL lands on it.
+  if (/^#\/console\/connectors\b/.test(hash)) {
+    location.replace(hash.replace("#/console/connectors", "#/console/workers"));
+    return;
+  }
   const [path, arg] = [hash.replace(/\?.*$/, ""), hash];
   let appId = "console";
 
@@ -8366,7 +8377,7 @@ async function route() {
     if (path === "#/console/logs") return await viewConsoleLogs();
     if (path === "#/console/backup") return await viewConsoleBackup();
     if (path === "#/console/org") return await viewConsoleOrg();
-    if (path === "#/console/connectors") return await viewConsoleConnectors();
+    if (path === "#/console/workers") return await viewConsoleWorkers();
     if (path === "#/console/ai-access") {
       const gen = navGen;
       return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
