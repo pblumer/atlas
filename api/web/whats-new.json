@@ -15,8 +15,8 @@
         "de": "Eine Webseite auszulesen ergab bisher eine flache Liste: entweder den Text jedes Treffers oder ein Attribut jedes Treffers — nie beides, nie gruppiert. Eine Artikelliste oder eine Zinstabelle brauchte deshalb zwei Tasks mit zwei Listen, und die erste Zeile ohne Link verschob jede weitere Zuordnung um eins. Ein Scraping-Task nimmt jetzt Feldzeilen: Der Selektor wählt die Zeile, jedes Feld wählt eine Zelle, und jeder Treffer kommt als ein Objekt an. Ein Feld, das nichts findet, ist vorhanden und leer — die Zeilen behalten ihre Gestalt. Feeds haben dieselbe Sorgfalt bekommen: Ein Eintrag trägt jetzt seine eigene Kennung zum Deduplizieren, dazu Autor, Kategorien und Bild. Und Seiten in älteren Zeichensätzen, RSS-1.0-Feeds und Sites, die anonyme Anfragen abweisen, scheitern nicht mehr so still wie bisher."
       },
       "link": {
-        "label": "ADR-0118",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0118-web-scraping-connector.md"
+        "label": "ADR-0231",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0231-webscrape-structured-extraction.md"
       },
       "tags": [
         "Modeler",

@@ -15,7 +15,7 @@ _Changed_ / _Removed_ for each version.
 ### Added
 
 - **Web scraping: one row is one record, and the fetch survives the real web**
-  ([ADR-draft-webscrape-structured-extraction](docs/adr/draft-webscrape-structured-extraction.md)).
+  ([ADR-0231](docs/adr/0231-webscrape-structured-extraction.md)).
   An `<atlas:webscrapeConnector>` now takes `<atlas:scrapeField>` children. With at
   least one, the selector picks **items** rather than values and every match becomes
   an object carrying the named fields — title *and* link off the same row, instead of

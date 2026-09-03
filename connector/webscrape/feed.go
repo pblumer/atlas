@@ -10,7 +10,7 @@ import (
 )
 
 // FeedEntry is the stable structured result one RSS item or Atom entry produces
-// (ADR-0190, extended by ADR-draft-webscrape-structured-extraction). Every field is
+// (ADR-0190, extended by ADR-0231). Every field is
 // always serialized; a source that omits one leaves it empty rather than making
 // Atlas invent data. Categories is always a list, empty when the source names none.
 //
@@ -30,7 +30,7 @@ type FeedEntry struct {
 
 // RSS 2.0 / 0.9x: <rss><channel><item>. RSS 1.0 is RDF and puts the items beside the
 // channel instead: <rdf:RDF><channel/><item>. Both are what an author means by
-// format="rss", so both decode into the same items (ADR-draft-webscrape-structured-extraction).
+// format="rss", so both decode into the same items (ADR-0231).
 type rssDocument struct {
 	XMLName xml.Name   `xml:"rss"`
 	Channel rssChannel `xml:"channel"`
@@ -115,7 +115,7 @@ type atomCategory struct {
 // documents that exist rather than documents that validate: CharsetReader accepts a
 // feed that declares a non-UTF-8 encoding (a plain decoder fails the job outright on
 // ISO-8859-1), and the HTML entity table plus non-strict mode survive the &nbsp; and
-// bare & that publishers ship (ADR-draft-webscrape-structured-extraction).
+// bare & that publishers ship (ADR-0231).
 func feedDecoder(body io.Reader) *xml.Decoder {
 	dec := xml.NewDecoder(body)
 	dec.CharsetReader = charset.NewReaderLabel
@@ -313,7 +313,7 @@ func atomImage(links []atomLink) string {
 // description returns an entry's summary as the model asked for it: verbatim by
 // default, or with its markup removed when the task authored plainText. Publishers
 // routinely put HTML inside description, which renders as tags wherever a process
-// puts it — a mail body, a user task, a chat message (ADR-draft-webscrape-structured-extraction).
+// puts it — a mail body, a user task, a chat message (ADR-0231).
 func description(raw string, plainText bool) string {
 	if !plainText {
 		return strings.TrimSpace(raw)

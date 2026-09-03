@@ -59,7 +59,7 @@
         window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get(id));
       window.__selectFeed = () => select("Activity_feed");
       // The structured-HTML task: item selector plus scrapeField children
-      // (ADR-draft-webscrape-structured-extraction).
+      // (ADR-0231).
       window.__selectRates = () => select("Activity_rates");
       window.__xml = async () => (await window.__atlasModeler.saveXML({ format: true })).xml;
       window.__ready = true;

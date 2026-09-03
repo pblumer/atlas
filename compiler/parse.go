@@ -2552,7 +2552,7 @@ type xmlRemedyConnector struct {
 
 // A web-scraping connector task's parameters, carried on a service task as an
 // <atlas:webscrapeConnector> extension (ADR-0118/0190,
-// ADR-draft-webscrape-structured-extraction). url and resultVariable are always
+// ADR-0231). url and resultVariable are always
 // required. format is a structural literal (html by default, rss, or atom); maxItems
 // is an optional non-negative structural bound. HTML requires selector and may name
 // attribute; RSS/Atom prohibit both. url and the HTML selector may be

@@ -174,7 +174,7 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 			// A structured HTML scrape. The field list decides the result's *shape*:
 			// a worker that receives the item selector without the fields returns the
 			// items' text as strings, and the model reads .zins off a string
-			// (ADR-draft-webscrape-structured-extraction).
+			// (ADR-0231).
 			name: "webscrape-fields",
 			element: `<atlas:webscrapeConnector url="https://example.com/zinsen" selector="tr.row" absoluteLinks="true" resultVariable="zinsen">` +
 				`<atlas:scrapeField name="laufzeit" selector="td.term"/>` +

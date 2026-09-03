@@ -143,7 +143,7 @@ func TestWebScrapeFieldScrapeWithoutMatchesWritesAnEmptyArray(t *testing.T) {
 	}
 }
 
-// A client that predates ADR-draft-webscrape-structured-extraction cannot assemble
+// A client that predates ADR-0231 cannot assemble
 // objects. The job fails with a message saying so rather than silently returning the
 // wrong shape.
 func TestWebScrapeFieldScrapeNeedsARecordClient(t *testing.T) {

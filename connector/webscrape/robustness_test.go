@@ -85,7 +85,7 @@ func TestExtractRSSReadsRDFFeeds(t *testing.T) {
 	}
 }
 
-// The entry fields ADR-draft-webscrape-structured-extraction added, from where RSS
+// The entry fields ADR-0231 added, from where RSS
 // publishers actually put them.
 func TestExtractRSSReadsIdentityAuthorCategoriesAndImage(t *testing.T) {
 	feed := `<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"

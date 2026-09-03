@@ -29,7 +29,7 @@ type Job struct {
 	// AbsoluteLinks resolves href/src reads against the fetched document's final URL
 	// (HTML); PlainText strips markup from a feed entry's description. Both are
 	// compile-time structure like Format, and both default to the behavior every
-	// model authored before ADR-draft-webscrape-structured-extraction has.
+	// model authored before ADR-0231 has.
 	AbsoluteLinks bool `json:"absoluteLinks,omitempty"`
 	PlainText     bool `json:"plainText,omitempty"`
 	// Result names the process variable the scraped values are written to; empty
@@ -52,7 +52,7 @@ type Result struct {
 
 // Items is what a run's result becomes as the value of the process variable: the
 // scraped strings for an HTML scrape with no fields, one object per match for a
-// scrape that authored fields (ADR-draft-webscrape-structured-extraction), or the
+// scrape that authored fields (ADR-0231), or the
 // feed's entries as {title, link, description, published, guid, author, categories,
 // image} objects for RSS/Atom (ADR-0190, extended).
 //

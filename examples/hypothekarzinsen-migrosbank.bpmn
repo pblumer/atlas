@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Hypothekarzinsen der Migros Bank (ADR-0118 + ADR-draft-webscrape-structured-extraction)
+  Hypothekarzinsen der Migros Bank (ADR-0118 + ADR-0231)
   — eine HTML-Tabelle als Prozessdaten, jeden Morgen.
 
   Das Gegenstück zu blick-schlagzeilen.bpmn: dort liefert die Quelle einen fertig
@@ -23,7 +23,7 @@
 
   1. **Ein Treffer ist ein Datensatz.** Der Selektor wählt die Tabellenzeile, die
      scrapeField-Kinder wählen darin die einzelnen Zellen. Ohne Felder wäre der Task das,
-     was er vor ADR-draft-webscrape-structured-extraction war: eine flache Liste von
+     was er vor ADR-0231 war: eine flache Liste von
      Strings. Beides gibt es weiterhin; welche Gestalt herauskommt, entscheidet das
      Modell.
   2. **Der Selektor identifiziert die Tabelle über ihren Inhalt.** Die Seite trägt

@@ -1490,7 +1490,7 @@ func compileWebScrapeConnectorTask(b *Builder, st xmlServiceTask, retries int32)
 // webScrapeFields validates one task's authored field list. A name is required and
 // unique — it is the object key the value lands under, so an unnamed or duplicated
 // field would silently drop a value the author asked for
-// (ADR-draft-webscrape-structured-extraction).
+// (ADR-0231).
 func webScrapeFields(taskID string, fields []xmlScrapeField) ([]WebScrapeFieldConfig, error) {
 	if len(fields) == 0 {
 		return nil, nil

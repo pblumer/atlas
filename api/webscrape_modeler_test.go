@@ -92,7 +92,7 @@ func TestWebScrapeModelerDeclaresFeedAuthoringFields(t *testing.T) {
 		`showIf: (v) => !v.format || v.format === "html"`,
 		// The structured-HTML half: the panel must offer the field rows, the two
 		// mode flags, and the child type the moddle declares
-		// (ADR-draft-webscrape-structured-extraction).
+		// (ADR-0231).
 		`key: "fields"`,
 		`childType: "atlas:ScrapeField"`,
 		`valueKey: "selector"`,

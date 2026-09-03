@@ -5385,7 +5385,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			// HTML and compiles the (empty) selector, which fails the job with a
 			// complaint about a CSS selector the task never authored. fields decides
 			// the same for the result's *shape* — objects or strings
-			// (ADR-draft-webscrape-structured-extraction).
+			// (ADR-0231).
 			"format": j.Format, "maxItems": j.MaxItems,
 			"fields": j.Fields, "absoluteLinks": j.AbsoluteLinks, "plainText": j.PlainText,
 			"resultVariable": j.Result,

@@ -123,7 +123,7 @@ func TestExtractRecordsResolvesRelativeLinks(t *testing.T) {
 }
 
 // Without the flag the page's own spelling survives, so every model authored before
-// ADR-draft-webscrape-structured-extraction keeps the value it reads today.
+// ADR-0231 keeps the value it reads today.
 func TestExtractRecordsLeavesRelativeLinksAloneByDefault(t *testing.T) {
 	got := parseRecordsPage(t, recordsRequest(Field{Name: "link", Selector: "a", Attribute: "href"}),
 		"https://example.com/de/hypotheken/zinsen.html")

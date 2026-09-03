@@ -31,7 +31,7 @@ func (f WebScrapeFormat) String() string {
 }
 
 // WebScrapeFieldConfig is one authored field of a structured HTML scrape
-// (ADR-draft-webscrape-structured-extraction). Name is required and unique within a
+// (ADR-0231). Name is required and unique within a
 // task; Selector is optional and relative to the matched item (empty = the item
 // itself); Attribute is optional (empty = the element's text).
 type WebScrapeFieldConfig struct {
@@ -44,7 +44,7 @@ type WebScrapeFieldConfig struct {
 // XML compiler. It extends the original WebScrapeConfig without breaking callers of
 // AddWebScrapeConnectorTask: Format is explicit and MaxItems is the deterministic
 // first-N bound (0 = unlimited). Fields, AbsoluteLinks and PlainText are the
-// structured-extraction additions (ADR-draft-webscrape-structured-extraction); their
+// structured-extraction additions (ADR-0231); their
 // zero values are exactly the pre-existing behavior.
 type WebScrapeExtractionConfig struct {
 	Url           RestExpr
@@ -91,7 +91,7 @@ func (b *Builder) AddWebScrapeExtractionTask(cfg WebScrapeExtractionConfig) int3
 }
 
 // internScrapeFields interns one authored field list. Nil in, nil out: a task with no
-// fields keeps the pre-ADR-draft-webscrape-structured-extraction string-array result.
+// fields keeps the pre-ADR-0231 string-array result.
 func (b *Builder) internScrapeFields(fields []WebScrapeFieldConfig) []ScrapeField {
 	if len(fields) == 0 {
 		return nil

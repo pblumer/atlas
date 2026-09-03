@@ -85,7 +85,7 @@ func TestWebScrapeConnectorWritesStructuredFeedArray(t *testing.T) {
 		t.Fatalf("entries = %d, want 2", len(entries))
 	}
 	for i, entry := range entries {
-		// Every key is always present, including the ones ADR-draft-webscrape-structured-extraction
+		// Every key is always present, including the ones ADR-0231
 		// added: a model reads entry.guid without checking whether this publisher set one.
 		for _, key := range []string{"title", "link", "description", "published", "guid", "author", "categories", "image"} {
 			if _, ok := entry[key]; !ok {

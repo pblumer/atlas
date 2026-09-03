@@ -3135,7 +3135,7 @@ const SERVICE_TASK_KINDS = [
   glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5b5bd6"/><g fill="none" stroke="#fff" stroke-width="1.1"><path d="M8 2.4v11.2M2.4 8h11.2M4 4l8 8M12 4l-8 8"/><circle cx="8" cy="8" r="2.6"/><circle cx="8" cy="8" r="5"/></g></svg>`,
   ext: "atlas:WebscrapeConnector",
   // Feed formats do not have HTML selector semantics (ADR-0190), and HTML has no
-  // feed description to strip (ADR-draft-webscrape-structured-extraction).
+  // feed description to strip (ADR-0231).
   // Normalizing before the generic upsert means switching modes cannot leave hidden
   // attributes behind and produce a model the compiler correctly rejects.
   normalize: (props) => {

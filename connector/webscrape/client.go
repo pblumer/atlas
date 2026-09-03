@@ -3,7 +3,7 @@
 // matching a CSS selector through the job path (ADR-0118), mirroring how the rest
 // package calls a model-authored HTTP endpoint (ADR-0067). ADR-0190 extends the same
 // connector with explicit RSS and Atom extraction modes, and
-// ADR-draft-webscrape-structured-extraction adds per-item fields, richer feed
+// ADR-0231 adds per-item fields, richer feed
 // entries, and a fetch that copes with the encodings and feed flavors real
 // publishers ship. The integration inherits the job protocol's durability and
 // non-blocking properties (ADR-0007):
@@ -49,7 +49,7 @@ const (
 // an anonymous script and is refused outright by a large share of sites, which
 // reaches the author as a bare 403 with nothing to act on. An honest identity with a
 // project link is something a site operator can allow — or block deliberately, which
-// is the point (ADR-draft-webscrape-structured-extraction).
+// is the point (ADR-0231).
 const UserAgent = "Atlas-Webscrape/1.0 (+https://github.com/pblumer/atlas)"
 
 // maxBodyBytes bounds one fetched document. In-process connector workers run on the
@@ -99,7 +99,7 @@ type FeedClient interface {
 	ScrapeFeed(ctx context.Context, r Request) ([]FeedEntry, error)
 }
 
-// RecordClient is the optional structured-HTML half (ADR-draft-webscrape-structured-extraction):
+// RecordClient is the optional structured-HTML half (ADR-0231):
 // one object per selector match, keyed by the task's authored field names. Separate
 // from Client for the same reason FeedClient is — a custom client written for
 // ADR-0118 keeps compiling.
@@ -290,7 +290,7 @@ func extractMatches(doc *goquery.Document, r Request, base *url.URL) ([]string, 
 	return out, nil
 }
 
-// extractRecords is the field result (ADR-draft-webscrape-structured-extraction): the
+// extractRecords is the field result (ADR-0231): the
 // selector picks items, and each match becomes one object carrying every authored
 // field. A field whose selector matches nothing — or whose attribute the element does
 // not carry — is present and empty, so every item has the same shape and a FEEL

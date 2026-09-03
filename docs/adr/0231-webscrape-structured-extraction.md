@@ -1,4 +1,4 @@
-# ADR-DRAFT: Structured HTML extraction, richer feed entries, and a fetch that survives the real web
+# ADR-0231: Structured HTML extraction, richer feed entries, and a fetch that survives the real web
 
 - **Status:** Proposed
 - **Date:** 2026-09-03
