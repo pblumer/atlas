@@ -2230,6 +2230,11 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
    resizer stays put so it can be reopened. */
 #pane-design .fjs-pgl-palette-container,
 #pane-design .fjs-pgl-properties-container { position: relative; }
+/* The side resizer widens the properties *column*, but form-js pins the panel inside
+   it to a fixed --properties-panel-width (250px). Left alone, dragging the column wider
+   grows a white strip beside the panel instead of the panel, and dragging it narrower
+   clips the panel instead of shrinking it — so let the panel follow its column. */
+#pane-design .fjs-pgl-properties-container .fjs-properties-container { width: 100%; min-width: 0; }
 #pane-design .fv-rail { width: 0 !important; min-width: 0 !important; overflow: hidden; }
 #pane-design .fv-railbtn {
   position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 8;

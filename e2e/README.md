@@ -193,6 +193,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   instead of leaving a second one behind. Drives the real `mountFormEditor` — the actual
   vendored form-js properties panel — against a mock `api` that captures the save.
 
+- **`form-side-columns.spec.mjs`** ([ADR-0028](../docs/adr/0028-forms-and-the-tasks-app.md)):
+  the form editor's **resizable side columns**. The drag sets the width of the *column*,
+  but the vendored form-js Playground pins the properties panel inside it to a fixed
+  250px, so a column pulled wider grew white space beside the panel and a column pulled
+  narrower clipped it. The panel must be exactly as wide as its column — at the default
+  width, after a real pointer drag, for a width a previous session left in
+  `localStorage`, and collapsed to its rail, where the editor must take the freed width
+  rather than leave a gap at the right edge.
+
 - **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
   **who is signed in**, in the Users card under Organization. The column must render the
   three states from what the roster carries, and keep itself current *without* reloading
