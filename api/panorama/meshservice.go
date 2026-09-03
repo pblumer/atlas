@@ -2,7 +2,10 @@ package panorama
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
@@ -66,6 +69,84 @@ func NewMesh(loop *runloop.Loop, collect LandscapeCollector, overlays OverlayCol
 
 // HandleGraph serves the whole-instance mesh for the calling principal.
 func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
+	graph, ok := m.derive(w, r)
+	if !ok {
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, graph)
+}
+
+// HandleNotations serves the vocabularies the landscape can be drawn in, with each
+// one's mapping and what it drops (ADR-0211 §8).
+//
+// It is served rather than duplicated in the browser for the reason ADR-0189's
+// connection subset already gives: three things read this table — the picture's
+// labels, the stamp on its image export, and the ArchiMate document generated from
+// it — and a copy in the view would eventually have the picture calling a node one
+// thing while the file called it another.
+//
+// No authorization beyond the route's own: this is a description of a mapping, not
+// of anybody's resources.
+func (m *Mesh) HandleNotations(w http.ResponseWriter, _ *http.Request) {
+	httpapi.JSON(w, http.StatusOK, Notations())
+}
+
+// HandleArchiMate serves the landscape as an ArchiMate Open Exchange document.
+//
+// It derives exactly what HandleGraph derives and writes that, so the file and the
+// picture are the same landscape seen twice rather than two answers to one question.
+// Whatever the caller may not see is missing from both, identically, and the
+// document says how much of it there was.
+func (m *Mesh) HandleArchiMate(w http.ResponseWriter, r *http.Request) {
+	graph, ok := m.derive(w, r)
+	if !ok {
+		return
+	}
+	var at int64
+	if m.now != nil {
+		at = m.now().Unix()
+	}
+	body := ExportArchiMate(graph, ArchiMateExport{Instance: r.Host, GeneratedAt: at})
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	// Named for the instance and the day, because the second thing anybody does with
+	// these is put two of them side by side.
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=%q", archiMateFilename(r.Host, at)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
+}
+
+// archiMateFilename is the download's name. The host is sanitised into it rather
+// than interpolated: a Host header is caller-supplied, and it must not be able to
+// put a quote or a path separator into a response header.
+func archiMateFilename(host string, at int64) string {
+	var b strings.Builder
+	b.WriteString("atlas-landscape")
+	var wrote int
+	for _, r := range host {
+		if wrote >= 40 {
+			break
+		}
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '.':
+			if wrote == 0 {
+				b.WriteByte('-')
+			}
+			b.WriteRune(r)
+			wrote++
+		}
+	}
+	if at > 0 {
+		b.WriteString("-" + time.Unix(at, 0).UTC().Format("20060102"))
+	}
+	b.WriteString(".xml")
+	return b.String()
+}
+
+// derive is the shared half of every mesh answer: collect on the loop, ask the peers
+// off it, derive off it. Reports whether it produced a graph; when it did not it has
+// already written the refusal.
+func (m *Mesh) derive(w http.ResponseWriter, r *http.Request) (Graph, bool) {
 	// Read before the loop turn rather than after the derivation, so the stamp is the
 	// oldest moment any fact in this answer could have been read. A picture that
 	// dates itself later than its contents is the one an export must never carry:
@@ -100,11 +181,11 @@ func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	})
 	if !ran {
 		httpapi.Error(w, http.StatusServiceUnavailable, "server is shutting down")
-		return
+		return Graph{}, false
 	}
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "collect landscape: "+err.Error())
-		return
+		return Graph{}, false
 	}
 	// Asking the peers happens here, off the loop and before the derivation, for the
 	// reason [ReachOut] gives: the loop is the single writer, and a network call is
@@ -115,7 +196,7 @@ func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	// Derived off the loop: this is pure CPU over a snapshot the loop already
 	// produced, and holding the single-writer goroutine through it would make every
 	// other design-time request wait on one caller's graph.
-	httpapi.JSON(w, http.StatusOK, DeriveGraph(land, Options{
+	return DeriveGraph(land, Options{
 		MaxNodes: m.maxNodes, Overlays: overlays, ObservedAt: observedAt,
-	}))
+	}), true
 }

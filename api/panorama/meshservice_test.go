@@ -285,3 +285,127 @@ func TestMeshStampsACollapsedLandscapeToo(t *testing.T) {
 		t.Errorf("ObservedAt = %d on a collapsed landscape, want %d", g.ObservedAt, meshObservedAt)
 	}
 }
+
+// TestMeshServesTheNotationMapping. Three things read this table — the picture's
+// labels, the stamp on its image export, and the ArchiMate document generated from
+// the same landscape — and it is served rather than duplicated in the browser so
+// they cannot come to disagree about what a node is called.
+func TestMeshServesTheNotationMapping(t *testing.T) {
+	mesh := NewMesh(meshLoop(t), func(*http.Request) (Landscape, ReachOut, error) {
+		return Landscape{}, nil, nil
+	}, nil, 0, meshNow)
+
+	rec := httptest.NewRecorder()
+	mesh.HandleNotations(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/notations", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+	}
+	var served []Notation
+	if err := json.NewDecoder(rec.Body).Decode(&served); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(served) < 2 {
+		t.Fatalf("served %d notations, want the derived one and at least one projection", len(served))
+	}
+	if served[0].ID != NotationAtlas || served[0].Projection {
+		t.Errorf("first = %#v, want the derived vocabulary, which is not a projection", served[0])
+	}
+	for _, n := range served[1:] {
+		if !n.Projection {
+			t.Errorf("%q is offered as something other than a projection", n.ID)
+		}
+		if len(n.Loss) == 0 {
+			t.Errorf("%q declares no loss; a projection that drops nothing is not one", n.ID)
+		}
+		if n.MappingVersion == 0 {
+			t.Errorf("%q carries no mapping version", n.ID)
+		}
+	}
+}
+
+// TestMeshExportsArchiMateFromTheSameLandscape. The file and the picture have to be
+// one landscape seen twice: a second collection could answer a different question,
+// and a reader comparing them would have no way to tell which was true.
+func TestMeshExportsArchiMateFromTheSameLandscape(t *testing.T) {
+	collected := 0
+	mesh := NewMesh(meshLoop(t), func(*http.Request) (Landscape, ReachOut, error) {
+		collected++
+		return Landscape{
+			Applications: []Application{app("a1", "Billing")},
+			Processes:    []Process{proc(1, "invoice", "Invoice", "a1")},
+		}, nil, nil
+	}, nil, 0, meshNow)
+
+	rec := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh/archimate", nil)
+	request.Host = "atlas.example.test"
+	mesh.HandleArchiMate(rec, request)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+	}
+	if collected != 1 {
+		t.Errorf("the collector ran %d times, want once", collected)
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "application/xml") {
+		t.Errorf("Content-Type = %q", got)
+	}
+	// Offered as a download and named for the instance and the day, because the
+	// second thing anybody does with these is put two of them side by side.
+	disposition := rec.Header().Get("Content-Disposition")
+	if !strings.Contains(disposition, "attachment") || !strings.Contains(disposition, "atlas.example.test") {
+		t.Errorf("Content-Disposition = %q", disposition)
+	}
+	// And what it serves is a model Atlas itself would import.
+	if result := Validate(rec.Body.Bytes()); !result.Valid {
+		t.Fatalf("the served document is not a valid model: %#v", result.Problems)
+	}
+}
+
+// TestArchiMateExportRefusesWhenTheLoopIsClosing. Same rule as the graph: an
+// unanswered read is not an empty landscape, and an empty ArchiMate model is a
+// claim that the server runs nothing.
+func TestArchiMateExportRefusesWhenTheLoopIsClosing(t *testing.T) {
+	mesh := NewMesh(stoppedLoop(), func(*http.Request) (Landscape, ReachOut, error) {
+		return Landscape{}, nil, nil
+	}, nil, 0, meshNow)
+
+	rec := httptest.NewRecorder()
+	mesh.HandleArchiMate(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh/archimate", nil))
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "<model") {
+		t.Errorf("body = %s, want a refusal rather than a model", rec.Body)
+	}
+}
+
+// TestArchiMateExportAsksPeersOffTheLoop is invariant I3 on the second reader of the
+// same path. The export derives the landscape exactly as the graph does, which
+// includes asking the deployment targets — and that call must no more hold the
+// single writer here than it does there.
+func TestArchiMateExportAsksPeersOffTheLoop(t *testing.T) {
+	loop := meshLoop(t)
+	var loopWasFree bool
+	mesh := NewMesh(loop, func(*http.Request) (Landscape, ReachOut, error) {
+		return Landscape{
+				Applications: []Application{app("a1", "Billing")},
+				Targets:      []Target{{ID: "t1", Name: "Production"}},
+			}, func(_ context.Context, _ *Landscape) {
+				// A deadlock rather than a failure if this ran on the loop.
+				loop.Do(func() { loopWasFree = true })
+			}, nil
+	}, nil, 0, meshNow)
+
+	rec := httptest.NewRecorder()
+	mesh.HandleArchiMate(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh/archimate", nil))
+
+	if !loopWasFree {
+		t.Fatal("the run loop was not free while the peers were asked")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+	}
+}

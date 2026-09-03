@@ -464,6 +464,19 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/panorama/mesh", s.panoramaMesh.HandleGraph, apiOp{
 			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Derived landscape graph", tObject())}},
+		// The vocabularies the landscape can be drawn in, with each one's mapping and
+		// what it drops (ADR-0211 §8). Served rather than duplicated in the browser:
+		// the picture's labels, its image export's stamp and the ArchiMate document
+		// below all read this one table, and copies of it would drift apart.
+		{"GET", "/api/v1/panorama/notations", s.panoramaMesh.HandleNotations, apiOp{
+			summary: "List the notations the derived landscape can be projected into, with mapping and loss (ADR-0211)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("Notation mappings", tArray())}},
+		// The same landscape as an ArchiMate Open Exchange document. A *model* export
+		// in ADR-0211 §10's sense — structure only, no observation state — and it says
+		// in its own documentation that it was generated rather than drawn.
+		{"GET", "/api/v1/panorama/mesh/archimate", s.panoramaMesh.HandleArchiMate, apiOp{
+			summary: "Export the derived landscape as an ArchiMate Open Exchange document, filtered for the caller (ADR-0211)", tag: "Panorama", role: RoleModeler,
+			resp: xmlBody("ArchiMate Open Exchange XML")}},
 		{"GET", "/api/v1/panorama/models", s.panorama.HandleList, apiOp{
 			summary: "List application-owned Panorama model metadata visible to the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Panorama models", tArray())}},
