@@ -12,6 +12,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
+	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/mail"
@@ -148,6 +149,37 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 			fields: map[string]any{
 				"operation": "search", "baseDN": "ou=groups,dc=example,dc=com",
 				"scope": "one", "filter": "(cn=Vertrieb)", "resultVariable": "gruppe",
+			},
+		},
+		{
+			// A clio write. The event *body* is the one payload field no worker could
+			// reconstruct: it is the task's input mappings, or every variable it sees,
+			// which lives only in engine state (ADR-0036/0174). The idempotency key
+			// travels for the same reason REST's does — it is the job key, and a retry
+			// must write the same event once.
+			name:    "clio-write",
+			element: `<atlas:clioConnector connector="events" operation="write" subject="/kunden/42" eventType="kunde.angelegt"/>`,
+			jobType: compiler.ClioWriteJobType,
+			want:    "clio",
+			fields: map[string]any{
+				"connector": "events", "operation": "write",
+				"subject": "/kunden/42", "eventType": "kunde.angelegt",
+				"data": map[string]any{
+					"userDN": "cn=ada,dc=example,dc=com", "tenant": "contoso",
+					"impact": "2-Significant", "ldifText": `dn: cn=ada\nobjectClass: person`,
+				},
+			},
+		},
+		{
+			// A clio read: no body, a limit, and a result variable — the half a write
+			// does not have, and the half the worker writes back.
+			name:    "clio-read",
+			element: `<atlas:clioConnector connector="events" operation="read" subject="/kunden/42" limit="25" resultVariable="ereignisse"/>`,
+			jobType: compiler.ClioReadJobType,
+			want:    "clio",
+			fields: map[string]any{
+				"connector": "events", "operation": "read", "subject": "/kunden/42",
+				"limit": float64(25), "resultVariable": "ereignisse",
 			},
 		},
 		{
@@ -422,6 +454,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.MsSqlJobTypeIndex", sqldb.Job{}},
 		{"compiler.AdJobTypeIndex", ad.Job{}},
 		{"compiler.EntraJobTypeIndex", entra.Job{}},
+		{"compiler.ClioWriteJobTypeIndex", clio.Job{}},
 		{"compiler.WebScrapeJobTypeIndex", webscrape.Job{}},
 		{"compiler.RestJobTypeIndex", rest.Job{}},
 	} {

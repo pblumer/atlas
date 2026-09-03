@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Workers",
+    "Connectors"
+  ],
+  "title": {
+    "en": "Event-store tasks moved out of the engine",
+    "de": "Event-Store-Tasks sind aus der Engine ausgezogen"
+  },
+  "summary": {
+    "en": "Writing an event, reading a subject's history, folding its state — until now Atlas did all three from the process that runs the engine, so a slow event store held up work that had nothing to do with it. They run in a worker Atlas starts and supervises itself now. Nothing to configure: the store you set up in Connectors is handed to that worker, including a store you reach without a token.",
+    "de": "Ein Event schreiben, die Historie eines Subjects lesen, seinen Zustand falten — bisher machte Atlas alle drei im Prozess, der die Engine ausführt, sodass ein langsamer Event-Store Arbeit aufhielt, die nichts damit zu tun hatte. Sie laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Der Store, den Sie unter Connectors eingerichtet haben, wird an diesen Worker übergeben — auch einer, den Sie ohne Token erreichen."
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Worker öffnen"
+    },
+    "route": "#/console/workers"
+  }
+}
