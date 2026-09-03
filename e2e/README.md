@@ -65,7 +65,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   a render, so the box being typed in keeps its caret; the report's **numbers carry
   their own magnitude**, with the four duration tiles on one scale, waiting scaled to
   the worst element, utilisation to a full hundred, and each case's duration to the
-  slowest on its page; and stopping a batch leaves what it did readable.
+  slowest on its page; the run is **broken down by the outcome each case reached**,
+  ordered by size, keeping the row of an end event nothing reached and marking it as
+  such — and offering each outcome *once*, which is the regression guard for a
+  registry scan that used to see an element's external label as a second copy of it;
+  and stopping a batch leaves what it did readable.
 
   And the **scenario half**: the checkboxes an author ticks become the expectations a
   build exits on, resolved against the run that happened rather than the dataset in
@@ -188,6 +192,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   task binds to that id) and send the record it is editing, so the save moves the form
   instead of leaving a second one behind. Drives the real `mountFormEditor` — the actual
   vendored form-js properties panel — against a mock `api` that captures the save.
+
+- **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
+  **who is signed in**, in the Users card under Organization. The column must render the
+  three states from what the roster carries, and keep itself current *without* reloading
+  the page — an administrator half-way through a user form must still have it, and what
+  they typed in it, thirty seconds later. The other half is the tab's own report: the
+  activity flag may be set by a keystroke and never by the app's own polling, and with
+  enforcement off there is no session to be present in, so nothing is reported and the
+  column is absent. Drives the real app shell against a routed mock, with Playwright's
+  clock driving both intervals — the timing is part of what is being tested.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 

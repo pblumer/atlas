@@ -200,7 +200,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"key": tInteger(), "processId": tString(), "version": tInteger(), "deployments": tArray(),
 			}))}},
 		{"POST", "/api/v1/validate", s.handleValidate, apiOp{
-			summary: "Validate a BPMN model without deploying — a dry-run compile returning structured problems (errors and warnings) and the engine version, for the Modeler's Problems panel (ADR-0026)", tag: "Deployments", role: RoleModeler,
+			summary: "Validate a BPMN model without deploying — a dry-run compile returning structured problems (errors and warnings) and the engine version, for the Modeler's Problems panel (ADR-0026). Pass ?applicationId= to also resolve each data object's itemSubjectRef against that application's information model and check its member writes and read order (ADR-0230)", tag: "Deployments", role: RoleModeler,
 			req: xmlBody("BPMN 2.0 XML"),
 			resp: jsonBody("Validation problems and the engine version that produced them", schemaObj(map[string]any{
 				"version": tString(), "problems": tArray(),
@@ -272,8 +272,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Read the external variable overrides a process instance received — the \"who changed it\" audit trail, each with actor, scope, variable name, and typed new value (ADR-0098)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Variable overrides", tArray())}},
 		{"GET", "/api/v1/instances/{key}/data-objects", s.handleInstanceDataObjects, apiOp{
-			summary: "Read a process instance's data objects — each with its name, data state, and typed value", tag: "Instances", role: RoleOperator,
+			summary: "Read a process instance's data objects — each with its name, data state, typed value, declared class (itemSubjectRef), collection flag, and the trail of every state it passed through with the element that wrote it", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Instance data objects", tArray())}},
+		{"GET", "/api/v1/instances/{key}/object-graph", s.handleInstanceObjectGraph, apiOp{
+			summary: "Derive a process instance's object diagram — its data objects as UML object nodes with their attributes and business keys, linked by containment and by matching business keys, plus the references this instance cannot resolve (ADR-0230)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Object graph", tObject())}},
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
 			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Instance timeline", tObject())}},
@@ -555,6 +558,37 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/panorama/models/{id}/xml", s.panorama.HandleXML, apiOp{
 			summary: "Export a Panorama model as its original ArchiMate Open Exchange XML (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: xmlBody("ArchiMate Open Exchange XML")}},
+		{"GET", "/api/v1/data-objects", s.handleDataObjectsAcrossInstances, apiOp{
+			summary: "The data-centric index: which instances carry which data, newest instance first — the landscape read from the data's side rather than the process's. Filter with ?class= (the declared itemSubjectRef type) and ?key= (the business key, which is what makes a datum the same one across processes); ?history=true also sweeps finished instances. The answer says how many instances it examined and whether a bound stopped it", tag: "Information model", role: RoleOperator,
+			resp: jsonBody("Data objects across instances", tObject())}},
+		{"GET", "/api/v1/infomodel/subset", s.infomodel.HandleSubset, apiOp{
+			summary: "Read the information model's authoring subset — the class kinds, association kinds, primitive types and multiplicities this build authors, the matrix of what may be drawn between what, and what it deliberately does not author (ADR-0230)", tag: "Information model", role: RoleModeler,
+			resp: jsonBody("Authoring subset", tObject())}},
+		{"GET", "/api/v1/infomodel/models", s.infomodel.HandleList, apiOp{
+			summary: "List information models — the UML class-diagram documents that give a BPMN data object's itemSubjectRef a type to resolve against; filter with ?applicationId=", tag: "Information model", role: RoleModeler,
+			resp: jsonBody("Information models", tArray())}},
+		{"POST", "/api/v1/infomodel/models", s.infomodel.HandleCreate, apiOp{
+			summary: "Start an empty information model for a process application", tag: "Information model", role: RoleModeler,
+			req: jsonBody("New information model", schemaObj(map[string]any{
+				"applicationId": tString(), "name": tString(), "documentation": tString(),
+			}, "applicationId", "name")),
+			resp: jsonBody("Information model", tObject()), status: http.StatusCreated}},
+		{"GET", "/api/v1/infomodel/models/{id}", s.infomodel.HandleGet, apiOp{
+			summary: "Read one information model whole — its classes, their attributes and business keys, its associations, and the validation verdict on all of it", tag: "Information model", role: RoleModeler,
+			resp: jsonBody("Information model", tObject())}},
+		{"PUT", "/api/v1/infomodel/models/{id}", s.infomodel.HandleUpdate, apiOp{
+			summary: "Replace an information model's content. The whole document is sent; a model that does not validate is refused with its findings, and a stale revision is refused as a conflict", tag: "Information model", role: RoleModeler,
+			req: jsonBody("Information model content", schemaObj(map[string]any{
+				"name": tString(), "documentation": tString(), "classes": tArray(),
+				"associations": tArray(), "stores": tArray(), "revision": tInteger(),
+			})),
+			resp: jsonBody("Information model", tObject())}},
+		{"DELETE", "/api/v1/infomodel/models/{id}", s.infomodel.HandleDelete, apiOp{
+			summary: "Delete an information model", tag: "Information model", role: RoleModeler,
+			status: http.StatusNoContent}},
+		{"GET", "/api/v1/infomodel/models/{id}/schema", s.infomodel.HandleSchema, apiOp{
+			summary: "Project one class (?class=Order) to a JSON Schema — the derived, read-only contract a value of that class is checked against, together with what the projection could not carry", tag: "Information model", role: RoleModeler,
+			resp: jsonBody("JSON Schema projection", tObject())}},
 		{"POST", "/api/v1/public-links", s.handleCreatePublicLink, apiOp{
 			summary: "Publish a process: mint a public start link (ADR-0029)", tag: "Forms", role: RoleModeler,
 			req:  jsonBody("Target", schemaObj(map[string]any{"processId": tString()}, "processId")),
@@ -1015,6 +1049,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Authenticated user", tObject())}},
 		{"POST", "/api/v1/auth/logout", s.handleLogout, apiOp{
 			summary: "Log out the current session", tag: "Auth", role: roleAny, resp: jsonBody("Logout result", tObject())}},
+		{"POST", "/api/v1/auth/presence", s.handlePresenceBeacon, apiOp{
+			summary: "Report that the caller's own session is still open, and with active=true that somebody is using it (ADR-0228)", tag: "Auth", role: roleAny,
+			req:  jsonBody("Activity", schemaObj(map[string]any{"active": tBool()})),
+			resp: jsonBody("Accepted", tObject())}},
 		{"GET", "/api/v1/auth/providers", s.handleAuthProviders, apiOp{
 			summary: "List the identity providers this server offers besides the password form — empty unless an operator configured one (ADR-0210)", tag: "Auth", role: roleAny,
 			resp: jsonBody("Configured identity providers", tArray())}},
@@ -1025,7 +1063,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"GET", "/api/v1/users", s.handleListUsers, apiOp{
-			summary: "List user accounts", tag: "Users", role: RoleAdmin, resp: jsonBody("Users", tArray())}},
+			summary: "List user accounts, each with whether somebody is signed in as it right now (ADR-0228)", tag: "Users", role: RoleAdmin, resp: jsonBody("Users", tArray())}},
+		{"GET", "/api/v1/users/presence", s.handleUserPresence, apiOp{
+			summary: "Who is signed in right now: one entry per account holding a live session, online / idle / offline (ADR-0228)", tag: "Users", role: RoleAdmin,
+			resp: jsonBody("Presence", tArray())}},
 		{"GET", "/api/v1/users/assignable", s.handleListAssignableUsers, apiOp{
 			summary: "List users a task can be assigned to", tag: "Users", role: roleAny, resp: jsonBody("Assignable users", tArray())}},
 		{"GET", "/api/v1/principals", s.handleListPrincipals, apiOp{

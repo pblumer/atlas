@@ -45,7 +45,8 @@ func keyArg(desc string) map[string]any {
 // forms, decisions, task completion) are appended from authoringTools.
 func defaultTools() []Tool {
 	tools := append(runtimeTools(), authoringTools()...)
-	return append(tools, collabTools()...)
+	tools = append(tools, collabTools()...)
+	return append(tools, infomodelTools()...)
 }
 
 // runtimeTools are the deploy/instance/inspect tools.
@@ -236,7 +237,9 @@ func runtimeTools() []Tool {
 		{
 			Name: "atlas_instance_data_objects",
 			Description: "Read one process instance's BPMN data objects — each with its name, current data " +
-				"state, and typed value. An instance with no data objects (or an unknown key) returns [].",
+				"state, typed value, declared class (itemSubjectRef) and collection flag, plus the trail of " +
+				"every state it passed through and which element wrote each one. An instance with no data " +
+				"objects (or an unknown key) returns [].",
 			InputSchema: keyArg("The instance key (from atlas_list_instances) whose data objects to read."),
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				key, err := argUint(args, "key")

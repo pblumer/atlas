@@ -152,6 +152,56 @@ async function logout() {
   route();
 }
 
+// ---------- Presence (ADR-0228) ----------
+// The browser tells the server two different things, and keeping them apart is the
+// whole feature. The beacon itself says "this tab is still open"; its `active` flag
+// says "somebody is using it". So the interval keeps running when the tab moves to
+// the background — a window behind another one is still signed in — while the flag
+// is only ever set by a real pointer, key, scroll or touch. That is what lets the
+// Organization page tell somebody at their desk from a tab left open overnight from
+// a laptop that was closed.
+//
+// Nothing here reports what the person is doing: no route, no click target, no
+// count. One boolean per minute, and the server keeps neither it nor a history of
+// it (presence.go).
+const PRESENCE_INTERVAL = 60000;
+let presenceTimer = null;
+let presenceWired = false;
+let presenceActive = false;
+
+const noteActivity = () => { presenceActive = true; };
+
+async function sendPresence() {
+  const active = presenceActive;
+  presenceActive = false;
+  try { await api("POST", "/api/v1/auth/presence", { active }); }
+  catch { /* one missed heartbeat; the next one carries the same story */ }
+}
+
+// startPresence begins reporting, once, for a signed-in session. With enforcement
+// off there is no session to be present in, so it does nothing at all.
+function startPresence() {
+  if (presenceTimer || !AUTH.enabled || !AUTH.user) return;
+  if (!presenceWired) {
+    for (const ev of ["pointerdown", "keydown", "wheel", "touchstart"]) {
+      window.addEventListener(ev, noteActivity, { passive: true, capture: true });
+    }
+    // Coming back to the tab is itself somebody doing something.
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) noteActivity(); });
+    presenceWired = true;
+  }
+  presenceActive = true; // opening the app is an act
+  sendPresence();
+  presenceTimer = setInterval(sendPresence, PRESENCE_INTERVAL);
+}
+
+// stopPresence silences the tab: on the login screen there is nobody to be present.
+function stopPresence() {
+  if (!presenceTimer) return;
+  clearInterval(presenceTimer);
+  presenceTimer = null;
+}
+
 // viewLogin is the sign-in screen shown whenever enforcement is on and no session
 // is active. A successful login re-reads auth and drops the user on the Console.
 function viewLogin() {
@@ -467,6 +517,7 @@ const APPS = [
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "panorama", name: "Panorama", route: "#/panorama/landscape", on: true, role: "modeler" },
+  { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
 ];
 
 // Secondary (in-app) navigation.
@@ -502,6 +553,15 @@ const TOPNAV = {
   panorama: [
     { name: "Landscape", route: "#/panorama/landscape", role: "modeler" },
     { name: "Models", route: "#/panorama", role: "modeler" },
+  ],
+  // The two altitudes of process data, and the reason the UML class diagram was the
+  // right notation: Model is the type level — what an Order *is*, shared across
+  // processes — and Instances is the instance level, the actual objects running
+  // processes carry. UML draws those as two different diagrams, and Atlas already
+  // splits design time from run time the same way.
+  data: [
+    { name: "Model", route: "#/data", role: "modeler" },
+    { name: "Instances", route: "#/data/instances", role: "operator" },
   ],
 };
 
@@ -1935,6 +1995,37 @@ async function viewConsoleOrg() {
   }
 
   const me = AUTH.user;
+
+  // Presence (ADR-0228). The Status column says whether the account
+  // may be used; this one says whether anybody is using it this minute. It is shown
+  // only when login is enforced — with enforcement off there are no sessions, so
+  // every row would read "offline" and mean nothing by it.
+  const showPresence = AUTH.enabled;
+  const ago = (unix) => {
+    if (!unix) return "unknown";
+    const secs = Math.max(0, Math.round(Date.now() / 1000 - unix));
+    if (secs < 60) return "a moment ago";
+    if (secs < 3600) return `${Math.round(secs / 60)} min ago`;
+    if (secs < 86400) return `${Math.round(secs / 3600)} h ago`;
+    return fmtTime(unix);
+  };
+  // Three states, and the title says what each one is actually claiming — including
+  // the one that is easy to over-read: a session whose browser stopped reporting is
+  // offline, not signed in, even though the session itself has not expired yet.
+  const presencePill = (p) => {
+    const state = (p && p.state) || "offline";
+    if (state === "online") {
+      return `<span class="pill ok" title="Signed in and using Atlas — last action ${esc(ago(p.lastActiveAt))}"><span class="dot"></span>online</span>`;
+    }
+    if (state === "idle") {
+      return `<span class="pill warn" title="Signed in, but nothing done since ${esc(ago(p.lastActiveAt))}"><span class="dot"></span>idle</span>`;
+    }
+    const closed = p && p.sessions
+      ? `Last signed in, but the browser stopped reporting ${ago(p.lastSeenAt)}`
+      : "Not signed in";
+    return `<span class="pill off" title="${esc(closed)}"><span class="dot"></span>offline</span>`;
+  };
+
   const roleChips = (roles) => (roles || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
   const statusPill = (u) => u.disabled
     ? `<span class="pill warn"><span class="dot"></span>disabled</span>`
@@ -1945,6 +2036,7 @@ async function viewConsoleOrg() {
       <td>${esc(u.displayName || "—")}${u.email ? `<div class="muted" style="font-size:12px">${esc(u.email)}</div>` : ""}</td>
       <td>${roleChips(u.roles)}</td>
       <td>${statusPill(u)}</td>
+      ${showPresence ? `<td class="presence-cell">${presencePill(u.presence)}</td>` : ""}
       <td style="text-align:right; white-space:nowrap">
         <button class="btn ghost" data-act="edit" title="Edit this user’s details and roles">Edit</button>
         <button class="btn ghost" data-act="password" title="Set a new password for this user">Password</button>
@@ -1964,12 +2056,16 @@ async function viewConsoleOrg() {
           Every route names the role that reaches it: <span class="chip">admin</span> for this page and the
           rest of the instance's configuration, <span class="chip">modeler</span> to deploy and to author,
           <span class="chip">operator</span> to run what is deployed, <span class="chip">user</span> for a
-          person's own task list.</p>
+          person's own task list.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
+          administrators see it: <b>online</b> means somebody did something in the last five minutes,
+          <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
+          It is read from the live sessions and never stored — a restart shows nobody.` : ""}</p>
         <div id="user-form-slot" style="padding:0 18px"></div>
         <table data-dt-key="users">
-          <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th>${
+            showPresence ? "<th>Presence</th>" : ""}<th></th></tr></thead>
           <tbody id="user-rows">${(users || []).map(userRow).join("")
-            || `<tr><td colspan="5" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
+            || `<tr><td colspan="${showPresence ? 6 : 5}" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
         </table>
       </div>`;
 
@@ -2050,6 +2146,7 @@ async function viewConsoleOrg() {
   wireSSO(groups);
 
   if (denied) return;
+  wireOrgPresence(showPresence, presencePill);
   const reload = () => viewConsoleOrg();
   const slot = document.getElementById("user-form-slot");
   document.getElementById("new-user").addEventListener("click", () => {
@@ -2099,6 +2196,36 @@ async function viewConsoleOrg() {
       case "rmmember": removeGroupMember(btn.dataset.gid, btn.dataset.uid, reload); break;
     }
   });
+}
+
+// Presence goes stale while the page sits open, so it repaints itself. The cells
+// only — never the page — because an administrator half-way through a user form
+// should not have it wiped from under them every half minute (ADR-0228).
+//
+// Half the beacon's own interval, so a change is on screen inside a minute, and one
+// tiny admin-only read either way.
+const ORG_PRESENCE_INTERVAL = 30000;
+let orgPresenceTimer = null;
+
+function wireOrgPresence(showPresence, presencePill) {
+  if (orgPresenceTimer) { clearInterval(orgPresenceTimer); orgPresenceTimer = null; }
+  if (!showPresence) return;
+  const stop = () => { clearInterval(orgPresenceTimer); orgPresenceTimer = null; };
+  const paint = async () => {
+    const rows = document.getElementById("user-rows");
+    // The view was replaced by another one that sets no cleanup of its own; stop
+    // rather than poll on behalf of a page nobody is looking at.
+    if (!rows || !rows.isConnected) return stop();
+    let live;
+    try { live = await api("GET", "/api/v1/users/presence"); } catch { return; }
+    const byId = new Map((live || []).map((p) => [p.userId, p]));
+    for (const cell of rows.querySelectorAll("td.presence-cell")) {
+      const row = cell.closest("tr");
+      if (row) cell.innerHTML = presencePill(byId.get(row.dataset.id));
+    }
+  };
+  orgPresenceTimer = setInterval(paint, ORG_PRESENCE_INTERVAL);
+  window.__atlasCleanup = stop;
 }
 
 // ---------- Single sign-on (ADR-0210) ----------
@@ -7224,6 +7351,318 @@ function viewComingSoon(appId) {
     </div>`;
 }
 
+// ---------- Data ----------
+// The information model is the answer to what BPMN leaves open. A <dataObject> is
+// scoped to one process definition, and its itemSubjectRef points at a type the
+// specification deliberately does not describe — so two processes that both handle
+// an order share a five-letter string and nothing else. These views author the
+// missing half: a UML class-diagram subset, owned by a process application, that
+// itemSubjectRef resolves against (ADR-0230).
+//
+// Why a class diagram and not an entity-relationship one: an ERD's vocabulary is
+// storage — entities, columns, foreign keys — and where a datum is persisted is the
+// data store's question, settled per store. A class diagram says what an Order *is*
+// without saying where it lives. It also brings the split this area's two tabs are:
+// UML already distinguishes the class diagram (types) from the object diagram
+// (actual instances), which is exactly Atlas's design-time/run-time line.
+async function viewInfoModels() {
+  view.innerHTML = `<p class="muted">Loading information models…</p>`;
+
+  let models, applications;
+  try {
+    [models, applications] = await Promise.all([
+      api("GET", "/api/v1/infomodel/models"),
+      api("GET", "/api/v1/applications"),
+    ]);
+  } catch (e) {
+    view.innerHTML = `<div class="card empty"><h1>Data</h1><p>${esc(e.message)}</p></div>`;
+    return;
+  }
+
+  const byApplication = new Map(applications.map((app) => [app.id, app]));
+  const writable = applications.filter((app) => !app.protected && roleRank(app.myRole) >= 2);
+  const canEdit = (m) => {
+    const app = byApplication.get(m.applicationId);
+    return !!app && !app.protected && roleRank(app.myRole) >= 2;
+  };
+
+  const row = (m) => {
+    const app = byApplication.get(m.applicationId);
+    const actions = [];
+    if (canEdit(m)) actions.push(
+      { label: "Rename", icon: "✎", act: "rename-im", data: { id: m.id } },
+      { sep: true },
+      { label: "Delete", icon: "🗑", act: "delete-im", data: { id: m.id }, danger: true },
+    );
+    return `<tr data-name="${esc(`${m.name} ${app ? app.name : ""}`.toLowerCase())}">
+      <td><div class="artifact-name"><span class="chip">UML</span>
+        <a href="#/data/m/${encodeURIComponent(m.id)}"><b>${esc(m.name)}</b></a></div>
+        ${m.documentation ? `<div class="muted" style="font-size:12px; padding-left:54px">${esc(m.documentation)}</div>` : ""}</td>
+      <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}` : `<span class="muted">Missing application</span>`}</td>
+      <td class="muted">${m.classes} ${m.classes === 1 ? "class" : "classes"}</td>
+      <td class="muted">${m.associations}</td>
+      <td class="muted">r${m.revision}</td>
+      <td class="muted" data-sort="${m.updatedAt || 0}">${esc(fmtTime(m.updatedAt))}</td>
+      <td class="row-actions">${actions.length ? dropdown("⋯", "icon-btn", actions) : ""}</td>
+    </tr>`;
+  };
+
+  view.innerHTML = `<div id="im-root">
+    <div class="between">
+      <div>
+        <h1>Information model</h1>
+        <p class="muted" style="margin:0">What the data in your processes <i>is</i> — classes, their attributes and
+          their business keys — as a UML class diagram shared across every process in an application.</p>
+      </div>
+      ${writable.length ? `<button class="btn" data-act="new-im">Create new</button>` : ""}
+    </div>
+    ${applications.length ? "" : `<div class="card empty" style="margin-top:16px">
+      <h2>Create an application first</h2>
+      <p>An information model belongs to a Process Application and inherits its sharing permissions — which is
+         what lets the processes in that application share one vocabulary for their data.</p>
+      <a class="btn ghost" href="#/modeler">Open Modeler</a>
+    </div>`}
+    <div class="card" style="padding:0; margin-top:16px">
+      <table data-dt-key="info-models">
+        <thead><tr><th>Model</th><th>Application</th><th>Classes</th><th>Associations</th><th>Revision</th><th>Last changed</th><th></th></tr></thead>
+        <tbody>${models.map(row).join("") || `<tr><td colspan="7" class="empty">${writable.length
+          ? "No information model yet. Create one, then draw the business objects your processes move — an Order, a Customer, a Claim."
+          : "No information model is visible to you."}</td></tr>`}</tbody>
+      </table>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2 style="margin-top:0">Why this exists</h2>
+      <p class="muted" style="margin-bottom:8px">BPMN scopes a data object to one process definition, and its
+        <code>itemSubjectRef</code> points at a type the specification deliberately leaves opaque. So a model can say
+        that <code>order</code> is of type <code>Order</code>, and nothing anywhere says what an <code>Order</code> is
+        — or that the <code>Order</code> in another process is the same one.</p>
+      <p class="muted" style="margin:0">A class here fills that slot: a name, typed attributes, and a
+        <b>business key</b> — the part BPMN has no equivalent for, and the part that makes
+        <code>Order#ORD-1</code> the same order in three processes.</p>
+    </div>
+  </div>`;
+
+  const root = document.getElementById("im-root");
+  const chooseApplication = () => {
+    if (!writable.length) return null;
+    if (writable.length === 1) return writable[0];
+    const choices = writable.map((app, i) => `${i + 1}) ${app.name}`).join("\n");
+    const answer = window.prompt(`Store the information model in which application?\n\n${choices}\n\nEnter a number:`, "1");
+    if (answer == null) return null;
+    const selected = writable[Number(answer) - 1];
+    if (!selected) toast("No such application", "err");
+    return selected || null;
+  };
+
+  root.addEventListener("click", async (e) => {
+    const btn = e.target.closest('[data-act="new-im"]');
+    if (!btn) return;
+    const app = chooseApplication();
+    if (!app) return;
+    const name = window.prompt("Information model name:", `${app.name} data`);
+    if (name == null || !name.trim()) return;
+    try {
+      const created = await api("POST", "/api/v1/infomodel/models", { applicationId: app.id, name: name.trim() });
+      toast(`${name.trim()} created`, "ok");
+      location.hash = `#/data/m/${encodeURIComponent(created.id)}`;
+    } catch (err) { toast(err.message, "err"); }
+  });
+
+  onMenuAction(root, async (act, button) => {
+    const id = button.dataset.id;
+    const model = models.find((m) => m.id === id);
+    if (!model) return;
+    if (act === "rename-im") {
+      const name = window.prompt("Model name:", model.name);
+      if (name == null || !name.trim()) return;
+      await api("PUT", `/api/v1/infomodel/models/${encodeURIComponent(id)}`, { name: name.trim() });
+      toast("Renamed", "ok");
+      return route();
+    }
+    if (act === "delete-im") {
+      if (!window.confirm(`Delete "${model.name}"? The classes and associations in it go with it.`)) return;
+      await api("DELETE", `/api/v1/infomodel/models/${encodeURIComponent(id)}`);
+      toast("Deleted", "ok");
+      return route();
+    }
+  });
+  enhanceViewTables();
+}
+
+// viewDataInstances is the same subject one altitude down: not what an Order *is*,
+// but which orders are out there right now. UML draws that as an object diagram —
+// instances of the classes next door — and this is its list form, which is what an
+// operator scans. It groups by the type the BPMN model declared in itemSubjectRef,
+// because that string is what the information model will resolve against; joining a
+// resolved class, and correlating two instances by business key, are the next slices.
+async function viewDataInstances() {
+  // The query lives in the URL, so a found datum is a link somebody can send: the
+  // object diagram's "this customer is not in this instance" note points here.
+  const params = new URLSearchParams((location.hash.split("?")[1] || ""));
+  const classFilter = params.get("class") || "";
+  const keyFilter = params.get("key") || "";
+  const history = params.get("history") === "true";
+
+  view.innerHTML = `<p class="muted">Loading data objects…</p>`;
+  const query = new URLSearchParams();
+  if (classFilter) query.set("class", classFilter);
+  if (keyFilter) query.set("key", keyFilter);
+  if (history) query.set("history", "true");
+
+  let index, models;
+  try {
+    [index, models] = await Promise.all([
+      api("GET", "/api/v1/data-objects" + (query.toString() ? "?" + query : "")),
+      api("GET", "/api/v1/infomodel/models").catch(() => []),
+    ]);
+  } catch (e) {
+    view.innerHTML = `<div class="card empty"><h1>Data</h1><p>${esc(e.message)}</p></div>`;
+    return;
+  }
+  const rows = (index && index.objects) || [];
+
+  // A declared type that no class in any information model matches is the gap this
+  // area exists to close, so it is marked rather than left looking like one that
+  // resolves. The join is by name, because that is all itemSubjectRef carries.
+  const classNames = new Set();
+  await Promise.all((models || []).map(async (m) => {
+    try {
+      const full = await api("GET", `/api/v1/infomodel/models/${encodeURIComponent(m.id)}`);
+      for (const c of full.classes || []) classNames.add(c.name);
+    } catch { /* a model we cannot read simply contributes no names */ }
+  }));
+
+  const fmtVal = (r) => {
+    if (r.kind === "null" || r.value == null) return `<span class="muted"><i>unset</i></span>`;
+    if (r.kind === "json") return `<code>${esc(JSON.stringify(r.value))}</code>`;
+    return `<code>${esc(String(r.value))}</code>`;
+  };
+  const goto = (next) => {
+    const q = new URLSearchParams();
+    if (next.class) q.set("class", next.class);
+    if (next.key) q.set("key", next.key);
+    if (next.history) q.set("history", "true");
+    location.hash = "#/data/instances" + (q.toString() ? "?" + q : "");
+  };
+
+  // Grouped by class, and inside a class by business key — because the key is what
+  // says two rows are the same datum. Rows whose class declares no identity fall
+  // into one unkeyed group rather than pretending each is its own thing.
+  const groups = new Map();
+  for (const r of rows) {
+    const key = r.itemType || "";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  }
+
+  const identityBlock = (items) => {
+    const keyed = new Map();
+    for (const r of items) {
+      const k = r.key || "";
+      if (!keyed.has(k)) keyed.set(k, []);
+      keyed.get(k).push(r);
+    }
+    return [...keyed.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([k, list]) => {
+      const instances = new Set(list.map((i) => i.instanceKey)).size;
+      // The headline: one datum, several instances. It is the sentence the whole
+      // information model exists to make sayable.
+      const head = k
+        ? `<div class="im-key-head"><span class="im-key">⚿ ${esc(k)}</span>
+             <span class="muted">${instances} ${instances === 1 ? "instance" : "instances"}</span>
+             ${keyFilter ? "" : `<button type="button" class="btn ghost small" data-key="${esc(k)}"
+               data-class="${esc(list[0].itemType || "")}" title="Show only this one">Isolate</button>`}</div>`
+        : `<div class="im-key-head"><span class="muted im-key none"
+             title="This class declares no business key, so nothing says which of these are the same datum">no identity declared</span></div>`;
+      return head + `<table>
+        <thead><tr><th>Object</th><th>State</th><th>Value</th><th>Process</th><th>Instance</th></tr></thead>
+        <tbody>${list.map((r) => `<tr>
+          <td><b>${esc(r.name)}</b>${r.isCollection ? ` <span class="do-coll">list</span>` : ""}</td>
+          <td>${r.state ? `<span class="do-state">${esc(r.state)}</span>` : `<span class="muted">—</span>`}</td>
+          <td>${fmtVal(r)}</td>
+          <td class="muted">${esc(r.processId || "—")}</td>
+          <td><a href="#/operations/i/${r.instanceKey}" title="Open this instance's Data tab">${r.instanceKey}</a>
+            ${r.instanceState && r.instanceState !== "active" ? ` <span class="im-past">${esc(r.instanceState)}</span>` : ""}</td>
+        </tr>`).join("")}</tbody>
+      </table>`;
+    }).join("");
+  };
+
+  const groupBlock = ([type, items]) => {
+    const resolved = type && classNames.has(type);
+    const head = type
+      ? `<span class="do-class">${esc(type)}</span>${resolved
+        ? `<span class="im-resolved" title="A class of this name is modelled in an information model">modelled</span>`
+        : `<span class="im-unresolved" title="No class of this name exists in any information model you can see. Model it so the type means something across processes.">not modelled</span>`}`
+      : `<span class="do-class none">untyped</span><span class="im-unresolved"
+           title="This data object declares no itemSubjectRef, so nothing says what kind of thing it is.">no declared type</span>`;
+    return `<div class="card" style="padding:0; margin-top:16px">
+      <div class="im-group-head">${head}<span class="muted">${items.length}
+        ${items.length === 1 ? "object" : "objects"}</span></div>
+      <div class="im-groups">${identityBlock(items)}</div>
+    </div>`;
+  };
+
+  const ordered = [...groups.entries()].sort((a, b) => (a[0] || "\uffff").localeCompare(b[0] || "\uffff"));
+  const filtering = classFilter || keyFilter;
+  view.innerHTML = `<div id="di-root">
+    <div class="between">
+      <div>
+        <h1>Data objects${keyFilter ? ` · ⚿ ${esc(keyFilter)}` : ""}</h1>
+        <p class="muted" style="margin:0">Which instances carry which data, grouped by the type their model
+          declares and by the business key that says two of them are the same one.</p>
+      </div>
+      <a class="btn neutral" href="#/data">Model →</a>
+    </div>
+    <div class="card di-filters">
+      <label class="di-field"><span>Class</span>
+        <input id="di-class" value="${esc(classFilter)}" placeholder="Order" list="di-classes"/></label>
+      <datalist id="di-classes">${[...classNames].sort().map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
+      <label class="di-field"><span>Business key</span>
+        <input id="di-key" value="${esc(keyFilter)}" placeholder="ORD-1"/></label>
+      <label class="di-toggle"><input type="checkbox" id="di-history"${history ? " checked" : ""}/>
+        <span>Include finished instances</span></label>
+      <button class="btn" id="di-apply">Search</button>
+      ${filtering || history ? `<button class="btn ghost" id="di-clear">Clear</button>` : ""}
+    </div>
+    ${rows.length ? ordered.map(groupBlock).join("") : `<div class="card empty" style="margin-top:16px">
+      <h2>${filtering ? "Nothing carries that" : "No data objects in flight"}</h2>
+      <p>${filtering
+        ? `No ${history ? "instance" : "running instance"} carries a data object matching that${history ? "" : " — try including finished instances"}.`
+        : "Running instances that carry BPMN data objects show up here. Draw a data object on a process, give an activity a data association to write it, and start an instance."}</p>
+      <a class="btn ghost" href="#/operations">Open Operations</a>
+    </div>`}
+    <p class="muted di-note">Examined ${index.scanned} instance${index.scanned === 1 ? "" : "s"}${history
+      ? "" : " — running only"}.${index.truncated
+      ? " <b>The sweep stopped before the end</b>, so this is a page and not the whole answer: narrow it with a class or a key."
+      : ""}
+      ${history ? "" : " A finished instance keeps its data until it is purged; tick the box above to sweep those too."}</p>
+  </div>`;
+
+  const root = document.getElementById("di-root");
+  const apply = () => goto({
+    class: document.getElementById("di-class").value.trim(),
+    key: document.getElementById("di-key").value.trim(),
+    history: document.getElementById("di-history").checked,
+  });
+  root.addEventListener("click", (e) => {
+    if (e.target.closest("#di-apply")) return apply();
+    if (e.target.closest("#di-clear")) return goto({});
+    const isolate = e.target.closest("[data-key]");
+    if (isolate) return goto({ class: isolate.dataset.class, key: isolate.dataset.key, history });
+  });
+  root.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.closest(".di-field")) apply();
+  });
+  enhanceViewTables();
+}
+
+// viewInfoModel opens one model on the class canvas, which lives in its own module
+// so the shell stays small.
+async function viewInfoModel(id) {
+  const mod = await import("./infomodel-editor.js");
+  await mod.mountClassDiagram(view, { api, toast, id });
+}
+
 // Panorama keeps the Open Exchange XML canonical. The library owns documents;
 // its diagram-js viewer is a read-only projection and therefore cannot discard
 // unsupported standard content when a model is opened (ADR-0189).
@@ -7774,6 +8213,9 @@ function routeTitle(path) {
     [/^#\/operations\/c\//, "Collaboration · Operations"],
     [/^#\/operations\/p\//, "Live view · Operations"],
     [/^#\/operations$/, "Instances · Operations"],
+    [/^#\/data\/instances$/, "Instances · Data"],
+    [/^#\/data\/m\//, "Class diagram · Data"],
+    [/^#\/data$/, "Model · Data"],
     [/^#\/panorama\/landscape$/, "Landscape · Panorama"],
     [/^#\/panorama\/models\//, "Architecture view · Panorama"],
     [/^#\/panorama$/, "Models · Panorama"],
@@ -7797,6 +8239,7 @@ async function route() {
   else if (path.startsWith("#/tasks")) appId = "tasks";
   else if (path.startsWith("#/operations")) appId = "operations";
   else if (path.startsWith("#/panorama")) appId = "panorama";
+  else if (path.startsWith("#/data")) appId = "data";
 
   // Gate the whole app behind login when enforcement is on and no session is
   // active. Auth off (the default) skips this entirely.
@@ -7806,10 +8249,12 @@ async function route() {
     document.getElementById("topnav").innerHTML = "";
     paintApps(); // nobody is signed in, so nobody holds a role: the drawer says so too
     syncIncidentBadge(""); // the login screen has no nav to badge, and must not poll
+    stopPresence(); // and nobody to be present: a logged-out tab reports nothing
     updateAccount();
     return viewLogin();
   }
 
+  startPresence(); // signed in, so this tab is somebody being here (presence.go)
   setChrome(appId, path);
   setTitle(routeTitle(path));
   updateAccount();
@@ -7862,6 +8307,10 @@ async function route() {
     if (path === "#/panorama") return await viewPanoramaModels();
     const pm = path.match(/^#\/panorama\/models\/(.+)$/);
     if (pm) return await viewPanoramaModel(decodeURIComponent(pm[1]));
+    if (path === "#/data") return await viewInfoModels();
+    if (path === "#/data/instances") return await viewDataInstances();
+    const imm = path.match(/^#\/data\/m\/(.+)$/);
+    if (imm) return await viewInfoModel(decodeURIComponent(imm[1]));
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);
@@ -7879,7 +8328,7 @@ async function route() {
     // token walks the diagram in activation order (ADR-0046).
     const im = path.match(/^#\/operations\/i\/(\d+)$/);
     if (im) return await viewInstanceReplay(Number(im[1]));
-    if (appId !== "console" && appId !== "modeler" && appId !== "tasks" && appId !== "panorama") return viewComingSoon(appId);
+    if (appId !== "console" && appId !== "modeler" && appId !== "tasks" && appId !== "panorama" && appId !== "data") return viewComingSoon(appId);
     // Unknown route → dashboard.
     location.hash = "#/console";
   } catch (e) {

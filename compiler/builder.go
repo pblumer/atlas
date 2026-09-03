@@ -457,6 +457,7 @@ type Builder struct {
 	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
 	timerStarts        []TimerStartDetail
 	dataObjects        []CompiledDataObject
+	dataStores         []CompiledDataStore
 	dataOutAssocs      []pendingDataOut // data-output associations, grouped by node in Build
 	dataInAssocs       []pendingDataIn  // data-input associations, grouped by node in Build
 	ioInputs           []pendingIO      // zeebe:ioMapping inputs, grouped by node in Build
@@ -1888,6 +1889,19 @@ func (b *Builder) AddDataObject(name, itemType, initialState string, isCollectio
 	return idx
 }
 
+// AddDataStore records a data store this process names, by the store's own name and
+// the BPMN id of the reference that named it. Like a data object it is not a flow
+// node — no token passes through it — so it returns the index of the entry in the
+// data-store table rather than an element id.
+func (b *Builder) AddDataStore(name, elementId string) int32 {
+	idx := int32(len(b.dataStores))
+	b.dataStores = append(b.dataStores, CompiledDataStore{
+		Name:      b.intern(name),
+		ElementId: b.intern(elementId),
+	})
+	return idx
+}
+
 // pendingDataOut pairs a data-output association with the activity node it belongs
 // to, until Build groups them into the shared per-node array.
 type pendingDataOut struct {
@@ -2556,6 +2570,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		compensationThrows: b.compensationThrows,
 		timerStarts:        b.timerStarts,
 		dataObjects:        b.dataObjects,
+		dataStores:         b.dataStores,
 		dataOutAssocs:      dataOut,
 		dataInAssocs:       dataIn,
 		ioInputs:           ioIn,

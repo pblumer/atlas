@@ -1,0 +1,38 @@
+{
+  "tags": [
+    "Operations",
+    "Data",
+    "Modeling"
+  ],
+  "title": {
+    "en": "See the data an instance carries — and who wrote it",
+    "de": "Sehen, welche Daten eine Instanz trägt — und wer sie geschrieben hat"
+  },
+  "summary": {
+    "en": "A process exists to move data: an order, a claim, a contract. Until now you could watch the token and read the variables, but the data objects on the diagram — the ones with a name and a state like [received] or [approved] — showed nothing at all once the process ran. The replay of an instance now has a Data tab: every data object it carries, the class the model says it is, the state it is in, and its current value. Open a row and you get that datum's whole life: every write, the state it moved into, when, and which task on the diagram made it. That last column is the one worth having. Two tasks running side by side on a parallel branch both look like they wrote everything if you only compare before-and-after snapshots, which is what any engine without recorded attribution has to do. Atlas now records who wrote each value at the moment of the write, so the answer is read rather than guessed. Instances that ran before this simply say so instead of naming a task that might be the wrong one.",
+    "de": "Ein Prozess ist dazu da, Daten zu bewegen: eine Bestellung, einen Schadenfall, einen Vertrag. Bisher konnten Sie dem Token zusehen und die Variablen lesen, aber die Datenobjekte auf dem Diagramm — jene mit einem Namen und einem Zustand wie [received] oder [approved] — zeigten im laufenden Prozess überhaupt nichts. Der Replay einer Instanz hat jetzt einen Reiter „Data\": jedes Datenobjekt, das sie trägt, die Klasse, die das Modell dafür nennt, den Zustand, in dem es steht, und den aktuellen Wert. Eine Zeile aufgeklappt zeigt das ganze Leben dieses Datums: jeden Schreibvorgang, den Zustand, in den er es gebracht hat, wann — und welche Aufgabe im Diagramm ihn gemacht hat. Diese letzte Spalte ist die eigentliche Neuerung. Zwei Aufgaben, die auf einem parallelen Zweig nebeneinander laufen, sehen beide so aus, als hätten sie alles geschrieben, wenn man nur Momentaufnahmen davor und danach vergleicht — und genau darauf ist jede Engine ohne aufgezeichnete Zuordnung angewiesen. Atlas hält jetzt im Moment des Schreibens fest, wer geschrieben hat; die Antwort wird also gelesen und nicht geraten. Instanzen, die vorher liefen, sagen das offen, statt eine Aufgabe zu nennen, die die falsche sein könnte."
+  },
+  "tutorial": {
+    "en": [
+      "Model a data object: drop a Data Object on the canvas, name it (order), and give it a data state under Properties.",
+      "Draw a data output association from a task to it, with a FEEL value under <from> — that is the write.",
+      "Deploy the model and start an instance, then open it under Operations › Instances and click into the replay.",
+      "Switch to the Data tab: the object is there with its class, its state and its value.",
+      "Click the object's name to open its state trail — every write, in order, with the task that made it."
+    ],
+    "de": [
+      "Modellieren Sie ein Datenobjekt: Ziehen Sie ein Data Object auf die Fläche, benennen Sie es (order) und geben Sie ihm unter Eigenschaften einen Datenzustand.",
+      "Zeichnen Sie von einer Aufgabe eine Data Output Association darauf, mit einem FEEL-Wert unter <from> — das ist der Schreibvorgang.",
+      "Deployen Sie das Modell, starten Sie eine Instanz und öffnen Sie sie unter Betrieb › Instanzen im Replay.",
+      "Wechseln Sie auf den Reiter „Data\": Das Objekt steht dort mit Klasse, Zustand und Wert.",
+      "Klicken Sie auf den Namen des Objekts, um seine Zustandsspur zu öffnen — jeden Schreibvorgang der Reihe nach, mit der Aufgabe, die ihn gemacht hat."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Instances",
+      "de": "Instanzen öffnen"
+    },
+    "route": "#/operations"
+  }
+}

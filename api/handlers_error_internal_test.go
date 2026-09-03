@@ -371,3 +371,172 @@ func newServerWithOptionsErr(t *testing.T, opts ...Option) (*Server, error) {
 	})
 	return srv, err
 }
+
+// TestInstanceDataObjectsReportsScanErrors covers the read-failure branches of the
+// instance Data view. Three reads stand between a request and the answer — the
+// objects themselves, the instance record that says which definition declared them,
+// and the retained state trail — and each must surface as a 500 rather than a
+// half-annotated list. A datum whose trail is missing its middle reads as a value
+// that never passed through a state it did, which is worse than no answer at all.
+func TestInstanceDataObjectsReportsScanErrors(t *testing.T) {
+	const scope = uint64(4242)
+	h500 := func(t *testing.T, srv *Server, what string) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/data-objects", scope), nil))
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("%s: status=%d body=%s, want 500", what, rec.Code, rec.Body.String())
+		}
+	}
+
+	t.Run("undecodable data object", func(t *testing.T) {
+		srv := newServerForErrors(t)
+		srv.do(func() {
+			if err := srv.store.InjectCorruptDataObject(scope, "order"); err != nil {
+				t.Fatalf("inject: %v", err)
+			}
+		})
+		h500(t, srv, "corrupt data object")
+	})
+
+	t.Run("undecodable instance record", func(t *testing.T) {
+		srv := newServerForErrors(t)
+		srv.do(func() {
+			// A readable object, so the handler gets past its own scan and reaches the
+			// annotation — where the instance record it needs is the broken one.
+			if err := putDataObjectForTest(srv, scope, "order"); err != nil {
+				t.Fatalf("seed: %v", err)
+			}
+			if err := srv.store.InjectCorruptProcessInstance(scope); err != nil {
+				t.Fatalf("inject: %v", err)
+			}
+		})
+		h500(t, srv, "corrupt instance record")
+	})
+
+	t.Run("undecodable state trail", func(t *testing.T) {
+		srv := newServerForErrors(t)
+		srv.do(func() {
+			if err := putDataObjectForTest(srv, scope, "order"); err != nil {
+				t.Fatalf("seed: %v", err)
+			}
+			if err := putProcessInstanceForTest(srv, scope, 1); err != nil {
+				t.Fatalf("seed instance: %v", err)
+			}
+			if err := srv.store.InjectCorruptDataObjectSnapshot(scope, 1, 1); err != nil {
+				t.Fatalf("inject: %v", err)
+			}
+		})
+		h500(t, srv, "corrupt state trail")
+	})
+}
+
+// dataObjectPairBPMN declares two data objects, so a test can give an instance only
+// one of them.
+const dataObjectPairBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="pair" isExecutable="true">
+    <dataObject id="DO_order" name="order" itemSubjectRef="Order"/>
+    <dataObject id="DO_invoice" name="invoice" itemSubjectRef="Invoice"/>
+    <startEvent id="s"/><endEvent id="e"/><sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestInstanceDataObjectsListsWhatTheInstanceCarries pins that the Data view lists the
+// objects the *instance* holds and annotates them from the definition — not the other
+// way round. An instance that carries only one of its definition's two data objects
+// gets one row, with its declared class; the other is not invented from the model. It
+// is how a migrated instance reads: a version that declares a data object the instance
+// was never seeded with does not conjure a datum that has no value and no history.
+func TestInstanceDataObjectsListsWhatTheInstanceCarries(t *testing.T) {
+	const scope = uint64(4244)
+	srv := newServerForErrors(t)
+	h := srv.Handler()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(dataObjectPairBPMN))
+	req.Header.Set("Content-Type", "application/xml")
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	srv.do(func() {
+		if err := putDataObjectForTest(srv, scope, "order"); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		if err := putProcessInstanceForTest(srv, scope, dep.Key); err != nil {
+			t.Fatalf("seed instance: %v", err)
+		}
+	})
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/data-objects", scope), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var got []dataObjectView
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v (%s)", err, rec.Body.String())
+	}
+	if len(got) != 1 || got[0].Name != "order" {
+		t.Fatalf("got %+v, want only the object the instance carries", got)
+	}
+	if got[0].ItemType != "Order" {
+		t.Errorf("itemType = %q, want Order — annotated from the definition", got[0].ItemType)
+	}
+}
+
+// TestInstanceDataObjectsWithoutInstanceRecord covers the case where a scope carries
+// data objects but no instance record resolves — the values still read, with no
+// declared class and no attribution, because both come from facts that are not there.
+func TestInstanceDataObjectsWithoutInstanceRecord(t *testing.T) {
+	const scope = uint64(4243)
+	srv := newServerForErrors(t)
+	srv.do(func() {
+		if err := putDataObjectForTest(srv, scope, "order"); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/data-objects", scope), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s, want 200", rec.Code, rec.Body.String())
+	}
+	var got []dataObjectView
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v (%s)", err, rec.Body.String())
+	}
+	if len(got) != 1 || got[0].Name != "order" {
+		t.Fatalf("got %+v, want the one seeded object", got)
+	}
+	if got[0].ItemType != "" || got[0].ProducedBy != "" || len(got[0].History) != 0 {
+		t.Errorf("got %+v, want no declared class, no attribution and an empty trail", got[0])
+	}
+}
+
+// putDataObjectForTest and putProcessInstanceForTest plant the two records the Data
+// view reads, so a test can put one of them out of reach and see what the handler
+// does. They write straight to the store under the run loop, as the injectors above
+// do — the point is a store in a shape the engine would not normally produce.
+func putDataObjectForTest(srv *Server, scope uint64, name string) error {
+	tx := srv.store.NewTransaction()
+	defer tx.Close()
+	if err := tx.PutDataObject(&model.DataObjectValue{ScopeKey: scope, Name: name, State: "received", Kind: model.VarNull}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func putProcessInstanceForTest(srv *Server, key, defKey uint64) error {
+	tx := srv.store.NewTransaction()
+	defer tx.Close()
+	if err := tx.PutProcessInstance(key, &model.ProcessInstanceValue{ProcessDefKey: defKey, State: model.PIActive}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

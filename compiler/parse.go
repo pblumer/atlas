@@ -188,7 +188,7 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), docs)
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs)
 }
 
 // Deployable is one executable process compiled from a model, plus the display
@@ -219,6 +219,8 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 	resolveErr := buildErrorResolver(defs)
 	resolveEsc := buildEscalationResolver(defs)
 	resolveOp := buildOperationResolver(defs)
+	resolveItem := buildItemTypeResolver(defs)
+	resolveStore := buildDataStoreResolver(defs)
 	poolName := participantNames(defs)
 
 	var out []Deployable
@@ -226,7 +228,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		if len(proc.StartEvents) == 0 {
 			continue // black-box pool: nothing to run
 		}
-		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, docs)
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs)
 		if err != nil {
 			return nil, err
 		}
@@ -285,7 +287,7 @@ func parseNamed(key uint64, version int32, r io.Reader, processId string, gated 
 		if proc.Id != processId {
 			continue
 		}
-		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), docs)
+		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs)
 		if err == nil {
 			return cp, nil, nil
 		}
@@ -534,7 +536,7 @@ func buildEscalationResolver(defs xmlDefinitions) func(ownerId, escalationRef st
 // resolveError (shared across a collaboration's processes). docs is the model-wide
 // element-id → <bpmn:documentation> index (elementDocumentation), likewise shared: it is
 // keyed by BPMN element id, and this process only ever looks up its own.
-func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), docs map[string]string) (*CompiledProcess, error) {
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), resolveItemType func(string) string, resolveDataStore func(ref, ownName string) string, docs map[string]string) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
 	b.SetDocumentation(docs[proc.Id]) // the process's own prose; "" interns to -1 (ADR-0025)
 	// isExecutable defaults to true when the attribute is absent (BPMN convention;
@@ -642,7 +644,24 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			continue // already have a logical object of this name; this is another view
 		}
 		seededObj[name] = true
-		b.AddDataObject(name, d.ItemSubjectRef, d.DataState.Name, d.IsCollection)
+		b.AddDataObject(name, resolveItemType(d.ItemSubjectRef), d.DataState.Name, d.IsCollection)
+	}
+
+	// Data stores: where this process says its data lives beyond one instance. Two
+	// references to one store are two views of it on the diagram, so the process
+	// names it once — the same folding the data objects above get, and for the same
+	// reason.
+	seenStore := make(map[string]bool, len(proc.DataStoreReferences))
+	for _, ref := range proc.DataStoreReferences {
+		name := resolveDataStore(ref.DataStoreRef, ref.Name)
+		if name == "" {
+			name = ref.Id
+		}
+		if seenStore[name] {
+			continue
+		}
+		seenStore[name] = true
+		b.AddDataStore(name, ref.Id)
 	}
 
 	// Wire data-output associations now that every activity node is registered
@@ -1039,13 +1058,60 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 // (bpmn:, zeebe:) are handled transparently by encoding/xml.
 
 type xmlDefinitions struct {
-	Processes     []xmlProcess      `xml:"process"`
-	Messages      []xmlMessage      `xml:"message"`
-	Signals       []xmlSignal       `xml:"signal"`
-	Errors        []xmlError        `xml:"error"`
-	Escalations   []xmlEscalation   `xml:"escalation"`
-	Interfaces    []xmlInterface    `xml:"interface"`
-	Collaboration *xmlCollaboration `xml:"collaboration"`
+	Processes       []xmlProcess        `xml:"process"`
+	ItemDefinitions []xmlItemDefinition `xml:"itemDefinition"`
+	DataStores      []xmlDataStore      `xml:"dataStore"`
+	Messages        []xmlMessage        `xml:"message"`
+	Signals         []xmlSignal         `xml:"signal"`
+	Errors          []xmlError          `xml:"error"`
+	Escalations     []xmlEscalation     `xml:"escalation"`
+	Interfaces      []xmlInterface      `xml:"interface"`
+	Collaboration   *xmlCollaboration   `xml:"collaboration"`
+}
+
+// A BPMN <itemDefinition> declares a data structure a data object can be typed
+// with. Atlas reads two things off it: its id, which is what an itemSubjectRef
+// references, and its structureRef, which names the structure — the class in the
+// application's information model (ADR-0230).
+//
+// The indirection is worth carrying rather than reading the reference as the name
+// directly, because the id is an XML id and the name is not: a class called "Line
+// item" cannot be an id, and the shorthand `itemSubjectRef="Line item"` a
+// hand-written model might use is not valid BPMN. The structureRef has no such
+// constraint, so the definition is what makes an arbitrary class name expressible.
+type xmlItemDefinition struct {
+	Id           string              `xml:"id,attr"`
+	StructureRef string              `xml:"structureRef,attr"`
+	Properties   []xmlVendorProperty `xml:"extensionElements>property"`
+}
+
+// A vendor <property name="…" value="…"> inside an element's <extensionElements>.
+//
+// BPMN gives an <itemDefinition> no name of its own — a root element carries an id
+// and nothing else — so structureRef is the only place the specification offers for
+// the name of the thing being declared. A tool that does not use it has to invent
+// somewhere, and MID Innovator (bpanda) invents here: its itemDefinitions are a bare
+// GUID id with <bpanda:property name="Name" value="Incident"/> beside it. Reading
+// the property is what keeps such a model from reporting a GUID as the declared
+// type of every data object in it, against a class name nobody could then model.
+type xmlVendorProperty struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:"value,attr"`
+}
+
+// typeName is the class name an <itemDefinition> declares: its structureRef, and
+// when it declares none, a vendor property called "Name". Empty when the definition
+// names nothing at all, which leaves its id as the only handle there is.
+func (it xmlItemDefinition) typeName() string {
+	if it.StructureRef != "" {
+		return it.StructureRef
+	}
+	for _, p := range it.Properties {
+		if strings.EqualFold(p.Name, "Name") && p.Value != "" {
+			return p.Value
+		}
+	}
+	return ""
 }
 
 // A BPMN <interface> groups <operation>s (the WSDL-style service-interface model). Atlas
@@ -1060,6 +1126,65 @@ type xmlInterface struct {
 type xmlOperation struct {
 	Id           string `xml:"id,attr"`
 	InMessageRef string `xml:"inMessageRef"`
+}
+
+// buildDataStoreResolver maps a <dataStoreReference>'s dataStoreRef onto the store's
+// own name. A reference naming no root element falls back to its own name, which is
+// the shorthand a tool that only draws the box produces and still a usable statement
+// about where data lives.
+func buildDataStoreResolver(defs xmlDefinitions) func(ref, ownName string) string {
+	byID := make(map[string]string, len(defs.DataStores))
+	for _, st := range defs.DataStores {
+		if st.Id == "" {
+			continue
+		}
+		name := st.Name
+		if name == "" {
+			name = st.Id
+		}
+		byID[st.Id] = name
+	}
+	return func(ref, ownName string) string {
+		if name, ok := byID[ref]; ok {
+			return name
+		}
+		return ownName
+	}
+}
+
+// buildItemTypeResolver maps a data object's itemSubjectRef onto the type name it
+// means: the referenced <itemDefinition>'s structureRef, the name it carries in a
+// vendor property when it declares no structureRef, its id when it names itself
+// nowhere, and — when the reference names no itemDefinition at all — the reference
+// itself.
+//
+// That last case is not a fallback for broken models; it is the shorthand every
+// hand-written Atlas model and fixture uses, and it stays supported. What the
+// indirection adds is the ability for a *tool* to write the reference the
+// specification actually asks for, which is also the only form the bpmn-js moddle
+// will round-trip: an unresolvable itemSubjectRef is dropped on export, so a model
+// edited in the Modeler would silently lose its types without this.
+func buildItemTypeResolver(defs xmlDefinitions) func(string) string {
+	if len(defs.ItemDefinitions) == 0 {
+		return func(ref string) string { return ref }
+	}
+	byID := make(map[string]string, len(defs.ItemDefinitions))
+	for _, it := range defs.ItemDefinitions {
+		if it.Id == "" {
+			continue
+		}
+		if name := it.typeName(); name != "" {
+			byID[it.Id] = name
+			continue
+		}
+		byID[it.Id] = it.Id
+	}
+	return func(ref string) string {
+		if name, ok := byID[ref]; ok {
+			return name
+		}
+		return ref
+	}
 }
 
 // A collaboration groups participant pools. Each participant references the
@@ -1142,6 +1267,7 @@ type xmlProcess struct {
 	xmlFlowContent // the process root's flow nodes and sequence flows
 
 	DataObjects          []xmlDataObject          `xml:"dataObject"`
+	DataStoreReferences  []xmlDataStoreReference  `xml:"dataStoreReference"`
 	DataObjectReferences []xmlDataObjectReference `xml:"dataObjectReference"`
 }
 
@@ -1467,6 +1593,23 @@ type xmlDataObject struct {
 	IsCollection   bool         `xml:"isCollection,attr"`
 	ItemSubjectRef string       `xml:"itemSubjectRef,attr"`
 	DataState      xmlDataState `xml:"dataState"`
+}
+
+// A BPMN <dataStore> is a root element: a place data outlives the processes that
+// touch it. Atlas reads its id, which is what a <dataStoreReference> points at, and
+// its name, which is what the application's information model declares the store by.
+type xmlDataStore struct {
+	Id   string `xml:"id,attr"`
+	Name string `xml:"name,attr"`
+}
+
+// A BPMN <dataStoreReference> is the store as one process draws it. It may carry a
+// name of its own for that diagram, but the store's name is the authoritative one —
+// every process that says "Orders" means the same store.
+type xmlDataStoreReference struct {
+	Id           string `xml:"id,attr"`
+	Name         string `xml:"name,attr"`
+	DataStoreRef string `xml:"dataStoreRef,attr"`
 }
 
 // xmlDataState is a BPMN data state (the [received]/[approved] label on a data

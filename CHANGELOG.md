@@ -14,6 +14,218 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Data stores: saying where a class is kept.** BPMN has a `<dataStoreReference>` —
+  the box on the diagram meaning "this outlives the process" — and says nothing about
+  what it holds or what keeps it. Atlas did not even parse it. It does now, and a
+  **data store is declared in the application's information model**
+  ([ADR-0230](docs/adr/0230-process-information-model.md),
+  slice 5b): once per application, named by every process that reaches it, with the
+  class it holds and the Worker that keeps it.
+
+  It sits *beside* the classes rather than inside one, and that is the point: an Order
+  is an Order wherever it is kept, so the class stays storage-agnostic and only the
+  store says where. The class canvas draws it as a cylinder with a dashed line to the
+  class it holds — an annotation, not an association, because nothing in the model
+  *relates* those two.
+
+  A store may only hold a **business object with a business key**. A process reads
+  from one by naming which thing it wants, and the key is the only thing that names
+  one — so a store over a class with no identity could be filled and never read, and
+  is refused. A value type has no existence of its own to keep.
+
+  A deploy resolves what a process claims: a store the application does not declare,
+  and a store no Worker backs, are both **warnings**. A diagram is routinely drawn
+  before the store it names is modeled, and a store is modeled before somebody
+  configures the Worker behind it — different days' work, and neither is a reason to
+  refuse a deploy.
+
+  The mode is **read**. Writing through a store is refused as out of subset and says
+  so: it is a transaction against something outside the engine, whose durability
+  guarantee stops at its own log, and that is a decision of its own.
+
+- **Which instances are carrying this order?** The question BPMN structurally cannot
+  express now has an answer: **Data › Instances** groups every data object by the type
+  its model declares and then by its **business key**, so one order appearing in three
+  processes reads as one datum with three instances under it
+  ([ADR-0230](docs/adr/0230-process-information-model.md),
+  slice 5a). `GET /api/v1/data-objects` (and `atlas_data_objects` over MCP) takes a
+  `class` and a `key`, and with `history=true` sweeps finished instances too.
+
+  Including history costs a longer walk and **nothing on disk**: a finished instance
+  keeps its data objects until it is purged, and purging is opt-in
+  ([ADR-0115](docs/adr/0115-history-retention-hard-delete.md)). That is why this is a sweep rather
+  than a durable index. A durable one would have to live in `applyToState`, know what a
+  business key is — the engine reads integer indices, and the key lives in the
+  information model, which is design-time state it must not read — and be swept by a
+  purge that deletes by instance-key prefix and could not reach it. Each of those is
+  answerable, and none is worth answering before a sweep starts to hurt.
+
+  So the sweep says what it did: how many instances it examined, and whether a bound
+  stopped it before the end. An array cannot say whether it is complete, and a caller
+  that cannot tell will read a partial answer as a whole one — which is the worst
+  thing an index can do. The response is an object for that reason.
+
+  The object diagram's one admission of its own edge — *"this customer is not in this
+  instance; it lives in another instance or in a data store"* — now links straight into
+  the index, which is the thing that can find it.
+
+- **An instance's data, drawn as objects.** The Data tab in the Operations replay
+  now switches between a list and an **object diagram**
+  ([ADR-0230](docs/adr/0230-process-information-model.md),
+  slice 4): each data object as a UML object node — `order : Order`, its name
+  underlined the way the notation marks an instance — with the attributes its class
+  declares, in the class's own order, its business key marked, and a member the value
+  does not carry shown as *absent* rather than blank. "Not set" and "set to empty"
+  are different facts about a datum.
+
+  Two things become a line, and the diagram tells them apart because they are
+  different claims. A **part inside its whole's value** is read off the value itself
+  — a composition, drawn with the filled diamond. A **business key one object holds
+  for another** is an inference from two values agreeing, drawn dashed. This is what
+  the business key is *for*: without an identity there is nothing to match on and the
+  line simply cannot be drawn.
+
+  A reference that matches nothing in this instance is **stated rather than dropped**.
+  It is not a fault — it is the edge of what one instance can see: the Customer lives
+  in another instance, or in a data store. Saying so is what makes the picture
+  trustworthy, and it is exactly the boundary a worker-backed data store removes.
+
+  The graph is derived on the server (`GET /api/v1/instances/{key}/object-graph`, and
+  `atlas_instance_object_graph` over MCP) for the same reason the authoring subset is
+  served rather than duplicated: the rules for what relates to what are model
+  semantics, and a second copy of them in the browser is a second place for them to
+  be wrong. The browser gets nodes and lines to draw. An application that models
+  nothing still gets its objects drawn, and the graph says it is showing less than it
+  could rather than showing nothing.
+
+- **A data object's declared type now means something.** BPMN's `itemSubjectRef` —
+  the slot where a data object says what kind of thing it is — resolves against the
+  owning application's information model, at deploy and in the Modeler's Problems
+  panel ([ADR-0230](docs/adr/0230-process-information-model.md),
+  slice 3). Three findings follow from it: a type nothing models, a write targeting a
+  member the class has no attribute for, and the one
+  [ADR-0053](docs/adr/0053-first-class-data-objects.md) named as the whole point of
+  having a type — *"task Approve reads `order`, and nothing upstream produces it"*.
+
+  The member check walks dotted paths (`customer.name`, ADR-0060's named follow-up)
+  and refuses one that would cross a primitive or an enumeration, which has no
+  members to write inside. The read-order check needs no information model at all —
+  it is reachability over the compiled graph — and is deliberately conservative: a
+  loop whose writer precedes its reader is not flagged, while an activity reading
+  what it will only write on its own completion is. **None of these refuses a
+  deploy.** A model is routinely drawn before the vocabulary it names exists, exactly
+  as it is deployed before its connectors do (ADR-0158).
+
+  The Modeler gained the **Type** field this slot always needed, suggesting the
+  application's modeled classes while still accepting one that is not modeled yet.
+  Adding it uncovered a silent data-loss bug and fixes it: `itemSubjectRef` is a
+  *reference* in the bpmn moddle, not a string, and a reference the moddle cannot
+  resolve is dropped on export — so a model carrying the shorthand
+  `itemSubjectRef="Order"` came back **untyped** after being opened and saved. Missing
+  declarations are now repaired on import and written as proper `<itemDefinition>`
+  elements, which the compiler resolves through; the shorthand keeps working
+  everywhere it already did, and a class name that is not a valid XML id (`Line item`)
+  becomes expressible for the first time.
+
+  The information model is also an MCP surface now, because an agent authoring BPMN
+  meets this gap first: `atlas_infomodel_subset` states the rules before it writes,
+  and the model can be listed, read, created, saved, projected to a JSON Schema and
+  deleted. `atlas_data_objects` answers the question from the other side — which
+  running instances are carrying an Order right now.
+
+- **Atlas can now say what the data in a process actually *is*.** A new top-level
+  **Data** area holds a **process information model**: a UML class-diagram subset,
+  owned by a process application and shared by every process in it
+  ([ADR-0230](docs/adr/0230-process-information-model.md),
+  slice 2). A class has typed attributes with multiplicities, documentation, and a
+  **business key** — the part BPMN has no equivalent for, and the fact that makes
+  `Order#ORD-1` the same order in three processes. Three stereotypes carry the
+  meaning: a **business object** is something you can point at and identify, a
+  **value type** is a structured value with no existence of its own, an
+  **enumeration** is a closed set of literals.
+
+  This exists because BPMN structurally cannot say it. A `<dataObject>` is scoped to
+  one process definition, and its `itemSubjectRef` points at a type the specification
+  deliberately leaves opaque — "some other schema language". Atlas has parsed that
+  attribute all along and had nothing to resolve it against. Now it does.
+
+  **The rules are served, not duplicated.** Which relationships may run between which
+  kinds of class is one table, sent to the browser: the canvas refuses a line while it
+  is being dragged with the same matrix the server refuses it on write, and in the
+  server's words. A refusal says which of two things it is — *out of subset* (UML
+  allows it, this build does not author it) or *the notation says no* (an enumeration
+  is not something a relationship can point at) — because a modeler acts on those
+  differently. A model that does not validate is refused with its findings rather than
+  stored, so nothing downstream ever meets a half-model.
+
+  **The JSON Schema projection** derives the contract a *value* of a class is checked
+  against, and states what it could not carry. A JSON document is a tree and a class
+  model is a graph: composition — a whole that owns parts that die with it — becomes
+  containment, and a plain association between two things that exist separately does
+  not. It says so rather than quietly emitting a schema that describes less than you
+  think.
+
+  **Data › Instances** is the same subject one altitude down — every data object the
+  running instances carry, grouped by the type their model declares, marking which of
+  those types is actually modeled and which is still just a string. Next: resolving
+  `itemSubjectRef` against the model at deploy time, so a task that writes
+  `order.amount` into a class with no such attribute is a finding in the Problems
+  panel rather than a surprise at runtime.
+
+- **A process instance now shows the data it carries, and where each value came
+  from.** The Operations replay gained a **Data** tab beside Variables and Decisions:
+  every BPMN data object the instance holds, with the class the model declared it to
+  be (`itemSubjectRef`), whether it is a collection, the lifecycle state it is in
+  (`received` → `approved`), and its current value. Each row opens into the object's
+  **state trail** — every durable write, the state it moved the object into, when, and
+  **which element on the diagram made it**
+  ([ADR-0230](docs/adr/0230-process-information-model.md),
+  slice 1). Atlas has recorded a data object's every transition since data objects
+  became first class ([ADR-0053](docs/adr/0053-first-class-data-objects.md)); until
+  now nothing read that history back, so the one thing that distinguishes a data
+  object from a variable — that it has a life, not just a current value — was
+  invisible.
+
+  "Which element wrote this" is newly recorded rather than guessed. A data object's
+  event now carries the element instance that produced it, stamped where every write
+  already funnels through — the same answer variables got in
+  [ADR-0219](docs/adr/0219-variable-write-attribution.md), for the same reason: on a
+  parallel fork, both branches sit inside each other's window, so a diff of two
+  snapshots credits both writes to both branches. It is an **appended field**, so
+  instances already on disk keep reading and simply report their writes as
+  unattributed rather than naming an element that may be the wrong one.
+
+  This is the first slice of a larger answer to process data. BPMN can say what a
+  datum is called inside one process definition and nothing more: `itemSubjectRef`
+  points at a type the specification deliberately leaves opaque, and two processes'
+  `order` are unrelated strings. The record above proposes filling that slot with a
+  **UML class-diagram subset** owned by a process application — a shared vocabulary
+  above BPMN's per-definition scope, so a data object has a declared type across
+  processes, the Problems panel can check data flow against it, and a data store can
+  say which class it holds and which Worker backs it.
+
+- **See who is signed in right now.** The user list under Organization gains a
+  **Presence** column: *online* for somebody who did something in the last five minutes,
+  *idle* for a session that is open but untouched, *offline* for an account no browser is
+  reporting for. Until now the list could only say whether an account was *enabled* — the
+  same answer for the person reading the screen this second and for the one who left in
+  March ([ADR-0228](docs/adr/0228-user-presence.md)).
+
+  The distinction that makes it worth having is between the last two states, and neither
+  falls out of "when did a request last arrive". The Console polls on its own, so a tab
+  parked behind another window would look busy forever; and a session outlives the laptop
+  that was closed on it by up to twelve hours. So the browser reports two separate things
+  once a minute — that the tab is still open, and whether anybody actually touched it —
+  and the column reads both, asking the first question first: a session that has stopped
+  reporting is *offline* whatever it was doing five minutes ago.
+
+  **Nothing is stored.** Presence is read from the live sessions and from nothing else: no
+  record, no event, nothing in a backup, and no way to ask it about yesterday. A restart
+  shows nobody, which is not a gap — after a restart nobody *is* signed in. It is
+  deliberately coarse (three states, never which page or which action), administrators
+  only, the same reach as the user list it annotates. The column refreshes itself every
+  thirty seconds without reloading the page, so a half-typed user form survives it.
+
 - **An inbound event watch has an hourly budget.** A watch reads a foreign system and
   publishes what it finds; every event can start a process, and that process can write
   back to the system the watch reads. When it writes something the watch's own query
@@ -378,6 +590,39 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The Modeler's bar carries two buttons now, and a menu for the rest.** It ended with
+  seven, added one at a time as the editor grew — Token simulation, Variables,
+  Auto-layout, Save, Export XML, Documentation, Deploy — and every one of them was the
+  same white button. That said they were the same size of decision, which they never
+  were: Auto-layout nudges boxes, Deploy puts a definition on a server and cannot be
+  taken back ([ADR-0229](docs/adr/0229-modeler-bar-hierarchy.md)).
+
+  The bar now carries **Save** and **Deploy**, with Deploy the only filled button because
+  it is the only act there that leaves the browser. The other five moved into a **…**
+  menu beside them, grouped by what they touch: *View* (Token simulation, Variables) and
+  *Diagram* (Auto-layout, Export XML, Documentation). A toggle in a menu cannot look
+  held down, so it says it is on with a check and with `aria-pressed` — the Variables
+  toggle never announced its state at all before.
+
+  Two things that were not about any single button go with it. The bar is one row again
+  at the widths people work at: it wraps, and the buttons were direct children of it, so
+  a narrower window used to drop two or three of them into a second ragged row rather
+  than shorten anything. And the Playground tab no longer shows **▶ Token simulation**
+  directly above **▶ Run** — a drawn walkthrough with no engine
+  ([ADR-0078](docs/adr/0078-design-view-token-simulation.md)) one row above a real
+  sandboxed one ([ADR-0215](docs/adr/0215-modeler-playground.md)), same triangle, two
+  entirely different things.
+
+  One control could not simply move. Token simulation is not a command but a mode: while
+  it is on, the diagram is played rather than edited and the modeling palette is hidden.
+  Its control bar — the one that appears with the mode — now carries **Exit simulation**,
+  so leaving is one visible click rather than a trip back through the menu.
+
+  Nothing about what the controls *do* changed, and F8 still runs Auto-layout from
+  wherever focus sits. The cost is honest and worth naming: five controls are a click
+  further away, and someone opening the Modeler for the first time cannot see that they
+  exist until they open the menu.
+
 - **The three database Worker Types are one capability, and now say so everywhere.** MS
   SQL Server, MariaDB and PostgreSQL differ in a driver name, a placeholder syntax and —
   for SQL Server alone — the ability to bind a parameter by name
@@ -488,6 +733,22 @@ _Changed_ / _Removed_ for each version.
   extension elements are still `<atlas:jiraConnector>` and friends.
 
 ### Fixed
+
+- **A type a modeling tool wrote in its own namespace read back as a GUID.** BPMN gives
+  an `<itemDefinition>` no name of its own — a root element carries an id and nothing
+  else — so `structureRef` is the only slot the specification offers for the name of the
+  type being declared ([ADR-0230](docs/adr/0230-process-information-model.md)).
+  A tool that does not use it has to invent somewhere, and MID Innovator does: its
+  itemDefinitions are a bare GUID id with `<bpanda:property name="Name" value="Incident"/>`
+  beside them. Atlas read the id, so every data object in such a model declared a type
+  called `_853994e9-12f5-9cef-bf69-ca3e2b7cb6a8` — shown that way in the properties panel
+  and in the Data tab, and then reported by the Problems panel as a class nothing models,
+  against a name nobody could have modeled it under.
+
+  The property is read now, by the compiler and by the Modeler alike, so the panel and
+  the Problems list say Incident and agree. `structureRef` still wins wherever both are
+  present, and a definition that names itself nowhere still falls back to its id, so no
+  model that worked reads differently.
 
 - **A Jira watch could get stuck on one window and hold the whole Console with it.** A
   jira watch resumes from a `created >=` / `updated >=` clause, held a safety lag behind

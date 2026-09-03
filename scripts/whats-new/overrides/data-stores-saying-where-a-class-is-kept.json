@@ -1,0 +1,38 @@
+{
+  "tags": [
+    "Data",
+    "Modeling",
+    "Workers"
+  ],
+  "title": {
+    "en": "Say where your data is kept, once for the whole application",
+    "de": "Einmal für die ganze Applikation sagen, wo die Daten liegen"
+  },
+  "summary": {
+    "en": "BPMN has a box for \"this outlives the process\" — a data store — and says nothing at all about what it holds or what keeps it. Atlas did not even read it before. Now you declare a data store in your application's information model, next to your classes: it names the class it keeps, and the Worker that actually keeps it, and every process that draws that box means the same store. It sits beside the classes rather than inside one on purpose. An Order is an Order wherever it lives, so the class itself stays free of any statement about storage — the store is the only place that says where. On the diagram it appears as a cylinder with a dashed line to the class it holds, deliberately not the same shape as a class and deliberately not an association, because nothing in the model relates those two things. There is one rule worth knowing: a store may only keep a business object that has a business key. A process reads from a store by naming which thing it wants, and the key is the only thing that names one — so a store over a class with no identity could be filled and never read from, which is why it is refused. When you deploy, a process naming a store the application has not declared, or one no Worker backs yet, gets a warning rather than a refusal: you draw a process before the store exists, and model the store before someone wires it, and those are different days. For now a store is for reading. Writing back through one is a transaction against something outside Atlas, whose promise of durability ends at its own log, and that deserves its own decision rather than a quiet second option in a dropdown.",
+    "de": "BPMN hat einen Kasten für „das überlebt den Prozess“ — einen Data Store — und sagt kein Wort darüber, was darin liegt oder wer ihn führt. Atlas hat ihn bisher nicht einmal gelesen. Jetzt deklarieren Sie einen Data Store im Informationsmodell Ihrer Applikation, neben Ihren Klassen: Er nennt die Klasse, die er verwahrt, und den Worker, der das tatsächlich tut — und jeder Prozess, der diesen Kasten zeichnet, meint denselben Store. Dass er neben den Klassen steht und nicht in einer, ist Absicht. Eine Bestellung ist eine Bestellung, wo immer sie liegt; die Klasse bleibt also frei von jeder Aussage über Speicherung, und der Store ist die einzige Stelle, die sagt wo. Auf dem Diagramm erscheint er als Zylinder mit gestrichelter Linie zu seiner Klasse — bewusst nicht dieselbe Form wie eine Klasse, und bewusst keine Assoziation, denn im Modell steht nichts, was diese beiden in Beziehung setzt. Eine Regel lohnt sich zu kennen: Ein Store darf nur ein Geschäftsobjekt verwahren, das einen fachlichen Schlüssel hat. Ein Prozess liest aus einem Store, indem er benennt, welches Ding er will, und der Schlüssel ist das Einzige, was eines benennt — ein Store über einer Klasse ohne Identität liesse sich also füllen und nie lesen, und darum wird er abgelehnt. Beim Deployen bekommt ein Prozess, der einen nicht deklarierten Store nennt oder einen, hinter dem noch kein Worker steht, eine Warnung statt einer Ablehnung: Man zeichnet den Prozess, bevor der Store existiert, und modelliert den Store, bevor ihn jemand verkabelt — das sind verschiedene Tage. Vorerst ist ein Store zum Lesen da. Zurückzuschreiben ist eine Transaktion gegen etwas ausserhalb von Atlas, dessen Haltbarkeitsversprechen am eigenen Log endet, und das verdient eine eigene Entscheidung statt einer stillen zweiten Auswahl in einem Dropdown."
+  },
+  "tutorial": {
+    "en": [
+      "Open Data › Model and make sure the class you want to keep is a business object with at least one attribute ticked as its business key.",
+      "Press “+ Data store” in the toolbar. A cylinder appears and its panel opens.",
+      "Name it (Orders), choose the class it holds — only classes with a key are offered — and type the Worker that keeps it, e.g. a clio connector's name.",
+      "Save. The dashed line from the store to its class appears on the canvas.",
+      "In a process of the same application, draw a Data Store Reference and name it the same. Deploy it and read the warnings: if the names disagree, or no Worker is set, the deploy says so and still succeeds."
+    ],
+    "de": [
+      "Öffnen Sie Data › Model und stellen Sie sicher, dass die Klasse, die Sie verwahren wollen, ein Geschäftsobjekt mit mindestens einem als fachlicher Schlüssel markierten Attribut ist.",
+      "Drücken Sie in der Leiste „+ Data store“. Ein Zylinder erscheint, und sein Panel öffnet sich.",
+      "Benennen Sie ihn (Orders), wählen Sie die Klasse — angeboten werden nur solche mit Schlüssel — und tragen Sie den Worker ein, der ihn führt, etwa den Namen eines clio-Connectors.",
+      "Speichern. Die gestrichelte Linie vom Store zu seiner Klasse erscheint auf der Fläche.",
+      "Zeichnen Sie in einem Prozess derselben Applikation eine Data Store Reference und benennen Sie sie gleich. Deployen Sie und lesen Sie die Warnungen: Stimmen die Namen nicht überein oder fehlt der Worker, sagt der Deploy es — und gelingt trotzdem."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Data",
+      "de": "Data öffnen"
+    },
+    "route": "#/data"
+  }
+}

@@ -91,6 +91,9 @@ api/        HTTP API, web UI, command submission and queries
   vault/      Encrypted secret store (ADR-0069/0070)
   sidecar/    Store[T] and the atomic-write + fsync discipline behind every design-time store
   processdoc/ Process documentation (ADR-0143) — the first per-area service (ADR-0147)
+  infomodel/  The process information model: a UML class-diagram subset giving a
+              BPMN data object's itemSubjectRef a type to resolve against
+              (ADR-0230)
 mcp/        MCP server over the HTTP API (ADR-0016)
 metrics/    Prometheus metrics (ADR-0142)
 opensearch/ OpenSearch event exporter (ADR-0114)

@@ -102,6 +102,8 @@
         if (url.match(/\/processes\/[\w-]+\/xml$/)) return V2_XML;
         if (url.includes("/runtime")) return { elements: [] };
         if (url.match(/\/instances\/\d+\/decisions$/)) return [];
+        if (url.match(/\/instances\/\d+\/data-objects$/)) return [];
+        if (url.match(/\/instances\/\d+\/object-graph$/)) return { nodes: [], links: [], unresolved: [] };
         return {};
       };
 

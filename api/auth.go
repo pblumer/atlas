@@ -88,12 +88,26 @@ const defaultSessionTTL = 12 * time.Hour
 // then kept live: a membership change pushes into the snapshot
 // (ADR-0185), so it takes effect without a re-login. Roles
 // remain a login-time snapshot.
+//
+// The two timestamps below are what an administrator sees as presence
+// (ADR-0228). They answer different questions and are
+// deliberately not one field: lastSeen says this session is still reaching the
+// server, which a background poll satisfies on its own, while lastActive says a
+// person did something. Only both together tell "at the keyboard" from "tab left
+// open" from "browser closed".
 type session struct {
 	userID   string
 	username string
 	roles    []string
 	groupIDs []string
 	expires  time.Time
+
+	// lastSeen is when a request last carried this session, stamped by lookup, so
+	// every request refreshes it and no call site has to remember to.
+	lastSeen time.Time
+	// lastActive is when the person holding it last did something, stamped only by
+	// touch — the browser's own report, never a request (presence.go).
+	lastActive time.Time
 }
 
 // sessionStore holds live sessions in memory. Unlike the durable sidecar stores,
@@ -124,7 +138,14 @@ func (s *sessionStore) create(u User, groupIDs []string) (string, error) {
 	roles := append([]string(nil), u.Roles...)
 	groups := append([]string(nil), groupIDs...)
 	s.mu.Lock()
-	s.byToken[token] = session{userID: u.ID, username: u.Username, roles: roles, groupIDs: groups, expires: s.now().Add(s.ttl)}
+	now := s.now()
+	// A login is both: the session is reaching the server and somebody just typed a
+	// password into it, so a fresh account reads as online rather than as idle until
+	// the first heartbeat lands.
+	s.byToken[token] = session{
+		userID: u.ID, username: u.Username, roles: roles, groupIDs: groups,
+		expires: now.Add(s.ttl), lastSeen: now, lastActive: now,
+	}
 	s.mu.Unlock()
 	return token, nil
 }
@@ -141,10 +162,16 @@ func (s *sessionStore) lookup(token string) (session, bool) {
 	if !ok {
 		return session{}, false
 	}
-	if !s.now().Before(sess.expires) {
+	now := s.now()
+	if !now.Before(sess.expires) {
 		delete(s.byToken, token)
 		return session{}, false
 	}
+	// Every request refreshes the connection, and only the connection: a poll from a
+	// tab nobody is looking at is a request like any other, which is precisely why
+	// presence reads two timestamps instead of this one (presence.go).
+	sess.lastSeen = now
+	s.byToken[token] = sess
 	return sess, true
 }
 

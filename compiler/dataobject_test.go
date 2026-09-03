@@ -580,3 +580,182 @@ func TestBuilderAddDataOutputAssociation(t *testing.T) {
 		t.Errorf("start associations = %d, want 0", len(got))
 	}
 }
+
+// itemDefinitionBPMN declares its data-object types the way the BPMN specification
+// intends and the way the Modeler writes them: an <itemDefinition> at definitions
+// level, referenced by itemSubjectRef. The structureRef carries the real name; the
+// id is only the reference handle, so a class name that is not a valid XML id still
+// travels.
+const itemDefinitionBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <itemDefinition id="ItemDefinition_Order" structureRef="Order"/>
+  <itemDefinition id="ItemDefinition_Line_item" structureRef="Line item"/>
+  <itemDefinition id="Bare"/>
+  <process id="p" isExecutable="true">
+    <dataObject id="DO_order" name="order" itemSubjectRef="ItemDefinition_Order"/>
+    <dataObject id="DO_line" name="line" itemSubjectRef="ItemDefinition_Line_item"/>
+    <dataObject id="DO_bare" name="bare" itemSubjectRef="Bare"/>
+    <dataObject id="DO_direct" name="direct" itemSubjectRef="Claim"/>
+    <startEvent id="s"/><endEvent id="e"/><sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestDataObjectItemSubjectRefResolvesThroughItemDefinition pins how a declared
+// type is read. BPMN's itemSubjectRef is a *reference* to an <itemDefinition>, and
+// that is what a modeling tool writes — so the compiler resolves it, taking the
+// definition's structureRef as the type name. A reference naming no itemDefinition
+// keeps working as the name itself, which is what every hand-written model and
+// every Atlas fixture does.
+func TestDataObjectItemSubjectRefResolvesThroughItemDefinition(t *testing.T) {
+	cp, err := compiler.Parse(1, 1, strings.NewReader(itemDefinitionBPMN))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	byName := map[string]string{}
+	for _, do := range cp.DataObjects() {
+		byName[cp.Intern(do.Name)] = cp.Intern(do.ItemType)
+	}
+	tests := []struct{ object, want string }{
+		{"order", "Order"},
+		// The id is a handle; the structureRef is the name, so a class called "Line
+		// item" survives a reference id that could not contain a space.
+		{"line", "Line item"},
+		// An itemDefinition with no structureRef says nothing more than its own id.
+		{"bare", "Bare"},
+		// And a reference that names no itemDefinition is the type name itself — the
+		// shorthand every hand-written model uses.
+		{"direct", "Claim"},
+	}
+	for _, tt := range tests {
+		if got := byName[tt.object]; got != tt.want {
+			t.Errorf("data object %q: ItemType = %q, want %q", tt.object, got, tt.want)
+		}
+	}
+}
+
+// vendorItemDefinitionBPMN is how MID Innovator (bpanda) declares a type: a bare
+// GUID id, no structureRef, and the name in a vendor extension property. This is a
+// real export shape, not a hypothetical one — the itemDefinitions in a model exported
+// from Innovator 16.2 look exactly like this, down to the property's own id.
+const vendorItemDefinitionBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpanda="http://www.smartfacts.com" xmlns:ino="http://www.mid.de/spec/Innovator/14.3.1">
+  <itemDefinition id="_853994e9-12f5-9cef-bf69-ca3e2b7cb6a8">
+    <extensionElements>
+      <ino:stereotypename value="businessObject"/>
+      <bpanda:property name="Name" value="Incident" id="property_ELNamedElement_Name"/>
+      <bpanda:property name="Bearbeitungsstatus" value="in Arbeit" id="label_Editing Status"/>
+    </extensionElements>
+  </itemDefinition>
+  <itemDefinition id="_636d4322-604f-29cb-2beb-0feb766ec43e" structureRef="Order">
+    <extensionElements>
+      <bpanda:property name="Name" value="Bestellung"/>
+    </extensionElements>
+  </itemDefinition>
+  <itemDefinition id="_7a8d7463-6484-807f-7d6c-e2dbeb598f71">
+    <extensionElements>
+      <bpanda:property name="Bearbeitungsstatus" value="in Arbeit"/>
+    </extensionElements>
+  </itemDefinition>
+  <process id="p" isExecutable="true">
+    <dataObject id="DO_incident" name="incident" itemSubjectRef="_853994e9-12f5-9cef-bf69-ca3e2b7cb6a8"/>
+    <dataObject id="DO_order" name="order" itemSubjectRef="_636d4322-604f-29cb-2beb-0feb766ec43e"/>
+    <dataObject id="DO_untitled" name="untitled" itemSubjectRef="_7a8d7463-6484-807f-7d6c-e2dbeb598f71"/>
+    <startEvent id="s"/><endEvent id="e"/><sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestDataObjectItemTypeReadsAVendorNameWhenThereIsNoStructureRef pins the third way
+// round. BPMN gives an <itemDefinition> no name attribute — a root element carries an
+// id and nothing else — so structureRef is the only slot the specification offers for
+// the name of the type being declared, and a tool that does not use it puts the name
+// in its own namespace instead.
+//
+// Reading only the id, as this did before, turns every data object in such a model
+// into one declaring a type called _853994e9-12f5-9cef-bf69-ca3e2b7cb6a8 — shown that
+// way in the Console and then reported as a class nothing models, against a name
+// nobody could have modeled.
+func TestDataObjectItemTypeReadsAVendorNameWhenThereIsNoStructureRef(t *testing.T) {
+	cp, err := compiler.Parse(1, 1, strings.NewReader(vendorItemDefinitionBPMN))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	byName := map[string]string{}
+	for _, do := range cp.DataObjects() {
+		byName[cp.Intern(do.Name)] = cp.Intern(do.ItemType)
+	}
+	tests := []struct{ object, want string }{
+		// The name the exporter did record, rather than the GUID beside it.
+		{"incident", "Incident"},
+		// structureRef still wins: it is the slot the specification names, so a model
+		// that fills it means what it says there, whatever a vendor property adds.
+		{"order", "Order"},
+		// A definition that names itself nowhere still says no more than its own id.
+		{"untitled", "_7a8d7463-6484-807f-7d6c-e2dbeb598f71"},
+	}
+	for _, tt := range tests {
+		if got := byName[tt.object]; got != tt.want {
+			t.Errorf("data object %q: ItemType = %q, want %q", tt.object, got, tt.want)
+		}
+	}
+}
+
+// dataStoreBPMN declares a store the BPMN way: a <dataStore> at definitions level
+// and a <dataStoreReference> inside the process that points at it. A second
+// reference carries only its own name, which is what a tool that draws the box
+// without declaring the root element produces.
+const dataStoreBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <dataStore id="Store_orders" name="Orders" isUnlimited="true"/>
+  <process id="p" isExecutable="true">
+    <dataStoreReference id="Ref_orders" name="order archive" dataStoreRef="Store_orders"/>
+    <dataStoreReference id="Ref_bare" name="Invoices"/>
+    <startEvent id="s"/><endEvent id="e"/><sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestDataStoreReferencesCompile pins that a process's data stores are compiled at
+// all — until now a <dataStoreReference> was parsed as nothing, so a model could
+// name where its data lives and Atlas would not read the sentence.
+//
+// The name is the *store's*, not the reference's: the reference is one view of the
+// store on one diagram and may be labelled for that diagram, while the store is the
+// thing every process means when it says Orders.
+func TestDataStoreReferencesCompile(t *testing.T) {
+	cp, err := compiler.Parse(1, 1, strings.NewReader(dataStoreBPMN))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	stores := cp.DataStores()
+	if len(stores) != 2 {
+		t.Fatalf("stores = %d, want 2: %+v", len(stores), stores)
+	}
+	byElement := map[string]string{}
+	for _, st := range stores {
+		byElement[cp.Intern(st.ElementId)] = cp.Intern(st.Name)
+	}
+	if got := byElement["Ref_orders"]; got != "Orders" {
+		t.Errorf("Ref_orders resolves to %q, want the store's own name Orders", got)
+	}
+	// A reference with no root element to resolve is its own name — the shorthand a
+	// drawing tool produces, and still a usable statement about where data lives.
+	if got := byElement["Ref_bare"]; got != "Invoices" {
+		t.Errorf("Ref_bare resolves to %q, want Invoices", got)
+	}
+}
+
+// TestDataStoreDeduplicatesByName covers the same store drawn twice on one diagram:
+// two boxes, one store, so the process names it once.
+func TestDataStoreDeduplicatesByName(t *testing.T) {
+	const twice = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <dataStore id="Store_orders" name="Orders"/>
+  <process id="p" isExecutable="true">
+    <dataStoreReference id="Ref_a" dataStoreRef="Store_orders"/>
+    <dataStoreReference id="Ref_b" dataStoreRef="Store_orders"/>
+    <startEvent id="s"/><endEvent id="e"/><sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+  </process>
+</definitions>`
+	cp, err := compiler.Parse(1, 1, strings.NewReader(twice))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := cp.DataStores(); len(got) != 1 || cp.Intern(got[0].Name) != "Orders" {
+		t.Errorf("stores = %+v, want one Orders", got)
+	}
+}
