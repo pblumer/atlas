@@ -3,19 +3,24 @@
   <head>
     <meta charset="utf-8" />
     <title>Atlas Panorama mesh framing e2e harness</title>
-    <!-- Drives the *real* fitToFrame and zoomView from api/web/panorama-mesh.js.
-         Both are pure functions over numbers — the DOM only ever carries their
-         result into a viewBox attribute — so they are testable as functions, and
-         the properties that matter (the fit leaves no empty band, the zoom keeps
-         the point under the cursor) are stated as arithmetic rather than as
-         screenshots. -->
+    <!-- Drives the *real* fitToFrame, zoomView, contentBox and fitView from
+         api/web/panorama-mesh.js. All four are pure functions over numbers — the DOM
+         only ever carries their result into a viewBox attribute — so they are
+         testable as functions, and the properties that matter (the fit leaves no
+         empty band, the zoom keeps the point under the cursor, "Fit" frames the
+         picture rather than the world it was laid out in) are stated as arithmetic
+         rather than as screenshots. -->
   </head>
   <body>
     <div id="ready">loading</div>
     <script type="module">
-      import { fitToFrame, zoomView } from "/panorama-mesh.js";
+      import { contentBox, fitToFrame, fitView, zoomView } from "/panorama-mesh.js";
       window.fitToFrame = (nodes, w, h, pad) => fitToFrame(nodes, w, h, pad);
       window.zoomView = (view, factor, focus, base) => zoomView(view, factor, focus, base);
+      // What "Fit" actually frames: the box the drawn nodes occupy, and the view
+      // that puts it in the space it can be read and reached in.
+      window.contentBox = (nodes, pad) => contentBox(nodes, pad);
+      window.fitView = (box, frame, reserve) => fitView(box, frame, reserve);
       document.getElementById("ready").textContent = "ready";
     </script>
   </body>

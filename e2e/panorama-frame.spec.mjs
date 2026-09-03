@@ -133,3 +133,120 @@ test("zoom is bounded in both directions", async ({ page }) => {
   expect(inward.w).toBeGreaterThan(0);
   expect(inward.w).toBeCloseTo(base.w / 24, 3);
 });
+
+// What "Fit" frames (ADR-0211 §7). The world is an area budget the layout settles
+// in; the picture is where the nodes ended up. They coincide until something is
+// pinned — the fit is skipped then, to keep pins under the spots they were dropped
+// on — and from that moment framing the world shows the picture in a corner of a
+// mostly empty sheet.
+
+const FIT_FRAME = { width: 1000, height: 500 };
+
+// The box is the nodes plus what each of them draws: a circle has a radius, and a
+// name hangs below it. A box drawn through the centres would frame the picture with
+// half of every edge node cut off.
+test("the content box carries each node's own footprint", async ({ page }) => {
+  const box = await page.evaluate(() => window.contentBox(
+    [{ x: 100, y: 100, r: 10 }, { x: 300, y: 200, r: 30 }],
+    { top: 5, right: 7, bottom: 9, left: 11 }));
+
+  expect(box).toEqual({ x: 100 - 10 - 11, y: 100 - 10 - 5, width: (330 + 7) - 79, height: (230 + 9) - 85 });
+});
+
+// Nothing to frame is not an error and not a guess: an empty box, for the caller to
+// fall back from.
+test("an empty graph has an empty box", async ({ page }) => {
+  expect(await page.evaluate(() => window.contentBox([]))).toEqual({ x: 0, y: 0, width: 0, height: 0 });
+});
+
+// The view has to carry the viewport's aspect ratio or preserveAspectRatio pads one
+// axis with a band of nothing — which is the "content in the corner, empty space
+// above" this framing exists to remove.
+test("the fitted view has the viewport's shape, whatever shape the content is", async ({ page }) => {
+  const views = await page.evaluate((frame) => ({
+    wide: window.fitView({ x: 0, y: 0, width: 800, height: 100 }, frame),
+    tall: window.fitView({ x: 0, y: 0, width: 100, height: 800 }, frame),
+    square: window.fitView({ x: -50, y: -50, width: 400, height: 400 }, frame),
+  }), FIT_FRAME);
+
+  for (const [name, v] of Object.entries(views)) {
+    expect(v.w / v.h, name).toBeCloseTo(FIT_FRAME.width / FIT_FRAME.height, 5);
+  }
+});
+
+// Centred in what is left over, so the leftover reads as a margin rather than as a
+// blank half of the sheet.
+test("the content is centred in the view", async ({ page }) => {
+  const v = await page.evaluate((frame) =>
+    window.fitView({ x: 200, y: 400, width: 100, height: 100 }, frame), FIT_FRAME);
+
+  expect(200 - v.x).toBeCloseTo((v.w - 100) / 2, 5);
+  expect(400 - v.y).toBeCloseTo((v.h - 100) / 2, 5);
+});
+
+// The corner the zoom controls float over is not drawable: a node under them takes
+// no pointer, so it can be neither selected nor dragged. Reserving it is what makes
+// every node in the fitted picture reachable — and the fit pushes content to the
+// edges by construction, so without this a node lands there routinely.
+test("the reserved corner stays clear of content", async ({ page }) => {
+  const reserve = { width: 200, height: 60 };
+  const cases = await page.evaluate(([frame, res]) => ["wide", "tall", "square"].map((shape) => {
+    const box = shape === "wide" ? { x: 0, y: 0, width: 800, height: 120 }
+      : shape === "tall" ? { x: 0, y: 0, width: 120, height: 800 }
+      : { x: 0, y: 0, width: 400, height: 400 };
+    const view = window.fitView(box, frame, res);
+    return { shape, box, view, scale: frame.width / view.w };
+  }), [FIT_FRAME, reserve]);
+
+  for (const { shape, box, view, scale } of cases) {
+    // The corner the chrome occupies, in the view's own units.
+    const corner = {
+      left: view.x + view.w - reserve.width / scale,
+      top: view.y + view.h - reserve.height / scale,
+    };
+    // The content's box does not reach into it. Avoiding a corner means clearing one
+    // of its two sides — not both, which would be reserving two full strips and
+    // giving away a quarter of a wide canvas to a panel a few hundred pixels across.
+    const clearsRight = box.x + box.width <= corner.left + 0.001;
+    const clearsBottom = box.y + box.height <= corner.top + 0.001;
+    expect(clearsRight || clearsBottom, shape).toBe(true);
+  }
+});
+
+// Reserving the corner must not be paid for twice. A short panel on a wide canvas
+// costs the height it occupies, never the width as well.
+test("the corner costs one dimension, not both", async ({ page }) => {
+  const { free, reserved } = await page.evaluate((frame) => {
+    const box = { x: 0, y: 0, width: 900, height: 400 };
+    return {
+      free: window.fitView(box, frame),
+      reserved: window.fitView(box, frame, { width: 200, height: 60 }),
+    };
+  }, FIT_FRAME);
+
+  // Scale is frame width over view width, so a wider view is a smaller picture.
+  const cost = reserved.w / free.w;
+  expect(cost).toBeGreaterThan(1);      // it does cost something
+  expect(cost).toBeLessThan(1.2);       // and not the 1.25+ two strips would cost
+});
+
+// A reserve wider than the viewport would fit the content into nothing, or invert
+// the scale. It is chrome, so it can never take more than half the picture.
+test("an absurd reserve cannot swallow the picture", async ({ page }) => {
+  const v = await page.evaluate((frame) =>
+    window.fitView({ x: 0, y: 0, width: 100, height: 100 }, frame,
+      { width: frame.width * 3, height: frame.height * 3 }), FIT_FRAME);
+
+  expect(v.w).toBeGreaterThan(0);
+  expect(Number.isFinite(v.w) && Number.isFinite(v.h)).toBe(true);
+  expect(v.w / v.h).toBeCloseTo(FIT_FRAME.width / FIT_FRAME.height, 5);
+});
+
+// Degenerate content — one node, or a set that settled on a line — has no extent on
+// some axis. It must frame, not divide by zero.
+test("content with no extent still frames", async ({ page }) => {
+  const v = await page.evaluate((frame) =>
+    window.fitView({ x: 50, y: 50, width: 0, height: 0 }, frame), FIT_FRAME);
+  expect(Number.isFinite(v.x) && Number.isFinite(v.w)).toBe(true);
+  expect(v.w).toBeGreaterThan(0);
+});
