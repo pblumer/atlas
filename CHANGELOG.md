@@ -14,7 +14,8 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
-- **clio tasks run on a worker now** (ADR-draft-in-process-connectors-refused, slice 2).
+- **clio tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 2).
   Writing an event, folding a subject's state, reading its history: three round trips
   to an event store somebody else operates, all of them on the loop that owns the
   partition's state. clio joins the kinds Atlas offloads and supervises by itself.
@@ -36,7 +37,7 @@ _Changed_ / _Removed_ for each version.
   `soap`, `temis`.
 
 - **REST and LDIF tasks no longer run on the engine's own loop**
-  ([ADR-draft-in-process-connectors-refused](docs/adr/draft-in-process-connectors-refused.md),
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md),
   finishing [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md)). ADR-0164 decided
   two years ago that a side-effecting service task belongs on a worker, and then chose
   deprecation over a ban for one stated reason: a connector task could not run on a

@@ -996,7 +996,7 @@ func (s *Server) deployedSecretRefEnvLocked(what string, refsOf func(*compiler.C
 }
 
 // restWorkerEnv renders the auth secrets a supervised REST worker needs: one variable
-// per secret reference the deployed models name (ADR-draft-in-process-connectors-refused).
+// per secret reference the deployed models name (ADR-0233).
 //
 // A REST task carries its endpoint, method, headers and body in the model, and all of
 // that already travels with the job (ADR-0168). What does not travel is the secret

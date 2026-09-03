@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// REST is offloaded by default (ADR-draft-in-process-connectors-refused), and the
+// REST is offloaded by default (ADR-0233), and the
 // reason it can be is that the engine hands its auth secrets over. A REST task's
 // endpoint travels with the job; the secret behind its authSecret reference does not,
 // because a reference is resolved where it is used — and a supervised worker has no

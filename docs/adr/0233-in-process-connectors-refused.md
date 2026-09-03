@@ -1,4 +1,4 @@
-# ADR-DRAFT: Finish ADR-0164 — in-process connector work becomes a finite list, then nothing
+# ADR-0233: Finish ADR-0164 — in-process connector work becomes a finite list, then nothing
 
 - **Status:** Proposed
 - **Date:** 2026-09-03

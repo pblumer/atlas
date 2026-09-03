@@ -647,7 +647,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// that pegs a core or leaks memory taking nothing else down with it, which is the
 	// isolation the script kind is moved out for in the first place.
 	if inProcessConnectors {
-		// The escape hatch of ADR-draft-in-process-connectors-refused: still supported,
+		// The escape hatch of ADR-0233: still supported,
 		// and no longer silent. An operator has reasons — a host only the engine can
 		// reach, a credential not yet moved — but a flag that quietly puts every
 		// integration back on the run loop is how an installation ends up there without
