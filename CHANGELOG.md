@@ -41,6 +41,48 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Importing a UML class diagram: reading what somebody else drew.** A data model is
+  normally drawn in a UML tool — Enterprise Architect, Papyrus, Visual Paradigm — long
+  before anybody opens Atlas, and until now the only way to get it in was to retype it
+  class by class. What that loses is never the class names: it is the **business key**,
+  the one fact BPMN has no equivalent for and the one every cross-process capability
+  rests on. **Data › Information model** now has an **Import** button, and
+  `POST /api/v1/infomodel/import` behind it
+  ([ADR-0232](docs/adr/0232-uml-model-import.md), extending
+  [ADR-0230](docs/adr/0230-process-information-model.md)).
+
+  Two documents are read, and the format is detected from the document itself — a UML
+  tool writes `.uml`, `.xmi` and `.xml` for the same file, so the extension says
+  nothing. **XMI 2.5.1** is what a UML tool exports: classes, data types and
+  enumerations become the three stereotypes, an `ownedAttribute` that is an association
+  end belongs to its association rather than being stated twice, bounds become the four
+  multiplicities the subset has, `isID` becomes the business key, and a composite end
+  is read as the *whole* — which is what the diamond marks. **Atlas's own JSON** is the
+  other: exactly what `GET /api/v1/infomodel/models/{id}` hands out, so a model moves
+  between applications and installations through the document the API already gives
+  you.
+
+  ADR-0230 said XMI was "an export, not an interchange … until it is tested". What
+  makes it safe now is that **nothing is dropped silently**. An import goes through the
+  same subset the canvas writes through, and everything the subset has no place for —
+  an interface, an operation, an n-ary association, a multiplicity of `0..5`, a
+  generalization that closes a cycle — comes back as a note naming the element, at one
+  of three levels: *dropped* (not in the model), *adjusted* (in the model, saying
+  something slightly different) or *info* (nothing lost, worth knowing — a flattened
+  package, a generated layout). The Import dialog shows that report **before** anything
+  is stored, from the same call that does the storing (`dryRun`), so what the preview
+  promises is what lands.
+
+  Two readings are deliberate rather than literal. An identifier whose multiplicity the
+  document never states is read as **required**: the document does say something about
+  that member — it identifies the instance — and reading it as optional would throw the
+  business key away. And a document with no geometry is **laid out on a grid**, because
+  XMI keeps the picture in a file of its own and a stack of boxes at the origin is not
+  a diagram; the note says so, since what was lost is the arrangement, not the model.
+
+  The same import is an MCP tool (`atlas_import_information_model`), so an agent can
+  bring a vocabulary in before authoring against it.
+
 - **A variable named after one of your data objects is now flagged.** The new rule
   `variable.shadows-data-object` raises a warning where the two collide: draw a data
   object `Kunde`, have a task write its result into a variable `Kunde` — or read the
