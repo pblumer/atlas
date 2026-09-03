@@ -620,3 +620,51 @@ func TestIndexBackedScansReportDecodeErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestInstanceReadsRefuseDuringShutdown: the instance listing and the instance
+// search reach state through the run loop, and a loop that is closing runs
+// nothing handed to it — so the handler never gets its read view back. It has to
+// say the server is going down. Returning the zero value instead would read as
+// "this engine holds no instances", which is the one answer an operator must
+// never be given wrongly.
+func TestInstanceReadsRefuseDuringShutdown(t *testing.T) {
+	dir := t.TempDir()
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+		_ = log.Close()
+	})
+	proc := engine.New(1, log, store, nil)
+	if err := proc.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	srv, err := New(proc, store, dir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	h := srv.Handler()
+	// Closed here, not from a cleanup: the point of the test is what the handlers do
+	// once the loop has stopped draining. Close is not idempotent, so it is not also
+	// registered as a cleanup.
+	srv.Close()
+
+	for _, path := range []string{
+		"/api/v1/instances",
+		"/api/v1/instances?process=1&state=active",
+		"/api/v1/instances/search?q=anything",
+		"/api/v1/instances/search?q=12345",
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Errorf("GET %s during shutdown = %d, want 503 (%s)", path, rec.Code, rec.Body.String())
+		}
+	}
+}

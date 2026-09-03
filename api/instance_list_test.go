@@ -408,6 +408,19 @@ func TestListInstancesFinishedStatePaging(t *testing.T) {
 	if len(seen) != n {
 		t.Errorf("paged over %d finished instances, want %d", len(seen), n)
 	}
+
+	// Unscoped, the finished half has no index to read in completion order, so it is
+	// the capped family scan sorted afterwards. The order it returns must still be
+	// most-recently-finished first — that is what the sort is for.
+	rows, _ := listPage(t, ts, "?state=finished")
+	if len(rows) != n {
+		t.Fatalf("unscoped finished = %d rows, want %d", len(rows), n)
+	}
+	for i := 1; i < len(rows); i++ {
+		if rows[i-1].CompletedAt < rows[i].CompletedAt {
+			t.Errorf("unscoped finished is not newest-completion-first: %d before %d", rows[i-1].CompletedAt, rows[i].CompletedAt)
+		}
+	}
 }
 
 // TestListInstancesQueryContract pins what the listing accepts and what it

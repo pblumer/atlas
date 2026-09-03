@@ -460,4 +460,19 @@ func TestSearchInstancesScopedStopsAtTheCap(t *testing.T) {
 			t.Fatalf("row %d variables = %+v, want the matched tenant", r.Key, r.Variables)
 		}
 	}
+
+	// Unscoped, the same query has no index to stop early against — it reads the
+	// whole family and the cap is applied to the collected result instead. Same
+	// answer size, different way of arriving at it.
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/instances/search?q="+url.QueryEscape("tenant=acme"), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("unscoped search: status=%d body=%s", code, body)
+	}
+	var unscoped []searchRow
+	if err := json.Unmarshal(body, &unscoped); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(unscoped) != 200 {
+		t.Errorf("unscoped search returned %d rows, want the 200-row cap", len(unscoped))
+	}
 }
