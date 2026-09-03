@@ -1,6 +1,6 @@
 package compiler
 
-// WebScrapeFormat selects the document representation a web-scraping connector
+// WebScrapeFormat selects the document representation a web-scraping worker
 // extracts (ADR-0190). It is compiled from the model and carried as a compact value
 // in ConnectorTaskDetail so the worker never infers a representation from runtime
 // content. Zero is HTML deliberately: ConnectorTaskDetail values produced by code
@@ -44,7 +44,7 @@ type WebScrapeExtractionConfig struct {
 	Retries   int32
 }
 
-// AddWebScrapeExtractionTask adds a web-scraping connector task with the explicit
+// AddWebScrapeExtractionTask adds a web-scraping task with the explicit
 // extraction format and bound defined by ADR-0190. Existing callers may keep using
 // AddWebScrapeConnectorTask, whose zero-value format remains HTML with no bound.
 func (b *Builder) AddWebScrapeExtractionTask(cfg WebScrapeExtractionConfig) int32 {

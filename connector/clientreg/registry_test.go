@@ -17,11 +17,11 @@ func TestClientAndProblemAreDifferentAnswers(t *testing.T) {
 		t.Errorf(`Client("good") = (%q, %v), want ("client", true)`, c, ok)
 	}
 	if _, ok := r.Problem("good"); ok {
-		t.Errorf(`Problem("good") reported a problem for a usable connector`)
+		t.Errorf(`Problem("good") reported a problem for a usable worker`)
 	}
 
 	if _, ok := r.Client("broken"); ok {
-		t.Errorf(`Client("broken") returned a client for a connector that could not be built`)
+		t.Errorf(`Client("broken") returned a client for a worker that could not be built`)
 	}
 	if why, ok := r.Problem("broken"); !ok || why != "no credential" {
 		t.Errorf(`Problem("broken") = (%q, %v), want ("no credential", true)`, why, ok)
@@ -36,7 +36,7 @@ func TestClientAndProblemAreDifferentAnswers(t *testing.T) {
 	}
 }
 
-// TestRegisterClearsAProblem covers the reconfiguration path: a connector that was
+// TestRegisterClearsAProblem covers the reconfiguration path: a worker that was
 // broken and is fixed must stop being reported as broken.
 func TestRegisterClearsAProblem(t *testing.T) {
 	r := clientreg.New[string]()
@@ -44,7 +44,7 @@ func TestRegisterClearsAProblem(t *testing.T) {
 	r.Register("mail", "client")
 
 	if _, ok := r.Problem("mail"); ok {
-		t.Errorf("Problem stayed after the connector was registered")
+		t.Errorf("Problem stayed after the worker was registered")
 	}
 	if c, ok := r.Client("mail"); !ok || c != "client" {
 		t.Errorf("Client after Register = (%q, %v), want (\"client\", true)", c, ok)
@@ -84,20 +84,20 @@ func TestNilMapsClearRatherThanPanic(t *testing.T) {
 }
 
 // TestUnresolvedSaysWhichProblemItIs pins the message an operator actually reads on a
-// parked token. The old one claimed a configured-but-broken connector did not exist,
-// which is the sentence that sent someone looking for a connector that was right there.
+// parked token. The old one claimed a configured-but-broken worker did not exist,
+// which is the sentence that sent someone looking for a worker that was right there.
 func TestUnresolvedSaysWhichProblemItIs(t *testing.T) {
 	r := clientreg.New[string]()
-	r.ReplaceWith(nil, map[string]string{"Patrick Blumer": "the connector is disabled"})
+	r.ReplaceWith(nil, map[string]string{"Patrick Blumer": "the worker is disabled"})
 
 	configured := r.Unresolved("mail", "Patrick Blumer").Error()
-	want := `mail: connector "Patrick Blumer" is configured but not usable: the connector is disabled`
+	want := `mail: worker "Patrick Blumer" is configured but not usable: the worker is disabled`
 	if configured != want {
-		t.Errorf("Unresolved for a broken connector = %q, want %q", configured, want)
+		t.Errorf("Unresolved for a broken worker = %q, want %q", configured, want)
 	}
 
 	absent := r.Unresolved("mail", "Nobody").Error()
-	if absent != `mail: no connector registered as "Nobody"` {
-		t.Errorf("Unresolved for an unconfigured connector = %q", absent)
+	if absent != `mail: no worker registered as "Nobody"` {
+		t.Errorf("Unresolved for an unconfigured worker = %q", absent)
 	}
 }

@@ -15,7 +15,7 @@ import (
 // inheriting this process's environment; the client secret must not sit there in the
 // clear. An operator who wants it in the vault names a vault key in
 // ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF, and the engine resolves it and hands the child
-// the value under the name the worker reads — the AD bind-secret story with a connector
+// the value under the name the worker reads — the AD bind-secret story with a worker
 // name in place of a reference.
 
 // A tenant whose secret lives in the vault: the worker is handed that secret under its
@@ -98,7 +98,7 @@ func TestEntraSecretsAreCollectedPerTenant(t *testing.T) {
 }
 
 // A worker that does not serve Entra is not handed Entra's client secret: one worker
-// per kind is what keeps another connector's worker from reading the tenant credential.
+// per kind is what keeps another worker's worker from reading the tenant credential.
 func TestANonEntraWorkerIsNeverGivenTheEntraSecret(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	if _, err := srv.vault.Set("entra-blumer", "s3cr3t"); err != nil {
@@ -189,7 +189,7 @@ func TestADisabledEntraConnectorIsNotHandedOver(t *testing.T) {
 		t.Fatalf("connectors.Save: %v", err)
 	}
 	if env := srv.entraWorkerEnv(); len(env) != 0 {
-		t.Errorf("environment = %v, want nothing for a disabled connector", env)
+		t.Errorf("environment = %v, want nothing for a disabled worker", env)
 	}
 }
 

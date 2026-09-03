@@ -25,7 +25,7 @@ func (p *probeCalls) probe(_ context.Context, product sqldb.Product, dsn string)
 }
 
 // The point of the check, for a database: it runs against what is *typed*, before
-// anything is saved. A connection string is a SQL connector's whole configuration, so
+// anything is saved. A connection string is a SQL worker's whole configuration, so
 // the alternative to answering here is saving a wrong one and learning about it as an
 // incident on a parked task.
 //
@@ -70,7 +70,7 @@ func TestASQLConnectorIsCheckedBeforeItIsSaved(t *testing.T) {
 			}
 			// Checking stores nothing.
 			if recs, err := srv.connectors.LoadAll(); err != nil || len(recs) != 0 {
-				t.Errorf("the check stored %d connector(s) (err=%v), want none", len(recs), err)
+				t.Errorf("the check stored %d worker(s) (err=%v), want none", len(recs), err)
 			}
 		})
 	}
@@ -91,8 +91,8 @@ func TestASQLConnectorThatCannotBeReachedIsAnAnswerNotAnError(t *testing.T) {
 	}
 }
 
-// A connector already saved is checked through its vault reference, which is the case
-// an operator hits when they come back to a connector that stopped working.
+// A worker already saved is checked through its vault reference, which is the case
+// an operator hits when they come back to a worker that stopped working.
 func TestASavedSQLConnectorIsCheckedThroughItsVaultReference(t *testing.T) {
 	calls := &probeCalls{}
 	srv, _ := newValidateServer(t, WithSQLProbe(calls.probe))
@@ -131,7 +131,7 @@ func TestASQLCheckWithNothingToDialIsRefused(t *testing.T) {
 	}
 }
 
-// A reference the vault does not hold is the state a connector is in between being
+// A reference the vault does not hold is the state a worker is in between being
 // created and having its secret set. It is refused with that reason rather than
 // handed to the driver as an empty string, which every driver reports differently.
 func TestASQLCheckWithAnUnresolvableReferenceSaysSo(t *testing.T) {
@@ -147,7 +147,7 @@ func TestASQLCheckWithAnUnresolvableReferenceSaysSo(t *testing.T) {
 }
 
 // A server whose binary does not link a database driver cannot check a database, and
-// says that instead of reporting the connector broken. The engine deliberately does
+// says that instead of reporting the worker broken. The engine deliberately does
 // not import the drivers (ADR-0173), so the probe is wired in by whoever also runs
 // workers — and an embedder who wires nothing gets an honest answer.
 func TestAServerWithNoSQLDriverSaysItCannotCheck(t *testing.T) {

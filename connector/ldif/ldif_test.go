@@ -196,11 +196,11 @@ func TestKnownFormat(t *testing.T) {
 		t.Error("the empty format must not be accepted")
 	}
 	if KnownFormat("csv") {
-		t.Error("a table format belongs to the text-file connector, not this one")
+		t.Error("a table format belongs to the text-file worker, not this one")
 	}
 }
 
-// The JSON shape is the one the directory connectors produce, so a process handles a
+// The JSON shape is the one the directory workers produce, so a process handles a
 // file and a live directory the same way.
 func TestEntriesToJSON(t *testing.T) {
 	got, ok := EntriesToJSON([]Entry{{DN: "uid=a,dc=x", Attributes: map[string][]string{"cn": {"A"}}}}).([]any)
@@ -480,7 +480,7 @@ func TestHandlerErrors(t *testing.T) {
 	}
 }
 
-// An element that is not a connector task at all is reported rather than run.
+// An element that is not a task at all is reported rather than run.
 func TestHandlerNonConnectorTask(t *testing.T) {
 	b := compiler.NewBuilder(7, "p", 1)
 	start := b.AddStartEvent()

@@ -47,10 +47,10 @@ func clioReadScope(subject string, recursive bool) string {
 	return "read:" + subject
 }
 
-// envConnectorSecret returns the token for a connector's credentialsRef from the
+// envConnectorSecret returns the token for a worker's credentialsRef from the
 // environment per the ADR-0041 A2 secret model: the engine stores only the
 // reference; the value lives in ATLAS_CONNECTOR_<REF>_TOKEN (REF normalized like a
-// connector name). An empty ref yields no token.
+// worker name). An empty ref yields no token.
 func envConnectorSecret(ref string) string {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
@@ -78,7 +78,7 @@ func (s *Server) resolveConnectorSecret(ref string) string {
 	return envConnectorSecret(ref)
 }
 
-// envTemisClients builds the temis connector clients configured purely from the
+// envTemisClients builds the temis worker clients configured purely from the
 // environment (the pre-managed mechanism, kept as a base): ATLAS_TEMIS_CONNECTORS
 // plus per-name ATLAS_TEMIS_<NAME>_URL/_TOKEN.
 func envTemisClients() map[string]temis.Client {
@@ -101,24 +101,24 @@ func envTemisClients() map[string]temis.Client {
 	return out
 }
 
-// connectorProblem is why a connector an operator *did* configure is missing from
-// its kind's registry. A connector that cannot be built is deliberately left out so
+// connectorProblem is why a worker an operator *did* configure is missing from
+// its kind's registry. A worker that cannot be built is deliberately left out so
 // its tasks park rather than run wrongly (ADR-0093/0141), but the reason used to be
-// dropped at the point of skipping — leaving a parked token to report "no connector
+// dropped at the point of skipping — leaving a parked token to report "no worker
 // registered as X", which reads as *you never configured it*. Each builder below now
 // records the reason instead, and the registry carries it to the incident (ADR-0158).
 //
-// The strings are read by an operator in an incident message and in the connector
+// The strings are read by an operator in an incident message and in the worker
 // list, so they say what to go and fix, not what the code decided.
 const (
-	problemDisabled   = "the connector is disabled"
+	problemDisabled   = "the worker is disabled"
 	problemNoEndpoint = "no endpoint is configured"
 )
 
-// noteForeignKinds records, for every connector record that ended up as neither a
+// noteForeignKinds records, for every worker record that ended up as neither a
 // client nor a problem of its own, that it is configured as a *different* kind than
-// the one being built. A mail task pointed at the name of a clio connector is a
-// mistake an operator actually makes, and it is the one case where "no connector
+// the one being built. A mail task pointed at the name of a clio worker is a
+// mistake an operator actually makes, and it is the one case where "no worker
 // registered" is not merely unhelpful but wrong.
 func noteForeignKinds[T any](problems map[string]string, recs []connector, kind string, clients map[string]T) {
 	for _, c := range recs {
@@ -128,14 +128,14 @@ func noteForeignKinds[T any](problems map[string]string, recs []connector, kind 
 		if _, ok := problems[c.Name]; ok {
 			continue
 		}
-		problems[c.Name] = fmt.Sprintf("it is configured as a %q connector, not %q", c.Kind, kind)
+		problems[c.Name] = fmt.Sprintf("it is configured as a %q worker, not %q", c.Kind, kind)
 	}
 }
 
-// buildTemisClients assembles the temis connector clients from the environment
-// (base) plus the enabled managed connector instances (which override by name),
+// buildTemisClients assembles the temis worker clients from the environment
+// (base) plus the enabled managed workers (which override by name),
 // resolving each managed instance's token from its credentialsRef. It reads the
-// connector store, so callers run it on the run-loop goroutine (the store's owner).
+// worker store, so callers run it on the run-loop goroutine (the store's owner).
 func (s *Server) buildTemisClients() (map[string]temis.Client, map[string]string, error) {
 	clients := envTemisClients()
 	problems := map[string]string{}
@@ -163,9 +163,9 @@ func (s *Server) buildTemisClients() (map[string]temis.Client, map[string]string
 	return clients, problems, nil
 }
 
-// buildClioClients assembles the clio connector clients from the enabled managed
-// connector instances of kind "clio", resolving each instance's token from its
-// credentialsRef via the vault (ADR-0036/0041). It reads the connector store, so
+// buildClioClients assembles the clio worker clients from the enabled managed
+// workers of kind "clio", resolving each instance's token from its
+// credentialsRef via the vault (ADR-0036/0041). It reads the worker store, so
 // callers run it on the run-loop goroutine (the store's owner). It mirrors
 // buildTemisClients; clio has no environment base (its endpoints are managed only).
 func (s *Server) buildClioClients() (map[string]clio.Client, map[string]string, error) {
@@ -195,11 +195,11 @@ func (s *Server) buildClioClients() (map[string]clio.Client, map[string]string, 
 	return clients, problems, nil
 }
 
-// buildMailClients assembles the mail connector clients from the enabled managed
-// connector instances of kind "mail", resolving each instance's credential from its
-// credentialsRef via the vault (ADR-0079/0081/0041). It reads the connector store, so
+// buildMailClients assembles the mail worker clients from the enabled managed
+// workers of kind "mail", resolving each instance's credential from its
+// credentialsRef via the vault (ADR-0079/0081/0041). It reads the worker store, so
 // callers run it on the run-loop goroutine (the store's owner). It mirrors
-// buildClioClients; a mail connector has no environment base (its provider and
+// buildClioClients; a mail worker has no environment base (its provider and
 // credentials are managed only). Provider dispatch (SMTP, Gmail, Microsoft Graph)
 // lives in mail.NewProviderClient; a record whose provider is misconfigured — an
 // unparseable credential bundle, a missing field, an endpoint that names no host — is
@@ -239,7 +239,7 @@ func (s *Server) buildMailClients() (map[string]mail.Client, map[string]string, 
 		if err != nil {
 			// Misconfigured provider: its tasks park until it is fixed (ADR-0093) — and
 			// the incident now says which of the provider's requirements is unmet
-			// instead of claiming the connector does not exist (ADR-0158).
+			// instead of claiming the worker does not exist (ADR-0158).
 			problems[c.Name] = err.Error()
 			continue
 		}
@@ -249,10 +249,10 @@ func (s *Server) buildMailClients() (map[string]mail.Client, map[string]string, 
 	return clients, problems, nil
 }
 
-// buildSharePointClients assembles the SharePoint connector clients from the enabled
-// managed connector instances of kind "sharepoint", resolving each instance's OAuth
+// buildSharePointClients assembles the SharePoint worker clients from the enabled
+// managed workers of kind "sharepoint", resolving each instance's OAuth
 // credential bundle from its credentialsRef via the vault (ADR-0141/0041). It reads
-// the connector store, so callers run it on the run-loop goroutine (the store's
+// the worker store, so callers run it on the run-loop goroutine (the store's
 // owner). It mirrors buildMailClients; provider construction (Graph base + token
 // source) lives in sharepoint.NewProviderClient, and a record whose credential bundle
 // is misconfigured — unparseable, a missing field — is skipped (its tasks park)
@@ -287,10 +287,10 @@ func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[str
 	return clients, problems, nil
 }
 
-// buildJiraClients assembles the Jira connector clients from the enabled managed
-// connector instances of kind "jira", resolving each instance's credential bundle from
+// buildJiraClients assembles the Jira worker clients from the enabled managed
+// workers of kind "jira", resolving each instance's credential bundle from
 // its credentialsRef via the vault (ADR-0201, ADR-0041). It reads the
-// connector store, so callers run it on the run-loop goroutine (the store's owner). It
+// worker store, so callers run it on the run-loop goroutine (the store's owner). It
 // mirrors buildSharePointClients: credential dispatch — which of the two bundle shapes
 // an operator stored, and so which authentication scheme this instance uses — lives in
 // jira.NewProviderClient, and a record with no base URL or an unusable bundle is
@@ -326,11 +326,11 @@ func (s *Server) buildJiraClients() (map[string]jira.Client, map[string]string, 
 	return clients, problems, nil
 }
 
-// jiraCredentials is the shape of a Jira connector's credential bundle held in the
+// jiraCredentials is the shape of a Jira worker's credential bundle held in the
 // vault under its credentialsRef (ADR-0201): either a Jira Cloud {email, apiToken} pair
 // or a Data Center {token}. Only a *reference* to this bundle is stored in the
-// connector record; the values live in the vault, never in a model or the record (I6).
-// It mirrors the connector package's own unexported bundle type, which is what
+// worker record; the values live in the vault, never in a model or the record (I6).
+// It mirrors the connector/jira package's own unexported bundle type, which is what
 // TestJiraBundleShapeMatchesTheConnector holds it to.
 type jiraCredentials struct {
 	Email    string `json:"email,omitempty"`
@@ -338,18 +338,18 @@ type jiraCredentials struct {
 	Token    string `json:"token,omitempty"`
 }
 
-// remedyCredentials is the shape of a Remedy connector's credential bundle held in
+// remedyCredentials is the shape of a Remedy worker's credential bundle held in
 // the vault under its credentialsRef (ADR-0106): the AR System username and password
-// used to obtain a JWT. Only a *reference* to this bundle is stored in the connector
+// used to obtain a JWT. Only a *reference* to this bundle is stored in the worker
 // record; the values live in the vault, never in a model or the record (I6).
 type remedyCredentials struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
-// buildRemedyClients assembles the Remedy connector clients from the enabled managed
-// connector instances of kind "remedy", resolving each instance's credential bundle
-// from its credentialsRef via the vault (ADR-0106/0041). It reads the connector store,
+// buildRemedyClients assembles the Remedy worker clients from the enabled managed
+// workers of kind "remedy", resolving each instance's credential bundle
+// from its credentialsRef via the vault (ADR-0106/0041). It reads the worker store,
 // so callers run it on the run-loop goroutine (the store's owner). It mirrors
 // buildMailClients: a record with no endpoint, or whose credential bundle is missing
 // or not valid JSON, is skipped (its tasks park) rather than failing the whole
@@ -392,9 +392,9 @@ func (s *Server) buildRemedyClients() (map[string]remedy.Client, map[string]stri
 	return clients, problems, nil
 }
 
-// rebuildConnectorRegistries rebuilds every managed connector registry from the
-// current connector store and swaps each live registry atomically, so a task
-// referencing a changed connector starts (or stops) resolving at once. It iterates the
+// rebuildConnectorRegistries rebuilds every managed worker registry from the
+// current worker store and swaps each live registry atomically, so a task
+// referencing a changed worker starts (or stops) resolving at once. It iterates the
 // managedConnectorKinds registry in order, so a CRUD handler never has to know which
 // kinds exist and adding a kind needs no change here. Callers run it on the run-loop
 // goroutine, inside the same s.do closure that saved the change, so the rebuild sees
@@ -414,7 +414,7 @@ func (s *Server) rebuildConnectorRegistries() error {
 	return nil
 }
 
-// handleListConnectors lists the managed connector instances, oldest first. The
+// handleListConnectors lists the managed workers, oldest first. The
 // records carry only credential *references*, never secrets, so nothing is
 // redacted.
 func (s *Server) handleListConnectors(w http.ResponseWriter, r *http.Request) {
@@ -424,8 +424,8 @@ func (s *Server) handleListConnectors(w http.ResponseWriter, r *http.Request) {
 	)
 	// Two shapes, by what this caller may see (ADR-0205). At viewer or above, the
 	// record and what the runtime made of it. Below that, the catalog entry — name,
-	// kind, enabled — because the modeler builds its connector picker from this same
-	// listing, and a modeller who cannot see that a connector exists cannot author
+	// kind, enabled — because the modeler builds its worker picker from this same
+	// listing, and a modeller who cannot see that a worker exists cannot author
 	// against it. See connectorscope.go for why existence is not configuration.
 	views := []any{}
 	// The store read and the registry reads happen in the same closure: the registries
@@ -455,7 +455,7 @@ func (s *Server) handleListConnectors(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	if loadErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "list connectors: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list workers: "+loadErr.Error())
 		return
 	}
 	if views == nil {
@@ -464,9 +464,9 @@ func (s *Server) handleListConnectors(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, views)
 }
 
-// connectorView is a connector record as the operator UI reads it: the stored record
+// connectorView is a worker record as the operator UI reads it: the stored record
 // plus what the runtime made of it. Problem is why its client could not be built —
-// empty when the connector is usable — and is derived on read, never stored (ADR-0158).
+// empty when the worker is usable — and is derived on read, never stored (ADR-0158).
 type connectorView struct {
 	connector
 	// Role is what this caller may do with it — "viewer", "editor" or "owner"
@@ -476,14 +476,14 @@ type connectorView struct {
 	// tell an editor from a viewer.
 	Role    string `json:"role,omitempty"`
 	Problem string `json:"problem,omitempty"`
-	// UsedBy is every deployed definition whose model references this connector, so the
+	// UsedBy is every deployed definition whose model references this worker, so the
 	// operator page can say what a delete would park *before* they try it (ADR-0163).
 	// Empty when nothing references it — which is the only state in which deleting is
 	// uneventful.
 	UsedBy []connectorUse `json:"usedBy,omitempty"`
 }
 
-// connectorProblem asks the kind's live registry why this connector is not usable, or
+// connectorProblem asks the kind's live registry why this worker is not usable, or
 // returns "" when it is (or when the kind has no registry). The registries are owned
 // by the run-loop goroutine, so callers must be on it (invariant I3).
 func (s *Server) connectorProblem(kind, name string) string {
@@ -499,7 +499,7 @@ func (s *Server) connectorProblem(kind, name string) string {
 	return ""
 }
 
-// handleCreateConnector creates a managed connector instance and rebuilds the
+// handleCreateConnector creates a managed worker and rebuilds the
 // runtime registry so a central decision referencing it starts resolving at once.
 func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
@@ -522,7 +522,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	p.Sender = strings.TrimSpace(p.Sender)
 	p.CredentialsRef = strings.TrimSpace(p.CredentialsRef)
 	if p.Name == "" {
-		httpapi.Error(w, http.StatusBadRequest, "connector name is required")
+		httpapi.Error(w, http.StatusBadRequest, "worker name is required")
 		return
 	}
 	kind, ok := lookupManagedConnectorKind(p.Kind)
@@ -530,7 +530,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, managedConnectorKindsError())
 		return
 	}
-	// The id is generated before validation because a SQL connector's credential
+	// The id is generated before validation because a SQL worker's credential
 	// reference is derived from it: the operator pastes a connection string, and what
 	// the record stores is a vault key named after the record itself.
 	id, err := newID()
@@ -547,7 +547,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	p.ConnectionString = ""
 	if dsn != "" {
 		if !isSQLConnectorKind(p.Kind) {
-			httpapi.Error(w, http.StatusBadRequest, "connectionString applies only to a SQL connector ("+strings.Join(sqlConnectorKinds(), ", ")+")")
+			httpapi.Error(w, http.StatusBadRequest, "connectionString applies only to a SQL worker ("+strings.Join(sqlConnectorKinds(), ", ")+")")
 			return
 		}
 		if s.vault == nil {
@@ -625,16 +625,16 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case dupErr:
-		httpapi.Error(w, http.StatusConflict, "a connector named "+p.Name+" already exists")
+		httpapi.Error(w, http.StatusConflict, "a worker named "+p.Name+" already exists")
 		return
 	case saveErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "save connector: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "save worker: "+saveErr.Error())
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, rec)
 }
 
-// handleUpdateConnector applies a partial change to a managed connector (endpoint,
+// handleUpdateConnector applies a partial change to a managed worker (endpoint,
 // credential reference, or enabled state) and rebuilds the registry.
 func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -643,10 +643,10 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
-	// Every field an operator can change on a stored connector. Provider is here
+	// Every field an operator can change on a stored worker. Provider is here
 	// because switching one — an SMTP host that will not authenticate moved to the
 	// in-app preview transport, say — is the fix for a whole class of parked mail
-	// tasks, and re-creating the connector under the same name to change it would
+	// tasks, and re-creating the worker under the same name to change it would
 	// break every model referencing it (ADR-0160).
 	var p struct {
 		Endpoint       *string `json:"endpoint"`
@@ -677,7 +677,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		if !found {
 			return
 		}
-		// Changing a connector's endpoint or credential is an editor's act (ADR-0205).
+		// Changing a worker's endpoint or credential is an editor's act (ADR-0205).
 		// Checked inside this closure, on the record just loaded, so there is no second
 		// round-trip and no window between the check and the write.
 		if code, msg := s.checkConnectorRole(r, rec, ScopeRoleEditor); code != 0 {
@@ -712,10 +712,10 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case saveErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "update connector: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "update worker: "+saveErr.Error())
 		return
 	case !found:
-		httpapi.Error(w, http.StatusNotFound, "no connector with that id")
+		httpapi.Error(w, http.StatusNotFound, "no worker with that id")
 		return
 	case refusedCode != 0:
 		httpapi.Error(w, refusedCode, refusedMsg)
@@ -727,7 +727,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, rec)
 }
 
-// handleDeleteConnector removes a managed connector and rebuilds the registry so a
+// handleDeleteConnector removes a managed worker and rebuilds the registry so a
 // decision referencing it parks again (until reconfigured).
 func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -746,7 +746,7 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 		}
 		// Deleting is the owner's, not an editor's (ADR-0205): it is the one act here
 		// that cannot be undone, and it takes every inbound subscription with it. A
-		// connector that is already gone is left to the delete below, which is
+		// worker that is already gone is left to the delete below, which is
 		// idempotent — refusing an absent record at a role check would leak whether it
 		// ever existed.
 		if found {
@@ -754,7 +754,7 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		// Deleting a connector deployed models still reference parks every one of their
+		// Deleting a worker deployed models still reference parks every one of their
 		// tasks, with a message that reads as if it had never been configured. A deploy
 		// has warned about a reference it cannot resolve since ADR-0158; removing the
 		// thing a resolved reference points at was the same mistake from the other end,
@@ -772,7 +772,7 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 		delErr = s.rebuildConnectorRegistries()
 	})
 	if delErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "delete connector: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "delete worker: "+delErr.Error())
 		return
 	}
 	if refusedCode != 0 {
@@ -784,23 +784,23 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 		// not something an operator can act on, and the whole point is that they decide
 		// with the list in front of them. ?force=true is the decision.
 		httpapi.JSON(w, http.StatusConflict, map[string]any{
-			"error":   "connector is referenced by deployed processes; delete with ?force=true to remove it anyway",
+			"error":   "worker is referenced by deployed processes; delete with ?force=true to remove it anyway",
 			"usedBy":  inUse,
-			"details": "Their tasks will park with \"no connector registered\" until the connector is recreated under the same name.",
+			"details": "Their tasks will park with \"no worker registered\" until the worker is recreated under the same name.",
 		})
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleProvisionClioKey provisions a managed clio connector's credential in one
-// step (ADR-0092): it mints a scoped read key on the connector's clio instance (using an admin
+// handleProvisionClioKey provisions a managed clio worker's credential in one
+// step (ADR-0092): it mints a scoped read key on the worker's clio instance (using an admin
 // token the operator supplies once) and seals the returned key in the vault as the
-// connector's credential, then rebuilds the registries so the inbound bridge and
+// worker's credential, then rebuilds the registries so the inbound bridge and
 // outbound tasks use it at once — no copy-pasting a token. The admin token is used
 // only for the one-off mint and is never stored (I6); only the scoped key is sealed.
 // Admin-gated, and the mint (a network call) runs off the run loop (I3); only the
-// connector read and the vault write ride s.do.
+// worker read and the vault write ride s.do.
 func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) {
 	if s.vault == nil {
 		httpapi.Error(w, http.StatusServiceUnavailable, "vault not configured")
@@ -830,7 +830,7 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Resolve the connector on the run loop (the store's owner).
+	// Resolve the worker on the run loop (the store's owner).
 	var (
 		conn    connector
 		ok      bool
@@ -838,15 +838,15 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 	)
 	s.do(func() { conn, ok, loadErr = s.connectors.Get(connID) })
 	if loadErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "load connector: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "load worker: "+loadErr.Error())
 		return
 	}
 	if !ok || conn.Kind != connectorKindClio {
-		httpapi.Error(w, http.StatusBadRequest, "no clio connector with that id")
+		httpapi.Error(w, http.StatusBadRequest, "no clio worker with that id")
 		return
 	}
 	if strings.TrimSpace(conn.Endpoint) == "" {
-		httpapi.Error(w, http.StatusBadRequest, "connector has no endpoint")
+		httpapi.Error(w, http.StatusBadRequest, "worker has no endpoint")
 		return
 	}
 
@@ -868,7 +868,7 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Seal the scoped key as the connector's credential and rebuild, on the run loop.
+	// Seal the scoped key as the worker's credential and rebuild, on the run loop.
 	ref := strings.TrimSpace(conn.CredentialsRef)
 	setRef := ref == ""
 	if setRef {
@@ -924,13 +924,13 @@ func (s *Server) handleMailOutbox(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, map[string]any{"messages": msgs, "truncated": truncated})
 }
 
-// handleDeliverMailOutbox accepts one framed message from a preview connector that
+// handleDeliverMailOutbox accepts one framed message from a preview worker that
 // ran somewhere else and appends it to this server's outbox.
 //
 // It exists because mail moved onto a worker (ADR-0168). Every other provider needs
 // only a credential to work out there, and a worker holding one is the point. The
 // preview provider needs the opposite: its whole output is a message an operator
-// reads in *this* server's Operations › Outbox, so a preview connector framing its
+// reads in *this* server's Operations › Outbox, so a preview worker framing its
 // message in a child process has nowhere to put it. This is that place.
 //
 // It writes nothing durable — the outbox is memory, cleared by a restart, never an
@@ -944,7 +944,7 @@ func (s *Server) handleDeliverMailOutbox(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if strings.TrimSpace(m.Connector) == "" {
-		httpapi.Error(w, http.StatusBadRequest, "outbox message has no connector name")
+		httpapi.Error(w, http.StatusBadRequest, "outbox message has no worker name")
 		return
 	}
 	// Seq and At are the outbox's to assign: a caller that could choose them could
@@ -972,13 +972,13 @@ func (s *Server) handleClearMailOutbox(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// connectorTestTimeout backstops a connector check. Each attempt inside it is already
-// bounded by the shared connector call budget (ADR-0149) — this only bounds a check
+// connectorTestTimeout backstops a worker check. Each attempt inside it is already
+// bounded by the shared worker call budget (ADR-0149) — this only bounds a check
 // that somehow outlives its own transport, so that a person waiting in front of the
 // form always gets an answer.
 const connectorTestTimeout = 2 * nettimeout.Default
 
-// connectorTestReq is the body of a connector check: the connector's own fields — the
+// connectorTestReq is the body of a worker check: the worker's own fields — the
 // same shape a create takes, so the form can check what is *typed*, before it is
 // saved, which is the moment a mistake is cheapest to fix — plus an optional
 // recipient. Without a recipient the check stops at the door: connect, upgrade,
@@ -989,7 +989,7 @@ type connectorTestReq struct {
 	To string `json:"to"`
 }
 
-// handleTestConnector checks a mail connector and reports what happened in words the
+// handleTestConnector checks a mail worker and reports what happened in words the
 // person who typed it can act on (ADR-0150).
 //
 // It exists because every failure this catches used to be discovered the same way: a
@@ -1018,7 +1018,7 @@ func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Kind != connectorKindMail {
 		httpapi.Error(w, http.StatusBadRequest,
-			"a "+req.Kind+" connector cannot be checked yet; today the check covers mail and the SQL databases ("+
+			"a "+req.Kind+" worker cannot be checked yet; today the check covers mail and the SQL databases ("+
 				strings.Join(sqlConnectorKinds(), ", ")+")")
 		return
 	}
@@ -1039,15 +1039,15 @@ func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
 		secret = s.resolveConnectorSecret(req.CredentialsRef)
 	})
 	if lookupErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "read connectors: "+lookupErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read workers: "+lookupErr.Error())
 		return
 	}
 	if !mayUse {
 		// Named somebody else's credential. Refused rather than silently checked
 		// without it: the second would report a failure that says nothing about the
-		// connector and everything about a permission (ADR-0205).
+		// worker and everything about a permission (ADR-0205).
 		httpapi.Error(w, http.StatusForbidden,
-			"that credential reference belongs to a connector you may not edit")
+			"that credential reference belongs to a worker you may not edit")
 		return
 	}
 
@@ -1073,10 +1073,10 @@ func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
 	} else {
 		err = client.Send(ctx, mail.Message{
 			To:      []string{to},
-			Subject: "Atlas connector test",
-			Body: "This is a test message from the Atlas connector \"" + req.Name + "\".\n\n" +
-				"It was sent from the connector form, not by a process. If it reached you, " +
-				"the connector can deliver mail.\n",
+			Subject: "Atlas worker test",
+			Body: "This is a test message from the Atlas worker \"" + req.Name + "\".\n\n" +
+				"It was sent from the worker form, not by a process. If it reached you, " +
+				"the worker can deliver mail.\n",
 		})
 	}
 	if err != nil {
@@ -1096,7 +1096,7 @@ func (s *Server) testSQLConnector(w http.ResponseWriter, r *http.Request, produc
 	dsn := strings.TrimSpace(req.ConnectionString)
 	if dsn == "" && strings.TrimSpace(req.CredentialsRef) == "" {
 		httpapi.Error(w, http.StatusBadRequest,
-			"checking a "+product.Name+" connector needs a connectionString to dial, or a credentialsRef naming one already in the vault")
+			"checking a "+product.Name+" worker needs a connectionString to dial, or a credentialsRef naming one already in the vault")
 		return
 	}
 	if dsn == "" {
@@ -1111,18 +1111,18 @@ func (s *Server) testSQLConnector(w http.ResponseWriter, r *http.Request, produc
 			dsn = strings.TrimSpace(s.resolveConnectorSecret(req.CredentialsRef))
 		})
 		if lookupErr != nil {
-			httpapi.Error(w, http.StatusInternalServerError, "read connectors: "+lookupErr.Error())
+			httpapi.Error(w, http.StatusInternalServerError, "read workers: "+lookupErr.Error())
 			return
 		}
 		if !mayUse {
 			// Named somebody else's credential — refused rather than quietly checked
 			// without it, which would report a failure about a permission (ADR-0205).
 			httpapi.Error(w, http.StatusForbidden,
-				"that credential reference belongs to a connector you may not edit")
+				"that credential reference belongs to a worker you may not edit")
 			return
 		}
 		if dsn == "" {
-			// The state a connector is in between being created and having its secret
+			// The state a worker is in between being created and having its secret
 			// set. Reported as itself rather than handed to the driver as an empty
 			// string, which each of the three reports differently.
 			httpapi.JSON(w, http.StatusOK, map[string]any{"ok": false,
@@ -1139,7 +1139,7 @@ func (s *Server) testSQLConnector(w http.ResponseWriter, r *http.Request, produc
 
 // connectorTestDetail says what the check actually proved, rather than "OK" — the
 // difference between "the credential was accepted" and "a message was delivered"
-// matters to whoever has to decide the connector is finished.
+// matters to whoever has to decide the worker is finished.
 func connectorTestDetail(provider, endpoint, to string) string {
 	switch {
 	case to != "" && provider == mail.ProviderPreview:
@@ -1155,15 +1155,15 @@ func connectorTestDetail(provider, endpoint, to string) string {
 	}
 }
 
-// connectorWarnings checks a freshly compiled process's connector references against
+// connectorWarnings checks a freshly compiled process's worker references against
 // what is actually configured, and returns one sentence per reference that will not
 // resolve. A deploy is not refused for it: a model is routinely deployed before its
-// connectors are provisioned, and to an environment where they are provisioned later —
+// workers are provisioned, and to an environment where they are provisioned later —
 // refusing would be wrong, and staying silent is how a model reaches production
-// referring to a connector nobody ever created. So it warns, at the moment somebody is
+// referring to a worker nobody ever created. So it warns, at the moment somebody is
 // looking, instead of leaving the first token to discover it (ADR-0158).
 //
-// It reads the connector store and the live registries, so it runs on the run-loop
+// It reads the worker store and the live registries, so it runs on the run-loop
 // goroutine (invariant I3), inside the same closure as the deploy it describes.
 func (s *Server) connectorWarnings(cp *compiler.CompiledProcess) []string {
 	refs := cp.ConnectorRefs()
@@ -1186,9 +1186,9 @@ func (s *Server) connectorWarnings(cp *compiler.CompiledProcess) []string {
 			continue // a job type no managed kind claims (a local decision, say)
 		}
 		if strings.HasPrefix(strings.TrimSpace(ref.Connector), "=") {
-			// A connector authored as a FEEL expression (entra, ADR-0172) names no
+			// A worker authored as a FEEL expression (entra, ADR-0172) names no
 			// fixed tenant to check against the store — the name is only known at call
-			// time. Warning about a connector called "=tenant" would be noise, so the
+			// time. Warning about a worker called "=tenant" would be noise, so the
 			// runtime check (an incident if the resolved name is not configured) stands
 			// in for the deploy-time one here.
 			continue
@@ -1197,14 +1197,14 @@ func (s *Server) connectorWarnings(cp *compiler.CompiledProcess) []string {
 		rec, exists := byName[ref.Connector]
 		switch {
 		case !exists:
-			out = append(out, fmt.Sprintf("%s references the %s connector %q, which is not configured on this server — its tasks will park until it is created",
+			out = append(out, fmt.Sprintf("%s references the %s worker %q, which is not configured on this server — its tasks will park until it is created",
 				ref.ElementId, kind, ref.Connector))
 		case rec.Kind != kind:
-			out = append(out, fmt.Sprintf("%s references %q as a %s connector, but it is configured as a %q connector",
+			out = append(out, fmt.Sprintf("%s references %q as a %s worker, but it is configured as a %q worker",
 				ref.ElementId, ref.Connector, kind, rec.Kind))
 		default:
 			if why := s.connectorProblem(kind, ref.Connector); why != "" {
-				out = append(out, fmt.Sprintf("%s references the %s connector %q, which is configured but not usable: %s",
+				out = append(out, fmt.Sprintf("%s references the %s worker %q, which is configured but not usable: %s",
 					ref.ElementId, kind, ref.Connector, why))
 			}
 		}
@@ -1212,8 +1212,8 @@ func (s *Server) connectorWarnings(cp *compiler.CompiledProcess) []string {
 	return out
 }
 
-// connectorUse is one deployed definition that references a connector, as the
-// operator needs to see it before deleting that connector: which model, which version,
+// connectorUse is one deployed definition that references a worker, as the
+// operator needs to see it before deleting that worker: which model, which version,
 // which element(s), and whether anything is running on it right now.
 type connectorUse struct {
 	ProcessDefKey   uint64   `json:"processDefKey"`
@@ -1225,13 +1225,13 @@ type connectorUse struct {
 }
 
 // connectorUsers is connectorWarnings read backwards: instead of asking "what does this
-// model reference that is missing?", it asks "what would break if this connector were
-// gone?" — every deployed definition whose compiled graph names this connector under
+// model reference that is missing?", it asks "what would break if this worker were
+// gone?" — every deployed definition whose compiled graph names this worker under
 // this kind (ADR-0163).
 //
 // The check existed for a deploy since ADR-0158 and ran nowhere else, so removing a
-// connector was silent: the models referencing it kept referencing it, and the next
-// token to reach one of their tasks parked with "no connector registered as X" — the
+// worker was silent: the models referencing it kept referencing it, and the next
+// token to reach one of their tasks parked with "no worker registered as X" — the
 // same message that started ADR-0158, produced this time by the operator who deleted
 // it rather than by one who never created it.
 //
@@ -1241,9 +1241,9 @@ func (s *Server) connectorUsers(name, kind string) []connectorUse {
 	return s.connectorUseIndex()[kind+"/"+name]
 }
 
-// connectorUseIndex walks every deployed definition once and indexes its connector
-// references by "kind/name". The list view needs the answer for every connector at
-// once, and asking per connector would re-walk every compiled graph per row; one pass
+// connectorUseIndex walks every deployed definition once and indexes its worker
+// references by "kind/name". The list view needs the answer for every worker at
+// once, and asking per worker would re-walk every compiled graph per row; one pass
 // answers all of them. Ordered by definition key, so the answer is stable.
 func (s *Server) connectorUseIndex() map[string][]connectorUse {
 	keys := make([]uint64, 0, len(s.deployments))
@@ -1253,7 +1253,7 @@ func (s *Server) connectorUseIndex() map[string][]connectorUse {
 	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 
 	// One instance count per definition, not per reference: a model naming the same
-	// connector on three tasks must not read the counter three times.
+	// worker on three tasks must not read the counter three times.
 	index := map[string][]connectorUse{}
 	for _, key := range keys {
 		d := s.deployments[key]
@@ -1292,7 +1292,7 @@ func (s *Server) connectorUseIndex() map[string][]connectorUse {
 	return index
 }
 
-// connectorKindOfJobType maps a reserved job-type index back to the managed connector
+// connectorKindOfJobType maps a reserved job-type index back to the managed worker
 // kind whose registry serves it, or "" for a job type no managed kind claims.
 func connectorKindOfJobType(jobType int32) string {
 	for _, k := range managedConnectorKinds {
@@ -1305,9 +1305,9 @@ func connectorKindOfJobType(jobType int32) string {
 	return ""
 }
 
-// elementConnectorRef is the model half of "which connector is this element stuck
-// on?": the connector name the task refers to and the connector kind its reserved job
-// type says it needs. Both empty when the element refers to no connector — a local
+// elementConnectorRef is the model half of "which worker is this element stuck
+// on?": the worker name the task refers to and the Worker Type its reserved job
+// type says it needs. Both empty when the element refers to no worker — a local
 // decision, a task of another type, an element the compiled process does not describe
 // that way (ADR-0160).
 func elementConnectorRef(cp *compiler.CompiledProcess, elementID int32) (name, kind string) {
@@ -1316,29 +1316,29 @@ func elementConnectorRef(cp *compiler.CompiledProcess, elementID int32) (name, k
 	}
 	ref, ok := cp.NodeConnectorRef(elementID)
 	if !ok {
-		return "", "" // a local decision, or a task that names no connector
+		return "", "" // a local decision, or a task that names no worker
 	}
 	return ref.Connector, connectorKindOfJobType(ref.JobType)
 }
 
 // incidentConnectorLookup returns the resolver an incident listing uses to answer that
-// question for every row: the connector's name, the kind it needs, and the id of the
-// configured record standing under that name, if one is. An incident on a connector
-// task is very often a connector problem, and the fix is a field on the connector
+// question for every row: the worker's name, the kind it needs, and the id of the
+// configured record standing under that name, if one is. An incident on a worker
+// task is very often a worker problem, and the fix is a field on the worker
 // rather than anything about the instance — so the incident carries what it takes to
 // get there in one click, instead of leaving an operator to read a name out of a
 // message and go hunting (ADR-0160).
 //
 // It is a closure rather than a plain function because both callers loop over up to
-// thousands of incidents on the run-loop goroutine: the connector store is read at
-// most once per listing, and not at all when nothing on the page is on a connector
+// thousands of incidents on the run-loop goroutine: the worker store is read at
+// most once per listing, and not at all when nothing on the page is on a worker
 // task. A per-incident directory read there would block every writer behind it
 // (invariant I3).
 //
-// Everything is derived on read from the compiled process and the connector store;
-// nothing about it is durable (I6). An empty id means no connector of that kind is
+// Everything is derived on read from the compiled process and the worker store;
+// nothing about it is durable (I6). An empty id means no worker of that kind is
 // configured under the name — a record under the same name but *another* kind is not
-// this task's connector, and offering it would open the wrong one.
+// this task's worker, and offering it would open the wrong one.
 func (s *Server) incidentConnectorLookup() func(cp *compiler.CompiledProcess, elementID int32) (name, kind, id string) {
 	var (
 		recs   []connector

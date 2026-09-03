@@ -78,7 +78,7 @@ type Outcome struct {
 // A handler is registered as a *factory* rather than a handler, because handlers
 // read state and no longer run on the goroutine that owns it: each round binds its
 // handlers to that round's [state.Reader], a consistent read view taken while the
-// run loop was held (ADR-0157 step 6). The connector packages are unchanged by
+// run loop was held (ADR-0157 step 6). The connector/* packages are unchanged by
 // this — their Handler constructors already take a reader, so the factory is one
 // closure at the registration site.
 type Runner struct {
@@ -145,7 +145,7 @@ func (r *Runner) HandleCompleting(jobType int32, build func(state.Reader) Comple
 // external one instead (ADR-0168).
 //
 // It exists as a removal rather than a condition at each registration site because
-// the registrations are spread across the server — a managed connector kind
+// the registrations are spread across the server — a managed Worker Type
 // registers through its own descriptor, the script languages through their loop,
 // the rest inline — and a switch that has to be remembered at ten places is a switch
 // that will be missed at one.
@@ -198,7 +198,7 @@ func (r *Runner) Claim() ([]Job, error) {
 
 // Work runs the handlers for claimed jobs and returns what each produced. This is
 // the part that must NOT hold the run loop: a handler makes the outbound call a
-// connector exists for, and holding the single writer for its duration is the
+// worker exists for, and holding the single writer for its duration is the
 // stall ADR-0155 measured and ADR-0157 step 6 removes.
 //
 // Handlers run concurrently, one goroutine per job. That is also what ends the

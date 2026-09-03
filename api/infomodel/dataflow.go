@@ -30,7 +30,7 @@ import (
 //
 // **Nothing here refuses a deploy.** These are findings, not gates. A model is
 // routinely deployed before the vocabulary it names exists, exactly as it is
-// deployed before its connectors exist (ADR-0158), and the author is told now
+// deployed before its workers exist (ADR-0158), and the author is told now
 // rather than by the first token to read a null.
 
 // The rule slugs. Like the compiler's own, they are stable machine names a UI can

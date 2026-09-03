@@ -54,7 +54,7 @@ const PythonJobType = "io.atlas.script.python"
 
 // PythonJobTypeIndex is the interned index PythonJobType is guaranteed to occupy:
 // NewBuilder reserves it sixth (after DMN, user tasks, PowerShell, the temis
-// connector, and REST), so it is always 5, giving the in-process Python worker one
+// worker, and REST), so it is always 5, giving the in-process Python worker one
 // global index across every deployed process.
 const PythonJobTypeIndex int32 = 5
 
@@ -67,8 +67,8 @@ const JsJobType = "io.atlas.script.javascript"
 // worker one global index across every deployed process.
 const JsJobTypeIndex int32 = 6
 
-// ClioWriteJobType is the reserved job type a clio "write-events" connector task
-// carries. The in-process clio connector worker subscribes to it to append the
+// ClioWriteJobType is the reserved job type a clio "write-events" task
+// carries. The in-process clio worker subscribes to it to append the
 // event to the configured clio instance (ADR-0036), the same way the DMN worker
 // subscribes to DMNJobType.
 const ClioWriteJobType = "io.atlas.clio.write"
@@ -77,10 +77,10 @@ const ClioWriteJobType = "io.atlas.clio.write"
 // occupy in every compiled process: NewBuilder reserves it eighth, so it is always
 // 7. This lets a single in-process clio worker subscribe by one global index across
 // every deployed process, the same way the DMN worker uses DMNJobTypeIndex — which
-// is what wires the clio connector into the server run loop (ADR-0036).
+// is what wires the clio worker into the server run loop (ADR-0036).
 const ClioWriteJobTypeIndex int32 = 7
 
-// ClioQueryJobType is the reserved job type a clio "query" connector task carries.
+// ClioQueryJobType is the reserved job type a clio "query" task carries.
 // The in-process clio worker subscribes to it to read projected state (get_state)
 // or run a stored query (run_query) on the configured clio instance and write the
 // result back into the task's result variable (ADR-0036).
@@ -90,7 +90,7 @@ const ClioQueryJobType = "io.atlas.clio.query"
 // occupy: NewBuilder reserves it ninth, so it is always 8.
 const ClioQueryJobTypeIndex int32 = 8
 
-// ClioReadJobType is the reserved job type a clio "read" connector task carries.
+// ClioReadJobType is the reserved job type a clio "read" task carries.
 // The in-process clio worker subscribes to it to read a subject's events
 // (read_events) from the configured clio instance and write them back into the
 // task's result variable as a JSON array (ADR-0036).
@@ -100,21 +100,21 @@ const ClioReadJobType = "io.atlas.clio.read"
 // occupy: NewBuilder reserves it tenth, so it is always 9.
 const ClioReadJobTypeIndex int32 = 9
 
-// RestJobType is the reserved job type an HTTP-REST connector task carries. The
-// in-process REST connector worker subscribes to it to call the model-authored
+// RestJobType is the reserved job type an HTTP-REST task carries. The
+// in-process REST worker subscribes to it to call the model-authored
 // REST endpoint off the hot path and write the response back (ADR-0036/0067), the
 // same way the clio worker subscribes to ClioWriteJobType.
 const RestJobType = "io.atlas.http.rest"
 
 // RestJobTypeIndex is the interned index RestJobType is guaranteed to occupy in
 // every compiled process: NewBuilder reserves it fifth (after DMN, user tasks,
-// PowerShell, and the temis connector), so it is always 4. This lets a single
+// PowerShell, and the temis worker), so it is always 4. This lets a single
 // in-process REST worker subscribe by one global index across every deployed
 // process, the same way the DMN worker uses DMNJobTypeIndex (ADR-0067).
 const RestJobTypeIndex int32 = 4
 
-// MailJobType is the reserved job type an outbound mail connector task carries.
-// The in-process mail connector worker subscribes to it to send the model-authored
+// MailJobType is the reserved job type an outbound mail task carries.
+// The in-process mail worker subscribes to it to send the model-authored
 // message through a server-registered mail provider off the hot path (ADR-0079),
 // the same way the clio worker subscribes to ClioWriteJobType.
 const MailJobType = "io.atlas.mail.send"
@@ -140,8 +140,8 @@ const CsvImportJobType = "io.atlas.csv-import"
 // way the mail worker uses MailJobTypeIndex.
 const CsvImportJobTypeIndex int32 = 11
 
-// SharePointJobType is the reserved job type a SharePoint connector task carries.
-// The in-process SharePoint connector worker subscribes to it to create a list item
+// SharePointJobType is the reserved job type a SharePoint task carries.
+// The in-process SharePoint worker subscribes to it to create a list item
 // in a model-authored SharePoint site/list through a server-registered SharePoint
 // provider (Microsoft Graph) off the hot path (ADR-0141), the same way the mail
 // worker subscribes to MailJobType.
@@ -154,11 +154,11 @@ const SharePointJobType = "io.atlas.sharepoint.createitem"
 // same way the mail worker uses MailJobTypeIndex (ADR-0141).
 const SharePointJobTypeIndex int32 = 12
 
-// RemedyJobType is the reserved job type a BMC Remedy connector task carries. The
-// in-process Remedy connector worker subscribes to it to create an entry (e.g. an
+// RemedyJobType is the reserved job type a BMC Remedy task carries. The
+// in-process Remedy worker subscribes to it to create an entry (e.g. an
 // incident) in a Remedy form through the BMC AR System REST API off the hot path
 // (ADR-0106), the same way the mail worker subscribes to MailJobType. The provider
-// host and credentials live in a server-registered connector, like clio/mail; only
+// host and credentials live in a server-registered worker, like clio/mail; only
 // the form name and its field values are model-authored.
 const RemedyJobType = "io.atlas.remedy.entry"
 
@@ -169,7 +169,7 @@ const RemedyJobType = "io.atlas.remedy.entry"
 // worker uses MailJobTypeIndex (ADR-0079/0106).
 const RemedyJobTypeIndex int32 = 13
 
-// WebScrapeJobType is the reserved job type a web-scraping connector task carries.
+// WebScrapeJobType is the reserved job type a web-scraping task carries.
 // The in-process web-scraping worker subscribes to it to fetch a model-authored URL
 // and extract the elements matching a CSS selector off the hot path (ADR-0118), the
 // same way the REST worker subscribes to RestJobType. The URL and selector live in
@@ -183,7 +183,7 @@ const WebScrapeJobType = "io.atlas.webscrape"
 // the same way the mail worker uses MailJobTypeIndex (ADR-0118).
 const WebScrapeJobTypeIndex int32 = 14
 
-// UserConnectorJobType is the reserved job type a user-provisioning connector task
+// UserConnectorJobType is the reserved job type a user-provisioning task
 // carries (ADR-0123). The in-process user-provisioning worker subscribes to it to
 // create, set the password of, or disable an Atlas login through the internal user
 // store off the hot path, the same way the mail worker subscribes to MailJobType.
@@ -200,7 +200,7 @@ const UserConnectorJobTypeIndex int32 = 15
 
 // TemisDecisionJobType is the reserved job type a *central* business rule task
 // carries — one whose decision is evaluated by a remote temis service rather than
-// the embedded temis library. The in-process temis decision connector worker
+// the embedded temis library. The in-process temis decision worker
 // subscribes to it to evaluate the decision off the hot path and write the result
 // back (ADR-0050), the same way the local DMN worker subscribes to DMNJobType.
 const TemisDecisionJobType = "io.atlas.temis.decision"
@@ -208,14 +208,14 @@ const TemisDecisionJobType = "io.atlas.temis.decision"
 // TemisDecisionJobTypeIndex is the interned index TemisDecisionJobType is
 // guaranteed to occupy in every compiled process: NewBuilder reserves it fourth
 // (after DMN, user tasks, and PowerShell), so it is always 3. This lets a single
-// in-process temis connector worker subscribe by one global index across every
+// in-process temis worker subscribe by one global index across every
 // deployed process, the same way the DMN worker uses DMNJobTypeIndex (ADR-0050).
 const TemisDecisionJobTypeIndex int32 = 3
 
-// ScimJobType is the reserved job type a SCIM 2.0 connector task carries. Like the
-// REST connector it authors its endpoint in the model — the SCIM base URL and
+// ScimJobType is the reserved job type a SCIM 2.0 task carries. Like the
+// REST worker it authors its endpoint in the model — the SCIM base URL and
 // resource type — and names a server-side secret for authentication (ADR-0041); the
-// in-process SCIM connector worker subscribes to it to perform the resource
+// in-process SCIM worker subscribes to it to perform the resource
 // operation off the hot path and write the response back, the same way the REST
 // worker subscribes to RestJobType (ADR-0153).
 const ScimJobType = "io.atlas.scim"
@@ -227,10 +227,10 @@ const ScimJobType = "io.atlas.scim"
 // worker uses RestJobTypeIndex (ADR-0153).
 const ScimJobTypeIndex int32 = 16
 
-// LdapJobType is the reserved job type a generic LDAP connector task carries. Like
-// the REST/SCIM connectors it authors its endpoint in the model — the LDAP server
+// LdapJobType is the reserved job type a generic LDAP task carries. Like
+// the REST/SCIM workers it authors its endpoint in the model — the LDAP server
 // URL, bind DN, and target/base DN — and names a server-side secret for the bind
-// password (ADR-0041); the in-process LDAP connector worker subscribes to it to
+// password (ADR-0041); the in-process LDAP worker subscribes to it to
 // perform the directory operation (search/add/modify/delete/modify-password) off the
 // hot path (ADR-0154).
 const LdapJobType = "io.atlas.ldap"
@@ -242,10 +242,10 @@ const LdapJobType = "io.atlas.ldap"
 // worker uses ScimJobTypeIndex (ADR-0154).
 const LdapJobTypeIndex int32 = 17
 
-// SoapJobType is the reserved job type a SOAP / Web Services (WSDL) connector task
-// carries. Like the REST/SCIM connectors it authors its endpoint in the model — the
+// SoapJobType is the reserved job type a SOAP / Web Services (WSDL) task
+// carries. Like the REST/SCIM workers it authors its endpoint in the model — the
 // web-service URL, the operation, and the request body — and names a server-side
-// secret for any authentication credential (ADR-0041); the in-process SOAP connector
+// secret for any authentication credential (ADR-0041); the in-process SOAP worker
 // worker subscribes to it to wrap the body in a SOAP envelope, invoke the operation,
 // and parse the response off the hot path (ADR-0165).
 const SoapJobType = "io.atlas.soap"
@@ -257,9 +257,9 @@ const SoapJobType = "io.atlas.soap"
 // LdapJobTypeIndex (ADR-0165).
 const SoapJobTypeIndex int32 = 18
 
-// AdJobType is the reserved job type an Active Directory connector task carries. AD
-// speaks LDAP, so it dials like the generic LDAP connector, but it adds the
-// AD-specific provisioning primitives the generic connector cannot express: setting a
+// AdJobType is the reserved job type an Active Directory task carries. AD
+// speaks LDAP, so it dials like the generic LDAP worker, but it adds the
+// AD-specific provisioning primitives the generic worker cannot express: setting a
 // password via unicodePwd over LDAPS, enabling/disabling an account via
 // userAccountControl, and adding/removing a group member incrementally (ADR-0166).
 const AdJobType = "io.atlas.ad"
@@ -271,7 +271,7 @@ const AdJobType = "io.atlas.ad"
 // LdapJobTypeIndex (ADR-0166).
 const AdJobTypeIndex int32 = 19
 
-// The three SQL connector job types (ADR-0173). They are one connector in three
+// The three SQL worker job types (ADR-0173). They are one worker in three
 // faces: the same task shape, the same engine-side resolution and the same worker
 // code, differing only in the driver behind them — and therefore in the placeholder
 // syntax a statement must use. That difference is why the product is part of the
@@ -283,7 +283,7 @@ const AdJobTypeIndex int32 = 19
 // the type exists precisely so a worker — the one process holding the DSN — can
 // lease it, and the engine never learns which database it is for.
 
-// MsSqlJobType is the reserved job type a Microsoft SQL Server connector task
+// MsSqlJobType is the reserved job type a Microsoft SQL Server task
 // carries. Statements use @p1-style placeholders and may bind by name.
 const MsSqlJobType = "io.atlas.mssql"
 
@@ -292,7 +292,7 @@ const MsSqlJobType = "io.atlas.mssql"
 // types above), so it is always 20.
 const MsSqlJobTypeIndex int32 = 20
 
-// MariaDBJobType is the reserved job type a MariaDB (or MySQL) connector task
+// MariaDBJobType is the reserved job type a MariaDB (or MySQL) task
 // carries. Statements use ?-style positional placeholders only.
 const MariaDBJobType = "io.atlas.mariadb"
 
@@ -300,7 +300,7 @@ const MariaDBJobType = "io.atlas.mariadb"
 // every compiled process: NewBuilder reserves it twenty-second, so it is always 21.
 const MariaDBJobTypeIndex int32 = 21
 
-// PostgresJobType is the reserved job type a PostgreSQL connector task carries.
+// PostgresJobType is the reserved job type a PostgreSQL task carries.
 // Statements use $1-style positional placeholders only.
 const PostgresJobType = "io.atlas.postgres"
 
@@ -308,10 +308,10 @@ const PostgresJobType = "io.atlas.postgres"
 // in every compiled process: NewBuilder reserves it twenty-third, so it is always 22.
 const PostgresJobTypeIndex int32 = 22
 
-// EntraJobType is the reserved job type a Microsoft Entra ID connector task carries.
-// Entra is Graph, so a process could in principle reach it with the REST connector;
+// EntraJobType is the reserved job type a Microsoft Entra ID task carries.
+// Entra is Graph, so a process could in principle reach it with the REST worker;
 // what this type marks is a task that names a *lifecycle operation* instead of a URL
-// and a JSON fragment, the same argument the AD connector makes against generic LDAP
+// and a JSON fragment, the same argument the AD worker makes against generic LDAP
 // (ADR-0166/0171).
 //
 // Like the SQL types above it, no in-process handler subscribes to it: the kind is
@@ -322,7 +322,7 @@ const EntraJobType = "io.atlas.entra"
 // every compiled process: NewBuilder reserves it twenty-fourth, so it is always 23.
 const EntraJobTypeIndex int32 = 23
 
-// LdifJobType is the reserved job type a directory-file connector task carries: LDIF
+// LdifJobType is the reserved job type a directory-file task carries: LDIF
 // (RFC 2849) or DSML v1, read or written (ADR-0171).
 //
 // It has an in-process handler as well as a worker one, and that is not a lapse from
@@ -335,12 +335,12 @@ const LdifJobType = "io.atlas.ldif"
 // compiled process: NewBuilder reserves it twenty-fifth, so it is always 24.
 const LdifJobTypeIndex int32 = 24
 
-// JiraJobType is the reserved job type a Jira connector task carries
+// JiraJobType is the reserved job type a Jira task carries
 // (ADR-0201). One job type serves every Jira operation — create an
 // issue, read one, update, transition, comment, assign, or search — because they
 // share an instance, a credential and an error envelope; the operation is a modeled
 // value rather than a reserved index of its own, as it is for the directory
-// connectors (ADR-0153/0154/0166/0172).
+// workers (ADR-0153/0154/0166/0172).
 const JiraJobType = "io.atlas.jira"
 
 // JiraJobTypeIndex is the interned index JiraJobType is guaranteed to occupy in every
@@ -393,19 +393,19 @@ func ReservedJobTypes() []string { return slices.Clone(reservedJobTypes) }
 
 // ReservedJobTypeCount is how many built-in job types exist in this build, and so
 // the exclusive upper bound of the reserved index range. It grows whenever a
-// connector is added, which is exactly why it is not the same number as
+// worker is added, which is exactly why it is not the same number as
 // [FirstDynamicJobTypeIndex].
 func ReservedJobTypeCount() int32 { return int32(len(reservedJobTypes)) }
 
 // dynamicJobTypeFloor is the lowest index a model-authored job type may be issued.
 //
 // It is a fixed number rather than one past the reserved range, and that is the
-// whole point. Adding a built-in connector grows the reserved range; when the two
+// whole point. Adding a built-in worker grows the reserved range; when the two
 // were the same number, that growth walked over indices already issued to
 // model-authored types, and the jobs parked under them kept an index that had come
 // to mean something else. SOAP and Active Directory did exactly that to 18 and 19.
 //
-// With a fixed floor the reserved range can grow by hundreds of connectors and never
+// With a fixed floor the reserved range can grow by hundreds of workers and never
 // reach an issued index. The gap is dead space in an int32, which costs nothing:
 // indices are dense only in the sense that they are compared, never iterated.
 //
@@ -819,7 +819,7 @@ func (b *Builder) AddMockupTask(cfg MockupConfig) int32 {
 // up, runs source through the interpreter, and completes the job, writing the
 // result into the resultVar process variable. The parser owns language validation
 // and the language→jobType mapping; the builder only interns what it is given, the
-// same way AddServiceTask and the connector adds do.
+// same way AddServiceTask and the worker adds do.
 func (b *Builder) AddScriptJobTask(jobType, language, source, resultVar string, retries int32) int32 {
 	detail := int32(len(b.scriptJobTasks))
 	b.scriptJobTasks = append(b.scriptJobTasks, ScriptJobTaskDetail{
@@ -854,21 +854,21 @@ func (b *Builder) AddBusinessRuleTaskMapped(decisionId, resultVar string, static
 }
 
 // AddTemisDecisionTask adds a *central* business rule task: one whose decision is
-// evaluated by the named server-registered temis connector rather than the
+// evaluated by the named server-registered temis worker rather than the
 // embedded temis library (ADR-0050). It returns its element id. Authoring is
 // otherwise identical to a local business rule task — same decision id, result
 // variable, static inputs, and variable mappings — the only difference is that the
-// task carries the temis-connector job type so the remote worker picks it up.
+// task carries the temis job type so the remote worker picks it up.
 func (b *Builder) AddTemisDecisionTask(connector, decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32) (int32, error) {
-	// A central decision resolves through its connector, not a local snapshot, so
+	// A central decision resolves through its worker, not a local snapshot, so
 	// binding does not apply (BindingLatest is a harmless placeholder).
 	return b.addBusinessRuleTask(connector, decisionId, resultVar, staticInputs, mappings, retries, BindingLatest)
 }
 
 // addBusinessRuleTask is the shared constructor for local and central business
-// rule tasks. An empty connector selects local evaluation (the DMN job type,
-// ADR-0014); a named connector selects central evaluation (the temis-connector job
-// type, ADR-0050) and records the connector name.
+// rule tasks. An empty worker selects local evaluation (the DMN job type,
+// ADR-0014); a named worker selects central evaluation (the temis-connector job
+// type, ADR-0050) and records the worker name.
 func (b *Builder) addBusinessRuleTask(connector, decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32, binding DecisionBinding) (int32, error) {
 	inputsIdx := int32(-1)
 	if len(staticInputs) > 0 {
@@ -896,10 +896,10 @@ func (b *Builder) addBusinessRuleTask(connector, decisionId, resultVar string, s
 	return b.addNode(TypeBusinessRuleTask, detail), nil
 }
 
-// AddClioWriteTask adds a clio "write-events" connector task and returns its
+// AddClioWriteTask adds a clio "write-events" task and returns its
 // element id. Like a service task it creates a job on activation and waits; the
 // job carries the reserved ClioWriteJobType so the in-process clio worker picks
-// it up, appends an event to the named connector's clio instance under subject
+// it up, appends an event to the named worker's clio instance under subject
 // with the given event type, and completes the job (ADR-0036).
 func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries int32) int32 {
 	detail := int32(len(b.connectorTasks))
@@ -919,8 +919,8 @@ func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// AddClioQueryTask adds a clio "query" connector task and returns its element id.
-// It reads from the named connector's clio instance and writes the result into
+// AddClioQueryTask adds a clio "query" task and returns its element id.
+// It reads from the named worker's clio instance and writes the result into
 // resultVar. When query is non-empty the worker runs it as a run_query; otherwise
 // it reads get_state for subject (with the optional reduceSpec projection). Like a
 // service task it creates a job on activation carrying the reserved ClioQueryJobType
@@ -943,9 +943,9 @@ func (b *Builder) AddClioQueryTask(connector, subject, reduceSpec, query, result
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// AddClioReadTask adds a clio "read" connector task and returns its element id. It
-// reads subject's events (up to limit; 0 = the connector's default) from the named
-// connector's clio instance and writes them into resultVar as a JSON array. Like a
+// AddClioReadTask adds a clio "read" task and returns its element id. It
+// reads subject's events (up to limit; 0 = the worker's default) from the named
+// worker's clio instance and writes them into resultVar as a JSON array. Like a
 // service task it creates a job on activation carrying the reserved ClioReadJobType
 // and waits for the in-process clio worker to complete it (ADR-0036).
 func (b *Builder) AddClioReadTask(connector, subject, resultVar string, limit, retries int32) int32 {
@@ -967,7 +967,7 @@ func (b *Builder) AddClioReadTask(connector, subject, resultVar string, limit, r
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// RestAuth is a REST connector task's authentication config. Type is "", "basic",
+// RestAuth is a REST worker task's authentication config. Type is "", "basic",
 // "bearer", "apiKey", or "oauth2". Username (basic), ApiKeyName (the apiKey header
 // name), ClientID/TokenURL/Scope (oauth2 client-credentials) are model data.
 // SecretRef names a server-side secret (ADR-0041) — the basic password, bearer
@@ -989,7 +989,7 @@ type RestAuth struct {
 	Scope      string `json:"scope,omitempty"`
 }
 
-// RestConfig is the deploy-time configuration of an HTTP-REST connector task
+// RestConfig is the deploy-time configuration of an HTTP-REST task
 // (ADR-0067). Method and ResultVar are interned; Url, Headers, and Query carry
 // literal-or-FEEL values (the parser compiles the FEEL ones); Auth references a
 // server-side secret.
@@ -1003,7 +1003,7 @@ type RestConfig struct {
 	Retries   int32
 }
 
-// AddRestConnectorTask adds an HTTP-REST connector task and returns its element
+// AddRestConnectorTask adds an HTTP-REST task and returns its element
 // id. Like a service task it creates a job on activation and waits; the job
 // carries the reserved RestJobType so the in-process REST worker picks it up,
 // evaluates any FEEL url/header/query values over the instance's variables, calls
@@ -1040,7 +1040,7 @@ func (b *Builder) internAuth(a RestAuth) int32 {
 	return b.intern(string(raw))
 }
 
-// ScimConfig is the deploy-time configuration of a SCIM 2.0 connector task
+// ScimConfig is the deploy-time configuration of a SCIM 2.0 task
 // (ADR-0153). BaseURL and Resource address the service provider and resource type
 // ("Users"/"Groups"); Op is the operation ("create"|"get"|"replace"|"patch"|
 // "delete"|"search"); ResourceID (get/replace/patch/delete) and Filter (search)
@@ -1060,7 +1060,7 @@ type ScimConfig struct {
 	Retries    int32
 }
 
-// AddScimConnectorTask adds a SCIM 2.0 connector task and returns its element id.
+// AddScimConnectorTask adds a SCIM 2.0 task and returns its element id.
 // Like a service task it creates a job on activation and waits; the job carries the
 // reserved ScimJobType so the in-process SCIM worker picks it up, evaluates any FEEL
 // base-url/resource/id/filter values over the instance's variables, performs the
@@ -1091,7 +1091,7 @@ func (b *Builder) AddScimConnectorTask(cfg ScimConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// LdapConfig is the deploy-time configuration of a generic LDAP connector task
+// LdapConfig is the deploy-time configuration of a generic LDAP task
 // (ADR-0154). URL is the server (ldap://host:389 or ldaps://host:636) and BindDN the
 // bind identity — literal-or-FEEL values; BindSecret names the server-side secret for
 // the bind password (empty → an anonymous bind); StartTLS upgrades a plain ldap://
@@ -1122,7 +1122,7 @@ type LdapConfig struct {
 	Retries          int32
 }
 
-// AddLdapConnectorTask adds a generic LDAP connector task and returns its element id.
+// AddLdapConnectorTask adds a generic LDAP task and returns its element id.
 // Like a service task it creates a job on activation and waits; the job carries the
 // reserved LdapJobType so the in-process LDAP worker picks it up, evaluates any FEEL
 // url/dn/filter values over the instance's variables, binds and performs the
@@ -1161,7 +1161,7 @@ func (b *Builder) AddLdapConnectorTask(cfg LdapConfig) int32 {
 }
 
 // SoapConfig is the deploy-time configuration of a SOAP / Web Services (WSDL)
-// connector task (ADR-0165). Endpoint is the service URL (from the WSDL's
+// task (ADR-0165). Endpoint is the service URL (from the WSDL's
 // soap:address) and Op the operation name; Action overrides the SOAPAction header
 // (empty → Op); Body is the XML payload placed inside the SOAP envelope's Body
 // (literal-or-FEEL, so a request can interpolate the instance's variables); Version is
@@ -1178,7 +1178,7 @@ type SoapConfig struct {
 	Retries   int32
 }
 
-// AddSoapConnectorTask adds a SOAP / Web Services connector task and returns its
+// AddSoapConnectorTask adds a SOAP / Web Services task and returns its
 // element id. Like a service task it creates a job on activation and waits; the job
 // carries the reserved SoapJobType so the in-process SOAP worker picks it up, evaluates
 // any FEEL endpoint/action/body values over the instance's variables, wraps the body in
@@ -1207,7 +1207,7 @@ func (b *Builder) AddSoapConnectorTask(cfg SoapConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// AdConfig is the deploy-time configuration of an Active Directory connector task
+// AdConfig is the deploy-time configuration of an Active Directory task
 // (ADR-0166). URL is the server (ldaps://host:636 — a password set needs LDAPS) and
 // BindDN the bind identity — literal-or-FEEL values; BindSecret names the server-side
 // secret for the bind password (empty → an anonymous bind); StartTLS upgrades a plain
@@ -1217,7 +1217,7 @@ func (b *Builder) AddSoapConnectorTask(cfg SoapConfig) int32 {
 // the process variable holding the create-user attribute object; NewPassword is the
 // set-password value.
 type AdConfig struct {
-	// Connector is the Console-configured directory this task talks to, or "" for a
+	// Worker is the Console-configured directory this task talks to, or "" for a
 	// task that carries its own URL and bind DN the old way.
 	Connector   string
 	URL         RestExpr
@@ -1244,7 +1244,7 @@ type AdConfig struct {
 	ObjectSecurity bool
 }
 
-// AddAdConnectorTask adds an Active Directory connector task and returns its element
+// AddAdConnectorTask adds an Active Directory task and returns its element
 // id. Like a service task it creates a job on activation and waits; the job carries
 // the reserved AdJobType so the in-process AD worker picks it up, evaluates any FEEL
 // url/dn values over the instance's variables, binds, performs the AD operation
@@ -1291,12 +1291,12 @@ func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// SqlConfig is the deploy-time configuration of a SQL connector task (ADR-0173),
+// SqlConfig is the deploy-time configuration of a SQL task (ADR-0173),
 // shared by all three products. JobType is the product's reserved job type
 // (MsSqlJobType, MariaDBJobType or PostgresJobType) — the one field that differs
 // between them, and what decides which driver the worker opens.
 //
-// Connector names the database the worker is configured for: a SQL task carries no
+// Worker names the database the worker is configured for: a SQL task carries no
 // DSN, because the connection string never enters the engine. Op is the operation
 // ("query"|"query-one"|"execute"). Statement is the SQL text, a literal by
 // construction so no process value can become part of it; ParamsVar names the
@@ -1314,7 +1314,7 @@ type SqlConfig struct {
 	Retries   int32
 }
 
-// AddSqlConnectorTask adds a SQL connector task of cfg's product and returns its
+// AddSqlConnectorTask adds a SQL task of cfg's product and returns its
 // element id. Like a service task it creates a job on activation and waits; the job
 // carries the product's reserved job type. Unlike every kind before it, nothing in
 // the engine subscribes to that type — SQL is worker-only (ADR-0164/0170), so the job
@@ -1342,7 +1342,7 @@ func (b *Builder) AddSqlConnectorTask(cfg SqlConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// LdifConfig is the deploy-time configuration of a directory-file connector task
+// LdifConfig is the deploy-time configuration of a directory-file task
 // (ADR-0171). Format is "ldif" or "dsml" and Operation "read" or "write"; Source
 // names the variable holding the file text (read) or the entries (write), and Result
 // the variable receiving the entries (read) or the rendered file (write).
@@ -1354,7 +1354,7 @@ type LdifConfig struct {
 	Retries   int32
 }
 
-// AddLdifConnectorTask adds a directory-file connector task and returns its element
+// AddLdifConnectorTask adds a directory-file task and returns its element
 // id. Like a service task it creates a job on activation and waits; the job carries
 // the reserved LdifJobType, which an in-process worker and an `atlas worker` both
 // serve — the work is a pure transform, so neither placement can block the other.
@@ -1379,8 +1379,8 @@ func (b *Builder) AddLdifConnectorTask(cfg LdifConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// EntraConfig is the deploy-time configuration of a Microsoft Entra ID connector
-// task (ADR-0172). Connector names the tenant the worker is configured for — a task
+// EntraConfig is the deploy-time configuration of a Microsoft Entra ID worker
+// task (ADR-0172). Worker names the tenant the worker is configured for — a task
 // carries no tenant id and no client secret, because they never enter the engine. Op
 // is the lifecycle operation. UserID and GroupID are literal-or-FEEL values
 // addressing the user (a UPN or object id) and the group; AttributesVar names the
@@ -1395,9 +1395,9 @@ func (b *Builder) AddLdifConnectorTask(cfg LdifConfig) int32 {
 // operations that return one object or none.
 type EntraConfig struct {
 	Connector string
-	// ConnectorExpr carries the connector name as a literal-or-FEEL value when the
+	// ConnectorExpr carries the worker name as a literal-or-FEEL value when the
 	// author wants the tenant chosen at runtime (e.g. "=tenant" on a multi-tenant
-	// joiner). It is the zero RestExpr for the ordinary static case, where Connector
+	// joiner). It is the zero RestExpr for the ordinary static case, where Worker
 	// alone names the tenant. Only entra takes this: the kind is worker-only, so no
 	// deploy-time credential lookup keys off a fixed name (ADR-0172).
 	ConnectorExpr RestExpr
@@ -1421,7 +1421,7 @@ type EntraConfig struct {
 	Retries   int32
 }
 
-// AddEntraConnectorTask adds an Entra ID connector task and returns its element id.
+// AddEntraConnectorTask adds an Entra ID task and returns its element id.
 // Like a service task it creates a job on activation and waits; the job carries the
 // reserved EntraJobType, which nothing in the engine subscribes to — the kind is
 // worker-only (ADR-0164/0171), so the job waits for a worker that holds the tenant's
@@ -1457,8 +1457,8 @@ func (b *Builder) AddEntraConnectorTask(cfg EntraConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// MailConfig is the deploy-time configuration of an outbound mail connector task
-// (ADR-0079). Connector names the server-registered mail provider (its host and
+// MailConfig is the deploy-time configuration of an outbound mail task
+// (ADR-0079). Worker names the server-registered mail provider (its host and
 // credentials live server-side, never in the model); To/Cc/Bcc/From/Subject/Body
 // carry literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over
 // the instance's variables at send time. To and Subject/Body are the message; Cc,
@@ -1475,13 +1475,13 @@ type MailConfig struct {
 	Retries   int32
 }
 
-// AddMailConnectorTask adds an outbound mail connector task and returns its element
+// AddMailConnectorTask adds an outbound mail task and returns its element
 // id. Like a service task it creates a job on activation and waits; the job carries
 // the reserved MailJobType so the in-process mail worker picks it up, evaluates any
 // FEEL recipient/subject/body values over the instance's variables, resolves the
-// named connector's provider client, sends the message, and completes the job
+// named worker's provider client, sends the message, and completes the job
 // (ADR-0079). The provider endpoint and credentials are resolved server-side from
-// the named connector, never authored in the model — mirroring clio (ADR-0036).
+// the named worker, never authored in the model — mirroring clio (ADR-0036).
 func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
@@ -1507,11 +1507,11 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 }
 
 // UserConnectorConfig is the deploy-time configuration of a user-provisioning
-// connector task (ADR-0123). Operation is one of "create", "set-password", or
+// task (ADR-0123). Operation is one of "create", "set-password", or
 // "disable". Username identifies the account; Email/DisplayName/Roles/Password are
 // the create/update fields — each a literal-or-FEEL value (the parser compiles the
 // FEEL ones) evaluated over the instance's variables at call time. There is no
-// connector name and no credential: the worker mutates the internal user store
+// worker name and no credential: the worker mutates the internal user store
 // directly, gated to the protected system project (ADR-0122) and opt-in server-side.
 type UserConnectorConfig struct {
 	Operation   string
@@ -1523,7 +1523,7 @@ type UserConnectorConfig struct {
 	Retries     int32
 }
 
-// AddUserConnectorTask adds a user-provisioning connector task and returns its
+// AddUserConnectorTask adds a user-provisioning task and returns its
 // element id. Like a service task it creates a job on activation and waits; the job
 // carries the reserved UserConnectorJobType so the in-process user-provisioning
 // worker picks it up, evaluates any FEEL field over the instance's variables,
@@ -1552,7 +1552,7 @@ func (b *Builder) AddUserConnectorTask(cfg UserConnectorConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// CsvConfig is the deploy-time configuration of a CSV-to-JSON connector task
+// CsvConfig is the deploy-time configuration of a CSV-to-JSON task
 // (ADR-0139). Source names the process variable holding the raw CSV text
 // (empty → the worker's default "csvText"); Result the variable the parsed rows
 // are written to (empty → "rows"); Delimiter the field delimiter (empty → ",");
@@ -1573,7 +1573,7 @@ type CsvConfig struct {
 	Widths    []int32
 }
 
-// AddCsvConnectorTask adds a CSV-to-JSON connector task and returns its element
+// AddCsvConnectorTask adds a CSV-to-JSON task and returns its element
 // id. Like a service task it creates a job on activation and waits; the job carries
 // the reserved CsvImportJobType so the in-process CSV worker picks it up, reads the
 // raw text from the named source variable, parses it against the authored
@@ -1610,8 +1610,8 @@ func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// SharePointConfig is the deploy-time configuration of a SharePoint connector task
-// (ADR-0141). Connector names the server-registered SharePoint provider (its Graph
+// SharePointConfig is the deploy-time configuration of a SharePoint task
+// (ADR-0141). Worker names the server-registered SharePoint provider (its Graph
 // base and OAuth credential live server-side, never in the model); Site and List
 // address the target list, and Fields are the created item's column values — all
 // literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over the
@@ -1626,14 +1626,14 @@ type SharePointConfig struct {
 	Retries   int32
 }
 
-// AddSharePointConnectorTask adds a SharePoint connector task and returns its element
+// AddSharePointConnectorTask adds a SharePoint task and returns its element
 // id. Like a service task it creates a job on activation and waits; the job carries
 // the reserved SharePointJobType so the in-process SharePoint worker picks it up,
 // evaluates any FEEL site/list/field values over the instance's variables, resolves
-// the named connector's Graph client, creates the list item, writes the created
+// the named worker's Graph client, creates the list item, writes the created
 // item's JSON into ResultVar, and completes the job (ADR-0141). The Graph base and
-// credentials are resolved server-side from the named connector, never authored in
-// the model — mirroring the mail connector (ADR-0079).
+// credentials are resolved server-side from the named worker, never authored in
+// the model — mirroring the mail worker (ADR-0079).
 func (b *Builder) AddSharePointConnectorTask(cfg SharePointConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
@@ -1654,8 +1654,8 @@ func (b *Builder) AddSharePointConnectorTask(cfg SharePointConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// RemedyConfig is the deploy-time configuration of a BMC Remedy connector task
-// (ADR-0106). Connector names the server-registered Remedy instance (its base URL
+// RemedyConfig is the deploy-time configuration of a BMC Remedy task
+// (ADR-0106). Worker names the server-registered Remedy instance (its base URL
 // and credentials live server-side, never in the model). Form is the Remedy form
 // the entry is created in (e.g. "HPD:IncidentInterface_Create"); Fields carries the
 // entry's field values as name/literal-or-FEEL pairs evaluated over the instance's
@@ -1669,13 +1669,13 @@ type RemedyConfig struct {
 	Retries   int32
 }
 
-// AddRemedyConnectorTask adds a BMC Remedy connector task and returns its element
+// AddRemedyConnectorTask adds a BMC Remedy task and returns its element
 // id. Like a service task it creates a job on activation and waits; the job carries
 // the reserved RemedyJobType so the in-process Remedy worker picks it up, evaluates
 // any FEEL form/field values over the instance's variables, resolves the named
-// connector's AR System REST client, creates the entry, writes the new entry id into
+// worker's AR System REST client, creates the entry, writes the new entry id into
 // ResultVar (empty = discard it), and completes the job (ADR-0106). The Remedy base
-// URL and credentials are resolved server-side from the named connector, never
+// URL and credentials are resolved server-side from the named worker, never
 // authored in the model — mirroring clio and mail (ADR-0036/0079).
 func (b *Builder) AddRemedyConnectorTask(cfg RemedyConfig) int32 {
 	detail := int32(len(b.connectorTasks))
@@ -1696,8 +1696,8 @@ func (b *Builder) AddRemedyConnectorTask(cfg RemedyConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// JiraConfig is the deploy-time configuration of a Jira connector task
-// (ADR-0201). Connector names the server-registered Jira instance (its
+// JiraConfig is the deploy-time configuration of a Jira task
+// (ADR-0201). Worker names the server-registered Jira instance (its
 // base URL and credential live server-side, never in the model) and Operation is the
 // issue-tracker operation. The remaining values are the ones that operation takes —
 // literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over the
@@ -1723,13 +1723,13 @@ type JiraConfig struct {
 	Retries     int32
 }
 
-// AddJiraConnectorTask adds a Jira connector task and returns its element id. Like a
+// AddJiraConnectorTask adds a Jira task and returns its element id. Like a
 // service task it creates a job on activation and waits; the job carries the reserved
 // JiraJobType so the in-process Jira worker picks it up, evaluates the authored
 // literal-or-FEEL values over the variables the task sees, resolves the named
-// connector's client, performs the one operation, writes what Jira returned into
+// worker's client, performs the one operation, writes what Jira returned into
 // ResultVar (empty = discard it), and completes the job. The Jira base URL and
-// credential are resolved server-side from the named connector, never authored in the
+// credential are resolved server-side from the named worker, never authored in the
 // model — mirroring Remedy and SharePoint (ADR-0106/0141).
 func (b *Builder) AddJiraConnectorTask(cfg JiraConfig) int32 {
 	detail := int32(len(b.connectorTasks))
@@ -1761,7 +1761,7 @@ func (b *Builder) AddJiraConnectorTask(cfg JiraConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// WebScrapeConfig is the deploy-time configuration of a web-scraping connector task
+// WebScrapeConfig is the deploy-time configuration of a web-scraping task
 // (ADR-0118). Url is the page to fetch and Selector the CSS selector whose matches
 // are extracted — both literal-or-FEEL values (the parser compiles the FEEL ones)
 // evaluated over the instance's variables at call time. Attribute, when set, names
@@ -1776,14 +1776,14 @@ type WebScrapeConfig struct {
 	Retries   int32
 }
 
-// AddWebScrapeConnectorTask adds a web-scraping connector task and returns its
+// AddWebScrapeConnectorTask adds a web-scraping task and returns its
 // element id. Like a service task it creates a job on activation and waits; the job
 // carries the reserved WebScrapeJobType so the in-process web-scraping worker picks
 // it up, evaluates any FEEL url/selector values over the instance's variables,
 // fetches the page, extracts the text (or the named attribute) of every element
 // matching the selector, writes the values into Result as a JSON array, and
 // completes the job (ADR-0118). The URL and selector live in the model, mirroring
-// the REST connector (ADR-0067); nothing about the target is registry-held.
+// the REST worker (ADR-0067); nothing about the target is registry-held.
 func (b *Builder) AddWebScrapeConnectorTask(cfg WebScrapeConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{

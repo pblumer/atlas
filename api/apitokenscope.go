@@ -76,9 +76,9 @@ const (
 // from this map is unconfined — apiScopeFull is the only one, and it says so.
 //
 // The worker set is derived from what `atlas worker` actually calls: leasing a
-// batch by type, settling each job either way, and — for a mail connector running
+// batch by type, settling each job either way, and — for a mail worker running
 // in preview — posting the framed message back to this server's outbox (ADR-0150),
-// and, for an AD connector in mockup mode, reporting the forest it holds so the
+// and, for an AD worker in mockup mode, reporting the forest it holds so the
 // Console can show it (ADR-0213).
 // Nothing else. Notably not `POST /api/v1/jobs/{key}/activate`, which is the
 // single-job form no worker uses.

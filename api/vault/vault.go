@@ -1,4 +1,4 @@
-// Package vault is Atlas's engine-internal encrypted secret store: connector
+// Package vault is Atlas's engine-internal encrypted secret store: worker
 // credentials sealed at rest with AES-256-GCM under a master key that never
 // leaves the operator's control (ADR-0069), on by default with a generated key
 // file when no operator key is supplied (ADR-0070).

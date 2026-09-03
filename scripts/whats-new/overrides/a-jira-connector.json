@@ -1,6 +1,6 @@
 {
   "tags": [
-    "Connectors",
+    "Workers",
     "Modeler"
   ],
   "title": {
@@ -13,7 +13,7 @@
   },
   "tutorial": {
     "en": [
-      "Under Console › Connectors, add a connector of kind jira: its site address (https://acme.atlassian.net) and a vault credential — {\"email\": …, \"apiToken\": …} for Jira Cloud, or {\"token\": …} for a Data Center personal access token.",
+      "Under Console › Workers, add a connector of kind jira: its site address (https://acme.atlassian.net) and a vault credential — {\"email\": …, \"apiToken\": …} for Jira Cloud, or {\"token\": …} for a Data Center personal access token.",
       "In the Modeler, drop a service task and pick Jira Connector, then choose an operation — start with Create issue.",
       "Name your connector, fill in the project key, the issue type and a summary (the fx toggle makes any of them a FEEL expression over the instance's variables), and give it a result variable such as ticket.",
       "A later task can then address =ticket.key — Transition issue moves that same issue on by the name of the button you see in Jira."
@@ -27,9 +27,9 @@
   },
   "try": {
     "label": {
-      "en": "Open Connectors",
-      "de": "Konnektoren öffnen"
+      "en": "Open Workers",
+      "de": "Workers öffnen"
     },
-    "route": "#/console/connectors"
+    "route": "#/console/workers"
   }
 }

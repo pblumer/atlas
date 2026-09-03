@@ -82,7 +82,7 @@ func TestProcessRuntimeShowsWhyATokenIsParked(t *testing.T) {
 		t.Fatalf("a healthy instance reports %d incidents", len(rt.Incidents))
 	}
 
-	// Exhaust the job's retries the way a failing connector does.
+	// Exhaust the job's retries the way a failing worker does.
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
 	var tasks []struct {
 		Key uint64 `json:"key"`

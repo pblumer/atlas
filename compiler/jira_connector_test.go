@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// A service task bearing an <atlas:jiraConnector> extension is a Jira connector task
+// A service task bearing an <atlas:jiraConnector> extension is a Jira task
 // (ADR-0201): it performs one issue-tracker operation against a
 // server-registered Jira instance via the job path. The base URL and credential live
 // server-side, like Remedy's and SharePoint's (ADR-0106/0141); only what the task is
@@ -49,7 +49,7 @@ func TestParseJiraConnectorTask(t *testing.T) {
 		t.Errorf("jobType index = %d, want the reserved JiraJobTypeIndex %d", d.JobType, JiraJobTypeIndex)
 	}
 	if got := cp.Intern(d.Connector); got != "acme" {
-		t.Errorf("connector = %q, want acme", got)
+		t.Errorf("worker = %q, want acme", got)
 	}
 	if got := cp.Intern(d.JiraOp); got != "create-issue" {
 		t.Errorf("operation = %q, want create-issue", got)
@@ -202,7 +202,7 @@ func TestParseJiraConnectorOperations(t *testing.T) {
 	}
 }
 
-// A search that authors no maxResults compiles the connector's default rather than
+// A search that authors no maxResults compiles the worker's default rather than
 // leaving the runtime to interpret a zero (invariant I5).
 func TestParseJiraConnectorSearchDefaultsItsPageSize(t *testing.T) {
 	bpmn := jiraTaskBPMN(`<atlas:jiraConnector connector="acme" operation="search" jql="project = OPS" resultVariable="offen"/>`)
@@ -219,7 +219,7 @@ func TestParseJiraConnectorSearchDefaultsItsPageSize(t *testing.T) {
 
 func TestParseJiraConnectorErrors(t *testing.T) {
 	cases := map[string]string{
-		"missing connector":       `<atlas:jiraConnector operation="get-issue" issueKey="OPS-1"/>`,
+		"missing worker":          `<atlas:jiraConnector operation="get-issue" issueKey="OPS-1"/>`,
 		"missing operation":       `<atlas:jiraConnector connector="acme" issueKey="OPS-1"/>`,
 		"unknown operation":       `<atlas:jiraConnector connector="acme" operation="explode" issueKey="OPS-1"/>`,
 		"create without project":  `<atlas:jiraConnector connector="acme" operation="create-issue" issueType="Task" summary="s"/>`,
@@ -262,7 +262,7 @@ func TestParseJiraConnectorErrors(t *testing.T) {
 
 // The Modeler serializes the moddle type JiraConnector as <atlas:jiraConnector>, which
 // is the spelling the compiler reads — the guard TestCompilerReadsWhatTheModelerWrites
-// states repo-wide, asserted here on the connector's own round trip.
+// states repo-wide, asserted here on the worker's own round trip.
 func TestParseJiraConnectorRetries(t *testing.T) {
 	bpmn := jiraTaskBPMN(`<atlas:jiraConnector connector="acme" operation="get-issue" issueKey="OPS-1" resultVariable="t" retries="7"/>`)
 	cp, err := Parse(1, 1, strings.NewReader(bpmn))

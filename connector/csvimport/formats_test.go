@@ -35,7 +35,7 @@ func TestParseFixedWidth(t *testing.T) {
 		t.Errorf("row 0 = %v", rows[0])
 	}
 	// A line ending before the layout does yields empty cells rather than an error:
-	// a ragged export is dirty data, which this connector passes through.
+	// a ragged export is dirty data, which this worker passes through.
 	if rows[1]["name"] != "Meier" || rows[1]["abteilung"] != "" {
 		t.Errorf("row 1 = %v, want empty cells past the end of a short line", rows[1])
 	}
@@ -168,7 +168,7 @@ func TestRenderFixedWidthRoundTrips(t *testing.T) {
 	}
 }
 
-// A value wider than its column is cut. It is the one place this connector loses
+// A value wider than its column is cut. It is the one place this worker loses
 // data on purpose, because the format has no way to express a wider field.
 func TestRenderFixedWidthTruncates(t *testing.T) {
 	cfg := cols(Column{Name: "uid", Width: 3})
@@ -231,7 +231,7 @@ func TestKnownFormat(t *testing.T) {
 		}
 	}
 	if KnownFormat("ldif") {
-		t.Error("LDIF is a directory format, not a text table; it belongs to its own connector")
+		t.Error("LDIF is a directory format, not a text table; it belongs to its own worker")
 	}
 }
 

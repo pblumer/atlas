@@ -5,7 +5,7 @@
     <title>Atlas Variables-panel types e2e harness</title>
     <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, to verify
          what the Modeler's Variables panel says a variable *holds*: the type the model
-         declares (a start variable's own type, the shape a connector kind writes), and
+         declares (a start variable's own type, the shape a Worker Type writes), and
          the value it actually held on the last run of this process, read from a real
          instance — including a structure, opened where it stands.
 
@@ -28,7 +28,7 @@
 
       // Three variables, one per kind of knowledge the panel can have:
       //   kundennr  — a start variable, whose type the model states outright;
-      //   kunden    — a PostgreSQL connector's result. `operation="query"` returns rows,
+      //   kunden    — a PostgreSQL worker's result. `operation="query"` returns rows,
       //               so the catalog declares an array without anything having run;
       //   geschrieben — a FEEL script's result, which is whatever the expression yields.
       //               Nothing declares it, and the panel must say nothing rather than guess.
@@ -72,7 +72,7 @@
       // One finished instance of this process, shaped exactly as GET /instances returns
       // it: every value a string, with `kind` naming what it is. `kunden` holds two rows
       // whose column names (kundennr, nachname) are the point — a name tells an author
-      // that a connector writes `kunden`, not what is inside one.
+      // that a worker writes `kunden`, not what is inside one.
       const INSTANCE = {
         key: 281474976710657, processDefKey: 7, processId: "proc-vars", version: 1,
         state: "completed", createdAt: 1, completedAt: 2, elementInstances: 0,

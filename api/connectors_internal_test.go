@@ -49,10 +49,10 @@ func TestManagedConnectorKindsRegistry(t *testing.T) {
 	}
 	// The model-authored http.rest kind is not managed here.
 	if _, ok := lookupManagedConnectorKind("http.rest"); ok {
-		t.Error("http.rest should not be a managed connector kind")
+		t.Error("http.rest should not be a managed Worker Type")
 	}
 	// The whitelist error lists exactly the registered kinds, in order.
-	want := "connector kind must be \"temis\", \"clio\", \"mail\", \"sharepoint\", \"remedy\", \"jira\", \"entra\", \"ad\", \"postgres\", \"mariadb\", or \"mssql\""
+	want := "Worker Type must be \"temis\", \"clio\", \"mail\", \"sharepoint\", \"remedy\", \"jira\", \"entra\", \"ad\", \"postgres\", \"mariadb\", or \"mssql\""
 	if got := managedConnectorKindsError(); got != want {
 		t.Errorf("managedConnectorKindsError() = %q, want %q", got, want)
 	}
@@ -119,8 +119,8 @@ func TestConnectorValidation(t *testing.T) {
 }
 
 // TestManagedConnectorExecutesDecision is the point of managed configuration: a
-// central decision parks until its connector is configured *in the Console* (no
-// env), then executes once the connector instance exists; disabling it parks the
+// central decision parks until its worker is configured *in the Console* (no
+// env), then executes once the worker exists; disabling it parks the
 // decision again — all without a restart.
 func TestManagedConnectorExecutesDecision(t *testing.T) {
 	var calls int32
@@ -134,7 +134,7 @@ func TestManagedConnectorExecutesDecision(t *testing.T) {
 	x := deployTestHarness{t, srv.Handler()}
 
 	pid := x.mkProject("Central")
-	x.saveDraft(pid, centralDecisionBPMN) // references connector "risk"
+	x.saveDraft(pid, centralDecisionBPMN) // references worker "risk"
 	code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", "")
 	if code != http.StatusOK {
 		t.Fatalf("deploy: %d %s", code, b)
@@ -145,9 +145,9 @@ func TestManagedConnectorExecutesDecision(t *testing.T) {
 
 	// runInstance creates an instance (always 200 now — an un-runnable decision no
 	// longer fails the create). incidents counts the raised incidents: a central
-	// decision whose connector isn't configured fails its job, which (ADR-0061)
+	// decision whose worker isn't configured fails its job, which (ADR-0061)
 	// parks the token at the business rule task with an incident; a configured
-	// connector executes the decision so the instance completes with no new one.
+	// worker executes the decision so the instance completes with no new one.
 	runInstance := func() {
 		if code, cb := x.do(http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", key), "{}"); code != http.StatusOK {
 			t.Fatalf("create instance: %d %s", code, cb)
@@ -162,44 +162,44 @@ func TestManagedConnectorExecutesDecision(t *testing.T) {
 		return len(r.Incidents)
 	}
 
-	// No connector yet → the decision can't run, so a new instance raises an incident.
+	// No worker yet → the decision can't run, so a new instance raises an incident.
 	runInstance()
 	if incidents() == 0 {
-		t.Fatal("before configuring the connector: want an incident (decision can't run)")
+		t.Fatal("before configuring the worker: want an incident (decision can't run)")
 	}
 
-	// Configure the "risk" connector in the Console → a new instance now executes:
+	// Configure the "risk" worker in the Console → a new instance now executes:
 	// temis is called and no additional incident is raised.
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"risk","endpoint":"`+ts.URL+`"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create connector: %d %s", code, cb)
+		t.Fatalf("create worker: %d %s", code, cb)
 	}
 	before := incidents()
 	callsBefore := atomic.LoadInt32(&calls)
 	runInstance()
 	if atomic.LoadInt32(&calls) == callsBefore {
-		t.Fatal("after configuring the connector: temis service was never called")
+		t.Fatal("after configuring the worker: temis service was never called")
 	}
 	if incidents() != before {
-		t.Fatalf("after configuring the connector: incidents changed %d→%d, want the decision to execute", before, incidents())
+		t.Fatalf("after configuring the worker: incidents changed %d→%d, want the decision to execute", before, incidents())
 	}
 
 	// Disable it → a new instance can't run again, raising another incident.
 	var created connector
 	_ = json.Unmarshal(cb, &created)
 	if code, ub := x.do(http.MethodPatch, "/api/v1/connectors/"+created.ID, `{"enabled":false}`); code != http.StatusOK {
-		t.Fatalf("disable connector: %d %s", code, ub)
+		t.Fatalf("disable worker: %d %s", code, ub)
 	}
 	before = incidents()
 	runInstance()
 	if incidents() == before {
-		t.Fatal("after disabling the connector: want a new incident (decision can't run)")
+		t.Fatal("after disabling the worker: want a new incident (decision can't run)")
 	}
 
 	// The list shows the (disabled) instance and never a secret.
 	_, lb := x.do(http.MethodGet, "/api/v1/connectors", "")
 	if !strings.Contains(string(lb), `"name":"risk"`) || strings.Contains(string(lb), "token") {
-		t.Fatalf("connector list = %s, want risk and no secret", lb)
+		t.Fatalf("worker list = %s, want risk and no secret", lb)
 	}
 
 	// Deleting it is refused while the deployed model still references it: removing
@@ -208,7 +208,7 @@ func TestManagedConnectorExecutesDecision(t *testing.T) {
 	// names the model rather than a count, because that is what an operator decides on.
 	code, db := x.do(http.MethodDelete, "/api/v1/connectors/"+created.ID, "")
 	if code != http.StatusConflict {
-		t.Fatalf("delete a referenced connector = %d %s, want 409", code, db)
+		t.Fatalf("delete a referenced worker = %d %s, want 409", code, db)
 	}
 	if !strings.Contains(string(db), `"usedBy"`) || !strings.Contains(string(db), `"decide"`) {
 		t.Fatalf("refusal = %s, want the referencing process and its element", db)
@@ -219,7 +219,7 @@ func TestManagedConnectorExecutesDecision(t *testing.T) {
 		t.Fatalf("forced delete: %d %s, want 204", code, b)
 	}
 	if code, _ := x.do(http.MethodPatch, "/api/v1/connectors/"+created.ID, `{"enabled":true}`); code != http.StatusNotFound {
-		t.Fatalf("update deleted connector: want 404")
+		t.Fatalf("update deleted worker: want 404")
 	}
 }
 
@@ -257,7 +257,7 @@ func TestConnectorUpdateFields(t *testing.T) {
 }
 
 // TestMailConnectorValidationAndCreate covers the create endpoint's mail-specific
-// input checks and a successful mail connector create (ADR-0079).
+// input checks and a successful mail worker create (ADR-0079).
 func TestMailConnectorValidationAndCreate(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	h := srv.Handler()
@@ -323,17 +323,17 @@ func TestBuildMailNativeClients(t *testing.T) {
 		t.Fatalf("clients = %d, want 2 (gmail + graph; the broken bundle is skipped)", len(clients))
 	}
 	if _, ok := clients["gmail"].(*mail.GmailClient); !ok {
-		t.Errorf("gmail connector = %T, want *mail.GmailClient", clients["gmail"])
+		t.Errorf("gmail worker = %T, want *mail.GmailClient", clients["gmail"])
 	}
 	if _, ok := clients["graph"].(*mail.GraphClient); !ok {
-		t.Errorf("microsoft connector = %T, want *mail.GraphClient", clients["graph"])
+		t.Errorf("microsoft worker = %T, want *mail.GraphClient", clients["graph"])
 	}
 	if _, ok := clients["broken"]; ok {
 		t.Error("a malformed credential bundle should be skipped, not built")
 	}
 }
 
-// TestMailConnectorLifecycle drives a mail connector through the full Console
+// TestMailConnectorLifecycle drives a mail worker through the full Console
 // management surface — create, sender update, list, delete — so the create branch
 // (mail kind), the sender-update branch, and the mail arm of the registry rebuild
 // are all exercised end to end (ADR-0079).
@@ -350,7 +350,7 @@ func TestMailConnectorLifecycle(t *testing.T) {
 	code, b := do(http.MethodPost, "/api/v1/connectors",
 		`{"name":"office365","kind":"mail","endpoint":"smtp.office365.com:587","sender":"bot@example.com","credentialsRef":"o365_pw"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create mail connector: %d %s", code, b)
+		t.Fatalf("create mail worker: %d %s", code, b)
 	}
 	var c connector
 	_ = json.Unmarshal(b, &c)
@@ -366,15 +366,15 @@ func TestMailConnectorLifecycle(t *testing.T) {
 		t.Fatalf("sender after update = %q, want the new sender", up.Sender)
 	}
 
-	// The list shows the mail connector and never a secret value.
+	// The list shows the mail worker and never a secret value.
 	_, lb := do(http.MethodGet, "/api/v1/connectors", "")
 	if !strings.Contains(string(lb), `"kind":"mail"`) || strings.Contains(string(lb), "o365_pw_value") {
-		t.Fatalf("connector list = %s, want the mail connector and only the reference", lb)
+		t.Fatalf("worker list = %s, want the mail worker and only the reference", lb)
 	}
 
 	// Delete it → the registry rebuilds without it.
 	if code, _ := do(http.MethodDelete, "/api/v1/connectors/"+c.ID, ""); code != http.StatusNoContent {
-		t.Fatalf("delete mail connector: want 204")
+		t.Fatalf("delete mail worker: want 204")
 	}
 }
 
@@ -397,7 +397,7 @@ func TestBuildMailClients(t *testing.T) {
 		t.Fatalf("clients = %d, want 1 (only the enabled SMTP mail record)", len(clients))
 	}
 	if _, ok := clients["on"]; !ok {
-		t.Errorf("clients = %v, want the 'on' connector", clients)
+		t.Errorf("clients = %v, want the 'on' worker", clients)
 	}
 }
 
@@ -470,7 +470,7 @@ func TestBuildRemedyClients(t *testing.T) {
 		t.Fatalf("clients = %d, want 1 (only the enabled, credentialed remedy record)", len(clients))
 	}
 	if _, ok := clients["on"]; !ok {
-		t.Errorf("clients = %v, want the 'on' connector", clients)
+		t.Errorf("clients = %v, want the 'on' worker", clients)
 	}
 }
 
@@ -478,11 +478,11 @@ func TestBuildRemedyClients(t *testing.T) {
 // (ADR-0201). Which of the two bundle shapes it is — {email, apiToken} for Cloud,
 // {token} for a Data Center personal access token — is deliberately NOT decided here:
 // the record holds only the reference, so being wrong about the bundle becomes a
-// problem reported on the connector rather than a refused form.
+// problem reported on the worker rather than a refused form.
 func TestJiraConnectorNeedsASiteAndACredentialBundle(t *testing.T) {
 	k, ok := lookupManagedConnectorKind(connectorKindJira)
 	if !ok {
-		t.Fatal("jira is not a managed connector kind")
+		t.Fatal("jira is not a managed Worker Type")
 	}
 
 	for _, tc := range []struct{ name, endpoint, ref, want string }{
@@ -494,7 +494,7 @@ func TestJiraConnectorNeedsASiteAndACredentialBundle(t *testing.T) {
 				Name: "acme", Endpoint: tc.endpoint, CredentialsRef: tc.ref,
 			})
 			if msg == "" {
-				t.Fatal("an incomplete jira connector was accepted")
+				t.Fatal("an incomplete jira worker was accepted")
 			}
 			if !strings.Contains(msg, tc.want) {
 				t.Errorf("message = %q, want it to mention %q", msg, tc.want)
@@ -510,16 +510,16 @@ func TestJiraConnectorNeedsASiteAndACredentialBundle(t *testing.T) {
 		Provider: "smtp", Sender: "bot@x",
 	}
 	if msg := k.validateCreate(p); msg != "" {
-		t.Errorf("a complete jira connector was refused: %s", msg)
+		t.Errorf("a complete jira worker was refused: %s", msg)
 	}
 	if p.Provider != "" || p.Sender != "" {
 		t.Errorf("provider/sender = %q/%q, want both cleared for a jira record", p.Provider, p.Sender)
 	}
 }
 
-// buildJiraClients keeps a connector out of the registry unless it is enabled, has a
+// buildJiraClients keeps a worker out of the registry unless it is enabled, has a
 // site, and its credentialsRef resolves to one of the two bundle shapes. Each
-// exclusion records *why* on the connector instead (ADR-0158), because "no connector
+// exclusion records *why* on the worker instead (ADR-0158), because "no worker
 // registered as X" reads as "you never configured it" when the truth is that the
 // bundle is malformed.
 func TestBuildJiraClients(t *testing.T) {
@@ -558,7 +558,7 @@ func TestBuildJiraClients(t *testing.T) {
 		{"nosite", "base URL"},
 		{"broken", "not valid JSON"},
 		{"halfbundle", "neither shape"},
-		{"amail", "not \"jira\""}, // a mail connector named by a Jira task
+		{"amail", "not \"jira\""}, // a mail worker named by a Jira task
 	} {
 		got, ok := problems[tc.name]
 		if !ok {
@@ -802,7 +802,7 @@ func TestConnectorHandlerErrors(t *testing.T) {
 }
 
 // TestConnectorHandlerStoreErrors covers the endpoints' store-failure (500)
-// branches by pointing the server at an unusable connector store.
+// branches by pointing the server at an unusable worker store.
 func TestConnectorHandlerStoreErrors(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	h := srv.Handler()
@@ -838,8 +838,8 @@ func TestConnectorHandlerStoreErrors(t *testing.T) {
 }
 
 // TestMailProblemsExplainASkippedConnector is the fix for the report that started
-// this: a mail task parked with "no connector registered as %q" while the connector
-// sat right there in the list. Every reason a configured connector is left out of the
+// this: a mail task parked with "no worker registered as %q" while the worker
+// sat right there in the list. Every reason a configured worker is left out of the
 // registry must now come back as a sentence an operator can act on — and the
 // never-configured case must stay distinguishable from all of them.
 func TestMailProblemsExplainASkippedConnector(t *testing.T) {
@@ -860,7 +860,7 @@ func TestMailProblemsExplainASkippedConnector(t *testing.T) {
 		t.Fatalf("clients = %v, want exactly the usable one", clients)
 	}
 	if why, ok := problems["works"]; ok {
-		t.Errorf("the usable connector carries a problem: %q", why)
+		t.Errorf("the usable worker carries a problem: %q", why)
 	}
 	for name, want := range map[string]string{
 		"off":        "disabled",
@@ -882,15 +882,15 @@ func TestMailProblemsExplainASkippedConnector(t *testing.T) {
 	srv.mailRegistry = mail.NewRegistry()
 	srv.mailRegistry.ReplaceWith(clients, problems)
 	if got := srv.mailRegistry.Unresolved("mail", "off").Error(); !strings.Contains(got, "configured but not usable") {
-		t.Errorf("incident message for a disabled connector = %q", got)
+		t.Errorf("incident message for a disabled worker = %q", got)
 	}
-	if got := srv.mailRegistry.Unresolved("mail", "never heard of it").Error(); !strings.Contains(got, "no connector registered") {
-		t.Errorf("incident message for an unconfigured connector = %q", got)
+	if got := srv.mailRegistry.Unresolved("mail", "never heard of it").Error(); !strings.Contains(got, "no worker registered") {
+		t.Errorf("incident message for an unconfigured worker = %q", got)
 	}
 }
 
 // TestListConnectorsCarriesTheProblem: the operator list is where you look *before*
-// a token parks, so a stored-but-unusable connector has to say so there too.
+// a token parks, so a stored-but-unusable worker has to say so there too.
 func TestListConnectorsCarriesTheProblem(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	_ = srv.connectors.Save(connector{ID: "1", Name: "off", Kind: "mail", Provider: "smtp", Endpoint: "mx.example.ch:587", Sender: "b@x", Enabled: false, CreatedAt: 1})
@@ -909,12 +909,12 @@ func TestListConnectorsCarriesTheProblem(t *testing.T) {
 		t.Fatalf("views = %d, want 1", len(views))
 	}
 	if !strings.Contains(views[0].Problem, "disabled") {
-		t.Errorf("listed connector's problem = %q, want it to name the disabled state", views[0].Problem)
+		t.Errorf("listed worker's problem = %q, want it to name the disabled state", views[0].Problem)
 	}
 }
 
-// deployWarnBPMN references a mail connector by name, the way every model refers to a
-// server-registered connector (ADR-0036/0041).
+// deployWarnBPMN references a mail worker by name, the way every model refers to a
+// server-registered worker (ADR-0036/0041).
 const deployWarnBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0/bpmn">
   <process id="warnme" isExecutable="true">
     <startEvent id="start"/>
@@ -928,9 +928,9 @@ const deployWarnBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/2010052
 </definitions>`
 
 // TestConnectorWarningsCatchTheMismatchAtDeploy is the other half of the fix: a model
-// that names a connector nobody configured deploys fine and then parks its first token.
+// that names a worker nobody configured deploys fine and then parks its first token.
 // The deploy is the moment somebody is looking, so it says so there — without refusing,
-// since deploying before the connectors exist is legitimate.
+// since deploying before the workers exist is legitimate.
 func TestConnectorWarningsCatchTheMismatchAtDeploy(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	cp, err := compiler.Parse(1, 1, strings.NewReader(deployWarnBPMN))
@@ -941,20 +941,20 @@ func TestConnectorWarningsCatchTheMismatchAtDeploy(t *testing.T) {
 	// Nothing configured at all.
 	warns := srv.connectorWarnings(cp)
 	if len(warns) != 1 || !strings.Contains(warns[0], "not configured on this server") {
-		t.Fatalf("warnings with no connector = %v, want one naming it as unconfigured", warns)
+		t.Fatalf("warnings with no worker = %v, want one naming it as unconfigured", warns)
 	}
 	if !strings.Contains(warns[0], "notify") || !strings.Contains(warns[0], "Patrick Blumer") {
-		t.Errorf("warning names neither the element nor the connector: %q", warns[0])
+		t.Errorf("warning names neither the element nor the worker: %q", warns[0])
 	}
 
-	// Configured under the wrong kind — the mistake that reads as "no such connector".
+	// Configured under the wrong kind — the mistake that reads as "no such worker".
 	_ = srv.connectors.Save(connector{ID: "1", Name: "Patrick Blumer", Kind: "clio", Endpoint: "https://clio.example", Enabled: true, CreatedAt: 1})
 	if err := srv.rebuildConnectorRegistries(); err != nil {
 		t.Fatalf("rebuild: %v", err)
 	}
 	warns = srv.connectorWarnings(cp)
-	if len(warns) != 1 || !strings.Contains(warns[0], `configured as a "clio" connector`) {
-		t.Fatalf("warnings for a wrong-kind connector = %v", warns)
+	if len(warns) != 1 || !strings.Contains(warns[0], `configured as a "clio" worker`) {
+		t.Fatalf("warnings for a wrong-kind worker = %v", warns)
 	}
 
 	// Configured, right kind, but disabled: stored and still not going to run.
@@ -964,7 +964,7 @@ func TestConnectorWarningsCatchTheMismatchAtDeploy(t *testing.T) {
 	}
 	warns = srv.connectorWarnings(cp)
 	if len(warns) != 1 || !strings.Contains(warns[0], "configured but not usable") || !strings.Contains(warns[0], "disabled") {
-		t.Fatalf("warnings for a disabled connector = %v", warns)
+		t.Fatalf("warnings for a disabled worker = %v", warns)
 	}
 
 	// Usable: nothing to say.
@@ -973,13 +973,13 @@ func TestConnectorWarningsCatchTheMismatchAtDeploy(t *testing.T) {
 		t.Fatalf("rebuild: %v", err)
 	}
 	if warns = srv.connectorWarnings(cp); len(warns) != 0 {
-		t.Errorf("warnings for a working connector = %v, want none", warns)
+		t.Errorf("warnings for a working worker = %v, want none", warns)
 	}
 }
 
 // TestConnectorProviderUpdate covers the fix an operator reaches for from a parked
-// mail task: switch the connector's provider instead of re-creating it under the same
-// name (which would be a different connector as far as every model referencing it is
+// mail task: switch the worker's provider instead of re-creating it under the same
+// name (which would be a different worker as far as every model referencing it is
 // concerned). A move to the in-app preview transport drops the endpoint and credential
 // it no longer dials; a move to a native provider without a credential bundle is
 // refused at the moment it is typed rather than at the next send (ADR-0160).
@@ -996,7 +996,7 @@ func TestConnectorProviderUpdate(t *testing.T) {
 	code, b := do(http.MethodPost, "/api/v1/connectors",
 		`{"name":"Patrick Blumer","kind":"mail","endpoint":"smtp.office365.com:587","sender":"bot@example.com","credentialsRef":"o365_pw"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create mail connector: %d %s", code, b)
+		t.Fatalf("create mail worker: %d %s", code, b)
 	}
 	var c connector
 	_ = json.Unmarshal(b, &c)
@@ -1027,7 +1027,7 @@ func TestConnectorProviderUpdate(t *testing.T) {
 	)
 	srv.do(func() { client, ok = srv.mailRegistry.Client("Patrick Blumer") })
 	if !ok || client == nil {
-		t.Fatalf("mail registry after the switch has no client for the connector")
+		t.Fatalf("mail registry after the switch has no client for the worker")
 	}
 
 	// An unknown provider is rejected by the same validation a create runs.
@@ -1036,10 +1036,10 @@ func TestConnectorProviderUpdate(t *testing.T) {
 	}
 }
 
-// TestElementConnectorRefEdges covers the answers the incident's connector lookup has
+// TestElementConnectorRefEdges covers the answers the incident's worker lookup has
 // to give when there is nothing to resolve: an instance whose definition is no longer
 // deployed (no compiled process to ask), and a task whose reserved job type belongs to
-// no managed connector kind — a REST task carries its URL in the model and resolves
+// no managed Worker Type — a REST task carries its URL in the model and resolves
 // through no registry, so its reference has a name but no kind and can match no stored
 // record (ADR-0160).
 func TestElementConnectorRefEdges(t *testing.T) {
@@ -1057,35 +1057,35 @@ func TestElementConnectorRefEdges(t *testing.T) {
 }
 
 // TestConnectorUsageIsVisibleBeforeDeleting covers the reverse of the deploy-time
-// check: the connector list says which deployed models reference each connector, and
+// check: the worker list says which deployed models reference each worker, and
 // how many instances are running on them, so an operator can see what a delete would
-// park before attempting it — and a connector nothing references deletes without a
+// park before attempting it — and a worker nothing references deletes without a
 // fight (ADR-0163).
 func TestConnectorUsageIsVisibleBeforeDeleting(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	x := deployTestHarness{t, srv.Handler()}
 
 	pid := x.mkProject("Central")
-	x.saveDraft(pid, centralDecisionBPMN) // references the temis connector "risk"
+	x.saveDraft(pid, centralDecisionBPMN) // references the temis worker "risk"
 	if code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusOK {
 		t.Fatalf("deploy: %d %s", code, b)
 	}
 
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"risk","endpoint":"http://risk.internal"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create referenced connector: %d %s", code, cb)
+		t.Fatalf("create referenced worker: %d %s", code, cb)
 	}
 	var referenced connector
 	_ = json.Unmarshal(cb, &referenced)
 
 	code, ob := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"orphan","endpoint":"http://nobody.internal"}`)
 	if code != http.StatusOK {
-		t.Fatalf("create unreferenced connector: %d %s", code, ob)
+		t.Fatalf("create unreferenced worker: %d %s", code, ob)
 	}
 	var orphan connector
 	_ = json.Unmarshal(ob, &orphan)
 
-	// The list carries the usage per connector: the referenced one names the model and
+	// The list carries the usage per worker: the referenced one names the model and
 	// the element, the unreferenced one carries nothing at all.
 	_, lb := x.do(http.MethodGet, "/api/v1/connectors", "")
 	var views []struct {
@@ -1093,7 +1093,7 @@ func TestConnectorUsageIsVisibleBeforeDeleting(t *testing.T) {
 		UsedBy []connectorUse `json:"usedBy"`
 	}
 	if err := json.Unmarshal(lb, &views); err != nil {
-		t.Fatalf("connector list: %v (%s)", err, lb)
+		t.Fatalf("worker list: %v (%s)", err, lb)
 	}
 	byName := map[string][]connectorUse{}
 	for _, v := range views {
@@ -1101,7 +1101,7 @@ func TestConnectorUsageIsVisibleBeforeDeleting(t *testing.T) {
 	}
 	uses := byName["risk"]
 	if len(uses) != 1 {
-		t.Fatalf("usedBy for the referenced connector = %+v, want exactly the deployed model", uses)
+		t.Fatalf("usedBy for the referenced worker = %+v, want exactly the deployed model", uses)
 	}
 	if len(uses[0].Elements) != 1 || uses[0].Elements[0] != "decide" {
 		t.Errorf("usedBy elements = %v, want the business rule task", uses[0].Elements)
@@ -1110,10 +1110,10 @@ func TestConnectorUsageIsVisibleBeforeDeleting(t *testing.T) {
 		t.Errorf("usedBy = %+v, want the definition key and version so the UI can link to it", uses[0])
 	}
 	if got := byName["orphan"]; len(got) != 0 {
-		t.Errorf("usedBy for an unreferenced connector = %+v, want nothing", got)
+		t.Errorf("usedBy for an unreferenced worker = %+v, want nothing", got)
 	}
 
-	// A second deployed model referencing the same connector aggregates onto it, in
+	// A second deployed model referencing the same worker aggregates onto it, in
 	// definition-key order, so the operator sees every process a delete would park and
 	// not just the first one found.
 	pid2 := x.mkProject("Central again")
@@ -1127,7 +1127,7 @@ func TestConnectorUsageIsVisibleBeforeDeleting(t *testing.T) {
 		UsedBy []connectorUse `json:"usedBy"`
 	}
 	if err := json.Unmarshal(lb2, &views2); err != nil {
-		t.Fatalf("connector list: %v (%s)", err, lb2)
+		t.Fatalf("worker list: %v (%s)", err, lb2)
 	}
 	for _, v := range views2 {
 		if v.Name != "risk" {
@@ -1144,11 +1144,11 @@ func TestConnectorUsageIsVisibleBeforeDeleting(t *testing.T) {
 	// Nothing references it, so deleting it is uneventful — the guard must not stand
 	// in the way of the ordinary case.
 	if code, b := x.do(http.MethodDelete, "/api/v1/connectors/"+orphan.ID, ""); code != http.StatusNoContent {
-		t.Fatalf("delete an unreferenced connector = %d %s, want 204", code, b)
+		t.Fatalf("delete an unreferenced worker = %d %s, want 204", code, b)
 	}
 	// The referenced one is refused, and says by what.
 	if code, b := x.do(http.MethodDelete, "/api/v1/connectors/"+referenced.ID, ""); code != http.StatusConflict {
-		t.Fatalf("delete a referenced connector = %d %s, want 409", code, b)
+		t.Fatalf("delete a referenced worker = %d %s, want 409", code, b)
 	}
 }
 
@@ -1232,11 +1232,11 @@ func TestConnectorProblemFallback(t *testing.T) {
 func TestEntraConnectorNeedsItsCredentialBundle(t *testing.T) {
 	k, ok := lookupManagedConnectorKind("entra")
 	if !ok {
-		t.Fatal("entra is not a managed connector kind")
+		t.Fatal("entra is not a managed Worker Type")
 	}
 
 	if msg := k.validateCreate(&createConnectorParams{Name: "tenant"}); msg == "" {
-		t.Error("an entra connector without a credentialsRef was accepted")
+		t.Error("an entra worker without a credentialsRef was accepted")
 	} else if !strings.Contains(msg, "credentialsRef") {
 		t.Errorf("message = %q, want it to name the missing field", msg)
 	}
@@ -1246,7 +1246,7 @@ func TestEntraConnectorNeedsItsCredentialBundle(t *testing.T) {
 	// sender behind on a directory tenant.
 	p := &createConnectorParams{Name: "tenant", CredentialsRef: "entra-bundle", Provider: "smtp", Sender: "bot@x"}
 	if msg := k.validateCreate(p); msg != "" {
-		t.Errorf("a complete entra connector was refused: %s", msg)
+		t.Errorf("a complete entra worker was refused: %s", msg)
 	}
 	if p.Provider != "" || p.Sender != "" {
 		t.Errorf("provider/sender = %q/%q, want both cleared for an entra record", p.Provider, p.Sender)
@@ -1262,7 +1262,7 @@ func TestEntraConnectorNeedsItsCredentialBundle(t *testing.T) {
 func TestADConnectorNeedsAnLDAPURLAndABindBundle(t *testing.T) {
 	k, ok := lookupManagedConnectorKind(connectorKindAD)
 	if !ok {
-		t.Fatal("ad is not a managed connector kind")
+		t.Fatal("ad is not a managed Worker Type")
 	}
 
 	for _, tc := range []struct{ name, endpoint, ref, want string }{

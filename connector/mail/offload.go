@@ -21,25 +21,25 @@ import (
 // evaluating its FEEL against the variables the task sees, splitting the recipient
 // lists — all of that needs the compiled process and the scope chain, which only the
 // engine has, so [Resolve] does it and produces plain strings. The SMTP host, the
-// username and the password are never among them: what travels is the connector's
+// username and the password are never among them: what travels is the worker's
 // *name*, and [Run] looks that name up in the registry the worker itself was
 // started with. A worker can therefore hold credentials the engine has never seen,
-// which is what makes an offloaded mail connector deployable into a network the
+// which is what makes an offloaded mail worker deployable into a network the
 // engine does not sit in.
 //
-// The cost of that split is a failure mode the engine used to catch: a connector
+// The cost of that split is a failure mode the engine used to catch: a worker
 // name no worker holds. The engine can no longer refuse it at lease time, because
-// the engine no longer knows. [Run] refuses it instead, naming the connector — and
+// the engine no longer knows. [Run] refuses it instead, naming the worker — and
 // the Workers view is where an operator sees which names are configured nowhere.
 
 // Job is a mail task with everything already evaluated: the message, and the name of
-// the connector that will carry it. It is what travels with a leased job.
+// the worker that will carry it. It is what travels with a leased job.
 //
 // Every field here is model-authored or instance-derived. None of it is a secret,
 // and that is a property of the type rather than of the code that fills it in: there
 // is nowhere in a Job to put a password.
 type Job struct {
-	// Connector names the worker's own configured provider. It is a name and not an
+	// Worker names the worker's own configured provider. It is a name and not an
 	// endpoint on purpose — an endpoint would be half a credential.
 	Connector string   `json:"connector"`
 	From      string   `json:"from,omitempty"`
@@ -54,17 +54,17 @@ type Job struct {
 	MessageID string `json:"messageId,omitempty"`
 }
 
-// Resolve turns a compiled mail connector task into a [Job]: the authored fields
+// Resolve turns a compiled mail task into a [Job]: the authored fields
 // evaluated against the scope's variables. It is engine work by necessity — FEEL is
 // compiled at deploy (ADR-0008/0015) and the scope lives in the store.
 //
 // It deliberately does not validate that there is a recipient. That check belongs
-// with the send, after the connector lookup, so an operator with both an
-// unconfigured connector and an empty recipient list hears about the configuration
+// with the send, after the worker lookup, so an operator with both an
+// unconfigured worker and an empty recipient list hears about the configuration
 // first — that being the one they can act on.
 func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64) (Job, error) {
 	if detail == nil {
-		return Job{}, fmt.Errorf("mail: connector task has no detail")
+		return Job{}, fmt.Errorf("mail: task has no detail")
 	}
 	// Read the variables the task sees once — up its scope chain, so its own
 	// input-mapped locals shadow what it inherits (ADR-0068) — and evaluate every
@@ -91,7 +91,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 // worker's half, and the in-process path calls it too, so there is one definition of
 // what a resolved mail task means rather than two that drift.
 //
-// The connector lookup comes first: an unconfigured name is the more actionable of
+// The worker lookup comes first: an unconfigured name is the more actionable of
 // the two failures a job can carry here, and reporting it ahead of an empty
 // recipient list keeps the message an operator sees pointed at the fix.
 func Run(ctx context.Context, j Job, reg *Registry) error {

@@ -80,7 +80,7 @@ func TestTheNewWorkerFormOffersEveryConfigurableKind(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read app.js: %v", err)
 	}
-	// The picker is the one select whose options are the connector kinds; find it by
+	// The picker is the one select whose options are the Worker Types; find it by
 	// the field it sits in rather than by position.
 	src := string(body)
 	i := strings.Index(src, `<select name="kind">`)

@@ -148,14 +148,14 @@ func TestHandlerWithoutACompiledProcess(t *testing.T) {
 	}
 }
 
-// The element the job points at must be a connector task. A job type index and an
+// The element the job points at must be a worker task. A job type index and an
 // element that disagree is a corrupted store, not something to call Jira about.
 func TestHandlerOnANonConnectorElement(t *testing.T) {
 	rd, lookup := workerFixture(t,
 		`<atlas:jiraConnector connector="acme" operation="get-issue" issueKey="OPS-1" resultVariable="t"/>`)
 	rd.ei.ElementId = 0 // the start event
 	if _, err := jira.Handler(rd, lookup, jira.NewRegistry())(job.Job{Key: 1, ElementInstanceKey: 42}); err == nil {
-		t.Fatal("handler accepted a job on an element that is not a connector task")
+		t.Fatal("handler accepted a job on an element that is not a task")
 	}
 }
 
@@ -179,7 +179,7 @@ func (e *erroringReader) VariablesOfScope(uint64, func(*model.VariableValue) err
 	return context.DeadlineExceeded
 }
 
-// A connector with no base URL is refused before a request is built, so the failure
+// A worker with no base URL is refused before a request is built, so the failure
 // names the configuration rather than arriving as a malformed URL.
 func TestCallWithoutABaseURL(t *testing.T) {
 	c := jira.NewHTTPClient(jira.Connector{Token: "pat"})
@@ -470,7 +470,7 @@ func TestSearchOnCloudStopsOnARepeatedToken(t *testing.T) {
 // instead of about the model.
 func TestResolveRefusesATaskWithNoDetail(t *testing.T) {
 	if _, err := jira.Resolve(nil, nil, nil, nil, 1, 2); err == nil {
-		t.Fatal("a connector task with no detail was resolved")
+		t.Fatal("a task with no detail was resolved")
 	}
 }
 

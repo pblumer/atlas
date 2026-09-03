@@ -9,7 +9,7 @@ import (
 
 // The Modeler's Worker picker.
 //
-// A connector task names one *configured Worker* — a target and identity an operator
+// A task names one *configured Worker* — a target and identity an operator
 // registered on this server, not a Worker Type and not a Worker Instance (ADR-0203).
 // The panel therefore offers the server's configured Workers of the task's type as a
 // dropdown, because the one thing an author cannot know from the model is which names

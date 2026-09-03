@@ -714,8 +714,8 @@ func checkDottedTargets(cp *CompiledProcess) []Problem {
 		case TypeMockupTask:
 			report(elementID, "its result", cp.MockupTask(n.Detail).ResultVar)
 		case TypeConnectorTask:
-			// CsvResult and LdifResult are read only by the connector each belongs to,
-			// dispatched by job type — so every other connector leaves them at the zero
+			// CsvResult and LdifResult are read only by the worker each belongs to,
+			// dispatched by job type — so every other worker leaves them at the zero
 			// value, which is a *valid* interned index (0 is the first reserved job type),
 			// not the -1 that means "none". Ask the job type first, as the offloads do.
 			d := cp.ConnectorTask(n.Detail)

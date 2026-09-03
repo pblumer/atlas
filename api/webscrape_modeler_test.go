@@ -47,7 +47,7 @@ func TestWebScrapeModelerDeclaresFeedAuthoringFields(t *testing.T) {
 	catalog := string(editor)
 	start := strings.Index(catalog, `id: "webscrape"`)
 	if start < 0 {
-		t.Fatal("webscrape connector is missing from SERVICE_TASK_KINDS")
+		t.Fatal("webscrape worker is missing from SERVICE_TASK_KINDS")
 	}
 	endRel := strings.Index(catalog[start:], "\n  },\n].map(withRetries);")
 	if endRel < 0 {

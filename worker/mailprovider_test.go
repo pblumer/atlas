@@ -21,16 +21,16 @@ import (
 // The older environment names an SMTP host directly, and every test beside this file
 // still uses it, because that is what an operator's hand-written worker environment
 // says and it has to keep working. This one names a *provider* and describes it, so a
-// worker builds whatever client the engine would have built — and so a mail connector
+// worker builds whatever client the engine would have built — and so a mail worker
 // an operator configured in the Console can be served out of process without them
 // re-typing any of it into a worker's environment.
 
-// TestAWorkerBuildsWhicheverProviderItWasHandedIs the property that lets the engine
-// hand its own connector store over: not "the worker can do SMTP", but "the worker
+// TestAWorkerBuildsWhicheverProviderItWasHanded is the property that lets the engine
+// hand its own worker store over: not "the worker can do SMTP", but "the worker
 // builds the same client from the same four values", for every provider a managed
-// mail connector can have.
+// mail worker can have.
 func TestAWorkerBuildsWhicheverProviderItWasHanded(t *testing.T) {
-	// A Gmail connector's credential is an OAuth bundle rather than a password, so
+	// A Gmail worker's credential is an OAuth bundle rather than a password, so
 	// this also shows the secret arriving as whatever that provider's secret *is*.
 	bundle := `{"method":"refreshToken","clientId":"c","clientSecret":"s","refreshToken":"r"}`
 	for _, tc := range []struct {
@@ -66,7 +66,7 @@ func TestAWorkerBuildsWhicheverProviderItWasHanded(t *testing.T) {
 				t.Fatalf("no handler for %s", compiler.MailJobType)
 			}
 			if len(built.Names) != 1 || built.Names[0] != "post" {
-				t.Errorf("connectors held = %v, want [post]", built.Names)
+				t.Errorf("workers held = %v, want [post]", built.Names)
 			}
 		})
 	}
@@ -96,7 +96,7 @@ func TestAnUnbuildableProviderIsRefusedAtStartup(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := worker.BuiltinConnectors(fakeEnv(tc.env), "mail")
 			if err == nil {
-				t.Fatal("the worker started with a connector it cannot build")
+				t.Fatal("the worker started with a worker it cannot build")
 			}
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("error = %q, want it to mention %q", err, tc.want)
@@ -119,11 +119,11 @@ func TestTheSMTPOnlyEnvironmentStillConfiguresAWorker(t *testing.T) {
 		t.Fatalf("BuiltinConnectors: %v", err)
 	}
 	if len(built.Names) != 1 || built.Names[0] != "post" {
-		t.Errorf("connectors held = %v, want [post]", built.Names)
+		t.Errorf("workers held = %v, want [post]", built.Names)
 	}
 }
 
-// A preview connector is the one provider whose output only the engine can show, so
+// A preview worker is the one provider whose output only the engine can show, so
 // a worker running one has to hand the framed message back. This is that round trip:
 // the worker frames it exactly as an in-process preview would and delivers it to the
 // server's outbox, so the operator reads it where ADR-0150 promised it would be.
@@ -240,7 +240,7 @@ func TestAPreviewWhoseOutboxIsGoneFailsTheJob(t *testing.T) {
 	}
 }
 
-// A preview connector with nowhere to deliver is refused at startup, naming itself,
+// A preview worker with nowhere to deliver is refused at startup, naming itself,
 // rather than leasing preview jobs it can only fail.
 func TestAPreviewConnectorWithNoOutboxAddressIsRefusedAtStartup(t *testing.T) {
 	_, err := worker.BuiltinConnectors(fakeEnv(map[string]string{
@@ -248,10 +248,10 @@ func TestAPreviewConnectorWithNoOutboxAddressIsRefusedAtStartup(t *testing.T) {
 		"ATLAS_MAIL_VORSCHAU_PROVIDER": "preview",
 	}), "mail")
 	if err == nil {
-		t.Fatal("a preview connector with no outbox started anyway")
+		t.Fatal("a preview worker with no outbox started anyway")
 	}
 	if !strings.Contains(err.Error(), "Vorschau") {
-		t.Errorf("error = %q, want it to name the connector", err)
+		t.Errorf("error = %q, want it to name the worker", err)
 	}
 }
 

@@ -68,7 +68,7 @@ func TestMockOpenAPIBannerSaysWhatToDoWithIt(t *testing.T) {
 		"POST   http://127.0.0.1:8009/v1/pets",
 		"journal: GET http://127.0.0.1:8009/__mock/calls",
 		"report:  GET http://127.0.0.1:8009/__mock/report",
-		"point a REST connector task's url at http://127.0.0.1:8009/v1/…",
+		"point a REST worker task's url at http://127.0.0.1:8009/v1/…",
 		"Prefer: code=404",
 	} {
 		if !strings.Contains(banner, want) {

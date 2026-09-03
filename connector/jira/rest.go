@@ -14,7 +14,7 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
-// apiBase is the REST API version this connector speaks. See the package doc for why
+// apiBase is the REST API version this worker speaks. See the package doc for why
 // it is 2 and not 3: v3 requires an Atlassian Document Format tree where v2 takes a
 // string, and a process writing one sentence into a description should not have to
 // build a document tree to do it.
@@ -53,7 +53,7 @@ func ceilingReached(op string, n int) error {
 }
 
 // searchJQLPath is the endpoint a search uses on Jira Cloud, and the one place this
-// connector leaves apiBase behind. Atlassian removed the offset-paged
+// worker leaves apiBase behind. Atlassian removed the offset-paged
 // /rest/api/{2,3}/search from Cloud over 2025 — a site that has been switched over
 // answers 410 Gone, "The requested API has been removed" — and directs callers to
 // /search/jql, whose paging is an opaque nextPageToken. Its migration guidance names
@@ -95,8 +95,8 @@ type HTTPClient struct {
 	http *http.Client
 }
 
-// NewHTTPClient builds a Jira REST client for a configured connector, bounded by the
-// shared connector call budget (ADR-0149). The worker may run on the run-loop
+// NewHTTPClient builds a Jira REST client for a configured worker, bounded by the
+// shared worker call budget (ADR-0149). The worker may run on the run-loop
 // goroutine, so an unbounded call would let a hung Jira stall the whole engine; see
 // the nettimeout package doc.
 func NewHTTPClient(conn Connector) *HTTPClient {
@@ -104,7 +104,7 @@ func NewHTTPClient(conn Connector) *HTTPClient {
 	return &HTTPClient{conn: conn, http: nettimeout.HTTPClient()}
 }
 
-// cloud reports whether this connector authenticates as Jira Cloud does. It is what
+// cloud reports whether this worker authenticates as Jira Cloud does. It is what
 // decides both the authentication scheme and how an account is addressed when
 // assigning an issue — the two follow from the same fact, so neither is guessed.
 func (c *HTTPClient) cloud() bool { return strings.TrimSpace(c.conn.Token) == "" }
@@ -170,7 +170,7 @@ func trimIdentifiers(req Request) Request {
 // createFields builds the field object an issue is created from: the project and the
 // issue type wrapped as Jira wants them, the summary and description plain, and the
 // model's extra fields merged in — those last, so a model can override anything this
-// connector composed rather than be blocked by it.
+// worker composed rather than be blocked by it.
 func (c *HTTPClient) createFields(req Request) map[string]any {
 	fields := map[string]any{
 		"project":   idOrKey(req.Project, "key"),
@@ -293,7 +293,7 @@ func (c *HTTPClient) transitionID(ctx context.Context, req Request) (string, err
 // search runs the model's JQL and answers with the issues themselves. Which endpoint
 // serves it depends on the product, because the deprecation that moved Cloud to
 // /search/jql is a Cloud change: Data Center still serves the offset-paged
-// /rest/api/2/search and does not necessarily serve the other at all. The connector
+// /rest/api/2/search and does not necessarily serve the other at all. The worker
 // already knows which product it is talking to from the credential shape (see cloud),
 // so it asks each the way that product answers rather than making an operator choose.
 func (c *HTTPClient) search(ctx context.Context, req Request) (any, error) {
@@ -492,7 +492,7 @@ type jiraError struct {
 // than an error: the operation succeeded, and there is simply nothing to write back.
 func (c *HTTPClient) call(ctx context.Context, method, path string, body any, req Request) (any, error) {
 	if strings.TrimSpace(c.conn.BaseURL) == "" {
-		return nil, fmt.Errorf("jira: connector has no base URL")
+		return nil, fmt.Errorf("jira: worker has no base URL")
 	}
 	var payload io.Reader
 	if body != nil {
@@ -572,7 +572,7 @@ func sortStrings(s []string) {
 
 // ProviderConfig is the per-connector data the server resolves before building a
 // client: the Jira base URL (Endpoint) and the resolved Secret — the credential JSON
-// bundle held in the vault under the connector's credentialsRef. The secret lives only
+// bundle held in the vault under the worker's credentialsRef. The secret lives only
 // here at build time, never in a model or an event (I6).
 type ProviderConfig struct {
 	Endpoint string
@@ -580,7 +580,7 @@ type ProviderConfig struct {
 }
 
 // credentialBundle is the JSON an operator stores in the vault under a Jira
-// connector's credentialsRef. There is deliberately no "method" field: which of the
+// worker's credentialsRef. There is deliberately no "method" field: which of the
 // two shapes a bundle is, is already said by the fields it carries, and a method
 // naming one while the fields say the other is a state with no right answer.
 type credentialBundle struct {
@@ -589,18 +589,18 @@ type credentialBundle struct {
 	Token    string `json:"token,omitempty"`
 }
 
-// NewProviderClient builds the Jira client for a managed connector. A misconfigured
-// connector returns an error so the caller can skip it — its tasks then park with that
+// NewProviderClient builds the Jira client for a managed worker. A misconfigured
+// worker returns an error so the caller can skip it — its tasks then park with that
 // reason (ADR-0158) rather than calling Jira unauthenticated and being told nothing
 // useful by a 401.
 func NewProviderClient(cfg ProviderConfig) (Client, error) {
 	base := strings.TrimSpace(cfg.Endpoint)
 	if base == "" {
-		return nil, fmt.Errorf("jira: connector has no base URL (set it to the Jira site, e.g. https://acme.atlassian.net)")
+		return nil, fmt.Errorf("jira: worker has no base URL (set it to the Jira site, e.g. https://acme.atlassian.net)")
 	}
 	secret := strings.TrimSpace(cfg.Secret)
 	if secret == "" {
-		return nil, fmt.Errorf("jira: connector has no credential (set credentialsRef to a vault bundle {email, apiToken} for Jira Cloud or {token} for a Data Center personal access token)")
+		return nil, fmt.Errorf("jira: worker has no credential (set credentialsRef to a vault bundle {email, apiToken} for Jira Cloud or {token} for a Data Center personal access token)")
 	}
 	var b credentialBundle
 	if err := json.Unmarshal([]byte(secret), &b); err != nil {

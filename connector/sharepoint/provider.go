@@ -9,14 +9,14 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
-// graphScope is the default OAuth2 scope a SharePoint connector requests when a
+// graphScope is the default OAuth2 scope a SharePoint worker requests when a
 // credential bundle does not override it: the app's configured Graph permissions
 // (e.g. Sites.ReadWrite.All) via the ".default" scope.
 const graphScope = "https://graph.microsoft.com/.default"
 
 // ProviderConfig is the per-connector data the server resolves before building a
 // client: an optional Graph base override (Endpoint) and the resolved Secret — the
-// OAuth credential JSON bundle held in the vault under the connector's credentialsRef
+// OAuth credential JSON bundle held in the vault under the worker's credentialsRef
 // (ADR-0141). The secret lives only here at build time, never in a model or an event
 // (I6).
 type ProviderConfig struct {
@@ -24,9 +24,9 @@ type ProviderConfig struct {
 	Secret   string
 }
 
-// NewProviderClient builds the SharePoint client for a managed connector: it parses
+// NewProviderClient builds the SharePoint client for a managed worker: it parses
 // the credential bundle, applies the Graph token-endpoint and scope defaults, builds
-// an OAuth token source, and returns a Graph client. A misconfigured connector
+// an OAuth token source, and returns a Graph client. A misconfigured worker
 // returns an error so the caller can skip it (its tasks park) rather than acting
 // wrongly. This is the single place a provider variant would be added.
 func NewProviderClient(cfg ProviderConfig) (Client, error) {
@@ -37,12 +37,12 @@ func NewProviderClient(cfg ProviderConfig) (Client, error) {
 	return NewGraphClient(tokens, cfg.Endpoint), nil
 }
 
-// oauthTokenSource parses a connector's credential bundle from the resolved secret,
+// oauthTokenSource parses a worker's credential bundle from the resolved secret,
 // applies the Graph token-endpoint and scope defaults, and builds a cached token
 // source.
 func oauthTokenSource(cfg ProviderConfig) (TokenSource, error) {
 	if strings.TrimSpace(cfg.Secret) == "" {
-		return nil, fmt.Errorf("sharepoint: connector has no credential (set credentialsRef to a JSON auth bundle in the vault)")
+		return nil, fmt.Errorf("sharepoint: worker has no credential (set credentialsRef to a JSON auth bundle in the vault)")
 	}
 	var b credentialBundle
 	if err := json.Unmarshal([]byte(cfg.Secret), &b); err != nil {

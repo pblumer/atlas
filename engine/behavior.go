@@ -1959,7 +1959,7 @@ func (timerCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei
 }
 
 // mockupTaskBehavior: a service task the engine simulates itself (ADR-0120),
-// instead of dispatching a job to an external worker or connector. On activation it
+// instead of dispatching a job to an external worker. On activation it
 // writes the optional FEEL result (the input→output "script", e.g. a simulated REST
 // response) and arms a one-shot timer for a random duration, then waits. When the
 // timer fires the task completes — unless the fail draw selects failure, in which
@@ -3293,13 +3293,13 @@ func (businessRuleTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 	completeAndTakeFlows(c, key, ei)
 }
 
-// connectorTaskBehavior: delegate to a server-registered connector (e.g. a clio
+// connectorTaskBehavior: delegate to a server-registered worker (e.g. a clio
 // event store). The engine treats it exactly like a service task — create a job
-// on activation and wait — but the job carries the connector's reserved job type,
-// so the in-process connector worker (package clio) picks it up, performs the
+// on activation and wait — but the job carries the worker's reserved job type,
+// so the in-process worker (package clio) picks it up, performs the
 // outbound call off the hot path after fsync, and completes it. Keeping the call
 // on the worker side, not in a behavior, keeps the processor allocation-free (I1)
-// and the connector's network I/O out of applyToState (I4). See ADR-0036.
+// and the worker's network I/O out of applyToState (I4). See ADR-0036.
 type connectorTaskBehavior struct{}
 
 func (connectorTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -3313,7 +3313,7 @@ func (connectorTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 		Retries:            detail.Retries,
 	})
 	c.NotifyJobAvailable(detail.JobType)
-	// Stays Activated until the connector worker completes the job.
+	// Stays Activated until the worker completes the job.
 }
 
 func (connectorTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {

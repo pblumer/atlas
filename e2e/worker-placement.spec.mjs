@@ -1,8 +1,8 @@
 // End-to-end coverage for the "where does this run" badge in the three Modeler panels
-// that pick an implementation (api/web/editor.js): the connector picker, a script task's
+// that pick an implementation (api/web/editor.js): the worker picker, a script task's
 // language, and a business rule task's decision binding.
 //
-// The connector picker's badge used to be a constant compiled into the browser, written
+// The worker picker's badge used to be a constant compiled into the browser, written
 // when every kind but the plain job worker ran inside the engine. That stopped being true
 // in two directions — kinds moved onto a worker by the server's own command line
 // (ADR-0168), kinds born on a worker with no in-engine form (ADR-0173) — and the browser
@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.__errors = errors;
-  await page.goto("/connector-placement-harness.html");
+  await page.goto("/worker-placement-harness.html");
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
   await page.evaluate(() => window.__mount());
   await page.locator('[data-tab="implement"]').click();
@@ -121,7 +121,7 @@ test("a script task says where its language runs, per language", async ({ page }
 
   await page.evaluate(() => window.__select("Activity_py"));
   await expect(page.locator(".field .stkind-where")).toHaveText(/in.engine/);
-  // The connector advice would be nonsense here: a script task cannot become a job
+  // The worker advice would be nonsense here: a script task cannot become a job
   // worker task, so what it is told is how Atlas normally runs scripts.
   await expect(page.locator(".stkind-notice")).toContainText("holds the loop with it");
   await expect(page.locator(".stkind-notice")).not.toContainText("should prefer");

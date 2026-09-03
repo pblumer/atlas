@@ -1,6 +1,6 @@
 {
   "tags": [
-    "Connectors",
+    "Workers",
     "Active Directory"
   ],
   "title": {
@@ -14,14 +14,14 @@
   "tutorial": {
     "en": [
       "Under Secrets, add a vault entry holding {\"bindDN\": \"cn=svc-atlas,…\", \"password\": \"…\"}.",
-      "Open Console › Connectors and press New connector.",
+      "Open Console › Workers and press New worker.",
       "Pick kind Active Directory, give it a name, and enter the LDAP URL (ldaps://dc.example.com:636).",
       "Point the credential reference at the vault entry from step 1, then Add.",
       "In a model, set the AD task's connector attribute to that name — and drop its url, bindDN and bindSecret."
     ],
     "de": [
       "Unter Secrets einen Vault-Eintrag anlegen mit {\"bindDN\": \"cn=svc-atlas,…\", \"password\": \"…\"}.",
-      "Konsole › Connectors öffnen und New connector drücken.",
+      "Konsole › Workers öffnen und New worker drücken.",
       "Art Active Directory wählen, einen Namen vergeben und die LDAP-URL eintragen (ldaps://dc.example.com:636).",
       "Die Credentials-Referenz auf den Vault-Eintrag aus Schritt 1 zeigen lassen, dann Add.",
       "Im Modell beim AD-Task das Attribut connector auf diesen Namen setzen — und url, bindDN und bindSecret entfernen."
@@ -29,9 +29,9 @@
   },
   "try": {
     "label": {
-      "en": "Open Connectors",
-      "de": "Connectors öffnen"
+      "en": "Open Workers",
+      "de": "Workers öffnen"
     },
-    "route": "#/console/connectors"
+    "route": "#/console/workers"
   }
 }

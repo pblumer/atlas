@@ -1,6 +1,6 @@
 {
   "tags": [
-    "Connectors"
+    "Workers"
   ],
   "title": {
     "en": "Atlas can run the worker a connector needs",

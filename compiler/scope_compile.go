@@ -144,7 +144,7 @@ func registerScope(
 		}
 	}
 	// A send task is a service task under a different BPMN label (ADR-0112): it creates a
-	// job and waits, and a connector extension on it takes the connector path exactly as on
+	// job and waits, and a worker extension on it takes the worker path exactly as on
 	// a service task. registerJobWorkerTask compiles both — only the plain-worker node type
 	// (AddServiceTask vs AddSendTask, passed as plain) and the diagnostic label differ.
 	registerJobWorkerTask := func(st xmlServiceTask, label string, plain func(jobType string, retries int32) int32) error {
@@ -154,7 +154,7 @@ func registerScope(
 		}
 		// A service task bearing an <atlas:mockupConnector> extension is simulated by
 		// the engine itself (ADR-0120): it creates no job and delegates to no external
-		// worker or connector, so it is checked before the connector table and the
+		// worker, so it is checked before the worker table and the
 		// plain-worker fallthrough. It has no reserved job type — the engine's
 		// mockupTaskBehavior arms a timer and completes it.
 		if st.Mockup != nil {
@@ -165,8 +165,8 @@ func registerScope(
 			reg.taskNode(st.Id, id, st.Form.FormId)
 			return nil
 		}
-		// A service task (or send task) bearing a connector extension delegates to a
-		// server-registered connector via the job path rather than to an external
+		// A service task (or send task) bearing a worker extension delegates to a
+		// server-registered worker via the job path rather than to an external
 		// service-task worker. The ordered connectorCompilers table owns the set of
 		// flavors (clio, rest, mail, sharepoint, remedy); the first present extension
 		// wins, exactly as when these were inlined arms.
@@ -174,7 +174,7 @@ func registerScope(
 			if !cc.present(st) {
 				continue
 			}
-			// The connector's own retries attribute is where an author configures the
+			// The worker's own retries attribute is where an author configures the
 			// budget (the Modeler writes it there, ADR-0135); a <zeebe:taskDefinition
 			// retries> on the same task stays honoured as the fallback.
 			retries, err := parseRetries(label, st.Id, firstNonBlank(cc.retries(st), st.TaskDefinition.Retries))
@@ -189,7 +189,7 @@ func registerScope(
 			return nil
 		}
 		// A service task bearing an <atlas:csvConnector> extension is a CSV-to-JSON
-		// connector task: the in-process CSV worker parses the named source variable's
+		// task: the in-process CSV worker parses the named source variable's
 		// text against the model-authored layout into a rows collection via the job
 		// path (ADR-0139), rather than reading a columnConfig variable (ADR-0087). The
 		// whole layout lives in the model; only the file arrives at runtime.
@@ -212,7 +212,7 @@ func registerScope(
 			// Fixed-width always carries a layout (checked above) and an attribute-value
 			// file names its own fields, so neither needs this.
 			if format == csvimportFormatCSV && operation == csvimportOperationRead && !hasHeader && len(cols) == 0 {
-				return fmt.Errorf("compiler: csv connector task %q without a header row must list its columns", st.Id)
+				return fmt.Errorf("compiler: csv task %q without a header row must list its columns", st.Id)
 			}
 			id := b.AddCsvConnectorTask(CsvConfig{
 				Source:    strings.TrimSpace(cn.Source),
@@ -233,7 +233,7 @@ func registerScope(
 			// were resolved earlier), so name every kind it could take rather than only the task
 			// definition (ADR-0112) — this is the "Message selected but no message chosen yet" state.
 			if label == "send task" {
-				return fmt.Errorf("compiler: send task %q has no kind: choose a message (messageRef/operationRef), a task definition, or a connector", st.Id)
+				return fmt.Errorf("compiler: send task %q has no kind: choose a message (messageRef/operationRef), a task definition, or a worker", st.Id)
 			}
 			return fmt.Errorf("compiler: %s %q has no task definition type", label, st.Id)
 		}
@@ -253,7 +253,7 @@ func registerScope(
 		// The message kind: a <sendTask messageRef> is a correlating throw in task form
 		// (ADR-0112). It reuses the intermediate message throw's compile path — resolve the
 		// message, then register a TypeMessageThrowEvent, which correlates and flows straight
-		// on. A throw is instantaneous, so unlike the job/connector kinds it is not an activity
+		// on. A throw is instantaneous, so unlike the job and worker kinds it is not an activity
 		// (no boundary/I/O/MI — those loops skip it, keyed on the same MessageRef).
 		if strings.TrimSpace(st.MessageRef) != "" {
 			messageSendIDs[st.Id] = true
@@ -330,13 +330,13 @@ func registerScope(
 			return err
 		}
 		// A business rule task marked with <atlas:temisConnector> is a central
-		// decision: it delegates to the named server-registered temis connector
+		// decision: it delegates to the named server-registered temis worker
 		// instead of the embedded library (ADR-0050). Authoring is otherwise
 		// identical.
 		var node int32
 		if tc := brt.TemisConnector; tc != nil {
 			if tc.Connector == "" {
-				return fmt.Errorf("compiler: business rule task %q has a temisConnector with no connector name", brt.Id)
+				return fmt.Errorf("compiler: business rule task %q has a temisConnector with no worker name", brt.Id)
 			}
 			node, err = b.AddTemisDecisionTask(tc.Connector, brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries)
 		} else {
@@ -686,7 +686,7 @@ func registerScope(
 			return fmt.Errorf("compiler: boundary event %q attaches to unknown activity %q", ev.Id, ev.AttachedToRef)
 		}
 		if messageSendIDs[ev.AttachedToRef] {
-			return fmt.Errorf("compiler: boundary event %q attaches to send task %q, but a message-kind send task is an instantaneous throw (it publishes the message and continues) and cannot host a boundary event; switch the send task to a job or connector kind, which waits so a boundary can fire, or model a wait-and-time-out with a receive task and a boundary timer", ev.Id, ev.AttachedToRef)
+			return fmt.Errorf("compiler: boundary event %q attaches to send task %q, but a message-kind send task is an instantaneous throw (it publishes the message and continues) and cannot host a boundary event; switch the send task to a job or Worker Type, which waits so a boundary can fire, or model a wait-and-time-out with a receive task and a boundary timer", ev.Id, ev.AttachedToRef)
 		}
 		interrupting := ev.CancelActivity != "false"
 		switch {
@@ -973,7 +973,7 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 	return nil
 }
 
-// clioOperation normalizes a clio connector task's operation attribute, defaulting
+// clioOperation normalizes a clio worker task's operation attribute, defaulting
 // an empty value to "write" so the original write-only <atlas:clioConnector>
 // element (which carried no operation) keeps compiling unchanged.
 func clioOperation(op string) string {
@@ -984,7 +984,7 @@ func clioOperation(op string) string {
 	return op
 }
 
-// clioLimit parses a clio read task's limit attribute: empty is 0 (the connector's
+// clioLimit parses a clio read task's limit attribute: empty is 0 (the worker's
 // default), otherwise a non-negative integer. taskID names the task for the error.
 func clioLimit(taskID, raw string) (int32, error) {
 	if strings.TrimSpace(raw) == "" {

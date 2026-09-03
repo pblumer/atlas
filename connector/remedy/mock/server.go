@@ -1,5 +1,5 @@
 // Package remedymock is an in-memory stand-in for a BMC Remedy AR System REST API,
-// so the Remedy connector (ADR-0106) can be exercised end to end without a real
+// so the Remedy worker (ADR-0106) can be exercised end to end without a real
 // Remedy / Helix ITSM instance. It implements exactly the three endpoints the
 // [github.com/pblumer/atlas/connector/remedy.HTTPClient] calls, faithfully enough that the real
 // client talks to it unmodified:
@@ -13,13 +13,13 @@
 //
 //	GET  /mock/entries               JSON array of every created entry
 //
-// It is a development and demo aid, not part of the connector's runtime path: point a
-// managed Remedy connector's base URL at a running mock (see the `atlas mock-remedy`
-// subcommand) and a Remedy connector task creates entries against it. Created entry
+// It is a development and demo aid, not part of the worker's runtime path: point a
+// managed Remedy worker's base URL at a running mock (see the `atlas mock-remedy`
+// subcommand) and a Remedy task creates entries against it. Created entry
 // ids are generated deterministically ("<prefix><zero-padded counter>", default prefix
 // "INC"), so a demo is reproducible. Delivery is faithful to the real thing: there is
 // no idempotency de-duplication, so an at-least-once replay creates a second entry —
-// the X-Request-ID header the connector sends is recorded on each entry so a replay is
+// the X-Request-ID header the worker sends is recorded on each entry so a replay is
 // visible.
 package remedymock
 
@@ -35,8 +35,8 @@ import (
 
 // Entry is one entry created against the mock, as returned by GET /mock/entries. ID is
 // the generated entry id (also handed back in the create response's Location header);
-// Form is the Remedy form it was created in; Values are the field values the connector
-// sent; RequestID is the connector's X-Request-ID (the job key) so an at-least-once
+// Form is the Remedy form it was created in; Values are the field values the worker
+// sent; RequestID is the worker's X-Request-ID (the job key) so an at-least-once
 // replay is recognizable.
 type Entry struct {
 	ID        string         `json:"id"`
@@ -105,7 +105,7 @@ func (s *Server) Entries() []Entry {
 
 // handleLogin checks the credentials and issues a JWT (returned as the plain-text
 // response body, as the AR System does). Bad or missing credentials are a 401 so the
-// connector's login step fails and the job retries.
+// worker's login step fails and the job retries.
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
@@ -136,7 +136,7 @@ func (s *Server) credentialsOK(user, pass string) bool {
 }
 
 // handleCreate validates the bearer token, stores the entry, and returns 201 with a
-// Location header carrying the generated entry id — the shape the connector reads the
+// Location header carrying the generated entry id — the shape the worker reads the
 // id back from.
 func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	if !s.tokenOK(r.Header.Get("Authorization")) {
@@ -167,7 +167,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		RequestID: r.Header.Get("X-Request-ID"),
 	})
 	s.mu.Unlock()
-	// The real AR System returns the new entry's URL here; the connector reads the id
+	// The real AR System returns the new entry's URL here; the worker reads the id
 	// from its last path segment. r.URL.Path is /api/arsys/v1/entry/{form}, so appending
 	// /{id} yields the faithful shape.
 	w.Header().Set("Location", strings.TrimRight(r.URL.Path, "/")+"/"+id)
@@ -188,7 +188,7 @@ func (s *Server) tokenOK(authHeader string) bool {
 }
 
 // handleLogout invalidates the bearer token. It always answers 204 (releasing an
-// unknown token is a no-op), matching the connector's best-effort logout.
+// unknown token is a no-op), matching the worker's best-effort logout.
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	const prefix = "AR-JWT "
 	if token := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), prefix)); token != "" {

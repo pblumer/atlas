@@ -3,11 +3,11 @@
 //
 // # Worker-only
 //
-// This is the first connector kind with no in-process half at all. [ADR-0164] decided
+// This is the first Worker Type with no in-process half at all. [ADR-0164] decided
 // that every side-effecting service task belongs on a worker and that new kinds are
 // built worker-first; a database credential is the strongest case there is for taking
 // that literally, because a DSN cannot be split into a public address and a secret
-// reference the way every other connector's endpoint can. So the engine never holds
+// reference the way every other worker's endpoint can. So the engine never holds
 // one: nothing here is registered with the engine's job runner, and a SQL task waits
 // until a worker that holds the DSN leases it.
 //
@@ -19,7 +19,7 @@
 //     process and the parameters out of the instance's scope chain, because FEEL is
 //     compiled at deploy and only the engine has the scope. It produces a [Job] of
 //     plain values.
-//   - [Run] is worker work. It resolves the job's connector *name* against a registry
+//   - [Run] is worker work. It resolves the job's worker *name* against a registry
 //     the worker built from its own environment, opens nothing the engine knows
 //     about, and executes.
 //

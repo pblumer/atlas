@@ -19,7 +19,7 @@ type fixedClock struct{ t int64 }
 
 func (c *fixedClock) Now() int64 { c.t++; return c.t }
 
-// recordingClient captures the entries a Remedy connector task creates and returns a
+// recordingClient captures the entries a Remedy task creates and returns a
 // canned entry id.
 type recordingClient struct {
 	created []remedy.Entry
@@ -76,7 +76,7 @@ func active(t *testing.T, s *state.Store) (pi, ei int) {
 	return pi, ei
 }
 
-// remedyProcess: Start → Remedy connector task → End.
+// remedyProcess: Start → Remedy task → End.
 func remedyProcess(t *testing.T, cfg compiler.RemedyConfig) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	b := compiler.NewBuilder(remedyDefKey, "ticketing", 1)
@@ -107,7 +107,7 @@ func drive(t *testing.T, cp *compiler.CompiledProcess, jobType int32, reg *remed
 	return runner.Drive()
 }
 
-// TestRemedyConnectorCreatesEntry is the vertical slice end to end: a Remedy connector
+// TestRemedyConnectorCreatesEntry is the vertical slice end to end: a Remedy worker
 // task creates a job, the in-process Remedy worker resolves the named instance and
 // creates the model-authored entry keyed by the job key, the entry id is written into
 // the result variable, and the token finishes.
@@ -233,7 +233,7 @@ func TestRemedyConnectorNoForm(t *testing.T) {
 	}
 }
 
-// TestRemedyConnectorUnknownConnector proves a task naming an unregistered connector
+// TestRemedyConnectorUnknownConnector proves a task naming an unregistered worker
 // fails the job (retry, then incident) rather than dropping the create silently.
 func TestRemedyConnectorUnknownConnector(t *testing.T) {
 	log, store := openStore(t)
@@ -246,7 +246,7 @@ func TestRemedyConnectorUnknownConnector(t *testing.T) {
 		t.Fatalf("Drive: %v", err)
 	}
 	if pi := mustActiveProcs(t, store); pi != 1 {
-		t.Errorf("active instances = %d, want 1 (job parked: connector not registered)", pi)
+		t.Errorf("active instances = %d, want 1 (job parked: worker not registered)", pi)
 	}
 }
 
@@ -303,10 +303,10 @@ func TestRegistryReplace(t *testing.T) {
 	reg.Register("old", &recordingClient{})
 	reg.Replace(map[string]remedy.Client{"new": &recordingClient{}})
 	if _, ok := reg.Client("old"); ok {
-		t.Error("old connector should be gone after Replace")
+		t.Error("old worker should be gone after Replace")
 	}
 	if _, ok := reg.Client("new"); !ok {
-		t.Error("new connector should be present after Replace")
+		t.Error("new worker should be present after Replace")
 	}
 	reg.Replace(nil)
 	if _, ok := reg.Client("new"); ok {

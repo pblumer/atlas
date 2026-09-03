@@ -1,10 +1,10 @@
-// Package envname turns a connector name or a secret reference into the
+// Package envname turns a worker name or a secret reference into the
 // environment variable it is read from.
 //
 // It exists because three packages have to agree on that answer and none of them
 // can see the others do it. The engine renders a supervised worker's environment
 // from its own vault (api), a worker reads the same variables out of its own
-// environment (worker), and a connector that cannot resolve a reference has to name
+// environment (worker), and a worker that cannot resolve a reference has to name
 // the variable an operator must set (connector/…). One fold applied three ways is a
 // bug an operator meets as "I set the variable and it still says it is missing", so
 // the fold lives here once and is imported rather than repeated.
@@ -38,10 +38,10 @@ func Key(name string) string {
 	return b.String()
 }
 
-// ConnectorToken is the variable a connector secret reference resolves from
+// ConnectorToken is the variable a worker secret reference resolves from
 // (ADR-0041): ATLAS_CONNECTOR_<REF>_TOKEN, with REF folded by [Key].
 //
-// It is the whole point of this package being importable by a connector. A message
+// It is the whole point of this package being importable by a worker. A message
 // that quotes the pattern leaves an operator to apply the fold in their head, which
 // is exactly where "the variable is set and it still is not found" comes from —
 // quoting the result of the fold instead makes the error something to act on.

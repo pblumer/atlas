@@ -1,12 +1,12 @@
 // Package remedy integrates BMC Remedy (BMC Helix ITSM / the AR System) as a
-// server-registered Atlas connector: a BPMN Remedy connector task creates an entry
+// server-registered Atlas worker: a BPMN Remedy task creates an entry
 // (e.g. an incident) in a model-authored Remedy form through the AR System REST API
 // via the job path (ADR-0106), mirroring how the mail package delegates a send to a
 // registry-managed provider (ADR-0079) and clio an append to a registry-managed
 // endpoint (ADR-0036). The integration inherits the job protocol's durability and
 // non-blocking properties (ADR-0007):
 //
-//   - A connector task creates a job carrying the reserved [compiler.RemedyJobType].
+//   - A task creates a job carrying the reserved [compiler.RemedyJobType].
 //     The processor never performs the outbound call itself, so it stays
 //     allocation-free (invariant I1) and free of any HTTP dependency.
 //   - The in-process [Handler] — a job worker — pulls those jobs, calls the AR System
@@ -14,7 +14,7 @@
 //     applyToState / I4), writes the created entry's id into the task's result
 //     variable, and completes the job, which drives the token onward.
 //   - The Remedy base URL and credentials live in a server-side [Registry] keyed by
-//     connector name, so a model refers to a Remedy instance by name only and never
+//     worker name, so a model refers to a Remedy instance by name only and never
 //     carries a URL or a secret (ADR-0036/0041). Only the form and its field values
 //     are authored in the model, like a mail task's message (ADR-0079).
 //
@@ -45,7 +45,7 @@ import (
 	"github.com/pblumer/atlas/connector/clientreg"
 )
 
-// Entry is one Remedy entry a connector task creates. Form is the Remedy form the
+// Entry is one Remedy entry a task creates. Form is the Remedy form the
 // entry is created in (e.g. "HPD:IncidentInterface_Create"); Values are the entry's
 // field values, keyed by Remedy field name. RequestID is deterministic (the job
 // key), sent as an X-Request-ID header so an at-least-once retry can be recognized by
@@ -63,23 +63,23 @@ type Result struct {
 }
 
 // Client creates an entry in a Remedy instance. It is an interface so the worker is
-// testable without a live AR System and so a connector name binds to exactly one
+// testable without a live AR System and so a worker name binds to exactly one
 // Remedy instance.
 type Client interface {
 	CreateEntry(ctx context.Context, e Entry) (Result, error)
 }
 
-// Registry resolves a connector name to the [Client] for this kind. Connectors are
+// Registry resolves a worker name to the [Client] for this kind. Workers are
 // registered at the server from managed configuration (endpoint plus credentials), so
-// a model refers to a connector by name only (ADR-0036/0041).
+// a model refers to a worker by name only (ADR-0036/0041).
 //
 // It is the shared [clientreg.Registry], which also carries *why* a configured
-// connector is missing from it — the difference between "never configured" and
+// worker is missing from it — the difference between "never configured" and
 // "configured and broken", which is what a parked token has to be able to say
 // (ADR-0158).
 type Registry = clientreg.Registry[Client]
 
-// NewRegistry creates an empty connector registry.
+// NewRegistry creates an empty worker registry.
 func NewRegistry() *Registry { return clientreg.New[Client]() }
 
 // Connector is the server-side configuration of one Remedy instance: the AR System
@@ -100,8 +100,8 @@ type HTTPClient struct {
 	http *http.Client
 }
 
-// NewHTTPClient builds a Remedy REST client for a configured connector, bounded
-// by the shared connector call budget (nettimeout.Default). The worker runs on the
+// NewHTTPClient builds a Remedy REST client for a configured worker, bounded
+// by the shared worker call budget (nettimeout.Default). The worker runs on the
 // run-loop goroutine, so an unbounded call would let a hung ITSM host stall the
 // whole engine; see the nettimeout package doc. A per-connector configurable
 // timeout is a follow-up (ADR-0106).
@@ -148,7 +148,7 @@ func (c *HTTPClient) CreateEntry(ctx context.Context, e Entry) (Result, error) {
 	return Result{EntryID: entryIDFromLocation(resp.Header.Get("Location"))}, nil
 }
 
-// login exchanges the connector's username/password for a JWT via the AR System JWT
+// login exchanges the worker's username/password for a JWT via the AR System JWT
 // login endpoint. The token is the plain-text response body. An empty token (a 2xx
 // with no body — a misconfigured server) is an error so the job retries rather than
 // calling create unauthenticated.
@@ -188,7 +188,7 @@ func (c *HTTPClient) logout(ctx context.Context, token string) {
 	}
 }
 
-// url joins the connector's base URL with an API path, tolerating a trailing slash on
+// url joins the worker's base URL with an API path, tolerating a trailing slash on
 // the base.
 func (c *HTTPClient) url(p string) string {
 	return strings.TrimRight(c.conn.BaseURL, "/") + p

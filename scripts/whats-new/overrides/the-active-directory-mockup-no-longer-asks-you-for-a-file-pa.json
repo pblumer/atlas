@@ -1,6 +1,6 @@
 {
   "tags": [
-    "Connectors",
+    "Workers",
     "Active Directory"
   ],
   "title": {
@@ -13,14 +13,14 @@
   },
   "tutorial": {
     "en": [
-      "Open Console › Connectors and find the Active Directory card.",
+      "Open Console › Workers and find the Active Directory card.",
       "Tick “Serve Active Directory tasks against a mockup”.",
       "Press Example for a ready-made directory, or Choose a file… to load your own LDIF/DSML.",
       "Press Save. Atlas reports how many entries it read and restarts the AD worker.",
       "Run a leaver against it and watch Operations › Workers for what the mockup did."
     ],
     "de": [
-      "Konsole › Connectors öffnen und die Karte Active Directory suchen.",
+      "Konsole › Workers öffnen und die Karte Active Directory suchen.",
       "„Serve Active Directory tasks against a mockup“ ankreuzen.",
       "Example drücken für ein fertiges Verzeichnis, oder Choose a file… für deine eigene LDIF-/DSML-Datei.",
       "Save drücken. Atlas meldet die Zahl der gelesenen Einträge und startet den AD-Worker neu.",
@@ -29,9 +29,9 @@
   },
   "try": {
     "label": {
-      "en": "Open Connectors",
-      "de": "Connectors öffnen"
+      "en": "Open Workers",
+      "de": "Workers öffnen"
     },
-    "route": "#/console/connectors"
+    "route": "#/console/workers"
   }
 }

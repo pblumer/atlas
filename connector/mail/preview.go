@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// ProviderPreview is the zero-configuration mail provider: a connector that frames
+// ProviderPreview is the zero-configuration mail provider: a worker that frames
 // every message exactly like a real one and then delivers it to an in-server
 // [Outbox] instead of the internet (ADR-0150).
 //
@@ -34,7 +34,7 @@ const (
 	maxOutboxField    = 256 << 10 // 256 KiB per stored body
 )
 
-// OutboxMessage is one message a preview connector delivered: the addressing and
+// OutboxMessage is one message a preview worker delivered: the addressing and
 // bodies the model authored, plus the framed RFC 5322 bytes that would have gone out.
 // Raw is what makes a preview run worth reading — headers, MIME structure and
 // encoding are the parts an author cannot check by re-reading their own model.
@@ -53,7 +53,7 @@ type OutboxMessage struct {
 	Raw       string   `json:"raw"`
 }
 
-// Outbox is the bounded, newest-last mailbox every preview connector on a server
+// Outbox is the bounded, newest-last mailbox every preview worker on a server
 // delivers into — the "Outbox" view in Operations reads it.
 //
 // It holds its own mutex, which is deliberate and is the one piece of shared state in
@@ -149,12 +149,12 @@ func clipField(s string) string {
 	return s[:maxOutboxField] + "\n… [truncated by the preview outbox]"
 }
 
-// Sink is where a preview connector delivers. [Outbox] is the one that lives in the
-// server's own memory, and for as long as mail was an in-process connector it was
+// Sink is where a preview worker delivers. [Outbox] is the one that lives in the
+// server's own memory, and for as long as mail was an in-process worker it was
 // the only one there could be.
 //
 // It is an interface because mail now runs on a worker (ADR-0168), and a preview
-// connector that framed its message in another process and appended it to *that*
+// worker that framed its message in another process and appended it to *that*
 // process's memory would have previewed into a window nobody can open. A worker
 // binds a sink that hands the message back to the engine's outbox instead, so where
 // the framing happened stops being visible to the person reading Operations › Outbox
@@ -171,11 +171,11 @@ type Sink interface {
 // delivers it to a sink.
 type PreviewClient struct {
 	outbox    Sink
-	connector string // the connector name, so one outbox can serve several of them
-	sender    string // the connector's default From
+	connector string // the worker name, so one outbox can serve several of them
+	sender    string // the worker's default From
 }
 
-// NewPreviewClient binds a preview connector to the sink it delivers into.
+// NewPreviewClient binds a preview worker to the sink it delivers into.
 func NewPreviewClient(outbox Sink, connector, sender string) *PreviewClient {
 	return &PreviewClient{outbox: outbox, connector: connector, sender: sender}
 }
@@ -187,13 +187,13 @@ func (c *PreviewClient) Send(ctx context.Context, m Message) error {
 	_ = ctx // nothing is dialed; the signature is the provider seam
 	from := firstNonEmpty(m.From, c.sender)
 	if from == "" {
-		return fmt.Errorf("mail: preview: no sender configured (set the connector's sender or the task's from)")
+		return fmt.Errorf("mail: preview: no sender configured (set the worker's sender or the task's from)")
 	}
 	if len(recipients(m)) == 0 {
 		return fmt.Errorf("mail: preview: message has no recipients")
 	}
 	if c.outbox == nil {
-		return fmt.Errorf("mail: preview: connector %q has no outbox", c.connector)
+		return fmt.Errorf("mail: preview: worker %q has no outbox", c.connector)
 	}
 	return c.outbox.Deliver(OutboxMessage{
 		Connector: c.connector,

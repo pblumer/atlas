@@ -22,7 +22,7 @@ Es gibt **kein Startformular**. Die Variablen kommen aus dem Ereignis.
 
 ## Voraussetzungen
 
-Ein Konnektor namens `jira` unter *Console → Connectors* — Einrichtung und
+Ein Worker namens `jira` unter *Console → Workers* — Einrichtung und
 API-Token wie im [Zugangsantrag](../jira-zugangsantrag/README.md#einrichtung-jira-cloud)
 beschrieben. Wenn dort der Verbindungstest durchläuft, stimmt alles Nötige.
 
@@ -32,7 +32,7 @@ niemanden — und zwar ohne Fehler, siehe unten.
 
 ## Die Überwachung anlegen
 
-*Console → Connectors* → in der Zeile des Jira-Konnektors auf **Events**:
+*Console → Workers* → in der Zeile des Jira-Workers auf **Events**:
 
 | Feld | Wert |
 |---|---|
@@ -98,7 +98,7 @@ pro Alt-Ticket eine Instanz zu starten. Zum Testen heisst das: erst die
 **Ein leeres `konten` ist mehrdeutig.** Dasselbe leere Array bedeutet „niemand
 passt", „das Konto ist über seine Profil-Sichtbarkeit nicht auffindbar" und „dem
 Worker fehlt *Benutzer und Gruppen durchsuchen*" — Jira unterscheidet die drei
-nicht, also kann der Konnektor es auch nicht. Deshalb ist der Default des Gateways
+nicht, also kann der Worker es auch nicht. Deshalb ist der Default des Gateways
 der Zweig **ohne** Zuweisung, und deshalb schreibt er den Grund in den Vorgang,
 statt still zu enden.
 

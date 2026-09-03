@@ -1,8 +1,8 @@
 // Package temis integrates a central temis decision service as a server-registered
-// Atlas connector: a business rule task marked <atlas:temisConnector> delegates its
+// Atlas worker: a business rule task marked <atlas:temisConnector> delegates its
 // decision to a configured temis instance through the job path (ADR-0050), instead
 // of the embedded temis library that evaluates a local decision (ADR-0014). It
-// mirrors the clio connector (ADR-0036) and reuses the shared decision I/O core
+// mirrors the clio worker (ADR-0036) and reuses the shared decision I/O core
 // (dmn.DecisionHandler, ADR-0039), so a central and a local decision differ only in
 // where they are evaluated:
 //
@@ -14,7 +14,7 @@
 //     fsync (invariant I2, never inside applyToState / I4), and completes the job
 //     with the result written back as the resultVariable process variable.
 //   - The temis endpoint and credentials live in a server-side [Registry] keyed by
-//     connector name, so a model refers to a connector by name only and never
+//     worker name, so a model refers to a worker by name only and never
 //     carries a URL or secret (ADR-0036/0041).
 //
 // Evaluation is at-least-once (a crash between "temis answered" and "job completed"
@@ -35,27 +35,27 @@ import (
 )
 
 // Client evaluates a decision on one temis instance. It is an interface so the
-// worker is testable without a live temis and so a connector name binds to exactly
+// worker is testable without a live temis and so a worker name binds to exactly
 // one endpoint. Outputs are the decision's named results (decision/output name →
 // value), the same shape the local registry returns.
 type Client interface {
 	Evaluate(ctx context.Context, decisionId string, inputs map[string]any) (map[string]any, error)
 }
 
-// Registry resolves a connector name to the [Client] for this kind. Connectors are
+// Registry resolves a worker name to the [Client] for this kind. Workers are
 // registered at the server from managed configuration (endpoint plus credentials), so
-// a model refers to a connector by name only (ADR-0036/0041).
+// a model refers to a worker by name only (ADR-0036/0041).
 //
 // It is the shared [clientreg.Registry], which also carries *why* a configured
-// connector is missing from it — the difference between "never configured" and
+// worker is missing from it — the difference between "never configured" and
 // "configured and broken", which is what a parked token has to be able to say
 // (ADR-0158).
 type Registry = clientreg.Registry[Client]
 
-// NewRegistry creates an empty connector registry.
+// NewRegistry creates an empty worker registry.
 func NewRegistry() *Registry { return clientreg.New[Client]() }
 
-// Connector is the server-side configuration of one temis connector: the base
+// Connector is the server-side configuration of one temis worker: the base
 // endpoint of the temis instance and an optional bearer token for it. Per
 // ADR-0041 the token is the output of a secret resolver, not a value typed into a
 // model.
@@ -75,7 +75,7 @@ type HTTPClient struct {
 	http *http.Client
 }
 
-// NewHTTPClient builds a temis HTTP client for a configured connector.
+// NewHTTPClient builds a temis HTTP client for a configured worker.
 func NewHTTPClient(conn Connector) *HTTPClient {
 	return &HTTPClient{conn: conn, http: nettimeout.HTTPClient()}
 }

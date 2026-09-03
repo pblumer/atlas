@@ -11,11 +11,11 @@ import (
 )
 
 // The mock directory is a [ad.Conn] as well as a [ad.Dialer], and a caller embedding
-// the package can drive it directly — the connector's own operations are only some of
+// the package can drive it directly — the worker's own operations are only some of
 // what LDAP's modify can say. These tests take that route for the change shapes a job
 // cannot author, and for the answers a connection gives about entries.
 
-// conn dials the mock the way the connector does.
+// conn dials the mock the way the worker does.
 func conn(t *testing.T, d *ad.MockDirectory) ad.Conn {
 	t.Helper()
 	c, err := d.Dial(mockTLSURL, "", "", false)
@@ -27,7 +27,7 @@ func conn(t *testing.T, d *ad.MockDirectory) ad.Conn {
 }
 
 // A delete with no values removes the whole attribute, and a replace with none does
-// the same — LDAP says both, even though the AD connector's own operations author
+// the same — LDAP says both, even though the AD worker's own operations author
 // neither.
 func TestMockModifyRemovesAnAttributeWholesale(t *testing.T) {
 	d := ad.NewMockDirectory(ad.Entry{DN: arnoDN, Attributes: map[string][]string{
@@ -201,7 +201,7 @@ func TestMockFilterShapes(t *testing.T) {
 	}
 }
 
-// encodedPassword is what the connector puts on the wire for a set-password: the
+// encodedPassword is what the worker puts on the wire for a set-password: the
 // password in double quotes, UTF-16LE.
 func encodedPassword(pw string) string {
 	quoted := `"` + pw + `"`

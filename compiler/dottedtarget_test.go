@@ -115,8 +115,8 @@ func TestPlainTargetsAreQuiet(t *testing.T) {
 }
 
 // dottedConnectorFindings builds a one-task process around add and returns its
-// variable.dotted-target findings, so a connector's own result fields can be tested
-// without a BPMN dialect for every connector kind.
+// variable.dotted-target findings, so a worker's own result fields can be tested
+// without a BPMN dialect for every worker kind.
 func dottedConnectorFindings(t *testing.T, add func(b *Builder) int32) []Problem {
 	t.Helper()
 	b := NewBuilder(1, "p", 1)
@@ -136,8 +136,8 @@ func dottedConnectorFindings(t *testing.T, add func(b *Builder) int32) []Problem
 	return out
 }
 
-// TestConnectorResultsAreReadByJobType: a connector task carries every connector's
-// fields in one struct, and each connector reads only its own. The rest are left at the
+// TestConnectorResultsAreReadByJobType: a task carries every worker's
+// fields in one struct, and each worker reads only its own. The rest are left at the
 // zero value — which for an interned name is not "none" (-1) but index 0, the first
 // reserved job type, "io.atlas.dmn". Reading them blind therefore accused every clio,
 // REST and mail task in the estate of a dotted target it does not have.

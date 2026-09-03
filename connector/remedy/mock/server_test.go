@@ -14,7 +14,7 @@ import (
 )
 
 // TestRoundTripThroughRealClient is the whole point of the mock: the real Remedy
-// connector client (login → create → logout) talks to it unmodified and gets a
+// worker client (login → create → logout) talks to it unmodified and gets a
 // generated entry id back, and the mock records exactly what the client sent.
 func TestRoundTripThroughRealClient(t *testing.T) {
 	mock := remedymock.New()

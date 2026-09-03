@@ -23,7 +23,7 @@ func fakeEnv(pairs map[string]string) func(string) string {
 
 // TestMailWorkerHoldsItsOwnCredential is the point of ADR-0168's decision, made
 // checkable from the worker's side: the SMTP host and password are read from this
-// process's environment, and the leased job contributes only a connector *name*.
+// process's environment, and the leased job contributes only a worker *name*.
 // A worker can therefore serve a provider the engine has no configuration for.
 func TestMailWorkerHoldsItsOwnCredential(t *testing.T) {
 	env := fakeEnv(map[string]string{
@@ -42,7 +42,7 @@ func TestMailWorkerHoldsItsOwnCredential(t *testing.T) {
 	}
 }
 
-// A worker told to serve mail but given no mail connector must not lease every mail
+// A worker told to serve mail but given no mail worker must not lease every mail
 // job and fail it. It does not subscribe to mail at all, so those tasks wait for a
 // worker that can actually send them — and it says so, because "mail is not served
 // here" is the answer to why one is waiting.
@@ -57,7 +57,7 @@ func TestAMailWorkerWithNoConfiguredConnectorSimplyDoesNotServeMail(t *testing.T
 		t.Fatalf("BuiltinConnectors: %v", err)
 	}
 	if _, ok := built.Handlers[compiler.MailJobType]; ok {
-		t.Error("the worker subscribed to mail with no connector to send through")
+		t.Error("the worker subscribed to mail with no worker to send through")
 	}
 	if _, ok := built.Handlers[compiler.CsvImportJobType]; !ok {
 		t.Error("the kinds it *can* serve were dropped along with mail")
@@ -80,7 +80,7 @@ func TestAWorkerWithNothingLeftToServeHasNoHandlers(t *testing.T) {
 	}
 }
 
-// A named connector missing its endpoint is likewise a startup error: half a
+// A named worker missing its endpoint is likewise a startup error: half a
 // configuration sends nothing, and finding that out per job would spend a retry
 // budget to learn what was knowable before the first poll.
 func TestMailWorkerRefusesAHalfConfiguredConnector(t *testing.T) {
@@ -90,14 +90,14 @@ func TestMailWorkerRefusesAHalfConfiguredConnector(t *testing.T) {
 	})
 	_, err := worker.BuiltinConnectors(env, "mail")
 	if err == nil {
-		t.Fatal("a connector with no endpoint was accepted")
+		t.Fatal("a worker with no endpoint was accepted")
 	}
 	if !strings.Contains(err.Error(), "office365") || !strings.Contains(err.Error(), "ENDPOINT") {
-		t.Errorf("error = %v, want it to name the connector and the missing setting", err)
+		t.Errorf("error = %v, want it to name the worker and the missing setting", err)
 	}
 }
 
-// A connector name with characters that cannot appear in an environment variable is
+// A worker name with characters that cannot appear in an environment variable is
 // still configurable: the name is folded the one way, and the error says which
 // variable was looked for so an operator can set exactly that.
 func TestMailConnectorNamesFoldIntoEnvironmentVariables(t *testing.T) {
@@ -110,11 +110,11 @@ func TestMailConnectorNamesFoldIntoEnvironmentVariables(t *testing.T) {
 		t.Fatalf("BuiltinConnectors: %v", err)
 	}
 	if _, ok := execs.Handlers[compiler.MailJobType]; !ok {
-		t.Fatal("a hyphenated connector name was not configurable")
+		t.Fatal("a hyphenated worker name was not configurable")
 	}
 }
 
-// A mail job whose connector this worker does not hold fails with a message naming
+// A mail job whose worker this worker does not hold fails with a message naming
 // it. The engine can no longer catch this — it does not know what any worker holds —
 // so the worker's message is the whole of what an operator gets.
 func TestMailWorkerRefusesAConnectorItDoesNotHold(t *testing.T) {
@@ -134,10 +134,10 @@ func TestMailWorkerRefusesAConnectorItDoesNotHold(t *testing.T) {
 		}},
 	})
 	if err == nil {
-		t.Fatal("a job for an unheld connector succeeded")
+		t.Fatal("a job for an unheld worker succeeded")
 	}
 	if !strings.Contains(err.Error(), "some-other-provider") {
-		t.Errorf("error = %v, want it to name the connector this worker lacks", err)
+		t.Errorf("error = %v, want it to name the worker this worker lacks", err)
 	}
 }
 
@@ -155,7 +155,7 @@ func TestMailWorkerNeedsTheResolvedDetail(t *testing.T) {
 	}
 	_, err = execs.Handlers[compiler.MailJobType].Run(context.Background(), worker.Job{JobKey: 1, Type: compiler.MailJobType})
 	if err == nil {
-		t.Fatal("a mail job with no connector detail succeeded")
+		t.Fatal("a mail job with no worker detail succeeded")
 	}
 	if !strings.Contains(err.Error(), "offloading") {
 		t.Errorf("error = %v, want it to point at the server's offload configuration", err)
@@ -167,7 +167,7 @@ func TestMailWorkerNeedsTheResolvedDetail(t *testing.T) {
 // — recipients, subject and body, evaluated against the instance — and the worker
 // sent it through a provider configured only here. The engine has no SMTP
 // configuration in this test at all, which is the property that makes an offloaded
-// mail connector deployable into a network the engine cannot reach.
+// mail worker deployable into a network the engine cannot reach.
 func TestWorkerSendsAnOffloadedMailConnector(t *testing.T) {
 	sent := make(chan mail.Message, 1)
 	reg := mail.NewRegistry()

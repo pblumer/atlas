@@ -1,7 +1,7 @@
 {
   "tags": [
     "Operations",
-    "Connectors"
+    "Workers"
   ],
   "title": {
     "en": "A task's work can run outside the engine",

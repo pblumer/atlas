@@ -143,7 +143,7 @@ func TestIncidentSitesRankTheWorstFirstAndStopThere(t *testing.T) {
 	}
 }
 
-// TestATruncatedMessageSaysItWasTruncated. A connector can return a page of HTML as
+// TestATruncatedMessageSaysItWasTruncated. A worker can return a page of HTML as
 // its error and a panel is not where somebody reads that — but a silently shortened
 // message reads as a complete one, and then somebody searches their logs for a
 // string that does not exist.

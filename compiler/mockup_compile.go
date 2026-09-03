@@ -11,7 +11,7 @@ import (
 
 // compileMockupTask compiles an <atlas:mockupConnector> service task: the engine
 // simulates it itself (ADR-0120) instead of dispatching a job to an external worker
-// or connector. It bounds the random simulated duration from minDuration/maxDuration
+// or worker. It bounds the random simulated duration from minDuration/maxDuration
 // (ISO-8601, a fixed duration being min == max), compiles the optional FEEL result
 // expression at deploy time (invariant I5), and scales the failure probability to
 // parts-per-million so the runtime decision stays integer-pure. It validates the

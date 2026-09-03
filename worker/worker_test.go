@@ -162,7 +162,7 @@ func TestWorkerNeedsAtLeastOneHandler(t *testing.T) {
 
 // The command contract: the job arrives as JSON on stdin and result variables are
 // read back as JSON from stdout — the same "stdout is the result" shape the script
-// connector already uses, so one contract covers both.
+// worker already uses, so one contract covers both.
 func TestCmdExecPassesTheJobOnStdinAndReadsVariablesFromStdout(t *testing.T) {
 	if _, err := lookPath("sh"); err != nil {
 		t.Skip("no sh on this machine")
@@ -241,7 +241,7 @@ func TestWorkerSurvivesAJobTypeThatIsNotDeployedYet(t *testing.T) {
 }
 
 // TestWorkerRunsAnOffloadedCsvConnector is ADR-0168's first slice end to end: a
-// connector kind the engine no longer serves, worked by an external process. The
+// Worker Type the engine no longer serves, worked by an external process. The
 // engine resolved the task — found its detail in the compiled process and read the
 // source text up the scope chain — and the worker did the parsing, which needs
 // nothing but the values it was handed. No credential is involved, which is exactly
@@ -260,7 +260,7 @@ func TestWorkerRunsAnOffloadedCsvConnector(t *testing.T) {
 	}
 
 	if running := runningInstances(t, ts); running != 0 {
-		t.Errorf("%d instances still running, want 0 — the connector job was not completed", running)
+		t.Errorf("%d instances still running, want 0 — the worker job was not completed", running)
 	}
 	vars := instanceVariables(t, ts)
 	rows, ok := vars["orders"]
@@ -279,14 +279,14 @@ func TestWorkerRunsAnOffloadedCsvConnector(t *testing.T) {
 	}
 }
 
-// A worker asked for a connector kind it does not implement is a configuration
+// A worker asked for a Worker Type it does not implement is a configuration
 // error, not a process that leases work it cannot do.
 func TestBuiltinConnectorsRejectsAnUnknownKind(t *testing.T) {
 	// Refused by name rather than by a handler count: script alone contributes one
 	// handler per language, so counting would call a correct configuration wrong.
 	_, err := worker.BuiltinConnectors(nil, "no-such-kind")
 	if err == nil {
-		t.Fatal("an unknown connector kind was accepted")
+		t.Fatal("an unknown Worker Type was accepted")
 	}
 	if !strings.Contains(err.Error(), "no-such-kind") {
 		t.Errorf("error = %v, want it to name the kind it does not implement", err)
@@ -580,7 +580,7 @@ func TestOffloadedCsvNeedsTheResolvedDetail(t *testing.T) {
 	run := mustConnectors(t, "csv")[compiler.CsvImportJobType]
 	_, err := run.Run(context.Background(), worker.Job{JobKey: 1, Type: compiler.CsvImportJobType})
 	if err == nil {
-		t.Fatal("a CSV job with no connector detail succeeded")
+		t.Fatal("a CSV job with no worker detail succeeded")
 	}
 	if !strings.Contains(err.Error(), "offloading") {
 		t.Errorf("error = %v, want it to point at the server's offload configuration", err)
@@ -599,7 +599,7 @@ func TestOffloadedCsvRejectsDetailItCannotRead(t *testing.T) {
 		},
 	})
 	if err == nil {
-		t.Fatal("unreadable connector detail succeeded, want an error")
+		t.Fatal("unreadable worker detail succeeded, want an error")
 	}
 	if !strings.Contains(err.Error(), "csv") {
 		t.Errorf("error = %v, want it to name the kind", err)
@@ -633,7 +633,7 @@ func mustConnectors(t *testing.T, kinds ...string) map[string]worker.Exec {
 }
 
 // TestWorkerRunsAnOffloadedADConnectorInMockMode is the whole ask in one test: the
-// Active Directory connector running as a worker, and that worker serving it without
+// Active Directory worker running as a worker, and that worker serving it without
 // a domain controller.
 //
 // The engine resolved the task — the DN out of a FEEL expression, the entry out of a

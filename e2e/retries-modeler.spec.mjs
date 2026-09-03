@@ -52,7 +52,7 @@ test("clearing the retries drops the attribute, leaving the engine default", asy
   expect(page.__errors).toEqual([]);
 });
 
-test("a connector task carries its own retries attribute", async ({ page }) => {
+test("a task carries its own retries attribute", async ({ page }) => {
   await openRetries(page, "Activity_rest");
   // No budget authored: the field is empty, meaning "the engine's default".
   await expect(page.locator("#f-st-retries")).toHaveValue("");
@@ -67,7 +67,7 @@ test("a connector task carries its own retries attribute", async ({ page }) => {
 });
 
 test("switching the implementation kind keeps the retry budget", async ({ page }) => {
-  // The budget is a property of the task, not of the connector it happens to use.
+  // The budget is a property of the task, not of the worker it happens to use.
   await page.evaluate((el) => window.__select(el), "Activity_worker");
   await page.locator(".pgroup-head", { hasText: "Type" }).click(); // the kind picker
   await page.locator(".stkind-row[data-kind='rest']").click();

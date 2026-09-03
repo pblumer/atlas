@@ -10,7 +10,7 @@ import (
 // Detecting a store the reserved range grew over.
 //
 // Dynamic indices are issued from one past the reserved range, and that range grows
-// whenever a built-in connector is added. A store written before such an addition can
+// whenever a built-in worker is added. A store written before such an addition can
 // therefore hold a model-authored type on an index that now belongs to a built-in.
 // Loading it cannot simply keep the record — the index means the built-in now, and
 // two names on one index is the corruption to avoid — so [Registry.remember] drops

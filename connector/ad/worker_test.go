@@ -399,7 +399,7 @@ func TestAdHandlerElementInstanceGone(t *testing.T) {
 }
 
 // TestAdRecoversAcrossRestart runs to the waiting AD job, simulates a crash, and
-// recovers, proving the connector job survives replay.
+// recovers, proving the worker job survives replay.
 func TestAdRecoversAcrossRestart(t *testing.T) {
 	dir := t.TempDir()
 	cp, jobType := adProcess(t, compiler.AdConfig{URL: lit(adURL), Op: "disable", DN: lit("cn=x")}, false)
@@ -517,7 +517,7 @@ func TestAdUpdateAttributesEmpty(t *testing.T) {
 }
 
 // TestAdMove proves a mover: the model authors one target DN — how a person thinks
-// about it — and the connector splits it into the relative name and the new parent
+// about it — and the worker splits it into the relative name and the new parent
 // that LDAP's ModifyDN wants.
 func TestAdMove(t *testing.T) {
 	for _, tc := range []struct{ name, newDN, wantRDN, wantSuperior string }{
@@ -610,7 +610,7 @@ func TestAdMoveEmptyNewDN(t *testing.T) {
 
 // TestAdSync is the delta read end to end: the cookie goes out of a variable and the
 // server's new one comes back into the same variable, so a reconciliation modelled as
-// a loop carries its own position forward with no state in the connector.
+// a loop carries its own position forward with no state in the worker.
 func TestAdSync(t *testing.T) {
 	log, store := openStore(t)
 	cp, jobType := adProcess(t, compiler.AdConfig{
@@ -627,7 +627,7 @@ func TestAdSync(t *testing.T) {
 		Cookie: []byte{0xDE, 0xAD},
 		More:   true,
 	}}
-	// The previous pass's cookie, as the connector wrote it: base64 of the opaque token.
+	// The previous pass's cookie, as the worker wrote it: base64 of the opaque token.
 	prev := base64.StdEncoding.EncodeToString([]byte{0xBE, 0xEF})
 	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
 		model.VariableValue{Name: "cookie", Kind: model.VarString, Text: prev})

@@ -108,7 +108,7 @@ func TestRepositoryInstallFlow(t *testing.T) {
 
 	code, body := doReq(t, ts, "POST", "/api/v1/repository/packages/"+restPkgID+"/install", "", "")
 	if code != 200 {
-		t.Fatalf("install connector = %d, want 200 (%s)", code, body)
+		t.Fatalf("install worker = %d, want 200 (%s)", code, body)
 	}
 	var installed struct {
 		ID             string `json:"id"`
@@ -119,7 +119,7 @@ func TestRepositoryInstallFlow(t *testing.T) {
 		t.Fatalf("decode install: %v", err)
 	}
 	if installed.ID != restPkgID || installed.ReviewRequired {
-		t.Errorf("connector install = %+v, want id=%s reviewRequired=false", installed, restPkgID)
+		t.Errorf("worker install = %+v, want id=%s reviewRequired=false", installed, restPkgID)
 	}
 
 	// A script task installs (auth is off) but must flag reviewRequired.

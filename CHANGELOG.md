@@ -590,6 +590,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Everything a person reads now says Worker.** The Console's *Connectors* page was
+  renamed to *Workers* by an adapter that rewrote the rendered DOM after the fact
+  ([ADR-0203](docs/adr/0203-worker-execution-model.md), slice 2). It patched the
+  handful of strings it knew about and only on that one route, so the old word stayed
+  everywhere it had not been told about: the row menu offered *Configure connector*,
+  a delete asked "Delete connector?", an incident said the model named a connector,
+  and a deploy refused a model with `ad connector task … needs a connector`.
+
+  The adapter is gone. `#/console/workers` is a real route the Console renders itself
+  (the old `#/console/connectors` redirects to it, so a bookmark still lands), and the
+  vocabulary is now the source's own — in the Console, the Modeler, the handbook,
+  `atlas --help`, the OpenAPI summaries, every deploy and incident message, the
+  example models and the comments in this tree. A **Worker Type** is a capability, a
+  **Worker** is one configured target of it, and a **Worker Instance** is a process
+  leasing its jobs.
+
+  **Nothing on the wire moved.** A deployed model, a running worker and a scripted
+  deployment all keep working unchanged: the `connector="…"` BPMN attribute and the
+  `atlas:*Connector` extension elements, the `connector/` package paths, `atlas worker
+  --connector`, `--offload-connectors` / `--in-process-connectors` /
+  `--supervise-connector`, the `ATLAS_*_CONNECTORS` and `ATLAS_CONNECTOR_<REF>_TOKEN`
+  variables, the `connectors` field a worker registration carries, and the
+  `/api/v1/connectors` routes. Renaming those is a separate slice with its own
+  compatibility window
+  ([the migration plan](docs/architecture/worker-execution-migration.md), slice 6).
+
+  Three words that read the same are somebody else's and were left alone: BPMN's
+  **off-page connector** (link events), an AI client's **custom connector** (MCP), and
+  Microsoft Identity Manager's **connector** in the MIM comparison. Records written
+  before ADR-0203 — the decision records, and the release notes above — keep their
+  wording, because they are dated accounts of what was true when they were written.
+
 - **The Modeler's bar carries two buttons now, and a menu for the rest.** It ended with
   seven, added one at a time as the editor grew — Token simulation, Variables,
   Auto-layout, Save, Export XML, Documentation, Deploy — and every one of them was the

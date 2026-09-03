@@ -21,7 +21,7 @@ import (
 
 // TokenSource yields a valid OAuth2 bearer access token for a provider API. The
 // mechanism — caching, refresh timing, the token exchange — is the shared [oauth2]
-// package's; what stays here is this connector's policy: which grants it accepts,
+// package's; what stays here is this worker's policy: which grants it accepts,
 // what its credential bundle looks like, and the one grant nobody else has.
 type TokenSource = oauth2.TokenSource
 
@@ -37,7 +37,7 @@ const (
 )
 
 // credentialBundle is the JSON an operator stores in the vault under a mail
-// connector's credentialsRef (ADR-0093). method selects the OAuth2 grant; the
+// worker's credentialsRef (ADR-0093). method selects the OAuth2 grant; the
 // remaining fields configure it. Non-secret fields (ids, tenant) and secret fields
 // (clientSecret, refreshToken, privateKey) live together in this one vault secret, so
 // a model never carries any of them (I6). tokenUrl and scope are optional overrides;
@@ -167,7 +167,7 @@ func newTokenSource(b credentialBundle, httpc *http.Client, now func() time.Time
 		f = oauth2.RefreshToken(cfg)
 	case methodServiceAccount:
 		// The one grant the shared package does not carry: it is Google-specific, so
-		// it lives with the connector that needs it and only borrows the exchange.
+		// it lives with the worker that needs it and only borrows the exchange.
 		if b.ClientEmail == "" || b.PrivateKey == "" {
 			return nil, fmt.Errorf("mail: serviceAccount needs clientEmail and privateKey")
 		}

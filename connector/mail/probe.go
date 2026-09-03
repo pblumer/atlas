@@ -18,7 +18,7 @@ type Prober interface {
 
 // Probe checks a client as far as it can be checked without sending anything
 // (ADR-0150). A nil error means the configuration works: the server answered, the
-// credential was accepted, the connector is ready to carry a message.
+// credential was accepted, the worker is ready to carry a message.
 func Probe(ctx context.Context, c Client) error {
 	p, ok := c.(Prober)
 	if !ok {
@@ -48,13 +48,13 @@ func (c *GraphClient) Probe(ctx context.Context) error {
 	return nil
 }
 
-// Probe confirms the preview connector has an outbox to deliver into. There is
+// Probe confirms the preview worker has an outbox to deliver into. There is
 // nothing to dial and no credential to present, which is the whole point of the
 // provider — so this succeeds, and says so, rather than pretending to check a network
 // that is not involved.
 func (c *PreviewClient) Probe(context.Context) error {
 	if c.outbox == nil {
-		return fmt.Errorf("mail: preview: connector %q has no outbox", c.connector)
+		return fmt.Errorf("mail: preview: worker %q has no outbox", c.connector)
 	}
 	return nil
 }

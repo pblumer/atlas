@@ -116,7 +116,7 @@ func TestBindSecretErrorNamesTheVariableAndTheConsole(t *testing.T) {
 	for _, want := range []string{
 		`"ad-demo bind"`,                     // the reference as the model authored it
 		"ATLAS_CONNECTOR_AD_DEMO_BIND_TOKEN", // the variable, folded, not a pattern
-		"Console > Connectors > Secrets",     // the other place it can live
+		"Console > Workers > Secrets",        // the other place it can live
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)

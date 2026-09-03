@@ -41,7 +41,7 @@ func envOf(t *testing.T, lines []string) map[string]string {
 	return out
 }
 
-// The payoff: an operator configures a mail connector in the Console and the
+// The payoff: an operator configures a mail worker in the Console and the
 // supervised worker can send through it, having been told nothing by hand.
 func TestASupervisedWorkerIsHandedTheMailConnectorsFromTheStore(t *testing.T) {
 	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://localhost:8080", nil, nil))
@@ -57,7 +57,7 @@ func TestASupervisedWorkerIsHandedTheMailConnectorsFromTheStore(t *testing.T) {
 	env := envOf(t, srv.mailWorkerEnv())
 
 	if got := env["ATLAS_MAIL_CONNECTORS"]; got != "Haus-Post" {
-		t.Errorf("ATLAS_MAIL_CONNECTORS = %q, want the connector's own name", got)
+		t.Errorf("ATLAS_MAIL_CONNECTORS = %q, want the worker's own name", got)
 	}
 	// The four values mail.ProviderConfig is built from, under the name the worker
 	// folds "Haus-Post" into.
@@ -71,13 +71,13 @@ func TestASupervisedWorkerIsHandedTheMailConnectorsFromTheStore(t *testing.T) {
 			t.Errorf("%s = %q, want %q", name, got, want)
 		}
 	}
-	// And the address a preview connector delivers back to.
+	// And the address a preview worker delivers back to.
 	if got := env["ATLAS_MAIL_OUTBOX_URL"]; got != "http://localhost:8080/api/v1/mail/outbox" {
 		t.Errorf("ATLAS_MAIL_OUTBOX_URL = %q", got)
 	}
 }
 
-// A record written before the provider field existed is an SMTP connector, and is
+// A record written before the provider field existed is an SMTP worker, and is
 // handed over as one — the same default buildMailClients applies, so the worker's
 // client and the engine's are built from the same values.
 func TestAConnectorWithNoProviderIsHandedOverAsSMTP(t *testing.T) {
@@ -93,7 +93,7 @@ func TestAConnectorWithNoProviderIsHandedOverAsSMTP(t *testing.T) {
 	}
 }
 
-// A disabled connector is one an operator switched off. Handing it over would let a
+// A disabled worker is one an operator switched off. Handing it over would let a
 // worker keep sending through it, which is the one thing switching it off means.
 func TestADisabledConnectorIsNotHandedOver(t *testing.T) {
 	srv, _ := newValidateServer(t)
@@ -109,7 +109,7 @@ func TestADisabledConnectorIsNotHandedOver(t *testing.T) {
 
 	env := envOf(t, srv.mailWorkerEnv())
 	if got := env["ATLAS_MAIL_CONNECTORS"]; got != "live" {
-		t.Errorf("ATLAS_MAIL_CONNECTORS = %q, want only the enabled mail connector", got)
+		t.Errorf("ATLAS_MAIL_CONNECTORS = %q, want only the enabled mail worker", got)
 	}
 	for _, name := range []string{"ATLAS_MAIL_OFF_ENDPOINT", "ATLAS_MAIL_ELSEWHERE_ENDPOINT"} {
 		if _, handed := env[name]; handed {
@@ -118,9 +118,9 @@ func TestADisabledConnectorIsNotHandedOver(t *testing.T) {
 	}
 }
 
-// Two names that fold to one variable would give one connector the other's password.
+// Two names that fold to one variable would give one worker the other's password.
 // The second is left out, and the worker then reports it as a name it does not hold —
-// which the Workers view already shows as a connector served nowhere.
+// which the Workers view already shows as a worker served nowhere.
 func TestTwoConnectorsThatFoldToOneVariableDoNotShareACredential(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	for _, c := range []connector{
@@ -140,11 +140,11 @@ func TestTwoConnectorsThatFoldToOneVariableDoNotShareACredential(t *testing.T) {
 	// Whichever one won, the endpoint handed over is its own and not the other's.
 	want := map[string]string{"haus post": "a:587", "haus-post": "b:587"}[names[0]]
 	if got := env["ATLAS_MAIL_HAUS_POST_ENDPOINT"]; got != want {
-		t.Errorf("endpoint = %q, want %q — the surviving connector's own", got, want)
+		t.Errorf("endpoint = %q, want %q — the surviving worker's own", got, want)
 	}
 }
 
-// A server with no mail connector hands over nothing at all, rather than an empty
+// A server with no mail worker hands over nothing at all, rather than an empty
 // ATLAS_MAIL_CONNECTORS the worker would refuse to start on.
 func TestAServerWithNoMailConnectorsHandsOverNothing(t *testing.T) {
 	srv, _ := newValidateServer(t)
@@ -242,11 +242,11 @@ func TestSupervisedMailEnvUsesTheWorkersOwnNames(t *testing.T) {
 		t.Fatalf("a worker could not be configured from what the engine handed it: %v", err)
 	}
 	if !slices.Contains(built.Names, "post") {
-		t.Errorf("the worker holds %v, want the connector the engine handed it", built.Names)
+		t.Errorf("the worker holds %v, want the worker the engine handed it", built.Names)
 	}
 }
 
-// A preview connector previews into the outbox of the server the operator is
+// A preview worker previews into the outbox of the server the operator is
 // watching, even though the message was framed in another process — which is the
 // whole promise of the preview provider (ADR-0150), and the reason mail could be
 // offloaded by default without taking that promise away.
@@ -286,13 +286,13 @@ func TestAMessageFramedElsewhereLandsInThisServersOutbox(t *testing.T) {
 	}
 }
 
-// A delivery that names no connector is refused: the outbox is grouped by name, and a
+// A delivery that names no worker is refused: the outbox is grouped by name, and a
 // nameless entry is one nobody can trace back to a model.
 func TestAnOutboxDeliveryWithoutAConnectorIsRefused(t *testing.T) {
 	srv, _ := newValidateServer(t)
 
 	if code, _ := serveInternal(t, srv, http.MethodPost, "/api/v1/mail/outbox", `{"to":["a@x"]}`, "application/json"); code != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400 for a message with no connector", code)
+		t.Errorf("status = %d, want 400 for a message with no worker", code)
 	}
 	if code, _ := serveInternal(t, srv, http.MethodPost, "/api/v1/mail/outbox", `not json`, "application/json"); code != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400 for an unparseable body", code)
@@ -302,7 +302,7 @@ func TestAnOutboxDeliveryWithoutAConnectorIsRefused(t *testing.T) {
 // The payoff for the Remedy kind (ADR-0106/0168): an operator adds a Helix instance in
 // the Console, and the supervised worker files tickets against it having been told
 // nothing by hand. Remedy is mail's situation exactly — the base URL and the service
-// account live in the connector store and the vault, which a supervised worker can
+// account live in the worker store and the vault, which a supervised worker can
 // read no more than it can read the engine's memory.
 func TestASupervisedWorkerIsHandedTheRemedyConnectorsFromTheStore(t *testing.T) {
 	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://localhost:8080", nil, nil))
@@ -318,7 +318,7 @@ func TestASupervisedWorkerIsHandedTheRemedyConnectorsFromTheStore(t *testing.T) 
 	env := envOf(t, srv.remedyWorkerEnv())
 
 	if got := env["ATLAS_REMEDY_CONNECTORS"]; got != "Helix ITSM" {
-		t.Errorf("ATLAS_REMEDY_CONNECTORS = %q, want the connector's own name", got)
+		t.Errorf("ATLAS_REMEDY_CONNECTORS = %q, want the worker's own name", got)
 	}
 	// The three values remedy.Connector is built from, under the name the worker folds
 	// "Helix ITSM" into.
@@ -353,7 +353,7 @@ func TestSupervisedRemedyEnvUsesTheWorkersOwnNames(t *testing.T) {
 		t.Fatalf("a worker could not be configured from what the engine handed it: %v", err)
 	}
 	if !slices.Contains(built.Names, "helix") {
-		t.Errorf("the worker holds %v, want the connector the engine handed it", built.Names)
+		t.Errorf("the worker holds %v, want the worker the engine handed it", built.Names)
 	}
 }
 
@@ -377,7 +377,7 @@ func TestSupervisedJiraEnvUsesTheWorkersOwnNames(t *testing.T) {
 		t.Fatalf("a worker could not be configured from what the engine handed it: %v", err)
 	}
 	if !slices.Contains(built.Names, "acme") {
-		t.Errorf("the worker holds %v, want the connector the engine handed it", built.Names)
+		t.Errorf("the worker holds %v, want the worker the engine handed it", built.Names)
 	}
 }
 
@@ -394,7 +394,7 @@ func TestSupervisedJiraEnvRendersOneCredentialShape(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	// A bundle carrying both: the connector package prefers the Data Center token.
+	// A bundle carrying both: the connector/jira package prefers the Data Center token.
 	t.Setenv("ATLAS_CONNECTOR_JIRA_BOTH_TOKEN", `{"email":"bot@acme.example","apiToken":"t0ken","token":"pat"}`)
 
 	env := envOf(t, srv.jiraWorkerEnv())
@@ -409,9 +409,9 @@ func TestSupervisedJiraEnvRendersOneCredentialShape(t *testing.T) {
 	}
 }
 
-// The api-side jiraCredentials and the connector package's own unexported bundle type
+// The api-side jiraCredentials and the connector/jira package's own unexported bundle type
 // are two spellings of one vault contract. Reflection cannot see across that boundary,
-// so the check is behavioural: what this package writes, the connector package must
+// so the check is behavioural: what this package writes, the connector/jira package must
 // accept — in both shapes, and neither must be silently ignored.
 func TestJiraBundleShapeMatchesTheConnector(t *testing.T) {
 	for _, tc := range []struct {
@@ -429,7 +429,7 @@ func TestJiraBundleShapeMatchesTheConnector(t *testing.T) {
 			if _, err := jira.NewProviderClient(jira.ProviderConfig{
 				Endpoint: "https://acme.atlassian.net", Secret: string(raw),
 			}); err != nil {
-				t.Fatalf("the connector package rejected a bundle this package writes (%s): %v", raw, err)
+				t.Fatalf("the connector/jira package rejected a bundle this package writes (%s): %v", raw, err)
 			}
 			// And the same bytes must survive the parse this package does of them.
 			if _, ok := jiraBundleParse(string(raw)); !ok {
@@ -462,7 +462,7 @@ func TestJiraBundleParseRefusesEverythingButTheTwoShapes(t *testing.T) {
 
 // A Jira instance an operator set on the host is inherited by a supervised child as it
 // stands, so nothing is rendered for it — but its name must survive into the list, or a
-// store connector's CONNECTORS would silently take the host's instance away from it.
+// store worker's CONNECTORS would silently take the host's instance away from it.
 func TestSupervisedJiraEnvKeepsAHostConfiguredInstance(t *testing.T) {
 	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
 	t.Setenv(jiraConnectorsEnv, "onthehost")
@@ -486,7 +486,7 @@ func TestSupervisedJiraEnvKeepsAHostConfiguredInstance(t *testing.T) {
 	}
 }
 
-// Two connector names that fold to one environment variable would silently give one of
+// Two worker names that fold to one environment variable would silently give one of
 // them the other's credential — a worker authenticating to a Jira site as the wrong
 // Atlassian account. The second is left out and warned about instead, the same rule
 // mail and entra follow.
@@ -514,7 +514,7 @@ func TestSupervisedJiraEnvDropsAFoldingNameCollision(t *testing.T) {
 	// Whichever sorts first wins the variable; the point is that the loser's credential
 	// is not what the winner's name resolves to.
 	if env["ATLAS_JIRA_ACME_JIRA_URL"] != "https://first.atlassian.net" || env["ATLAS_JIRA_ACME_JIRA_TOKEN"] != "first" {
-		t.Errorf("url/token = %q/%q, want the first connector's own pair", env["ATLAS_JIRA_ACME_JIRA_URL"], env["ATLAS_JIRA_ACME_JIRA_TOKEN"])
+		t.Errorf("url/token = %q/%q, want the first worker's own pair", env["ATLAS_JIRA_ACME_JIRA_URL"], env["ATLAS_JIRA_ACME_JIRA_TOKEN"])
 	}
 	if strings.Contains(env[jiraConnectorsEnv], "acme_jira") {
 		t.Errorf("%s = %q, want the colliding second name left out rather than named with the first's credential",
@@ -522,9 +522,9 @@ func TestSupervisedJiraEnvDropsAFoldingNameCollision(t *testing.T) {
 	}
 }
 
-// A Jira connector the store cannot be read for hands over nothing rather than a
+// A Jira worker the store cannot be read for hands over nothing rather than a
 // partial list: a worker given half the instances would serve the other half's tasks
-// with "no connector registered", which reads as a configuration nobody made.
+// with "no worker registered", which reads as a configuration nobody made.
 func TestSupervisedJiraEnvSurvivesABrokenStore(t *testing.T) {
 	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
 	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
@@ -533,17 +533,17 @@ func TestSupervisedJiraEnvSurvivesABrokenStore(t *testing.T) {
 	}
 }
 
-// With no Jira connector in the store there is nothing to hand over, and CONNECTORS is
+// With no Jira worker in the store there is nothing to hand over, and CONNECTORS is
 // deliberately not rendered — writing it would hand a child an empty list that overrides
 // what it inherits.
 func TestSupervisedJiraEnvRendersNothingWithoutAStoreConnector(t *testing.T) {
 	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
 	if env := srv.jiraWorkerEnv(); len(env) != 0 {
-		t.Errorf("env = %v, want nothing rendered when no store connector contributes", env)
+		t.Errorf("env = %v, want nothing rendered when no store worker contributes", env)
 	}
 }
 
-// A Jira connector whose bundle does not resolve is left out entirely rather than
+// A Jira worker whose bundle does not resolve is left out entirely rather than
 // handed over half-filled: the worker refuses a *named* instance missing a field at
 // startup, which would take down every other kind it serves.
 func TestAnUnusableJiraConnectorIsNotHandedOver(t *testing.T) {
@@ -556,14 +556,14 @@ func TestAnUnusableJiraConnectorIsNotHandedOver(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 	if env := srv.jiraWorkerEnv(); len(env) != 0 {
-		t.Errorf("env = %v, want nothing handed over for a connector with no resolvable credential", env)
+		t.Errorf("env = %v, want nothing handed over for a worker with no resolvable credential", env)
 	}
 }
 
-// A connector whose credential bundle is missing, malformed, or half-filled is left
+// A worker whose credential bundle is missing, malformed, or half-filled is left
 // out entirely rather than handed over incomplete. The worker refuses a *named*
 // instance missing a field at startup — which would take down every other kind it
-// serves — so an unusable connector must not be named at all.
+// serves — so an unusable worker must not be named at all.
 func TestAnUnusableRemedyConnectorIsNotHandedOver(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	for _, c := range []connector{
@@ -583,11 +583,11 @@ func TestAnUnusableRemedyConnectorIsNotHandedOver(t *testing.T) {
 
 	env := envOf(t, srv.remedyWorkerEnv())
 	if len(env) != 0 {
-		t.Errorf("environment = %v, want nothing handed over: not one of these connectors is usable", env)
+		t.Errorf("environment = %v, want nothing handed over: not one of these workers is usable", env)
 	}
 }
 
-// A disabled connector is one an operator switched off. Handing it over would let a
+// A disabled worker is one an operator switched off. Handing it over would let a
 // worker keep filing tickets through it, which is the one thing switching it off means.
 func TestOnlyUsableRemedyConnectorsAreHandedOver(t *testing.T) {
 	srv, _ := newValidateServer(t)
@@ -604,7 +604,7 @@ func TestOnlyUsableRemedyConnectorsAreHandedOver(t *testing.T) {
 
 	env := envOf(t, srv.remedyWorkerEnv())
 	if got := env["ATLAS_REMEDY_CONNECTORS"]; got != "live" {
-		t.Errorf("ATLAS_REMEDY_CONNECTORS = %q, want only the enabled remedy connector", got)
+		t.Errorf("ATLAS_REMEDY_CONNECTORS = %q, want only the enabled remedy worker", got)
 	}
 	for _, name := range []string{"ATLAS_REMEDY_OFF_ENDPOINT", "ATLAS_REMEDY_ELSEWHERE_ENDPOINT"} {
 		if _, handed := env[name]; handed {
@@ -615,7 +615,7 @@ func TestOnlyUsableRemedyConnectorsAreHandedOver(t *testing.T) {
 
 // An instance an operator configured on the host keeps working when a Console one is
 // added: the child inherits its variables, and the rendered list is the union, so a
-// store connector does not silently take the whole list away from it.
+// store worker does not silently take the whole list away from it.
 func TestAHostConfiguredRemedyInstanceSurvivesAStoreOne(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	t.Setenv("ATLAS_REMEDY_CONNECTORS", "legacy")
@@ -635,7 +635,7 @@ func TestAHostConfiguredRemedyInstanceSurvivesAStoreOne(t *testing.T) {
 	}
 }
 
-// A connector name with no letter or digit in it folds to no variable name at all.
+// A worker name with no letter or digit in it folds to no variable name at all.
 // Rendered anyway it would become ATLAS_MAIL__ENDPOINT — a variable no operator could
 // ever set, and one the next such name would collide with.
 func TestAMailConnectorNameThatFoldsToNothingIsLeftOut(t *testing.T) {
@@ -676,7 +676,7 @@ func TestTwoRemedyConnectorsThatFoldToOneVariableDoNotShareACredential(t *testin
 	// Whichever one won, the account handed over is its own and not the other's.
 	want := map[string]string{"helix itsm": "svc-a", "helix-itsm": "svc-b"}[names[0]]
 	if got := env["ATLAS_REMEDY_HELIX_ITSM_USERNAME"]; got != want {
-		t.Errorf("username = %q, want %q — the surviving connector's own", got, want)
+		t.Errorf("username = %q, want %q — the surviving worker's own", got, want)
 	}
 }
 
@@ -806,11 +806,11 @@ func (b *lockedBuffer) String() string {
 	return b.buf.String()
 }
 
-// A connector store that cannot be read hands over nothing and says so, rather than
-// handing a worker a partial set of connectors or taking the server down.
+// A worker store that cannot be read hands over nothing and says so, rather than
+// handing a worker a partial set of workers or taking the server down.
 //
 // Every renderer is checked, because they each read the store separately and a new one
-// is easy to write without the guard: a worker spawned with half its connectors is
+// is easy to write without the guard: a worker spawned with half its workers is
 // worse than one spawned with none, since the missing half looks configured in the
 // Console and simply never serves.
 func TestAnUnreadableConnectorStoreRendersNothingForEveryKind(t *testing.T) {
@@ -844,11 +844,11 @@ func TestAnUnreadableConnectorStoreRendersNothingForEveryKind(t *testing.T) {
 		"entra":  {srv.entraWorkerEnv, "ATLAS_ENTRA_CONNECTORS"},
 		"ad":     {srv.adWorkerEnv, "ATLAS_AD_CONNECTORS"},
 	}
-	// Each renders its own connector while the store is readable, so "nothing" below is
+	// Each renders its own worker while the store is readable, so "nothing" below is
 	// a decision rather than an empty store.
 	for name, r := range renderers {
 		if envOf(t, r.render())[r.lists] == "" {
-			t.Fatalf("%s rendered no connector before the store broke", name)
+			t.Fatalf("%s rendered no worker before the store broke", name)
 		}
 	}
 
@@ -871,7 +871,7 @@ func TestAnUnreadableConnectorStoreRendersNothingForEveryKind(t *testing.T) {
 			}
 		})
 	}
-	// And it is said out loud: an operator whose workers quietly lost their connectors
+	// And it is said out loud: an operator whose workers quietly lost their workers
 	// has nothing else to go on.
 	if !strings.Contains(sink.String(), logging.WorkerSupervisorFailed.String()) {
 		t.Errorf("nothing was logged; the log was %q", sink.String())

@@ -30,9 +30,9 @@ func (r *fakeReader) VariablesOfScope(uint64, func(*model.VariableValue) error) 
 	return r.varsErr
 }
 
-// adProcessIDs builds a one-connector process and returns it with the connector node's
+// adProcessIDs builds a one-connector process and returns it with the worker node's
 // element id and the start event's, so a test can point a fake element instance at
-// either a real connector task or a non-connector node.
+// either a real task or a non-connector node.
 func adProcessIDs(t *testing.T, cfg compiler.AdConfig) (cp *compiler.CompiledProcess, connID, startID int32) {
 	t.Helper()
 	if cfg.Retries == 0 {
@@ -78,7 +78,7 @@ func TestAdHandlerNotAConnectorTask(t *testing.T) {
 	r := &fakeReader{ei: &model.ElementInstanceValue{ProcessDefKey: cp.Key, ElementId: startID}, eiOK: true}
 	h := ad.Handler(r, func(uint64) *compiler.CompiledProcess { return cp }, &fakeDialer{conn: &fakeConn{}}, noSecret, nil)
 	if _, err := h(job.Job{ElementInstanceKey: 1}); err == nil {
-		t.Fatal("want an error when the element is not a connector task")
+		t.Fatal("want an error when the element is not a task")
 	}
 }
 

@@ -13,11 +13,11 @@ import (
 )
 
 // ProcessLookup resolves a process-definition key to its compiled process. The
-// worker uses it to find the connector name, form, and field values a Remedy job
+// worker uses it to find the worker name, form, and field values a Remedy job
 // belongs to, so one handler serves every deployed process.
 type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
-// Handler builds a job handler that performs a BMC Remedy connector task in the
+// Handler builds a job handler that performs a BMC Remedy task in the
 // engine's own process. Register it with a [job.Runner] for the reserved
 // [compiler.RemedyJobTypeIndex] via HandleWithOutput; the runner then pulls
 // activatable Remedy jobs, and for each the handler resolves the task and creates the

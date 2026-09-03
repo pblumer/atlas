@@ -33,9 +33,9 @@ func TestPreviewClientDeliversToOutbox(t *testing.T) {
 	m := msgs[0]
 	switch {
 	case m.Connector != "preview":
-		t.Errorf("connector = %q, want %q", m.Connector, "preview")
+		t.Errorf("worker = %q, want %q", m.Connector, "preview")
 	case m.From != "bot@example.com":
-		t.Errorf("from = %q, want the connector's default sender", m.From)
+		t.Errorf("from = %q, want the worker's default sender", m.From)
 	case m.Subject != "Bestellung versandt":
 		t.Errorf("subject = %q", m.Subject)
 	case m.Seq != 1 || m.At == 0:
@@ -96,7 +96,7 @@ func TestPreviewRefusesWhatARealProviderRefuses(t *testing.T) {
 
 func TestPreviewClientWithoutOutboxFails(t *testing.T) {
 	if err := NewPreviewClient(nil, "preview", "bot@x").Send(context.Background(), previewMessage()); err == nil {
-		t.Error("want an error when the connector has no outbox")
+		t.Error("want an error when the worker has no outbox")
 	}
 }
 
@@ -169,7 +169,7 @@ func TestPreviewProviderBuildsThroughTheDispatch(t *testing.T) {
 		t.Fatalf("preview provider = %T, want *PreviewClient", c)
 	}
 	if _, err := NewProviderClient(ProviderConfig{Provider: ProviderPreview, Sender: "bot@x", Name: "trial"}); err == nil {
-		t.Error("a preview connector with no outbox built successfully, want an error")
+		t.Error("a preview worker with no outbox built successfully, want an error")
 	}
 }
 
@@ -188,6 +188,6 @@ func TestSMTPProviderNormalizesItsEndpoint(t *testing.T) {
 		t.Errorf("endpoint = %q, want the submission port filled in", sc.conn.Endpoint)
 	}
 	if _, err := NewProviderClient(ProviderConfig{Provider: ProviderSMTP, Endpoint: "", Sender: "bot@x"}); err == nil {
-		t.Error("an SMTP connector with no endpoint built successfully, want an error")
+		t.Error("an SMTP worker with no endpoint built successfully, want an error")
 	}
 }

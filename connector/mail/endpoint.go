@@ -24,9 +24,9 @@ const (
 // submission endpoint, but only one of them dials. Passing an endpoint without a port
 // straight through fails deep inside the send with "missing port in address", which
 // surfaces as an incident on a parked token hours after someone configured the
-// connector — the failure is real, but it arrives at the wrong time, to the wrong
+// worker — the failure is real, but it arrives at the wrong time, to the wrong
 // person, in the wrong words. Normalizing at the boundary turns three of those into a
-// working connector and the rest into a message at the moment of typing.
+// working worker and the rest into a message at the moment of typing.
 //
 // The rules, in order: an optional "smtp://" or "smtps://" scheme is consumed (smtps
 // selects implicit TLS, hence port 465); a path, query or fragment is dropped, so a

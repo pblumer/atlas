@@ -24,7 +24,7 @@ import (
 // A supervised worker is the one case where the engine also happens to *be* the
 // operator. It is this process's own child: same host, same user, started by the same
 // command line, and it already inherits this process's whole environment. So handing
-// it a connector's configuration through that environment is the operator setting the
+// it a worker's configuration through that environment is the operator setting the
 // worker up, done by the program instead of by hand — the secret goes neither over
 // the wire nor into a payload, and an `atlas worker` run by hand is configured
 // exactly the same way, from the same variables.
@@ -34,7 +34,7 @@ import (
 // the arrangement ADR-0168 is actually about.
 //
 // It also makes mail the first *managed* kind Atlas can offload by default: mail's
-// endpoint and password live in the connector store rather than the environment, and
+// endpoint and password live in the worker store rather than the environment, and
 // until the engine could hand them over, offloading mail meant handing every mail
 // task to a worker with no mailbox.
 
@@ -44,20 +44,20 @@ import (
 // channel is how the supervised path would quietly become the only tested one
 // (ADR-0157).
 const (
-	// mailConnectorsEnv lists the connector names this worker can send through.
+	// mailConnectorsEnv lists the worker names this worker can send through.
 	mailConnectorsEnv = "ATLAS_MAIL_CONNECTORS"
-	// mailOutboxURLEnv is where a preview connector delivers: this server's own
+	// mailOutboxURLEnv is where a preview worker delivers: this server's own
 	// outbox, over the API. A worker frames the message and posts it back, so the
 	// operator reads it in Operations › Outbox as if it had never left (ADR-0150).
 	mailOutboxURLEnv = "ATLAS_MAIL_OUTBOX_URL"
 )
 
-// mailWorkerEnv renders this server's mail connectors as the environment a
+// mailWorkerEnv renders this server's mail workers as the environment a
 // supervised worker builds the identical clients from. It is re-read on every spawn,
-// so an operator who adds a connector in the Console and presses Restart in the
+// so an operator who adds a worker in the Console and presses Restart in the
 // Workers view has a worker that can send through it — without restarting Atlas.
 //
-// It reads the connector store and the vault, so it runs on the run-loop goroutine
+// It reads the worker store and the vault, so it runs on the run-loop goroutine
 // (their owner), like buildMailClients does.
 func (s *Server) mailWorkerEnv() []string {
 	var (
@@ -67,7 +67,7 @@ func (s *Server) mailWorkerEnv() []string {
 	s.do(func() {
 		recs, err := s.connectors.LoadAll()
 		if err != nil {
-			logging.Warn(logging.WorkerSupervisorFailed, "could not read the connector store for a supervised worker",
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the worker store for a supervised worker",
 				slog.String("error", err.Error()))
 			return
 		}
@@ -83,11 +83,11 @@ func (s *Server) mailWorkerEnv() []string {
 			}
 			// Two names that fold to the same variable would silently give one of them
 			// the other's credential, so the second is left out and said out loud. The
-			// worker then reports it as a connector it does not hold, and the Workers
+			// worker then reports it as a worker it does not hold, and the Workers
 			// view shows it among the names served nowhere (ADR-0168).
 			if first, dup := taken[key]; dup {
 				logging.Warn(logging.WorkerSupervisorFailed,
-					"two mail connectors share one environment name; the second is not handed to the supervised worker",
+					"two mail workers share one environment name; the second is not handed to the supervised worker",
 					slog.String("connector", c.Name), slog.String("collidesWith", first))
 				continue
 			}
@@ -106,11 +106,11 @@ func (s *Server) mailWorkerEnv() []string {
 	return env
 }
 
-// mailConnectorEnv is one connector's configuration as environment variables: exactly
+// mailConnectorEnv is one worker's configuration as environment variables: exactly
 // the fields [mail.ProviderConfig] is built from, so the worker's client and the
 // engine's are the same client built from the same values.
 //
-// The secret is written last and only when there is one, so a connector with no
+// The secret is written last and only when there is one, so a worker with no
 // credential does not hand the child an empty variable that looks like a configured
 // blank password.
 func mailConnectorEnv(key string, c connector, secret string) []string {
@@ -149,7 +149,7 @@ func mailProviderOf(c connector) string {
 func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 	return map[string]func() []string{
 		connectorKindMail: s.mailWorkerEnv,
-		// AD is not a managed kind — no connector record, no store entry — but its
+		// AD is not a managed kind — no worker record, no store entry — but its
 		// bind-password *reference* can resolve out of the vault, which a supervised
 		// worker cannot read either. So it is provisioned for the same reason mail
 		// is, and defaulting it without this would have moved every vault-backed AD
@@ -165,11 +165,11 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// connection string per configured database and nothing else
 		// (ADR-0188).
 		// Remedy is provisioned for exactly mail's reason: its base URL and service
-		// account live in the connector store and the vault (ADR-0106), so a supervised
+		// account live in the worker store and the vault (ADR-0106), so a supervised
 		// worker holding neither could serve no Remedy task at all.
 		connectorKindRemedy: s.remedyWorkerEnv,
 		// Jira is provisioned for exactly Remedy's reason: its site URL and credential
-		// live in the connector store and the vault (ADR-0201), so a supervised worker
+		// live in the worker store and the vault (ADR-0201), so a supervised worker
 		// holding neither could serve no Jira task at all.
 		connectorKindJira:     s.jiraWorkerEnv,
 		connectorKindPostgres: func() []string { return s.sqlWorkerEnvByName(connectorKindPostgres) },
@@ -188,7 +188,7 @@ const (
 // entraWorkerEnv renders the client secrets a supervised Entra worker needs out of the
 // vault, one variable per tenant this process's environment names in ATLAS_ENTRA_CONNECTORS.
 //
-// It is the AD story with a connector name in place of a bind-secret reference. The
+// It is the AD story with a worker name in place of a bind-secret reference. The
 // Entra worker is worker-only (ADR-0172): it reads ATLAS_ENTRA_<NAME>_TENANT_ID,
 // _CLIENT_ID and _CLIENT_SECRET, and the engine never builds an Entra client. Tenant
 // and client id are not secret and reach a supervised child by inheriting this
@@ -242,7 +242,7 @@ func (s *Server) entraWorkerEnv() []string {
 		// them, it only hands them to its own supervised child at spawn.
 		recs, err := s.connectors.LoadAll()
 		if err != nil {
-			logging.Warn(logging.WorkerSupervisorFailed, "could not read the connector store for a supervised entra worker",
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the worker store for a supervised entra worker",
 				slog.String("error", err.Error()))
 			return
 		}
@@ -260,13 +260,13 @@ func (s *Server) entraWorkerEnv() []string {
 			// credential — the mail/AD collision, left out for the same reason.
 			if first, dup := taken[envKey]; dup {
 				logging.Warn(logging.WorkerSupervisorFailed,
-					"two entra connectors share one environment name; the second is not handed to the supervised worker",
+					"two entra workers share one environment name; the second is not handed to the supervised worker",
 					slog.String("connector", c.Name), slog.String("collidesWith", first))
 				continue
 			}
 			// A bundle that does not resolve (no secret set yet, or malformed) is left out
 			// rather than handed over half-filled: the worker then simply does not build
-			// that tenant, and the Console shows the connector as configured-not-working
+			// that tenant, and the Console shows the worker as configured-not-working
 			// instead of a token failing mid-run.
 			b, ok := entraBundleParse(s.resolveConnectorSecret(c.CredentialsRef))
 			if !ok {
@@ -296,7 +296,7 @@ func (s *Server) entraWorkerEnv() []string {
 }
 
 // entraBundle is the OAuth bundle an operator stores in the vault under an entra
-// connector's credentialsRef: the tenant id, client id and client secret together, so
+// worker's credentialsRef: the tenant id, client id and client secret together, so
 // the record itself holds no credential (ADR-0172). ok is false when the bundle is
 // absent or missing a field — the tenant is then left unconfigured rather than handed
 // over half-filled.
@@ -331,27 +331,27 @@ const (
 	remedyConnectorsEnv = remedyEnvPrefix + "CONNECTORS"
 )
 
-// remedyWorkerEnv renders this server's Remedy connectors as the environment a
+// remedyWorkerEnv renders this server's Remedy workers as the environment a
 // supervised worker builds the identical clients from: the AR System base URL and the
-// {username,password} bundle behind each connector's credentialsRef.
+// {username,password} bundle behind each worker's credentialsRef.
 //
 // It is mail's story with an ITSM instance in place of a mailbox (ADR-0106/0168). The
-// base URL and the service account live in the connector store and the vault, which a
+// base URL and the service account live in the worker store and the vault, which a
 // supervised worker can read no more than it can read the engine's memory — so
 // offloading Remedy without this would hand every Remedy task to a worker with no
 // instance to file against.
 //
-// A connector an operator configured on the host is left untouched and kept in the
+// A worker an operator configured on the host is left untouched and kept in the
 // rendered list: the child inherits ATLAS_REMEDY_<NAME>_* already, and dropping its
-// name would let a store connector silently take the whole list away from it.
+// name would let a store worker silently take the whole list away from it.
 //
-// It reads the connector store and the vault, so it runs on the run-loop goroutine
+// It reads the worker store and the vault, so it runs on the run-loop goroutine
 // (their owner, invariant I3), like buildRemedyClients does.
 func (s *Server) remedyWorkerEnv() []string {
 	var (
 		env       []string
 		names     []string
-		fromStore bool // a store connector contributed a name; only then must CONNECTORS be rendered
+		fromStore bool // a store worker contributed a name; only then must CONNECTORS be rendered
 	)
 	seen := map[string]bool{}
 	addName := func(n string) {
@@ -368,7 +368,7 @@ func (s *Server) remedyWorkerEnv() []string {
 	s.do(func() {
 		recs, err := s.connectors.LoadAll()
 		if err != nil {
-			logging.Warn(logging.WorkerSupervisorFailed, "could not read the connector store for a supervised remedy worker",
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the worker store for a supervised remedy worker",
 				slog.String("error", err.Error()))
 			return
 		}
@@ -386,17 +386,17 @@ func (s *Server) remedyWorkerEnv() []string {
 			// credential — the mail/entra collision, left out for the same reason.
 			if first, dup := taken[envKey]; dup {
 				logging.Warn(logging.WorkerSupervisorFailed,
-					"two remedy connectors share one environment name; the second is not handed to the supervised worker",
+					"two remedy workers share one environment name; the second is not handed to the supervised worker",
 					slog.String("connector", c.Name), slog.String("collidesWith", first))
 				continue
 			}
 			endpoint := strings.TrimSpace(c.Endpoint)
 			creds, ok := remedyBundleParse(s.resolveConnectorSecret(c.CredentialsRef))
-			// A connector with no endpoint, or whose bundle does not resolve (no secret
+			// A worker with no endpoint, or whose bundle does not resolve (no secret
 			// set yet, or malformed), is left out rather than handed over half-filled:
 			// the worker then refuses at startup on a *named* instance missing a field,
 			// which would take down every other kind it serves. Left out, it simply is
-			// not served, and the Console shows the connector as configured-not-working.
+			// not served, and the Console shows the worker as configured-not-working.
 			if endpoint == "" || !ok {
 				continue
 			}
@@ -410,7 +410,7 @@ func (s *Server) remedyWorkerEnv() []string {
 			fromStore = true
 		}
 	})
-	// Only a store connector needs CONNECTORS rendered: an operator who set it on the
+	// Only a store worker needs CONNECTORS rendered: an operator who set it on the
 	// host has it inherited by the child already. When the store does contribute,
 	// render the union so a host-named instance is not lost to the override.
 	if !fromStore {
@@ -419,7 +419,7 @@ func (s *Server) remedyWorkerEnv() []string {
 	return append(env, remedyConnectorsEnv+"="+strings.Join(names, ","))
 }
 
-// remedyBundleParse parses the vault bundle a remedy connector's credentialsRef names
+// remedyBundleParse parses the vault bundle a remedy worker's credentialsRef names
 // (ADR-0106): the AR System username and password together, so the record itself holds
 // no credential. ok is false when the bundle is absent, invalid JSON, or missing a
 // field — the instance is then left unconfigured rather than handed over half-filled,
@@ -447,33 +447,33 @@ const (
 	jiraConnectorsEnv = jiraEnvPrefix + "CONNECTORS"
 )
 
-// jiraWorkerEnv renders this server's Jira connectors as the environment a supervised
+// jiraWorkerEnv renders this server's Jira workers as the environment a supervised
 // worker builds the identical clients from: the site URL and, out of the vault bundle
-// behind each connector's credentialsRef, either the Cloud {email, apiToken} pair or a
+// behind each worker's credentialsRef, either the Cloud {email, apiToken} pair or a
 // Data Center personal access token.
 //
 // It is Remedy's story with an issue tracker in place of an AR System (ADR-0201/0168).
-// The site URL and the credential live in the connector store and the vault, which a
+// The site URL and the credential live in the worker store and the vault, which a
 // supervised worker can read no more than it can read the engine's memory — so
 // offloading Jira without this would hand every Jira task to a worker with no site to
 // file against.
 //
-// Exactly one credential shape is rendered per connector, chosen the way
+// Exactly one credential shape is rendered per worker, chosen the way
 // jira.NewProviderClient chooses it, so the supervised worker cannot end up talking to
 // a product the engine thinks it is not: the shape decides the authentication scheme,
 // how an assignee is addressed, and which search endpoint is used.
 //
-// A connector an operator configured on the host is left untouched and kept in the
+// A worker an operator configured on the host is left untouched and kept in the
 // rendered list: the child inherits ATLAS_JIRA_<NAME>_* already, and dropping its name
-// would let a store connector silently take the whole list away from it.
+// would let a store worker silently take the whole list away from it.
 //
-// It reads the connector store and the vault, so it runs on the run-loop goroutine
+// It reads the worker store and the vault, so it runs on the run-loop goroutine
 // (their owner, invariant I3), like buildJiraClients does.
 func (s *Server) jiraWorkerEnv() []string {
 	var (
 		env       []string
 		names     []string
-		fromStore bool // a store connector contributed a name; only then must CONNECTORS be rendered
+		fromStore bool // a store worker contributed a name; only then must CONNECTORS be rendered
 	)
 	seen := map[string]bool{}
 	addName := func(n string) {
@@ -490,7 +490,7 @@ func (s *Server) jiraWorkerEnv() []string {
 	s.do(func() {
 		recs, err := s.connectors.LoadAll()
 		if err != nil {
-			logging.Warn(logging.WorkerSupervisorFailed, "could not read the connector store for a supervised jira worker",
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the worker store for a supervised jira worker",
 				slog.String("error", err.Error()))
 			return
 		}
@@ -508,17 +508,17 @@ func (s *Server) jiraWorkerEnv() []string {
 			// credential — the mail/entra collision, left out for the same reason.
 			if first, dup := taken[envKey]; dup {
 				logging.Warn(logging.WorkerSupervisorFailed,
-					"two jira connectors share one environment name; the second is not handed to the supervised worker",
+					"two jira workers share one environment name; the second is not handed to the supervised worker",
 					slog.String("connector", c.Name), slog.String("collidesWith", first))
 				continue
 			}
 			endpoint := strings.TrimSpace(c.Endpoint)
 			creds, ok := jiraBundleParse(s.resolveConnectorSecret(c.CredentialsRef))
-			// A connector with no site, or whose bundle does not resolve (no secret set
+			// A worker with no site, or whose bundle does not resolve (no secret set
 			// yet, or neither shape), is left out rather than handed over half-filled:
 			// the worker then refuses at startup on a *named* instance missing a field,
 			// which would take down every other kind it serves. Left out, it simply is
-			// not served, and the Console shows the connector as configured-not-working.
+			// not served, and the Console shows the worker as configured-not-working.
 			if endpoint == "" || !ok {
 				continue
 			}
@@ -534,7 +534,7 @@ func (s *Server) jiraWorkerEnv() []string {
 			fromStore = true
 		}
 	})
-	// Only a store connector needs CONNECTORS rendered: an operator who set it on the
+	// Only a store worker needs CONNECTORS rendered: an operator who set it on the
 	// host has it inherited by the child already. When the store does contribute,
 	// render the union so a host-named instance is not lost to the override.
 	if !fromStore {
@@ -543,7 +543,7 @@ func (s *Server) jiraWorkerEnv() []string {
 	return append(env, jiraConnectorsEnv+"="+strings.Join(names, ","))
 }
 
-// jiraBundleParse parses the vault bundle a jira connector's credentialsRef names
+// jiraBundleParse parses the vault bundle a jira worker's credentialsRef names
 // (ADR-0201) and returns it reduced to the one shape that will be used. The precedence
 // is jira.NewProviderClient's — a Data Center token wins over a Cloud pair — so a
 // supervised worker is handed the same product the engine would have talked to rather
@@ -571,12 +571,12 @@ func jiraBundleParse(raw string) (jiraCredentials, bool) {
 // worker builds its registry from: ATLAS_AD_CONNECTORS naming them, and per name an
 // ATLAS_AD_<NAME>_URL, _BIND_DN and _PASSWORD out of the record and the vault bundle.
 //
-// "Locked" because it reads the connector store and the vault and must run on the run
+// "Locked" because it reads the worker store and the vault and must run on the run
 // loop; its caller is already inside s.do, so it does not open a second one.
 func (s *Server) adDirectoryEnvLocked() []string {
 	recs, err := s.connectors.LoadAll()
 	if err != nil {
-		logging.Warn(logging.WorkerSupervisorFailed, "could not read the connector store for a supervised ad worker",
+		logging.Warn(logging.WorkerSupervisorFailed, "could not read the worker store for a supervised ad worker",
 			slog.String("error", err.Error()))
 		return nil
 	}
@@ -599,7 +599,7 @@ func (s *Server) adDirectoryEnvLocked() []string {
 		// they are, and worse here: the credential opens a forest.
 		if first, dup := taken[envKey]; dup {
 			logging.Warn(logging.WorkerSupervisorFailed,
-				"two active directory connectors share one environment name; the second is not handed to the supervised worker",
+				"two active directory workers share one environment name; the second is not handed to the supervised worker",
 				slog.String("connector", c.Name), slog.String("collidesWith", first))
 			continue
 		}
@@ -627,7 +627,7 @@ func (s *Server) adDirectoryEnvLocked() []string {
 	return append(env, adConnectorsEnv+"="+strings.Join(names, ","))
 }
 
-// adCredentials is the vault bundle an AD connector's credentialsRef names: the
+// adCredentials is the vault bundle an AD worker's credentialsRef names: the
 // service account's DN and its password together, so the record holds neither
 // (ADR-0041 / I6). Both halves are required — a bind DN with no password is an
 // *anonymous* bind to Active Directory, which succeeds and then fails on permissions
@@ -759,7 +759,7 @@ func (s *Server) refreshSupervisedWorkers() {
 }
 
 // doAndRefresh runs a write on the run loop and then lets the supervised workers pick
-// up whatever it changed about them. Every path that can edit a connector or the
+// up whatever it changed about them. Every path that can edit a worker or the
 // secret behind one goes through it, so there is no route by which a change reaches
 // the engine's own registries and not the worker's.
 func (s *Server) doAndRefresh(fn func()) {
@@ -772,7 +772,7 @@ func (s *Server) doAndRefresh(fn func()) {
 // resolved through this server's vault or environment.
 //
 // AD is the kind that made this necessary. Every other provisioned kind is named by
-// a *connector record* an operator created, so the engine knows what to hand over by
+// a *worker record* an operator created, so the engine knows what to hand over by
 // reading its own store. An AD task names its own server and its own bind-password
 // reference (ADR-0166), so what has to travel is not a configuration but whichever
 // references the deployed models happen to make — which the engine knows because it
@@ -846,7 +846,7 @@ func (s *Server) adWorkerEnv() []string {
 					continue
 				}
 				// Two references that fold to one variable would silently give one of
-				// them the other's password — the same collision two mail connectors
+				// them the other's password — the same collision two mail workers
 				// can have, and left out for the same reason. The worker then fails
 				// that job naming the reference, which is the honest outcome.
 				if first, dup := taken[envKey]; dup {
@@ -878,7 +878,7 @@ func adSecretEnv(envKey, secret string) string {
 }
 
 // adBindSecretRefs returns the bind-password references a compiled process's AD
-// connector tasks name, in node order. A task that binds anonymously names none.
+// tasks name, in node order. A task that binds anonymously names none.
 func adBindSecretRefs(cp *compiler.CompiledProcess) []string {
 	var out []string
 	for id := int32(0); int(id) < cp.NodeCount(); id++ {

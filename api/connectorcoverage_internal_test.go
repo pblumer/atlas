@@ -9,11 +9,11 @@ import (
 	"testing"
 )
 
-// The Workers view's connector coverage: which connector names deployed models
+// The Workers view's worker coverage: which worker names deployed models
 // reference, and whether anything can actually serve them.
 //
 // Moving a credential onto a worker (ADR-0168) created a failure the engine can no
-// longer catch on its own. It used to refuse an unconfigured connector at lease
+// longer catch on its own. It used to refuse an unconfigured worker at lease
 // time, because it held every credential. Once a kind is offloaded it does not, so
 // the only way an operator learns that a name is configured *nowhere* is a job that
 // fails at a worker an hour later. These tests pin the answer arriving before that.
@@ -43,7 +43,7 @@ func coverage(t *testing.T, srv *Server) coverageResp {
 	return out
 }
 
-// A worker says which connector names it holds credentials for, and the view shows
+// A worker says which worker names it holds credentials for, and the view shows
 // them. This is the half only the worker knows — the engine cannot read another
 // process's environment.
 func TestAWorkerReportsTheConnectorNamesItHolds(t *testing.T) {
@@ -56,11 +56,11 @@ func TestAWorkerReportsTheConnectorNamesItHolds(t *testing.T) {
 	}
 	names := got.Workers[0].Connectors
 	if len(names) != 2 || names[0] != "internal-relay" || names[1] != "office365" {
-		t.Errorf("connectors = %v, want both names in a stable order", names)
+		t.Errorf("workers = %v, want both names in a stable order", names)
 	}
 }
 
-// The payoff: a connector a model references that no worker holds is named, with the
+// The payoff: a worker a model references that no worker holds is named, with the
 // processes that use it, so an operator can go and configure it somewhere.
 func TestTheViewNamesAConnectorNoWorkerHolds(t *testing.T) {
 	srv := mailPullSrv(t)
@@ -69,7 +69,7 @@ func TestTheViewNamesAConnectorNoWorkerHolds(t *testing.T) {
 
 	got := coverage(t, srv)
 	if len(got.Unserved) != 1 {
-		t.Fatalf("unserved connectors = %+v, want the one nothing can send through", got.Unserved)
+		t.Fatalf("unserved workers = %+v, want the one nothing can send through", got.Unserved)
 	}
 	u := got.Unserved[0]
 	if u.Name != "office365" {
@@ -83,21 +83,21 @@ func TestTheViewNamesAConnectorNoWorkerHolds(t *testing.T) {
 	}
 }
 
-// A connector a worker does hold is not reported as missing — otherwise the list
+// A worker a worker does hold is not reported as missing — otherwise the list
 // would be noise and an operator would stop reading it.
 func TestAConnectorAWorkerHoldsIsNotReportedMissing(t *testing.T) {
 	srv := mailPullSrv(t)
 	pullMail(t, srv, `{"type":"io.atlas.mail.send","worker":"mailer-1","connectors":["office365"]}`)
 
 	if got := coverage(t, srv); len(got.Unserved) != 0 {
-		t.Errorf("unserved = %+v, want none: a worker holds that connector", got.Unserved)
+		t.Errorf("unserved = %+v, want none: a worker holds that worker", got.Unserved)
 	}
 }
 
 // A kind the engine still serves itself is not reported either. The engine holds
 // every credential for a kind it has not offloaded, and ADR-0163's own machinery
 // already answers for those — reporting them here would say "missing" about a
-// connector that works.
+// worker that works.
 func TestAKindTheEngineStillServesIsNotReportedMissing(t *testing.T) {
 	// No offload: mail runs in the engine, as it does by default.
 	srv, _ := newValidateServer(t)
@@ -115,7 +115,7 @@ func TestAKindTheEngineStillServesIsNotReportedMissing(t *testing.T) {
 // broken" about a model that is fine. The next four tests pin which versions count.
 
 // A superseded version nothing is running on cannot create a job, so it has no
-// connector left to serve.
+// worker left to serve.
 func TestASupersededVersionWithNothingRunningIsNotReported(t *testing.T) {
 	srv, _ := newValidateServer(t, WithOffloadedConnectorKinds([]string{"mail"}))
 	deployNotify(t, srv, "office365")      // v1: the name nothing holds
@@ -128,7 +128,7 @@ func TestASupersededVersionWithNothingRunningIsNotReported(t *testing.T) {
 }
 
 // A superseded version an instance is still running on is reported, at its own
-// version. That instance's token reaches the connector task the old model wrote, so
+// version. That instance's token reaches the task the old model wrote, so
 // the gap is real and the version is the part that makes it findable.
 func TestASupersededVersionWithALiveInstanceIsReportedAtItsVersion(t *testing.T) {
 	srv, _ := newValidateServer(t, WithOffloadedConnectorKinds([]string{"mail"}))
@@ -152,7 +152,7 @@ func TestASupersededVersionWithALiveInstanceIsReportedAtItsVersion(t *testing.T)
 
 // An operator can pin a call activity to an exact version (ADR-0105), which makes
 // that version the live target of every call to the process id. It is not
-// superseded in any sense that matters, so its connectors still have to be served.
+// superseded in any sense that matters, so its workers still have to be served.
 func TestAVersionPinnedAsACallTargetIsReported(t *testing.T) {
 	srv, _ := newValidateServer(t, WithOffloadedConnectorKinds([]string{"mail"}))
 	deployNotify(t, srv, "office365")
@@ -200,8 +200,8 @@ func TestAnUnreadableOverrideSidecarFailsTheWorkersView(t *testing.T) {
 	}
 }
 
-// A connector authored as a FEEL expression (entra, ADR-0172) names no fixed
-// connector to check against what workers hold — the tenant is resolved from the
+// A worker authored as a FEEL expression (entra, ADR-0172) names no fixed
+// worker to check against what workers hold — the tenant is resolved from the
 // instance's variables at call time. It must not be listed as unserved (that would be
 // a false "= tenant" alarm), while a static name that nothing serves still is.
 func TestADynamicConnectorNameIsNotReportedUnserved(t *testing.T) {
@@ -218,11 +218,11 @@ func TestADynamicConnectorNameIsNotReportedUnserved(t *testing.T) {
 		names[u.Name] = true
 	}
 	if !names["contoso"] {
-		t.Errorf("static entra connector 'contoso' should be reported unserved; got %+v", got.Unserved)
+		t.Errorf("static entra worker 'contoso' should be reported unserved; got %+v", got.Unserved)
 	}
 	for n := range names {
 		if strings.HasPrefix(n, "=") {
-			t.Errorf("a dynamic (FEEL) connector name %q was reported unserved; it should be skipped", n)
+			t.Errorf("a dynamic (FEEL) worker name %q was reported unserved; it should be skipped", n)
 		}
 	}
 }
@@ -252,7 +252,7 @@ const entraCoverageModel = `<?xml version="1.0" encoding="UTF-8"?>
 </bpmn:definitions>`
 
 // mailPullSrv is a server that has offloaded mail and has the notify model deployed,
-// so its one mail connector task is leasable by an external worker.
+// so its one mail task is leasable by an external worker.
 func mailPullSrv(t *testing.T) *Server {
 	t.Helper()
 	srv, _ := newValidateServer(t, WithOffloadedConnectorKinds([]string{"mail"}))
@@ -266,7 +266,7 @@ func deployMailModel(t *testing.T, srv *Server) {
 	startNotify(t, srv, 1)
 }
 
-// deployNotify deploys one version of the notify model naming the given connector.
+// deployNotify deploys one version of the notify model naming the given worker.
 func deployNotify(t *testing.T, srv *Server, connector string) {
 	t.Helper()
 	code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments",
@@ -289,7 +289,7 @@ func startNotify(t *testing.T, srv *Server, defKey uint64) {
 }
 
 // pollWorker is a poll that need not come back with work: an idle worker still
-// reports the connectors it holds, and that is the half the coverage answer needs.
+// reports the workers it holds, and that is the half the coverage answer needs.
 func pollWorker(t *testing.T, srv *Server, body string) {
 	t.Helper()
 	if code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/jobs/activate", body, "application/json"); code != http.StatusOK {
@@ -314,9 +314,9 @@ func pullMail(t *testing.T, srv *Server, body string) {
 	}
 }
 
-// mailCoverageModel is the notify model, parameterized on the connector name so a
+// mailCoverageModel is the notify model, parameterized on the worker name so a
 // test can deploy a second version that points somewhere else — which is what a
-// corrected connector name looks like on a server that keeps every version.
+// corrected worker name looks like on a server that keeps every version.
 const mailCoverageModel = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">

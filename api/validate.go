@@ -66,7 +66,7 @@ func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 // as deploy warnings (ADR-0230, slice 3).
 //
 // They are warnings by construction and never a refusal, for the same reason a
-// connector reference that resolves to nothing is one (ADR-0158): a model is
+// worker reference that resolves to nothing is one (ADR-0158): a model is
 // routinely deployed before the vocabulary it names exists, and before the activity
 // that will write a datum has been drawn. The author is told at deploy rather than
 // by the first token to read a null.

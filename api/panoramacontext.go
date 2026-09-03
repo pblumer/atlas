@@ -34,7 +34,7 @@ import (
 //     key, so it can answer about a process and about the application whose
 //     processes those are. It carries a job's type only as an interned index — a
 //     number meaningless without this process's intern table — so it cannot answer
-//     about a connector or a job type at all.
+//     about a worker or a job type at all.
 //   - Metrics (ADR-0142) carry no per-element labels by deliberate design: that
 //     record forbids labelling by process id, instance key, or any other value the
 //     data can invent, because one such label turns a metric into unboundedly many
@@ -223,7 +223,7 @@ func (s *Server) metricInstanceFor(query panorama.ContextQuery) (instance, reaso
 	}
 	return "", "Atlas's metrics carry no per-element labels by design, so a metrics " +
 		"store can answer about a node and never about one process, application, " +
-		"connector or release."
+		"worker or release."
 }
 
 // hostOfRuntime finds the address of a peer that reported this runtime id, from the
@@ -271,7 +271,7 @@ func contextUnidentifiableReason(key string) string {
 	case panorama.KeyConnectorID, panorama.KeyJobType:
 		return "The event log stores a job's type as an interned index — a number that " +
 			"means nothing outside the process that wrote it — so it cannot be asked " +
-			"about a connector or a job type."
+			"about a worker or a job type."
 	case panorama.KeyRuntimeID, panorama.KeyDeploymentTargetID:
 		return "The event log is this node's own history and carries no node identity, " +
 			"so it cannot be asked about a runtime or a deployment target. A metrics " +

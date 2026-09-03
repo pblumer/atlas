@@ -77,7 +77,7 @@ func Items(res Result) []any {
 // interprets them.
 func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey uint64) (Job, error) {
 	if detail == nil {
-		return Job{}, fmt.Errorf("webscrape: connector task has no detail")
+		return Job{}, fmt.Errorf("webscrape: task has no detail")
 	}
 	scopeVars, err := state.VisibleVariablesMap(store, elementInstanceKey)
 	if err != nil {

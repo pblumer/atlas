@@ -1020,7 +1020,7 @@ func decodeVariable(raw []byte, fn func(v *model.VariableValue) error) error {
 // reading a root instance are unaffected.
 //
 // It is the [Reader]-level [VisibleVariables] under a name that reads better at a
-// call site holding a *Store; the walk itself lives there, shared with the connector
+// call site holding a *Store; the walk itself lives there, shared with the worker
 // workers.
 func (s *Store) VisibleVariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
 	return VisibleVariables(s, scope, fn)

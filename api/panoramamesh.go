@@ -57,7 +57,7 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama
 		ovByPID[rec.CalledProcessID] = rec
 	}
 
-	// Configured workers still live in the connector store, whose record still spells
+	// Configured workers still live in the worker store, whose record still spells
 	// the Worker Type Kind — names ADR-0203 leaves in place until the packages move.
 	// What the mesh emits is Worker vocabulary.
 	confWorkers, err := s.connectors.LoadAll()
@@ -223,7 +223,7 @@ func (s *Server) observeLandscapeTargets(ctx context.Context, peers []remoteTarg
 // configured" nodes on the landscape:
 //
 //   - a reference whose job type no managed Worker Type claims is not a worker
-//     reference at all (a local decision names its connector field the same way); and
+//     reference at all (a local decision names its worker field the same way); and
 //   - a name authored as a FEEL expression (entra, ADR-0172) names no fixed worker —
 //     which one it reaches is known only at call time, so there is nothing on this
 //     server to resolve it against.

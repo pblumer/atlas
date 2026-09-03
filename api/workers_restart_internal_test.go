@@ -130,7 +130,7 @@ func TestWorkersViewReportsNoSupervisedWorkersAsAnEmptyList(t *testing.T) {
 }
 
 // A worker holding a configuration that has since changed is restarted, because an
-// operator who edits a mail connector in the Console means for it to take effect. The
+// operator who edits a mail worker in the Console means for it to take effect. The
 // engine's own registries are rebuilt in place; a worker's cannot be, so cycling it
 // is what "rebuild" means out there.
 func TestAWorkerWhoseConfigurationChangedIsRestarted(t *testing.T) {
@@ -158,7 +158,7 @@ func TestAWorkerWhoseConfigurationChangedIsRestarted(t *testing.T) {
 	first := sup.list()[0].Starts
 
 	// Nothing changed: refreshing must not cycle a healthy worker, or every unrelated
-	// connector edit would cost a restart.
+	// worker edit would cost a restart.
 	srv.refreshSupervisedWorkers()
 	if got := sup.list()[0].Starts; got != first {
 		t.Errorf("starts = %d after an unchanged refresh, want %d", got, first)

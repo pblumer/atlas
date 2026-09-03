@@ -8,14 +8,14 @@ import (
 	"strings"
 )
 
-// The text-table formats this connector reads and writes (ADR-0139, amended).
+// The text-table formats this worker reads and writes (ADR-0139, amended).
 //
 // All three describe the same thing — a table of records in a text file — and differ
 // only in how a record is delimited and how a field is found inside it. So they share
 // the [Column] layout, the type coercion, and everything downstream: what a process
 // gets back is a list of row objects whichever format the file arrived in.
 //
-// They are formats of one connector rather than three connectors for the same
+// They are formats of one worker rather than three workers for the same
 // reason: unlike the SQL products (ADR-0173), nothing here can be pointed at the
 // wrong one silently. A fixed-width layout applied to an LDIF file does not quietly
 // produce plausible rows; it fails on the first record, loudly, at the moment the
@@ -36,7 +36,7 @@ const (
 // say what was expected.
 func Formats() []string { return []string{FormatAVP, FormatCSV, FormatFixedWidth} }
 
-// KnownFormat reports whether name is a format this connector handles. The empty
+// KnownFormat reports whether name is a format this worker handles. The empty
 // string is CSV, which is what every model authored before formats existed.
 func KnownFormat(name string) bool {
 	switch name {
@@ -112,7 +112,7 @@ func renderColumns(cfg Config, rows []map[string]any) []Column {
 
 // parseFixedWidth splits each line by the configured column widths. A line shorter
 // than the layout yields empty cells for the columns past its end rather than an
-// error: a ragged export is dirty data, which this connector passes through to be
+// error: a ragged export is dirty data, which this worker passes through to be
 // validated downstream, exactly as a ragged CSV row is.
 func parseFixedWidth(cfg Config, data []byte) ([]map[string]any, error) {
 	if len(cfg.Columns) == 0 {
@@ -255,7 +255,7 @@ func renderCSV(cfg Config, cols []Column, rows []map[string]any) (string, error)
 // renderFixedWidth pads each cell to its column's width.
 //
 // A value longer than its column is **truncated**, which is the one place this
-// connector loses data on purpose: a fixed-width file has no way to express a wider
+// worker loses data on purpose: a fixed-width file has no way to express a wider
 // field, so the alternatives are a corrupt file whose columns no longer line up, or
 // refusing to write a record because a display name is long. Truncation is what every
 // producer of these files does, and it is at least visible in the output.

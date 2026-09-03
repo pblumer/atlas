@@ -2,10 +2,10 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Atlas connector delete e2e harness</title>
-    <!-- Drives the real api/web/connectordialog.js delete flow against a mock `api`
+    <title>Atlas worker delete e2e harness</title>
+    <!-- Drives the real api/web/workerdialog.js delete flow against a mock `api`
          that answers a plain DELETE the way the server does (ADR-0163): 409 with the
-         deployed processes that reference the connector, until ?force=true. The page
+         deployed processes that reference the worker, until ?force=true. The page
          scaffolding is the test's own — app.js boots the whole console on import and
          cannot be loaded here — so this proves the flow and the row's usage line, not
          app.js's wiring of them. -->
@@ -20,7 +20,7 @@
       <button class="btn danger" id="del-orphan">Delete orphan</button>
     </div>
     <script type="module">
-      import { connectorUsageHTML, openConnectorUsage, deleteConnectorFlow } from "/connectordialog.js";
+      import { workerUsageHTML, openWorkerUsage, deleteWorkerFlow } from "/workerdialog.js";
 
       const REFERENCED = {
         id: "c1", name: "Patrick Blumer", kind: "mail",
@@ -44,28 +44,28 @@
         ],
       };
 
-      document.getElementById("usage-referenced").innerHTML = connectorUsageHTML(REFERENCED.usedBy);
-      document.getElementById("usage-orphan").innerHTML = connectorUsageHTML(ORPHAN.usedBy);
-      document.getElementById("usage-many").innerHTML = connectorUsageHTML(MANY.usedBy);
+      document.getElementById("usage-referenced").innerHTML = workerUsageHTML(REFERENCED.usedBy);
+      document.getElementById("usage-orphan").innerHTML = workerUsageHTML(ORPHAN.usedBy);
+      document.getElementById("usage-many").innerHTML = workerUsageHTML(MANY.usedBy);
 
       // The row's count is a button; the list it stands for is the dialog behind it.
-      // app.js wires that click on the connector table; here it is wired by hand, on
-      // the same markup connectorUsageHTML produces.
-      for (const [id, connector] of [["usage-referenced", REFERENCED], ["usage-many", MANY]]) {
+      // app.js wires that click on the worker table; here it is wired by hand, on
+      // the same markup workerUsageHTML produces.
+      for (const [id, worker] of [["usage-referenced", REFERENCED], ["usage-many", MANY]]) {
         document.getElementById(id).querySelector("[data-usage]")
-          .addEventListener("click", () => openConnectorUsage({ connector }));
+          .addEventListener("click", () => openWorkerUsage({ worker }));
       }
 
       window.__deletes = [];   // every DELETE the flow issued, in order
       window.__result = null;  // what the flow resolved to
 
-      // The mock server: a referenced connector refuses a plain DELETE with the same
+      // The mock server: a referenced worker refuses a plain DELETE with the same
       // 409 body the real handler sends, and honours ?force=true.
       const api = async (method, url) => {
         window.__deletes.push(url);
         if (method !== "DELETE") return {};
         if (url.startsWith("/api/v1/connectors/c1") && !url.includes("force=true")) {
-          const err = new Error("connector is referenced by deployed processes; delete with ?force=true to remove it anyway");
+          const err = new Error("worker is referenced by deployed processes; delete with ?force=true to remove it anyway");
           err.status = 409;
           err.body = { error: err.message, usedBy: REFERENCED.usedBy };
           throw err;
@@ -73,9 +73,9 @@
         return null;
       };
 
-      const run = (connector) => async () => {
+      const run = (worker) => async () => {
         window.__deletes = [];
-        window.__result = await deleteConnectorFlow({ api, connector });
+        window.__result = await deleteWorkerFlow({ api, worker });
       };
       document.getElementById("del-referenced").addEventListener("click", run(REFERENCED));
       document.getElementById("del-orphan").addEventListener("click", run(ORPHAN));

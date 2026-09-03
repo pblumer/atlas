@@ -206,7 +206,7 @@ func TestAChildThatExitsCleanlyIsStillAFailure(t *testing.T) {
 // A worker with nothing to serve is parked, not restarted. Before the default
 // supervised one worker per kind this could not happen — a combined worker always had
 // the other kinds to serve — and with it, a mail worker on a server whose operator has
-// not configured a mail connector yet would restart forever on a backoff, filling the
+// not configured a mail worker yet would restart forever on a backoff, filling the
 // console with red for an ordinary state.
 func TestAWorkerWithNothingToServeIsParkedRatherThanRestarted(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {

@@ -1,7 +1,7 @@
 {
   "tags": [
     "Operations",
-    "Connectors"
+    "Workers"
   ],
   "summary": {
     "en": "When a step that calls an external system (a \"connector\", e.g. sending mail) gets stuck, Atlas now tells you the real reason — disabled, misconfigured, or a missing credential — instead of one confusing message.",
