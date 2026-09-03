@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Operations",
+    "Modeler"
+  ],
+  "title": {
+    "en": "A reminder attached to a task now fires every time, not just the first",
+    "de": "Eine Erinnerung an einer Aufgabe feuert jetzt jedes Mal, nicht nur beim ersten Mal"
+  },
+  "summary": {
+    "en": "A non-interrupting boundary event is how a model says remind me: it fires beside a running task and leaves the task running. On a timer that repeats it already fired on every occurrence — but on a message or a signal it fired once and then stopped listening, so the second message matched nothing at all: no incident, no log line, and no way for the sender to tell. It now stays armed for as long as its task runs, and every message takes the reminder branch again. A model that only ever expected to hear the first one will now hear them all; an interrupting event, or a condition on the reminder branch, is how you ask for exactly one.",
+    "de": "Ein nicht-unterbrechendes Boundary-Ereignis ist die Art, wie ein Modell «erinnere mich» sagt: Es feuert neben einer laufenden Aufgabe und lässt sie weiterlaufen. Bei einem wiederkehrenden Timer tat es das schon bisher bei jedem Mal — bei einer Nachricht oder einem Signal dagegen genau einmal, danach hörte es auf zuzuhören: Die zweite Nachricht traf auf nichts, ohne Incident, ohne Logzeile und ohne dass der Absender es hätte merken können. Es bleibt jetzt scharf, solange seine Aufgabe läuft, und jede Nachricht nimmt den Erinnerungszweig erneut. Ein Modell, das nur die erste erwartet hat, hört nun alle; wer genau eine will, nimmt ein unterbrechendes Ereignis oder eine Bedingung auf dem Erinnerungszweig."
+  }
+}
