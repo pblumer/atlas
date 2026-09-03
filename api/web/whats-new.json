@@ -321,24 +321,6 @@
         },
         "route": "#/operations"
       }
-    },
-    {
-      "id": "a-class-s-attributes-can-be-put-in-the-order-you-want-to-rea",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A class's attributes can be put in the order you want to read them in.",
-        "de": "A class's attributes can be put in the order you want to read them in."
-      },
-      "summary": {
-        "en": "Grab a row by its grip and move it, or press Alt+↑ / Alt+↓ in the field you are editing.",
-        "de": "Grab a row by its grip and move it, or press Alt+↑ / Alt+↓ in the field you are editing."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
     }
   ]
 }
