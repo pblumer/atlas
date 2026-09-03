@@ -173,6 +173,10 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// account live in the worker store and the vault (ADR-0106), so a supervised
 		// worker holding neither could serve no Remedy task at all.
 		connectorKindRemedy: s.remedyWorkerEnv,
+		// clio is Remedy's shape with an event store in place of an ITSM instance
+		// (ADR-0036): the base endpoint is in the connector store and the token in the
+		// vault, so a supervised worker holding neither could serve no clio task.
+		connectorKindClio: s.clioWorkerEnv,
 		// Jira is provisioned for exactly Remedy's reason: its site URL and credential
 		// live in the worker store and the vault (ADR-0201), so a supervised worker
 		// holding neither could serve no Jira task at all.
@@ -331,6 +335,99 @@ func entraBundleParse(raw string) (entraBundle, bool) {
 // same names an operator sets by hand for an external worker (there is no private
 // channel, ADR-0157). remedyEnvPrefix matches the worker's own constant of the same
 // name; TestSupervisedRemedyEnvUsesTheWorkersOwnNames holds the two together.
+// Environment a supervised clio worker reads its event stores from — the same names
+// an operator sets by hand for an external worker (there is no private channel,
+// ADR-0157). clioEnvPrefix matches the worker's own constant of the same name;
+// TestSupervisedClioEnvUsesTheWorkersOwnNames holds the two together.
+const (
+	clioEnvPrefix     = "ATLAS_CLIO_"
+	clioConnectorsEnv = clioEnvPrefix + "CONNECTORS"
+)
+
+// clioWorkerEnv renders this server's clio connectors as the environment a supervised
+// worker builds the identical clients from: each instance's base endpoint and, where
+// one is configured, the bearer token behind its credentialsRef.
+//
+// It is Remedy's story with an event store in place of an ITSM instance
+// (ADR-0036/0168). One difference is deliberate: a connector with no token is still
+// rendered. clio may be reached without one — a store an operator runs beside Atlas —
+// and dropping such a connector would leave a working instance unserved, where Remedy
+// without a password is simply not configured.
+//
+// A connector an operator configured on the host is left untouched and kept in the
+// rendered list: the child inherits ATLAS_CLIO_<NAME>_* already, and dropping its name
+// would let a store connector silently take the whole list away from it.
+//
+// It reads the connector store and the vault, so it runs on the run-loop goroutine
+// (their owner, invariant I3), like buildClioClients does.
+func (s *Server) clioWorkerEnv() []string {
+	var (
+		env       []string
+		names     []string
+		fromStore bool // a store connector contributed a name; only then must CONNECTORS be rendered
+	)
+	seen := map[string]bool{}
+	addName := func(n string) {
+		if n = strings.TrimSpace(n); n != "" && !seen[n] {
+			seen[n] = true
+			names = append(names, n)
+		}
+	}
+	// Stores an operator set directly on the host: inherited by the child as they are,
+	// so nothing is rendered for them — they are only kept in the list below.
+	for _, name := range splitConnectorList(os.Getenv(clioConnectorsEnv)) {
+		addName(name)
+	}
+	s.do(func() {
+		recs, err := s.connectors.LoadAll()
+		if err != nil {
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the connector store for a supervised clio worker",
+				slog.String("error", err.Error()))
+			return
+		}
+		sort.Slice(recs, func(i, j int) bool { return recs[i].Name < recs[j].Name })
+		taken := map[string]string{}
+		for _, c := range recs {
+			if c.Kind != connectorKindClio || !c.Enabled {
+				continue
+			}
+			envKey := connectorEnvKey(c.Name)
+			if envKey == "" {
+				continue
+			}
+			// Two names that fold to one variable would silently give one the other's
+			// token — the mail/remedy collision, left out for the same reason.
+			if first, dup := taken[envKey]; dup {
+				logging.Warn(logging.WorkerSupervisorFailed,
+					"two clio connectors share one environment name; the second is not handed to the supervised worker",
+					slog.String("connector", c.Name), slog.String("collidesWith", first))
+				continue
+			}
+			endpoint := strings.TrimSpace(c.Endpoint)
+			if endpoint == "" {
+				// Nothing to reach: left out rather than handed over half-filled, so the
+				// worker starts and the Console shows the connector as configured-not-working.
+				continue
+			}
+			taken[envKey] = c.Name
+			key := clioEnvPrefix + envKey + "_"
+			env = append(env, key+"ENDPOINT="+endpoint)
+			if token := strings.TrimSpace(s.resolveConnectorSecret(c.CredentialsRef)); token != "" {
+				env = append(env, key+"TOKEN="+token)
+			}
+			addName(c.Name)
+			fromStore = true
+		}
+	})
+	// Only a store connector needs CONNECTORS rendered: an operator who set it on the
+	// host has it inherited by the child already. When the store does contribute,
+	// render the union so a host-named store is not lost to the override.
+	if !fromStore {
+		return nil
+	}
+	return append(env, clioConnectorsEnv+"="+strings.Join(names, ","))
+}
+
 const (
 	remedyEnvPrefix     = "ATLAS_REMEDY_"
 	remedyConnectorsEnv = remedyEnvPrefix + "CONNECTORS"
