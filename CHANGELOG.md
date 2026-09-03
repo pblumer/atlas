@@ -14,22 +14,33 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
-- **A widened Properties column in the form editor gave its width to white space, not
-  to the panel.** The Design tab's side columns are resizable — our own affordance on
-  top of the vendored form-js Playground ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)) —
-  and the drag sets the width of the *column*. But form-js pins the properties panel
-  inside that column to a fixed `--properties-panel-width: 250px`. So an author who
-  pulled the divider left to get room for a long FEEL expression got a 510px column
-  holding a 250px panel, and 260px of blank white between the panel and the window's
-  right edge, which stayed there across sessions because the width is remembered. The
-  mirror case was worse and quieter: dragged narrower than 250px, the panel was clipped
-  by the column rather than shrunk with it, so the rightmost part of every property row
-  was simply not reachable.
+- **The form editor's side columns gave their width to white space, not to what they
+  hold.** The Design tab's Components palette and Properties column are resizable — our
+  own affordance on top of the vendored form-js Playground
+  ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)) — and the drag sets the width of
+  the *column*. But form-js pins what sits inside each one to a fixed width:
+  `--properties-panel-width: 250px` for the panel, `--palette-width: 270px` for the
+  palette, with its tile grid fixed at 236px inside that. So an author who pulled a
+  divider to get room for a long FEEL expression got a 510px column holding a 250px
+  panel and 260px of blank white beside it, and that stayed across sessions because the
+  width is remembered. The mirror case was worse and quieter: dragged narrower than the
+  pinned width, the contents were clipped by the column rather than shrunk with it, so
+  the far end of every property row was simply not reachable.
 
-  The panel now follows the column it lives in. The palette on the other side always
-  did — its content is fluid — which is why only one of the two columns showed it.
-  `e2e/form-side-columns.spec.mjs` holds the outcome at the default width, after a real
-  drag, for a width a previous session saved, and with the column collapsed to its rail.
+  The palette had the narrow case **out of the box**, with no drag involved. The width a
+  column opens with is measured off the rendered column, the palette renders a frame
+  later than that measurement, and the fallback standing in for it was 200px against a
+  palette form-js draws at 270 — so the Components list opened 70px too narrow, with the
+  third tile of every row (Number, File picker, Radio group, Table, Spacer) cut in half
+  by the column's own edge and reachable only through a horizontal scrollbar. The
+  fallbacks are now each vendor's own width for the column, which is what the
+  measurement agrees with once it succeeds.
+
+  What a column holds now follows the column. For the palette that also means the tiles
+  reflow — one per row in a narrow column, five in a wide one — rather than staying
+  three abreast beside an empty strip. `e2e/form-side-columns.spec.mjs` holds the
+  outcome for both columns: at the width each opens with, after a real pointer drag, for
+  a width a previous session saved, and with the properties column collapsed to its rail.
 
 ### Changed
 

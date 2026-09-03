@@ -2221,6 +2221,20 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
    grows a white strip beside the panel instead of the panel, and dragging it narrower
    clips the panel instead of shrinking it — so let the panel follow its column. */
 #pane-design .fjs-pgl-properties-container .fjs-properties-container { width: 100%; min-width: 0; }
+/* The palette is the same story on the other side, with one turn more: form-js pins
+   .fjs-palette-container to --palette-width (270px) and the tile grid inside it to a
+   fixed 236px — three 72px tiles per row — so the column's width never reached the
+   palette either. Dragged wider it left the same white strip; at the width the column
+   opens with it was the mirror case, the third tile of every row cut off by the
+   column's edge. Let both follow the column: .fjs-palette-fields already wraps, so the
+   tiles reflow to as many per row as the width allows. The gutter stays a max-width
+   rather than a fixed margin because three 72px tiles need 236 of the column's 270 and
+   the entries list can put a scrollbar in the rest: a fixed gutter wide enough to look
+   right is also wide enough to drop the third tile to the next row. */
+#pane-design .fjs-pgl-palette-container .fjs-palette-container { width: 100%; min-width: 0; }
+#pane-design .fjs-pgl-palette-container .fjs-palette-group {
+  width: auto; max-width: calc(100% - 16px); margin: 0 auto;
+}
 #pane-design .fv-rail { width: 0 !important; min-width: 0 !important; overflow: hidden; }
 #pane-design .fv-railbtn {
   position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 8;

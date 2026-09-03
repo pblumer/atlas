@@ -642,7 +642,12 @@ function enhanceDesignLayout(container) {
   const palette = rootEl.querySelector(":scope > .fjs-pgl-palette-container");
   const props = rootEl.querySelector(":scope > .fjs-pgl-properties-container");
   const sane = (el, def) => { const w = el ? Math.round(el.getBoundingClientRect().width) : 0; return w > 50 ? w : def; };
-  const paletteW0 = sane(palette, 200);
+  // The fallbacks are each vendor's own width for the column — --palette-width and
+  // the properties container's 250px — because that is what the measurement above
+  // reads once form-js has rendered, and what it must agree with when it has not:
+  // the palette renders a frame later than this capture, so a fallback of its own
+  // invention is simply a wrong width the column then keeps.
+  const paletteW0 = sane(palette, 270);
   const propsW0 = sane(props, 250);
 
   // Reshape main into a vertical stack of two regions: the editor with an optional

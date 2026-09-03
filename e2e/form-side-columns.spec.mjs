@@ -3,14 +3,22 @@
 //
 // The Design tab lets an author widen the Components palette and the Properties column
 // with a drag (ADR-0028's editor, our own affordance on top of the vendored form-js
-// Playground). The palette followed its column; the properties panel did not. form-js
-// pins the panel inside the column to a fixed `--properties-panel-width: 250px`, so
-// dragging the column wider only grew an empty white strip between the panel and the
-// window's right edge — the column got the width, the panel it exists to hold did not —
-// and dragging it narrower clipped the panel instead of shrinking it.
+// Playground). Neither column passed its width on to what it holds. form-js pins the
+// properties panel to `--properties-panel-width: 250px` and the palette to
+// `--palette-width: 270px`, with the tile grid inside the palette fixed at 236px, so
+// dragging a column wider only grew an empty white strip beside its contents — the
+// column got the width, the thing it exists to hold did not — and dragging it narrower
+// clipped those contents instead of shrinking them.
 //
-// These tests hold the outcome: the panel is exactly as wide as its column, at the
-// default width, after a drag, and for the width a previous session left behind.
+// The palette had the narrow case out of the box: the width it opens with is captured
+// from the rendered column, the palette renders a frame later than that capture, and
+// the fallback that stood in was 200px against a palette form-js draws at 270 — so the
+// third tile of every row was cut off by the column's own edge before anyone touched a
+// divider.
+//
+// These tests hold the outcome for both columns: what a column holds is exactly as wide
+// as the column, at the width it opens with, after a drag, and for a width a previous
+// session left behind.
 import { test, expect } from "@playwright/test";
 
 test.use({ viewport: { width: 1400, height: 900 } });
@@ -110,5 +118,56 @@ test("collapsing the properties column leaves no gap at the right edge", async (
   const mainRight = await page.evaluate(() =>
     Math.round(document.querySelector(".fjs-pgl-main").getBoundingClientRect().right));
   expect(g.root.right - mainRight).toBeLessThanOrEqual(6); // only the resizer's own 6px
+  expect(page.__errors).toEqual([]);
+});
+
+// --- Components palette ------------------------------------------------------
+// palette reports the column, the palette inside it, and how the tiles are laid out.
+const palette = (page) => page.evaluate(() => {
+  const w = (el) => Math.round(el.getBoundingClientRect().width);
+  const col = document.querySelector(".fjs-pgl-palette-container");
+  const inner = col.querySelector(".fjs-palette-container");
+  const tiles = [...col.querySelectorAll(".fjs-palette-field")];
+  const firstRowTop = tiles.length ? Math.round(tiles[0].getBoundingClientRect().top) : 0;
+  const colRight = col.getBoundingClientRect().right;
+  return {
+    col: w(col), inner: w(inner),
+    // The white strip: column width the palette never received. 1px is form-js's border.
+    strip: w(col) - w(inner),
+    // The mirror: content the column is cutting off rather than shrinking.
+    clipped: col.scrollWidth - col.clientWidth,
+    tilesPerRow: tiles.filter((t) => Math.round(t.getBoundingClientRect().top) === firstRowTop).length,
+    tileOverhang: tiles.some((t) => t.getBoundingClientRect().right > colRight + 0.5),
+  };
+});
+
+test("the palette opens at form-js's own width, with no tile cut off", async ({ page }) => {
+  await mount(page);
+  const g = await palette(page);
+  expect(g.col).toBe(270);        // --palette-width, not a fallback of our own invention
+  expect(g.strip).toBeLessThanOrEqual(1);
+  expect(g.clipped).toBe(0);
+  expect(g.tileOverhang).toBe(false);
+  expect(g.tilesPerRow).toBe(3);  // the reference modeler's three 72px tiles per row
+  expect(page.__errors).toEqual([]);
+});
+
+test("dragging the palette wider fills it with tiles, not white space", async ({ page }) => {
+  await mount(page, { paletteW: 420 });
+  const g = await palette(page);
+  expect(g.col).toBe(420);
+  expect(g.strip).toBeLessThanOrEqual(1);
+  expect(g.tileOverhang).toBe(false);
+  expect(g.tilesPerRow).toBeGreaterThan(3); // the extra width goes to the grid, not a strip
+  expect(page.__errors).toEqual([]);
+});
+
+test("dragging the palette narrower reflows the tiles instead of cutting them off", async ({ page }) => {
+  await mount(page, { paletteW: 130 });
+  const g = await palette(page);
+  expect(g.col).toBe(130);
+  expect(g.clipped).toBe(0);
+  expect(g.tileOverhang).toBe(false);
+  expect(g.tilesPerRow).toBe(1);
   expect(page.__errors).toEqual([]);
 });

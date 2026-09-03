@@ -2,17 +2,17 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
-      "id": "a-widened-properties-column-in-the-form-editor-gave-its-widt",
+      "id": "the-form-editor-s-side-columns-gave-their-width-to-white-spa",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "The form editor's Properties column is properly resizable again",
-        "de": "Die Eigenschaften-Spalte im Formular-Editor lässt sich wieder richtig verbreitern"
+        "en": "The form editor's side columns are properly resizable again",
+        "de": "Die Seitenspalten im Formular-Editor lassen sich wieder richtig verbreitern"
       },
       "summary": {
-        "en": "In the form editor's Design tab you can drag the Components palette and the Properties column wider — useful when a field's condition or an expression is longer than the column. Widening Properties used to add nothing but an empty white strip along the right edge of the window: the column grew, the panel inside it stayed 250 pixels, and because the width is remembered the strip was still there the next time you opened a form. Dragging the column narrower was worse and quieter — the panel was cut off rather than made smaller, so the right-hand end of every property row was out of reach. The panel now has exactly the width of the column it sits in. Double-click the divider to go back to the default width.",
-        "de": "Im Design-Tab des Formular-Editors lassen sich die Komponenten-Palette und die Eigenschaften-Spalte breiter ziehen — praktisch, wenn die Bedingung eines Feldes oder ein Ausdruck länger ist als die Spalte. Die Eigenschaften breiter zu ziehen brachte bisher nur einen leeren weissen Streifen am rechten Rand: Die Spalte wuchs, das Panel darin blieb bei 250 Pixeln, und weil die Breite gemerkt wird, war der Streifen beim nächsten Öffnen eines Formulars immer noch da. Schmaler ziehen war schlimmer und stiller — das Panel wurde abgeschnitten statt verkleinert, das rechte Ende jeder Eigenschaftszeile war damit unerreichbar. Das Panel hat jetzt genau die Breite der Spalte, in der es sitzt. Ein Doppelklick auf den Trenner stellt die Standardbreite wieder her."
+        "en": "In the form editor's Design tab you can drag the Components palette and the Properties column wider — useful when a field's condition or an expression is longer than the column. Widening either one used to add nothing but an empty white strip: the column grew, its contents kept their fixed width, and because the width is remembered the strip was still there the next time you opened a form. Dragging a column narrower was worse and quieter — the contents were cut off rather than made smaller, so the far end of every property row was out of reach. The Components palette had that second problem from the start, without any dragging: it opened 70 pixels too narrow, and the third component of every row was cut in half by the column's edge. Both columns now pass their width on to what they hold, and the component tiles reflow — one per row in a narrow column, five in a wide one. Double-click a divider to go back to the default width.",
+        "de": "Im Design-Tab des Formular-Editors lassen sich die Komponenten-Palette und die Eigenschaften-Spalte breiter ziehen — praktisch, wenn die Bedingung eines Feldes oder ein Ausdruck länger ist als die Spalte. Eine der beiden breiter zu ziehen brachte bisher nur einen leeren weissen Streifen: Die Spalte wuchs, ihr Inhalt behielt seine feste Breite, und weil die Breite gemerkt wird, war der Streifen beim nächsten Öffnen eines Formulars immer noch da. Schmaler ziehen war schlimmer und stiller — der Inhalt wurde abgeschnitten statt verkleinert, das äussere Ende jeder Eigenschaftszeile war damit unerreichbar. Die Komponenten-Palette hatte dieses zweite Problem von Anfang an, ganz ohne Ziehen: Sie öffnete 70 Pixel zu schmal, und die dritte Komponente jeder Reihe wurde vom Spaltenrand halbiert. Beide Spalten geben ihre Breite jetzt an ihren Inhalt weiter, und die Komponenten-Kacheln fliessen um — eine pro Reihe in einer schmalen Spalte, fünf in einer breiten. Ein Doppelklick auf einen Trenner stellt die Standardbreite wieder her."
       },
       "link": {
         "label": "ADR-0028",

@@ -195,12 +195,17 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 - **`form-side-columns.spec.mjs`** ([ADR-0028](../docs/adr/0028-forms-and-the-tasks-app.md)):
   the form editor's **resizable side columns**. The drag sets the width of the *column*,
-  but the vendored form-js Playground pins the properties panel inside it to a fixed
-  250px, so a column pulled wider grew white space beside the panel and a column pulled
-  narrower clipped it. The panel must be exactly as wide as its column — at the default
-  width, after a real pointer drag, for a width a previous session left in
-  `localStorage`, and collapsed to its rail, where the editor must take the freed width
-  rather than leave a gap at the right edge.
+  but the vendored form-js Playground pins what sits inside each one to a fixed width —
+  250px for the properties panel, 270px for the palette — so a column pulled wider grew
+  white space beside its contents and a column pulled narrower clipped them. The palette
+  had the narrow case with no drag at all: the width it opens with is measured off the
+  rendered column, the palette renders a frame later than that measurement, and the
+  fallback standing in was 200px, cutting the third tile of every row in half. What a
+  column holds must be exactly as wide as the column — at the width it opens with, after
+  a real pointer drag, for a width a previous session left in `localStorage`, with the
+  properties column collapsed to its rail (where the editor must take the freed width
+  rather than leave a gap at the right edge), and with the palette's tiles reflowing to
+  the width rather than overhanging it.
 
 - **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
   **who is signed in**, in the Users card under Organization. The column must render the
