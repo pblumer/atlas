@@ -96,8 +96,6 @@ func TestSheetRowWatchNamesColumnsFromTheHeader(t *testing.T) {
 	if f["Antragsnummer"] != "A-1" || f["Name"] != "Anna" {
 		t.Errorf("fields = %#v; want each cell under its column name", f)
 	}
-	// A short row has empty cells, not missing keys, so a FEEL path never hits a null
-	// it has to defend against.
 	if f["rowNumber"] != 2 {
 		t.Errorf("rowNumber = %v; want the real row number, with the header counted", f["rowNumber"])
 	}
@@ -107,6 +105,36 @@ func TestSheetRowWatchNamesColumnsFromTheHeader(t *testing.T) {
 	// An unnamed column names no field rather than one called "".
 	if _, ok := f[""]; ok {
 		t.Errorf("fields = %#v; want no field for the unnamed third column", f)
+	}
+}
+
+// TestSheetRowWatchGivesAShortRowEmptyCells: Sheets omits trailing empty cells, so a
+// row that stops early would otherwise arrive with *missing* fields — and a FEEL path
+// into a name that is not bound is a null the model has to defend against, where an
+// empty string is just an empty cell. Every event of one watch carries the same fields.
+func TestSheetRowWatchGivesAShortRowEmptyCells(t *testing.T) {
+	client := &fakeGoogleClient{rows: []any{
+		row("Antragsnummer", "Name", "Status"),
+		row("A-1"), // the person and the status were never filled in
+	}}
+	events, _, err := (sheetRowSource{client: client}).Read(context.Background(),
+		inboundSubscription{SpreadsheetID: "1B", HeaderRow: true, LastEventID: "1"}, 25)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	f := events[0].Fields
+	if f["Antragsnummer"] != "A-1" {
+		t.Errorf("fields = %#v; want the one cell that is there", f)
+	}
+	for _, name := range []string{"Name", "Status"} {
+		got, ok := f[name]
+		if !ok {
+			t.Errorf("fields = %#v; want %q present rather than missing", f, name)
+			continue
+		}
+		if got != "" {
+			t.Errorf("%s = %#v; want an empty cell", name, got)
+		}
 	}
 }
 

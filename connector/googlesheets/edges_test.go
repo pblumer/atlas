@@ -273,3 +273,104 @@ func TestDeleteSheetIgnoresEntriesWithoutProperties(t *testing.T) {
 		t.Fatalf("Do: %v", err)
 	}
 }
+
+// TestRequestIDTravelsAsAHeader: the job key rides along as X-Request-ID. It buys
+// tracing rather than idempotency — Google deduplicates nothing on it — but a
+// duplicated row in a sheet is exactly the case somebody has to trace back to a job,
+// so the header is a contract worth asserting rather than a nicety.
+func TestRequestIDTravelsAsAHeader(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("X-Request-ID")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c := gs.NewHTTPClient(gs.Account{Tokens: staticToken("tok"), SheetsBase: srv.URL, DriveBase: srv.URL})
+	if _, err := c.Do(context.Background(), gs.Request{
+		Operation: "clear-range", Spreadsheet: "1B", Range: "A1", RequestID: "4711",
+	}); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if got != "4711" {
+		t.Errorf("X-Request-ID = %q; want the job key", got)
+	}
+}
+
+// TestHandlerRefusesAnElementThatIsNotASheetsTask: the job and the element instance
+// disagree about what this element is — a definition replaced under a pending job, say.
+// Failing keeps the job for a retry; acting on whatever detail happened to sit at that
+// index would perform a different task's call.
+func TestHandlerRefusesAnElementThatIsNotASheetsTask(t *testing.T) {
+	rd, lookup := workerFixture(t,
+		`<atlas:googleSheetsConnector connector="acme" operation="clear-range" spreadsheet="1B" range="A2:F"/>`)
+	cp := lookup(7)
+	rd.ei.ElementId = cp.StartEvents()[0] // a start event carries no task detail
+	client := &recordingClient{}
+	if _, err := gs.Handler(rd, lookup, registered(client))(job.Job{Key: 1, ElementInstanceKey: 42}); err == nil {
+		t.Error("an element that is not a Sheets task: want an error, got nil")
+	}
+	if len(client.reqs) != 0 {
+		t.Errorf("made %d calls for an element that is not a Sheets task", len(client.reqs))
+	}
+}
+
+// TestHandlerPropagatesAVariableReadError: the element instance is there but its scope
+// cannot be read. That is not "no variables" — resolving the task against an empty
+// scope would write a row of blanks and call it done.
+func TestHandlerPropagatesAVariableReadError(t *testing.T) {
+	rd, lookup := workerFixture(t,
+		`<atlas:googleSheetsConnector connector="acme" operation="write-range" spreadsheet="1B" range="A1" values="=zeilen"/>`)
+	client := &recordingClient{}
+	_, err := gs.Handler(&unreadableScope{fakeReader: rd}, lookup, registered(client))(job.Job{Key: 1, ElementInstanceKey: 42})
+	if err == nil {
+		t.Error("a scope that cannot be read: want an error, got nil")
+	}
+	if len(client.reqs) != 0 {
+		t.Errorf("made %d calls without having read the variables", len(client.reqs))
+	}
+}
+
+// unreadableScope answers with the element instance but fails on its variables — the
+// half of the store the resolve step needs second.
+type unreadableScope struct{ *fakeReader }
+
+func (u *unreadableScope) VariablesOfScope(uint64, func(*model.VariableValue) error) error {
+	return errors.New("scope is unavailable")
+}
+
+// TestValuesWithNoVariableReferences: a FEEL value that names nothing still resolves.
+// It is the shape a header row has — constants — and it must not depend on the
+// binding step having anything to bind.
+func TestValuesWithNoVariableReferences(t *testing.T) {
+	rd, lookup := workerFixture(t,
+		`<atlas:googleSheetsConnector connector="acme" operation="write-range" spreadsheet="1B" range="A1:B1"
+		    values="=[[&quot;Name&quot;, &quot;Betrag&quot;]]"/>`)
+	client := &recordingClient{}
+	if _, err := gs.Handler(rd, lookup, registered(client))(job.Job{Key: 1, ElementInstanceKey: 42}); err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	row := client.reqs[0].Values[0]
+	if len(row) != 2 || row[0] != "Name" {
+		t.Errorf("row = %#v; want the two constant cells", row)
+	}
+}
+
+// TestAVariableExplicitlySetToNullIsAnEmptyCell: a variable that exists and holds null
+// is not the same as one that was never set, but for a spreadsheet both are an empty
+// cell — and the binding step has to carry the first through rather than drop it.
+func TestAVariableExplicitlySetToNullIsAnEmptyCell(t *testing.T) {
+	rd, lookup := workerFixture(t,
+		`<atlas:googleSheetsConnector connector="acme" operation="append-row" spreadsheet="1B" range="A:B"
+		    values="=[name, leer]"/>`,
+		model.VariableValue{Name: "name", Kind: model.VarString, Text: "Anna"},
+		model.VariableValue{Name: "leer", Kind: model.VarNull},
+	)
+	client := &recordingClient{}
+	if _, err := gs.Handler(rd, lookup, registered(client))(job.Job{Key: 1, ElementInstanceKey: 42}); err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	row := client.reqs[0].Values[0]
+	if len(row) != 2 || row[0] != "Anna" || row[1] != nil {
+		t.Errorf("row = %#v; want the name and an empty cell", row)
+	}
+}
