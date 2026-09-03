@@ -2,6 +2,70 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "a-widened-properties-column-in-the-form-editor-gave-its-widt",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The form editor's Properties column is properly resizable again",
+        "de": "Die Eigenschaften-Spalte im Formular-Editor lässt sich wieder richtig verbreitern"
+      },
+      "summary": {
+        "en": "In the form editor's Design tab you can drag the Components palette and the Properties column wider — useful when a field's condition or an expression is longer than the column. Widening Properties used to add nothing but an empty white strip along the right edge of the window: the column grew, the panel inside it stayed 250 pixels, and because the width is remembered the strip was still there the next time you opened a form. Dragging the column narrower was worse and quieter — the panel was cut off rather than made smaller, so the right-hand end of every property row was out of reach. The panel now has exactly the width of the column it sits in. Double-click the divider to go back to the default width.",
+        "de": "Im Design-Tab des Formular-Editors lassen sich die Komponenten-Palette und die Eigenschaften-Spalte breiter ziehen — praktisch, wenn die Bedingung eines Feldes oder ein Ausdruck länger ist als die Spalte. Die Eigenschaften breiter zu ziehen brachte bisher nur einen leeren weissen Streifen am rechten Rand: Die Spalte wuchs, das Panel darin blieb bei 250 Pixeln, und weil die Breite gemerkt wird, war der Streifen beim nächsten Öffnen eines Formulars immer noch da. Schmaler ziehen war schlimmer und stiller — das Panel wurde abgeschnitten statt verkleinert, das rechte Ende jeder Eigenschaftszeile war damit unerreichbar. Das Panel hat jetzt genau die Breite der Spalte, in der es sitzt. Ein Doppelklick auf den Trenner stellt die Standardbreite wieder her."
+      },
+      "link": {
+        "label": "ADR-0028",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0028-forms-and-the-tasks-app.md"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-data-object-s-value-opens-as-formatted-json",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "A data object's value opens as formatted JSON.",
+        "de": "A data object's value opens as formatted JSON."
+      },
+      "summary": {
+        "en": "In an instance's Data tab, a structured value showed as {3 fields} and the whole of it was reachable only as a tooltip — unreadable past a few lines, impossible to scroll, select or copy from, and absent altogether on a touch device.",
+        "de": "In an instance's Data tab, a structured value showed as {3 fields} and the whole of it was reachable only as a tooltip — unreadable past a few lines, impossible to scroll, select or copy from, and absent altogether on a touch device."
+      },
+      "link": {
+        "label": "ADR-0053",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0053-first-class-data-objects.md"
+      }
+    },
+    {
+      "id": "the-class-diagram-s-properties-panel-is-the-modeler-s-panel",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The class diagram's properties panel is the Modeler's panel.",
+        "de": "The class diagram's properties panel is the Modeler's panel."
+      },
+      "summary": {
+        "en": "Selecting a class, a data store or a relationship under Data › Information model now gives you the same panel the BPMN Modeler does: a header naming what is selected — its kind in small type, its own name in bold, a type chip beside it — and collapsible property groups below, each with a chevron and a filled dot when it carries content.",
+        "de": "Selecting a class, a data store or a relationship under Data › Information model now gives you the same panel the BPMN Modeler does: a header naming what is selected — its kind in small type, its own name in bold, a type chip beside it — and collapsible property groups below, each with a chevron and a filled dot when it carries content."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "scim-tasks-run-on-a-worker-now",
       "version": "Unreleased",
       "date": null,
@@ -237,115 +301,6 @@
         "Modeler",
         "Events"
       ]
-    },
-    {
-      "id": "importing-a-uml-class-diagram-reading-what-somebody-else-dre",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Import the UML class diagram you already have",
-        "de": "Das vorhandene UML-Klassendiagramm importieren"
-      },
-      "summary": {
-        "en": "Your data model usually exists long before your first process does — drawn in Enterprise Architect, in Papyrus, in whatever your architecture team uses. Until now the only way to get it into Atlas was to retype it, class by class and attribute by attribute. What gets lost in a retyping is never the class names; it is the business key, the one thing BPMN has no equivalent for and the one everything cross-process depends on. Data › Information model now has an Import button. It reads two documents: the XMI 2.5.1 your UML tool exports, and Atlas's own JSON — which is exactly what the API hands out for a model, so you can also move a model from one application or installation to another. You do not have to tell it which; it reads the document, because a UML tool writes .uml, .xmi and .xml for the same file. Atlas authors a deliberately small part of UML, so a real document always says things it has no place for — an interface, an operation, a relationship with three ends, a multiplicity of 0..5. None of that is a reason to refuse your file, and none of it disappears quietly: every single one comes back as a line naming the element, marked as dropped (not in the model), adjusted (in the model, saying something slightly different) or worth knowing. You read that report before anything is stored, and it comes from the same call that does the storing, so what you read is what you get. Two readings are on purpose rather than literal. An attribute marked as the identifier whose multiplicity the file never states is read as required — the file does say something about it, namely that it identifies the thing, and reading it as optional would throw your business key away. And a document with no diagram geometry is laid out on a grid, because XMI keeps the picture in a separate file and a stack of boxes at the origin is not a diagram. Move them where they belong.",
-        "de": "Ihr Datenmodell existiert meist lange vor Ihrem ersten Prozess — gezeichnet im Enterprise Architect, in Papyrus, in dem Werkzeug, das Ihre Architektur nun einmal verwendet. Bisher führte der einzige Weg nach Atlas über das Abtippen, Klasse für Klasse und Attribut für Attribut. Verloren gehen dabei nie die Klassennamen, sondern der fachliche Schlüssel — das Einzige, wofür BPMN keine Entsprechung hat, und das, worauf alles Prozessübergreifende beruht. Data › Information model hat jetzt eine Schaltfläche „Import…“. Sie liest zwei Dokumente: das XMI 2.5.1, das Ihr UML-Werkzeug exportiert, und Atlas' eigenes JSON — genau das, was die API zu einem Modell herausgibt, womit sich ein Modell auch von einer Applikation oder Installation in eine andere bewegen lässt. Welches von beidem, müssen Sie nicht sagen: Atlas liest es am Dokument ab, denn UML-Werkzeuge schreiben .uml, .xmi und .xml für dieselbe Datei. Atlas modelliert bewusst nur einen kleinen Teil von UML, und ein echtes Dokument sagt darum immer Dinge, für die es hier keinen Platz gibt — eine Schnittstelle, eine Operation, eine Beziehung mit drei Enden, eine Multiplizität 0..5. Nichts davon ist ein Grund, Ihre Datei abzulehnen, und nichts davon verschwindet stillschweigend: Jede einzelne Stelle kommt als Zeile zurück, die das Element benennt und als verworfen, angepasst oder wissenswert markiert ist. Diesen Bericht lesen Sie, bevor irgendetwas gespeichert wird — und er stammt aus demselben Aufruf, der auch speichert, sodass Sie bekommen, was Sie gelesen haben. Zwei Lesarten sind Absicht statt Wörtlichkeit. Ein als Identifikator markiertes Attribut, dessen Multiplizität die Datei nie nennt, wird als Pflichtfeld gelesen: Die Datei sagt sehr wohl etwas über dieses Merkmal, nämlich dass es das Ding identifiziert — es als optional zu lesen, würfe Ihren fachlichen Schlüssel weg. Und ein Dokument ohne Diagrammgeometrie wird auf einem Raster angeordnet, denn XMI verwahrt das Bild in einer eigenen Datei, und ein Stapel Kästen im Nullpunkt ist kein Diagramm. Schieben Sie sie dorthin, wo sie hingehören."
-      },
-      "link": {
-        "label": "ADR-0232",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0232-uml-model-import.md"
-      },
-      "tags": [
-        "Data",
-        "Modeling",
-        "Import"
-      ],
-      "tutorial": {
-        "en": [
-          "Export your class diagram from your UML tool as XMI (.xmi, .uml or .xml — all three are read).",
-          "Open Data › Information model and press “Import…”. Choose the application the model should belong to, then pick your file.",
-          "Read the report: how many classes, relationships and data stores arrived, and every element the subset would not take. Nothing is stored yet.",
-          "Adjust the model name if you want one other than the document's, then press “Import into …”.",
-          "The class canvas opens. Check the business keys, retype anything the report marked as adjusted, and drag the boxes into an arrangement you can read."
-        ],
-        "de": [
-          "Exportieren Sie Ihr Klassendiagramm aus Ihrem UML-Werkzeug als XMI (.xmi, .uml oder .xml — alle drei werden gelesen).",
-          "Öffnen Sie Data › Information model und drücken Sie „Import…“. Wählen Sie die Applikation, zu der das Modell gehören soll, und danach Ihre Datei.",
-          "Lesen Sie den Bericht: wie viele Klassen, Beziehungen und Data Stores angekommen sind — und jedes Element, das der Sprachumfang nicht aufnimmt. Gespeichert ist noch nichts.",
-          "Passen Sie den Modellnamen an, falls Sie einen anderen als den des Dokuments möchten, und drücken Sie „Import into …“.",
-          "Die Klassenfläche öffnet sich. Prüfen Sie die fachlichen Schlüssel, korrigieren Sie, was der Bericht als angepasst markiert hat, und ordnen Sie die Kästen lesbar an."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Data öffnen"
-        },
-        "route": "#/data"
-      }
-    },
-    {
-      "id": "a-variable-named-after-one-of-your-data-objects-is-now-flagg",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A variable named after one of your data objects is now flagged.",
-        "de": "A variable named after one of your data objects is now flagged."
-      },
-      "summary": {
-        "en": "The new rule variable.shadows-data-object raises a warning where the two collide: draw a data object Kunde, have a task write its result into a variable Kunde — or read the object back into a variable of the same name — and the diagram shows one thing while the instance holds two.",
-        "de": "The new rule variable.shadows-data-object raises a warning where the two collide: draw a data object Kunde, have a task write its result into a variable Kunde — or read the object back into a variable of the same name — and the diagram shows one thing while the instance holds two."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "web-scraping-one-row-is-one-record-and-the-fetch-survives-th",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A scraped table row now arrives as one record",
-        "de": "Eine ausgelesene Tabellenzeile kommt jetzt als ein Datensatz an"
-      },
-      "summary": {
-        "en": "Reading a web page used to give you a flat list: either the text of every match, or one attribute of every match — never both, and never grouped. A list of articles or a table of rates therefore needed two tasks returning two lists, and the first row missing a link shifted every later pairing by one. A scrape task now takes item fields: the selector picks the row, each field picks a cell, and every match arrives as one object. A field that finds nothing is present and empty, so the rows keep their shape. Feeds gained the same care: an entry now carries its own id to deduplicate on, plus author, categories and image, and pages in older character sets, RSS 1.0 feeds and sites that refuse anonymous requests no longer fail the way they quietly did.",
-        "de": "Eine Webseite auszulesen ergab bisher eine flache Liste: entweder den Text jedes Treffers oder ein Attribut jedes Treffers — nie beides, nie gruppiert. Eine Artikelliste oder eine Zinstabelle brauchte deshalb zwei Tasks mit zwei Listen, und die erste Zeile ohne Link verschob jede weitere Zuordnung um eins. Ein Scraping-Task nimmt jetzt Feldzeilen: Der Selektor wählt die Zeile, jedes Feld wählt eine Zelle, und jeder Treffer kommt als ein Objekt an. Ein Feld, das nichts findet, ist vorhanden und leer — die Zeilen behalten ihre Gestalt. Feeds haben dieselbe Sorgfalt bekommen: Ein Eintrag trägt jetzt seine eigene Kennung zum Deduplizieren, dazu Autor, Kategorien und Bild. Und Seiten in älteren Zeichensätzen, RSS-1.0-Feeds und Sites, die anonyme Anfragen abweisen, scheitern nicht mehr so still wie bisher."
-      },
-      "link": {
-        "label": "ADR-0231",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0231-webscrape-structured-extraction.md"
-      },
-      "tags": [
-        "Modeler",
-        "Connectors"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the Modeler and put a service task on the canvas.",
-          "Pick \"Web Scraping\" as the kind and enter the page URL.",
-          "Under Extraction, let the CSS selector pick one ITEM per match — a table row, a card, a list entry.",
-          "Add one item field per value: a name (the key you will read later), the selector inside the item, and optionally the attribute (for example href for a link).",
-          "Name a result variable — it now holds one object per match, so a later step reads eintrag.titel beside eintrag.link."
-        ],
-        "de": [
-          "Modeler öffnen und einen Service-Task auf die Fläche ziehen.",
-          "Als Art „Web Scraping“ wählen und die URL der Seite eintragen.",
-          "Unter „Extraction“ den CSS-Selektor so wählen, dass er je Treffer ein ITEM trifft — eine Tabellenzeile, eine Kachel, einen Listeneintrag.",
-          "Je Wert eine Feldzeile anlegen: Name (der Schlüssel, den Sie später lesen), Selektor innerhalb des Items und optional das Attribut (etwa href für einen Link).",
-          "Ergebnisvariable benennen — sie hält jetzt ein Objekt je Treffer, ein späterer Schritt liest also eintrag.titel neben eintrag.link."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }

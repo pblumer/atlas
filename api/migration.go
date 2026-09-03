@@ -14,6 +14,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
 )
 
 // migrationBatchDefault / migrationBatchMax bound one call of the batch form, the way
@@ -369,13 +370,17 @@ func (s *Server) handleMigrateInstancesOfProcess(w http.ResponseWriter, r *http.
 		resp  = migrateBatchResp{ToProcessDefKey: req.TargetProcessDefKey}
 		opErr error
 	)
-	s.do(func() {
-		if _, ok := s.deployments[fromKey]; !ok {
-			return
+	// Selecting the batch is a read over the whole active family; planning and
+	// migrating are writes. Only the second half needs the run loop, so the walk
+	// runs off it — the same split as the bulk cancel. An instance that finishes in
+	// between is already handled below (planMigration reports it as gone).
+	var keys []uint64
+	opErr = s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+		if _, ok := defs[fromKey]; !ok {
+			return nil
 		}
 		found = true
-		var keys []uint64
-		err := s.store.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
+		err := rv.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
 			if v.ProcessDefKey != fromKey {
 				return nil
 			}
@@ -386,10 +391,18 @@ func (s *Server) handleMigrateInstancesOfProcess(w http.ResponseWriter, r *http.
 			return nil
 		})
 		if err != nil && !errors.Is(err, errMigrationBatchFull) {
-			opErr = err
-			return
+			return err
 		}
 		resp.Remaining = errors.Is(err, errMigrationBatchFull)
+		return nil
+	})
+	if opErr != nil {
+		found = found && !errors.Is(opErr, errLoopClosing)
+	}
+	s.do(func() {
+		if opErr != nil || !found {
+			return
+		}
 		for _, k := range keys {
 			plan, ok, err := s.planMigration(k, req.TargetProcessDefKey, req.Mapping)
 			if err != nil {

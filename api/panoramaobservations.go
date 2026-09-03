@@ -8,7 +8,6 @@ import (
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/panorama"
-	"github.com/pblumer/atlas/model"
 )
 
 // The local half of Panorama's observation projection (ADR-0189 §6, P4b).
@@ -392,20 +391,25 @@ func (s *Server) releaseFact(rel applicationRelease) panorama.Fact {
 	}
 }
 
-// instancesByDefinition counts live process instances per definition. One scan for
-// the whole document: the alternative is a scan per bound element, and a model
-// binding a hundred processes would then walk the instance table a hundred times
-// on the run loop, which is the single writer every other request is waiting on.
+// instancesByDefinition counts live process instances per definition, reading the
+// per-definition counter the write path maintains (ADR-0083) once per deployment.
+//
+// It used to walk the whole instance family instead — correct, but O(instances) on
+// the run loop for a number the engine already knows, which at a large population
+// is the single writer every other request is waiting on. The cost is now the
+// number of *deployed definitions*: design-time size, not runtime population.
 //
 // Run-loop goroutine only, via its caller.
 func (s *Server) instancesByDefinition() (map[uint64]int, error) {
-	out := map[uint64]int{}
-	err := s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
-		out[v.ProcessDefKey]++
-		return nil
-	})
-	if err != nil {
-		return nil, err
+	out := make(map[uint64]int, len(s.deployments))
+	for key := range s.deployments {
+		n, err := s.store.DefInstanceCount(key)
+		if err != nil {
+			return nil, err
+		}
+		if n > 0 {
+			out[key] = n
+		}
 	}
 	return out, nil
 }

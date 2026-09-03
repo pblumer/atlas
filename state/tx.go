@@ -273,6 +273,25 @@ func (t *Tx) DeleteProcessInstance(key uint64) error {
 	return t.b.Delete(keyProcessInstance(key), nil)
 }
 
+// PutChildByParent records that a call-activity element instance started a child
+// process instance (ADR-0076). It is the reverse of the child's own
+// ParentElementInstanceKey: that field answers "who started me", this index answers
+// "what did I start", which is the direction the engine needs when a call activity
+// is terminated and must tear its child down with it.
+//
+// Written from applyToState on the child's activation, from the child's own record,
+// so replay rebuilds it identically (I4/I6).
+func (t *Tx) PutChildByParent(callElKey, childPiKey uint64) error {
+	return t.b.Set(keyChildByParent(callElKey, childPiKey), nil, nil)
+}
+
+// DeleteChildByParent drops the reverse link when the child instance ends. Written
+// on the child's terminal event, alongside dropping its active record, so a
+// completed child never lingers in the index. Idempotent, like every delete here.
+func (t *Tx) DeleteChildByParent(callElKey, childPiKey uint64) error {
+	return t.b.Delete(keyChildByParent(callElKey, childPiKey), nil)
+}
+
 // PutProcessInstanceHistory records a terminal (completed/terminated) process
 // instance in the history index. Written from applyToState when an instance
 // ends, from the event alone, so it replays identically on recovery (ADR-0017).

@@ -29,6 +29,12 @@ type Reader interface {
 // run loop (the store's owner), use it off the loop, close it when the work is
 // done — the same lifetime as the job it was taken for.
 type ReadView struct {
+	// queries is the whole read surface, bound to the snapshot: a ReadView answers
+	// every query a *Store does, from the same code, as of one moment. That is what
+	// makes it usable for an operator query and not only for a job handler's two
+	// reads — see [queries].
+	queries
+
 	snap *pebble.Snapshot
 }
 
@@ -37,24 +43,18 @@ type ReadView struct {
 // This is deliberately not called Snapshot: [Store.Snapshot] already means the
 // on-disk backup checkpoint (ADR-0107), and conflating a durable copy of the whole
 // store with an in-memory read view would be a genuinely dangerous ambiguity.
-func (s *Store) ReadView() *ReadView { return &ReadView{snap: s.db.NewSnapshot()} }
+func (s *Store) ReadView() *ReadView {
+	snap := s.db.NewSnapshot()
+	return &ReadView{queries: queries{r: snap}, snap: snap}
+}
 
 // Close releases the view. A view left open holds back the compaction of
 // everything written since it was taken, so it must not outlive the work it was
 // taken for.
 func (v *ReadView) Close() error { return v.snap.Close() }
 
-// GetElementInstance implements [Reader] against the view.
-func (v *ReadView) GetElementInstance(key uint64) (*model.ElementInstanceValue, bool, error) {
-	return decodeElementInstance(getCopy(v.snap, keyElementInstance(key)))
-}
-
-// VariablesOfScope implements [Reader] against the view.
-func (v *ReadView) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
-	return scanPrefixWith(v.snap, variablePrefix(scope), func(_, raw []byte) error {
-		return decodeVariable(raw, fn)
-	})
-}
+// Both methods [Reader] requires — GetElementInstance and VariablesOfScope — come
+// from the embedded [queries], so *ReadView satisfies Reader without restating them.
 
 // maxScopeDepth bounds a scope-chain walk, a defensive guard against a cyclic or
 // corrupt FlowScopeKey chain. Real nesting (activity-local scopes over subprocess
