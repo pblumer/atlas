@@ -7477,7 +7477,11 @@ async function viewInfoModels() {
         <p class="muted" style="margin:0">What the data in your processes <i>is</i> — classes, their attributes and
           their business keys — as a UML class diagram shared across every process in an application.</p>
       </div>
-      ${writable.length ? `<button class="btn" data-act="new-im">Create new</button>` : ""}
+      ${writable.length ? `<div style="display:flex; gap:8px; align-items:center">
+        <button class="btn ghost" data-act="import-im"
+          title="Read a class diagram somebody already drew: Atlas's own JSON, or the XMI a UML tool exports">Import…</button>
+        <button class="btn" data-act="new-im">Create new</button>
+      </div>` : ""}
     </div>
     ${applications.length ? "" : `<div class="card empty" style="margin-top:16px">
       <h2>Create an application first</h2>
@@ -7507,6 +7511,11 @@ async function viewInfoModels() {
 
   const root = document.getElementById("im-root");
   root.addEventListener("click", async (e) => {
+    if (e.target.closest('[data-act="import-im"]')) {
+      const app = chooseApplication();
+      if (app) await importInfoModel(app);
+      return;
+    }
     const btn = e.target.closest('[data-act="new-im"]');
     if (!btn || !writable.length) return;
     const picked = await openPickModal({
@@ -7544,6 +7553,94 @@ async function viewInfoModels() {
     }
   });
   enhanceViewTables();
+}
+
+// importInfoModel reads a class diagram somebody already drew.
+//
+// A data model is normally drawn in a UML tool long before anybody opens Atlas, and
+// retyping one by hand is both the slowest way to start and the way a business key
+// quietly goes missing. Two documents are read: Atlas's own JSON — how a model moves
+// between applications and installations — and the XMI 2.5.1 a UML tool exports.
+//
+// The import is deliberately two steps. Reading a foreign notation into a declared
+// subset is lossy, and the report the first step returns is the substance of it: what
+// arrived, and what the subset would not take, element by element. The same call
+// makes both — the second one only drops the dryRun flag — so what the report
+// promises is exactly what gets stored.
+async function importInfoModel(app) {
+  const file = await pickFile(".json,.xml,.xmi,.uml,application/json,application/xml,text/xml");
+  if (!file) return;
+  let text;
+  try { text = await file.text(); }
+  catch (e) { toast("Import failed: " + e.message, "err"); return; }
+
+  const base = file.name.replace(/\.[^.]+$/, "");
+  let preview;
+  try {
+    preview = await api("POST", "/api/v1/infomodel/import",
+      { applicationId: app.id, document: text, dryRun: true });
+  } catch (e) { toast("Import failed: " + e.message, "err"); return; }
+
+  showImportReport(app, file.name, base, text, preview);
+}
+
+// showImportReport is the report and the confirmation in one: the counts, the name the
+// model will carry, and every note the reader has to see before deciding.
+function showImportReport(app, fileName, base, text, preview) {
+  const model = preview.preview || { classes: [], associations: [], stores: [] };
+  const notes = preview.notes || [];
+  const level = (l) => ({ dropped: "#b42318", adjusted: "#9a6700", info: "#6a737d" }[l] || "#6a737d");
+  const badge = (l) => `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;color:#fff;white-space:nowrap;background:${level(l)}">${esc(l)}</span>`;
+  const rows = notes.map((n) =>
+    `<tr><td>${badge(n.level)}</td><td>${n.element ? `<code>${esc(n.element)}</code>` : `<span class="muted">the model</span>`}</td>
+     <td class="muted">${esc(n.message)}</td></tr>`).join("");
+  const counted = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Import report" style="max-width:880px">
+      <div class="modal-head"><h2>Import ${esc(fileName)}</h2></div>
+      <div class="modal-body">
+        <p class="muted" style="margin:0 0 10px">Read as <b>${esc(preview.format === "xmi" ? "UML XMI" : "Atlas JSON")}</b> —
+          ${counted((model.classes || []).length, "class", "classes")},
+          ${counted((model.associations || []).length, "relationship", "relationships")},
+          ${counted((model.stores || []).length, "data store", "data stores")}.
+          Nothing is stored until you import.</p>
+        <label class="field" style="max-width:380px"><span>Model name</span>
+          <input id="im-import-name" value="${esc(model.name || base)}"/></label>
+        <p class="muted" style="margin:10px 0 6px">Atlas authors a declared subset of the UML class diagram, so a
+          document from another tool routinely says things it has no place for. Every one of them is listed here:
+          <b>dropped</b> is not in the model, <b>adjusted</b> is in it saying something slightly different.</p>
+        <div style="max-height:44vh; overflow:auto">
+          <table><thead><tr><th style="width:90px">What</th><th style="width:190px">Element</th><th>Detail</th></tr></thead>
+            <tbody>${rows || `<tr><td colspan="3" class="muted">Nothing was lost: the document fits the subset as it stands.</td></tr>`}</tbody></table>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn neutral" data-close title="Close without importing">Cancel</button>
+        <button class="btn" data-import title="Store this as an information model of ${esc(app.name)}">Import into ${esc(app.name)}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.querySelector("[data-close]").addEventListener("click", close);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  ov.querySelector("[data-import]").addEventListener("click", async () => {
+    const name = (document.getElementById("im-import-name").value || "").trim();
+    try {
+      const created = await api("POST", "/api/v1/infomodel/import",
+        { applicationId: app.id, document: text, name });
+      close();
+      const dropped = (created.notes || []).filter((n) => n.level === "dropped").length;
+      toast(dropped
+        ? `Imported “${created.model.name}” — ${dropped} element${dropped === 1 ? "" : "s"} the subset does not author were left out`
+        : `Imported “${created.model.name}”`, "ok");
+      location.hash = `#/data/m/${encodeURIComponent(created.model.id)}`;
+    } catch (e) { toast("Import failed: " + e.message, "err"); }
+  });
 }
 
 // viewDataInstances is the same subject one altitude down: not what an Order *is*,

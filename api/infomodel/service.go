@@ -18,7 +18,10 @@ import (
 // this is generous enough that the cap is never the thing a modeler meets.
 const maxJSONBytes = 4 << 20
 
-var errBodyTooLarge = errors.New("request body is too large")
+var (
+	errBodyTooLarge = errors.New("request body is too large")
+	errIDCollision  = errors.New("generated id collision")
+)
 
 // ApplicationAccess is the caller's resolved access to the process application that
 // owns a model. Like Panorama, this area reuses the application scope (ADR-0071/
@@ -120,7 +123,7 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			opErr = err
 			return
 		} else if exists {
-			opErr = fmt.Errorf("generated id collision")
+			opErr = errIDCollision
 			return
 		}
 		opErr = s.store.Save(model)
@@ -528,12 +531,16 @@ func writeReadOutcome(w http.ResponseWriter, refusal *operationRefusal, err erro
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxJSONBytes+1))
+	return decodeJSONLimit(w, r, dst, maxJSONBytes)
+}
+
+func decodeJSONLimit(w http.ResponseWriter, r *http.Request, dst any, limit int64) bool {
+	body, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return false
 	}
-	if int64(len(body)) > maxJSONBytes {
+	if int64(len(body)) > limit {
 		httpapi.Error(w, http.StatusRequestEntityTooLarge, errBodyTooLarge.Error())
 		return false
 	}

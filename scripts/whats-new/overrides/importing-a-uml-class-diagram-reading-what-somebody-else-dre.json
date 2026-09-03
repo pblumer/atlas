@@ -1,0 +1,38 @@
+{
+  "tags": [
+    "Data",
+    "Modeling",
+    "Import"
+  ],
+  "title": {
+    "en": "Import the UML class diagram you already have",
+    "de": "Das vorhandene UML-Klassendiagramm importieren"
+  },
+  "summary": {
+    "en": "Your data model usually exists long before your first process does — drawn in Enterprise Architect, in Papyrus, in whatever your architecture team uses. Until now the only way to get it into Atlas was to retype it, class by class and attribute by attribute. What gets lost in a retyping is never the class names; it is the business key, the one thing BPMN has no equivalent for and the one everything cross-process depends on. Data › Information model now has an Import button. It reads two documents: the XMI 2.5.1 your UML tool exports, and Atlas's own JSON — which is exactly what the API hands out for a model, so you can also move a model from one application or installation to another. You do not have to tell it which; it reads the document, because a UML tool writes .uml, .xmi and .xml for the same file. Atlas authors a deliberately small part of UML, so a real document always says things it has no place for — an interface, an operation, a relationship with three ends, a multiplicity of 0..5. None of that is a reason to refuse your file, and none of it disappears quietly: every single one comes back as a line naming the element, marked as dropped (not in the model), adjusted (in the model, saying something slightly different) or worth knowing. You read that report before anything is stored, and it comes from the same call that does the storing, so what you read is what you get. Two readings are on purpose rather than literal. An attribute marked as the identifier whose multiplicity the file never states is read as required — the file does say something about it, namely that it identifies the thing, and reading it as optional would throw your business key away. And a document with no diagram geometry is laid out on a grid, because XMI keeps the picture in a separate file and a stack of boxes at the origin is not a diagram. Move them where they belong.",
+    "de": "Ihr Datenmodell existiert meist lange vor Ihrem ersten Prozess — gezeichnet im Enterprise Architect, in Papyrus, in dem Werkzeug, das Ihre Architektur nun einmal verwendet. Bisher führte der einzige Weg nach Atlas über das Abtippen, Klasse für Klasse und Attribut für Attribut. Verloren gehen dabei nie die Klassennamen, sondern der fachliche Schlüssel — das Einzige, wofür BPMN keine Entsprechung hat, und das, worauf alles Prozessübergreifende beruht. Data › Information model hat jetzt eine Schaltfläche „Import…“. Sie liest zwei Dokumente: das XMI 2.5.1, das Ihr UML-Werkzeug exportiert, und Atlas' eigenes JSON — genau das, was die API zu einem Modell herausgibt, womit sich ein Modell auch von einer Applikation oder Installation in eine andere bewegen lässt. Welches von beidem, müssen Sie nicht sagen: Atlas liest es am Dokument ab, denn UML-Werkzeuge schreiben .uml, .xmi und .xml für dieselbe Datei. Atlas modelliert bewusst nur einen kleinen Teil von UML, und ein echtes Dokument sagt darum immer Dinge, für die es hier keinen Platz gibt — eine Schnittstelle, eine Operation, eine Beziehung mit drei Enden, eine Multiplizität 0..5. Nichts davon ist ein Grund, Ihre Datei abzulehnen, und nichts davon verschwindet stillschweigend: Jede einzelne Stelle kommt als Zeile zurück, die das Element benennt und als verworfen, angepasst oder wissenswert markiert ist. Diesen Bericht lesen Sie, bevor irgendetwas gespeichert wird — und er stammt aus demselben Aufruf, der auch speichert, sodass Sie bekommen, was Sie gelesen haben. Zwei Lesarten sind Absicht statt Wörtlichkeit. Ein als Identifikator markiertes Attribut, dessen Multiplizität die Datei nie nennt, wird als Pflichtfeld gelesen: Die Datei sagt sehr wohl etwas über dieses Merkmal, nämlich dass es das Ding identifiziert — es als optional zu lesen, würfe Ihren fachlichen Schlüssel weg. Und ein Dokument ohne Diagrammgeometrie wird auf einem Raster angeordnet, denn XMI verwahrt das Bild in einer eigenen Datei, und ein Stapel Kästen im Nullpunkt ist kein Diagramm. Schieben Sie sie dorthin, wo sie hingehören."
+  },
+  "tutorial": {
+    "en": [
+      "Export your class diagram from your UML tool as XMI (.xmi, .uml or .xml — all three are read).",
+      "Open Data › Information model and press “Import…”. Choose the application the model should belong to, then pick your file.",
+      "Read the report: how many classes, relationships and data stores arrived, and every element the subset would not take. Nothing is stored yet.",
+      "Adjust the model name if you want one other than the document's, then press “Import into …”.",
+      "The class canvas opens. Check the business keys, retype anything the report marked as adjusted, and drag the boxes into an arrangement you can read."
+    ],
+    "de": [
+      "Exportieren Sie Ihr Klassendiagramm aus Ihrem UML-Werkzeug als XMI (.xmi, .uml oder .xml — alle drei werden gelesen).",
+      "Öffnen Sie Data › Information model und drücken Sie „Import…“. Wählen Sie die Applikation, zu der das Modell gehören soll, und danach Ihre Datei.",
+      "Lesen Sie den Bericht: wie viele Klassen, Beziehungen und Data Stores angekommen sind — und jedes Element, das der Sprachumfang nicht aufnimmt. Gespeichert ist noch nichts.",
+      "Passen Sie den Modellnamen an, falls Sie einen anderen als den des Dokuments möchten, und drücken Sie „Import into …“.",
+      "Die Klassenfläche öffnet sich. Prüfen Sie die fachlichen Schlüssel, korrigieren Sie, was der Bericht als angepasst markiert hat, und ordnen Sie die Kästen lesbar an."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Data",
+      "de": "Data öffnen"
+    },
+    "route": "#/data"
+  }
+}
