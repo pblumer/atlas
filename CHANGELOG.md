@@ -259,6 +259,61 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Finding one instance among a few hundred thousand.** An operator's most common
+  question is about a single instance — "where is MT-1998?", "what happened to the
+  instance this ticket names?" — and Atlas answered every version of it by reading
+  through every instance in the engine.
+  [ADR-0239](docs/adr/0239-off-loop-queries.md) took the first half of that away:
+  those queries no longer hold the engine's single writer while they run. They still
+  *walked*, though, and off the loop a walk still costs the operator the wait —
+  `?process=` filtered after the scan, so listing a version with three instances cost
+  a walk of every instance in the store; the finished half was collected whole and
+  sorted in memory to show the ten most recent completions; and the search was, in
+  its own words, "a full scan with no value index".
+  ([ADR-draft-finding-an-instance](docs/adr/draft-finding-an-instance.md))
+
+  **A bare instance key is now a point read.** Paste a key into the search box and
+  it resolves against the live record and then the history — two reads, no walk,
+  and the whole instance with all its variables comes back. A number that is not an
+  instance key falls through to the content search, so `3098` still finds
+  `zip=3098`.
+
+  **Instances are indexed by their definition.** Two new column families —
+  `piByDef:<procDefKey>:<piKey>` and `piDoneByDef:<procDefKey>:<completedAt>:<piKey>`
+  — are maintained in `applyToState` alongside the records they index, so replay
+  rebuilds them (I4/I6) and an existing store is seeded once at open, the same way
+  the ADR-0080/0083 counters were. `GET /api/v1/instances?process=` now reads them:
+  a version's instances cost the page rather than the store, and history comes back
+  most-recently-finished first without sorting anything in memory — which the
+  history family's own key order cannot give you, since an instance started first
+  can finish last.
+
+  **The listing pages.** `?state=active|finished` returns one half and, when the
+  page is capped, hands back `X-Instances-Next-Cursor` for the next (older) one —
+  the same newest-first cursor paging the task inbox uses. The finished cursor
+  carries the completion time as well as the key, for that same reason. `?before=`
+  without `?process=` is refused rather than ignored: a silently dropped paging
+  parameter is how a client loops over one page forever. `state=all` and
+  `state=completed` keep working — callers wrote them back when the parameter was
+  ignored, and they now do what those callers meant. `GET
+  /api/v1/instances/search` takes `?process=` too, scoping a content search to one
+  version's index and letting it stop as soon as the cap is met.
+
+  **The live view's instance panel stops loading everything.** It used to fetch
+  every instance of the version, with every variable on every row, on a 1.5-second
+  poll, and render one card each. It now asks for one page per half, says what it
+  is showing out of what exists ("80 of 150" — a page reported as a total is
+  believed), walks the cursor on **Load more**, and carries a search box: an
+  instance key, or `name=value` over that version's variables. `GET
+  /processes/{key}/runtime` gained a `finished` count so that total costs nothing.
+
+  Still a walk, deliberately: an unscoped content search, and an unscoped
+  `?state=finished`. An ordered key-value store answers equality and prefix, not
+  substring — the record says what a variable-value index would have to look like
+  (declarative, resolved at deploy time, exact and prefix only) and why full text
+  over cold history belongs in the OpenSearch export (ADR-0114) rather than in a
+  new engine index.
+
 - **A class's attributes can be put in the order you want to read them in.** Grab a row
   by its grip and move it, or press Alt+↑ / Alt+↓ in the field you are editing. An
   «enumeration»'s literals move the same way.

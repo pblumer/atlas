@@ -156,6 +156,11 @@ func TestScanHandlersReportDecodeErrors(t *testing.T) {
 		// The incident list scans the incident column family (ADR-0061), so the
 		// undecodable incident record surfaces as a 500 there too.
 		{http.MethodGet, "/api/v1/incidents", ""},
+		// The content search walks the same instance family, so it reports the
+		// undecodable record rather than quietly returning the instances it could read
+		// — a search that silently omits a match is worse than one that fails.
+		{http.MethodGet, "/api/v1/instances/search?q=anything", ""},
+		{http.MethodGet, "/api/v1/instances?state=active", ""},
 	} {
 		rec := httptest.NewRecorder()
 		var body io.Reader
@@ -539,4 +544,127 @@ func putProcessInstanceForTest(srv *Server, key, defKey uint64) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// TestIndexBackedScansReportDecodeErrors is the scoped counterpart: the
+// by-definition indexes point at instance records, and an undecodable record
+// behind an entry must surface as a failure rather than as a version that
+// silently lists one instance fewer than it has. The record is corrupted *after*
+// it was really written, so its index entry stands and the scan reaches it —
+// which an injected record alone could not arrange.
+func TestIndexBackedScansReportDecodeErrors(t *testing.T) {
+	srv := newServerForErrors(t)
+	h := srv.Handler()
+
+	const oneTask = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:atlas="http://atlas.dev/schema/bpmn">
+  <process id="p" name="P" isExecutable="true">
+    <startEvent id="s"/>
+    <userTask id="t" name="T"/>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </process>
+</definitions>`
+	depRec := httptest.NewRecorder()
+	depReq := httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(oneTask))
+	depReq.Header.Set("Content-Type", "application/xml")
+	h.ServeHTTP(depRec, depReq)
+	if depRec.Code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", depRec.Code, depRec.Body.String())
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(depRec.Body.Bytes(), &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	startRec := httptest.NewRecorder()
+	startReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), strings.NewReader("{}"))
+	startReq.Header.Set("Content-Type", "application/json")
+	h.ServeHTTP(startRec, startReq)
+	if startRec.Code != http.StatusOK {
+		t.Fatalf("create instance status=%d body=%s", startRec.Code, startRec.Body.String())
+	}
+
+	// Find the instance the definition's index now points at, then make its record
+	// undecodable while leaving the entry standing.
+	var key uint64
+	srv.do(func() {
+		if err := srv.store.ActiveInstancesOfDefDesc(dep.Key, 0, func(k uint64, _ *model.ProcessInstanceValue) error {
+			key = k
+			return nil
+		}); err != nil {
+			t.Fatalf("ActiveInstancesOfDefDesc: %v", err)
+		}
+	})
+	if key == 0 {
+		t.Fatal("the definition's index holds no instance")
+	}
+	srv.do(func() {
+		if err := srv.store.InjectCorruptProcessInstance(key); err != nil {
+			t.Fatalf("inject corrupt record: %v", err)
+		}
+	})
+
+	for _, path := range []string{
+		fmt.Sprintf("/api/v1/instances?process=%d", dep.Key),
+		fmt.Sprintf("/api/v1/instances?process=%d&state=active", dep.Key),
+		fmt.Sprintf("/api/v1/instances/search?process=%d&q=anything", dep.Key),
+		fmt.Sprintf("/api/v1/instances/search?q=%d", key), // the exact-key point read
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("GET %s = %d, want 500 over an undecodable record (%s)", path, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// TestInstanceReadsRefuseDuringShutdown: the instance listing and the instance
+// search reach state through the run loop, and a loop that is closing runs
+// nothing handed to it — so the handler never gets its read view back. It has to
+// say the server is going down. Returning the zero value instead would read as
+// "this engine holds no instances", which is the one answer an operator must
+// never be given wrongly.
+func TestInstanceReadsRefuseDuringShutdown(t *testing.T) {
+	dir := t.TempDir()
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+		_ = log.Close()
+	})
+	proc := engine.New(1, log, store, nil)
+	if err := proc.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	srv, err := New(proc, store, dir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	h := srv.Handler()
+	// Closed here, not from a cleanup: the point of the test is what the handlers do
+	// once the loop has stopped draining. Close is not idempotent, so it is not also
+	// registered as a cleanup.
+	srv.Close()
+
+	for _, path := range []string{
+		"/api/v1/instances",
+		"/api/v1/instances?process=1&state=active",
+		"/api/v1/instances/search?q=anything",
+		"/api/v1/instances/search?q=12345",
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Errorf("GET %s during shutdown = %d, want 503 (%s)", path, rec.Code, rec.Body.String())
+		}
+	}
 }

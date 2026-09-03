@@ -801,7 +801,26 @@ What it takes to run this for real.
   switching definitions at the migration's log position. Implementation sequence:
   record encoding and the fold → validation → the plan/migrate endpoints → recovery
   tests across the boundary → the timeline's two-definition reader → the Operations UI.
-- 🔲 Operator tooling: list/inspect instances, incidents, jobs
+- 🚧 Operator tooling: list/inspect instances, incidents, jobs. **Finding one instance
+  among a few hundred thousand** landed
+  ([ADR-draft-finding-an-instance](docs/adr/draft-finding-an-instance.md)): the
+  variable search used to walk every instance in the engine *on the run loop*, so a
+  search stopped the processor for as long as it took, and `?process=` filtered after
+  that walk rather than before it. Now a bare instance key is a **point read** (live
+  or finished, whatever the instance count); the search and the instances list take a
+  `state.ReadView` on the loop in microseconds and read **beside** it (ADR-0157); and
+  two new column families — `piByDef:<procDefKey>:<piKey>` and
+  `piDoneByDef:<procDefKey>:<completedAt>:<piKey>`, folded in `applyToState` and
+  backfilled once at open like the ADR-0080/0083 counters — make a version's
+  instances a **bounded range scan**, newest first, with history already in
+  completion order. `GET /api/v1/instances` gained `?state=active|finished` and a
+  `?before=` cursor (`X-Instances-Next-Cursor`, the task inbox's paging), the search
+  gained `?process=`, and the live view's instance panel stops loading every instance
+  of a version: one page per half, an honest "80 of 150", **Load more**, and a search
+  box beside the list. Remaining: the **variable value index** that would turn
+  `identityId=MT-1998` from a walk into a seek — declarative, resolved at deploy time
+  (I5), exact and prefix only — with substring and full text over cold history staying
+  in the OpenSearch export (ADR-0114) rather than becoming a second engine index.
 
 ## Milestone 5 — Scale-out 🔲
 

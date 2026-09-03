@@ -84,7 +84,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// and last-activity stamped, so the summary reads both in O(1) (ADR-0083).
 			err := firstErr(
 				tx.PutProcessInstanceHistory(h.Key, &hist),
-				tx.DeleteProcessInstance(h.Key),
+				tx.DeleteProcessInstance(h.Key, v.process.ProcessDefKey),
 				tx.DecDefInstanceCount(v.process.ProcessDefKey),
 				tx.IncDefCompletedCount(v.process.ProcessDefKey),
 				tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp),

@@ -85,6 +85,14 @@ func Open(dir string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill child index: %w", err)
 	}
+	// The by-definition instance indexes are later still. Unlike a counter, a missing
+	// index does not read low — it reads *empty*, so a store upgraded into this
+	// version would answer "this version's instances" with nothing until it was
+	// seeded once from the instances and history it already holds.
+	if err := s.backfillInstanceDefIndexIfNeeded(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: backfill instance-by-definition index: %w", err)
+	}
 	return s, nil
 }
 
@@ -662,6 +670,50 @@ func (s *Store) backfillSummaryCountersIfNeeded() error {
 	return b.Commit(pebble.Sync)
 }
 
+const metaInstanceDefIndexV1 = "instance_def_index_v1"
+
+// backfillInstanceDefIndexIfNeeded seeds the by-definition instance indexes from
+// the instances and history a store already holds, the first time it gains them,
+// then records that it has done so. It scans the two process-instance families
+// once and writes their index entries plus the marker in a single atomic, synced
+// batch — so a crash mid-migration leaves nothing and the next open re-runs
+// cleanly.
+//
+// Both entries are valueless, so an interrupted and repeated run could only rewrite
+// keys it had already written; the marker is nevertheless what keeps a normal open
+// from re-scanning the whole store every time.
+func (s *Store) backfillInstanceDefIndexIfNeeded() error {
+	if _, ok, err := getCopy(s.db, keyMeta(metaInstanceDefIndexV1)); err != nil || ok {
+		return err
+	}
+
+	b := s.db.NewBatch()
+	defer b.Close()
+	if err := s.scanPrefix([]byte{byte(cfProcessInstance)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		return b.Set(keyInstanceByDef(v.(*model.ProcessInstanceValue).ProcessDefKey, trailingKey(k)), nil, nil)
+	}); err != nil {
+		return err
+	}
+	if err := s.scanPrefix([]byte{byte(cfProcessInstanceHistory)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		pi := v.(*model.ProcessInstanceValue)
+		return b.Set(keyInstanceDoneByDef(pi.ProcessDefKey, pi.CompletedAt, trailingKey(k)), nil, nil)
+	}); err != nil {
+		return err
+	}
+	if err := b.Set(keyMeta(metaInstanceDefIndexV1), []byte{1}, nil); err != nil {
+		return err
+	}
+	return b.Commit(pebble.Sync)
+}
+
 // InjectCorruptProcessInstance writes an undecodable record under a process
 // instance's key. It is a test/tooling affordance only — it lets a caller in another
 // package exercise the decode-error path of the active-instance scan
@@ -729,6 +781,70 @@ func (q queries) CompletedProcessInstances(fn func(key uint64, v *model.ProcessI
 			return err
 		}
 		return fn(trailingKey(k), v.(*model.ProcessInstanceValue))
+	})
+}
+
+// ActiveInstancesOfDefDesc calls fn with every live instance of one definition in
+// DESCENDING key order — newest first — starting just below `before`; before == 0
+// starts from the newest. It reads the by-definition index, so its cost is the
+// page it yields plus one point read per row, not the size of the store: a version
+// with three running instances costs three reads whether the engine holds a
+// thousand instances or a million.
+//
+// It is the definition-scoped counterpart of [queries.ActiveProcessInstancesDesc],
+// and it takes a cursor rather than only a limit because a version's list is paged
+// rather than truncated. The caller stops a page by returning a sentinel from fn,
+// exactly as the task inbox pages ActivatableJobsDesc; the key of the last row it
+// kept is the cursor for the next (older) page.
+func (q queries) ActiveInstancesOfDefDesc(procDefKey, before uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	lo := instanceByDefPrefix(procDefKey)
+	hi := prefixEnd(lo)
+	if before != 0 {
+		// UpperBound is exclusive, so this starts at the highest key strictly below
+		// `before` — the natural cursor for "the next older page".
+		hi = keyInstanceByDef(procDefKey, before)
+	}
+	return q.instancesOfDefDesc(lo, hi, keyProcessInstance, fn)
+}
+
+// FinishedInstancesOfDefDesc calls fn with every finished instance of one
+// definition in DESCENDING completion order — most recently finished first —
+// starting just below the (beforeCompletedAt, beforeKey) cursor; a zero cursor
+// starts from the most recent. It is the history counterpart of
+// [queries.ActiveInstancesOfDefDesc], and it gets that order from the index key
+// rather than by sorting the history in memory — which is what
+// [queries.CompletedProcessInstancesDesc] cannot do, since the history family is
+// in key order and an instance started first can finish last.
+//
+// The cursor is a pair for that same reason. fn receives the value, whose
+// CompletedAt together with the key forms the cursor for the next page.
+func (q queries) FinishedInstancesOfDefDesc(procDefKey uint64, beforeCompletedAt int64, beforeKey uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	lo := instanceDoneByDefPrefix(procDefKey)
+	hi := prefixEnd(lo)
+	if beforeCompletedAt != 0 || beforeKey != 0 {
+		hi = keyInstanceDoneByDef(procDefKey, beforeCompletedAt, beforeKey)
+	}
+	return q.instancesOfDefDesc(lo, hi, keyProcessInstanceHistory, fn)
+}
+
+// instancesOfDefDesc walks one of the by-definition indexes backwards and hands fn
+// the record each entry names. The two indexes differ only in their key range and
+// in which family holds the record, so the walk itself is written once.
+func (q queries) instancesOfDefDesc(lo, hi []byte, recordKey func(uint64) []byte, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	return q.scanRangeDesc(lo, hi, func(k, _ []byte) error {
+		key := trailingKey(k)
+		raw, ok, err := getCopy(q.r, recordKey(key))
+		if err != nil || !ok {
+			// An index entry whose record is gone is skipped rather than reported: the
+			// pair is written in one batch, so this can only be a store that predates
+			// the index and has not been backfilled.
+			return err
+		}
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		return fn(key, v.(*model.ProcessInstanceValue))
 	})
 }
 

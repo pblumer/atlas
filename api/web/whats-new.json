@@ -280,6 +280,49 @@
       }
     },
     {
+      "id": "finding-one-instance-among-a-few-hundred-thousand",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Find one instance among hundreds of thousands",
+        "de": "Eine Instanz unter Hunderttausenden finden"
+      },
+      "summary": {
+        "en": "The question you usually arrive with is about one instance: where is MT-1998, what happened to the one this ticket names. Until now every way of asking it read through every instance in the engine — so on a busy version the search took a long time and, worse, held the engine up while it ran. Paste an instance key into the search box and it now comes back at once, however many instances exist, running or long finished. Searching by variable content is scoped to the version you are looking at. And the instance list beside the diagram no longer loads everything: it shows a page, says what that page was drawn from (\"80 of 150\"), and lets you load more or search for the one you want.",
+        "de": "Die Frage, mit der man meistens kommt, betrifft eine einzelne Instanz: Wo ist MT-1998, was ist mit der aus diesem Ticket passiert? Bisher las jede Art, sie zu stellen, jede Instanz der Engine durch — auf einer stark genutzten Version dauerte die Suche also lange und hielt dabei auch noch die Engine auf. Ein in das Suchfeld eingefügter Instanzschlüssel kommt jetzt sofort zurück, egal wie viele Instanzen es gibt, laufend oder längst beendet. Die Suche über Variableninhalte bleibt auf die Version beschränkt, die Sie gerade ansehen. Und die Instanzliste neben dem Diagramm lädt nicht mehr alles: Sie zeigt eine Seite, sagt dazu, woraus diese Seite stammt („80 von 150\"), und lässt Sie nachladen oder gezielt nach der einen suchen."
+      },
+      "link": {
+        "label": "ADR-0239",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0239-off-loop-queries.md"
+      },
+      "tags": [
+        "Operations",
+        "Search"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations and pick a process version to see its live diagram.",
+          "In the panel beside the diagram, type an instance key into the search box and press Find — the instance comes back on its own.",
+          "Or type name=value (for example identityId=MT-1998) to search that version's process variables.",
+          "Clear the search to go back to the newest instances, and use Load more to walk further back."
+        ],
+        "de": [
+          "Operations öffnen und eine Prozessversion wählen, um ihr Live-Diagramm zu sehen.",
+          "Im Panel neben dem Diagramm einen Instanzschlüssel ins Suchfeld eingeben und Find drücken — die Instanz kommt für sich allein zurück.",
+          "Oder name=wert eingeben (etwa identityId=MT-1998), um die Prozessvariablen dieser Version zu durchsuchen.",
+          "Die Suche leeren, um zu den neuesten Instanzen zurückzukehren, und mit Load more weiter zurückgehen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "a-class-s-attributes-can-be-put-in-the-order-you-want-to-rea",
       "version": "Unreleased",
       "date": null,
