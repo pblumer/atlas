@@ -4404,7 +4404,19 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .do-state.none { background: none; color: var(--muted); font-weight: 500; }
 .do-by { font: 12px/1.5 system-ui, sans-serif; color: var(--text); }
 .do-by.none { color: var(--muted); font-style: italic; }
-.vt.do-table .c-val.do-json { color: var(--accent); }
+/* A structured value is a button: it opens the same JSON window the Variables tab
+   opens. Styled as a link rather than as a button, because it sits in a table cell
+   among plain values and a chrome button there would read as an action on the row. */
+.c-val.do-json {
+  /* A button inherits no font, and this one has to keep reading as a value: the same
+     monospace .vt .c-val sets, in the trail table as well as in the row. */
+  font: 13px/1.5 ui-monospace, monospace; color: var(--accent);
+  background: none; border: 0; padding: 0;
+  cursor: pointer; text-align: left; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
+.do-trail-table .c-val.do-json { font-size: 12.5px; }
+.c-val.do-json:hover { text-decoration: underline; }
+.c-val.do-json:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
 
 /* The state trail: the object's own biography, opened under its row. Indented and
    quieted so the table above stays the thing being scanned. */

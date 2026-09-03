@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **A data object's value opens as formatted JSON.** In an instance's **Data** tab, a
+  structured value showed as `{3 fields}` and the whole of it was reachable only as a
+  tooltip — unreadable past a few lines, impossible to scroll, select or copy from, and
+  absent altogether on a touch device. The summary is now a button, and it opens the
+  same pretty-printed, syntax-highlighted window the **Variables** tab opens, with the
+  same Copy JSON. A data object is variable-shaped by design
+  ([ADR-0053](docs/adr/0053-first-class-data-objects.md)), so the two tabs
+  should answer "what is actually in there" with one surface.
+
+  Every write in the state trail opens too, and each window says which write it is
+  showing — a trail of four `{3 fields}` is unreadable if every window is titled the
+  same. Scalars are left alone: a string is already whole in its cell, and a button
+  around it would promise a second reading that does not exist.
+
 - **The class diagram's properties panel is the Modeler's panel.** Selecting a class, a
   data store or a relationship under **Data › Information model** now gives you the same
   panel the BPMN Modeler does: a header naming what is selected — its kind in small

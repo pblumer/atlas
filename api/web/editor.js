@@ -9726,14 +9726,25 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // variable's: a structure is summarized rather than dumped, because a data object is
   // variable-shaped by design (ADR-0053) and an operator scanning the two side by side
   // should not have to learn two readings of the same thing.
-  const doValueCell = (d) => {
+  // `label` names the value in the window it opens: the object for a row, the object
+  // and which write for a trail entry — a trail of four {3 fields} is unreadable if
+  // every window is titled the same.
+  const doValueCell = (d, label = "") => {
     if (d.kind === "null" || d.value === null || d.value === undefined) {
       return `<span class="c-val null" title="No value written yet — the object is declared and seeded, but no association has written it">unset</span>`;
     }
     if (d.kind === "json") {
       const text = JSON.stringify(d.value);
       const arr = Array.isArray(d.value);
-      return `<span class="c-val do-json" title="${esc(prettyJSON(text))}">${arr ? "[" : "{"}${esc(jsonSummary(text))}${arr ? "]" : "}"}</span>`;
+      // The summary opens the same window the Variables tab's values open, rather than
+      // hiding the value in a title attribute — a tooltip is unreadable past a few
+      // lines, cannot be scrolled, copied or selected from, and never appears at all on
+      // a touch device. A data object is variable-shaped by design (ADR-0053), so the
+      // two tabs answer "what is actually in there" with one surface.
+      return `<button type="button" class="c-val do-json" data-name="${esc(label)}"
+          data-json="${esc(text)}" data-type="${arr ? "array" : "object"}"
+          title="Show ${esc(label || "this value")} as formatted JSON"
+        >${arr ? "[" : "{"}${esc(jsonSummary(text))}${arr ? "]" : "}"}</button>`;
     }
     const cls = d.kind === "boolean" ? "bool" : d.kind === "number" ? "num" : "str";
     return `<span class="c-val ${cls}">${esc(String(d.value))}</span>`;
@@ -9802,7 +9813,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         </td>
         <td class="do-c-class">${cls}</td>
         <td class="do-c-state">${state}</td>
-        <td class="c-valcell">${doValueCell(d)}</td>
+        <td class="c-valcell">${doValueCell(d, d.name)}</td>
         <td class="do-c-by">${by}</td>
         <td class="do-c-at">${esc(fmtClock(d.at))}</td>
       </tr>`;
@@ -9810,7 +9821,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       const entries = trail.map((h, i) => `<tr class="do-trail-row">
           <td class="do-t-n">${i + 1}</td>
           <td class="do-t-state">${h.state ? esc(h.state) : "—"}</td>
-          <td class="do-t-val">${doValueCell(h)}</td>
+          <td class="do-t-val">${doValueCell(h, `${d.name} · write ${i + 1}`)}</td>
           <td class="do-t-by">${writtenBy(h, i)}</td>
           <td class="do-t-at">${esc(fmtClock(h.at))}</td>
         </tr>`).join("");
@@ -9969,6 +9980,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // The trail toggles are inside a body that re-renders, so they are wired by
   // delegation rather than re-bound on every render.
   dataEl.addEventListener("click", (e) => {
+    // A structured value opens in the same window the Variables tab uses.
+    const val = e.target.closest(".do-json");
+    if (val && dataEl.contains(val)) {
+      openVarModal(val.dataset.name, val.dataset.json, val.dataset.type);
+      return;
+    }
     const t = e.target.closest(".do-toggle");
     if (!t || !dataEl.contains(t)) return;
     const row = t.closest(".do-row");
