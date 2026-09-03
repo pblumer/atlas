@@ -101,6 +101,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_list_information_models":  "GET /api/v1/infomodel/models",
 	"atlas_get_information_model":    "GET /api/v1/infomodel/models/{id}",
 	"atlas_create_information_model": "POST /api/v1/infomodel/models",
+	"atlas_import_information_model": "POST /api/v1/infomodel/import",
 	"atlas_save_information_model":   "PUT /api/v1/infomodel/models/{id}",
 	"atlas_delete_information_model": "DELETE /api/v1/infomodel/models/{id}",
 	"atlas_information_model_schema": "GET /api/v1/infomodel/models/{id}/schema",

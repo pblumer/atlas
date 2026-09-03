@@ -14,6 +14,67 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Importing a UML class diagram: reading what somebody else drew.** A data model is
+  normally drawn in a UML tool — Enterprise Architect, Papyrus, Visual Paradigm — long
+  before anybody opens Atlas, and until now the only way to get it in was to retype it
+  class by class. What that loses is never the class names: it is the **business key**,
+  the one fact BPMN has no equivalent for and the one every cross-process capability
+  rests on. **Data › Information model** now has an **Import** button, and
+  `POST /api/v1/infomodel/import` behind it
+  ([ADR-0232](docs/adr/0232-uml-model-import.md), extending
+  [ADR-0230](docs/adr/0230-process-information-model.md)).
+
+  Two documents are read, and the format is detected from the document itself — a UML
+  tool writes `.uml`, `.xmi` and `.xml` for the same file, so the extension says
+  nothing. **XMI 2.5.1** is what a UML tool exports: classes, data types and
+  enumerations become the three stereotypes, an `ownedAttribute` that is an association
+  end belongs to its association rather than being stated twice, bounds become the four
+  multiplicities the subset has, `isID` becomes the business key, and a composite end
+  is read as the *whole* — which is what the diamond marks. **Atlas's own JSON** is the
+  other: exactly what `GET /api/v1/infomodel/models/{id}` hands out, so a model moves
+  between applications and installations through the document the API already gives
+  you.
+
+  ADR-0230 said XMI was "an export, not an interchange … until it is tested". What
+  makes it safe now is that **nothing is dropped silently**. An import goes through the
+  same subset the canvas writes through, and everything the subset has no place for —
+  an interface, an operation, an n-ary association, a multiplicity of `0..5`, a
+  generalization that closes a cycle — comes back as a note naming the element, at one
+  of three levels: *dropped* (not in the model), *adjusted* (in the model, saying
+  something slightly different) or *info* (nothing lost, worth knowing — a flattened
+  package, a generated layout). The Import dialog shows that report **before** anything
+  is stored, from the same call that does the storing (`dryRun`), so what the preview
+  promises is what lands.
+
+  Two readings are deliberate rather than literal. An identifier whose multiplicity the
+  document never states is read as **required**: the document does say something about
+  that member — it identifies the instance — and reading it as optional would throw the
+  business key away. And a document with no geometry is **laid out on a grid**, because
+  XMI keeps the picture in a file of its own and a stack of boxes at the origin is not
+  a diagram; the note says so, since what was lost is the arrangement, not the model.
+
+  The same import is an MCP tool (`atlas_import_information_model`), so an agent can
+  bring a vocabulary in before authoring against it.
+
+- **A variable named after one of your data objects is now flagged.** The new rule
+  `variable.shadows-data-object` raises a warning where the two collide: draw a data
+  object `Kunde`, have a task write its result into a variable `Kunde` — or read the
+  object back into a variable of the same name — and the diagram shows one thing while
+  the instance holds two.
+
+  They are not two views of one value. A data object carries the declared type, the data
+  state and the recorded history of every write; a variable carries a value. They live in
+  separate records, are written by separate events, and **writing one never changes the
+  other** — a data association *copies*, evaluating its expression once. And only one of
+  them answers to the name: FEEL is bound from the variables alone, so `Kunde` in a
+  condition, a mapping or a connector payload always means the variable, even in a model
+  whose whole point is the object. The two then drift apart under one name, and every
+  expression quietly means just one of them.
+
+  A warning rather than a refusal: it is legal, and wanting one name for one idea is
+  reasonable. The panel says which write collides and why it matters; renaming either
+  side clears it.
+
 - **Web scraping: one row is one record, and the fetch survives the real web**
   ([ADR-0231](docs/adr/0231-webscrape-structured-extraction.md)).
   An `<atlas:webscrapeConnector>` now takes `<atlas:scrapeField>` children. With at
@@ -817,6 +878,50 @@ _Changed_ / _Removed_ for each version.
   extension elements are still `<atlas:jiraConnector>` and friends.
 
 ### Fixed
+
+- **A data object whose declaration went missing took the whole deploy down with it.**
+  A data object is two elements: the `<dataObject>` that declares it and carries its
+  type, and the `<dataObjectReference>` that puts it on the canvas with its name, its
+  data state and its shape. Only the second is drawn, so only the second is visibly
+  there — and a model can reach Atlas having lost the first. The box still reads
+  `Kunde [received]` to everybody looking at it, and it names nothing the engine can
+  find.
+
+  Two things then went wrong, neither of them the modeller's doing. The deploy was
+  refused with `dataObjectRef "DataObject_0s4i37q" is unknown` — an id nobody had ever
+  typed, attached to no shape, with nothing to do about it. And a type set in the
+  properties panel had nowhere to be written, so it vanished on the next save without
+  a word.
+
+  Both are fixed from opposite ends. **The compiler lets the reference stand in for
+  its own declaration**: a data object's identity is its name, the name is on the
+  reference, and nothing about such a model is in doubt — the same fallback a
+  `<dataStoreReference>` naming no root element already gets. Only the declared type
+  is genuinely lost, so the object is seeded without one rather than with a guess.
+  **The Modeler repairs the model on the way in**, declaring what the dangling
+  reference implies, which is where the type gets somewhere to live again. That repair
+  now runs beside the one for `itemSubjectRef`, and for the same reason: the bpmn
+  moddle drops a reference it cannot resolve, so a model that arrives dangling comes
+  back from the next save having lost more than it arrived with.
+
+  The message left for a reference that names nothing at all no longer claims to be
+  about a data *output* association when it is a read that failed.
+
+- **An application you had just created was missing from the dialog that asked which
+  application to use.** Creating an information model, creating or importing an
+  architecture model, and promoting a release all asked their question through a
+  `window.prompt` whose body was the choices as a numbered list, with "enter a number"
+  underneath. A browser truncates a prompt body once it grows past a handful of lines
+  and ends it with an ellipsis — so on a server with a dozen applications the newest
+  ones, which sort last, were simply not in the list somebody was being told to choose
+  from. Nothing said they had been cut off; the application looked missing, and the
+  three trailing dots looked like a rendering quirk.
+
+  All four are now the same small dialog: a real drop-down of the applications you can
+  write to, and the name beside it in one step instead of a second prompt. The
+  suggested name follows the picker until you type your own. Nothing has to be counted,
+  a list of any length fits, and Escape, Cancel or a click outside all mean the same
+  thing as before.
 
 - **A type a modeling tool wrote in its own namespace read back as a GUID.** BPMN gives
   an `<itemDefinition>` no name of its own — a root element carries an id and nothing

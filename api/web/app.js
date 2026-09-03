@@ -18,6 +18,7 @@ import {
 } from "./incidents.js";
 import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWorkerUsage, deleteWorkerFlow } from "./workerdialog.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
+import { openPickModal } from "./pickmodal.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { loadFormViewer } from "./formviewer.js";
@@ -3078,11 +3079,15 @@ async function renderAppDeployments(id) {
 // picks *where*, never *what*. Results come back per target, so a refusal by one
 // peer is reported as that peer's, not as a failed action.
 async function promoteRelease(appID, version, targets) {
-  const names = targets.map((t, i) => `${i + 1}) ${t.targetName}`).join("\n");
-  const answer = window.prompt(
-    `Promote v${version} to which target?\n\n${names}\n\nEnter a number:`, "1");
-  if (answer == null) return;
-  const pick = targets[Number(answer) - 1];
+  const picked = await openPickModal({
+    title: `Promote v${version}`,
+    label: "Target",
+    options: targets.map((t) => ({ value: t.targetId, label: t.targetName })),
+    okLabel: "Promote",
+    hint: "The release is frozen, so this sends exactly what was published.",
+  });
+  if (!picked) return;
+  const pick = targets.find((t) => t.targetId === picked.option.value);
   if (!pick) { toast("No such target", "err"); return; }
 
   try {
@@ -7416,7 +7421,11 @@ async function viewInfoModels() {
         <p class="muted" style="margin:0">What the data in your processes <i>is</i> — classes, their attributes and
           their business keys — as a UML class diagram shared across every process in an application.</p>
       </div>
-      ${writable.length ? `<button class="btn" data-act="new-im">Create new</button>` : ""}
+      ${writable.length ? `<div style="display:flex; gap:8px; align-items:center">
+        <button class="btn ghost" data-act="import-im"
+          title="Read a class diagram somebody already drew: Atlas's own JSON, or the XMI a UML tool exports">Import…</button>
+        <button class="btn" data-act="new-im">Create new</button>
+      </div>` : ""}
     </div>
     ${applications.length ? "" : `<div class="card empty" style="margin-top:16px">
       <h2>Create an application first</h2>
@@ -7445,27 +7454,26 @@ async function viewInfoModels() {
   </div>`;
 
   const root = document.getElementById("im-root");
-  const chooseApplication = () => {
-    if (!writable.length) return null;
-    if (writable.length === 1) return writable[0];
-    const choices = writable.map((app, i) => `${i + 1}) ${app.name}`).join("\n");
-    const answer = window.prompt(`Store the information model in which application?\n\n${choices}\n\nEnter a number:`, "1");
-    if (answer == null) return null;
-    const selected = writable[Number(answer) - 1];
-    if (!selected) toast("No such application", "err");
-    return selected || null;
-  };
-
   root.addEventListener("click", async (e) => {
+    if (e.target.closest('[data-act="import-im"]')) {
+      const app = chooseApplication();
+      if (app) await importInfoModel(app);
+      return;
+    }
     const btn = e.target.closest('[data-act="new-im"]');
-    if (!btn) return;
-    const app = chooseApplication();
-    if (!app) return;
-    const name = window.prompt("Information model name:", `${app.name} data`);
-    if (name == null || !name.trim()) return;
+    if (!btn || !writable.length) return;
+    const picked = await openPickModal({
+      title: "New information model",
+      label: "Application",
+      options: writable.map((app) => ({ value: app.id, label: app.name })),
+      nameLabel: "Model name",
+      nameFor: (app) => `${app.label} data`,
+      hint: "The model belongs to this application and is shared by every process in it.",
+    });
+    if (!picked) return;
     try {
-      const created = await api("POST", "/api/v1/infomodel/models", { applicationId: app.id, name: name.trim() });
-      toast(`${name.trim()} created`, "ok");
+      const created = await api("POST", "/api/v1/infomodel/models", { applicationId: picked.option.value, name: picked.name });
+      toast(`${picked.name} created`, "ok");
       location.hash = `#/data/m/${encodeURIComponent(created.id)}`;
     } catch (err) { toast(err.message, "err"); }
   });
@@ -7489,6 +7497,94 @@ async function viewInfoModels() {
     }
   });
   enhanceViewTables();
+}
+
+// importInfoModel reads a class diagram somebody already drew.
+//
+// A data model is normally drawn in a UML tool long before anybody opens Atlas, and
+// retyping one by hand is both the slowest way to start and the way a business key
+// quietly goes missing. Two documents are read: Atlas's own JSON — how a model moves
+// between applications and installations — and the XMI 2.5.1 a UML tool exports.
+//
+// The import is deliberately two steps. Reading a foreign notation into a declared
+// subset is lossy, and the report the first step returns is the substance of it: what
+// arrived, and what the subset would not take, element by element. The same call
+// makes both — the second one only drops the dryRun flag — so what the report
+// promises is exactly what gets stored.
+async function importInfoModel(app) {
+  const file = await pickFile(".json,.xml,.xmi,.uml,application/json,application/xml,text/xml");
+  if (!file) return;
+  let text;
+  try { text = await file.text(); }
+  catch (e) { toast("Import failed: " + e.message, "err"); return; }
+
+  const base = file.name.replace(/\.[^.]+$/, "");
+  let preview;
+  try {
+    preview = await api("POST", "/api/v1/infomodel/import",
+      { applicationId: app.id, document: text, dryRun: true });
+  } catch (e) { toast("Import failed: " + e.message, "err"); return; }
+
+  showImportReport(app, file.name, base, text, preview);
+}
+
+// showImportReport is the report and the confirmation in one: the counts, the name the
+// model will carry, and every note the reader has to see before deciding.
+function showImportReport(app, fileName, base, text, preview) {
+  const model = preview.preview || { classes: [], associations: [], stores: [] };
+  const notes = preview.notes || [];
+  const level = (l) => ({ dropped: "#b42318", adjusted: "#9a6700", info: "#6a737d" }[l] || "#6a737d");
+  const badge = (l) => `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;color:#fff;white-space:nowrap;background:${level(l)}">${esc(l)}</span>`;
+  const rows = notes.map((n) =>
+    `<tr><td>${badge(n.level)}</td><td>${n.element ? `<code>${esc(n.element)}</code>` : `<span class="muted">the model</span>`}</td>
+     <td class="muted">${esc(n.message)}</td></tr>`).join("");
+  const counted = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Import report" style="max-width:880px">
+      <div class="modal-head"><h2>Import ${esc(fileName)}</h2></div>
+      <div class="modal-body">
+        <p class="muted" style="margin:0 0 10px">Read as <b>${esc(preview.format === "xmi" ? "UML XMI" : "Atlas JSON")}</b> —
+          ${counted((model.classes || []).length, "class", "classes")},
+          ${counted((model.associations || []).length, "relationship", "relationships")},
+          ${counted((model.stores || []).length, "data store", "data stores")}.
+          Nothing is stored until you import.</p>
+        <label class="field" style="max-width:380px"><span>Model name</span>
+          <input id="im-import-name" value="${esc(model.name || base)}"/></label>
+        <p class="muted" style="margin:10px 0 6px">Atlas authors a declared subset of the UML class diagram, so a
+          document from another tool routinely says things it has no place for. Every one of them is listed here:
+          <b>dropped</b> is not in the model, <b>adjusted</b> is in it saying something slightly different.</p>
+        <div style="max-height:44vh; overflow:auto">
+          <table><thead><tr><th style="width:90px">What</th><th style="width:190px">Element</th><th>Detail</th></tr></thead>
+            <tbody>${rows || `<tr><td colspan="3" class="muted">Nothing was lost: the document fits the subset as it stands.</td></tr>`}</tbody></table>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn neutral" data-close title="Close without importing">Cancel</button>
+        <button class="btn" data-import title="Store this as an information model of ${esc(app.name)}">Import into ${esc(app.name)}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.querySelector("[data-close]").addEventListener("click", close);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  ov.querySelector("[data-import]").addEventListener("click", async () => {
+    const name = (document.getElementById("im-import-name").value || "").trim();
+    try {
+      const created = await api("POST", "/api/v1/infomodel/import",
+        { applicationId: app.id, document: text, name });
+      close();
+      const dropped = (created.notes || []).filter((n) => n.level === "dropped").length;
+      toast(dropped
+        ? `Imported “${created.model.name}” — ${dropped} element${dropped === 1 ? "" : "s"} the subset does not author were left out`
+        : `Imported “${created.model.name}”`, "ok");
+      location.hash = `#/data/m/${encodeURIComponent(created.model.id)}`;
+    } catch (e) { toast("Import failed: " + e.message, "err"); }
+  });
 }
 
 // viewDataInstances is the same subject one altitude down: not what an Order *is*,
@@ -7740,16 +7836,7 @@ async function viewPanoramaModels() {
 
   const panoramaRoot = document.getElementById("panorama-root");
 
-  const chooseApplication = () => {
-    if (!writable.length) return null;
-    if (writable.length === 1) return writable[0];
-    const choices = writable.map((app, i) => `${i + 1}) ${app.name}`).join("\n");
-    const answer = window.prompt(`Store the architecture model in which application?\n\n${choices}\n\nEnter a number:`, "1");
-    if (answer == null) return null;
-    const selected = writable[Number(answer) - 1];
-    if (!selected) toast("No such application", "err");
-    return selected || null;
-  };
+  const applicationOptions = () => writable.map((app) => ({ value: app.id, label: app.name }));
 
   const saveImported = async (xml, suggestedName) => {
     const validation = await api("POST", "/api/v1/panorama/validate", xml, true);
@@ -7757,14 +7844,21 @@ async function viewPanoramaModels() {
       const first = validation.problems && validation.problems[0];
       throw new Error(first ? first.message : "The document is not valid ArchiMate Open Exchange XML");
     }
-    const app = chooseApplication();
-    if (!app) return;
-    const name = window.prompt("Model name:", validation.name || suggestedName || "Architecture model");
-    if (name == null || !name.trim()) return;
-    await api("POST", "/api/v1/panorama/models", {
-      applicationId: app.id, name: name.trim(), notation: "archimate-3.2", xml,
+    if (!writable.length) return;
+    const picked = await openPickModal({
+      title: "Import architecture model",
+      label: "Application",
+      options: applicationOptions(),
+      nameLabel: "Model name",
+      nameFor: () => validation.name || suggestedName || "Architecture model",
+      okLabel: "Import",
+      hint: "The model belongs to this application and inherits its sharing.",
     });
-    toast(`${name.trim()} imported`, "ok");
+    if (!picked) return;
+    await api("POST", "/api/v1/panorama/models", {
+      applicationId: picked.option.value, name: picked.name, notation: "archimate-3.2", xml,
+    });
+    toast(`${picked.name} imported`, "ok");
     return route();
   };
 
@@ -7783,18 +7877,24 @@ async function viewPanoramaModels() {
         input.click();
       }
       if (act === "new-panorama") {
-        const app = chooseApplication();
-        if (!app) return;
-        const name = window.prompt("Model name:", "Application landscape");
-        if (name == null || !name.trim()) return;
+        if (!writable.length) return;
+        const picked = await openPickModal({
+          title: "New architecture model",
+          label: "Application",
+          options: applicationOptions(),
+          nameLabel: "Model name",
+          nameFor: () => "Application landscape",
+          hint: "The model belongs to this application and inherits its sharing.",
+        });
+        if (!picked) return;
         const identifier = `model-${globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : Date.now()}`;
         const xml = `<?xml version="1.0" encoding="UTF-8"?>\n` +
           `<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" identifier="${identifier}">\n` +
-          `  <name xml:lang="en">${esc(name.trim())}</name>\n</model>\n`;
+          `  <name xml:lang="en">${esc(picked.name)}</name>\n</model>\n`;
         await api("POST", "/api/v1/panorama/models", {
-          applicationId: app.id, name: name.trim(), notation: "archimate-3.2", xml,
+          applicationId: picked.option.value, name: picked.name, notation: "archimate-3.2", xml,
         });
-        toast(`${name.trim()} created`, "ok");
+        toast(`${picked.name} created`, "ok");
         return route();
       }
       if (act === "rename-panorama") {

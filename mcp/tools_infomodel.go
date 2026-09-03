@@ -119,6 +119,51 @@ func infomodelTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_import_information_model",
+			Description: "Import a UML class diagram as a NEW information model of an application. Two " +
+				"documents are read: Atlas's own JSON (what atlas_get_information_model returns, so a " +
+				"model moves between applications and installations), and the XMI 2.5.1 a UML tool " +
+				"exports. The format is detected from the document unless you state it. Reading a " +
+				"foreign notation into a declared subset is LOSSY: everything outside the subset is " +
+				"dropped or adjusted, and the answer's notes name every element it happened to — read " +
+				"them, they are the substance of the answer. Set dryRun to get those notes and the " +
+				"model it would create without storing anything.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"applicationId": stringProp("The process application that will own the imported model."),
+					"document":      stringProp("The whole source document: Atlas JSON, or UML XMI."),
+					"format":        stringProp("Optional: \"json\" or \"xmi\". Detected from the document when omitted."),
+					"name":          stringProp("Optional: a name for the model, overriding the one the document carries."),
+					"documentation": stringProp("Optional: what part of the business these classes describe."),
+					"dryRun": map[string]any{"type": "boolean",
+						"description": "Report what the import would do — the notes and the model it would create — and store nothing."},
+				},
+				"required": []any{"applicationId", "document"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				appID, err := argString(args, "applicationId")
+				if err != nil {
+					return "", err
+				}
+				document, err := argString(args, "document")
+				if err != nil {
+					return "", err
+				}
+				payload := map[string]any{"applicationId": appID, "document": document}
+				for _, field := range []string{"format", "name", "documentation"} {
+					if v := optString(args, field); v != "" {
+						payload[field] = v
+					}
+				}
+				if dry, ok := args["dryRun"].(bool); ok && dry {
+					payload["dryRun"] = true
+				}
+				body, _ := json.Marshal(payload)
+				return asText(c.post("/api/v1/infomodel/import", "application/json", body))
+			},
+		},
+		{
 			Name: "atlas_save_information_model",
 			Description: "Replace an information model's classes and associations. The whole document is " +
 				"sent, so read it first and send it back changed. A class is {id, name, stereotype, " +

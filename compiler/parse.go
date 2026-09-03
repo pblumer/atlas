@@ -647,6 +647,33 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		b.AddDataObject(name, resolveItemType(d.ItemSubjectRef), d.DataState.Name, d.IsCollection)
 	}
 
+	// A <dataObjectReference> whose dataObjectRef names no <dataObject> still names an
+	// object. A data object's identity is its name, and the *reference* is what carries
+	// the name — along with the label, the data state and the shape on the diagram. The
+	// declaration carries only the type, so when a tool loses one it loses the half a
+	// model can do without, and nothing about what the model means is in doubt.
+	//
+	// Refusing the deploy over it would strand a diagram that reads correctly to
+	// everybody looking at it, over an element nobody draws and nobody can see is
+	// missing. So the reference stands in for its own declaration, which is the same
+	// fallback a <dataStoreReference> naming no root element already gets. The type is
+	// the one thing that cannot be recovered here — it was on the lost declaration —
+	// so the object is seeded without one rather than with a guess.
+	for _, ref := range proc.DataObjectReferences {
+		if _, ok := objName[ref.DataObjectRef]; ok {
+			continue // the declaration is there; nothing to stand in for
+		}
+		name := ref.Name
+		if name == "" {
+			name = ref.Id
+		}
+		if seededObj[name] {
+			continue
+		}
+		seededObj[name] = true
+		b.AddDataObject(name, "", ref.DataState.Name, false)
+	}
+
 	// Data stores: where this process says its data lives beyond one instance. Two
 	// references to one store are two views of it on the diagram, so the process
 	// names it once — the same folding the data objects above get, and for the same
@@ -671,20 +698,24 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	for _, ref := range proc.DataObjectReferences {
 		refs[ref.Id] = ref
 	}
-	// resolveDataTarget maps an association's targetRef to the data-object name it
-	// writes and the data state it moves the object into.
-	resolveDataTarget := func(ownerId, targetRef string) (name, state string, err error) {
-		if ref, ok := refs[targetRef]; ok {
-			name, ok := objName[ref.DataObjectRef]
-			if !ok {
-				return "", "", fmt.Errorf("compiler: data output association on %q references data object reference %q whose dataObjectRef %q is unknown", ownerId, targetRef, ref.DataObjectRef)
+	// resolveDataTarget maps an association's ref to the data-object name it reads or
+	// writes and the data state it moves the object into. A reference whose declaration
+	// is gone resolves to its own name, matching the object seeded for it above.
+	resolveDataTarget := func(ownerId, ref string) (name, state string, err error) {
+		if r, ok := refs[ref]; ok {
+			if name, ok := objName[r.DataObjectRef]; ok {
+				return name, r.DataState.Name, nil
 			}
-			return name, ref.DataState.Name, nil
+			name := r.Name
+			if name == "" {
+				name = r.Id
+			}
+			return name, r.DataState.Name, nil
 		}
-		if name, ok := objName[targetRef]; ok {
-			return name, "", nil // targets the object directly; no state change
+		if name, ok := objName[ref]; ok {
+			return name, "", nil // names the object directly; no state change
 		}
-		return "", "", fmt.Errorf("compiler: data output association on %q has unknown targetRef %q", ownerId, targetRef)
+		return "", "", fmt.Errorf("compiler: data association on %q names %q, which is neither a data object nor a data object reference", ownerId, ref)
 	}
 	// The four wiring passes below each repeat one shape at every activity kind they
 	// handle — around thirty call sites of "wire it, propagate the rejection". keepWire
@@ -705,7 +736,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		for _, a := range assocs {
 			name, state, err := resolveDataTarget(ownerId, a.TargetRef)
 			if err != nil {
-				keepWire(err)
+				keepWire(fmt.Errorf("compiler: data output association on %q target: %w", ownerId, err))
 				return
 			}
 			var valExpr *expr.Compiled
@@ -1622,8 +1653,14 @@ type xmlDataState struct {
 // carry its own <dataState> — so the same object can appear on the canvas in several
 // states (order [received], order [approved]). A data-output association targets a
 // reference to say which object it writes and what state it moves it into (ADR-0058).
+//
+// The name is read because it is what the reference shows on the canvas, and because
+// it is what identifies the object when the <dataObject> the reference points at is
+// not in the model — the case a tool leaves behind when it loses the declaration but
+// keeps the shape.
 type xmlDataObjectReference struct {
 	Id            string       `xml:"id,attr"`
+	Name          string       `xml:"name,attr"`
 	DataObjectRef string       `xml:"dataObjectRef,attr"`
 	DataState     xmlDataState `xml:"dataState"`
 }

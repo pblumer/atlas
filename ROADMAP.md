@@ -211,7 +211,26 @@ The control-flow basics most real models use.
   its own log. Next: the **runtime read** — the one remaining piece, and the one that
   needs its own record (an activity reading a store must park on a job, which is
   either a two-phase activation the engine does not have, or a Worker Type that
-  delegates to the store's Worker).
+  delegates to the store's Worker). **Slice 5c landed** — the model can now be
+  *brought in*. A data model is normally drawn in a UML tool long before anybody opens
+  Atlas, and retyping it by hand loses the one fact BPMN has no equivalent for: the
+  business key. `POST /api/v1/infomodel/import` reads two documents — Atlas's own JSON
+  (so a model moves between applications and installations through the document the API
+  already hands out) and the **XMI 2.5.1** a UML tool exports — and detects which from
+  the document itself, because a tool writes `.uml`, `.xmi` and `.xml` for the same
+  file. ADR-0230 had left this out ("an export, not an interchange … until it is
+  tested"); what makes it safe is that an import goes through the same subset the canvas
+  writes through and **states every loss**. An interface, an operation, an n-ary
+  association, a `0..5` multiplicity, a generalization that closes a cycle: each comes
+  back as a note naming the element, as *dropped*, *adjusted* or *info*. Data › Import
+  shows that report before anything is stored, from the same call that stores it. Two
+  readings are deliberate rather than literal — an `isID` member whose multiplicity the
+  document never states is read as required, because reading it as optional would throw
+  the business key away, and a document with no geometry is laid out on a grid, since
+  XMI keeps the picture in a file of its own. Next here: an XMI *export*, which ADR-0230
+  named and which would make the pair symmetric. Merging an import into an existing
+  model is deliberately not done — reconciling two versions of a class is a modeling
+  decision, and it belongs to the person.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🚧 **Conformance tests against a curated BPMN model set** — the
   [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN
@@ -405,7 +424,7 @@ The control-flow basics most real models use.
   assigning, so a model does not know which product it is talking to. The `jira` trio
   (registry/client/worker) is wired into the single-binary run loop under the
   reserved Jira job type and authored via a first-class **Jira** Worker Type
-  type in the modeler. A transition may be named by the button a person reads in Jira (its
+  in the modeler. A transition may be named by the button a person reads in Jira (its
   id is resolved first), and an extra issue field keeps the JSON shape its FEEL value had.
   A search follows the paging of whichever endpoint the product serves: Jira Cloud removed
   the offset-paged `/rest/api/{2,3}/search` over 2025, so a Cloud search uses
