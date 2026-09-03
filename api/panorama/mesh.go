@@ -244,6 +244,11 @@ type Options struct {
 	// the graph collapses to applications and says so, rather than returning a graph
 	// the browser cannot lay out — or, worse, a truncated one that looks complete.
 	MaxNodes int
+	// ObservedAt is when the landscape this graph derives from was read, in Unix
+	// seconds. Zero omits it, which is what a caller with no clock gets — and is
+	// deliberately not "now": a derivation that invented a timestamp would be
+	// claiming a freshness nobody measured.
+	ObservedAt int64
 }
 
 // Node is one vertex. A restricted node carries no Name, no process id, and no
@@ -357,6 +362,16 @@ type Graph struct {
 	// Status is the severity summary and, as importantly, the declaration of which
 	// observation states this build cannot produce at all (ADR-0211 §4).
 	Status Status `json:"status"`
+	// ObservedAt is when this picture was derived, in Unix seconds, and zero when
+	// the caller supplied no clock.
+	//
+	// It is on the payload rather than left to the reader's own clock because the
+	// picture outlives the tab it was drawn in: ADR-0211 §10 requires an exported
+	// landscape to carry its observation time *into* the artifact, and a time the
+	// browser invented would date the export rather than the facts in it. The two
+	// differ by however long the file sat unsaved, and by all of history once
+	// somebody re-exports a stale tab.
+	ObservedAt int64 `json:"observedAt,omitempty"`
 }
 
 func applicationNodeID(id string) string  { return KindApplication + ":" + id }
@@ -405,7 +420,7 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	}
 	sort.Slice(visible, func(i, j int) bool { return visible[i].Key < visible[j].Key })
 
-	g := Graph{Nodes: []Node{}, Edges: []Edge{}}
+	g := Graph{Nodes: []Node{}, Edges: []Edge{}, ObservedAt: opts.ObservedAt}
 
 	appIDs := make([]string, 0, len(visibleApps))
 	for id := range visibleApps {
@@ -718,7 +733,7 @@ func cluster(full Graph, visible []Process, appIDs []string, apps map[string]App
 	}
 	out := Graph{
 		Nodes: []Node{}, Edges: []Edge{},
-		Restricted: full.Restricted, Clustered: true,
+		Restricted: full.Restricted, Clustered: true, ObservedAt: full.ObservedAt,
 	}
 	for _, id := range appIDs {
 		node := Node{

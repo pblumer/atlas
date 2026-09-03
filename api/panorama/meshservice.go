@@ -52,17 +52,28 @@ type Mesh struct {
 	collect  LandscapeCollector
 	overlays OverlayCollector
 	maxNodes int
+	now      Clock
 }
 
 // NewMesh builds the mesh service. maxNodes is the size budget; zero is unlimited.
 // overlays may be nil, in which case no desired-versus-observed comparison is made.
+// now stamps each answer with the moment its landscape was read; a nil clock leaves
+// the stamp off rather than inventing one.
 func NewMesh(loop *runloop.Loop, collect LandscapeCollector, overlays OverlayCollector,
-	maxNodes int) *Mesh {
-	return &Mesh{loop: loop, collect: collect, overlays: overlays, maxNodes: maxNodes}
+	maxNodes int, now Clock) *Mesh {
+	return &Mesh{loop: loop, collect: collect, overlays: overlays, maxNodes: maxNodes, now: now}
 }
 
 // HandleGraph serves the whole-instance mesh for the calling principal.
 func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
+	// Read before the loop turn rather than after the derivation, so the stamp is the
+	// oldest moment any fact in this answer could have been read. A picture that
+	// dates itself later than its contents is the one an export must never carry:
+	// it would make a stale landscape look freshly checked.
+	var observedAt int64
+	if m.now != nil {
+		observedAt = m.now().Unix()
+	}
 	var (
 		land     Landscape
 		reach    ReachOut
@@ -104,5 +115,7 @@ func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	// Derived off the loop: this is pure CPU over a snapshot the loop already
 	// produced, and holding the single-writer goroutine through it would make every
 	// other design-time request wait on one caller's graph.
-	httpapi.JSON(w, http.StatusOK, DeriveGraph(land, Options{MaxNodes: m.maxNodes, Overlays: overlays}))
+	httpapi.JSON(w, http.StatusOK, DeriveGraph(land, Options{
+		MaxNodes: m.maxNodes, Overlays: overlays, ObservedAt: observedAt,
+	}))
 }
