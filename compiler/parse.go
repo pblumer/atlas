@@ -751,33 +751,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			b.AddDataOutputAssociation(ids[ownerId], name, valExpr, state, strings.TrimSpace(a.Assignment.To))
 		}
 	}
-	for _, st := range proc.ServiceTasks {
-		wireDataOut(st.Id, st.DataOut)
-	}
-	for _, st := range proc.ScriptTasks {
-		wireDataOut(st.Id, st.DataOut)
-	}
-	for _, brt := range proc.BusinessRuleTasks {
-		wireDataOut(brt.Id, brt.DataOut)
-	}
-	for _, ut := range proc.UserTasks {
-		wireDataOut(ut.Id, ut.DataOut)
-	}
-	for _, t := range proc.Tasks {
-		wireDataOut(t.Id, t.DataOut)
-	}
-	for _, t := range proc.ManualTasks {
-		wireDataOut(t.Id, t.DataOut)
-	}
-	for _, rt := range proc.ReceiveTasks {
-		wireDataOut(rt.Id, rt.DataOut)
-	}
-	for _, st := range proc.SendTasks {
-		if strings.TrimSpace(st.MessageRef) != "" {
-			continue // a message-kind send task is a throw, not an activity (ADR-0112)
-		}
-		wireDataOut(st.Id, st.DataOut)
-	}
+	// Every scope, recursively — like wireScopeIO below, and for the same reason: a
+	// data association is drawn on the activity, and an activity may sit in any scope
+	// the model nests. Walking only the process root's element lists dropped every
+	// association inside a subprocess at compile time, with no error and no warning:
+	// the model deployed, ran, and quietly wrote nothing.
+	forEachDataAssociated(&proc.xmlFlowContent, func(ownerId string, out []xmlDataOutputAssociation, _ []xmlDataInputAssociation) {
+		wireDataOut(ownerId, out)
+	})
 
 	// Wire data-input associations: a sourceRef names the data object read (resolved
 	// like an output target, its state ignored on a read); a targetRef is the process
@@ -813,33 +794,9 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			b.AddDataInputAssociation(ids[ownerId], name, variable, valExpr)
 		}
 	}
-	for _, st := range proc.ServiceTasks {
-		wireDataIn(st.Id, st.DataIn)
-	}
-	for _, st := range proc.ScriptTasks {
-		wireDataIn(st.Id, st.DataIn)
-	}
-	for _, brt := range proc.BusinessRuleTasks {
-		wireDataIn(brt.Id, brt.DataIn)
-	}
-	for _, ut := range proc.UserTasks {
-		wireDataIn(ut.Id, ut.DataIn)
-	}
-	for _, t := range proc.Tasks {
-		wireDataIn(t.Id, t.DataIn)
-	}
-	for _, t := range proc.ManualTasks {
-		wireDataIn(t.Id, t.DataIn)
-	}
-	for _, rt := range proc.ReceiveTasks {
-		wireDataIn(rt.Id, rt.DataIn)
-	}
-	for _, st := range proc.SendTasks {
-		if strings.TrimSpace(st.MessageRef) != "" {
-			continue // a message-kind send task is a throw, not an activity (ADR-0112)
-		}
-		wireDataIn(st.Id, st.DataIn)
-	}
+	forEachDataAssociated(&proc.xmlFlowContent, func(ownerId string, _ []xmlDataOutputAssociation, in []xmlDataInputAssociation) {
+		wireDataIn(ownerId, in)
+	})
 
 	// Wire generic zeebe:ioMapping input/output mappings (ADR-0068). Each source is a
 	// FEEL expression compiled once at deploy time (invariant I5); an empty target or
@@ -1363,6 +1320,59 @@ type xmlFlowContent struct {
 	// LaneSets partition this scope's flow nodes into organizational lanes (ADR-0121).
 	// Lanes are metadata with no execution effect; resolveLanes records each node's lane.
 	LaneSets []xmlLaneSet `xml:"laneSet"`
+}
+
+// forEachDataAssociated calls fn once for every activity in the scope tree rooted at c
+// that may carry data associations (ADR-0058/0059), handing it the activity's BPMN id
+// and its <dataOutputAssociation>/<dataInputAssociation> lists. It recurses into every
+// nested scope — an embedded subprocess (a <transaction> among them, folded in before
+// this runs), an event subprocess, an ad-hoc subprocess — because an association is
+// drawn on the activity, and the activity may sit in any of them.
+//
+// It is the data-association twin of wireScopeIO's walk, and the two must stay in step:
+// they once did not, and the shape of that failure is worth remembering. I/O mappings
+// recursed and data associations did not, so an activity inside a subprocess kept its
+// zeebe:ioMapping and silently lost its associations. Nothing rejected the model — it
+// deployed, started, and ran to the end writing nothing into the data object.
+//
+// Only the eight activity kinds whose XML shape carries the two elements are visited;
+// a subprocess and a call activity do not parse them today, so they are containers here
+// and nothing else. A send task naming a message is skipped: it compiles to a throw
+// event, not an activity (ADR-0112), so there is no activity node to wire onto.
+func forEachDataAssociated(c *xmlFlowContent, fn func(ownerId string, out []xmlDataOutputAssociation, in []xmlDataInputAssociation)) {
+	for _, st := range c.ServiceTasks {
+		fn(st.Id, st.DataOut, st.DataIn)
+	}
+	for _, st := range c.ScriptTasks {
+		fn(st.Id, st.DataOut, st.DataIn)
+	}
+	for _, brt := range c.BusinessRuleTasks {
+		fn(brt.Id, brt.DataOut, brt.DataIn)
+	}
+	for _, ut := range c.UserTasks {
+		fn(ut.Id, ut.DataOut, ut.DataIn)
+	}
+	for _, t := range c.Tasks {
+		fn(t.Id, t.DataOut, t.DataIn)
+	}
+	for _, t := range c.ManualTasks {
+		fn(t.Id, t.DataOut, t.DataIn)
+	}
+	for _, rt := range c.ReceiveTasks {
+		fn(rt.Id, rt.DataOut, rt.DataIn)
+	}
+	for _, st := range c.SendTasks {
+		if strings.TrimSpace(st.MessageRef) != "" {
+			continue // a message-kind send task is a throw, not an activity (ADR-0112)
+		}
+		fn(st.Id, st.DataOut, st.DataIn)
+	}
+	for i := range c.SubProcesses {
+		forEachDataAssociated(&c.SubProcesses[i].xmlFlowContent, fn)
+	}
+	for i := range c.AdHocSubProcesses {
+		forEachDataAssociated(&c.AdHocSubProcesses[i].xmlFlowContent, fn)
+	}
 }
 
 // xmlLaneSet is a <laneSet> — a set of sibling lanes partitioning a process or subprocess scope.
