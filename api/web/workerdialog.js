@@ -84,6 +84,9 @@ export function workerShape(kind, provider) {
   // it with, neither derivable from the other.
   const jira = kind === "jira";
   const entra = kind === "entra";
+  // Google Sheets is SharePoint's shape: Google's API bases are the same for everyone,
+  // so there is no endpoint to author — the credential bundle *is* the configuration.
+  const googlesheets = kind === "googlesheets";
   // Active Directory is Remedy's shape: an LDAP URL to dial and a bind account to dial
   // it with, neither derivable from the other. It is the newest kind to stop carrying
   // its directory in the model (ADR-0206).
@@ -94,7 +97,7 @@ export function workerShape(kind, provider) {
   const sql = kind === "postgres" || kind === "mariadb" || kind === "mssql";
   // Kinds that default their API base and authenticate with a credential bundle
   // instead of dialing a host:port. Remedy is not one: it needs both.
-  const bundle = native || sharepoint || entra || sql;
+  const bundle = native || sharepoint || entra || sql || googlesheets;
   return {
     mail,
     sql,
@@ -122,6 +125,8 @@ export function workerShape(kind, provider) {
         : (remedy ? "https://helix.example.com:8008" : (jira ? "https://acme.atlassian.net" : "https://temis.internal"))),
     credRefLabel: ad
       ? "Credential reference (vault {bindDN, password})"
+      : googlesheets
+      ? "Credential reference (vault Google auth bundle)"
       : jira
       ? "Credential reference (vault {email, apiToken} or {token})"
       : remedy
@@ -131,6 +136,8 @@ export function workerShape(kind, provider) {
           : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)"))),
     credRefPlaceholder: ad
       ? "ad_prod_bind (vault {bindDN, password})"
+      : googlesheets
+      ? "google_sheets_auth (vault JSON bundle)"
       : jira
       ? "jira_acme (vault {email, apiToken} or {token})"
       : remedy
@@ -138,7 +145,9 @@ export function workerShape(kind, provider) {
       : (sql ? kind + "_hr_dsn (a vault key holding the whole connection string)"
         : (entra ? "entra_blumer (vault {tenantId, clientId, clientSecret})"
           : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token")))),
-    hint: ad
+    hint: googlesheets
+      ? "The credential reference names a JSON auth bundle in the vault \u2014 never a secret value. A <b>service account</b> is the normal shape: <code>{\"method\": \"serviceAccount\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\"}</code>, copied out of the JSON key file Google hands out. A service account owns nothing by itself: <b>share each spreadsheet or folder with its address</b>, exactly as you would with a colleague, or it will read a 403 where you see a document."
+      : ad
       ? "The directory's <b>LDAP URL</b> and a vault bundle holding the service account: <code>{\"bindDN\": \"cn=svc-atlas,ou=Dienstkonten,dc=example,dc=com\", \"password\": \"\u2026\"}</code>. Use <b>ldaps://</b> unless you enable StartTLS \u2014 Active Directory refuses to set a password over an unencrypted channel, so an <code>ldap://</code> directory works for everything except the one thing a joiner needs. A model names this worker and says nothing else about the directory."
       : sql
       ? "The <b>whole connection string</b> is the credential \u2014 it is sealed into the vault and the record keeps only a reference, so the Console can never show it back. Atlas supervises a worker for this kind, and it picks the database up as soon as you save; no restart and no start parameter. To replace a connection string later, overwrite its vault key under <b>Secrets</b>."

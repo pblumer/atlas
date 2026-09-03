@@ -118,6 +118,29 @@
       }
     },
     {
+      "id": "google-sheets-as-a-worker-type-and-a-spreadsheet-or-a-drive-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Google Sheets, in both directions",
+        "de": "Google Sheets, in beide Richtungen"
+      },
+      "summary": {
+        "en": "A lot of what a process runs on lives in a spreadsheet somebody keeps by hand — the applicant list, the budget lines, the table the team actually looks at. Atlas can now work with one: create a spreadsheet, add a tab, read a range, write one, append rows, empty a range, and remove a tab or the whole file (to the trash, never permanently). And it can be started by one: a new row in a sheet begins a process — that is a Google Form writing its answers into a table — or a file dropped into a Drive folder does, because the folder is a queue people already use. Set the watch up under Workers → Events; Atlas polls, so nothing has to reach your server from the internet. Two things are worth knowing before you rely on it: after a crash a row can be appended twice, so write a status column and read it before appending (the shipped example does exactly that), and a row watch follows row numbers — it sees rows added at the end, which is what a form does. The example folder walks through the setup, including the thing people get wrong first: a service account owns nothing until you share the sheet with its address.",
+        "de": "Vieles, womit ein Prozess arbeitet, liegt in einer Tabelle, die jemand von Hand pflegt — die Bewerberliste, die Budgetzeilen, die Tabelle, in die das Team tatsächlich schaut. Atlas kann jetzt damit arbeiten: Tabelle anlegen, Blatt hinzufügen, Bereich lesen, Bereich schreiben, Zeilen anhängen, Bereich leeren, Blatt oder ganze Datei entfernen (in den Papierkorb, nie endgültig). Und Atlas kann davon gestartet werden: Eine neue Zeile startet einen Prozess — das ist der Fall „Google-Formular schreibt seine Antworten in eine Tabelle“ — oder eine Datei, die in einem Drive-Ordner abgelegt wird, denn der Ordner ist die Warteschlange, die es ohnehin schon gibt. Eingerichtet wird das unter Workers → Events; Atlas fragt selbst nach, es muss also nichts aus dem Internet Ihren Server erreichen. Zwei Dinge sollte man wissen, bevor man sich darauf verlässt: Nach einem Absturz kann eine Zeile zweimal angehängt werden — dagegen hilft eine Statusspalte, die der Prozess vor dem Anhängen liest (genau das führt das mitgelieferte Beispiel vor) —, und ein Zeilen-Watch folgt den Zeilennummern, sieht also am Ende angehängte Zeilen, was ein Formular genau so macht. Der Beispielordner führt durch die Einrichtung, samt dem, was man zuerst falsch macht: Ein Dienstkonto besitzt nichts, solange die Tabelle nicht mit seiner Adresse geteilt ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "Modeler",
+        "Events"
+      ]
+    },
+    {
       "id": "importing-a-uml-class-diagram-reading-what-somebody-else-dre",
       "version": "Unreleased",
       "date": null,
@@ -387,54 +410,6 @@
           "de": "Instanzen öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-data-object-s-declared-type-now-means-something",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Atlas now checks what your process does with its data",
-        "de": "Atlas prüft jetzt, was Ihr Prozess mit seinen Daten macht"
-      },
-      "summary": {
-        "en": "A data object on a diagram could always say which type it is, and nothing ever checked it — the word was decoration. Now it is looked up in the information model of the application the process belongs to, and three kinds of mistake surface while you model instead of after a token has run. A type nothing has modelled is named. A task that writes into a field the class does not have is named, along with the class and the field, and so is a write that tries to reach inside a plain value or a list of fixed choices, which have nothing inside to write to. And the one worth the whole feature: a task that reads a data object no task before it fills. That last check does not need a modelled type at all — it reads the diagram — and it is careful about what it claims: a loop whose writing step comes round before the reading one is left alone, while a task that reads what it will only write when it finishes is flagged, because on the first pass it reads nothing. None of this refuses a deployment. You draw a process before the vocabulary it uses exists, and being told at deploy is the point; being stopped would not be. The Modeler also has the Type field this always needed, which offers the classes your application has modelled. Adding it turned up something worth knowing: the type was quietly being lost whenever a diagram written by hand or by an agent was opened here and saved again. That is fixed, and models that were written the short way keep working.",
-        "de": "Ein Datenobjekt im Diagramm konnte immer schon sagen, welchen Typ es hat, und geprüft hat das nie jemand — das Wort war Dekoration. Jetzt wird es im Informationsmodell der Applikation nachgeschlagen, zu der der Prozess gehört, und drei Arten von Fehler zeigen sich beim Modellieren statt erst, nachdem ein Token gelaufen ist. Ein Typ, den niemand modelliert hat, wird benannt. Eine Aufgabe, die in ein Feld schreibt, das die Klasse nicht hat, wird benannt — mit Klasse und Feld — und ebenso ein Schreibvorgang, der in einen einfachen Wert oder in eine feste Werteliste hineingreifen will, in denen es nichts zu beschreiben gibt. Und der, für den sich das Ganze lohnt: eine Aufgabe, die ein Datenobjekt liest, das keine Aufgabe davor gefüllt hat. Diese Prüfung braucht gar keinen modellierten Typ — sie liest das Diagramm — und sie ist vorsichtig mit dem, was sie behauptet: eine Schleife, deren schreibender Schritt vor dem lesenden herumkommt, bleibt unbehelligt, während eine Aufgabe, die liest, was sie erst beim Abschliessen schreibt, gemeldet wird, denn im ersten Durchlauf liest sie nichts. Nichts davon verweigert ein Deployment. Man zeichnet einen Prozess, bevor das Vokabular dazu existiert; beim Deploy darauf hingewiesen zu werden ist der Sinn, aufgehalten zu werden wäre es nicht. Der Modeler hat ausserdem das Feld „Type\", das dafür immer gefehlt hat — es schlägt die Klassen vor, die Ihre Applikation modelliert hat. Beim Einbauen kam etwas heraus, das man wissen sollte: Der Typ ging still verloren, sobald ein von Hand oder von einem Agenten geschriebenes Diagramm hier geöffnet und wieder gespeichert wurde. Das ist behoben, und kurz geschriebene Modelle laufen unverändert weiter."
-      },
-      "link": {
-        "label": "ADR-0230",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0230-process-information-model.md"
-      },
-      "tags": [
-        "Data",
-        "Modeling",
-        "Validation"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data › Model and give your application a class — an Order with an id and a total, say.",
-          "Open a process of the same application in the Modeler, select a data object and set its Type to Order; the field suggests the classes you modelled.",
-          "Give a task a data output association to that object and set its Target member to a field the class does not have, e.g. amount.",
-          "Watch the Problems bar at the bottom: it names the task, the class and the field. Click the finding to jump to the element.",
-          "Now delete the association and leave only a task that reads the object — the panel tells you nothing writes it.",
-          "Deploy anyway. It succeeds, and the same sentences come back as deploy warnings."
-        ],
-        "de": [
-          "Öffnen Sie Data › Model und geben Sie Ihrer Applikation eine Klasse — etwa eine Order mit id und total.",
-          "Öffnen Sie im Modeler einen Prozess derselben Applikation, wählen Sie ein Datenobjekt und setzen Sie „Type\" auf Order; das Feld schlägt Ihre modellierten Klassen vor.",
-          "Geben Sie einer Aufgabe eine Data Output Association auf dieses Objekt und tragen Sie als Zielfeld eines ein, das die Klasse nicht hat, z. B. amount.",
-          "Schauen Sie in die Problems-Leiste unten: Sie nennt Aufgabe, Klasse und Feld. Ein Klick auf den Befund springt zum Element.",
-          "Löschen Sie jetzt die Assoziation und lassen Sie nur eine Aufgabe stehen, die das Objekt liest — die Leiste sagt Ihnen, dass es niemand schreibt.",
-          "Deployen Sie trotzdem. Es gelingt, und dieselben Sätze kommen als Deploy-Warnungen zurück."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Data öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]

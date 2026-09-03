@@ -106,6 +106,54 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Google Sheets as a Worker Type, and a spreadsheet or a Drive folder as an event
+  source.** A lot of the data a process runs on lives in a spreadsheet somebody
+  maintains by hand — the applicant list, the budget lines, the tracking table the team
+  actually looks at. Atlas could not reach one at all, and not for want of a package:
+  Google needs a signed JWT-bearer assertion, which the generic REST Worker Type's
+  bearer/basic/apiKey surface cannot produce, so the gap was structural.
+
+  Everything a person reads about it says **Worker**, per ADR-0203. The old spelling
+  survives only where changing it would break something: the `connector/` package path,
+  the `connector="…"` attribute and the `<atlas:googleSheetsConnector>` element (both
+  authored in deployed models, and the guard that stops bpmn-js silently dropping an
+  extension only recognizes `*Connector` elements), and the `"connector"` key in the
+  offload payload.
+
+  **Outbound** ([ADR-0235](docs/adr/0235-google-sheets-worker.md))
+  is eight operations that are steps a process takes: create a spreadsheet, add a tab,
+  read a range, write one, append rows, clear a range, delete a tab, move the file to
+  the trash. `values` takes the three shapes a process actually holds — a list of rows,
+  a flat list of cells, or a list of objects projected through the task's `columns`; a
+  list of objects with no columns is refused at deploy rather than written in an order
+  nobody chose. A read with `header` answers with objects keyed by the first row, which
+  is the shape a multi-instance subprocess iterates. `delete-spreadsheet` **trashes
+  rather than purges**: a process that deletes the wrong file is a bad afternoon either
+  way, but only one of the two is survivable. The credential — a service account's key,
+  or a refresh token — lives in the vault behind a Worker name, never in a model.
+
+  **Inbound** ([ADR-0234](docs/adr/0234-google-inbound-watch.md))
+  is the two intake channels people already have. A **row watch** publishes each new row
+  of a spreadsheet as an Atlas message — the "a Google Form writes its responses into a
+  sheet" case — and a **folder watch** publishes each file put into a Drive folder,
+  because the folder is a queue people already use. Both ride the existing inbound
+  bridge, so an event starts or wakes a process through ordinary message correlation,
+  and Atlas polls rather than exposing anything to the internet. A row's sequence is its
+  own row number, which is monotonic for appends; a file has none, so its mark is scoped
+  per file id exactly as a Jira issue's is (ADR-0214).
+
+  Two things are stated rather than hidden. Delivery is at-least-once and a spreadsheet
+  has no idempotency key, so a retried append can duplicate a row — a process that
+  cannot tolerate that needs a marker column it reads first. And a row watch loses rows
+  if rows are *deleted* from the watched range, because a row's only identity is its
+  place; the sheets people watch are the append-only ones.
+
+- **The Google service-account grant is now shared machinery.** `connector/oauth2` had
+  named it "the one such case" a caller supplies its own `Fetcher` for. A second caller
+  needs it, and two copies of a JWT signer is the duplication that package was
+  extracted to end, so it moved into `oauth2.ServiceAccount` and the mail Worker Type
+  delegates to it.
+
 - **Importing a UML class diagram: reading what somebody else drew.** A data model is
   normally drawn in a UML tool — Enterprise Architect, Papyrus, Visual Paradigm — long
   before anybody opens Atlas, and until now the only way to get it in was to retype it

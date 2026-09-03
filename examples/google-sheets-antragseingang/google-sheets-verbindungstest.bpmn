@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Google-Sheets-Verbindungstest
+
+  Der kuerzeste Prozess, der beweist, dass der Google-Sheets-Worker wirklich an
+  deinem Google-Konto haengt — und der dabei die ganze Schleife zeigt, die ein
+  Prozess mit einer Tabelle faehrt: anlegen, schreiben, anhaengen, lesen.
+
+  Start (Formular gs-start: tabellenname)
+   -> "Tabelle anlegen"      (create-spreadsheet -> datei)
+   -> "Kopfzeile schreiben"  (write-range A1:C1)
+   -> "Zeilen anhaengen"     (append-row, Objekte ueber columns)
+   -> "Tabelle lesen"        (read-range mit header -> zeilen)
+   -> Ende "Tabelle steht"
+
+  Diesen Prozess zuerst starten. Laeuft er durch, sind Credential, Scopes und
+  Worker-Name richtig — und jeder spaetere Fehler im Antragseingang liegt am
+  Modell, nicht an der Einrichtung. Die angelegte Tabelle liegt im Drive des
+  Dienstkontos; ihre URL steht danach in =datei.spreadsheetUrl.
+
+  BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=200, Pitch 150.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_gs_verbindungstest" targetNamespace="http://atlas/examples">
+  <process id="proc_gs_verbindungstest" name="Google-Sheets-Verbindungstest" isExecutable="true">
+    <documentation>Legt eine Tabelle an, schreibt eine Kopfzeile, haengt zwei Zeilen an und liest sie zurueck — um Credential, Scopes und Worker-Namen zu pruefen. Startvariable: tabellenname (wie die neue Tabelle heissen soll).</documentation>
+
+    <startEvent id="start" name="Test starten">
+      <extensionElements>
+        <zeebe:formDefinition formId="gs-start"/>
+      </extensionElements>
+      <outgoing>f_start_anlegen</outgoing>
+    </startEvent>
+
+    <serviceTask id="anlegen" name="Tabelle anlegen">
+      <documentation>Google-Sheets-Worker-Typ, Operation create-spreadsheet. Der Worker-Name "google" verweist auf den konfigurierten Worker unter Console -> Workers (das Attribut heisst weiterhin connector); das Credential liegt dort und im Vault, nie im Modell. Anlegen ist die einzige Operation ohne "spreadsheet" — sie bringt die Datei erst hervor. sheet benennt das erste Blatt gleich mit, was Sheets in derselben Anfrage kann und Drive nicht; deshalb ist das hier ein Sheets-Aufruf und kein Drive-Upload. resultVariable schreibt die Antwort nach "datei", danach ist die Tabelle als =datei.spreadsheetId adressierbar.</documentation>
+      <extensionElements>
+        <atlas:googleSheetsConnector connector="google" operation="create-spreadsheet"
+          title="=tabellenname"
+          sheet="Antraege"
+          resultVariable="datei"/>
+      </extensionElements>
+      <incoming>f_start_anlegen</incoming>
+      <outgoing>f_anlegen_kopf</outgoing>
+    </serviceTask>
+
+    <serviceTask id="kopfzeile" name="Kopfzeile schreiben">
+      <documentation>write-range ueberschreibt genau die genannten Zellen. values ist hier eine FEEL-Liste von Listen — also Zeilen, die Form, die Sheets selbst schreibt; fuer eine einzelne Zeile taete es auch die flache Liste. valueInput bleibt auf dem Standard "user": eine Kopfzeile ist Text, und ein Datum oder ein Betrag soll spaeter auch wirklich ein Datum bzw. eine Zahl in der Tabelle werden.</documentation>
+      <extensionElements>
+        <atlas:googleSheetsConnector connector="google" operation="write-range"
+          spreadsheet="=datei.spreadsheetId"
+          range="Antraege!A1:C1"
+          values="=[[&quot;Antragsnummer&quot;, &quot;Name&quot;, &quot;Status&quot;]]"/>
+      </extensionElements>
+      <incoming>f_anlegen_kopf</incoming>
+      <outgoing>f_kopf_anhaengen</outgoing>
+    </serviceTask>
+
+    <serviceTask id="anhaengen" name="Zeilen anhaengen">
+      <documentation>append-row haengt hinter der letzten belegten Zeile an, deshalb ist der Bereich eine ganze Spaltengruppe (A:C) und keine feste Zeile. values ist hier eine Liste von OBJEKTEN — die Form, die ein Prozess wirklich in der Hand hat — und columns sagt, welche Felder in welcher Reihenfolge geschrieben werden. Ohne columns lehnt der Deploy ab: die Schluesselreihenfolge eines Objekts ist keine Spaltenreihenfolge, und sie zu raten hiesse, eine vertauschte Tabelle statt eines Fehlers zu liefern. Achtung: die Zustellung ist "mindestens einmal" und eine Tabelle hat keinen Idempotenzschluessel — nach einem Absturz zwischen "angehaengt" und "Job fertig" stehen die Zeilen zweimal da.</documentation>
+      <extensionElements>
+        <atlas:googleSheetsConnector connector="google" operation="append-row"
+          spreadsheet="=datei.spreadsheetId"
+          range="Antraege!A:C"
+          columns="nummer, name, status"
+          values="=[{nummer: &quot;A-1&quot;, name: &quot;Anna Beispiel&quot;, status: &quot;offen&quot;}, {nummer: &quot;A-2&quot;, name: &quot;Bo Beispiel&quot;, status: &quot;offen&quot;}]"/>
+      </extensionElements>
+      <incoming>f_kopf_anhaengen</incoming>
+      <outgoing>f_anhaengen_lesen</outgoing>
+    </serviceTask>
+
+    <serviceTask id="lesen" name="Tabelle lesen">
+      <documentation>read-range liest die Zeilen zurueck. header="true" macht aus der ersten Zeile des Bereichs die Spaltennamen, sodass "zeilen" eine Liste von Objekten ist und nicht eine Liste von Listen — das ist die Form, die ein Multi-Instance-Unterprozess durchlaeuft und die =zeilen[1].Name lesbar macht. FEEL-Listen sind 1-basiert. Ohne header waere dieselbe Zelle =zeilen[2][2], was niemand nach drei Wochen noch entziffert. Der Bereich muss die Kopfzeile enthalten, sonst wird die erste Datenzeile zur Ueberschrift.</documentation>
+      <extensionElements>
+        <atlas:googleSheetsConnector connector="google" operation="read-range"
+          spreadsheet="=datei.spreadsheetId"
+          range="Antraege!A:C"
+          header="true"
+          resultVariable="zeilen"/>
+      </extensionElements>
+      <incoming>f_anhaengen_lesen</incoming>
+      <outgoing>f_lesen_ende</outgoing>
+    </serviceTask>
+
+    <endEvent id="ende" name="Tabelle steht">
+      <incoming>f_lesen_ende</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_anlegen" sourceRef="start" targetRef="anlegen"/>
+    <sequenceFlow id="f_anlegen_kopf" sourceRef="anlegen" targetRef="kopfzeile"/>
+    <sequenceFlow id="f_kopf_anhaengen" sourceRef="kopfzeile" targetRef="anhaengen"/>
+    <sequenceFlow id="f_anhaengen_lesen" sourceRef="anhaengen" targetRef="lesen"/>
+    <sequenceFlow id="f_lesen_ende" sourceRef="lesen" targetRef="ende"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_gs_verbindungstest">
+    <bpmndi:BPMNPlane id="BPMNPlane_gs_verbindungstest" bpmnElement="proc_gs_verbindungstest">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="152" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="136" y="225" width="70" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="anlegen_di" bpmnElement="anlegen">
+        <omgdc:Bounds x="240" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="kopfzeile_di" bpmnElement="kopfzeile">
+        <omgdc:Bounds x="390" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="anhaengen_di" bpmnElement="anhaengen">
+        <omgdc:Bounds x="540" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lesen_di" bpmnElement="lesen">
+        <omgdc:Bounds x="690" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="850" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="828" y="225" width="80" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f_start_anlegen_di" bpmnElement="f_start_anlegen">
+        <omgdi:waypoint x="188" y="200"/><omgdi:waypoint x="240" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_anlegen_kopf_di" bpmnElement="f_anlegen_kopf">
+        <omgdi:waypoint x="340" y="200"/><omgdi:waypoint x="390" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_kopf_anhaengen_di" bpmnElement="f_kopf_anhaengen">
+        <omgdi:waypoint x="490" y="200"/><omgdi:waypoint x="540" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_anhaengen_lesen_di" bpmnElement="f_anhaengen_lesen">
+        <omgdi:waypoint x="640" y="200"/><omgdi:waypoint x="690" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_lesen_ende_di" bpmnElement="f_lesen_ende">
+        <omgdi:waypoint x="790" y="200"/><omgdi:waypoint x="850" y="200"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
