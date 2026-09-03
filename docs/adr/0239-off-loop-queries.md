@@ -1,4 +1,4 @@
-# ADR-DRAFT: Read-only queries run off the run loop, on a consistent view
+# ADR-0239: Read-only queries run off the run loop, on a consistent view
 
 - **Status:** Proposed
 - **Date:** 2026-09-03

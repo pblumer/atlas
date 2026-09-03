@@ -40,7 +40,7 @@ This document is the compact, checkable reference. The reasoning lives in the li
 
 **Common violations:** adding a lock "just to be safe"; reaching into another partition's state store; sharing a mutable cache across partitions.
 
-**Readers are not writers.** The rule binds mutation. A read-only query may run off the loop on a `state.ReadView` — a consistent snapshot — and must, once its cost grows with the instance population: a scan dispatched onto the loop holds the single writer for its whole duration, which is how one operator query stops the whole engine (ADR-0080, ADR-draft-off-loop-queries). What such a query may still do *on* the loop is take the view and copy loop-owned metadata; what it must never do is touch loop-owned state from off it.
+**Readers are not writers.** The rule binds mutation. A read-only query may run off the loop on a `state.ReadView` — a consistent snapshot — and must, once its cost grows with the instance population: a scan dispatched onto the loop holds the single writer for its whole duration, which is how one operator query stops the whole engine (ADR-0080, ADR-0239). What such a query may still do *on* the loop is take the view and copy loop-owned metadata; what it must never do is touch loop-owned state from off it.
 
 ---
 

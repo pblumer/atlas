@@ -45,7 +45,7 @@ const (
 	cfHistoryExpiry          columnFamily = 0x20 // histExp:<purgeDueDate>:<piKey> → nil (ADR-0146)
 	cfRuntimeTotal           columnFamily = 0x21 // rtTotal:<kind> → int64 engine-wide live count (merge, ADR-0142)
 	cfOperatorAction         columnFamily = 0x22 // opAct:<piKey>:<ts>:<pos> → OperatorActionValue (ADR-0159)
-	cfChildByParent          columnFamily = 0x23 // childByParent:<callElKey>:<childPiKey> → nil (ADR-draft-child-instance-index)
+	cfChildByParent          columnFamily = 0x23 // childByParent:<callElKey>:<childPiKey> → nil (ADR-0238)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key

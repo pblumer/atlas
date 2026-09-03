@@ -1,4 +1,4 @@
-# ADR-DRAFT: A reverse index from call activity to child instance
+# ADR-0238: A reverse index from call activity to child instance
 
 - **Status:** Proposed
 - **Date:** 2026-09-03
@@ -31,7 +31,7 @@ solves it the same expensive way.
 ## Decision drivers
 
 - **The engine's own path must be sublinear.** A read endpoint that scans can at
-  least be moved off the loop (ADR-draft-off-loop-queries). The processor cannot:
+  least be moved off the loop (ADR-0239). The processor cannot:
   the teardown *is* the write.
 - **Derived state must be event-driven.** Anything added has to be written from the
   event that causes it, so replay rebuilds it identically (I4/I6).
@@ -113,7 +113,7 @@ Chosen: **option 2**, a `cfChildByParent` column family keyed
 - relates to ADR-0076 (call activities and the parent link this indexes in reverse)
 - relates to ADR-0080 (sublinear views via maintained state) — same doctrine, applied
   to the processor's own path rather than a read endpoint
-- relates to ADR-draft-off-loop-queries, which moved the *read* side's remaining
+- relates to ADR-0239, which moved the *read* side's remaining
   walks off the run loop
 - relates to ADR-0115 (history retention) — a future history-side variant of this
   index would have to be purged with the instance

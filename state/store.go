@@ -1220,7 +1220,7 @@ func (q queries) countPrefix(prefix []byte) (int, error) {
 // a whole column family is O(instances); run on the loop it holds the engine's
 // single writer for its whole duration, which is how one operator search made a
 // 500k-instance server stop answering anything at all (ADR-0080 removed the
-// scans from the runtime views for exactly this reason; ADR-draft-off-loop-queries
+// scans from the runtime views for exactly this reason; ADR-0239
 // finishes the job for the ones that must still scan). A caller that takes a
 // ReadView and scans it touches no run-loop state, so the engine keeps
 // processing commands while the scan runs.
