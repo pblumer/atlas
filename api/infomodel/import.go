@@ -14,7 +14,7 @@ import (
 // ADR-0230 settled that Atlas *authors* a declared subset of the UML class diagram
 // and *projects* it to JSON Schema and XMI, and it explicitly left reading a foreign
 // tool's XMI out — "an export, not an interchange", until it was tested. This file is
-// that follow-up (ADR-draft-uml-model-import): a model is routinely drawn in a UML
+// that follow-up (ADR-0232): a model is routinely drawn in a UML
 // tool long before anybody opens Atlas, and retyping it by hand is both the slowest
 // way to start and the one that quietly loses a business key.
 //

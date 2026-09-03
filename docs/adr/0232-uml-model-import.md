@@ -1,4 +1,4 @@
-# ADR-DRAFT: Importing a UML class diagram — reading what somebody else drew
+# ADR-0232: Importing a UML class diagram — reading what somebody else drew
 
 - **Status:** Proposed
 - **Date:** 2026-09-03

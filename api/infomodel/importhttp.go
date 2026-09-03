@@ -52,7 +52,7 @@ type ImportResponse struct {
 // HandleImport reads a UML class diagram into a new information model.
 //
 // ADR-0230 left this out — "XMI is an export, not an interchange" — and
-// ADR-draft-uml-model-import settles the other half: a model is routinely drawn in a
+// ADR-0232 settles the other half: a model is routinely drawn in a
 // UML tool before anybody opens Atlas, and retyping one by hand loses a business key
 // quietly. What makes it safe is that the import is not trusted: it goes through the
 // same subset the canvas writes through, everything outside that subset is dropped

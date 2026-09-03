@@ -285,6 +285,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0229](0229-modeler-bar-hierarchy.md) | The Modeler's editor bar carries two acts and a menu | Accepted |
 | [0230](0230-process-information-model.md) | The process information model — UML classes above BPMN's data objects | Proposed |
 | [0231](0231-webscrape-structured-extraction.md) | Structured HTML extraction, richer feed entries, and a fetch that survives the real web | Proposed |
+| [0232](0232-uml-model-import.md) | Importing a UML class diagram — reading what somebody else drew | Proposed |
 
 ## Status values
 

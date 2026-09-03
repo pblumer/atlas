@@ -21,7 +21,7 @@ _Changed_ / _Removed_ for each version.
   the one fact BPMN has no equivalent for and the one every cross-process capability
   rests on. **Data › Information model** now has an **Import** button, and
   `POST /api/v1/infomodel/import` behind it
-  ([ADR-draft-uml-model-import](docs/adr/draft-uml-model-import.md), extending
+  ([ADR-0232](docs/adr/0232-uml-model-import.md), extending
   [ADR-0230](docs/adr/0230-process-information-model.md)).
 
   Two documents are read, and the format is detected from the document itself — a UML
