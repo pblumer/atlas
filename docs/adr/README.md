@@ -286,6 +286,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0230](0230-process-information-model.md) | The process information model — UML classes above BPMN's data objects | Proposed |
 | [0231](0231-webscrape-structured-extraction.md) | Structured HTML extraction, richer feed entries, and a fetch that survives the real web | Proposed |
 | [0232](0232-uml-model-import.md) | Importing a UML class diagram — reading what somebody else drew | Proposed |
+| [0233](0233-in-process-connectors-refused.md) | Finish ADR-0164 — in-process connector work becomes a finite list, then nothing | Proposed |
 
 ## Status values
 

@@ -12,6 +12,33 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **REST and LDIF tasks no longer run on the engine's own loop**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md),
+  finishing [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md)). ADR-0164 decided
+  two years ago that a side-effecting service task belongs on a worker, and then chose
+  deprecation over a ban for one stated reason: a connector task could not run on a
+  worker yet. ADR-0168 closed that, and the worker halves have landed kind by kind
+  since — but the *default* never moved, so a fresh install still made outbound HTTP
+  calls from the processor's own process. `rest` and `ldif` now join the kinds Atlas
+  offloads and supervises by itself.
+
+  REST needed what Active Directory needed: its endpoint travels with the job, but its
+  `authSecret` is a vault reference, and a reference is resolved where it is used — on
+  a supervised worker, a child process with no vault. The engine now renders exactly
+  the references its deployed models name into that child's environment, under the
+  `ATLAS_CONNECTOR_<REF>_TOKEN` names the worker already reads. Only what is deployed
+  travels: the running models' secrets, not the vault.
+
+  What is still in the engine is now a list rather than a condition — `clio`,
+  `sharepoint`, `scim`, `ldap`, `soap` and `temis` each need a worker half, one slice
+  each, and the record names them. Beside them stands the closed list of what stays
+  in-engine on purpose: FEEL, local DMN, the mockup task, timers, user tasks, and user
+  provisioning (which mutates Atlas's own store and has no endpoint to reach).
+  `--in-process-connectors` keeps working and now says at startup that it puts every
+  integration back on the run loop.
+
 ### Added
 
 - **Google Sheets as a Worker Type, and a spreadsheet or a Drive folder as an event

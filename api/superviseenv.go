@@ -155,6 +155,11 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// is, and defaulting it without this would have moved every vault-backed AD
 		// task to a worker holding nothing to bind with.
 		"ad": s.adWorkerEnv,
+		// REST is neither managed nor credential-free: the endpoint is in the model but
+		// the auth secret is a vault reference, which is AD's shape exactly. Provisioned
+		// for AD's reason, and defaulted onto a worker for the plainest one there is —
+		// an HTTP call to somebody else's host is the original argument for ADR-0164.
+		"rest": s.restWorkerEnv,
 		// Entra is worker-only like AD (the engine holds no tenant credential, ADR-0172),
 		// and provisioned for the same reason: a supervised worker has no vault, so the
 		// engine renders its client secret out of the vault. Only the secret — tenant and
@@ -828,46 +833,122 @@ func (s *Server) adWorkerEnv() []string {
 		// in a store and the bind account is in the vault, neither of which a supervised
 		// worker can read.
 		env = append(env, s.adDirectoryEnvLocked()...)
-		keys := make([]uint64, 0, len(s.deployments))
-		for key := range s.deployments {
-			keys = append(keys, key)
-		}
-		sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-
-		taken := map[string]string{}
-		for _, key := range keys {
-			d := s.deployments[key]
-			if d == nil || d.cp == nil {
-				continue
-			}
-			for _, ref := range adBindSecretRefs(d.cp) {
-				envKey := connectorEnvKey(ref)
-				if envKey == "" {
-					continue
-				}
-				// Two references that fold to one variable would silently give one of
-				// them the other's password — the same collision two mail workers
-				// can have, and left out for the same reason. The worker then fails
-				// that job naming the reference, which is the honest outcome.
-				if first, dup := taken[envKey]; dup {
-					if first != ref {
-						logging.Warn(logging.WorkerSupervisorFailed,
-							"two AD bind-secret references share one environment name; the second is not handed to the supervised worker",
-							slog.String("reference", ref), slog.String("collidesWith", first))
-					}
-					continue
-				}
-				taken[envKey] = ref
-				// A reference nothing answers to is left out rather than handed over
-				// empty: an empty variable reads as a configured blank password, and
-				// the worker's own error names the variable an operator must set.
-				if secret := s.resolveConnectorSecret(ref); secret != "" {
-					env = append(env, adSecretEnv(envKey, secret))
-				}
-			}
-		}
+		env = append(env, s.deployedSecretRefEnvLocked("AD bind-secret", adBindSecretRefs)...)
 	})
 	return env
+}
+
+// deployedSecretRefEnvLocked renders one ATLAS_CONNECTOR_<REF>_TOKEN per secret
+// reference the deployed models name, resolved through this server's vault or
+// environment. refsOf says which references a compiled process makes; what names them
+// in the collision warning.
+//
+// Two kinds need this and they need it identically. A worker *record* tells the
+// engine what to hand over by being in its own store; a task that names its own
+// endpoint and its own secret reference (an AD bind, a REST call's auth) tells it
+// nothing — what has to travel is whichever references the deployed models happen to
+// make, which the engine knows because it compiled them and a worker cannot know
+// because it has neither the models nor the vault.
+//
+// Only what is deployed is handed over: a worker gets the secrets the running models
+// actually use, and not the rest of the vault.
+//
+// It reads the deployment map and the vault, so it runs on the run-loop goroutine
+// (invariant I3), their owner — the caller holds it.
+func (s *Server) deployedSecretRefEnvLocked(what string, refsOf func(*compiler.CompiledProcess) []string) []string {
+	keys := make([]uint64, 0, len(s.deployments))
+	for key := range s.deployments {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+	var env []string
+	taken := map[string]string{}
+	for _, key := range keys {
+		d := s.deployments[key]
+		if d == nil || d.cp == nil {
+			continue
+		}
+		for _, ref := range refsOf(d.cp) {
+			envKey := connectorEnvKey(ref)
+			if envKey == "" {
+				continue
+			}
+			// Two references that fold to one variable would silently give one of
+			// them the other's password — the same collision two mail workers
+			// can have, and left out for the same reason. The worker then fails
+			// that job naming the reference, which is the honest outcome.
+			if first, dup := taken[envKey]; dup {
+				if first != ref {
+					logging.Warn(logging.WorkerSupervisorFailed,
+						"two "+what+" references share one environment name; the second is not handed to the supervised worker",
+						slog.String("reference", ref), slog.String("collidesWith", first))
+				}
+				continue
+			}
+			taken[envKey] = ref
+			// A reference nothing answers to is left out rather than handed over
+			// empty: an empty variable reads as a configured blank password, and
+			// the worker's own error names the variable an operator must set.
+			if secret := s.resolveConnectorSecret(ref); secret != "" {
+				env = append(env, adSecretEnv(envKey, secret))
+			}
+		}
+	}
+	return env
+}
+
+// restWorkerEnv renders the auth secrets a supervised REST worker needs: one variable
+// per secret reference the deployed models name (ADR-0233).
+//
+// A REST task carries its endpoint, method, headers and body in the model, and all of
+// that already travels with the job (ADR-0168). What does not travel is the secret
+// behind its authSecret reference — the basic password, bearer token, api-key value or
+// OAuth2 client secret — because a reference is resolved where it is used. On a
+// supervised worker "where it is used" is a child process with no vault, so the engine
+// resolves the references its own deployed models make and hands over exactly those.
+//
+// Without this, defaulting rest onto a worker would have moved every authenticated
+// REST task to a process that fails it with "auth secret is not configured".
+func (s *Server) restWorkerEnv() []string {
+	var env []string
+	s.do(func() {
+		env = s.deployedSecretRefEnvLocked("REST auth-secret", restAuthSecretRefs)
+	})
+	return env
+}
+
+// restAuthSecretRefs returns the auth-secret references a compiled process's REST
+// connector tasks name, in node order. A task calling an open endpoint names none, and
+// so does one whose auth carries only model data (a username without a password
+// reference is not a secret to hand over).
+func restAuthSecretRefs(cp *compiler.CompiledProcess) []string {
+	var out []string
+	for id := int32(0); int(id) < cp.NodeCount(); id++ {
+		n := cp.Node(id)
+		if n.Type != compiler.TypeConnectorTask {
+			continue
+		}
+		d := cp.ConnectorTask(n.Detail)
+		if d == nil || d.JobType != compiler.RestJobTypeIndex {
+			continue
+		}
+		raw := strings.TrimSpace(cp.Intern(d.Auth))
+		if raw == "" {
+			continue
+		}
+		var auth compiler.RestAuth
+		if err := json.Unmarshal([]byte(raw), &auth); err != nil {
+			// The engine wrote this JSON at deploy time, so a parse failure is a bug
+			// rather than an operator's mistake — skipping it hands over one secret
+			// less, and the worker's own error names what is missing.
+			continue
+		}
+		if ref := strings.TrimSpace(auth.SecretRef); ref != "" {
+			out = append(out, ref)
+		}
+	}
+	return out
 }
 
 // adSecretEnv is one bind password under the name the worker reads it by. It is the
