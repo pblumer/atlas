@@ -168,3 +168,21 @@ func TestRunSharePointJobWithoutAResolvedDetail(t *testing.T) {
 		t.Fatal("a job with no connector payload was accepted")
 	}
 }
+
+// A payload whose field carries the wrong JSON type is reported as a payload this
+// worker cannot read. Reachable for the reason ldap's is: a worker leases from
+// whichever Atlas is in front of it, and unmarshalling into a zero Job would ask the
+// registry for the instance "" rather than say what went wrong.
+func TestRunSharePointJobRefusesAPayloadItCannotRead(t *testing.T) {
+	job := Job{Connector: &ConnectorPayload{Kind: "sharepoint", Fields: map[string]any{
+		"connector": "intranet", "fields": "not an object",
+	}}}
+
+	_, err := RunSharePointJob(context.Background(), job, nil)
+	if err == nil {
+		t.Fatal("a payload with a mistyped field was accepted")
+	}
+	if !strings.Contains(err.Error(), "cannot read the resolved detail") {
+		t.Errorf("error = %v, want it to say the resolved detail could not be read", err)
+	}
+}
