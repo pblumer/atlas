@@ -67,21 +67,22 @@ const (
 // operator can move work nothing here reports — silence being the exact thing this
 // replaced.
 var authoredKindJobTypes = map[string][]int32{
-	"rest":                  {compiler.RestJobTypeIndex},
-	"scim":                  {compiler.ScimJobTypeIndex},
-	"ldap":                  {compiler.LdapJobTypeIndex},
-	"soap":                  {compiler.SoapJobTypeIndex},
-	"ad":                    {compiler.AdJobTypeIndex},
-	"ldif":                  {compiler.LdifJobTypeIndex},
-	"entra":                 {compiler.EntraJobTypeIndex},
-	connectorKindClio:       {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
-	connectorKindMail:       {compiler.MailJobTypeIndex},
-	"csv":                   {compiler.CsvImportJobTypeIndex},
-	connectorKindSharePoint: {compiler.SharePointJobTypeIndex},
-	connectorKindRemedy:     {compiler.RemedyJobTypeIndex},
-	connectorKindJira:       {compiler.JiraJobTypeIndex},
-	"webscrape":             {compiler.WebScrapeJobTypeIndex},
-	"userconnector":         {compiler.UserConnectorJobTypeIndex},
+	"rest":                    {compiler.RestJobTypeIndex},
+	"scim":                    {compiler.ScimJobTypeIndex},
+	"ldap":                    {compiler.LdapJobTypeIndex},
+	"soap":                    {compiler.SoapJobTypeIndex},
+	"ad":                      {compiler.AdJobTypeIndex},
+	"ldif":                    {compiler.LdifJobTypeIndex},
+	"entra":                   {compiler.EntraJobTypeIndex},
+	connectorKindClio:         {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
+	connectorKindMail:         {compiler.MailJobTypeIndex},
+	"csv":                     {compiler.CsvImportJobTypeIndex},
+	connectorKindSharePoint:   {compiler.SharePointJobTypeIndex},
+	connectorKindRemedy:       {compiler.RemedyJobTypeIndex},
+	connectorKindJira:         {compiler.JiraJobTypeIndex},
+	connectorKindGoogleSheets: {compiler.GoogleSheetsJobTypeIndex},
+	"webscrape":               {compiler.WebScrapeJobTypeIndex},
+	"userconnector":           {compiler.UserConnectorJobTypeIndex},
 
 	// A script task's language (ADR-0047). One entry per language, not one for
 	// "script": see above.

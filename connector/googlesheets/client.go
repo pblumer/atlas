@@ -177,6 +177,10 @@ type Client interface {
 	// spreadsheet, the read range's rows, the update summary, or nil where the answer
 	// holds nothing a process needs.
 	Do(ctx context.Context, req Request) (any, error)
+	// ListFiles lists one Drive folder. It is the inbound half's read
+	// (ADR-draft-google-inbound-watch) and deliberately not one of [Ops]: a watch on a
+	// drop folder needs it, and a model must not be able to author it.
+	ListFiles(ctx context.Context, q FileQuery) ([]map[string]any, error)
 }
 
 // Registry resolves a connector name to the [Client] for this kind. Connectors are

@@ -32,6 +32,12 @@ import (
 // access token — is read from the vault. Like Remedy, its base URL and credential are
 // managed here, never in the model; only the operation and its values are
 // model-authored.
+// connectorKindGoogleSheets is the Google Sheets connector kind
+// (ADR-draft-google-sheets-worker): a managed record of this kind resolves to a live
+// client speaking Sheets v4 and Drive v3, whose OAuth credential bundle — a service
+// account's {clientEmail, privateKey}, or a {clientId, clientSecret, refreshToken}
+// for a consumer account — is read from the vault. Like Jira, only the operation and
+// its values are model-authored; the credential is managed here and never in a model.
 const (
 	connectorKindTemis      = "temis"
 	connectorKindClio       = "clio"
@@ -39,7 +45,10 @@ const (
 	connectorKindSharePoint = "sharepoint"
 	connectorKindRemedy     = "remedy"
 	connectorKindJira       = "jira"
-	connectorKindEntra      = "entra"
+	// connectorKindGoogleSheets is documented above the block: it needs no endpoint,
+	// only a credentialsRef, because Google's API bases are not a per-tenant address.
+	connectorKindGoogleSheets = "googlesheets"
+	connectorKindEntra        = "entra"
 	// connectorKindAD is the Active Directory connector kind
 	// (ADR-0206). A record holds the directory's LDAP URL
 	// and a credentialsRef naming a vault {bindDN, password} bundle; the model names

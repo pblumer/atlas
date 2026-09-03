@@ -39,12 +39,18 @@ func (f *fakeReader) VariablesOfScope(scope uint64, fn func(*model.VariableValue
 type recordingClient struct {
 	reqs   []gs.Request
 	result any
+	files  []map[string]any
 	err    error
 }
 
 func (r *recordingClient) Do(_ context.Context, req gs.Request) (any, error) {
 	r.reqs = append(r.reqs, req)
 	return r.result, r.err
+}
+
+// ListFiles is the inbound half of the interface; the outbound worker never calls it.
+func (r *recordingClient) ListFiles(context.Context, gs.FileQuery) ([]map[string]any, error) {
+	return r.files, r.err
 }
 
 // workerFixture compiles a one-task process and returns the pieces a handler needs.

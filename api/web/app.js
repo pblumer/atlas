@@ -623,6 +623,11 @@ const CONNECTORS = [
     refs: "ADR-0041 · ADR-0201", status: "active", statusLabel: "configurable",
   },
   {
+    id: "googlesheets", name: "Google Sheets", kind: "Spreadsheet",
+    desc: "Performs one Google Sheets operation from a service task off the processor loop: read a range, write one, append rows, clear a range, create a spreadsheet, add or delete a sheet, or move the whole file to the trash. The operation, the spreadsheet, the range and the values are model-authored (FEEL-capable) and what Google returned is written into a result variable; the credential — a service account's {clientEmail, privateKey} or a consumer account's {clientId, clientSecret, refreshToken} — is managed below and resolved from the vault. Creating and deleting a spreadsheet are Drive operations on the same credential, so the scopes an operator grants decide which half works. Authored on a service task with the Google Sheets Worker Type.",
+    refs: "ADR-0041", status: "active", statusLabel: "configurable",
+  },
+  {
     id: "remedy", name: "BMC Remedy", kind: "ITSM",
     desc: "Creates an entry (e.g. an incident) in a BMC Remedy / Helix ITSM form from a service task off the processor loop via the AR System REST API. The form and its field values are model-authored (FEEL-capable) and the created entry's id is written into a result variable; the base URL and the {username,password} credential bundle are managed below and resolved from the vault. Authored on a service task with the BMC Remedy Worker Type.",
     refs: "ADR-0041 · ADR-0106", status: "active", statusLabel: "configurable",
@@ -1709,7 +1714,7 @@ async function viewConsoleConnectors() {
     // Kind-specific first: these are the reasons an operator came to this row rather
     // than to any other, and they exist on no other kind.
     if (c.kind === "clio") items.push({ label: "Provision access…", icon: "🔑", act: "provision" });
-    if (c.kind === "clio" || c.kind === "jira") items.push({ label: "Events…", icon: "⇄", act: "subs" });
+    if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets") items.push({ label: "Events…", icon: "⇄", act: "subs" });
     // Every kind the check covers: mail connects and authenticates (or sends a test
     // message), a SQL connector dials its connection string. connectorShape is the one
     // place that knows, so the menu does not go stale the next kind that gains one.
@@ -3690,7 +3695,7 @@ function wireConnectorManagement(connectors) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option><option value="preview">Preview (in-app outbox)</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -4029,7 +4034,7 @@ async function toggleInboundSubs(row, connectorId, kind) {
   }
   const subs = (await api("GET", "/api/v1/connectors/" + encodeURIComponent(connectorId) + "/inbound-subscriptions")) || [];
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
-      <td><code>${esc(s.jql || s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}</td>
+      <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
       <td>${s.enabled
         ? '<span class="pill ok"><span class="dot"></span>on</span>'
@@ -4038,13 +4043,39 @@ async function toggleInboundSubs(row, connectorId, kind) {
       <td style="text-align:right"><button class="btn ghost danger" data-sdel title="Delete this subscription">Delete</button></td>
     </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">No subscriptions. Add one below to have clio events start or wake processes.</td></tr>`;
   const isJira = kind === "jira";
-  const what = isJira
+  const isGoogle = kind === "googlesheets";
+  const what = isGoogle
+    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — a spreadsheet's new rows, or the files put into a Drive folder, are published as Atlas messages so each one starts a process. Atlas polls once a minute by default; nothing has to reach this server from the internet. <b>A row watch follows the sheet's own row numbers</b>, so it sees rows appended at the end — which is what a form response sheet does. Deleting rows from the watched range renumbers the tail, and a later row landing on a number already delivered is not delivered again. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a watch fed by what its own processes write has no natural end. Empty uses 60.</div>`
+    : isJira
     ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as Atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`
     : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0075). <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`;
-  const source = isJira
+  const source = isGoogle
+    ? `<label class="field" style="margin:0"><span>Watch</span><select name="googleTarget" class="input">
+        <option value="rows">new rows in a spreadsheet</option>
+        <option value="files">new files in a Drive folder</option>
+      </select></label>
+      <label class="field" style="margin:0"><span>Spreadsheet or folder</span><input name="googleId" placeholder="paste the id or the whole URL" required/></label>`
+    : isJira
     ? `<label class="field" style="margin:0"><span>JQL</span><input name="jql" placeholder="project = OPS AND issuetype = Bug" required/></label>`
     : `<label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="/employees" required/></label>`;
-  const extra = isJira
+  const extra = isGoogle
+    ? `<div class="google-rows" style="grid-column:1 / -1;display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+        <label class="field" style="margin:0;flex:1 1 200px"><span>Range (optional)</span><input name="watchRange" placeholder="Formularantworten 1!A:F"/></label>
+        <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center">
+          <input type="checkbox" name="headerRow"/>
+          <span>The first row names the columns</span>
+        </label>
+      </div>
+      <div class="google-files" style="grid-column:1 / -1;display:flex;gap:12px;align-items:center" hidden>
+        <span>Watch</span>
+        <select name="cursorField" class="input" style="width:auto">
+          <option value="created">files added to the folder</option>
+          <option value="modified">files changed in the folder</option>
+        </select>
+      </div>
+      <div class="muted google-rows" style="grid-column:1 / -1">With <b>the first row names the columns</b>, the correlation key (FEEL) sees each cell under its column name — <code>= Antragsnummer</code> — plus <code>rowNumber</code>, <code>row</code> (the cells as a list), <code>spreadsheetId</code>, <code>range</code> and <code>eventType</code>. Without it, only the envelope: index into <code>row</code>. These are also seeded as process variables on the started instance. A new watch is forward-only, so the rows already in the sheet are skipped.</div>
+      <div class="muted google-files" style="grid-column:1 / -1" hidden>The correlation key (FEEL) sees <code>fileId</code>, <code>fileName</code>, <code>mimeType</code>, <code>webViewLink</code>, <code>createdTime</code>, <code>modifiedTime</code>, <code>folderId</code>, <code>eventType</code>, and <code>file</code> — the whole file, for anything not named here. These are also seeded as process variables on the started instance. A new watch is forward-only, so the files already in the folder are skipped. <b>The credential must be able to see the folder</b>: a service account owns nothing by itself, so share the folder with its address.</div>`
+    : isJira
     ? `<label class="check" style="grid-column:1 / -1;margin:0;display:flex;gap:12px;align-items:center">
         <span>Watch</span>
         <select name="cursorField" class="input" style="width:auto">
@@ -4066,13 +4097,30 @@ async function toggleInboundSubs(row, connectorId, kind) {
     <table style="width:100%"><tbody id="subs-body">${list}</tbody></table>
     <form id="subs-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin-top:10px">
       ${source}
-      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
-      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isJira ? "= issueKey" : "= subjectTail"}"/></label>
+      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isGoogle ? "antrag.eingegangen" : isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
+      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isGoogle ? "= Antragsnummer" : isJira ? "= issueKey" : "= subjectTail"}"/></label>
       <label class="field" style="margin:0"><span>Max events/hour</span><input name="maxPerHour" type="number" min="0" placeholder="60"/></label>
       <button class="btn" type="submit" title="Add this inbound event watch">Add</button>
       ${extra}
     </form></td>`;
   row.after(panel);
+  // The two Google watches share one form, and the target decides which half of it
+  // applies — so the half that does not is hidden rather than left to be filled in and
+  // silently ignored. The server refuses a watch carrying the other's fields anyway;
+  // this is what keeps an operator from writing one.
+  const target = panel.querySelector('select[name="googleTarget"]');
+  if (target) {
+    const sync = () => {
+      const files = target.value === "files";
+      panel.querySelectorAll(".google-rows").forEach((el) => { el.hidden = files; });
+      panel.querySelectorAll(".google-files").forEach((el) => { el.hidden = !files; });
+      panel.querySelector('input[name="googleId"]').placeholder = files
+        ? "paste the folder id or the whole URL of the folder page"
+        : "paste the spreadsheet id or the whole URL";
+    };
+    target.addEventListener("change", sync);
+    sync();
+  }
   panel.querySelector("#subs-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -4082,7 +4130,17 @@ async function toggleInboundSubs(row, connectorId, kind) {
         correlationKey: (f.get("correlationKey") || "").trim(),
         maxPerHour: Number(f.get("maxPerHour") || 0) || 0,
       };
-      if (isJira) {
+      if (isGoogle) {
+        const id = (f.get("googleId") || "").trim();
+        if (f.get("googleTarget") === "files") {
+          body.folderId = id;
+          body.cursorField = f.get("cursorField") || "created";
+        } else {
+          body.spreadsheetId = id;
+          body.watchRange = (f.get("watchRange") || "").trim();
+          body.headerRow = f.get("headerRow") === "on";
+        }
+      } else if (isJira) {
         body.jql = (f.get("jql") || "").trim();
         body.cursorField = f.get("cursorField") || "created";
       } else {

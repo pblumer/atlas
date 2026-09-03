@@ -376,6 +376,26 @@
       ]
     },
     {
+      "name": "GoogleSheetsConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "spreadsheet", "type": "String", "isAttr": true },
+        { "name": "sheet", "type": "String", "isAttr": true },
+        { "name": "range", "type": "String", "isAttr": true },
+        { "name": "title", "type": "String", "isAttr": true },
+        { "name": "folder", "type": "String", "isAttr": true },
+        { "name": "values", "type": "String", "isAttr": true },
+        { "name": "columns", "type": "String", "isAttr": true },
+        { "name": "valueInput", "type": "String", "isAttr": true },
+        { "name": "header", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "WebscrapeConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },
