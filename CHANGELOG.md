@@ -270,7 +270,7 @@ _Changed_ / _Removed_ for each version.
   a walk of every instance in the store; the finished half was collected whole and
   sorted in memory to show the ten most recent completions; and the search was, in
   its own words, "a full scan with no value index".
-  ([ADR-draft-finding-an-instance](docs/adr/draft-finding-an-instance.md))
+  ([ADR-0241](docs/adr/0241-finding-an-instance.md))
 
   **A bare instance key is now a point read.** Paste a key into the search box and
   it resolves against the live record and then the history — two reads, no walk,

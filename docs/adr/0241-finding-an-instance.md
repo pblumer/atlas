@@ -1,4 +1,4 @@
-# ADR-DRAFT: Finding an instance — a key lookup and a per-definition index
+# ADR-0241: Finding an instance — a key lookup and a per-definition index
 
 - **Status:** Accepted
 - **Date:** 2026-09-03

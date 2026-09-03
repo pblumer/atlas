@@ -803,7 +803,7 @@ What it takes to run this for real.
   tests across the boundary → the timeline's two-definition reader → the Operations UI.
 - 🚧 Operator tooling: list/inspect instances, incidents, jobs. **Finding one instance
   among a few hundred thousand** landed
-  ([ADR-draft-finding-an-instance](docs/adr/draft-finding-an-instance.md)): the
+  ([ADR-0241](docs/adr/0241-finding-an-instance.md)): the
   variable search used to walk every instance in the engine *on the run loop*, so a
   search stopped the processor for as long as it took, and `?process=` filtered after
   that walk rather than before it. Now a bare instance key is a **point read** (live
