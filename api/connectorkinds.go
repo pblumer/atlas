@@ -7,6 +7,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
@@ -276,6 +277,37 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes: []int32{compiler.JiraJobTypeIndex},
 	},
 	{
+		// A Google Sheets task performs one spreadsheet operation against a Worker an
+		// operator configured (ADR-0235) and writes what Google
+		// returned into the task's result variable (HandleWithOutput) — for the
+		// operations that answer with something. The credential bundle lives in the
+		// Worker store as a reference and is resolved from the vault at build time
+		// (ADR-0041), so a model carries neither an address nor a key.
+		name:           connectorKindGoogleSheets,
+		validateCreate: validateGoogleSheetsConnector,
+		newRegistry:    func(s *Server) { s.googleSheetsRegistry = googlesheets.NewRegistry() },
+		registerHandlers: func(s *Server, store *state.Store) {
+			s.jobRunner.HandleWithOutput(compiler.GoogleSheetsJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+				return googlesheets.Handler(rd, s.processLookup, s.googleSheetsRegistry)
+			})
+		},
+		rebuild: func(s *Server) error {
+			clients, problems, err := s.buildGoogleSheetsClients()
+			if err != nil {
+				return err
+			}
+			s.googleSheetsRegistry.ReplaceWith(clients, problems)
+			return nil
+		},
+		problem: func(s *Server, name string) (string, bool) {
+			if s.googleSheetsRegistry == nil {
+				return "", false
+			}
+			return s.googleSheetsRegistry.Problem(name)
+		},
+		jobTypes: []int32{compiler.GoogleSheetsJobTypeIndex},
+	},
+	{
 		// A Microsoft Entra ID task manages the cloud directory over Graph
 		// (ADR-0172). It is worker-only: the engine builds no client and holds no tenant
 		// credential — the store entry exists only so an operator can add a tenant in the
@@ -385,22 +417,23 @@ func (s *Server) setupManagedConnectors(store *state.Store) error {
 // does not: a worker Atlas can run but an operator cannot move is a kind that can
 // only ever run on the loop, which is the thing ADR-0164 rules out.
 var offloadableKinds = map[string][]int32{
-	connectorKindTemis:      {compiler.TemisDecisionJobTypeIndex},
-	connectorKindClio:       {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
-	connectorKindMail:       {compiler.MailJobTypeIndex},
-	connectorKindSharePoint: {compiler.SharePointJobTypeIndex},
-	connectorKindRemedy:     {compiler.RemedyJobTypeIndex},
-	connectorKindJira:       {compiler.JiraJobTypeIndex},
-	"csv":                   {compiler.CsvImportJobTypeIndex},
-	"ldif":                  {compiler.LdifJobTypeIndex},
-	"rest":                  {compiler.RestJobTypeIndex},
-	"scim":                  {compiler.ScimJobTypeIndex},
-	"ldap":                  {compiler.LdapJobTypeIndex},
-	"soap":                  {compiler.SoapJobTypeIndex},
-	"ad":                    {compiler.AdJobTypeIndex},
-	"webscrape":             {compiler.WebScrapeJobTypeIndex},
-	"dmn":                   {compiler.DMNJobTypeIndex},
-	"script":                {compiler.PwshJobTypeIndex, compiler.PythonJobTypeIndex, compiler.JsJobTypeIndex},
+	connectorKindTemis:        {compiler.TemisDecisionJobTypeIndex},
+	connectorKindClio:         {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
+	connectorKindMail:         {compiler.MailJobTypeIndex},
+	connectorKindSharePoint:   {compiler.SharePointJobTypeIndex},
+	connectorKindRemedy:       {compiler.RemedyJobTypeIndex},
+	connectorKindJira:         {compiler.JiraJobTypeIndex},
+	connectorKindGoogleSheets: {compiler.GoogleSheetsJobTypeIndex},
+	"csv":                     {compiler.CsvImportJobTypeIndex},
+	"ldif":                    {compiler.LdifJobTypeIndex},
+	"rest":                    {compiler.RestJobTypeIndex},
+	"scim":                    {compiler.ScimJobTypeIndex},
+	"ldap":                    {compiler.LdapJobTypeIndex},
+	"soap":                    {compiler.SoapJobTypeIndex},
+	"ad":                      {compiler.AdJobTypeIndex},
+	"webscrape":               {compiler.WebScrapeJobTypeIndex},
+	"dmn":                     {compiler.DMNJobTypeIndex},
+	"script":                  {compiler.PwshJobTypeIndex, compiler.PythonJobTypeIndex, compiler.JsJobTypeIndex},
 }
 
 // DefaultOffloadedKinds are the Worker Types Atlas moves onto a worker of its
@@ -466,10 +499,19 @@ var offloadableKinds = map[string][]int32{
 // AD's answer (restWorkerEnv). LDIF needs no answer: it reads and writes a file, and a
 // supervised worker is a child on the same host.
 //
+// LDAP is the ninth, and it is AD's way exactly (ADR-0233, slice 3). The two kinds
+// share a shape — a task authors its own directory URL and bind DN, and names its
+// bind password and client certificate as vault *references* — so it was excluded for
+// the same reason AD was and is included now on the same condition: ldapWorkerEnv
+// hands the child exactly the references the deployed models name. A bind, a modify
+// and a close against a directory somebody else operates is the same work AD's
+// argument was about; that one kind speaks it through Microsoft's dialect and the
+// other through the standard one changes nothing about where it belongs.
+//
 // The credential-bearing kinds the engine cannot yet hand over stay in the engine
 // until an operator moves their secrets themselves, with --offload-connectors.
 func DefaultOffloadedKinds() []string {
-	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldif", connectorKindMail, connectorKindRemedy, "rest", "script", "webscrape"}
+	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "script", "webscrape"}
 }
 
 // DefaultSupervisedWorkerOnlyKinds are the worker-only Worker Types Atlas supervises
@@ -616,6 +658,24 @@ func validateJiraConnector(p *createConnectorParams) string {
 	}
 	if p.CredentialsRef == "" {
 		return "a jira worker requires a credentialsRef naming a vault bundle: {email, apiToken} for Jira Cloud, or {token} for a Data Center personal access token"
+	}
+	return ""
+}
+
+// validateGoogleSheetsConnector validates a Google Sheets Worker an operator is
+// adding. Unlike Jira or Remedy it needs no endpoint: Google's API bases are the same
+// for everyone, and the endpoint field stays an override for an operator behind a
+// proxy. What it does need is the credentialsRef, because for this Worker Type the
+// credential *is* the whole configuration (ADR-0235).
+// Provider/Sender are mail-only.
+//
+// The function keeps the validate*Connector name its siblings in this table carry.
+func validateGoogleSheetsConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender = "", ""
+	if p.CredentialsRef == "" {
+		return "a Google Sheets Worker requires a credentialsRef naming a vault bundle: " +
+			"{method:\"serviceAccount\", clientEmail, privateKey} for a service account, " +
+			"or {method:\"refreshToken\", clientId, clientSecret, refreshToken} for a consumer account"
 	}
 	return ""
 }

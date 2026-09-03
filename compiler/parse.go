@@ -2072,6 +2072,9 @@ type xmlServiceTask struct {
 	// (ADR-0201): one issue-tracker operation against a
 	// server-registered Jira instance.
 	Jira *xmlJiraConnector `xml:"extensionElements>jiraConnector"`
+	// GoogleSheets, when present, marks this service task a Google Sheets task: one
+	// spreadsheet operation against a Worker an operator configured.
+	GoogleSheets *xmlGoogleSheetsConnector `xml:"extensionElements>googleSheetsConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
 	// absent.
@@ -2583,6 +2586,46 @@ type xmlJiraConnector struct {
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"jiraField"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// A Google Sheets task's parameters, carried on a service task as an
+// <atlas:googleSheetsConnector connector="..." operation="..." .../> extension element
+// (ADR-0235). The connector attribute names the Worker (whose
+// credential lives on the server, never in the model) and operation is the spreadsheet
+// operation the task performs. Element and attribute keep the pre-ADR-0203 spelling
+// their siblings carry: both are authored in deployed models.
+//
+// Which of the remaining attributes apply is decided by the operation, and only by it:
+// spreadsheet addresses an existing file by id or by its URL (everything but
+// create-spreadsheet); sheet is a tab title (added, deleted, or a new file's first
+// tab); range is A1 notation for the four cell-level operations and may name its own
+// sheet; title and folder are what a new spreadsheet is called and where it is put;
+// values is what write-range and append-row write; columns names the fields and the
+// order a list of objects is projected through; valueInput chooses whether a written
+// value is interpreted as typed ("user", the default) or stored verbatim ("raw");
+// header makes a read answer with objects keyed by the range's first row.
+//
+// spreadsheet, sheet, range, title, folder and values are each literal or, with a
+// leading '=', a FEEL expression evaluated over the variables the task sees at call
+// time (the fx toggle, ADR-0067). columns, valueInput and header are not: each decides
+// the shape of the call rather than its content, and a shape that could differ on
+// every token is not a shape.
+type xmlGoogleSheetsConnector struct {
+	Connector      string `xml:"connector,attr"`
+	Operation      string `xml:"operation,attr"`
+	Spreadsheet    string `xml:"spreadsheet,attr"`
+	Sheet          string `xml:"sheet,attr"`
+	Range          string `xml:"range,attr"`
+	Title          string `xml:"title,attr"`
+	Folder         string `xml:"folder,attr"`
+	Values         string `xml:"values,attr"`
+	Columns        string `xml:"columns,attr"`
+	ValueInput     string `xml:"valueInput,attr"`
+	Header         string `xml:"header,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }

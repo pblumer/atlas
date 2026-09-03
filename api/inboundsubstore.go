@@ -55,6 +55,34 @@ type inboundSubscription struct {
 	// bridge's ticker is shared and fast; a Jira site rate-limits per site, and
 	// spending that budget on empty answers every two seconds is not what it is for.
 	PollSeconds int `json:"pollSeconds,omitempty"`
+
+	// The fields below belong to a Google watch (ADR-0234).
+	// Which of the two it is follows from which target it names — a subscription names
+	// exactly one, and the create endpoint refuses both or neither.
+
+	// SpreadsheetID is a *row watch*: the spreadsheet whose new rows are published.
+	// WatchRange is the A1 range read on each poll (normalized to a default when the
+	// operator names none) and HeaderRow makes the range's first row the column names,
+	// so the event's fields carry each row by name and a correlation key can say
+	// `Antragsnummer` rather than index into a list.
+	//
+	// Its sequence is the row's own absolute number, which rises with every append and
+	// never rises twice for the same row — so the mark stays the watch's scalar one.
+	// The hole this leaves is stated in the record and in the Console: deleting a row
+	// renumbers the tail, and a later append landing on a delivered number is not
+	// delivered again. The sheets people watch are the append-only ones.
+	SpreadsheetID string `json:"spreadsheetId,omitempty"`
+	WatchRange    string `json:"watchRange,omitempty"`
+	HeaderRow     bool   `json:"headerRow,omitempty"`
+	// FolderID is a *file watch*: the Drive folder whose files are published, which is
+	// the drop folder people already use as a queue. It has no sequence of its own —
+	// files.list is a query and its order is an index's — so, exactly as for Jira, the
+	// mark is scoped per file id and the sequence is the file's own timestamp.
+	// CursorField ("created", the default, or "modified") selects which, and LagSeconds
+	// holds the cursor behind the newest file so one indexed late is still inside the
+	// next window.
+	FolderID string `json:"folderId,omitempty"`
+
 	// LastPolledAt is when this watch was last read, in unix seconds. It is what makes
 	// PollSeconds a cadence rather than a wish, and like LastEventID it is
 	// best-effort: losing it re-reads, which the marks make harmless.

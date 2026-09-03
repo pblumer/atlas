@@ -9,7 +9,8 @@
 //
 // The shapes track the Go side: connector/mail/oauth.go's credentialBundle,
 // connector/sharepoint/oauth.go's, api/connectors.go's remedyCredentials, and
-// connector/jira/rest.go's credentialBundle. A field added there is a field added here.
+// connector/jira/rest.go's and connector/googlesheets/oauth.go's credentialBundle. A
+// field added there is a field added here.
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -21,8 +22,8 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 // back, a wrong shape is invisible until a task parks behind an incident hours later
 // (ADR-0155). The shapes mirror the Go decoders — connector/mail/oauth.go's
 // credentialBundle, connector/sharepoint/oauth.go's, api/connectors.go's
-// remedyCredentials, and connector/jira/rest.go's credentialBundle — so a change there
-// is a change here.
+// remedyCredentials, and the connector/jira and connector/googlesheets bundles — so a
+// change there is a change here.
 export const SECRET_SHAPES = {
   "mail:gmail": {
     what: "a Google OAuth credential bundle (JSON)",
@@ -59,6 +60,19 @@ export const SECRET_SHAPES = {
     anyOf: [["email", "apiToken"], ["token"]],
     skeleton: { email: "bot@acme.example", apiToken: "ATATT…" },
     note: "A Jira Cloud API token is created under <b>Atlassian account &rsaquo; Security &rsaquo; API tokens</b> and is used with the account's e-mail address, not a password. For Jira Data Center, store <code>{\"token\": \"…\"}</code> instead — a personal access token, sent as a bearer.",
+  },
+  "googlesheets:": {
+    what: "a Google OAuth credential bundle (JSON): a service account's signing key, or a consumer account's refresh token",
+    oauth: "google",
+    // anyOf, not fields: the two grants are alternatives, and a bundle is valid when it
+    // satisfies either — the same shape the Jira entry uses for Cloud and Data Center.
+    anyOf: [["clientEmail", "privateKey"], ["clientId", "clientSecret", "refreshToken"]],
+    skeleton: {
+      method: "serviceAccount",
+      clientEmail: "atlas@\u2026.iam.gserviceaccount.com",
+      privateKey: "-----BEGIN PRIVATE KEY-----\u2026",
+    },
+    note: "Copied out of the JSON key file Google hands out for a service account (<code>client_email</code> and <code>private_key</code>, camel-cased here). Atlas fills in <code>tokenUrl</code> and the Sheets and Drive <code>scope</code>. Add <code>\"subject\"</code> to act as a Workspace user through domain-wide delegation. Pasting the whole key file is the common mistake: it is that file's two fields, not the file.",
   },
   "mail:smtp": { what: "the SMTP password for the worker's sender address (a plain string)" },
   "mail:preview": { what: "nothing — the preview provider needs no credential" },

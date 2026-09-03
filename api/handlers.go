@@ -19,7 +19,9 @@ import (
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/entra"
+	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
+	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
@@ -5322,6 +5324,23 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"assignee": j.Assignee, "jql": j.JQL, "query": j.Query, "maxResults": j.MaxResults,
 			"fields": j.Fields, "requestId": j.RequestID, "resultVariable": j.ResultVariable,
 		}}
+	case compiler.GoogleSheetsJobTypeIndex:
+		// The operation, the spreadsheet, the range and the already-projected rows
+		// travel; the service account's private key does not. Google Sheets is Jira's
+		// situation exactly — one operator-managed credential behind a name
+		// (ADR-0235) — so what travels is the *Worker's* name,
+		// resolved against the Worker Instance's own configuration. That is also what
+		// lets it act as a different Google identity from anything the engine holds.
+		j, err := googlesheets.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "googlesheets", Fields: map[string]any{
+			"connector": j.Worker, "operation": j.Operation, "spreadsheet": j.Spreadsheet,
+			"sheet": j.Sheet, "range": j.Range, "title": j.Title, "folder": j.Folder,
+			"values": j.Values, "input": j.Input, "header": j.Header,
+			"requestId": j.RequestID, "resultVariable": j.ResultVariable,
+		}}
 	case compiler.MsSqlJobTypeIndex, compiler.MariaDBJobTypeIndex, compiler.PostgresJobTypeIndex:
 		// The statement and its bound parameters travel; the DSN does not exist here
 		// to travel. SQL is the first kind with no in-process handler at all, so this
@@ -5356,6 +5375,23 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"attributes": j.Attributes, "baseDN": j.BaseDN, "filter": j.Filter,
 			"scope": j.Scope, "cookie": j.Cookie, "cookieVariable": j.CookieVariable,
 			"maxEntries": j.MaxEntries, "objectSecurity": j.ObjectSecurity,
+			"resultVariable": j.ResultVariable,
+		}}
+	case compiler.LdapJobTypeIndex:
+		// LDAP authors its own server (ADR-0154), so like AD the endpoint travels and
+		// the credentials do not: the bind-password and client-certificate
+		// *references* travel and whoever runs the job resolves them, so an offloaded
+		// LDAP task never reads the engine's vault (ADR-0168).
+		j, err := ldap.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "ldap", Fields: map[string]any{
+			"url": j.URL, "startTLS": j.StartTLS, "bindDN": j.BindDN,
+			"bindSecretRef": j.BindSecret, "clientCertSecretRef": j.ClientCertSecret,
+			"operation": j.Operation, "dn": j.DN, "attributes": j.Attributes,
+			"newPassword": j.NewPassword, "baseDN": j.BaseDN, "scope": j.Scope,
+			"filter": j.Filter, "pageSize": j.PageSize, "maxEntries": j.MaxEntries,
 			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.EntraJobTypeIndex:

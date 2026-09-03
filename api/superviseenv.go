@@ -160,6 +160,10 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// for AD's reason, and defaulted onto a worker for the plainest one there is —
 		// an HTTP call to somebody else's host is the original argument for ADR-0164.
 		"rest": s.restWorkerEnv,
+		// LDAP is AD's shape without Microsoft's dialect: the directory is model data
+		// and travels, the bind password and client certificate are vault references
+		// and cannot. Provisioned for AD's reason, and defaulted with it.
+		"ldap": s.ldapWorkerEnv,
 		// Entra is worker-only like AD (the engine holds no tenant credential, ADR-0172),
 		// and provisioned for the same reason: a supervised worker has no vault, so the
 		// engine renders its client secret out of the vault. Only the secret — tenant and
@@ -1043,6 +1047,51 @@ func restAuthSecretRefs(cp *compiler.CompiledProcess) []string {
 		}
 		if ref := strings.TrimSpace(auth.SecretRef); ref != "" {
 			out = append(out, ref)
+		}
+	}
+	return out
+}
+
+// ldapWorkerEnv renders the directory credentials a supervised LDAP worker needs: one
+// variable per secret reference the deployed models name (ADR-0233, slice 3).
+//
+// It is AD's handover, and it is one function call rather than a second copy of it
+// because the two kinds pose the identical problem: an LDAP task authors its own
+// server and bind DN (ADR-0154) and both travel with the job, while its bind password
+// and its client certificate are *vault references*, and a reference is resolved where
+// it is used. On a supervised worker that is a child process with no vault, so the
+// engine resolves the references its own deployed models make and hands over exactly
+// those.
+//
+// Both flavours are covered, because both fail the same way if they are not: a
+// certificate reference nothing answers to is a bind that cannot present an identity,
+// which is not a better outcome than a password reference nothing answers to.
+func (s *Server) ldapWorkerEnv() []string {
+	var env []string
+	s.do(func() {
+		env = s.deployedSecretRefEnvLocked("LDAP secret", ldapSecretRefs)
+	})
+	return env
+}
+
+// ldapSecretRefs returns the bind-password and client-certificate references a
+// compiled process's LDAP tasks name, in node order. An anonymous bind over plain
+// LDAP names neither; a task may name either or both.
+func ldapSecretRefs(cp *compiler.CompiledProcess) []string {
+	var out []string
+	for id := int32(0); int(id) < cp.NodeCount(); id++ {
+		n := cp.Node(id)
+		if n.Type != compiler.TypeConnectorTask {
+			continue
+		}
+		d := cp.ConnectorTask(n.Detail)
+		if d == nil || d.JobType != compiler.LdapJobTypeIndex {
+			continue
+		}
+		for _, ref := range []string{cp.Intern(d.LdapBindSecret), cp.Intern(d.LdapClientCertSecret)} {
+			if ref = strings.TrimSpace(ref); ref != "" {
+				out = append(out, ref)
+			}
 		}
 	}
 	return out

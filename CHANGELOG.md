@@ -14,6 +14,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **LDAP tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 3).
+  A bind, a search or a modify against a directory somebody else operates no longer
+  happens on the loop that owns the partition's state. `ldap` joins the kinds Atlas
+  offloads and supervises by itself, so a fresh install gets it without configuring
+  anything.
+
+  It is Active Directory's handover exactly (ADR-0182), because the two kinds share a
+  shape: an LDAP task authors its own server and bind DN, so those travel with the
+  job, while its bind password and client certificate are vault **references** — and a
+  reference is resolved where it is used. `ldapWorkerEnv` renders the references the
+  deployed models actually name, resolved through the vault, under the
+  `ATLAS_CONNECTOR_<REF>_TOKEN` names the worker already reads. Both flavours are
+  covered: a certificate reference nothing answers to is a bind that cannot present an
+  identity, which is no better an outcome than a missing password.
+
+  The worker keeps the connection pool ADR-0154 introduced, so relocating the work
+  does not give back the reason binds were pooled in the first place. And both halves
+  now go through one `ldap.Resolve`/`ldap.Run` pair — the in-process handler was
+  rewritten onto it — so an offloaded search and an in-engine one cannot drift about
+  what an LDAP task means.
+
+  Four kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `soap`,
+  `temis`.
+
 - **A non-interrupting message or signal boundary event now fires every time, not once**
   ([ADR-draft-repeating-non-interrupting-boundary-events](docs/adr/draft-repeating-non-interrupting-boundary-events.md),
   refining [ADR-0040](docs/adr/0040-boundary-events.md)). Non-interrupting is how a model
@@ -91,6 +116,54 @@ _Changed_ / _Removed_ for each version.
   integration back on the run loop.
 
 ### Added
+
+- **Google Sheets as a Worker Type, and a spreadsheet or a Drive folder as an event
+  source.** A lot of the data a process runs on lives in a spreadsheet somebody
+  maintains by hand — the applicant list, the budget lines, the tracking table the team
+  actually looks at. Atlas could not reach one at all, and not for want of a package:
+  Google needs a signed JWT-bearer assertion, which the generic REST Worker Type's
+  bearer/basic/apiKey surface cannot produce, so the gap was structural.
+
+  Everything a person reads about it says **Worker**, per ADR-0203. The old spelling
+  survives only where changing it would break something: the `connector/` package path,
+  the `connector="…"` attribute and the `<atlas:googleSheetsConnector>` element (both
+  authored in deployed models, and the guard that stops bpmn-js silently dropping an
+  extension only recognizes `*Connector` elements), and the `"connector"` key in the
+  offload payload.
+
+  **Outbound** ([ADR-0235](docs/adr/0235-google-sheets-worker.md))
+  is eight operations that are steps a process takes: create a spreadsheet, add a tab,
+  read a range, write one, append rows, clear a range, delete a tab, move the file to
+  the trash. `values` takes the three shapes a process actually holds — a list of rows,
+  a flat list of cells, or a list of objects projected through the task's `columns`; a
+  list of objects with no columns is refused at deploy rather than written in an order
+  nobody chose. A read with `header` answers with objects keyed by the first row, which
+  is the shape a multi-instance subprocess iterates. `delete-spreadsheet` **trashes
+  rather than purges**: a process that deletes the wrong file is a bad afternoon either
+  way, but only one of the two is survivable. The credential — a service account's key,
+  or a refresh token — lives in the vault behind a Worker name, never in a model.
+
+  **Inbound** ([ADR-0234](docs/adr/0234-google-inbound-watch.md))
+  is the two intake channels people already have. A **row watch** publishes each new row
+  of a spreadsheet as an Atlas message — the "a Google Form writes its responses into a
+  sheet" case — and a **folder watch** publishes each file put into a Drive folder,
+  because the folder is a queue people already use. Both ride the existing inbound
+  bridge, so an event starts or wakes a process through ordinary message correlation,
+  and Atlas polls rather than exposing anything to the internet. A row's sequence is its
+  own row number, which is monotonic for appends; a file has none, so its mark is scoped
+  per file id exactly as a Jira issue's is (ADR-0214).
+
+  Two things are stated rather than hidden. Delivery is at-least-once and a spreadsheet
+  has no idempotency key, so a retried append can duplicate a row — a process that
+  cannot tolerate that needs a marker column it reads first. And a row watch loses rows
+  if rows are *deleted* from the watched range, because a row's only identity is its
+  place; the sheets people watch are the append-only ones.
+
+- **The Google service-account grant is now shared machinery.** `connector/oauth2` had
+  named it "the one such case" a caller supplies its own `Fetcher` for. A second caller
+  needs it, and two copies of a JWT signer is the duplication that package was
+  extracted to end, so it moved into `oauth2.ServiceAccount` and the mail Worker Type
+  delegates to it.
 
 - **Importing a UML class diagram: reading what somebody else drew.** A data model is
   normally drawn in a UML tool — Enterprise Architect, Papyrus, Visual Paradigm — long

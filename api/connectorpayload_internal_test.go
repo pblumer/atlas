@@ -15,6 +15,7 @@ import (
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/jira"
+	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
@@ -381,9 +382,13 @@ func TestAnUnresolvableFeelFieldTravelsAsNullRatherThanBlockingTheLease(t *testi
 // into a stated one: if a kind is later offloaded without adding its arm, the worker
 // gets a job with nothing on it, and this test is where that shows up.
 func TestAKindWithNoArmResolvesToNoPayload(t *testing.T) {
-	got := leaseConnectorPayloadOrNil(t, "ldap-proc",
-		`<atlas:ldapConnector url="ldaps://dc.example.com" connector="corp" operation="search" baseDN="dc=example,dc=com" filter="(objectClass=person)" resultVariable="found"/>`,
-		compiler.LdapJobType, `{"variables":{}}`)
+	// SOAP, one of the kinds ADR-0233's table still owes a worker half. It stood as
+	// ldap here until ldap got its slice, which is the table shrinking working as
+	// intended: this test names whichever kind is still in-engine, and the day the
+	// last one moves it has nothing left to assert.
+	got := leaseConnectorPayloadOrNil(t, "soap-proc",
+		`<atlas:soapConnector endpoint="https://example.com/svc" operation="GetRate" body="&lt;req/&gt;" resultVariable="found"/>`,
+		compiler.SoapJobType, `{"variables":{}}`)
 	if got != nil {
 		t.Errorf("payload = %#v, want none: this kind has no arm in resolveConnectorTask", *got)
 	}
@@ -453,6 +458,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.JiraJobTypeIndex", jira.Job{}},
 		{"compiler.MsSqlJobTypeIndex", sqldb.Job{}},
 		{"compiler.AdJobTypeIndex", ad.Job{}},
+		{"compiler.LdapJobTypeIndex", ldap.Job{}},
 		{"compiler.EntraJobTypeIndex", entra.Job{}},
 		{"compiler.ClioWriteJobTypeIndex", clio.Job{}},
 		{"compiler.WebScrapeJobTypeIndex", webscrape.Job{}},
