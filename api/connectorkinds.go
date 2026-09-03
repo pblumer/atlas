@@ -451,6 +451,13 @@ var offloadableKinds = map[string][]int32{
 // it, so a working Jira worker is a row that is folded away as quiet, in a table whose
 // whole subject is who is doing the work.
 //
+// clio is the eighth, and it is Remedy's way exactly (ADR-0231's successor): a managed
+// kind whose endpoint and token live in the connector store and the vault, excluded
+// only for as long as there was nothing to hand them to. It has a worker now
+// (worker.RunClioJob) and clioWorkerEnv builds the handover, which leaves no reason
+// for three round trips to somebody else's event store to keep happening on the loop —
+// least of all for the write, whose whole point is that it is durable somewhere else.
+//
 // REST and LDIF are the sixth and seventh, and they are what turns the deprecation of
 // ADR-0164 into its rule (ADR-0233). An HTTP call to
 // somebody else's host is the *original* case for not running integrations on the
@@ -462,7 +469,7 @@ var offloadableKinds = map[string][]int32{
 // The credential-bearing kinds the engine cannot yet hand over stay in the engine
 // until an operator moves their secrets themselves, with --offload-connectors.
 func DefaultOffloadedKinds() []string {
-	return []string{"ad", "csv", connectorKindJira, "ldif", connectorKindMail, connectorKindRemedy, "rest", "script", "webscrape"}
+	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldif", connectorKindMail, connectorKindRemedy, "rest", "script", "webscrape"}
 }
 
 // DefaultSupervisedWorkerOnlyKinds are the worker-only Worker Types Atlas supervises

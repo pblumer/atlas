@@ -184,6 +184,28 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.EntraJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunEntraJob(ctx, j, reg)
 			})
+		case "clio":
+			reg, names, err := clioRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve clio, holding no event store to reach. Not an error,
+				// for the reason mail's and Remedy's identical branches do not error:
+				// this worker very likely serves other kinds, and a store nobody has
+				// configured yet must park its tasks rather than take down the kinds
+				// that are configured.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			// One kind, three job types: write, query and read are the same connector
+			// and the same registry, and the resolved job says which of them it is.
+			for _, jobType := range []string{compiler.ClioWriteJobType, compiler.ClioQueryJobType, compiler.ClioReadJobType} {
+				built.Handlers[jobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+					return RunClioJob(ctx, j, reg)
+				})
+			}
 		case "remedy":
 			reg, names, err := remedyRegistryFromEnv(env)
 			if err != nil {
@@ -306,7 +328,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "csv", "entra", "jira", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "webscrape"}
+	return []string{"ad", "clio", "csv", "entra", "jira", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.
