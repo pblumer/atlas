@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mengentest-Seeder für identitaet-lebenszyklus.
+
+  Über MCP kostet jeder Aufruf rund 1,5 s Transport — 50.000 Instanzen einzeln zu
+  starten wäre ein Tag Wanduhr. Diese eine Multi-Instance-Call-Activity erzeugt
+  sie stattdessen in einem Aufruf.
+
+  Wichtiger Unterschied zum Lasttest von 2026-08: dort liefen die Kind-Instanzen
+  durch und endeten. Identitäten enden nicht — sie parken auf ihren Receive-Tasks.
+  Die Call-Activity wartet folglich für immer, und die Seeder-Instanz bleibt aktiv,
+  solange ihre Identitäten leben. Das ist hier Absicht und zugleich der
+  Aufräum-Hebel: Wird die Seeder-Instanz terminiert, fallen ihre Kinder mit.
+  Für den Produktivbetrieb erzeugt man Identitäts-Instanzen als Wurzelinstanzen
+  über die API, nicht über diesen Seeder.
+
+  Startvariablen: anzahl (wie viele), offset (Nummernkreis-Versatz),
+  praefix (Präfix der Test-Personalnummer, z. B. "MT-").
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_identitaet_massentest" targetNamespace="http://atlas/identity">
+  <process id="identitaet-massentest" name="Identitäten-Mengentest (Seeder)" isExecutable="true">
+    <documentation>Erzeugt in einem Aufruf "anzahl" Instanzen von identitaet-lebenszyklus mit fortlaufenden Personalnummern. Startvariablen: anzahl, offset, praefix.</documentation>
+    <startEvent id="start" name="Start"/>
+    <callActivity id="fan" name="Identitäten anlegen">
+      <documentation>Parallele Multi-Instance über die Zahlenreihe offset+1 .. offset+anzahl. Die Eingabe-Zuordnungen bilden je Iteration die Startvariablen der Kind-Instanz — die Kind-Instanz wird aus dem lokalen Scope der Call-Activity befüllt, propagateAllChildVariables bleibt deshalb ungenutzt. Die Iteration wird nicht an der Laufzeit gemessen, sondern am Visit-Count des Kindprozesses geprüft: eine FEEL-Range, die still null liefert, sähe sonst wie ein sehr schneller Lauf aus.</documentation>
+      <extensionElements>
+        <zeebe:calledElement processId="identitaet-lebenszyklus"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="= praefix + string(item)" target="identityId"/>
+          <zeebe:input source="= &quot;Testperson&quot;" target="nachname"/>
+          <zeebe:input source="= &quot;Nr&quot; + string(item)" target="vorname"/>
+          <zeebe:input source="= &quot;Testabteilung&quot;" target="orgEinheit"/>
+          <zeebe:input source="= &quot;Testfunktion&quot;" target="funktion"/>
+          <zeebe:input source="= &quot;2026-09-01&quot;" target="eintritt"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <multiInstanceLoopCharacteristics>
+        <extensionElements>
+          <zeebe:loopCharacteristics inputCollection="= for i in 1..anzahl return i + offset" inputElement="item"/>
+        </extensionElements>
+      </multiInstanceLoopCharacteristics>
+    </callActivity>
+    <endEvent id="end" name="Alle Identitäten beendet"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="fan"/>
+    <sequenceFlow id="f2" sourceRef="fan" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="identitaet-massentest">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="162" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_fan" bpmnElement="fan"><dc:Bounds x="250" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="420" y="162" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="375" y="205" width="127" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="180"/><di:waypoint x="250" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="350" y="180"/><di:waypoint x="420" y="180"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

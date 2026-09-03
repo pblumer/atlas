@@ -156,27 +156,28 @@ func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey
 	}
 }
 
-// ForEachActiveProcessInstance calls fn with the key and value of every live
-// process instance, via the committed process-instance column family. Entries are
-// collected before fn runs so fn may emit events/commands (e.g. terminate a child)
-// without disturbing the scan. Used to find the child a call activity started, via
-// its persisted parent link (ADR-0076).
-func (c *ProcessingContext) ForEachActiveProcessInstance(fn func(piKey uint64, pi *model.ProcessInstanceValue)) {
-	type entry struct {
-		key uint64
-		v   model.ProcessInstanceValue
-	}
-	var entries []entry
-	if err := c.p.store.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
-		entries = append(entries, entry{key: k, v: *v})
+// ChildInstancesOf returns the live child process instances a call-activity element
+// instance started, from the committed childByParent index (ADR-0076).
+//
+// It replaced a walk of every live process instance comparing each one's
+// ParentElementInstanceKey. That walk was O(instances) *per call activity torn
+// down*, so cancelling a parent holding many children cost the product of the two —
+// on the single-writer loop, which is every other request's queue as well. The keys
+// are collected before the caller acts on them, as the walk did, so the caller may
+// emit events for each without disturbing the read.
+//
+// Committed state only, deliberately: the teardown must be a pure function of what
+// is durable (I6), exactly as the walk it replaced was.
+func (c *ProcessingContext) ChildInstancesOf(callElKey uint64) []uint64 {
+	var children []uint64
+	if err := c.p.store.ChildInstancesOfParent(callElKey, func(childPiKey uint64) error {
+		children = append(children, childPiKey)
 		return nil
 	}); err != nil {
 		c.p.fail(err)
-		return
+		return nil
 	}
-	for i := range entries {
-		fn(entries[i].key, &entries[i].v)
-	}
+	return children
 }
 
 // ForEachStartTimer calls fn with the key and value of every armed start timer,
