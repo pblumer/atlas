@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -143,5 +145,29 @@ func TestReadOffLoopReportsAClosingLoop(t *testing.T) {
 	}
 	if called {
 		t.Fatal("the query body ran even though no view was taken")
+	}
+}
+
+// TestDefMetaVersionTagWithoutAModel covers the definition whose compiled model is
+// not loaded: it has no version tag to report, and asking for one must not
+// dereference the missing model.
+func TestDefMetaVersionTagWithoutAModel(t *testing.T) {
+	if got := (defMeta{ProcessID: "p"}).VersionTag(); got != "" {
+		t.Errorf("VersionTag with no compiled model = %q, want the empty string", got)
+	}
+}
+
+// TestSearchInstancesDuringShutdown covers the off-loop read path's shutdown
+// branch through a handler: with the loop gone there is no view to answer from, so
+// the request must say the server is going away rather than return an empty result
+// set that reads like "nothing matched".
+func TestSearchInstancesDuringShutdown(t *testing.T) {
+	srv, closeSrv := newOffLoopServer(t)
+	closeSrv()
+
+	w := httptest.NewRecorder()
+	srv.handleSearchInstances(w, httptest.NewRequest("GET", "/api/v1/instances/search?q=a=b", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
 	}
 }

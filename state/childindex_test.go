@@ -190,3 +190,26 @@ func TestInstancesDescIsNewestFirstAndBounded(t *testing.T) {
 		t.Errorf("limit 0 scanned anyway (called=%v, more=%v, err=%v)", called, more, err)
 	}
 }
+
+// TestPointReadsRefuseACorruptRecord covers the decode-failure paths of the two
+// reads this change added. A record that cannot be decoded must surface as an
+// error, not as "no such instance": the second answer would let a cancel report
+// success for an instance it never looked at.
+func TestPointReadsRefuseACorruptRecord(t *testing.T) {
+	s := openStore(t)
+	if err := s.InjectCorruptProcessInstance(42); err != nil {
+		t.Fatalf("InjectCorruptProcessInstance: %v", err)
+	}
+
+	if _, ok, err := s.ActiveProcessInstance(42); err == nil {
+		t.Errorf("ActiveProcessInstance on a corrupt record = ok:%v, err:nil; want an error", ok)
+	}
+
+	// The bounded descending scan decodes the same records, so it fails the same way
+	// rather than skipping the row and reporting a short page as a complete one.
+	if _, err := s.ActiveProcessInstancesDesc(10, func(uint64, *model.ProcessInstanceValue) error {
+		return nil
+	}); err == nil {
+		t.Error("ActiveProcessInstancesDesc over a corrupt record returned no error")
+	}
+}
