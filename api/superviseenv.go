@@ -164,6 +164,10 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// and travels, the bind password and client certificate are vault references
 		// and cannot. Provisioned for AD's reason, and defaulted with it.
 		"ldap": s.ldapWorkerEnv,
+		// SOAP is REST's shape in an envelope: the call is model data and travels, the
+		// credential behind authSecret is a vault reference and cannot. Provisioned
+		// for REST's reason, and defaulted with it.
+		"soap": s.soapWorkerEnv,
 		// Entra is worker-only like AD (the engine holds no tenant credential, ADR-0172),
 		// and provisioned for the same reason: a supervised worker has no vault, so the
 		// engine renders its client secret out of the vault. Only the secret — tenant and
@@ -1019,11 +1023,39 @@ func (s *Server) restWorkerEnv() []string {
 	return env
 }
 
+// soapWorkerEnv renders the auth secrets a supervised SOAP worker needs: one variable
+// per secret reference the deployed models name (ADR-0233, slice 4).
+//
+// It is restWorkerEnv with a different job type, because a SOAP task poses REST's
+// problem exactly: the endpoint, the SOAPAction and the envelope body are model data
+// and travel with the job, while the credential behind its authSecret is a vault
+// reference, and a reference is resolved where it is used.
+func (s *Server) soapWorkerEnv() []string {
+	var env []string
+	s.do(func() {
+		env = s.deployedSecretRefEnvLocked("SOAP auth-secret", soapAuthSecretRefs)
+	})
+	return env
+}
+
 // restAuthSecretRefs returns the auth-secret references a compiled process's REST
-// connector tasks name, in node order. A task calling an open endpoint names none, and
-// so does one whose auth carries only model data (a username without a password
-// reference is not a secret to hand over).
+// tasks name.
 func restAuthSecretRefs(cp *compiler.CompiledProcess) []string {
+	return authSecretRefs(cp, compiler.RestJobTypeIndex)
+}
+
+// soapAuthSecretRefs returns the same for its SOAP tasks. REST and SOAP author their
+// credentials identically — one [compiler.RestAuth] blob naming a vault reference —
+// so they are one function called twice rather than two that drift.
+func soapAuthSecretRefs(cp *compiler.CompiledProcess) []string {
+	return authSecretRefs(cp, compiler.SoapJobTypeIndex)
+}
+
+// authSecretRefs returns the auth-secret references the compiled process's tasks of
+// one job type name, in node order. A task calling an open endpoint names none, and so
+// does one whose auth carries only model data (a username without a password reference
+// is not a secret to hand over).
+func authSecretRefs(cp *compiler.CompiledProcess, jobType int32) []string {
 	var out []string
 	for id := int32(0); int(id) < cp.NodeCount(); id++ {
 		n := cp.Node(id)
@@ -1031,7 +1063,7 @@ func restAuthSecretRefs(cp *compiler.CompiledProcess) []string {
 			continue
 		}
 		d := cp.ConnectorTask(n.Detail)
-		if d == nil || d.JobType != compiler.RestJobTypeIndex {
+		if d == nil || d.JobType != jobType {
 			continue
 		}
 		raw := strings.TrimSpace(cp.Intern(d.Auth))

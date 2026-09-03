@@ -124,7 +124,6 @@ idempotency key that de-duplicates the retry.
 |---|---|
 | `sharepoint` | Worker half |
 | `scim` | Worker half |
-| `soap` | Worker half |
 | `temis` | Worker half |
 
 Each is one slice of the same shape the landed kinds took: resolve the authored detail
