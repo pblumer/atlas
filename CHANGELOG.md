@@ -33,6 +33,41 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **A data object's value opens as formatted JSON.** In an instance's **Data** tab, a
+  structured value showed as `{3 fields}` and the whole of it was reachable only as a
+  tooltip — unreadable past a few lines, impossible to scroll, select or copy from, and
+  absent altogether on a touch device. The summary is now a button, and it opens the
+  same pretty-printed, syntax-highlighted window the **Variables** tab opens, with the
+  same Copy JSON. A data object is variable-shaped by design
+  ([ADR-0053](docs/adr/0053-first-class-data-objects.md)), so the two tabs
+  should answer "what is actually in there" with one surface.
+
+  Every write in the state trail opens too, and each window says which write it is
+  showing — a trail of four `{3 fields}` is unreadable if every window is titled the
+  same. Scalars are left alone: a string is already whole in its cell, and a button
+  around it would promise a second reading that does not exist.
+
+- **The class diagram's properties panel is the Modeler's panel.** Selecting a class, a
+  data store or a relationship under **Data › Information model** now gives you the same
+  panel the BPMN Modeler does: a header naming what is selected — its kind in small
+  type, its own name in bold, a type chip beside it — and collapsible property groups
+  below, each with a chevron and a filled dot when it carries content. Fields look like
+  fields do everywhere else in Atlas.
+
+  It is the same panel because it is the **same code**, not a lookalike. The Modeler had
+  grown the shape first, as a function inside `editor.js` that turns a rendered panel's
+  sections into groups. That is exactly the kind of thing worth having once: a copy
+  drifts from its model the first time either side is touched, and then two panels a
+  person uses in one sitting disagree about what a group is. It moved to
+  `api/web/pgroup.js`, and both panels call it.
+
+  What the two panels do *not* share is which groups start open, because the honest
+  answer differs. A BPMN element has a dozen sections and opening one of them is the
+  point, so only **General** starts open. A class has three, and one of them is its
+  attributes — the attributes *are* the class, so hiding them behind a click on every
+  selection would be worse than having no groups at all. So the class panel opens
+  everything, and collapsing is there for when a long attribute list is in the way.
+
 - **SCIM tasks run on a worker now**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 6).
   Creating, reading or searching a user at an identity provider no longer happens on

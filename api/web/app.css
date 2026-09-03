@@ -626,12 +626,15 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .props .esc-row { display: flex; gap: 6px; align-items: center; }
 .props .esc-row input { flex: 1 1 auto; min-width: 0; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 5px; font: inherit; }
 .props .esc-row .esc-del { flex: 0 0 auto; padding: 4px 9px; line-height: 1; }
-.props .phead { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
-.props .ptype { width: 26px; height: 26px; border: 1px solid var(--border-strong); border-radius: 5px; display: grid; place-items: center; font-size: 11px; color: var(--muted); }
-.props .psec { padding: 14px 16px; border-bottom: 1px solid var(--border); }
-.props .psec h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin: 0 0 10px; }
-.props .kv { font-size: 12px; color: var(--muted); }
-.props .kv b { color: var(--text); font-weight: 600; }
+/* The element header and the property body. Both diagram panels wear them — the
+   Modeler's and the class canvas's (.im-side) — because a person moves between the
+   two in one session and the difference had nothing behind it. */
+.props .phead, .im-side .phead { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.props .ptype, .im-side .ptype { width: 26px; height: 26px; border: 1px solid var(--border-strong); border-radius: 5px; display: grid; place-items: center; font-size: 11px; color: var(--muted); }
+.props .psec, .im-side .psec { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.props .psec h3, .im-side .psec h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin: 0 0 10px; }
+.props .kv, .im-side .kv { font-size: 12px; color: var(--muted); }
+.props .kv b, .im-side .kv b { color: var(--text); font-weight: 600; }
 .problems { height: 30px; flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); background: var(--bg); cursor: pointer; user-select: none; }
 .problems:hover { background: var(--surface); }
 .problems:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -4406,7 +4409,19 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .do-state.none { background: none; color: var(--muted); font-weight: 500; }
 .do-by { font: 12px/1.5 system-ui, sans-serif; color: var(--text); }
 .do-by.none { color: var(--muted); font-style: italic; }
-.vt.do-table .c-val.do-json { color: var(--accent); }
+/* A structured value is a button: it opens the same JSON window the Variables tab
+   opens. Styled as a link rather than as a button, because it sits in a table cell
+   among plain values and a chrome button there would read as an action on the row. */
+.c-val.do-json {
+  /* A button inherits no font, and this one has to keep reading as a value: the same
+     monospace .vt .c-val sets, in the trail table as well as in the row. */
+  font: 13px/1.5 ui-monospace, monospace; color: var(--accent);
+  background: none; border: 0; padding: 0;
+  cursor: pointer; text-align: left; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
+.do-trail-table .c-val.do-json { font-size: 12.5px; }
+.c-val.do-json:hover { text-decoration: underline; }
+.c-val.do-json:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
 
 /* The state trail: the object's own biography, opened under its row. Indented and
    quieted so the table above stays the thing being scanned. */
@@ -4511,24 +4526,23 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .djs-element.selected .uml-store-body { stroke: var(--accent); stroke-width: 2; }
 .djs-element.selected .uml-edge-line { stroke: var(--accent); stroke-width: 2.2; }
 
-/* The properties panel. */
-.im-panel { padding: 12px 14px 20px; }
-.im-panel h3 { margin: 0 0 10px; font-size: 14px; }
-.im-panel h4 { margin: 0; font-size: 12.5px; }
-.im-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 0 8px; }
-.im-panel-head:first-child { margin-top: 0; }
-.im-field { display: block; margin-bottom: 10px; }
-.im-field > span { display: block; font: 600 11px/1.6 system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-.im-field input, .im-field select, .im-field textarea {
-  width: 100%; box-sizing: border-box; font: 13px/1.5 system-ui, sans-serif;
-  border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px;
-  background: var(--bg); color: var(--text);
-}
-.im-field textarea { resize: vertical; }
+/* The properties panel. Its chrome — the element header, the property body and the
+   collapsible groups — is the Modeler's, styled above and in the .pgroup block, and
+   its fields are .field like the Modeler's. What is left here is the part that is
+   this panel's own: the notation's sentences, the attribute table and the ends.
+
+   .field dresses text inputs only, so a select or a textarea beside one sits tight
+   against its label. Fixed here rather than on .field itself: that class is also the
+   login and user-management form, and this is a 5px change nobody asked for there. */
+.im-side .field select,
+.im-side .field textarea { display: block; margin-top: 5px; }
+.im-side .field textarea { resize: vertical; }
 /* The sentence that tells a modeler which kind to pick. It is the most consequential
    choice in this metamodel and a three-word palette makes it by accident. */
 .im-meaning { margin: -4px 0 12px; font: 12px/1.5 system-ui, sans-serif; color: var(--muted); }
-.im-reading { margin: 0 0 12px; font: 13px/1.5 system-ui, sans-serif; }
+/* Louder than a group body's other paragraphs on purpose: it is what the
+   relationship says, not a note about it. */
+.im-side .im-reading { margin: 0 0 12px; font: 13px/1.5 system-ui, sans-serif; color: var(--text); }
 .im-hint-text { margin: 10px 0 0; font: 12px/1.55 system-ui, sans-serif; color: var(--muted); }
 .im-hint-text code { font-size: 11.5px; }
 
@@ -4556,7 +4570,7 @@ table.im-attrs { width: 100%; border-collapse: collapse; font-size: 12px; }
 .im-attrs tr.im-drop-after td { box-shadow: inset 0 -2px 0 0 var(--accent); }
 .im-end { border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px 2px; margin-bottom: 10px; }
 .im-end legend { font: 600 11px/1.5 system-ui, sans-serif; color: var(--muted); padding: 0 4px; }
-.im-note { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; font: 12px/1.55 system-ui, sans-serif; color: var(--muted); }
+.im-note { font: 12px/1.55 system-ui, sans-serif; color: var(--muted); }
 .im-note ul { margin: 6px 0 0; padding-left: 18px; }
 .im-note li { margin-bottom: 6px; }
 .im-schema { max-height: 320px; overflow: auto; font: 11.5px/1.5 ui-monospace, monospace; background: var(--accent-soft); border-radius: 6px; padding: 8px 10px; }
@@ -4584,7 +4598,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 }
 .im-problem.notation .im-problem-tag { background: #d93025; color: #fff; }
 .im-problem.out-of-subset .im-problem-tag { background: var(--muted); color: var(--bg); }
-.im-panel-problems { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.im-panel-problems { display: flex; flex-direction: column; gap: 6px; }
 .im-panel-problems .im-problem { padding-left: 0; }
 
 /* Data › Instances: the same subject one altitude down. */
