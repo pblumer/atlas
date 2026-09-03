@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas Panorama landscape-export e2e harness</title>
+    <!-- Drives the *real* export functions from api/web/panorama-export.js.
+         What ends up inside an exported file is exactly the kind of thing a
+         screenshot test cannot see: a picture that lost its stamp still looks like
+         a picture, and a picture whose colours failed to resolve looks like a
+         picture with a design change. Both are checked as functions over the
+         artifact's own text. -->
+    <style>
+      /* Stands in for app.css: a token defined in terms of another token — which is
+         what the real theme does — and one rule keyed off the class every node body
+         carries, so the harvest has something true to find. */
+      :root { --accent: #3355ff; --accent-soft: var(--accent); --ink: #123456; }
+      .mesh-body { stroke: var(--ink); }
+      .mesh-label-ink { transition: opacity 80ms linear; }
+      .not-mesh-at-all { color: #ff0000; }
+      @media (prefers-reduced-motion: reduce) { .mesh-beat { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <div id="ready">loading</div>
+    <script type="module">
+      import * as exporter from "/panorama-export.js";
+      window.exporter = exporter;
+      // A landscape the size of two nodes, built the way the view builds one: a
+      // viewBox in world units, presentation attributes that name theme tokens, and
+      // a name on each node whose ink the stylesheet hides until it is revealed.
+      window.landscape = () => {
+        const holder = document.createElement("div");
+        holder.innerHTML = `<svg class="mesh-canvas mesh-beating mesh-zoomed mesh-names-anchors"
+            viewBox="0 0 800 400" role="img" aria-label="Derived landscape mesh">
+          <g class="mesh-edges"><line x1="10" y1="10" x2="90" y2="90" class="mesh-edge"/></g>
+          <g class="mesh-node mesh-application mesh-named" data-node-id="application:a1" tabindex="0"
+             transform="translate(100,100)" onclick="alert('no')">
+            <circle class="mesh-beat" r="30"/>
+            <circle class="mesh-body" data-r="30" r="30" fill="var(--accent-soft)" stroke="var(--accent)"/>
+            <text class="mesh-label"><tspan class="mesh-label-ink">Billing</tspan></text>
+            <title>Billing · Application</title>
+          </g>
+          <script>window.exportedScriptRan = true;<\/script>
+        </svg>`;
+        return holder.querySelector("svg");
+      };
+      document.getElementById("ready").textContent = "ready";
+    </script>
+  </body>
+</html>

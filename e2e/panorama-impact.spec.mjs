@@ -116,3 +116,142 @@ test("an unknown node is refused rather than answered emptily", async ({ page })
   const r = await impact(page, "process:404", { direction: "both", depth: Infinity });
   expect(r).toBeNull();
 });
+
+// A second landscape, for the three answers built over the walk. Severity matters
+// here, so every node carries one, and one worker is deliberately the thing four
+// separate processes reach:
+//
+//   invoice ──calls──> dunning ──uses──> credit
+//      │                  │
+//      └──uses──┐         └──uses──┐
+//   reminder ───┼──uses──> mail <──┘
+//   signup ─────┘
+//
+//   orphan ──calls──> restricted        (a boundary, asked about directly)
+const wider = {
+  nodes: [
+    { id: "process:1", kind: "process", name: "Invoice", severity: "ok", state: "healthy" },
+    { id: "process:2", kind: "process", name: "Dunning", severity: "critical", state: "degraded" },
+    { id: "process:3", kind: "process", name: "Reminder", severity: "ok", state: "healthy" },
+    { id: "process:4", kind: "process", name: "Signup", severity: "attention", state: "degraded" },
+    { id: "process:7", kind: "process", name: "Orphan", severity: "unknown", state: "unbound" },
+    { id: "worker:mail", kind: "worker", name: "ops-mail", severity: "critical", state: "not_ready" },
+    { id: "decision:credit", kind: "decision", name: "Credit score", severity: "ok", state: "healthy" },
+    { id: "restricted:1", kind: "restricted", severity: "unknown", state: "unbound" },
+  ],
+  edges: [
+    { from: "process:1", to: "process:2", kind: "calls" },
+    { from: "process:1", to: "worker:mail", kind: "uses" },
+    { from: "process:2", to: "worker:mail", kind: "uses" },
+    { from: "process:3", to: "worker:mail", kind: "uses" },
+    { from: "process:4", to: "worker:mail", kind: "uses" },
+    { from: "process:2", to: "decision:credit", kind: "uses" },
+    { from: "process:7", to: "restricted:1", kind: "calls" },
+  ],
+  restricted: 1,
+};
+
+const all = { direction: "dependents", depth: Infinity };
+
+// A count says how many; it does not say how bad. Three of a worker's four
+// dependents already failing is a different morning from four quiet ones, and the
+// count is identical in both.
+test("the answer says how bad the radius is, without claiming it caused it", async ({ page }) => {
+  const s = await page.evaluate(([g, o]) => window.impactSummary(g, "worker:mail", o), [wider, all]);
+
+  expect(s.total).toBe(4);
+  expect(s.bySeverity).toEqual({ critical: 1, attention: 1, ok: 2, unknown: 0 });
+  // Every one of the four reaches the worker by its own edge, so nothing is further
+  // out — the distinction is real and this landscape happens to have none of it.
+  expect(s.direct).toBe(4);
+  expect(s.indirect).toBe(0);
+  expect(s.complete).toBe(true);
+});
+
+// Direct and transitive are different facts: the direct dependents are the ones
+// whose owners get told, the rest are the reach.
+test("direct dependents are told apart from the ones further out", async ({ page }) => {
+  const s = await page.evaluate(([g, o]) => window.impactSummary(g, "decision:credit", o), [wider, all]);
+  expect(s.total).toBe(2);
+  expect(s.direct).toBe(1);      // Dunning uses it
+  expect(s.indirect).toBe(1);    // Invoice only reaches it through Dunning
+
+  const list = await page.evaluate(([g, o]) => window.impactList(g, "decision:credit", o), [wider, all]);
+  expect(list.map((n) => [n.name, n.direct])).toEqual([["Dunning", true], ["Invoice", false]]);
+});
+
+// The count and the highlight still leave the reader hunting for the three that
+// matter among four hundred circles. The list is the same nodes as an index, worst
+// first — and direct before transitive inside a class, because those are the ones
+// somebody has to be told about first.
+test("the impacted nodes are named, worst first", async ({ page }) => {
+  const list = await page.evaluate(([g, o]) => window.impactList(g, "worker:mail", o), [wider, all]);
+
+  expect(list.map((n) => n.name)).toEqual(["Dunning", "Signup", "Invoice", "Reminder"]);
+  expect(list[0].severity).toBe("critical");
+  // It is a bounded list: a sidebar is not a page.
+  const short = await page.evaluate(([g, o]) =>
+    window.impactList(g, "worker:mail", o, { limit: 2 }), [wider, all]);
+  expect(short.map((n) => n.name)).toEqual(["Dunning", "Signup"]);
+});
+
+// The question the reader actually arrives with, and the one that needed a
+// selection until now: which of these would hurt most. Ranking it means asking it
+// of every node rather than of the one somebody already suspected.
+test("the landscape can be asked where the risk is, with nothing selected", async ({ page }) => {
+  const rows = await page.evaluate(([g, o]) => window.blastRanking(g, o), [wider, all]);
+
+  expect(rows.map((r) => [r.name ?? r.kind, r.total, r.direct])).toEqual([
+    ["ops-mail", 4, 4],
+    ["Credit score", 2, 1],
+    ["Dunning", 1, 1],
+    // The placeholder carries no name — that is the whole of what it withholds —
+    // and it is still ranked, because "one of your processes depends on something
+    // you cannot see" is a finding rather than an absence.
+    ["restricted", 1, 1],
+  ]);
+  // Nodes nothing depends on are left out rather than listed with a zero: a ranking
+  // of the whole landscape by a number most of it does not have is a list of noise.
+  expect(rows.some((r) => r.name === "Invoice")).toBe(false);
+});
+
+// A walk that stopped at a permission boundary produces a floor, and in a ranking
+// that matters twice: the order is a claim about the rows as well as the numbers.
+test("a ranked row whose walk hit a boundary says its number is a floor", async ({ page }) => {
+  const rows = await page.evaluate(([g, o]) => window.blastRanking(g, o), [wider, all]);
+  const boundary = rows.find((r) => r.kind === "restricted");
+
+  expect(boundary).toBeTruthy();
+  expect(boundary.total).toBe(1);
+  expect(boundary.complete).toBe(false);
+});
+
+// Asking about the boundary itself is not the same as arriving at one. The nodes
+// that point at a placeholder are in this caller's own picture, so they are walked
+// — answering "nothing depends on this" about a hidden resource is the single claim
+// a boundary must never be allowed to make.
+test("a placeholder asked about directly reports its dependents, as a floor", async ({ page }) => {
+  const r = await page.evaluate(([g, o]) =>
+    window.impactFrom(g, "restricted:1", o), [wider, all]);
+
+  expect(new Set(r.nodes)).toEqual(new Set(["restricted:1", "process:7"]));
+  expect(r.complete).toBe(false);
+  expect(r.truncatedBy).toEqual(["restricted:1"]);
+});
+
+// The ranking follows the controls rather than fixing its own question, so it and
+// the panel can never be measured differently.
+test("the ranking answers the direction and depth it is given", async ({ page }) => {
+  const needs = await page.evaluate((g) =>
+    window.blastRanking(g, { direction: "dependencies", depth: Infinity }), wider);
+  // Invoice needs the most: dunning, mail, credit.
+  expect(needs[0].name).toBe("Invoice");
+  expect(needs[0].total).toBe(3);
+
+  const oneHop = await page.evaluate((g) =>
+    window.blastRanking(g, { direction: "dependents", depth: 1 }), wider);
+  expect(oneHop[0].name).toBe("ops-mail");
+  expect(oneHop[0].total).toBe(4);
+  // Credit score's second dependent is two hops away, so at depth 1 it is not there.
+  expect(oneHop.find((r) => r.name === "Credit score").total).toBe(1);
+});
