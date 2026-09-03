@@ -77,7 +77,7 @@ func TestWebScrapeConnectorWritesStructuredFeedArray(t *testing.T) {
 	if got == nil || got.Kind != model.VarJSON {
 		t.Fatalf("result variable = %+v, want VarJSON", got)
 	}
-	var entries []map[string]string
+	var entries []map[string]any
 	if err := json.Unmarshal([]byte(got.Text), &entries); err != nil {
 		t.Fatalf("result JSON: %v (%q)", err, got.Text)
 	}
@@ -85,7 +85,9 @@ func TestWebScrapeConnectorWritesStructuredFeedArray(t *testing.T) {
 		t.Fatalf("entries = %d, want 2", len(entries))
 	}
 	for i, entry := range entries {
-		for _, key := range []string{"title", "link", "description", "published"} {
+		// Every key is always present, including the ones ADR-draft-webscrape-structured-extraction
+		// added: a model reads entry.guid without checking whether this publisher set one.
+		for _, key := range []string{"title", "link", "description", "published", "guid", "author", "categories", "image"} {
 			if _, ok := entry[key]; !ok {
 				t.Errorf("entry %d lacks key %q: %#v", i, key, entry)
 			}

@@ -1,0 +1,37 @@
+{
+  "tags": [
+    "Modeler",
+    "Connectors"
+  ],
+  "title": {
+    "en": "A scraped table row now arrives as one record",
+    "de": "Eine ausgelesene Tabellenzeile kommt jetzt als ein Datensatz an"
+  },
+  "summary": {
+    "en": "Reading a web page used to give you a flat list: either the text of every match, or one attribute of every match — never both, and never grouped. A list of articles or a table of rates therefore needed two tasks returning two lists, and the first row missing a link shifted every later pairing by one. A scrape task now takes item fields: the selector picks the row, each field picks a cell, and every match arrives as one object. A field that finds nothing is present and empty, so the rows keep their shape. Feeds gained the same care: an entry now carries its own id to deduplicate on, plus author, categories and image, and pages in older character sets, RSS 1.0 feeds and sites that refuse anonymous requests no longer fail the way they quietly did.",
+    "de": "Eine Webseite auszulesen ergab bisher eine flache Liste: entweder den Text jedes Treffers oder ein Attribut jedes Treffers — nie beides, nie gruppiert. Eine Artikelliste oder eine Zinstabelle brauchte deshalb zwei Tasks mit zwei Listen, und die erste Zeile ohne Link verschob jede weitere Zuordnung um eins. Ein Scraping-Task nimmt jetzt Feldzeilen: Der Selektor wählt die Zeile, jedes Feld wählt eine Zelle, und jeder Treffer kommt als ein Objekt an. Ein Feld, das nichts findet, ist vorhanden und leer — die Zeilen behalten ihre Gestalt. Feeds haben dieselbe Sorgfalt bekommen: Ein Eintrag trägt jetzt seine eigene Kennung zum Deduplizieren, dazu Autor, Kategorien und Bild. Und Seiten in älteren Zeichensätzen, RSS-1.0-Feeds und Sites, die anonyme Anfragen abweisen, scheitern nicht mehr so still wie bisher."
+  },
+  "tutorial": {
+    "en": [
+      "Open the Modeler and put a service task on the canvas.",
+      "Pick \"Web Scraping\" as the kind and enter the page URL.",
+      "Under Extraction, let the CSS selector pick one ITEM per match — a table row, a card, a list entry.",
+      "Add one item field per value: a name (the key you will read later), the selector inside the item, and optionally the attribute (for example href for a link).",
+      "Name a result variable — it now holds one object per match, so a later step reads eintrag.titel beside eintrag.link."
+    ],
+    "de": [
+      "Modeler öffnen und einen Service-Task auf die Fläche ziehen.",
+      "Als Art „Web Scraping“ wählen und die URL der Seite eintragen.",
+      "Unter „Extraction“ den CSS-Selektor so wählen, dass er je Treffer ein ITEM trifft — eine Tabellenzeile, eine Kachel, einen Listeneintrag.",
+      "Je Wert eine Feldzeile anlegen: Name (der Schlüssel, den Sie später lesen), Selektor innerhalb des Items und optional das Attribut (etwa href für einen Link).",
+      "Ergebnisvariable benennen — sie hält jetzt ein Objekt je Treffer, ein späterer Schritt liest also eintrag.titel neben eintrag.link."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}
