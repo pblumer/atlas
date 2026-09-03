@@ -395,15 +395,38 @@ func handleElementActivating(c *ProcessingContext) {
 	// Read the activity's data-input associations into process variables before its
 	// behavior runs, so the activity's own FEEL (e.g. a script task's expression)
 	// sees them (ADR-0059).
-	applyDataInputAssociations(c, ei)
-	// Then evaluate its zeebe:ioMapping inputs into its activity-local scope, so the
-	// behavior (and any worker) reads the mapped locals resolving up the scope chain
-	// (ADR-0068). Runs after data-input associations so a mapping can read them.
-	if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
-		applyInputMappings(c, c.cmd.Key, ei)
+	// An armed event-subprocess trigger borrows its handler's element id, so it must
+	// be excluded from both — see isArmedEventSubTrigger.
+	if !isArmedEventSubTrigger(ei) {
+		applyDataInputAssociations(c, ei)
+		// Then evaluate its zeebe:ioMapping inputs into its activity-local scope, so the
+		// behavior (and any worker) reads the mapped locals resolving up the scope chain
+		// (ADR-0068). Runs after data-input associations so a mapping can read them.
+		if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
+			applyInputMappings(c, c.cmd.Key, ei)
+		}
 	}
 	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
 	armBoundaryEvents(c, c.cmd.Key, ei)
+}
+
+// isArmedEventSubTrigger reports whether ei is an event subprocess's *armed
+// trigger* rather than its running handler (ADR-0082).
+//
+// The two share an element id: a trigger instance is a TypeEventSubProcessStart
+// whose ElementId points at the handler container node, so its behavior can read
+// the trigger detail hanging off that node. Everything that looks a definition up
+// by element id therefore finds the handler's — including the generic data
+// associations and zeebe:ioMapping, which must not run for the guard.
+//
+// Applied to a trigger they are actively wrong, not merely redundant: the input
+// side evaluates when the scope is *entered* (instance creation for a root-scope
+// handler), long before anything the handler works on exists, and the output side
+// writes that result into the parent scope the moment the trigger fires — before
+// the handler runs at all. A handler maintaining a variable across triggers had it
+// overwritten with null on every firing.
+func isArmedEventSubTrigger(ei *model.ElementInstanceValue) bool {
+	return ei.BpmnElementType == uint8(compiler.TypeEventSubProcessStart)
 }
 
 // Multi-instance element-instance roles (ADR-0077), mirrored on
@@ -485,13 +508,15 @@ func handleElementCompleting(c *ProcessingContext) {
 	// object it produces is in state before any outgoing flow activates the next
 	// element (ADR-0058). Any element type may carry associations, so this is a
 	// single shared point rather than per-behavior logic.
-	applyDataOutputAssociations(c, ei)
+	if !isArmedEventSubTrigger(ei) {
+		applyDataOutputAssociations(c, ei)
+	}
 	// Promote the activity's zeebe:ioMapping outputs to the parent scope, then drop
 	// its activity-local scope, before it completes and any outgoing flow activates
 	// the next element — so downstream FEEL sees the promoted values and never the
 	// dropped locals (ADR-0068). Gated so a mapping-free activity keeps the pre-0068
 	// behaviour with no scope-drop scan.
-	if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
+	if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) && !isArmedEventSubTrigger(ei) {
 		// A call activity's output mappings are applied against the child instance's
 		// variables when the child completes (resumeCaller), not against this
 		// element's local scope, so the generic promotion is skipped for it — but its
@@ -1466,12 +1491,7 @@ func terminateChildInstance(c *ProcessingContext, callElKey uint64, elemType uin
 	if elemType != uint8(compiler.TypeCallActivity) {
 		return
 	}
-	var children []uint64
-	c.ForEachActiveProcessInstance(func(piKey uint64, pi *model.ProcessInstanceValue) {
-		if pi.ParentElementInstanceKey == callElKey {
-			children = append(children, piKey)
-		}
-	})
+	children := c.ChildInstancesOf(callElKey)
 	for _, ck := range children {
 		if pi := c.GetProcessInstance(ck); pi != nil {
 			c.AppendProcessInstanceCommand(ck, model.IntentTerminating, *pi)

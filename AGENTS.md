@@ -179,6 +179,7 @@ numbers (`docs/adr/number.go`, `make adr-number`).
 ## Things that will trip you up
 
 - **`applyToState` is special.** It is called both live and on recovery. Side effects (notifications, network, time reads) must *not* live here — only deterministic state mutation. Put side effects in the processor's post-fsync phase.
+- **A query that can grow with the instance population does not belong on the run loop.** `Server.do` gives its closure the engine's single writer for as long as it runs, so a scan dispatched onto it stops command processing for every other request. Use `Server.readOffLoop`: it takes a `state.ReadView` and the deployment metadata on the loop, then runs the scan with the loop free (ADR-0080, ADR-draft-off-loop-queries). Better still, check whether the answer is already a maintained counter or an index.
 - **Followup commands vs. events.** Emitting an event mutates state now and is persisted now. Scheduling a followup command defers work to the next batch. Don't confuse them; see `ProcessingContext` in [`processor.md`](docs/architecture/processor.md).
 - **Element IDs are integer indices**, not strings, everywhere in engine code. Strings are interned at compile time. Don't reintroduce string handling on the hot path.
 - **Keys encode the partition** in their high bits. Don't invent keys by hand; use the key generator.

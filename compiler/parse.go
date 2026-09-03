@@ -751,34 +751,6 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			b.AddDataOutputAssociation(ids[ownerId], name, valExpr, state, strings.TrimSpace(a.Assignment.To))
 		}
 	}
-	for _, st := range proc.ServiceTasks {
-		wireDataOut(st.Id, st.DataOut)
-	}
-	for _, st := range proc.ScriptTasks {
-		wireDataOut(st.Id, st.DataOut)
-	}
-	for _, brt := range proc.BusinessRuleTasks {
-		wireDataOut(brt.Id, brt.DataOut)
-	}
-	for _, ut := range proc.UserTasks {
-		wireDataOut(ut.Id, ut.DataOut)
-	}
-	for _, t := range proc.Tasks {
-		wireDataOut(t.Id, t.DataOut)
-	}
-	for _, t := range proc.ManualTasks {
-		wireDataOut(t.Id, t.DataOut)
-	}
-	for _, rt := range proc.ReceiveTasks {
-		wireDataOut(rt.Id, rt.DataOut)
-	}
-	for _, st := range proc.SendTasks {
-		if strings.TrimSpace(st.MessageRef) != "" {
-			continue // a message-kind send task is a throw, not an activity (ADR-0112)
-		}
-		wireDataOut(st.Id, st.DataOut)
-	}
-
 	// Wire data-input associations: a sourceRef names the data object read (resolved
 	// like an output target, its state ignored on a read); a targetRef is the process
 	// variable the read value is written into (ADR-0059).
@@ -813,33 +785,62 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			b.AddDataInputAssociation(ids[ownerId], name, variable, valExpr)
 		}
 	}
-	for _, st := range proc.ServiceTasks {
-		wireDataIn(st.Id, st.DataIn)
-	}
-	for _, st := range proc.ScriptTasks {
-		wireDataIn(st.Id, st.DataIn)
-	}
-	for _, brt := range proc.BusinessRuleTasks {
-		wireDataIn(brt.Id, brt.DataIn)
-	}
-	for _, ut := range proc.UserTasks {
-		wireDataIn(ut.Id, ut.DataIn)
-	}
-	for _, t := range proc.Tasks {
-		wireDataIn(t.Id, t.DataIn)
-	}
-	for _, t := range proc.ManualTasks {
-		wireDataIn(t.Id, t.DataIn)
-	}
-	for _, rt := range proc.ReceiveTasks {
-		wireDataIn(rt.Id, rt.DataIn)
-	}
-	for _, st := range proc.SendTasks {
-		if strings.TrimSpace(st.MessageRef) != "" {
-			continue // a message-kind send task is a throw, not an activity (ADR-0112)
+	// Both passes run over the whole scope tree, not just the process's own
+	// activities. A data object is declared on the process and the engine keys it by
+	// process instance, so an association on an activity inside a subprocess means
+	// exactly what the same association means at the root — nesting changes nothing.
+	// This mirrors wireScopeIO and wireScopeMI, which already recurse.
+	//
+	// They did not always: wiring read the process's element lists alone, so an
+	// association on a nested activity was dropped at compile time. The model still
+	// deployed and still ran; the activity just read nothing and wrote nothing, with
+	// no deploy error and no incident to find it by. A silent no-op is the one
+	// outcome a compiler must not produce.
+	var wireScopeData func(c *xmlFlowContent)
+	wireScopeData = func(c *xmlFlowContent) {
+		for _, st := range c.ServiceTasks {
+			wireDataOut(st.Id, st.DataOut)
+			wireDataIn(st.Id, st.DataIn)
 		}
-		wireDataIn(st.Id, st.DataIn)
+		for _, st := range c.ScriptTasks {
+			wireDataOut(st.Id, st.DataOut)
+			wireDataIn(st.Id, st.DataIn)
+		}
+		for _, brt := range c.BusinessRuleTasks {
+			wireDataOut(brt.Id, brt.DataOut)
+			wireDataIn(brt.Id, brt.DataIn)
+		}
+		for _, ut := range c.UserTasks {
+			wireDataOut(ut.Id, ut.DataOut)
+			wireDataIn(ut.Id, ut.DataIn)
+		}
+		for _, t := range c.Tasks {
+			wireDataOut(t.Id, t.DataOut)
+			wireDataIn(t.Id, t.DataIn)
+		}
+		for _, t := range c.ManualTasks {
+			wireDataOut(t.Id, t.DataOut)
+			wireDataIn(t.Id, t.DataIn)
+		}
+		for _, rt := range c.ReceiveTasks {
+			wireDataOut(rt.Id, rt.DataOut)
+			wireDataIn(rt.Id, rt.DataIn)
+		}
+		for _, st := range c.SendTasks {
+			if strings.TrimSpace(st.MessageRef) != "" {
+				continue // a message-kind send task is a throw, not an activity (ADR-0112)
+			}
+			wireDataOut(st.Id, st.DataOut)
+			wireDataIn(st.Id, st.DataIn)
+		}
+		for i := range c.SubProcesses {
+			wireScopeData(&c.SubProcesses[i].xmlFlowContent)
+		}
+		for i := range c.AdHocSubProcesses {
+			wireScopeData(&c.AdHocSubProcesses[i].xmlFlowContent)
+		}
 	}
+	wireScopeData(&proc.xmlFlowContent)
 
 	// Wire generic zeebe:ioMapping input/output mappings (ADR-0068). Each source is a
 	// FEEL expression compiled once at deploy time (invariant I5); an empty target or
