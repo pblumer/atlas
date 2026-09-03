@@ -27,6 +27,7 @@ import (
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
 	"github.com/pblumer/atlas/connector/script"
+	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
@@ -5407,6 +5408,18 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"endpoint": j.Endpoint, "operation": j.Operation, "action": j.Action,
 			"version": j.Version, "body": j.Body, "auth": j.Auth,
 			"resultVariable": j.Result,
+		}}
+	case compiler.SharePointJobTypeIndex:
+		// Jira's arm exactly, and for Jira's reason: the task names its instance, and
+		// the Graph endpoint and OAuth bundle stay with the worker — a URL is half a
+		// credential (ADR-0141/0168). The site and list are model data and travel.
+		j, err := sharepoint.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "sharepoint", Fields: map[string]any{
+			"connector": j.Connector, "site": j.Site, "list": j.List,
+			"fields": j.Fields, "requestId": j.RequestID, "resultVariable": j.Result,
 		}}
 	case compiler.EntraJobTypeIndex:
 		// The operation and the ids travel; the tenant's app credential does not

@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "sharepoint-tasks-run-on-a-worker-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "SharePoint writes moved out of the engine",
+        "de": "SharePoint-Schreibvorgänge sind aus der Engine ausgezogen"
+      },
+      "summary": {
+        "en": "Adding a row to a SharePoint list means fetching a token and calling Microsoft Graph, and until now Atlas did both from the process that runs the engine — so a slow or throttled Graph held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the site you set up in Connectors is handed to that worker. An instance whose credential you have not finished storing is simply not served yet, rather than stopping the worker.",
+        "de": "Eine Zeile in eine SharePoint-Liste zu schreiben heisst, ein Token zu holen und Microsoft Graph aufzurufen — bisher machte Atlas beides im Prozess, der die Engine ausführt, sodass ein langsames oder gebremstes Graph Arbeit aufhielt, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Die Site, die Sie unter Connectors eingerichtet haben, wird an diesen Worker übergeben. Eine Instanz, deren Credential Sie noch nicht fertig hinterlegt haben, wird einfach noch nicht bedient — statt den Worker aufzuhalten."
+      },
+      "link": {
+        "label": "ADR-0233",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "soap-tasks-run-on-a-worker-now",
       "version": "Unreleased",
       "date": null,

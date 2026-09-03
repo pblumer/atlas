@@ -168,6 +168,10 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// credential behind authSecret is a vault reference and cannot. Provisioned
 		// for REST's reason, and defaulted with it.
 		"soap": s.soapWorkerEnv,
+		// SharePoint is a managed kind like Jira: the site's address and its OAuth
+		// bundle are a record and a vault secret, so a supervised worker holding
+		// neither could serve no SharePoint task at all.
+		connectorKindSharePoint: s.sharepointWorkerEnv,
 		// Entra is worker-only like AD (the engine holds no tenant credential, ADR-0172),
 		// and provisioned for the same reason: a supervised worker has no vault, so the
 		// engine renders its client secret out of the vault. Only the secret — tenant and
@@ -546,6 +550,113 @@ func remedyBundleParse(raw string) (remedyCredentials, bool) {
 		return remedyCredentials{}, false
 	}
 	return c, true
+}
+
+// Environment a supervised SharePoint worker reads its instances from — the same
+// names an operator sets by hand for an external worker (there is no private channel,
+// ADR-0157). sharepointEnvPrefix matches the worker's own constant of the same name;
+// TestSupervisedSharePointEnvUsesTheWorkersOwnNames holds the two together.
+const (
+	sharepointEnvPrefix     = "ATLAS_SHAREPOINT_"
+	sharepointConnectorsEnv = sharepointEnvPrefix + "CONNECTORS"
+)
+
+// sharepointWorkerEnv renders this server's SharePoint instances as the environment a
+// supervised worker builds the identical clients from (ADR-0233, slice 5).
+//
+// It is jiraWorkerEnv's story with a document library in place of an issue tracker
+// (ADR-0141/0168): the Graph endpoint and the OAuth bundle live in the worker store
+// and the vault, which a supervised worker can read no more than it can read the
+// engine's memory — so offloading SharePoint without this would hand every task to a
+// worker with no site to create items in.
+//
+// One difference from Jira is deliberate: the credential is handed over as the *whole
+// bundle*, one opaque value, rather than field by field. The bundle has no public half
+// worth splitting — tenant and client ids sit in the same vault secret as the client
+// secret and the refresh token — and splitting it would mean this function deciding
+// the grant's shape a second time, where getting it wrong yields a worker that fails
+// every job. sharepoint.NewProviderClient parses and validates it on the far side, as
+// it already does here. It is the SQL kinds' arrangement (ADR-0188) for the SQL kinds'
+// reason.
+//
+// A worker an operator configured on the host is left untouched and kept in the
+// rendered list: the child inherits ATLAS_SHAREPOINT_<NAME>_* already, and dropping
+// its name would let a store instance silently take the whole list away from it.
+//
+// It reads the worker store and the vault, so it runs on the run-loop goroutine
+// (their owner, invariant I3), like buildSharePointClients does.
+func (s *Server) sharepointWorkerEnv() []string {
+	var (
+		env       []string
+		names     []string
+		fromStore bool // a store instance contributed a name; only then must CONNECTORS be rendered
+	)
+	seen := map[string]bool{}
+	addName := func(n string) {
+		if n = strings.TrimSpace(n); n != "" && !seen[n] {
+			seen[n] = true
+			names = append(names, n)
+		}
+	}
+	// Instances an operator set directly on the host: inherited by the child as they
+	// are, so nothing is rendered for them — they are only kept in the list below.
+	for _, name := range splitConnectorList(os.Getenv(sharepointConnectorsEnv)) {
+		addName(name)
+	}
+	s.do(func() {
+		recs, err := s.connectors.LoadAll()
+		if err != nil {
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the worker store for a supervised sharepoint worker",
+				slog.String("error", err.Error()))
+			return
+		}
+		sort.Slice(recs, func(i, j int) bool { return recs[i].Name < recs[j].Name })
+		taken := map[string]string{}
+		for _, c := range recs {
+			if c.Kind != connectorKindSharePoint || !c.Enabled {
+				continue
+			}
+			envKey := connectorEnvKey(c.Name)
+			if envKey == "" {
+				continue
+			}
+			// Two names that fold to one variable would silently give one the other's
+			// credential — the mail/jira collision, left out for the same reason.
+			if first, dup := taken[envKey]; dup {
+				logging.Warn(logging.WorkerSupervisorFailed,
+					"two sharepoint workers share one environment name; the second is not handed to the supervised worker",
+					slog.String("connector", c.Name), slog.String("collidesWith", first))
+				continue
+			}
+			bundle := strings.TrimSpace(s.resolveConnectorSecret(c.CredentialsRef))
+			// An instance whose bundle does not resolve — no secret set yet — is left
+			// out rather than handed over empty: the worker refuses at startup on a
+			// *named* instance it cannot build, which would take down every other kind
+			// it serves. Left out, it is simply not served, and the Console shows it as
+			// configured-not-working.
+			if bundle == "" {
+				continue
+			}
+			taken[envKey] = c.Name
+			key := sharepointEnvPrefix + envKey + "_"
+			// The endpoint is optional: blank means the Graph default, which is what
+			// buildSharePointClients passes too, so a record without one builds the
+			// same client on both sides.
+			if endpoint := strings.TrimSpace(c.Endpoint); endpoint != "" {
+				env = append(env, key+"ENDPOINT="+endpoint)
+			}
+			env = append(env, key+"CREDENTIALS="+bundle)
+			addName(c.Name)
+			fromStore = true
+		}
+	})
+	// Only a store instance needs CONNECTORS rendered: an operator who set it on the
+	// host has it inherited by the child already. When the store does contribute,
+	// render the union so a host-named instance is not lost to the override.
+	if !fromStore {
+		return nil
+	}
+	return append(env, sharepointConnectorsEnv+"="+strings.Join(names, ","))
 }
 
 // Environment a supervised Jira worker reads its sites from — the same names an
