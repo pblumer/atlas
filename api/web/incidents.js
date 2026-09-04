@@ -10,6 +10,7 @@
 // ignores the count, something window.prompt had nowhere to put.
 
 import { editWorkerFlow } from "./workerdialog.js";
+import { openDialog } from "./dialog.js";
 import { loadFormViewer, formFieldKeys } from "./formviewer.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
@@ -137,42 +138,42 @@ export async function resolveIncidentQuick({ api, toast, key }) {
 function askResolveRetries(inc) {
   return new Promise((resolve) => {
     const timer = incidentKind(inc) === "timer";
-    const ov = document.createElement("div");
-    ov.className = "modal-ov";
-    ov.innerHTML = `
-      <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Resolve incident">
-        <div class="modal-head"><h2>Resolve incident</h2></div>
-        <div class="modal-body">
-          <p class="muted" style="margin:0 0 10px">${timer
-            ? "This timer re-arms against the instance's current variables. If its schedule still doesn't resolve, the incident is raised again."
-            : "The parked job goes back on the activatable index and a worker retries it. If the cause is unfixed it fails again and a new incident is raised."}</p>
-          ${inc.message ? `<p class="inc-modal-msg">${esc(inc.message)}</p>` : ""}
-          <label class="field"><span>Retries to grant${timer ? " (ignored by a timer incident)" : ""}</span>
-            <input id="inc-retries" type="number" min="1" step="1" value="1" ${timer ? "disabled" : ""}/></label>
-        </div>
-        <div class="modal-foot">
-          <button class="btn neutral" data-inc-cancel title="Close without resolving the incident">Cancel</button>
-          <button class="btn" data-inc-go title="Clear the incident and retry the job with the granted retries">Resolve</button>
-        </div>
-      </div>`;
-    document.body.appendChild(ov);
-    const input = ov.querySelector("#inc-retries");
-    const close = (value) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(value); };
-    const onKey = (e) => {
-      if (e.key === "Escape") close(null);
-      if (e.key === "Enter" && document.body.contains(ov)) go();
-    };
+    const body = document.createElement("div");
+    body.innerHTML = `
+      <p class="muted" style="margin:0 0 10px">${timer
+        ? "This timer re-arms against the instance's current variables. If its schedule still doesn't resolve, the incident is raised again."
+        : "The parked job goes back on the activatable index and a worker retries it. If the cause is unfixed it fails again and a new incident is raised."}</p>
+      ${inc.message ? `<p class="inc-modal-msg">${esc(inc.message)}</p>` : ""}
+      <label class="field"><span>Retries to grant${timer ? " (ignored by a timer incident)" : ""}</span>
+        <input id="inc-retries" type="number" min="1" step="1" value="1" ${timer ? "disabled" : ""}/></label>`;
+
+    const input = body.querySelector("#inc-retries");
     const go = () => {
       const n = timer ? 1 : parseInt(input.value, 10);
       if (!Number.isInteger(n) || n <= 0) { input.focus(); return; }
-      close(n);
+      dlg.close(n);
     };
-    document.addEventListener("keydown", onKey);
-    ov.querySelector("[data-inc-cancel]").addEventListener("click", () => close(null));
-    ov.querySelector("[data-inc-go]").addEventListener("click", go);
-    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
-    (timer ? ov.querySelector("[data-inc-go]") : input).focus();
-    if (input && !timer) input.select();
+
+    const dlg = openDialog({
+      title: "Resolve incident",
+      body,
+      className: "confirm-modal",
+      onClose: (value) => resolve(value),
+      actions: [
+        { label: "Cancel", kind: "neutral", value: null, attrs: { "data-inc-cancel": "" },
+          title: "Close without resolving the incident" },
+        { label: "Resolve", keepOpen: true, attrs: { "data-inc-go": "" },
+          title: "Clear the incident and retry the job with the granted retries", onSelect: go },
+      ],
+    });
+
+    // Enter resolves: this dialog is one number, and a disabled field means there is
+    // not even that to fill in. openDialog owns Escape.
+    dlg.el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } });
+    // A timer ignores the budget, so its field is disabled and the focus goes where
+    // the decision is; otherwise the number is selected, ready to be typed over.
+    if (timer) dlg.el.querySelector("[data-inc-go]").focus();
+    else input.select();
   });
 }
 
@@ -238,29 +239,16 @@ export async function fixVariablesFlow({ api, toast, incident }) {
 // request fail server-side with the change already typed and lost.
 function askVariables(inc, current) {
   return new Promise((resolve) => {
-    const ov = document.createElement("div");
-    ov.className = "modal-ov";
-    ov.innerHTML = `
-      <div class="modal confirm-modal inc-vars-modal" role="dialog" aria-modal="true" aria-labelledby="inc-vars-title">
-        <div class="modal-head"><h2 id="inc-vars-title">Fix variables &middot; instance ${esc(String(inc.processInstanceKey))}</h2></div>
-        <div class="modal-body">
-          ${inc.message ? `<p class="inc-modal-msg">${esc(inc.message)}</p>` : ""}
-          <p class="muted" style="margin:0 0 8px">Correct the values the retry will run against. Keys you leave out stay as they are; this sets and overwrites, it never deletes. Every change is recorded with your name and shown in the replay.</p>
-          <textarea id="inc-vars" class="inc-vars-json" spellcheck="false" rows="12"></textarea>
-          <p class="err" id="inc-vars-err" style="margin:6px 0 0"></p>
-        </div>
-        <div class="modal-foot">
-          <button class="btn neutral" data-vars-cancel title="Close without changing the variables">Cancel</button>
-          <button class="btn neutral" data-vars-save title="Save the corrected variables without retrying">Save only</button>
-          <button class="btn" data-vars-go title="Save the variables and retry the job">Save &amp; retry</button>
-        </div>
-      </div>`;
-    document.body.appendChild(ov);
-    const ta = ov.querySelector("#inc-vars");
-    const err = ov.querySelector("#inc-vars-err");
+    const body = document.createElement("div");
+    body.innerHTML = `
+      ${inc.message ? `<p class="inc-modal-msg">${esc(inc.message)}</p>` : ""}
+      <p class="muted" style="margin:0 0 8px">Correct the values the retry will run against. Keys you leave out stay as they are; this sets and overwrites, it never deletes. Every change is recorded with your name and shown in the replay.</p>
+      <textarea id="inc-vars" class="inc-vars-json" spellcheck="false" rows="12"></textarea>
+      <p class="err" id="inc-vars-err" style="margin:6px 0 0"></p>`;
+    const ta = body.querySelector("#inc-vars");
+    const err = body.querySelector("#inc-vars-err");
     ta.value = JSON.stringify(current, null, 2);
-    const close = (value) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(value); };
-    const onKey = (e) => { if (e.key === "Escape") close(null); };
+
     const submit = (retry) => {
       let parsed;
       try { parsed = JSON.parse(ta.value); }
@@ -269,14 +257,24 @@ function askVariables(inc, current) {
         err.textContent = "Expected an object of variable names to values.";
         return;
       }
-      close({ variables: parsed, retry });
+      dlg.close({ variables: parsed, retry });
     };
-    document.addEventListener("keydown", onKey);
-    ov.querySelector("[data-vars-cancel]").addEventListener("click", () => close(null));
-    ov.querySelector("[data-vars-save]").addEventListener("click", () => submit(false));
-    ov.querySelector("[data-vars-go]").addEventListener("click", () => submit(true));
-    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
-    ta.focus();
+
+    const dlg = openDialog({
+      title: `Fix variables · instance ${inc.processInstanceKey}`,
+      label: "Fix variables",
+      body,
+      className: "confirm-modal inc-vars-modal",
+      onClose: (value) => resolve(value),
+      actions: [
+        { label: "Cancel", kind: "neutral", value: null, attrs: { "data-vars-cancel": "" },
+          title: "Close without changing the variables" },
+        { label: "Save only", kind: "neutral", keepOpen: true, attrs: { "data-vars-save": "" },
+          title: "Save the corrected variables without retrying", onSelect: () => submit(false) },
+        { label: "Save & retry", keepOpen: true, attrs: { "data-vars-go": "" },
+          title: "Save the variables and retry the job", onSelect: () => submit(true) },
+      ],
+    });
   });
 }
 
@@ -349,36 +347,17 @@ export async function repairFormFlow({ api, toast, incident }) {
 // same meaning — an operator learns repairing an incident once, not twice.
 function askRepairForm({ Form, incident, schema, name, current }) {
   return new Promise((resolve) => {
-    const ov = document.createElement("div");
-    ov.className = "modal-ov";
-    ov.innerHTML = `
-      <div class="modal confirm-modal repair-modal" role="dialog" aria-modal="true" aria-labelledby="inc-repair-title">
-        <div class="modal-head"><h2 id="inc-repair-title">Repair &middot; ${esc(incident.elementId || "task")}</h2></div>
-        <div class="modal-body">
-          <p class="inc-modal-msg">${esc(incident.message || "(no message)")}</p>
-          <p class="muted" style="margin:0 0 10px">The fields below are the ones this task's author said matter when it goes
-          wrong. Only these are written; everything else the instance holds is left untouched.</p>
-          <div class="repair-form" id="inc-repair-form"></div>
-          <p class="repair-err" style="margin:8px 0 0;font-size:12.5px" hidden></p>
-        </div>
-        <div class="modal-foot">
-          <span class="muted repair-which">${esc(name)}</span>
-          <span style="flex:1"></span>
-          <button class="btn neutral" data-repair-cancel title="Close without changing anything">Cancel</button>
-          <button class="btn neutral" data-repair-save title="Save the corrected values without retrying">Save only</button>
-          <button class="btn" data-repair-go title="Save the values and retry the parked task">Save &amp; retry</button>
-        </div>
-      </div>`;
-    document.body.appendChild(ov);
+    const body = document.createElement("div");
+    body.innerHTML = `
+      <p class="inc-modal-msg">${esc(incident.message || "(no message)")}</p>
+      <p class="muted" style="margin:0 0 10px">The fields below are the ones this task's author said matter when it goes
+      wrong. Only these are written; everything else the instance holds is left untouched.</p>
+      <div class="repair-form" id="inc-repair-form"></div>
+      <p class="repair-err" style="margin:8px 0 0;font-size:12.5px" hidden></p>`;
 
-    const host = ov.querySelector("#inc-repair-form");
-    const errEl = ov.querySelector(".repair-err");
+    const host = body.querySelector("#inc-repair-form");
+    const errEl = body.querySelector(".repair-err");
     let form = null;
-    const close = (value) => {
-      if (form) { try { form.destroy(); } catch { /* already gone */ } }
-      ov.remove();
-      resolve(value);
-    };
 
     // The keys this form binds — the only ones a submit is allowed to write.
     const keys = formFieldKeys(schema);
@@ -398,14 +377,30 @@ function askRepairForm({ Form, incident, schema, name, current }) {
         errEl.hidden = false;
         return;
       }
-      close({ variables: take(data), retry });
+      dlg.close({ variables: take(data), retry });
     };
 
-    ov.querySelector("[data-repair-cancel]").addEventListener("click", () => close(null));
-    ov.querySelector("[data-repair-save]").addEventListener("click", submit(false));
-    ov.querySelector("[data-repair-go]").addEventListener("click", submit(true));
-    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
-    ov.addEventListener("keydown", (e) => { if (e.key === "Escape") close(null); });
+    const dlg = openDialog({
+      title: `Repair · ${incident.elementId || "task"}`,
+      label: "Repair task",
+      body,
+      className: "confirm-modal repair-modal",
+      // The form owns DOM of its own; tearing it down belongs with the dialog closing
+      // rather than with each of the three ways of closing it.
+      onClose: (value) => {
+        if (form) { try { form.destroy(); } catch { /* already gone */ } }
+        resolve(value);
+      },
+      actions: [
+        { spacer: name, className: "repair-which" },
+        { label: "Cancel", kind: "neutral", value: null, attrs: { "data-repair-cancel": "" },
+          title: "Close without changing anything" },
+        { label: "Save only", kind: "neutral", keepOpen: true, attrs: { "data-repair-save": "" },
+          title: "Save the corrected values without retrying", onSelect: submit(false) },
+        { label: "Save & retry", keepOpen: true, attrs: { "data-repair-go": "" },
+          title: "Save the values and retry the parked task", onSelect: submit(true) },
+      ],
+    });
 
     (async () => {
       try {
@@ -454,32 +449,20 @@ export async function completeManuallyFlow({ api, toast, incident }) {
 // after it; the outputs are optional and must be a JSON object when given.
 function askCompletion(inc) {
   return new Promise((resolve) => {
-    const ov = document.createElement("div");
-    ov.className = "modal-ov";
-    ov.innerHTML = `
-      <div class="modal confirm-modal inc-vars-modal" role="dialog" aria-modal="true" aria-labelledby="inc-done-title">
-        <div class="modal-head"><h2 id="inc-done-title">Complete manually &middot; ${esc(inc.elementId || "task")}</h2></div>
-        <div class="modal-body">
-          ${inc.message ? `<p class="inc-modal-msg">${esc(inc.message)}</p>` : ""}
-          <p class="muted" style="margin:0 0 8px">This finishes the task as a worker would and lets the process continue.
-            It is recorded as a manual completion — your name, the time, and the reason below — and shown on this step in the replay.</p>
-          <label class="field"><span>Reason <b>(required)</b></span>
-            <input type="text" id="inc-done-reason" spellcheck="false" placeholder="e.g. account created by hand in AD, ticket INC-4711"/></label>
-          <label class="field"><span>Output variables (optional JSON)</span>
-            <textarea id="inc-done-vars" class="inc-vars-json" spellcheck="false" rows="7">{}</textarea></label>
-          <p class="err" id="inc-done-err" style="margin:6px 0 0"></p>
-        </div>
-        <div class="modal-foot">
-          <button class="btn neutral" data-done-cancel title="Close without completing the task">Cancel</button>
-          <button class="btn" data-done-go title="Finish the task by hand and let the process continue">Complete task</button>
-        </div>
-      </div>`;
-    document.body.appendChild(ov);
-    const reasonEl = ov.querySelector("#inc-done-reason");
-    const varsEl = ov.querySelector("#inc-done-vars");
-    const err = ov.querySelector("#inc-done-err");
-    const close = (value) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(value); };
-    const onKey = (e) => { if (e.key === "Escape") close(null); };
+    const body = document.createElement("div");
+    body.innerHTML = `
+      ${inc.message ? `<p class="inc-modal-msg">${esc(inc.message)}</p>` : ""}
+      <p class="muted" style="margin:0 0 8px">This finishes the task as a worker would and lets the process continue.
+        It is recorded as a manual completion — your name, the time, and the reason below — and shown on this step in the replay.</p>
+      <label class="field"><span>Reason <b>(required)</b></span>
+        <input type="text" id="inc-done-reason" spellcheck="false" placeholder="e.g. account created by hand in AD, ticket INC-4711"/></label>
+      <label class="field"><span>Output variables (optional JSON)</span>
+        <textarea id="inc-done-vars" class="inc-vars-json" spellcheck="false" rows="7">{}</textarea></label>
+      <p class="err" id="inc-done-err" style="margin:6px 0 0"></p>`;
+    const reasonEl = body.querySelector("#inc-done-reason");
+    const varsEl = body.querySelector("#inc-done-vars");
+    const err = body.querySelector("#inc-done-err");
+
     const submit = () => {
       const reason = (reasonEl.value || "").trim();
       if (!reason) {
@@ -497,13 +480,22 @@ function askCompletion(inc) {
           return;
         }
       }
-      close({ reason, variables: parsed });
+      dlg.close({ reason, variables: parsed });
     };
-    document.addEventListener("keydown", onKey);
-    ov.querySelector("[data-done-cancel]").addEventListener("click", () => close(null));
-    ov.querySelector("[data-done-go]").addEventListener("click", submit);
-    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
-    reasonEl.focus();
+
+    const dlg = openDialog({
+      title: `Complete manually · ${inc.elementId || "task"}`,
+      label: "Complete manually",
+      body,
+      className: "confirm-modal inc-vars-modal",
+      onClose: (value) => resolve(value),
+      actions: [
+        { label: "Cancel", kind: "neutral", value: null, attrs: { "data-done-cancel": "" },
+          title: "Close without completing the task" },
+        { label: "Complete task", keepOpen: true, attrs: { "data-done-go": "" },
+          title: "Finish the task by hand and let the process continue", onSelect: submit },
+      ],
+    });
   });
 }
 

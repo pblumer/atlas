@@ -10,6 +10,8 @@
 // whole console on import, so anything left in it is only ever exercised by hand. Here
 // it is reachable from a test.
 
+import { openDialog } from "./dialog.js";
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -130,47 +132,52 @@ function migrateError(e) {
 // mislead about live process state.
 function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
   return new Promise((resolve) => {
-    const ov = document.createElement("div");
-    ov.className = "modal-ov";
-    ov.innerHTML = `
-      <div class="modal confirm-modal mig-modal" role="dialog" aria-modal="true" aria-labelledby="mig-title">
-        <div class="modal-head"><h2 id="mig-title">Migrate instance &middot; ${esc(String(instanceKey))}</h2></div>
-        <div class="modal-body">
-          <p class="muted" style="margin:0 0 10px">This instance is running on <b>v${esc(String(fromVersion))}</b> of
-          <b>${esc(processId)}</b>. Moving it to another deployed version keeps its variables, its tasks and everything
-          already done — it is rebound, not restarted. Pick the version to move it to; what that would do is shown before
-          anything is written.</p>
-          <label class="field"><span>Move to</span>
-            <select id="mig-target">
-              ${targets.map((t, i) => `<option value="${esc(String(t.key))}"${i === 0 ? " selected" : ""}>${esc(versionLabel(t))}</option>`).join("")}
-            </select>
-          </label>
-          <div id="mig-plan" class="mig-plan"><p class="muted" style="margin:0;font-size:12px">Reading the plan…</p></div>
-          <label class="field" style="margin-top:10px"><span>Reason</span>
-            <input id="mig-reason" placeholder="Why this instance is being moved" autocomplete="off"/>
-          </label>
-          <p class="muted" style="margin:6px 0 0;font-size:12px">Recorded with your name and the time, and shown on this
-          instance's replay at the point it happened.</p>
-          <p class="mig-err" style="margin:8px 0 0;font-size:12.5px" hidden></p>
-        </div>
-        <div class="modal-foot">
-          <button class="btn neutral" data-mig-cancel title="Close without migrating">Cancel</button>
-          <button class="btn" data-mig-go title="Move this instance to the selected version" disabled>Migrate</button>
-        </div>
-      </div>`;
-    document.body.appendChild(ov);
+    const body = document.createElement("div");
+    body.innerHTML = `
+      <p class="muted" style="margin:0 0 10px">This instance is running on <b>v${esc(String(fromVersion))}</b> of
+      <b>${esc(processId)}</b>. Moving it to another deployed version keeps its variables, its tasks and everything
+      already done — it is rebound, not restarted. Pick the version to move it to; what that would do is shown before
+      anything is written.</p>
+      <label class="field"><span>Move to</span>
+        <select id="mig-target">
+          ${targets.map((t, i) => `<option value="${esc(String(t.key))}"${i === 0 ? " selected" : ""}>${esc(versionLabel(t))}</option>`).join("")}
+        </select>
+      </label>
+      <div id="mig-plan" class="mig-plan"><p class="muted" style="margin:0;font-size:12px">Reading the plan…</p></div>
+      <label class="field" style="margin-top:10px"><span>Reason</span>
+        <input id="mig-reason" placeholder="Why this instance is being moved" autocomplete="off"/>
+      </label>
+      <p class="muted" style="margin:6px 0 0;font-size:12px">Recorded with your name and the time, and shown on this
+      instance's replay at the point it happened.</p>
+      <p class="mig-err" style="margin:8px 0 0;font-size:12.5px" hidden></p>`;
 
-    const targetSel = ov.querySelector("#mig-target");
-    const planEl = ov.querySelector("#mig-plan");
-    const reasonIn = ov.querySelector("#mig-reason");
-    const goBtn = ov.querySelector("[data-mig-go]");
-    const errEl = ov.querySelector(".mig-err");
+    const targetSel = body.querySelector("#mig-target");
+    const planEl = body.querySelector("#mig-plan");
+    const reasonIn = body.querySelector("#mig-reason");
+    const errEl = body.querySelector(".mig-err");
     const byKey = new Map(targets.map((t) => [String(t.key), t]));
 
     let plan = null;
     let planSeq = 0;
 
-    const close = (value) => { ov.remove(); resolve(value); };
+    // The shared dialog (ADR-draft-shared-ui-primitives). It brings the focus
+    // handling this one never had: onto the version picker, which is the decision
+    // being made, and back to whatever opened it afterwards.
+    const dlg = openDialog({
+      title: `Migrate instance · ${instanceKey}`,
+      label: "Migrate instance",
+      body,
+      className: "confirm-modal mig-modal",
+      onClose: (value) => resolve(value),
+      actions: [
+        { label: "Cancel", kind: "neutral", value: null, attrs: { "data-mig-cancel": "" },
+          title: "Close without migrating" },
+        { label: "Migrate", keepOpen: true, disabled: true, attrs: { "data-mig-go": "" },
+          title: "Move this instance to the selected version", onSelect: () => submit() },
+      ],
+    });
+    const goBtn = dlg.el.querySelector("[data-mig-go]");
+    const close = (value) => dlg.close(value);
     // A migration is only offered when the plan says it holds *and* a reason is given.
     // The button is the gate rather than a later error, because a refusal an operator
     // could have seen first is a round trip they should not have had to make.
@@ -200,12 +207,9 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
       sync();
     };
 
-    targetSel.addEventListener("change", loadPlan);
-    reasonIn.addEventListener("input", () => { errEl.hidden = true; sync(); });
-    ov.querySelector("[data-mig-cancel]").addEventListener("click", () => close(null));
-    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
-    ov.addEventListener("keydown", (e) => { if (e.key === "Escape") close(null); });
-    goBtn.addEventListener("click", () => {
+    // submit is what the Migrate button does. It is declared here rather than inline
+    // because openDialog is handed it before this point in the file.
+    function submit() {
       const reason = reasonIn.value.trim();
       if (!reason) {
         errEl.textContent = "A reason is required — it is what makes the migration auditable.";
@@ -213,10 +217,14 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
         return;
       }
       close({ target: byKey.get(targetSel.value), reason });
-    });
+    }
+
+    targetSel.addEventListener("change", loadPlan);
+    reasonIn.addEventListener("input", () => { errEl.hidden = true; sync(); });
 
     loadPlan();
-    setTimeout(() => reasonIn.focus(), 0);
+    // The reason is what the operator has to supply; the picker already has a value.
+    reasonIn.focus();
   });
 }
 
@@ -289,48 +297,50 @@ function askBatchMigration({ processId, processName, versions, runningOf }) {
     const withRunning = versions.filter((v) => running(v) > 0);
     const defaultFrom = (withRunning.length ? withRunning[withRunning.length - 1] : versions[versions.length - 1]).key;
 
-    const ov = document.createElement("div");
-    ov.className = "modal-ov";
-    ov.innerHTML = `
-      <div class="modal confirm-modal mig-modal" role="dialog" aria-modal="true" aria-labelledby="migb-title">
-        <div class="modal-head"><h2 id="migb-title">Migrate running instances &middot; ${esc(processName || processId)}</h2></div>
-        <div class="modal-body">
-          <p class="muted" style="margin:0 0 10px">Moves every running instance of one deployed version onto another. Each
-          instance keeps its variables, its tasks and everything already done.</p>
-          <div class="row" style="gap:10px;flex-wrap:wrap">
-            <label class="field" style="flex:1 1 200px"><span>From</span>
-              <select id="migb-from">${versions.map(optionFor).join("")}</select>
-            </label>
-            <label class="field" style="flex:1 1 200px"><span>To</span>
-              <select id="migb-to">${versions.map(optionFor).join("")}</select>
-            </label>
-          </div>
-          <p class="muted" style="margin:8px 0 0;font-size:12px">Each instance is checked on its own. Any that cannot be
-          moved — a token on an element the new version does not have, an element that changed type — is left exactly where
-          it is and listed afterwards, so nothing is half-applied.</p>
-          <label class="field" style="margin-top:10px"><span>Reason</span>
-            <input id="migb-reason" placeholder="Why these instances are being moved" autocomplete="off"/>
-          </label>
-          <p class="mig-err" style="margin:8px 0 0;font-size:12.5px" hidden></p>
-        </div>
-        <div class="modal-foot">
-          <button class="btn neutral" data-migb-cancel title="Close without migrating">Cancel</button>
-          <button class="btn" data-migb-go title="Move every running instance of the source version" disabled>Migrate instances</button>
-        </div>
-      </div>`;
-    document.body.appendChild(ov);
+    const body = document.createElement("div");
+    body.innerHTML = `
+      <p class="muted" style="margin:0 0 10px">Moves every running instance of one deployed version onto another. Each
+      instance keeps its variables, its tasks and everything already done.</p>
+      <div class="row" style="gap:10px;flex-wrap:wrap">
+        <label class="field" style="flex:1 1 200px"><span>From</span>
+          <select id="migb-from">${versions.map(optionFor).join("")}</select>
+        </label>
+        <label class="field" style="flex:1 1 200px"><span>To</span>
+          <select id="migb-to">${versions.map(optionFor).join("")}</select>
+        </label>
+      </div>
+      <p class="muted" style="margin:8px 0 0;font-size:12px">Each instance is checked on its own. Any that cannot be
+      moved — a token on an element the new version does not have, an element that changed type — is left exactly where
+      it is and listed afterwards, so nothing is half-applied.</p>
+      <label class="field" style="margin-top:10px"><span>Reason</span>
+        <input id="migb-reason" placeholder="Why these instances are being moved" autocomplete="off"/>
+      </label>
+      <p class="mig-err" style="margin:8px 0 0;font-size:12.5px" hidden></p>`;
 
-    const fromSel = ov.querySelector("#migb-from");
-    const toSel = ov.querySelector("#migb-to");
-    const reasonIn = ov.querySelector("#migb-reason");
-    const goBtn = ov.querySelector("[data-migb-go]");
-    const errEl = ov.querySelector(".mig-err");
+    const fromSel = body.querySelector("#migb-from");
+    const toSel = body.querySelector("#migb-to");
+    const reasonIn = body.querySelector("#migb-reason");
+    const errEl = body.querySelector(".mig-err");
     const byKey = new Map(versions.map((v) => [String(v.key), v]));
 
     fromSel.value = String(defaultFrom);
     toSel.value = String(versions[0].key);
 
-    const close = (value) => { ov.remove(); resolve(value); };
+    const dlg = openDialog({
+      title: `Migrate running instances · ${processName || processId}`,
+      label: "Migrate running instances",
+      body,
+      className: "confirm-modal mig-modal",
+      onClose: (value) => resolve(value),
+      actions: [
+        { label: "Cancel", kind: "neutral", value: null, attrs: { "data-migb-cancel": "" },
+          title: "Close without migrating" },
+        { label: "Migrate instances", keepOpen: true, disabled: true, attrs: { "data-migb-go": "" },
+          title: "Move every running instance of the source version", onSelect: () => submit() },
+      ],
+    });
+    const goBtn = dlg.el.querySelector("[data-migb-go]");
+    const close = (value) => dlg.close(value);
     const sync = () => {
       const same = fromSel.value === toSel.value;
       errEl.hidden = !same;
@@ -338,20 +348,18 @@ function askBatchMigration({ processId, processName, versions, runningOf }) {
       goBtn.disabled = same || !reasonIn.value.trim();
     };
 
-    fromSel.addEventListener("change", sync);
-    toSel.addEventListener("change", sync);
-    reasonIn.addEventListener("input", sync);
-    ov.querySelector("[data-migb-cancel]").addEventListener("click", () => close(null));
-    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
-    ov.addEventListener("keydown", (e) => { if (e.key === "Escape") close(null); });
-    goBtn.addEventListener("click", () => {
+    function submit() {
       const reason = reasonIn.value.trim();
       if (!reason || fromSel.value === toSel.value) { sync(); return; }
       close({ from: byKey.get(fromSel.value), to: byKey.get(toSel.value), reason });
-    });
+    }
+
+    fromSel.addEventListener("change", sync);
+    toSel.addEventListener("change", sync);
+    reasonIn.addEventListener("input", sync);
 
     sync();
-    setTimeout(() => reasonIn.focus(), 0);
+    reasonIn.focus();
   });
 }
 
@@ -365,29 +373,23 @@ function showBatchOutcome({ migrated, refused, from, to }) {
       return `<li><a href="#/operations/i/${esc(String(r.instanceKey))}" class="mono">${esc(String(r.instanceKey))}</a>
         <span class="muted">${esc(why || "could not be migrated")}</span></li>`;
     }).join("");
-    const ov = document.createElement("div");
-    ov.className = "modal-ov";
-    ov.innerHTML = `
-      <div class="modal confirm-modal mig-modal" role="dialog" aria-modal="true" aria-labelledby="migo-title">
-        <div class="modal-head"><h2 id="migo-title">Migrated ${migrated} &middot; ${refused.length} left behind</h2></div>
-        <div class="modal-body">
-          <p style="margin:0 0 10px">${migrated} instance${migrated === 1 ? "" : "s"} moved from
-          <b>${esc(versionLabel(from))}</b> to <b>${esc(versionLabel(to))}</b>.
-          ${refused.length} could not be, and ${refused.length === 1 ? "is" : "are"} still running on
-          <b>${esc(versionLabel(from))}</b> exactly as before:</p>
-          <ul class="mig-problems mig-refused">${rows}</ul>
-          <p class="muted" style="margin:8px 0 0;font-size:12px">Open one to see where its token is. A refusal is not a
-          failure to apply — nothing was written for these, so they are unchanged rather than half-migrated.</p>
-        </div>
-        <div class="modal-foot">
-          <button class="btn" data-migo-ok title="Close">Close</button>
-        </div>
-      </div>`;
-    document.body.appendChild(ov);
-    const close = () => { ov.remove(); resolve(); };
-    ov.querySelector("[data-migo-ok]").addEventListener("click", close);
-    ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
-    ov.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
-    setTimeout(() => ov.querySelector("[data-migo-ok]").focus(), 0);
+    const body = document.createElement("div");
+    body.innerHTML = `
+      <p style="margin:0 0 10px">${migrated} instance${migrated === 1 ? "" : "s"} moved from
+      <b>${esc(versionLabel(from))}</b> to <b>${esc(versionLabel(to))}</b>.
+      ${refused.length} could not be, and ${refused.length === 1 ? "is" : "are"} still running on
+      <b>${esc(versionLabel(from))}</b> exactly as before:</p>
+      <ul class="mig-problems mig-refused">${rows}</ul>
+      <p class="muted" style="margin:8px 0 0;font-size:12px">Open one to see where its token is. A refusal is not a
+      failure to apply — nothing was written for these, so they are unchanged rather than half-migrated.</p>`;
+
+    openDialog({
+      title: `Migrated ${migrated} · ${refused.length} left behind`,
+      label: "Migration outcome",
+      body,
+      className: "confirm-modal mig-modal",
+      onClose: () => resolve(),
+      actions: [{ label: "Close", value: null, attrs: { "data-migo-ok": "" }, title: "Close" }],
+    });
   });
 }

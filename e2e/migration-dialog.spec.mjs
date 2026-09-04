@@ -132,15 +132,15 @@ test("a batch drains every page and lists the instances it left behind", async (
   await modal.locator("[data-migb-go]").click();
 
   // The server pages; the caller repeats while `remaining` is true.
-  await expect(page.locator("#migo-title")).toBeVisible();
+  await expect(page.locator(".mig-modal .modal-head h2")).toBeVisible();
   const calls = await page.evaluate(() => window.__calls.filter((c) => c.url.includes("migrate-instances")));
   expect(calls.length).toBe(2);
   expect(calls[0].body.reason).toBe("draining v1");
 
   // Both numbers, and the refusal as a work list: each named instance is still on the
   // old version and still needs a decision.
-  await expect(page.locator("#migo-title")).toContainText("Migrated 3");
-  await expect(page.locator("#migo-title")).toContainText("1 left behind");
+  await expect(page.locator(".mig-modal .modal-head h2")).toContainText("Migrated 3");
+  await expect(page.locator(".mig-modal .modal-head h2")).toContainText("1 left behind");
   const refused = page.locator(".mig-refused");
   await expect(refused).toContainText("7007");
   await expect(refused).toContainText("ExclusiveGateway");

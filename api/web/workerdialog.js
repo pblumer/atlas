@@ -17,6 +17,8 @@
 // reachable from a test at all: app.js boots the whole console on import, so anything
 // left in it is only ever exercised by hand.
 
+import { openDialog } from "./dialog.js";
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -202,12 +204,8 @@ export async function editWorkerFlow({ api, toast, worker, intro = "", extraLabe
 function askWorker({ api, worker, intro, extraLabel }) {
   return new Promise((resolve) => {
     const c = worker || {};
-    const ov = document.createElement("div");
-    ov.className = "modal-ov";
-    ov.innerHTML = `
-      <div class="modal confirm-modal conn-modal" role="dialog" aria-modal="true" aria-labelledby="conn-edit-title">
-        <div class="modal-head"><h2 id="conn-edit-title">Worker &middot; ${esc(c.name || "")}</h2></div>
-        <div class="modal-body">
+    const body = document.createElement("div");
+    body.innerHTML = `
           ${intro ? `<p class="inc-modal-msg">${esc(intro)}</p>` : ""}
           ${c.problem ? `<p class="conn-problem"><b>Not usable right now:</b> ${esc(c.problem)}</p>` : ""}
           <p class="muted" style="margin:0 0 10px">The name is what every model references, so it is fixed here — changing it would leave those tasks looking for a worker that no longer exists. Everything else takes effect at once; a parked task retries against the new configuration.</p>
@@ -223,41 +221,38 @@ function askWorker({ api, worker, intro, extraLabel }) {
           <label class="conn-enabled"><input type="checkbox" id="conn-enabled"${c.enabled ? " checked" : ""}/> <span>Enabled — a disabled worker is skipped, and its tasks park</span></label>
           <p class="muted conn-hint" style="margin:8px 0 0;font-size:12.5px"></p>
           <p class="conn-test-result" style="margin:8px 0 0;font-size:12.5px" hidden></p>
-        </div>
-        <div class="modal-foot">
-          <button class="btn neutral" data-conn-cancel title="Close without saving">Cancel</button>
-          <button class="btn neutral conn-f-test" data-conn-test title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
-          <button class="btn${extraLabel ? " neutral" : ""}" data-conn-save title="Save the worker changes">Save</button>
-          ${extraLabel ? `<button class="btn" data-conn-extra title="Save the changes and retry the parked task">${esc(extraLabel)}</button>` : ""}
-        </div>
-      </div>`;
-    document.body.appendChild(ov);
+`;
 
-    const providerSel = ov.querySelector("#conn-provider");
-    const endpointIn = ov.querySelector("#conn-endpoint");
-    const senderIn = ov.querySelector("#conn-sender");
-    const credRefIn = ov.querySelector("#conn-credref");
-    const enabledIn = ov.querySelector("#conn-enabled");
-    const testOut = ov.querySelector(".conn-test-result");
+    const providerSel = body.querySelector("#conn-provider");
+    const endpointIn = body.querySelector("#conn-endpoint");
+    const senderIn = body.querySelector("#conn-sender");
+    const credRefIn = body.querySelector("#conn-credref");
+    const enabledIn = body.querySelector("#conn-enabled");
+    const testOut = body.querySelector(".conn-test-result");
 
     const shape = () => workerShape(c.kind, c.kind === "mail" ? providerSel.value : c.provider);
+    // The dialog, once opened. sync runs before that (to lay the fields out for the
+    // kind) and again after (the Test button lives in the foot, so it only exists once
+    // the dialog does) — hence the scope rather than a fixed root.
+    let dlg = null;
     const sync = () => {
       const sh = shape();
-      const show = (sel, on) => { const el = ov.querySelector(sel); if (el) el.style.display = on ? "" : "none"; };
+      const root = dlg ? dlg.el : body;
+      const show = (sel, on) => { const el = root.querySelector(sel); if (el) el.style.display = on ? "" : "none"; };
       show(".conn-f-provider", sh.provider);
       show(".conn-f-endpoint", sh.endpoint);
       show(".conn-f-sender", sh.sender);
       show(".conn-f-credref", sh.credRef !== "none");
       show(".conn-f-test", sh.test);
       endpointIn.placeholder = sh.endpointPlaceholder;
-      ov.querySelector(".conn-credref-label").textContent = sh.credRefLabel;
+      root.querySelector(".conn-credref-label").textContent = sh.credRefLabel;
       credRefIn.placeholder = sh.credRefPlaceholder;
-      ov.querySelector(".conn-hint").innerHTML = sh.hint;
+      root.querySelector(".conn-hint").innerHTML = sh.hint;
     };
     providerSel.addEventListener("change", sync);
     sync();
 
-    ov.querySelector("[data-conn-test]").addEventListener("click", async (e) => {
+    const onTest = async (e) => {
       const btn = e.currentTarget;
       testOut.hidden = false;
       testOut.className = "conn-test-result muted";
@@ -279,10 +274,9 @@ function askWorker({ api, worker, intro, extraLabel }) {
         testOut.className = "conn-test-result err";
         testOut.textContent = "✕ " + (err && err.message ? err.message : err);
       } finally { btn.disabled = false; }
-    });
+    };
 
-    const close = (value) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(value); };
-    const onKey = (e) => { if (e.key === "Escape") close(null); };
+    const close = (value) => dlg.close(value);
     // The patch carries every field this kind and provider actually use — the server
     // re-runs the kind's full validation on the resulting record (ADR-0160), so it has
     // to see what the operator is looking at. A field the shape hides is *omitted*,
@@ -302,12 +296,33 @@ function askWorker({ api, worker, intro, extraLabel }) {
       }
       close({ patch, extra });
     };
-    document.addEventListener("keydown", onKey);
-    ov.querySelector("[data-conn-cancel]").addEventListener("click", () => close(null));
-    ov.querySelector("[data-conn-save]").addEventListener("click", () => submit(false));
-    const extraBtn = ov.querySelector("[data-conn-extra]");
-    if (extraBtn) extraBtn.addEventListener("click", () => submit(true));
-    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
+    dlg = openDialog({
+      title: `Worker · ${c.name || ""}`,
+      label: "Edit worker",
+      body,
+      className: "confirm-modal conn-modal",
+      onClose: (value) => resolve(value),
+      actions: [
+        { label: "Cancel", kind: "neutral", value: null, attrs: { "data-conn-cancel": "" },
+          title: "Close without saving" },
+        { label: "Test connection", kind: "neutral", keepOpen: true,
+          attrs: { "data-conn-test": "", "class": "btn neutral conn-f-test" },
+          title: "Connect and authenticate with what is typed above — nothing is saved and no message is sent",
+          onSelect: null },
+        { label: "Save", kind: extraLabel ? "neutral" : "primary", keepOpen: true,
+          attrs: { "data-conn-save": "" }, title: "Save the worker changes",
+          onSelect: () => submit(false) },
+        ...(extraLabel ? [{ label: extraLabel, keepOpen: true, attrs: { "data-conn-extra": "" },
+          title: "Save the changes and retry the parked task", onSelect: () => submit(true) }] : []),
+      ],
+    });
+    // Test is the one action that talks to the server and stays open, and it needs the
+    // button itself (it disables it while the call is out), so it is wired here rather
+    // than through onSelect.
+    dlg.el.querySelector("[data-conn-test]").addEventListener("click", onTest);
+    sync(); // again, now that the foot's Test button exists to be shown or hidden
+    // The first field that is actually editable for this kind: mail leads with its
+    // provider, everything else with its endpoint.
     (c.kind === "mail" ? providerSel : endpointIn).focus();
   });
 }
@@ -415,60 +430,47 @@ export function openWorkerUsage({ worker }) {
     </div>`;
 
   const ov = document.createElement("div");
-  ov.className = "modal-ov";
-  ov.innerHTML = `
-    <div class="modal usage-modal" role="dialog" aria-modal="true" aria-labelledby="usage-title">
-      <div class="modal-head">
-        <h2 id="usage-title">Used by &middot; ${esc(c.name || "")}</h2>
-        <button type="button" class="icon-btn" data-usage-x aria-label="Close" title="Close">&#10005;</button>
-      </div>
-      <div class="modal-body">
-        <p class="muted usage-intro">${procs === defs
-          ? `<b>${defs}</b> deployed process${defs === 1 ? "" : "es"}`
-          : `<b>${procs}</b> process${procs === 1 ? "" : "es"} in <b>${defs}</b> deployed versions`} resolve
-          through this worker${live ? `, with <b>${live}</b> instance${live === 1 ? "" : "s"} running on them` : ""}.
-          Each version links to its Operations page and names the tasks that resolve here.</p>
-        ${filtered ? `<input type="text" class="usage-filter" data-usage-filter placeholder="Filter processes…" autocomplete="off" spellcheck="false"/>` : ""}
-        <div data-usage-list>${groups.map(groupHTML).join("")}</div>
-        <p class="usage-empty" data-usage-none hidden>No process matches that.</p>
-      </div>
-      <div class="modal-foot">
-        <span class="muted small">Deleting this worker parks these tasks with
-          &ldquo;no worker registered as ${esc(c.name || "")}&rdquo; until one of the same name
-          and kind exists again.</span>
-        <button type="button" class="btn" data-usage-done title="Close this dialog">Done</button>
-      </div>
-    </div>`;
-  document.body.appendChild(ov);
+  const body = document.createElement("div");
+  body.innerHTML = `
+    <p class="muted usage-intro">${procs === defs
+      ? `<b>${defs}</b> deployed process${defs === 1 ? "" : "es"}`
+      : `<b>${procs}</b> process${procs === 1 ? "" : "es"} in <b>${defs}</b> deployed versions`} resolve
+      through this worker${live ? `, with <b>${live}</b> instance${live === 1 ? "" : "s"} running on them` : ""}.
+      Each version links to its Operations page and names the tasks that resolve here.</p>
+    ${filtered ? `<input type="text" class="usage-filter" data-usage-filter placeholder="Filter processes…" autocomplete="off" spellcheck="false"/>` : ""}
+    <div data-usage-list>${groups.map(groupHTML).join("")}</div>
+    <p class="usage-empty" data-usage-none hidden>No process matches that.</p>`;
 
-  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
-  const onKey = (e) => { if (e.key === "Escape") close(); };
-  document.addEventListener("keydown", onKey);
-  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
-  ov.querySelector("[data-usage-x]").addEventListener("click", close);
-  ov.querySelector("[data-usage-done]").addEventListener("click", close);
+  const dlg = openDialog({
+    title: `Used by · ${c.name || ""}`,
+    label: "Used by",
+    body,
+    className: "usage-modal",
+    actions: [
+      { spacer: `Deleting this worker parks these tasks with “no worker registered as ${c.name || ""}” until one of the same name and kind exists again.` },
+      { label: "Done", value: null, attrs: { "data-usage-done": "" }, title: "Close this dialog" },
+    ],
+  });
+
   // A version link navigates the console underneath; leaving the dialog standing over
   // the page it just moved to would be a dialog about a worker you can no longer see.
-  for (const a of ov.querySelectorAll(".usage-ver")) a.addEventListener("click", close);
+  for (const a of body.querySelectorAll(".usage-ver")) a.addEventListener("click", () => dlg.close(null));
 
-  const filter = ov.querySelector("[data-usage-filter]");
+  const filter = body.querySelector("[data-usage-filter]");
   if (filter) {
-    const none = ov.querySelector("[data-usage-none]");
+    const none = body.querySelector("[data-usage-none]");
     filter.addEventListener("input", () => {
       const q = filter.value.trim().toLowerCase();
       let shown = 0;
-      for (const g of ov.querySelectorAll(".usage-group")) {
+      for (const g of body.querySelectorAll(".usage-group")) {
         const hit = !q || (g.dataset.usageText || "").includes(q);
         g.hidden = !hit;
         if (hit) shown++;
       }
       none.hidden = shown > 0;
     });
-    filter.focus();
-  } else {
-    ov.querySelector("[data-usage-done]").focus();
   }
-  return ov;
+  return dlg.el;
 }
 
 // deleteWorkerFlow asks, then deletes — and when the server refuses because deployed

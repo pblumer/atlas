@@ -38,6 +38,9 @@ function visibleFocusable(root) {
 //              keepOpen is set; `kind` is "primary" (filled), "neutral", "ghost" or
 //              "danger"; `attrs` puts caller-chosen attributes on the button, which
 //              is how a caller keeps addressing its own buttons after moving here.
+//              An entry with `spacer` is not a button: its text sits on the left of
+//              the foot (with an optional `className`), which is where a dialog that
+//              has something to say beside its buttons says it.
 //   width      a max-width for the dialog box
 //   className  an extra class on the box, for a dialog that styles its own body
 //   overlayId  an id for the overlay element, for a caller that addresses it
@@ -92,7 +95,10 @@ export function openDialog(opts = {}) {
     const note = document.createElement("span");
     note.className = "muted small";
     const spacer = actions.find((a) => a.spacer);
-    if (spacer) note.textContent = spacer.spacer;
+    if (spacer) {
+      note.textContent = spacer.spacer;
+      if (spacer.className) note.classList.add(spacer.className);
+    }
     foot.appendChild(note);
     const group = document.createElement("span");
     group.className = "modal-actions";
