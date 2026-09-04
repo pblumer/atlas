@@ -7703,7 +7703,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
   };
   document.addEventListener("keydown", onLayoutKey, true);
 
-  // Save layout to deployment (ADR-draft-adjust-a-deployed-diagram): the diagram on
+  // Save layout to deployment (ADR-0251): the diagram on
   // screen replaces the one the deployed definition carries, and nothing else about
   // that definition changes. It is the answer to the thing you only see in
   // operations — a label under a token badge, a task in the wrong row — where the
@@ -8231,7 +8231,7 @@ function eventGatewayRaces(registry) {
   return members;
 }
 
-// --- Where a runtime badge goes (ADR-draft-runtime-badges-clear-of-labels) ---
+// --- Where a runtime badge goes (ADR-0252) ---
 //
 // The Operations views annotate a shape with up to four badges, and which corner a
 // badge takes is its identity: an operator learns "the red one is bottom-left" and
@@ -8331,7 +8331,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   let procName = `definition ${key}`;
   let versions = []; // [{key, version, name}], newest first
   // The stamp on a diagram somebody has adjusted since it was deployed
-  // (ADR-draft-adjust-a-deployed-diagram). It rides the listing this already fetches,
+  // (ADR-0251). It rides the listing this already fetches,
   // and it belongs here rather than only on the audit trail: this view is where a
   // reader would otherwise compare the picture against a printed copy and conclude
   // that the process was redeployed.

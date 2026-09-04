@@ -39,7 +39,7 @@ type persistedDeployment struct {
 	// when DMNXMLs is absent. New deployments write DMNXMLs and leave this empty.
 	DMNXML string `json:"dmnXml,omitempty"`
 	// DiagramUpdatedAt / DiagramUpdatedBy stamp the last layout-only adjustment made
-	// to this deployment's diagram (ADR-draft-adjust-a-deployed-diagram): unix
+	// to this deployment's diagram (ADR-0251): unix
 	// seconds, and the account that made it. Both absent on a deployment whose
 	// picture is still the one it was deployed with, which is why the omitempty
 	// matters — the common record is unchanged by this field existing.

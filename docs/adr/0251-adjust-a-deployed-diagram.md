@@ -1,4 +1,4 @@
-# ADR-DRAFT: Adjusting a deployed definition's diagram without redeploying it
+# ADR-0251: Adjusting a deployed definition's diagram without redeploying it
 
 - **Status:** Proposed
 - **Date:** 2026-09-04
@@ -200,4 +200,4 @@ the stream an operator already ships and alerts on.
 - relates to [ADR-0162](0162-process-instance-migration.md) — the instrument this exists to avoid using for cosmetics
 - relates to [ADR-0197](0197-login-throttle-and-audit-log.md) — the audit trail the change is recorded on
 - relates to [ADR-0229](0229-modeler-bar-hierarchy.md) — why the control sits in the Modeler's menu
-- relates to [ADR-draft-runtime-badges-clear-of-labels](draft-runtime-badges-clear-of-labels.md) — the other half of the same complaint
+- relates to [ADR-0252](0252-runtime-badges-clear-of-labels.md) — the other half of the same complaint

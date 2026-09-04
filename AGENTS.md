@@ -87,7 +87,7 @@ api/        HTTP API, web UI, command submission and queries
   httpapi/    Response envelope, client IP, request principal — what every handler uses
   token/      Opaque share tokens: minting, and the shape guard that keeps one off a path
   layout/     BPMN diagram auto-layout, and transplanting an adjusted diagram onto a
-              deployed model (ADR-0124/0127, ADR-draft-adjust-a-deployed-diagram)
+              deployed model (ADR-0124/0127, ADR-0251)
   collab/     Live collaborative modeling sessions (ADR-0140)
   vault/      Encrypted secret store (ADR-0069/0070)
   sidecar/    Store[T] and the atomic-write + fsync discipline behind every design-time store

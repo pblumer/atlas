@@ -1,5 +1,5 @@
 // End-to-end coverage for where the Operations views put their runtime badges
-// (ADR-draft-runtime-badges-clear-of-labels).
+// (ADR-0252).
 //
 // The badges used to sit in the four *inner* corners of a shape, which is where the
 // words are: a task's caption is drawn inside its box, and an event's is centred
@@ -153,7 +153,7 @@ test("the compact badges still say what they are", async ({ page }) => {
 });
 
 test("the live view says when a diagram was adjusted after it was deployed", async ({ page }) => {
-  // The other half of the same complaint (ADR-draft-adjust-a-deployed-diagram): an
+  // The other half of the same complaint (ADR-0251): an
   // operator may move what a badge used to cover, in place, on the deployment. The
   // picture then differs from the deployed artefact, and this view is where somebody
   // would otherwise compare it against a printed copy and conclude it was redeployed.

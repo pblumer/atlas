@@ -1,4 +1,4 @@
-# ADR-DRAFT: Runtime badges hang outside the shape, clear of its caption
+# ADR-0252: Runtime badges hang outside the shape, clear of its caption
 
 - **Status:** Proposed
 - **Date:** 2026-09-04
@@ -53,7 +53,7 @@ event's caption band.
 
 None of this is visible while modelling. The badges exist only where a process is
 running, so the first person to see it is an operator, on a diagram they cannot change
-(which is the subject of [ADR-draft-adjust-a-deployed-diagram](draft-adjust-a-deployed-diagram.md)).
+(which is the subject of [ADR-0251](0251-adjust-a-deployed-diagram.md)).
 
 ## Decision drivers
 
@@ -158,4 +158,4 @@ appeared only on hover.
 - relates to [ADR-0245](0245-call-activity-drilldown.md) — the four-corner convention, and icon-plus-tooltip as an always-visible control
 - relates to [ADR-0249](0249-overlay-cancelled-tokens.md) — the token badges whose corner this moves
 - relates to [ADR-0066](0066-decision-evaluation-records.md) — the decision badge
-- relates to [ADR-draft-adjust-a-deployed-diagram](draft-adjust-a-deployed-diagram.md) — the escape hatch for the collisions no convention can prevent
+- relates to [ADR-0251](0251-adjust-a-deployed-diagram.md) — the escape hatch for the collisions no convention can prevent

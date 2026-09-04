@@ -304,6 +304,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0248](0248-search-terms-are-literal.md) | A search term is literal, and widening is asked for | Proposed |
 | [0249](0249-overlay-cancelled-tokens.md) | Cancelled tokens on the runtime overlay, and a deferred choice drawn once | Accepted |
 | [0250](0250-documentation-is-markdown.md) | Documentation prose is Markdown, rendered by one closed renderer | Proposed |
+| [0251](0251-adjust-a-deployed-diagram.md) | Adjusting a deployed definition's diagram without redeploying it | Proposed |
+| [0252](0252-runtime-badges-clear-of-labels.md) | Runtime badges hang outside the shape, clear of its caption | Proposed |
 
 ## Status values
 

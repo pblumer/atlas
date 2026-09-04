@@ -110,7 +110,7 @@ type processResp struct {
 	// Always emitted so the UI can render the active/inactive control unambiguously.
 	Active bool `json:"active"`
 	// DiagramUpdatedAt / DiagramUpdatedBy stamp the last layout-only adjustment made
-	// to this definition's diagram (ADR-draft-adjust-a-deployed-diagram), absent when
+	// to this definition's diagram (ADR-0251), absent when
 	// the picture is still the one it was deployed with. The UI says so where the
 	// diagram is shown: the drawing is no longer the deployed artefact, and a reader
 	// comparing it against a printed copy deserves to know that before they conclude
@@ -1033,7 +1033,7 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUpdateProcessDiagram replaces a deployed definition's diagram without
-// deploying anything (ADR-draft-adjust-a-deployed-diagram).
+// deploying anything (ADR-0251).
 //
 // A BPMN model's diagram interchange is presentation, not behaviour: the compiler
 // never reads it, and a CompiledProcess holds no coordinate. So a label that turns

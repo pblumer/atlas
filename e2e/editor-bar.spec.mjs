@@ -14,7 +14,7 @@
 import { test, expect } from "@playwright/test";
 
 // The menu in deployment mode. "savelayout" is the one entry that depends on what is
-// open rather than on what the editor can do (ADR-draft-adjust-a-deployed-diagram):
+// open rather than on what the editor can do (ADR-0251):
 // a deployment can have its picture adjusted in place, a draft has nothing to adjust.
 const MENU_IDS = ["sim-toggle", "autolayout", "savelayout", "export", "docexport"];
 

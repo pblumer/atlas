@@ -307,7 +307,7 @@ var (
 	DeploymentReloadedWithProblems = newEvent("deployment.reloaded_with_problems")
 
 	// DeploymentDiagramUpdated reports a layout-only adjustment to a deployed
-	// definition's diagram (ADR-draft-adjust-a-deployed-diagram): the picture the
+	// definition's diagram (ADR-0251): the picture the
 	// Operations views draw changed while the process behind it did not. It is on
 	// the audit trail rather than merely in the record's stamp because the change
 	// is visible to everyone looking at that definition — running instances and

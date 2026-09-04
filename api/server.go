@@ -157,7 +157,7 @@ type deployment struct {
 	// authoritative gate; this is the display copy, kept in sync on toggle and load.
 	inactive bool
 	// diagramUpdatedAt / diagramUpdatedBy mirror the persisted stamp of the last
-	// layout-only adjustment (ADR-draft-adjust-a-deployed-diagram), so the process
+	// layout-only adjustment (ADR-0251), so the process
 	// listing can say the picture is no longer the deployed one without re-reading
 	// the sidecar. Zero and empty for a diagram nobody has adjusted.
 	diagramUpdatedAt int64

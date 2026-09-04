@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// Saving a layout onto a deployed definition (ADR-draft-adjust-a-deployed-diagram).
+// Saving a layout onto a deployed definition (ADR-0251).
 //
 // The endpoint's whole claim is that nothing but the picture moves, so these tests
 // check the two halves separately: what arrives (the new coordinates, on every pool

@@ -25,7 +25,7 @@ test.describe("live view", () => {
     // The badge counts them; the word it used to spell out lives in its accessible
     // name and its tooltip now, because a pill wide enough for the sentence covered
     // the name of the task it was pointing at
-    // (ADR-draft-runtime-badges-clear-of-labels).
+    // (ADR-0252).
     const badge = page.locator(".incident-badge");
     await expect(badge).toHaveText("⚠ 2");
     await expect(badge).toHaveAttribute("aria-label", "2 incidents");

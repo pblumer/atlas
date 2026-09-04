@@ -1151,12 +1151,12 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   stroke: var(--danger) !important; stroke-width: 3px !important;
 }
 /* The Live view's note that a deployed definition's drawing was adjusted after it was
-   deployed (ADR-draft-adjust-a-deployed-diagram). Quiet on purpose: it is a caveat about
+   deployed (ADR-0251). Quiet on purpose: it is a caveat about
    the picture, not a state of the process. */
 .live-layout-note { margin-left: 8px; font-size: 11px; }
 
 /* The three annotation badges below are deliberately the size of the token count and
-   not of the word they used to spell out (ADR-draft-runtime-badges-clear-of-labels).
+   not of the word they used to spell out (ADR-0252).
    A pill wide enough for "⚠ 2 incidents" is 90px, and 90px is most of a task's width
    or three times an event's: wherever it was anchored it came down on a caption. The
    glyph identifies the badge, the count is the only text that varies, and the words

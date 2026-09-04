@@ -74,7 +74,7 @@ _Changed_ / _Removed_ for each version.
 
   Also on the API as `PUT /api/v1/processes/{key}/diagram` and to an agent as
   `atlas_save_process_diagram`
-  ([ADR-draft-adjust-a-deployed-diagram](docs/adr/draft-adjust-a-deployed-diagram.md)).
+  ([ADR-0251](docs/adr/0251-adjust-a-deployed-diagram.md)).
 
 - **The handbook plays.** Reading how to claim a task is not the same as being shown
   where to press, and the gap costs the most for exactly the people who have the least
@@ -225,7 +225,7 @@ _Changed_ / _Removed_ for each version.
   link and the decision button are a glyph plus a count now; the words they used to spell
   out are their tooltip and their accessible name, and the thing they name is listed in the
   panel below the diagram either way
-  ([ADR-draft-runtime-badges-clear-of-labels](docs/adr/draft-runtime-badges-clear-of-labels.md)).
+  ([ADR-0252](docs/adr/0252-runtime-badges-clear-of-labels.md)).
 
 - **A count on the diagram is grouped in thousands.** Reported from a running process:
   badges reading `25864`, `50002`, `23436`, `2428` around the shapes of one diagram.
