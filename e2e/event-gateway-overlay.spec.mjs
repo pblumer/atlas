@@ -31,14 +31,45 @@ test("counts the race on the gateway, not once per armed branch", async ({ page 
   await expect(badges(page, "gw")).toHaveText(["1", "2"]);
   await expect(badges(page, "gw").nth(1)).toHaveAttribute("title", /2 live token/);
 
-  // The branches are armed, not counted: no green number is repeated on either of them.
+  // The branches are armed, not counted: neither repeats the gateway's green number,
+  // and neither carries a word for it either — the dashed outline is the whole mark.
   for (const id of ["reply", "timeout"]) {
     await expect(shape(page, id)).toHaveClass(/atlas-armed/);
-    const armed = badges(page, id, ".armed");
-    await expect(armed).toHaveText("armed");
-    await expect(armed).toHaveAttribute("title", /nächstes Ereignis/);
+    await expect(badges(page, id).filter({ hasText: /^2$/ })).toHaveCount(0);
   }
   expect(page.__errors).toEqual([]);
+});
+
+test("says once, in the legend, what an armed branch is", async ({ page }) => {
+  await open(page);
+
+  // The explanation belongs where it is read once, not beside every branch of every
+  // race. It appears because this diagram has a deferred choice in it.
+  const armed = page.locator("#legend-armed");
+  await expect(armed).toBeVisible();
+  await expect(armed).toContainText("armed branch of an event gateway");
+  await expect(armed).toHaveAttribute("title", /counted once — on the gateway/);
+
+  // And the two counts the badges now separate are named there too.
+  const legend = page.locator(".problems");
+  await expect(legend).toContainText("completed here and moved on");
+  await expect(legend).toContainText("cancelled here");
+  expect(page.__errors).toEqual([]);
+});
+
+test("leaves the armed entry out of a diagram that has no deferred choice", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/event-gateway-overlay-harness.html");
+  await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+  await page.evaluate(() => window.__mountPlain());
+
+  // The rest of the legend still stands — only the entry nothing on this diagram can
+  // show is left out.
+  await expect(page.locator('#canvas g[data-element-id="p_task"]')).toHaveClass(/atlas-active/);
+  await expect(page.locator("#legend-armed")).toBeHidden();
+  await expect(page.locator(".problems")).toContainText("cancelled here");
+  expect(errors).toEqual([]);
 });
 
 test("tells the branch that won from the branch that was cancelled", async ({ page }) => {
@@ -46,12 +77,12 @@ test("tells the branch that won from the branch that was cancelled", async ({ pa
 
   // Identical visits, identical live tokens — the only difference between the two
   // branches is that one token completed on `reply` and one was cancelled on `timeout`.
-  // Gray then armed on the winner; nothing gray, an amber cancelled count on the loser.
-  await expect(badges(page, "reply")).toHaveText(["1", "armed"]);
+  // A single gray count on the winner; a single amber one on the loser.
+  await expect(badges(page, "reply")).toHaveText(["1"]);
   await expect(badges(page, "reply").first()).toHaveAttribute("title", /completed here and moved on/);
   await expect(badges(page, "reply", ".cancelled")).toHaveCount(0);
 
-  await expect(badges(page, "timeout")).toHaveText(["1", "armed"]);
+  await expect(badges(page, "timeout")).toHaveText(["1"]);
   const cancelled = badges(page, "timeout", ".cancelled");
   await expect(cancelled).toHaveText("1");
   await expect(cancelled).toHaveAttribute("title", /cancelled here/);

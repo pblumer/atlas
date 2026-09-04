@@ -8157,8 +8157,8 @@ function eventGatewayRaces(registry) {
 // counts are identical whichever event actually won (ADR-0249).
 //
 // `tokens` overrides the live count (a gateway shows its race's, which the engine parks
-// on the branches) and `green` replaces the green badge outright (an armed branch says
-// "armed" instead of repeating the count its gateway already carries).
+// on the branches) and `green` replaces the green badge outright — "" on an armed
+// branch, whose live tokens are the gateway's race and are counted there.
 function tokenBadgesHTML(e, { tokens = e.tokens, green = null } = {}) {
   const cancelled = e.terminated || 0;
   const passed = Math.max(0, e.visits - tokens - cancelled);
@@ -8241,10 +8241,14 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         <aside class="var-panel side" id="var-panel"></aside>
       </div>
       <div class="problems">
-        <span class="legend-swatch live"></span> live token
-        <span class="legend-swatch history" style="margin-left:12px"></span> passed through
-        <span class="badge" style="margin-left:12px">N</span> token count
+        <span class="legend-swatch live"></span> token here now
+        <span class="legend-swatch history" style="margin-left:12px"></span> visited
+        <span id="legend-armed" hidden title="An event-based gateway arms every branch at once, so the engine parks a token on each of them and none on the gateway. The wait is one race however many branches it has, so it is counted once — on the gateway.">
+          <span class="legend-swatch armed" style="margin-left:12px"></span> armed branch of an event gateway</span>
         <span class="legend-swatch incident" style="margin-left:12px"></span> parked on an incident
+        <span class="token-badge history" style="margin-left:16px">N</span> completed here and moved on
+        <span class="token-badge cancelled" style="margin-left:10px">N</span> cancelled here
+        <span class="token-badge" style="margin-left:10px">N</span> tokens here now
         <span style="flex:1"></span>
         <span class="muted">Polling every 1.5s</span>
       </div>
@@ -8820,8 +8824,13 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // count is the smallest of the armed branches, so a branch that also carries tokens
     // from elsewhere cannot inflate it.
     const byId = new Map((rt.elements || []).map((e) => [e.elementId, e]));
+    const gateways = eventGatewayRaces(registry);
+    // The legend carries "armed" only where the diagram can show one — it is read off
+    // the model, not the tokens, so it does not blink in and out as races are decided.
+    const armedLegend = root.querySelector("#legend-armed");
+    if (armedLegend) armedLegend.hidden = gateways.size === 0;
     const races = new Map(); // gateway id → tokens waiting in its race
-    for (const [gw, armed] of eventGatewayRaces(registry)) {
+    for (const [gw, armed] of gateways) {
       const waiting = Math.min(...armed.map((id) => (byId.get(id) || {}).tokens || 0));
       if (waiting > 0) races.set(gw, { waiting, armed });
     }
@@ -8856,19 +8865,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
           html: `<div class="incident-badge" title="${esc(elIncidents[0].message || "")}">&#9888; ${label}</div>`,
         });
       }
-      // An armed branch shows no count of its own: the tokens on it are the gateway's
-      // race, already counted there, and a number here would be that same wait read a
-      // second time. It says "armed" instead — what is true of the branch, and not a
-      // quantity anyone can misread as arrived events.
-      const gwId = armedNow.get(e.elementId);
-      const gwShape = gwId && registry.get(gwId);
-      const gwName = gwShape && gwShape.businessObject && gwShape.businessObject.name;
-      const armedPill = armed
-        ? `<div class="token-badge armed" title="armed by the event-based gateway ${esc(gwName || gwId)}, which carries the count — the first of its events to fire wins, the other branches are cancelled">armed</div>`
-        : null;
+      // An armed branch shows no live count of its own: the tokens on it are the
+      // gateway's race, already counted there, and a number here would be that same
+      // wait read a second time. Its dashed outline says it is armed, and the legend
+      // says what that means — once, rather than beside every branch of every race.
+      // Its gray and amber counts stay: how often this branch won and lost is exactly
+      // what the diagram could not say before.
       overlays.add(e.elementId, "tokens", {
         position: { bottom: 4, right: 4 },
-        html: tokenBadgesHTML(e, { tokens, green: armedPill }),
+        html: tokenBadgesHTML(e, { tokens, green: armed ? "" : null }),
       });
       // A user-task element with a waiting job gets a clickable "Open" badge that
       // jumps to its form. One waiting task → straight to it; several (only under

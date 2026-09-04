@@ -1143,14 +1143,6 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    event-based gateway, an activity a boundary event interrupted, a scope torn down. Amber,
    not the incident red: nothing here is broken or waiting for an operator. */
 .token-badge.cancelled { background: var(--warn); }
-/* Armed badge: this branch of a deferred choice is waiting. Deliberately a word and not a
-   number — the number belongs to the gateway, and repeating it per branch is what made
-   two armed branches look like two events that had arrived equally often. */
-.token-badge.armed {
-  background: transparent; color: var(--ok);
-  border: 1px dashed var(--ok); box-shadow: none;
-  font-weight: 600; font-size: 11px; line-height: 18px;
-}
 /* An element whose token is parked behind an incident (ADR-0061) is drawn red over
    its live-token green, and carries a badge with the reason. Without it a stuck task
    is pixel-identical to one that is legitimately waiting, which is exactly how a
@@ -1274,6 +1266,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   border-top: 2.5px solid var(--ok); vertical-align: middle; margin-right: 4px;
 }
 .legend-swatch.history { border-top: 2px dashed var(--muted); }
+.legend-swatch.armed { border-top: 2.5px dashed var(--ok); }
 .legend-swatch.incident { border-top-color: var(--danger); }
 
 /* The incident block that leads the live variables panel: what is parked, why, and
