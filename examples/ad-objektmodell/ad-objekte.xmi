@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<uml:Model xmi:version="20131001" xmlns:xmi="http://www.omg.org/spec/XMI/20131001" xmlns:uml="http://www.omg.org/spec/UML/20161101" xmi:id="model" name="EFD-BIT AD Objekte">
+  <ownedComment xmi:type="uml:Comment" xmi:id="model-doc">
+    <body>Active Directory Objektmodell mit BPMN, UML und ERM - exportiert aus Enterprise Architect</body>
+  </ownedComment>
+  <packagedElement xmi:type="uml:PrimitiveType" xmi:id="String" name="String"/>
+  <packagedElement xmi:type="uml:Class" xmi:id="id-8a9b61a2-0ede-572c-2d63-8e2bfa3ec7f5" name="Top">
+    <ownedComment xmi:type="uml:Comment" xmi:id="id-8a9b61a2-0ede-572c-2d63-8e2bfa3ec7f5-doc">
+      <body>The top level class from which all classes are derived.
+
+Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Blumer Patrick BIT; createdAt: 05.12.2025 08:59:32; modifiedBy: Blumer Patrick BIT; modifiedAt: 15.12.2025 17:01:55</body>
+    </ownedComment>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_d2483750-0e72-73fb-7dd9-edb43eabe74a" name="msExchOWAForceSaveFileTypesBL" type="String">
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_7cbfe5c2-c692-d000-f3d6-88c5079de73f" name="adminDescription" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_7cbfe5c2-c692-d000-f3d6-88c5079de73f-doc">
+        <body>Admin-Description - The description displayed on admin screens.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_ca4b64e3-d41f-0916-0933-5f2614c09e1e" name="adminDisplayName" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_ca4b64e3-d41f-0916-0933-5f2614c09e1e-doc">
+        <body>Admin-Display-Name - The name to be displayed on admin screens.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_624f6ce3-b78b-90a4-9b6b-b5cb56ae12b4" name="allowedAttributes" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_624f6ce3-b78b-90a4-9b6b-b5cb56ae12b4-doc">
+        <body>Allowed-Attributes - Attributes that will be permitted to be assigned to a class.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_c0fb250c-2eeb-e3e8-b935-d3591f7ad032" name="allowedAttributesEffective" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_c0fb250c-2eeb-e3e8-b935-d3591f7ad032-doc">
+        <body>Allowed-Attributes-Effective – A list of attributes that can be modified on the object.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_8a6243bb-dd96-89ec-454c-2a498b12e87d" name="allowedChildClasses" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_8a6243bb-dd96-89ec-454c-2a498b12e87d-doc">
+        <body>Allowed-Child-Classes – Classes that can be contained by a class.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_1eea4384-4e0b-dd96-d1dc-d31d409fa80d" name="allowedChildClassesEffective" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_1eea4384-4e0b-dd96-d1dc-d31d409fa80d-doc">
+        <body>Allowed-Child-Classes-Effective – A list of classes that can be modified.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_c8d80268-36e7-c88a-5f3f-11caa9cb3f14" name="bridgeheadServerListBL" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_c8d80268-36e7-c88a-5f3f-11caa9cb3f14-doc">
+        <body>Bridgehead-Server-List-BL – The list of servers that are bridgeheads for replication.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_78e06557-3d94-74ab-16ae-36a959071a51" name="canonicalName" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_78e06557-3d94-74ab-16ae-36a959071a51-doc">
+        <body>Canonical-Name – The name of the object in canonical format.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_ea6976cb-7f14-44f9-5677-cef652c98b3e" name="cn" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_ea6976cb-7f14-44f9-5677-cef652c98b3e-doc">
+        <body>Common-Name – The name that represents an object. Used to perform searches.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_c234df58-1442-5c58-352f-dbcb6ca55039" name="createTimeStamp" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_c234df58-1442-5c58-352f-dbcb6ca55039-doc">
+        <body>Create-Time-Stamp – The date when this object was created. This value is replicated.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_c16b95d1-4894-a98e-4220-085ff212d219" name="description" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_c16b95d1-4894-a98e-4220-085ff212d219-doc">
+        <body>Description - Contains the description to display for an object.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_e513151f-8916-4db8-4545-13604910f776" name="directReports" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_e513151f-8916-4db8-4545-13604910f776-doc">
+        <body>Reports – Contains the list of users that directly report to the user.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_91d20900-a234-de07-9c19-96d5331acd1e" name="displayNamePrintable" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_91d20900-a234-de07-9c19-96d5331acd1e-doc">
+        <body>Display-Name-Printable – The printable display name for an object.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_0eabbcc5-3a42-0126-6056-c8cda44626d5" name="dSASignature" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_0eabbcc5-3a42-0126-6056-c8cda44626d5-doc">
+        <body>DSA-Signature - The DSA-Signature of an object is the Invocation-ID of the last directory to modify the object.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_7b8ce292-0f27-7974-e239-21ce51cb9221" name="dSCorePropagationData" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_7b8ce292-0f27-7974-e239-21ce51cb9221-doc">
+        <body>DS-Core-Propagation-Data - The DS-Core-Propagation-Data attribute is for internal use only.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_6f02012f-3b0a-ef05-4608-2971173b7368" name="extensionName" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_6f02012f-3b0a-ef05-4608-2971173b7368-doc">
+        <body>Extension-Name - The name of a property page used to extend the UI of a directory object.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_183571c5-6cf6-3f1a-e492-fddecc37e4e6" name="flags" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_183571c5-6cf6-3f1a-e492-fddecc37e4e6-doc">
+        <body>Flags - To be used by the object to store bit information.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_edc31075-6c77-9d32-9220-3795d9c170be" name="fromEntry" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_edc31075-6c77-9d32-9220-3795d9c170be-doc">
+        <body>From-Entry - This is a constructed attribute that is TRUE if the object is writable and FALSE if it is read-only.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+  </packagedElement>
+  <packagedElement xmi:type="uml:Class" xmi:id="id-a8012085-dde1-2a48-992f-710b84645218" name="Person">
+    <ownedComment xmi:type="uml:Comment" xmi:id="id-a8012085-dde1-2a48-992f-710b84645218-doc">
+      <body>Active Directory Klasse: Person
+
+Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Blumer Patrick BIT; createdAt: 05.12.2025 09:13:44; modifiedBy: Blumer Patrick BIT; modifiedAt: 15.12.2025 17:02:05</body>
+    </ownedComment>
+    <generalization xmi:type="uml:Generalization" xmi:id="id-d75f7f2b-8381-a171-7586-7dc32f5c1766" general="id-8a9b61a2-0ede-572c-2d63-8e2bfa3ec7f5"/>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_47fc4356-71ed-f2f2-a83c-d0c2c4fa0607" name="cn" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_47fc4356-71ed-f2f2-a83c-d0c2c4fa0607-doc">
+        <body>Common-Name - The name that represents an object. Used to perform searches.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_e3443953-5cef-30ed-e7b1-49ad8a9f0c38" name="seeAlso" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_e3443953-5cef-30ed-e7b1-49ad8a9f0c38-doc">
+        <body>See-Also - List of distinguished names that are related to an object.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_c7051813-7af4-4614-499f-00235d0752c2" name="sn" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_c7051813-7af4-4614-499f-00235d0752c2-doc">
+        <body>Surname - This attribute contains the family or last name for a user.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_f69a6d19-a18a-22c2-c732-fadf88a9c5ad" name="telephoneNumber" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_f69a6d19-a18a-22c2-c732-fadf88a9c5ad-doc">
+        <body>Telephone-Number - The primary telephone number.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_6e360e8e-744c-3ab0-4214-67f6eccfd084" name="userPassword" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_6e360e8e-744c-3ab0-4214-67f6eccfd084-doc">
+        <body>User-Password - The user's password in UTF-8 format. This is a write-only attribute.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_d5dfa006-7fe7-c257-d906-03d97da8574e" name="distinguishedName" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_d5dfa006-7fe7-c257-d906-03d97da8574e-doc">
+        <body>Obj-Dist-Name - Same as the Distinguished Name for an object. Used by Exchange.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_6243b904-9839-bf8d-b9ec-0c689f312e3d" name="wWWHomePage" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_6243b904-9839-bf8d-b9ec-0c689f312e3d-doc">
+        <body>WWW-Home-Page - A web page that is the primary landing page of a website.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+  </packagedElement>
+  <packagedElement xmi:type="uml:Class" xmi:id="id-9bec3e24-8b16-414a-7340-9b9b740b2603" name="organizationalPerson">
+    <ownedComment xmi:type="uml:Comment" xmi:id="id-9bec3e24-8b16-414a-7340-9b9b740b2603-doc">
+      <body>Active Directory Klasse: organizationalPerson
+
+Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Blumer Patrick BIT; createdAt: 05.12.2025 09:23:02; modifiedBy: Blumer Patrick BIT; modifiedAt: 15.12.2025 17:02:11</body>
+    </ownedComment>
+    <generalization xmi:type="uml:Generalization" xmi:id="id-3b6c7e67-ac39-478a-99b8-d9be453f1db0" general="id-a8012085-dde1-2a48-992f-710b84645218"/>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_24f931d3-0004-3366-dbec-686c2ad4a1e9" name="streetAddress" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_24f931d3-0004-3366-dbec-686c2ad4a1e9-doc">
+        <body>Address - The user's address.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_6b143516-8ef5-6623-46a4-e4293de2dadc" name="homePostalAddress" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_6b143516-8ef5-6623-46a4-e4293de2dadc-doc">
+        <body>Address-Home - A user's home address.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_1ecc40dc-29d3-7708-f7d9-960ad8071014" name="assistant" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_1ecc40dc-29d3-7708-f7d9-960ad8071014-doc">
+        <body>Assistant - The distinguished name of a user's administrative assistant.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_c7fb2d5f-00e3-9471-00c0-5e78c92e4ebe" name="company" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_c7fb2d5f-00e3-9471-00c0-5e78c92e4ebe-doc">
+        <body>Company - The user's company name.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_7e574b38-0e71-e782-c039-fc9bd7b57e91" name="countryCode" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_7e574b38-0e71-e782-c039-fc9bd7b57e91-doc">
+        <body>Country-Code - Specifies the country/region code for the user's language of choice.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_81c006dc-609a-95fa-20d1-ce0a47d596c8" name="c" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_81c006dc-609a-95fa-20d1-ce0a47d596c8-doc">
+        <body>Country-Name - The country/region in the address of the user.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_1c82a54b-47ac-6eab-8557-6bca2e475789" name="department" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_1c82a54b-47ac-6eab-8557-6bca2e475789-doc">
+        <body>Department - Contains the name for the department in which the user works.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_d970141e-84fd-63ff-bfcb-1e6c69ad18f2" name="destinationIndicator" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_d970141e-84fd-63ff-bfcb-1e6c69ad18f2-doc">
+        <body>Destination-Indicator - This is part of the X.500 specification and not used by NTDS.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_08556457-56aa-6b04-1e5a-9a241a3045af" name="division" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_08556457-56aa-6b04-1e5a-9a241a3045af-doc">
+        <body>Division - The user's division.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_c32f5b96-7b53-e159-e7b3-0691fbda20fa" name="mail" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_c32f5b96-7b53-e159-e7b3-0691fbda20fa-doc">
+        <body>E-mail-Addresses - The list of email addresses for a contact.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_ee78cb3c-f049-30ee-bacb-f05ec22856bf" name="employeeID" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_ee78cb3c-f049-30ee-bacb-f05ec22856bf-doc">
+        <body>Employee-ID - The ID of an employee.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_c11bc16d-b4d2-65bc-1d04-fa7c2cda7637" name="facsimileTelephoneNumber" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_c11bc16d-b4d2-65bc-1d04-fa7c2cda7637-doc">
+        <body>Facsimile-Telephone-Number - Contains telephone number of the user's business fax machine.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_35eb6e85-3485-6f16-fc67-0eee0d704267" name="generationQualifier" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_35eb6e85-3485-6f16-fc67-0eee0d704267-doc">
+        <body>Generation-Qualifier - Indicates a person generation. For example, Jr. or II.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="uml:Property" xmi:id="attr_fae71994-f759-8553-50d1-19b97255aa5c" name="givenName" type="String">
+      <ownedComment xmi:type="uml:Comment" xmi:id="attr_fae71994-f759-8553-50d1-19b97255aa5c-doc">
+        <body>Given-Name - Contains the given name (first name) of the user.</body>
+      </ownedComment>
+      <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
+      <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
+    </ownedAttribute>
+  </packagedElement>
+  <packagedElement xmi:type="uml:Class" xmi:id="id-e1f45414-e3af-13fb-6965-26e4814e8738" name="Security-Principal">
+    <ownedComment xmi:type="uml:Comment" xmi:id="id-e1f45414-e3af-13fb-6965-26e4814e8738-doc">
+      <body>Active Directory Klasse: Security-Principal
+
+ACHTUNG: Der Quellexport enthielt hier nur einen Platzhalter (... 14 Attribute von Security-Principal ...), keine Attributdaten. Attribute sind nachzupflegen.
+
+Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Blumer Patrick BIT; createdAt: 05.12.2025 16:22:06; modifiedBy: Blumer Patrick BIT; modifiedAt: 15.12.2025 17:02:05</body>
+    </ownedComment>
+    <generalization xmi:type="uml:Generalization" xmi:id="id-6f9b8e21-79ee-25a9-9ac2-ab1e88360eb6" general="id-8a9b61a2-0ede-572c-2d63-8e2bfa3ec7f5"/>
+  </packagedElement>
+  <packagedElement xmi:type="uml:Class" xmi:id="id-90826d9b-c88c-7542-5204-5355cb6579ba" name="User">
+    <ownedComment xmi:type="uml:Comment" xmi:id="id-90826d9b-c88c-7542-5204-5355cb6579ba-doc">
+      <body>Active Directory Klasse: User
+
+ACHTUNG: Der Quellexport enthielt hier nur einen Platzhalter (... 15 Attribute von User ...), keine Attributdaten. Attribute sind nachzupflegen.
+
+Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Configurator|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Blumer Patrick BIT; createdAt: 05.12.2025 16:12:37; modifiedBy: Blumer Patrick BIT; modifiedAt: 15.12.2025 17:01:55</body>
+    </ownedComment>
+    <generalization xmi:type="uml:Generalization" xmi:id="id-933875aa-2e8e-c187-6579-5c6474b71b94" general="id-9bec3e24-8b16-414a-7340-9b9b740b2603"/>
+    <generalization xmi:type="uml:Generalization" xmi:id="id-06aedb5a-20c8-eab4-5ce4-6caf1c5d47f8" general="id-e1f45414-e3af-13fb-6965-26e4814e8738"/>
+  </packagedElement>
+</uml:Model>

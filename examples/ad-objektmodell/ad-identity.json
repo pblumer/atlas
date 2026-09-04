@@ -1,0 +1,3589 @@
+{
+  "name": "Active Directory Objektmodell",
+  "documentation": "Active-Directory-Schemaklassen fuer Identitaets- und Berechtigungsprozesse, erzeugt aus Microsofts Schemadokumentation (MicrosoftDocs/win32, desktop-src/ADSchema). Je Klasse nur die selbst deklarierten Attribute; geerbte stehen an der Oberklasse. Hilfsklassen (auxiliary classes) sind als Generalisierung gefuehrt.",
+  "classes": [
+    {
+      "id": "Builtin-Domain",
+      "name": "Builtin-Domain",
+      "stereotype": "businessObject",
+      "documentation": "The container that holds the default groups for a domain. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [],
+      "identity": [],
+      "x": 460.0,
+      "y": 60.0
+    },
+    {
+      "id": "Computer",
+      "name": "Computer",
+      "stereotype": "businessObject",
+      "documentation": "This class represents a computer account in the domain. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "catalogs",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Catalogs - The list of catalogs that index storage on a given computer. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "cn",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Common-Name - The name that represents an object. Used to perform searches. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "defaultLocalPolicyObject",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Default-Local-Policy-Object - A reference to a Policy object that defines the local policy for the host object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "dNSHostName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "DNS-Host-Name - Name of computer as registered in DNS. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "localPolicyFlags",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Local-Policy-Flags - Flags that determine where a computer gets its policy. Local-Policy-Reference. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "location",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Location - The user's location, such as office number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "machineRole",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Machine-Role - Role for a machine DC, Server, or Workstation. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "managedBy",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Managed-By - The distinguished name of the user that is assigned to manage this object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-AdditionalDnsHostName",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Additional-Dns-Host-Name - The attribute is used to store the additional DNS host name of a computer object. This attribute is used at the time a DC is renamed. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-AdditionalSamAccountName",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Additional-Sam-Account-Name - This attribute is used to store the SAM account names that correspond to the DNS host names in ms-DS-Additional-Dns-Host-Name. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-AuthenticatedAtDC",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-AuthenticatedAt-DC - Forward link for ms-DS-AuthenticatedTo-Accountlist. Identifies which DC a user has authenticated to. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-ExecuteScriptPassword",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-ExecuteScriptPassword - Used during domain rename. This value cannot be written to or read from by using LDAP. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "msDS-GenerationId",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Generation-Id - For virtual machine snapshot resuming detection. This attribute represents the VM Generation ID. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "msDS-HostServiceAccount",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Host-Service-Account - Service Accounts configured to run on this computer. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-isGC",
+          "type": "boolean",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-isGC - Identifies the state of the Global Catalog on the DC. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "msDS-isRODC",
+          "type": "boolean",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-isRODC - Shows whether a DC is an RODC. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "msDS-IsUserCachableAtRodc",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Is-User-Cachable-At-Rodc - For a Read-Only Domain Controller (RODC), identifies whether the specified user's secrets can be cached. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msDS-KrbTgtLink",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-KrbTgt-Link - Used with RODCs to define which krbtgt_XXXX account corresponds to each RODC. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-NeverRevealGroup",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Never-Reveal-Group - Used with RODCs to define which users, computers, and groups are not allowed to have their passwords cached on an RODC. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-PromotionSettings",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Promotion-Settings - For a computer, contains an XML string to be used for delegated DSA promotion. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-RevealedList",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Revealed-List - Identifies security principals whose current computer account passwords have been replicated to the RODC. (LDAP-Syntax: Object(Access-Point))"
+        },
+        {
+          "name": "msDS-RevealedUsers",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Revealed-Users - Used with RODCs to identify the user objects whose secrets have been disclosed to that RODC. (LDAP-Syntax: Object(DN-Binary))"
+        },
+        {
+          "name": "msDS-RevealOnDemandGroup",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Reveal-OnDemand-Group - Used with RODCs to define which users, computers, and groups are allowed to have their passwords cached on an RODC. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-SiteName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-SiteName - Lists the site name that corresponds to the DC. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msImaging-HashAlgorithm",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-Imaging-Hash-Algorithm - Contains the name of the hash algorithm used to create the Thumbprint Hash for the Scan Repository/Secure Print Device. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msImaging-ThumbprintHash",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-Imaging-Thumbprint-Hash - Contains a hash of the security certificate for the Scan Repository/Secure Print Device. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "msSFU30Aliases",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "msSFU-30-Aliases - Contains part of the NIS mail map. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msSFU30Name",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "msSFU-30-Name - Contains the name of a map. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msSFU30NisDomain",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "msSFU-30-Nis-Domain - Contains the NIS domain. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msTPM-OwnerInformation",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-TPM-OwnerInformation - Contains the owner information of a particular TPM. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTPM-TpmInformationForComputer",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-TPM-Tpm-Information-For-Computer - This attribute links a Computer object to a TPM object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msTSEndpointData",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Endpoint-Data - This attribute represents the VM Name for a computer in a TSV deployment. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSEndpointPlugin",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Endpoint-Plugin - This attribute represents the name of the plug-in that handles the orchestration. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSEndpointType",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Endpoint-Type - This attribute defines whether the computer is a physical computer or a virtual machine. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msTSPrimaryDesktopBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-TS-Primary-Desktop-BL - This attribute represents the backward link to a user. | ms-TS-Primary-Desktop-BL attribute (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msTSProperty01",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "MS-TS-Property01 - Reserved for future use. | MS-TS-Property01 attribute (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSProperty02",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "MS-TS-Property02 - Reserved for future use. | MS-TS-Property02 attribute (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSSecondaryDesktopBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-TS-Secondary-Desktop-BL - This attribute represents the backward link to a user. | ms-TS-Secondary-Desktop-BL attribute (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "netbootGUID",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Netboot-GUID - Diskless boot A computer's on-board GUID. Corresponds to the computer's network card MAC address. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "netbootInitialization",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Netboot-Initialization - Default boot path for diskless boot. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "netbootMachineFilePath",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Netboot-Machine-File-Path - This attribute specifies the server that answers the client. Beginning with the Windows Server 2003 operating system, it can indicate the Startrom.com that the client gets. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "netbootMirrorDataFile",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Netboot-Mirror-Data-File - The Netboot-Mirror-Data-File attribute is reserved for internal use. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "netbootSIFFile",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Netboot-SIF-File - The Netboot-SIF-File attribute is reserved for internal use. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "networkAddress",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Network-Address - The TCP/IP address for a network segment. Also called the subnet address. (LDAP-Syntax: String(Teletex))"
+        },
+        {
+          "name": "nisMapName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "nisMapName - Contains the name of the map to which the object belongs. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "operatingSystem",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Operating-System - The Operating System name, for example, Windows Vista Enterprise. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "operatingSystemHotfix",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Operating-System-Hotfix - The hotfix level of the operating system. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "operatingSystemServicePack",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Operating-System-Service-Pack - The operating system service pack ID string (for example, SP3). (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "operatingSystemVersion",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Operating-System-Version - The operating system version string, for example, 4.0. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "physicalLocationObject",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Physical-Location-Object - Used to map a device (for example, a printer, computer, and so on) to a physical location. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "policyReplicationFlags",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Policy-Replication-Flags - Determines which LSA properties are replicated to clients. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "rIDSetReferences",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "RID-Set-References - List of references to RID-Set objects that manage Relative Identifier (RID) allocation. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "siteGUID",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Site-GUID - The unique identifier for a site. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "volumeCount",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Volume-Count - The tracked volume quota for a given computer. (LDAP-Syntax: Enumeration)"
+        }
+      ],
+      "identity": [],
+      "x": 1660.0,
+      "y": 60.0
+    },
+    {
+      "id": "Contact",
+      "name": "Contact",
+      "stereotype": "businessObject",
+      "documentation": "This class contains information about a person or company that you may need to contact on a regular basis. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "notes",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Additional-Information - Free text for notes on object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "cn",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Common-Name - The name that represents an object. Used to perform searches. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-SourceObjectDN",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Source-Object-DN - Contains the string representation of the distinguished name of the object in another forest that corresponds to this object. (LDAP-Syntax: String(Unicode))"
+        }
+      ],
+      "identity": [],
+      "x": 1260.0,
+      "y": 60.0
+    },
+    {
+      "id": "Container",
+      "name": "Container",
+      "stereotype": "businessObject",
+      "documentation": "This class is used to hold other classes. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "cn",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Common-Name - The name that represents an object. Used to perform searches. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "defaultClassStore",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Default-Class-Store - The default Class Store for a given user. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-ObjectReference",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Object-Reference - A link to the object that uses the data stored in the object that contains this attribute. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "schemaVersion",
+          "type": "number",
+          "multiplicity": "0..*",
+          "documentation": "Schema-Version - The version number for the schema. (LDAP-Syntax: Enumeration)"
+        }
+      ],
+      "identity": [],
+      "x": 460.0,
+      "y": 150.0
+    },
+    {
+      "id": "Domain",
+      "name": "Domain",
+      "stereotype": "businessObject",
+      "documentation": "Contains information about a domain. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "dc",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Domain-Component - The naming attribute for Domain and DNS objects. Usually displayed as dc DomainName. (LDAP-Syntax: String(Unicode))"
+        }
+      ],
+      "identity": [],
+      "x": 460.0,
+      "y": 320.0
+    },
+    {
+      "id": "Domain-DNS",
+      "name": "Domain-DNS",
+      "stereotype": "businessObject",
+      "documentation": "Windows NT domain with DNS-based (DC ) naming. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "managedBy",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Managed-By - The distinguished name of the user that is assigned to manage this object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-AllowedDNSSuffixes",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Allowed-DNS-Suffixes - The list of allowed suffixes for the dNSHostName attribute in computer objects. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-Behavior-Version",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Behavior-Version - This attribute is used to track the domain or forest behavior version. It is a monotonically increasing number that is used to enable certain Active Directory features. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msDS-EnabledFeature",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Enabled-Feature - Enabled optional features. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-USNLastSyncSuccess",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-USN-Last-Sync-Success - The USN at which the last successful replication synchronization occurred. (LDAP-Syntax: Interval)"
+        }
+      ],
+      "identity": [],
+      "x": 860.0,
+      "y": 60.0
+    },
+    {
+      "id": "Foreign-Security-Principal",
+      "name": "Foreign-Security-Principal",
+      "stereotype": "businessObject",
+      "documentation": "The Security Principal from an external source. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "foreignIdentifier",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Foreign-Identifier - The security properties used by a foreign system. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "objectSid",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Object-Sid - A binary value that specifies the security identifier (SID) of the user. The SID is a unique value used to identify the user as a security principal. (LDAP-Syntax: String(Sid))"
+        }
+      ],
+      "identity": [],
+      "x": 460.0,
+      "y": 430.0
+    },
+    {
+      "id": "Group",
+      "name": "Group",
+      "stereotype": "businessObject",
+      "documentation": "Stores a list of user names. Used to apply security principals on resources. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "adminCount",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Admin-Count - Indicates that a given object has had its ACLs changed to a more secure value by the system because it was a member of one of the administrative groups (directly or transitively). (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "controlAccessRights",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Control-Access-Rights - Used by DS Security to determine which users can perform specific operations on the host object. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "desktopProfile",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Desktop-Profile - The location of the desktop profile for a user or group of users. Not used. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "mail",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "E-mail-Addresses - The list of email addresses for a contact. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "groupAttributes",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Group-Attributes - The Group-Attributes attribute is not currently used. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "groupMembershipSAM",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Group-Membership-SAM - Windows NT Security. Down level Windows NT support. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "groupType",
+          "type": "number",
+          "multiplicity": "1",
+          "documentation": "Group-Type - Contains a set of flags that define the type and scope of a group object. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "managedBy",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Managed-By - The distinguished name of the user that is assigned to manage this object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "member",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Member - The list of users that belong to the group. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-AzApplicationData",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Az-Application-Data - A string that is used by individual applications to store whatever information they may need to. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-AzBizRule",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Az-Biz-Rule - Text of the script implementing the business rule. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-AzBizRuleLanguage",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Az-Biz-Rule-Language - The language that the business rule script is in (JScript, VBScript). (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-AzGenericData",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Az-Generic-Data - Generic AzMan-specific data. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-AzLastImportedBizRulePath",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Az-Last-Imported-Biz-Rule-Path - The last imported business rule path. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-AzLDAPQuery",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Az-LDAP-Query - A string that defines the LDAP query (max length 4096) which determines the membership of a user object to the group. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-AzObjectGuid",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Az-Object-Guid - The unique and portable identifier of AzMan objects (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "msDS-NonMembers",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Non-Members - This attribute serves the same purpose as the Non-Security-Member attribute but with scoping rules applied. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-PrimaryComputer",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Primary-Computer - For a user or group object, identifies the primary computers. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msSFU30Name",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "msSFU-30-Name - Contains the name of a map. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msSFU30NisDomain",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "msSFU-30-Nis-Domain - Contains the NIS domain. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msSFU30PosixMember",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "msSFU-30-Posix-Member - Contains the DN display name of the user's part of a group. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "nonSecurityMember",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Non-Security-Member - Nonsecurity members of a group. Used for Exchange distribution lists. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "nTGroupMembers",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "NT-Group-Members - This attribute is not used. | NT-Group-Members attribute (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "operatorCount",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Operator-Count - Operator count. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "primaryGroupToken",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Primary-Group-Token - A computed attribute that is used in retrieving the membership list of a group, such as Domain Users. The complete membership of such groups is not stored explicitly for scaling reasons. (LDAP-Syntax: Enumeration)"
+        }
+      ],
+      "identity": [],
+      "x": 460.0,
+      "y": 560.0
+    },
+    {
+      "id": "Mail-Recipient",
+      "name": "Mail-Recipient",
+      "stereotype": "businessObject",
+      "documentation": "Stores email configuration information. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "info",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Comment - The user's comments. This string can be a null string. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "cn",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Common-Name - The name that represents an object. Used to perform searches. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "garbageCollPeriod",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Garbage-Coll-Period - This attribute is located on the CN Directory Service,CN Windows NT,CN Services,CN Configuration,... object. It represents the time, in hours, between DS garbage collection runs. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "labeledURI",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "labeledURI - A Uniform Resource Identifier followed by a label. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "legacyExchangeDN",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Legacy-Exchange-DN - The distinguished name previously used by Exchange. (LDAP-Syntax: String(Teletex))"
+        },
+        {
+          "name": "msDS-GeoCoordinatesAltitude",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-GeoCoordinates-Altitude - Geo-coordinates for location services, specifically altitude (in millimeters) of the office or conference room. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "msDS-GeoCoordinatesLatitude",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-GeoCoordinates-Latitude - Geo-coordinates for location services, specifically, latitude (in microdegrees) of the office or conference room. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "msDS-GeoCoordinatesLongitude",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-GeoCoordinates-Longitude - Geo-coordinates for location services, specifically, longitude (in microdegrees) of the office or conference room. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "msDS-PhoneticDisplayName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Phonetic-Display-Name - The phonetic display name of an object. In the absence of a phonetic display name, the existing display name is used. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msExchAssistantName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-Exch-Assistant-Name - Contains the name of the assistant for an account. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msExchLabeledURI",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-Exch-LabeledURI - An Exchange URI followed by a label. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "secretary",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "secretary - Contains the distinguished name of the secretary for an account. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "showInAddressBook",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Show-In-Address-Book - This attribute is used to indicate in which MAPI address books an object will appear. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "telephoneNumber",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Telephone-Number - The primary telephone number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "textEncodedORAddress",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Text-Encoded-OR-Address - This attribute is used to support X.400 addresses in a text format. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "userCert",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "User-Cert - Nortel v1 or DMS certificates. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "userSMIMECertificate",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "User-SMIME-Certificate - Certificate distribution object or tagged certificates. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "userCertificate",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "X509-Cert - Contains the DER-encoded X.509v3 certificates issued to the user. Note that this property contains the public key certificates issued to this user by Microsoft Certificate Service. (LDAP-Syntax: Object(Replica-Link))"
+        }
+      ],
+      "identity": [],
+      "x": 460.0,
+      "y": 1150.0
+    },
+    {
+      "id": "Organizational-Person",
+      "name": "Organizational-Person",
+      "stereotype": "businessObject",
+      "documentation": "This class is used for objects that contain organizational information about a user, such as the employee number, department, manager, title, office address, and so on. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "streetAddress",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Address - The user's address. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "homePostalAddress",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Address-Home - A user's home address. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "assistant",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Assistant - The distinguished name of a user's administrative assistant. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "company",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Company - The user's company name. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "countryCode",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Country-Code - Specifies the country/region code for the user's language of choice. This value is not used by Windows 2000. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "c",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Country-Name - The country/region in the address of the user. The country/region is represented as a 2-character code based on ISO-3166. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "department",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Department - Contains the name for the department in which the user works. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "destinationIndicator",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Destination-Indicator - This is part of the X.500 specification and not used by NTDS. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "division",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Division - The user's division. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "mail",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "E-mail-Addresses - The list of email addresses for a contact. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "employeeID",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Employee-ID - The ID of an employee. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "facsimileTelephoneNumber",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Facsimile-Telephone-Number - Contains telephone number of the user's business fax machine. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "generationQualifier",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Generation-Qualifier - Indicates a person generation. For example, Jr. or II. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "givenName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Given-Name - Contains the given name (first name) of the user. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "houseIdentifier",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "houseIdentifier - Specifies a linguistic construct used to identify a particular building, for example, a house number or house name relative to a street, avenue, town, city, and so on. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "initials",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Initials - Contains the initials for parts of the user's full name. This may be used as the middle initial in the Windows Address Book. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "internationalISDNNumber",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "International-ISDN-Number - Specifies an International ISDN Number associated with an object. (LDAP-Syntax: String(Numeric))"
+        },
+        {
+          "name": "l",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Locality-Name - Represents the name of a locality, such as a town or city. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "thumbnailLogo",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Logo - BLOB that contains a logo for this object. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "manager",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Manager - Contains the distinguished name of the user who is the user's manager. The manager's user object contains a directReports property that contains references to all user objects that have their manager properties set to this distinguished name. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "mhsORAddress",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "MHS-OR-Address - X.400 address. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-AllowedToActOnBehalfOfOtherIdentity",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Allowed-To-Act-On-Behalf-Of-Other-Identity - This attribute is used for access checks to determine if a requestor has permission to act on the behalf of other identities to services running as this account. (LDAP-Syntax: String(NT-Sec-Desc))"
+        },
+        {
+          "name": "msDS-AllowedToDelegateTo",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Allowed-To-Delegate-To - This is an attribute on service account (computer or user account) objects. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-HABSeniorityIndex",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-HAB-Seniority-Index - Contains the seniority index as applied by the organization where the person works. | ms-DS-HAB-Seniority-Index attribute (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msDS-PhoneticCompanyName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Phonetic-Company-Name - Contains the phonetic company name where the person works. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-PhoneticDepartment",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Phonetic-Department - Contains the phonetic department name where the person works. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-PhoneticDisplayName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Phonetic-Display-Name - The phonetic display name of an object. In the absence of a phonetic display name, the existing display name is used. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-PhoneticFirstName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Phonetic-First-Name - Contains the phonetic given name or first name of the person. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-PhoneticLastName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Phonetic-Last-Name - Contains the phonetic last name of the person. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msExchHouseIdentifier",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-Exch-House-Identifier - This attribute contains an address for a contact in an Exchange server address book. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "ou",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Organizational-Unit-Name - The name of the organizational unit. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "o",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Organization-Name - The name of the company or organization. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "otherMailbox",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Other-Mailbox - Contains other additional mail addresses in a form such as CCMAIL BruceKeever. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "middleName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Other-Name - Additional names for a user. For example, middle name, patronymic, matronymic, or others. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "personalTitle",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Personal-Title - The user's title. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "otherFacsimileTelephoneNumber",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Phone-Fax-Other - A list of alternate facsimile numbers. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "otherHomePhone",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Phone-Home-Other - A list of alternate home phone numbers. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "homePhone",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Phone-Home-Primary - The user's main home phone number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "otherIpPhone",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Phone-Ip-Other - The list of alternate TCP/IP addresses for the phone. Used by Telephony. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "ipPhone",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Phone-Ip-Primary - The TCP/IP address for the phone. Used by Telephony. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "primaryInternationalISDNNumber",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Phone-ISDN-Primary - The primary ISDN. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "otherMobile",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Phone-Mobile-Other - A list of alternate mobile phone numbers. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "mobile",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Phone-Mobile-Primary - The primary mobile phone number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "otherTelephone",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Phone-Office-Other - A list of alternate office phone numbers. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "otherPager",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Phone-Pager-Other - A list of alternate pager numbers. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "pager",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Phone-Pager-Primary - The primary pager number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "physicalDeliveryOfficeName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Physical-Delivery-Office-Name - Contains the office location in the user's place of business. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "thumbnailPhoto",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Picture - An image of the user. A space-efficient format like JPEG or GIF is recommended. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "postalAddress",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Postal-Address - The mailing address for the object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "postalCode",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Postal-Code - The postal or zip code for mail delivery. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "postOfficeBox",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Post-Office-Box - The post office box number for this object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "preferredDeliveryMethod",
+          "type": "number",
+          "multiplicity": "0..*",
+          "documentation": "Preferred-Delivery-Method - The X.500-preferred way to deliver to addressee. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "registeredAddress",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Registered-Address - Specifies a mnemonic for an address associated with an object at a particular city location. The mnemonic is registered in the country/region in which the city is located and is used in the provision of the Public Telegram Service. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "st",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "State-Or-Province-Name - The name of a user's state or province. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "street",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Street-Address - The street address. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "teletexTerminalIdentifier",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Teletex-Terminal-Identifier - Specifies the Teletex terminal identifier and, optionally, parameters, for a teletex terminal associated with an object. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "telexNumber",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Telex-Number - A list of alternate telex numbers. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "primaryTelexNumber",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Telex-Primary - The primary telex number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "co",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Text-Country - The country/region in which the user is located. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Title - Contains the user's job title. This property is commonly used to indicate the formal job title, such as Senior Programmer, rather than occupational class, such as programmer. It is not typically used for suffix titles such as Esq. or DDS. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "comment",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "User-Comment - The user's comments. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "x121Address",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "X121-Address - The X.121 address for an object. (LDAP-Syntax: String(Numeric))"
+        }
+      ],
+      "identity": [],
+      "x": 860.0,
+      "y": 250.0
+    },
+    {
+      "id": "Organizational-Unit",
+      "name": "Organizational-Unit",
+      "stereotype": "businessObject",
+      "documentation": "A container for storing users, computers, and other account objects. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "businessCategory",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Business-Category - Descriptive text on an Organizational Unit. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "countryCode",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Country-Code - Specifies the country/region code for the user's language of choice. This value is not used by Windows 2000. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "c",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Country-Name - The country/region in the address of the user. The country/region is represented as a 2-character code based on ISO-3166. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "defaultGroup",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Default-Group - The group to which this object is assigned when it is created. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "desktopProfile",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Desktop-Profile - The location of the desktop profile for a user or group of users. Not used. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "destinationIndicator",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Destination-Indicator - This is part of the X.500 specification and not used by NTDS. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "facsimileTelephoneNumber",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Facsimile-Telephone-Number - Contains telephone number of the user's business fax machine. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "gPLink",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "GP-Link - A sorted list of Group Policy options. Each option is a DWORD. Use of the UNICODE string is a convenience. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "gPOptions",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "GP-Options - Options that affect all group policies associated with the object hosting this property. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "internationalISDNNumber",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "International-ISDN-Number - Specifies an International ISDN Number associated with an object. (LDAP-Syntax: String(Numeric))"
+        },
+        {
+          "name": "l",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Locality-Name - Represents the name of a locality, such as a town or city. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "thumbnailLogo",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Logo - BLOB that contains a logo for this object. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "managedBy",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Managed-By - The distinguished name of the user that is assigned to manage this object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msCOM-UserPartitionSetLink",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-COM-UserPartitionSetLink - A link used to associate a User with a COM+ PartitionSet. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "ou",
+          "type": "string",
+          "multiplicity": "1..*",
+          "documentation": "Organizational-Unit-Name - The name of the organizational unit. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "physicalDeliveryOfficeName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Physical-Delivery-Office-Name - Contains the office location in the user's place of business. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "postalAddress",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Postal-Address - The mailing address for the object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "postalCode",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Postal-Code - The postal or zip code for mail delivery. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "postOfficeBox",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Post-Office-Box - The post office box number for this object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "preferredDeliveryMethod",
+          "type": "number",
+          "multiplicity": "0..*",
+          "documentation": "Preferred-Delivery-Method - The X.500-preferred way to deliver to addressee. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "registeredAddress",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Registered-Address - Specifies a mnemonic for an address associated with an object at a particular city location. The mnemonic is registered in the country/region in which the city is located and is used in the provision of the Public Telegram Service. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "searchGuide",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Search-Guide - Specifies information of suggested search criteria, which may be included in some entries that are expected to be a convenient base-object for the search operation, for example, country/region or organization. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "seeAlso",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "See-Also - List of distinguished names that are related to an object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "st",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "State-Or-Province-Name - The name of a user's state or province. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "street",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Street-Address - The street address. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "telephoneNumber",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Telephone-Number - The primary telephone number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "teletexTerminalIdentifier",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Teletex-Terminal-Identifier - Specifies the Teletex terminal identifier and, optionally, parameters, for a teletex terminal associated with an object. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "telexNumber",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Telex-Number - A list of alternate telex numbers. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "co",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Text-Country - The country/region in which the user is located. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "uPNSuffixes",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "UPN-Suffixes - The list of User-Principal-Name suffixes for a domain. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "userPassword",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "User-Password - The user's password in UTF-8 format. This is a write-only attribute. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "x121Address",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "X121-Address - The X.121 address for an object. (LDAP-Syntax: String(Numeric))"
+        }
+      ],
+      "identity": [],
+      "x": 460.0,
+      "y": 1600.0
+    },
+    {
+      "id": "Person",
+      "name": "Person",
+      "stereotype": "businessObject",
+      "documentation": "Contains personal information about a user. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "attributeCertificateAttribute",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "attributeCertificateAttribute - A digitally signed or certified identity and set of attributes. Used to bind authorization information to an identity. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "cn",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Common-Name - The name that represents an object. Used to perform searches. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "seeAlso",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "See-Also - List of distinguished names that are related to an object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "serialNumber",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Serial-Number - Part of X.500 specification. Not used by Active Directory. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "sn",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Surname - This attribute contains the family or last name for a user. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "telephoneNumber",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Telephone-Number - The primary telephone number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "userPassword",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "User-Password - The user's password in UTF-8 format. This is a write-only attribute. (LDAP-Syntax: Object(Replica-Link))"
+        }
+      ],
+      "identity": [],
+      "x": 460.0,
+      "y": 2330.0
+    },
+    {
+      "id": "Security-Principal",
+      "name": "Security-Principal",
+      "stereotype": "businessObject",
+      "documentation": "Contains the security information for an object. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "accountNameHistory",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Account-Name-History - The length of time that the account has been active. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "altSecurityIdentities",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Alt-Security-Identities - Contains mappings for X.509 certificates or external Kerberos user accounts to this user for the purpose of authentication. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-KeyVersionNumber",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-KeyVersionNumber - The Kerberos version number of the current key for this account. This is a constructed attribute. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "nTSecurityDescriptor",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "NT-Security-Descriptor - The Windows NT security descriptor for the schema object. A security descriptor is a data structure that contains security information about an object, such as the ownership and permissions of the object. (LDAP-Syntax: String(NT-Sec-Desc))"
+        },
+        {
+          "name": "objectSid",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Object-Sid - A binary value that specifies the security identifier (SID) of the user. The SID is a unique value used to identify the user as a security principal. (LDAP-Syntax: String(Sid))"
+        },
+        {
+          "name": "rid",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Rid - The relative Identifier of an object. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "sAMAccountName",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "SAM-Account-Name - The logon name used to support clients and servers running earlier versions of the operating system, such as Windows NT 4.0, Windows 95, Windows 98, and LAN Manager. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "sAMAccountType",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "SAM-Account-Type - This attribute contains information about every account type object. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "securityIdentifier",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Security-Identifier - A unique value of variable length used to identify a user account, group account, or logon session to which an ACE applies. (LDAP-Syntax: String(Sid))"
+        },
+        {
+          "name": "sIDHistory",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "SID-History - Contains previous SIDs used for the object if the object was moved from another domain. (LDAP-Syntax: String(Sid))"
+        },
+        {
+          "name": "supplementalCredentials",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Supplemental-Credentials - Stored credentials for use in authenticating. The encrypted version of the user's password. This attribute is neither readable nor writable. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "tokenGroups",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Token-Groups - A computed attribute that contains the list of SIDs due to a transitive group membership expansion operation on a given user or computer. Token Groups cannot be retrieved if no Global Catalog is present to retrieve the transitive reverse memberships. (LDAP-Syntax: String(Sid))"
+        },
+        {
+          "name": "tokenGroupsGlobalAndUniversal",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Token-Groups-Global-And-Universal - Token groups for Exchange. (LDAP-Syntax: String(Sid))"
+        },
+        {
+          "name": "tokenGroupsNoGCAcceptable",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Token-Groups-No-GC-Acceptable - This attribute contains the list of SIDs due to a transitive group membership expansion operation on a given user or computer. Token groups cannot be retrieved if a Global Catalog is not present to retrieve the transitive reverse memberships. (LDAP-Syntax: String(Sid))"
+        }
+      ],
+      "identity": [],
+      "x": 460.0,
+      "y": 2560.0
+    },
+    {
+      "id": "Top",
+      "name": "Top",
+      "stereotype": "businessObject",
+      "documentation": "The top level class from which all classes are derived. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "adminDescription",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Admin-Description - The description displayed on admin screens. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "adminDisplayName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Admin-Display-Name - The name to be displayed on admin screens. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "allowedAttributes",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Allowed-Attributes - Attributes that will be permitted to be assigned to a class. (LDAP-Syntax: String(Object-Identifier))"
+        },
+        {
+          "name": "allowedAttributesEffective",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Allowed-Attributes-Effective - A list of attributes that can be modified on the object. (LDAP-Syntax: String(Object-Identifier))"
+        },
+        {
+          "name": "allowedChildClasses",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Allowed-Child-Classes - Classes that can be contained by a class. (LDAP-Syntax: String(Object-Identifier))"
+        },
+        {
+          "name": "allowedChildClassesEffective",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Allowed-Child-Classes-Effective - A list of classes that can be modified. (LDAP-Syntax: String(Object-Identifier))"
+        },
+        {
+          "name": "bridgeheadServerListBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Bridgehead-Server-List-BL - The list of servers that are bridgeheads for replication. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "canonicalName",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Canonical-Name - The name of the object in canonical format. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "cn",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Common-Name - The name that represents an object. Used to perform searches. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "createTimeStamp",
+          "type": "dateTime",
+          "multiplicity": "0..1",
+          "documentation": "Create-Time-Stamp - The date when this object was created. This value is replicated. (LDAP-Syntax: String(Generalized-Time))"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Description - Contains the description to display for an object. This value is restricted as single-valued for backward compatibility in some cases but is allowed to be multi-valued in others. See Remarks. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "displayName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Display-Name - The display name for an object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "displayNamePrintable",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Display-Name-Printable - The printable display name for an object. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "dSASignature",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "DSA-Signature - The DSA-Signature of an object is the Invocation-ID of the last directory to modify the object. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "dSCorePropagationData",
+          "type": "dateTime",
+          "multiplicity": "0..*",
+          "documentation": "DS-Core-Propagation-Data - The DS-Core-Propagation-Data attribute is for internal use only. (LDAP-Syntax: String(Generalized-Time))"
+        },
+        {
+          "name": "extensionName",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Extension-Name - The name of a property page used to extend the UI of a directory object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "flags",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Flags - To be used by the object to store bit information. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "fromEntry",
+          "type": "boolean",
+          "multiplicity": "0..*",
+          "documentation": "From-Entry - This is a constructed attribute that is TRUE if the object is writable and FALSE if it is read-only, for example, a GC replica instance. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "frsComputerReferenceBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Frs-Computer-Reference-BL - Reference to replica sets to which this computer belongs. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "fRSMemberReferenceBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "FRS-Member-Reference-BL - Reference to subscriber objects for this member. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "fSMORoleOwner",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "FSMO-Role-Owner - Flexible Single-Master Operation The distinguished name of the DC where the schema can be modified. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "instanceType",
+          "type": "number",
+          "multiplicity": "1",
+          "documentation": "Instance-Type - A bitfield that dictates how the object is instantiated on a particular server. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "isCriticalSystemObject",
+          "type": "boolean",
+          "multiplicity": "0..1",
+          "documentation": "Is-Critical-System-Object - If TRUE, the object hosting this attribute must be replicated during installation of a new replica. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "isDeleted",
+          "type": "boolean",
+          "multiplicity": "0..1",
+          "documentation": "Is-Deleted - If TRUE, this object has been marked for deletion and cannot be instantiated. After the tombstone period has expired, it will be removed from the system. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "memberOf",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Is-Member-Of-DL - The distinguished name of the groups to which this object belongs. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "isPrivilegeHolder",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Is-Privilege-Holder - Backward link to privileges held by a given principal. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "isRecycled",
+          "type": "boolean",
+          "multiplicity": "0..1",
+          "documentation": "Is-Recycled - Is the object recycled. For use with AD Recycle Bin. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "lastKnownParent",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Last-Known-Parent - The Distinguished Name (DN) of the last known parent of an orphaned object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "managedObjects",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Managed-Objects - Contains the list of objects that are managed by the user. The objects listed are those that have the property managedBy property set to this user. Each item in the list is a linked reference to the managed object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "masteredBy",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Mastered-By - Backward link for Has-Master-NCs attribute. The distinguished name for its NTDS Settings objects. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "modifyTimeStamp",
+          "type": "dateTime",
+          "multiplicity": "0..1",
+          "documentation": "Modify-Time-Stamp - A computed attribute that represents the date when this object was last changed. This value is not replicated. (LDAP-Syntax: String(Generalized-Time))"
+        },
+        {
+          "name": "msCOM-PartitionSetLink",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-COM-PartitionSetLink - A link used to associate a COM+ Partition with a COM+ PartitionSet object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msCOM-UserLink",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-COM-UserLink - A link used to associate a COM+ PartitionSet with a User object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDFSR-ComputerReferenceBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DFSR-ComputerReferenceBL - Contains the backward link for the ms-DFSR-ComputerReference attribute. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDFSR-MemberReferenceBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DFSR-MemberReferenceBL - Contains the backward link for the ms-DFSR-MemberReference attribute. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-Approx-Immed-Subordinates",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Approx-Immed-Subordinates - The value returned by this attribute is based on index sizes. This may be off by +/ -10 on large containers, and the error is theoretically unbounded, but using this attribute helps the UI display the contents of a container. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msDS-AuthenticatedToAccountlist",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-AuthenticatedTo-Accountlist - Backward link for ms-DS-AuthenticatedAt-DC. Identifies which users have authenticated to this Computer. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-ClaimSharesPossibleValuesWithBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Claim-Shares-Possible-Values-With-BL - For a claim type object, this attribute indicates that the possible values described in ms-DS-Claim-Possible-Values are being referenced by other claim type objects. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "mS-DS-ConsistencyChildCount",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "MS-DS-Consistency-Child-Count - This attribute is used to check consistency between the directory and another object, database, or application, by comparing a count of child objects. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "mS-DS-ConsistencyGuid",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "MS-DS-Consistency-Guid - This attribute is used to check consistency between the directory and another object, database, or application, by comparing GUIDs. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "msDS-EnabledFeatureBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Enabled-Feature-BL - Scopes where this optional feature is enabled. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-HostServiceAccountBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Host-Service-Account-BL - Service Accounts backward link for linking computers that are associated with the service account. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-IsDomainFor",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Is-Domain-For - Backward link for ms-DS-Has-Domain-NCs. Identifies which DCs hold that partition as their primary domain. | ms-DS-Is-Domain-For attribute (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-IsFullReplicaFor",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Is-Full-Replica-For - Backward link for ms-DS-Has-Domain-NCs. Identifies which DCs hold that partition as their primary domain. | ms-DS-Is-Full-Replica-For attribute (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-IsPartialReplicaFor",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Is-Partial-Replica-For - Backward link for hasPartialReplicaNCs. Identifies which DCs hold that partition as a partial replica. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-IsPrimaryComputerFor",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Is-Primary-Computer-For - Backlink attribute for msDS-IsPrimaryComputer. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-KrbTgtLinkBl",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-KrbTgt-Link-BL - Backward link for the ms-DS-KrbTgt-Link attribute. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-LastKnownRDN",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Last-Known-RDN - Contains the original RDN of a deleted object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-LocalEffectiveDeletionTime",
+          "type": "dateTime",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-local-Effective-Deletion-Time - Deletion time of the object in the local DIT. (LDAP-Syntax: String(Generalized-Time))"
+        },
+        {
+          "name": "msDS-LocalEffectiveRecycleTime",
+          "type": "dateTime",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-local-Effective-Recycle-Time - Recycle time of the object in the local DIT. (LDAP-Syntax: String(Generalized-Time))"
+        },
+        {
+          "name": "msDs-masteredBy",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Mastered-By - Backward link for msDS-hasMasterNCs. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-MembersForAzRoleBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Members-For-Az-Role-BL - Backward link from member application group or user to Az-Role objects linking to it. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-MembersOfResourcePropertyListBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Members-Of-Resource-Property-List-BL - Backlink for ms-DS-Members-Of-Resource-Property-List. For a resource property object, this attribute references the resource property list object that it is a member of. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-NCReplCursors",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-NC-Repl-Cursors - A list of past and present replication partners, and how current we are with each of them. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-NCReplInboundNeighbors",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-NC-Repl-Inbound-Neighbors - Replication partners for this partition. This server obtains replication data from these other servers, which act as sources. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-NCReplOutboundNeighbors",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-NC-Repl-Outbound-Neighbors - Replication partners for this partition. This server sends replication data to these other servers, which act as destinations. This server will notify these other servers when new data is available. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-NC-RO-Replica-Locations-BL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-NC-RO-Replica-Locations-BL - Backward link attribute for ms-DS-NC-RO-Replica-Locations. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-NcType",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-NC-Type - A bitfield that maintains information about aspects of an NC replica that is relevant to replication. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msDS-NonMembersBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Non-Members-BL - Backward link from non-member group or user to Az groups that link to it (same functionality as Non-Security-Member-BL). (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-ObjectReferenceBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Object-Reference-BL - Backward link for ms-DS-Object-Reference. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-OIDToGroupLinkBl",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-OIDToGroup-Link-BL - Backward link for ms-DS-OIDToGroup-Link. Identifies the issuance policy, represented by an OID object, that is mapped to this group. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-OperationsForAzRoleBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Operations-For-Az-Role-BL - Backward link from Az-Operation to Az-Role objects that link to it. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-OperationsForAzTaskBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Operations-For-Az-Task-BL - Backward link from Az-Operation to Az-Task objects that link to it. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-PrincipalName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Principal-Name - Account name for the security principal (constructed). (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-PSOApplied",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-PSO-Applied - Password settings object that is applied to this object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-ReplAttributeMetaData",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Repl-Attribute-Meta-Data - A list of metadata for each replicated attribute. The metadata indicates who changed the attribute last. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-ReplValueMetaData",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Repl-Value-Meta-Data - A list of metadata for each value of an attribute. The metadata indicates who changed the value last. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-RevealedDSAs",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Revealed-DSAs - Backward link for ms-DS-Revealed-Users. Identifies which RODC holds that users secret. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-RevealedListBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Revealed-List-BL - Backward link attribute for ms-DS-Revealed-List. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-TasksForAzRoleBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Tasks-For-Az-Role-BL - Backward link from Az-Task to Az-Role objects that link to it. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-TasksForAzTaskBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Tasks-For-Az-Task-BL - Backward link from Az-Task to the Az-Task objects that link to it. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-TDOEgressBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-TDO-Egress-BL - Backlink to TDO Egress rules link on object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-TDOIngressBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-TDO-Ingress-BL - Backlink to TDO Ingress rules link on object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-ValueTypeReferenceBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Value-Type-Reference-BL - This is the back link for ms-DS-Value-Type-Reference. It links a value type object back to resource properties. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "ownerBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-Exch-Owner-BL - The backward link to the owner attribute. Contains a list of owners for an object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msSFU30PosixMemberOf",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "msSFU-30-Posix-Member-Of - Contains the display names of groups to which this user belongs. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "netbootSCPBL",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "netboot-SCP-BL - A list of service connection points that reference this NetBoot server. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "nonSecurityMemberBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Non-Security-Member-BL - List of nonsecurity-members for an Exchange distribution list. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "nTSecurityDescriptor",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "NT-Security-Descriptor - The Windows NT security descriptor for the schema object. A security descriptor is a data structure that contains security information about an object, such as the ownership and permissions of the object. (LDAP-Syntax: String(NT-Sec-Desc))"
+        },
+        {
+          "name": "distinguishedName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Obj-Dist-Name - Same as the Distinguished Name for an object. Used by Exchange. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "objectCategory",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Object-Category - An object class name used to group objects of this or derived classes. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "objectClass",
+          "type": "string",
+          "multiplicity": "1..*",
+          "documentation": "Object-Class - The list of classes from which this class is derived. (LDAP-Syntax: String(Object-Identifier))"
+        },
+        {
+          "name": "objectGUID",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Object-Guid - The unique identifier for an object. (LDAP-Syntax: Object(Replica-Link)) Als Geschaeftsschluessel gefuehrt: Microsoft fuehrt das Attribut als optional, weil das Verzeichnis es selbst setzt."
+        },
+        {
+          "name": "objectVersion",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Object-Version - This can be used to store a version number for the object. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "otherWellKnownObjects",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Other-Well-Known-Objects - Contains a list of containers by GUID and Distinguished Name. This permits retrieving an object after it has been moved by using just the GUID and the domain name. Whenever the object is moved, the system automatically updates the Distinguished Name. (LDAP-Syntax: Object(DN-Binary))"
+        },
+        {
+          "name": "partialAttributeDeletionList",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Partial-Attribute-Deletion-List - Tracks the internal replication state of partial replicas (that is, on GCs). Attribute of the partial replica NC object. Used when the GC is in the process of removing attributes from the objects in its partial replica NCs. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "partialAttributeSet",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Partial-Attribute-Set - Tracks the internal replication state of partial replicas (that is, on GCs). Attribute of the partial replica NC object. Defines the set of attributes present on a particular partial replica NC. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "possibleInferiors",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Possible-Inferiors - The list of objects that this object can contain. (LDAP-Syntax: String(Object-Identifier))"
+        },
+        {
+          "name": "proxiedObjectName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Proxied-Object-Name - This attribute is used internally by Active Directory to help track interdomain moves. (LDAP-Syntax: Object(DN-Binary))"
+        },
+        {
+          "name": "proxyAddresses",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Proxy-Addresses - A proxy address is the address by which a Microsoft Exchange Server recipient object is recognized in a foreign mail system. Proxy addresses are required for all recipient objects, such as custom recipients and distribution lists. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "queryPolicyBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Query-Policy-BL - List of all objects holding references to a given Query-Policy. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "RDN - The Relative Distinguished Name (RDN) of an object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "replPropertyMetaData",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Repl-Property-Meta-Data - Tracks internal replication state information for DS objects. Information here can be extracted in public form through the public API DsReplicaGetInfo(). Present on all DS objects. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "replUpToDateVector",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Repl-UpToDate-Vector - Tracks internal replication state information for an entire NC. Information here can be extracted in public form through the API DsReplicaGetInfo(). Present on all NC root objects. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "directReports",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Reports - Contains the list of users that directly report to the user. The users listed as reports are those that have the property manager property set to this user. Each item in the list is a linked reference to the object that represents the user. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "repsFrom",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Reps-From - Lists the servers from which the directory will accept changes for the defined naming context. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "repsTo",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Reps-To - Lists the servers that the directory will notify of changes and servers to which the directory will send changes on Request for the defined naming context. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "revision",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Revision - The revision level for a security descriptor or other change. Only used in the sam-server and ds-ui-settings objects. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "sDRightsEffective",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "SD-Rights-Effective - This constructed attribute returns a single DWORD value that can have up to three bits set OWNER_SECURITY_INFORMATIONDACL_SECURITY_INFORMATIONSACL_SECURITY_INFORMATION If a bit is set, then the user has write access to the corresponding part of the security descriptor. Owner means both owner and group. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "serverReferenceBL",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Server-Reference-BL - Found in the domain naming context. The distinguished name of a computer under the sites folder. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "showInAdvancedViewOnly",
+          "type": "boolean",
+          "multiplicity": "0..1",
+          "documentation": "Show-In-Advanced-View-Only - TRUE if this attribute is to be visible in the Advanced mode of the UI. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "siteObjectBL",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Site-Object-BL - The list of distinguished names for subnets that belong to this site. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "structuralObjectClass",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Structural-Object-Class - This constructed attribute stores a list of classes contained in a class hierarchy, including abstract classes. This list does contain dynamically linked auxiliary classes. (LDAP-Syntax: String(Object-Identifier))"
+        },
+        {
+          "name": "subRefs",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Sub-Refs - List of subordinate references of a Naming Context. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "subSchemaSubEntry",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "SubSchemaSubEntry - The distinguished name for the location of the subschema object where a class or attribute is defined. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "systemFlags",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "System-Flags - An integer value that contains flags that define additional properties of the class. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "uSNChanged",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "USN-Changed - The update sequence number (USN) assigned by the local directory for the latest change, including creation. See also , USN-Created. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "uSNCreated",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "USN-Created - The update sequence number (USN) assigned at object creation. See also, USN-Changed. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "uSNDSALastObjRemoved",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "USN-DSA-Last-Obj-Removed - Contains the update sequence number (USN) for the last system object that was removed from a server. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "USNIntersite",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "USN-Intersite - The update sequence number (USN) for inter-site replication. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "uSNLastObjRem",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "USN-Last-Obj-Rem - Contains the update sequence number (USN) for the last non-system object that was removed from a server. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "uSNSource",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "USN-Source - Value of the USN-Changed attribute of the object from the remote directory that replicated the change to the local server. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "wbemPath",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Wbem-Path - References to objects in other ADSI namespaces. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "wellKnownObjects",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Well-Known-Objects - This attribute contains a list of well-known object containers by GUID and distinguished name. (LDAP-Syntax: Object(DN-Binary))"
+        },
+        {
+          "name": "whenChanged",
+          "type": "dateTime",
+          "multiplicity": "0..1",
+          "documentation": "When-Changed - The date when this object was last changed. This value is not replicated and exists in the global catalog. (LDAP-Syntax: String(Generalized-Time))"
+        },
+        {
+          "name": "whenCreated",
+          "type": "dateTime",
+          "multiplicity": "0..1",
+          "documentation": "When-Created - The date when this object was created. This value is replicated and is in the global catalog. (LDAP-Syntax: String(Generalized-Time))"
+        },
+        {
+          "name": "wWWHomePage",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "WWW-Home-Page - A web page that is the primary landing page of a website. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "WWW-Page-Other - A list of alternate webpages. (LDAP-Syntax: String(Unicode))"
+        }
+      ],
+      "identity": [
+        "objectGUID"
+      ],
+      "x": 60.0,
+      "y": 60.0
+    },
+    {
+      "id": "User",
+      "name": "User",
+      "stereotype": "businessObject",
+      "documentation": "This class is used to store information about an employee or contractor who works for an organization. It is also possible to apply this class to long term visitors. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "accountExpires",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Account-Expires - The date when the account expires. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "aCSPolicyName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ACS-Policy-Name - String name of an ACS policy that applies to this user. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "homePostalAddress",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Address-Home - A user's home address. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "adminCount",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Admin-Count - Indicates that a given object has had its ACLs changed to a more secure value by the system because it was a member of one of the administrative groups (directly or transitively). (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "audio",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "audio - The Audio attribute type allows the storing of sounds in the Directory. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "badPasswordTime",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Bad-Password-Time - The last time and date that an attempt to log on to this account was made with a password that is not valid. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "badPwdCount",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Bad-Pwd-Count - The number of times the user tried to log on to the account using an incorrect password. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "businessCategory",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Business-Category - Descriptive text on an Organizational Unit. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "carLicense",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "carLicense - Vehicle license or registration plate. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "codePage",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Code-Page - Specifies the code page for the user's language of choice. This value is not used by Windows 2000. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "controlAccessRights",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Control-Access-Rights - Used by DS Security to determine which users can perform specific operations on the host object. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "dBCSPwd",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "DBCS-Pwd - The account's LAN Manager password. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "defaultClassStore",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Default-Class-Store - The default Class Store for a given user. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "departmentNumber",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "departmentNumber - Identifies a department within an organization. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "desktopProfile",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Desktop-Profile - The location of the desktop profile for a user or group of users. Not used. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "displayName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Display-Name - The display name for an object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "dynamicLDAPServer",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Dynamic-LDAP-Server - DNS name of server handing dynamic properties for this account. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "mail",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "E-mail-Addresses - The list of email addresses for a contact. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "employeeNumber",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Employee-Number - The number assigned to an employee other than the ID. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "employeeType",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Employee-Type - The job category for an employee. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "givenName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Given-Name - Contains the given name (first name) of the user. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "groupMembershipSAM",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Group-Membership-SAM - Windows NT Security. Down level Windows NT support. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "groupPriority",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Group-Priority - The Group-Priority attribute is not currently used. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "groupsToIgnore",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Groups-to-Ignore - The Groups-to-Ignore attribute is not currently used. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "homeDirectory",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Home-Directory - The home directory for the account. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "homeDrive",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Home-Drive - Specifies the drive letter to which to map the UNC path specified by homeDirectory. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "initials",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Initials - Contains the initials for parts of the user's full name. This may be used as the middle initial in the Windows Address Book. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "jpegPhoto",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "jpegPhoto - Used to store one or more images of a person using the JPEG File Interchange Format JFIF . (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "labeledURI",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "labeledURI - A Uniform Resource Identifier followed by a label. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "lastLogoff",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Last-Logoff - This attribute is not used. | Last-Logoff attribute (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "lastLogon",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Last-Logon - The last time the user logged on. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "lastLogonTimestamp",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Last-Logon-Timestamp - This is the time that the user last logged into the domain. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "lmPwdHistory",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Lm-Pwd-History - The password history of the user in LAN Manager (LM) one-way format (OWF). The LM OWF is used for compatibility with LAN Manager 2.x clients, Windows 95, and Windows 98. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "localeID",
+          "type": "number",
+          "multiplicity": "0..*",
+          "documentation": "Locale-ID - This attribute contains a list of locale IDs supported by this application. A locale ID represents a geographic location, such as a country/region, city, county, and so on. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "lockoutTime",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Lockout-Time - The date and time (UTC) that this account was locked out. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "logonCount",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Logon-Count - The number of times the account has successfully logged on. A value of 0 indicates that the value is unknown. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "logonHours",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Logon-Hours - The hours that the user is allowed to logon to the domain. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "logonWorkstation",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Logon-Workstation - This attribute is not used. | Logon-Workstation attribute (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "manager",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Manager - Contains the distinguished name of the user who is the user's manager. The manager's user object contains a directReports property that contains references to all user objects that have their manager properties set to this distinguished name. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "maxStorage",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Max-Storage - The maximum amount of disk space the user can use. Use the value specified in USER_MAXSTORAGE_UNLIMITED to use all available disk space. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "msCOM-UserPartitionSetLink",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-COM-UserPartitionSetLink - A link used to associate a User with a COM+ PartitionSet. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDRM-IdentityCertificate",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "MS-DRM-Identity-Certificate - The XrML digital rights management certificates for this user. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "msDS-AuthenticatedAtDC",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-AuthenticatedAt-DC - Forward link for ms-DS-AuthenticatedTo-Accountlist. Identifies which DC a user has authenticated to. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-Cached-Membership",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Cached-Membership - The ms-DS-Cached-Membership attribute is used by the Security Accounts Manager for group expansion during token evaluation. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "msDS-Cached-Membership-Time-Stamp",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Cached-Membership-Time-Stamp - The ms-DS-Cached-Membership-Time-Stamp attribute is used by the Security Accounts Manager for group expansion during token evaluation. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "mS-DS-CreatorSID",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "MS-DS-Creator-SID - The security ID of the creator of the object that contains this attribute. (LDAP-Syntax: String(Sid))"
+        },
+        {
+          "name": "msDS-FailedInteractiveLogonCount",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Failed-Interactive-Logon-Count - The total number of failed interactive logons since this feature was turned on. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msDS-FailedInteractiveLogonCountAtLastSuccessfulLogon",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Failed-Interactive-Logon-Count-At-Last-Successful-Logon - The total number of failed interactive logons up until the last successful C-A-D logon. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msDS-LastFailedInteractiveLogonTime",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Last-Failed-Interactive-Logon-Time - The time that an incorrect password was presented during a Ctrl+Alt+Delete logon. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "msDS-LastSuccessfulInteractiveLogonTime",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Last-Successful-Interactive-Logon-Time - The time that the correct password was presented during a Ctrl+Alt+Delete logon. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "msDS-PrimaryComputer",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Primary-Computer - For a user or group object, identifies the primary computers. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-ResultantPSO",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Resultant-PSO - Resultant password settings object applied to this object. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msDS-SecondaryKrbTgtNumber",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Secondary-KrbTgt-Number - Identifies the protocol identification number associated with the secondary domain. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msDS-Site-Affinity",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-DS-Site-Affinity - The ms-DS-Site-Affinity attribute is used by the Security Accounts Manager for group expansion during token evaluation. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "msDS-SourceObjectDN",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Source-Object-DN - Contains the string representation of the distinguished name of the object in another forest that corresponds to this object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msDS-SupportedEncryptionTypes",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-Supported-Encryption-Types - The encryption algorithms supported by user, computer or trust accounts.Note The KDC uses this information while generating a service ticket for this account. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msDS-User-Account-Control-Computed",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-User-Account-Control-Computed - msDS-User-Account-Control-Computed is much like userAccountControl, but the attribute's value can contain additional bits that are not persisted. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msDS-UserPasswordExpiryTimeComputed",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-User-Password-Expiry-Time-Computed - Contains the expiry time for the user's current password. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "msIIS-FTPDir",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-IIS-FTP-Dir - This attribute determines the user home directory relative to the file server share. It is used in conjunction with ms-IIS-FTP-Root to determine the FTP user home directory. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msIIS-FTPRoot",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-IIS-FTP-Root - This attribute determines the file server share. It is used in conjunction with ms-IIS-FTP-Dir to determine the FTP user home directory. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "mSMQDigests",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "MSMQ-Digests - An array of digests of the corresponding certificates in attribute mSMQ-Sign-Certificates. They are used for mapping a digest into a certificate. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "mSMQDigestsMig",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "MSMQ-Digests-Mig - In MSMQ mixed-mode, contains the previous value of mSMQDigests. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "mSMQSignCertificates",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "MSMQ-Sign-Certificates - This attribute contains a number of certificates. A user can generate a certificate per computer. For each certificate we also keep a digest. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "mSMQSignCertificatesMig",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "MSMQ-Sign-Certificates-Mig - In MSMQ mixed-mode, the attribute contains the previous value of mSMQSignCertificates. MSMQ supports migration from the MSMQ 1.0 DS to the Windows 2000 DS, and mixed mode specifies a state in which some of the DS severs were not upgraded to Windows 2000. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "msNPAllowDialin",
+          "type": "boolean",
+          "multiplicity": "0..1",
+          "documentation": "msNPAllowDialin - Indicates whether the account has permission to dial in to the RAS server. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "msNPCallingStationID",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "msNPCallingStationID - The msNPCallingStationID attribute is used internally. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msNPSavedCallingStationID",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "msNPSavedCallingStationID - The msNPSavedCallingStationID attribute is used internally. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msPKIAccountCredentials",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-PKI-AccountCredentials - Storage of encrypted user credential token BLOBs for roaming. | ms-PKI-AccountCredentials attribute (LDAP-Syntax: Object(DN-Binary))"
+        },
+        {
+          "name": "msPKI-CredentialRoamingTokens",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-PKI-Credential-Roaming-Tokens - Storage of encrypted user credential token BLOBs for roaming. | ms-PKI-Credential-Roaming-Tokens attribute (LDAP-Syntax: Object(DN-Binary))"
+        },
+        {
+          "name": "msPKIDPAPIMasterKeys",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-PKI-DPAPIMasterKeys - Storage of encrypted DPAPI Master Keys for user. (LDAP-Syntax: Object(DN-Binary))"
+        },
+        {
+          "name": "msPKIRoamingTimeStamp",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-PKI-RoamingTimeStamp - Time stamp for last change to roaming tokens. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "msRADIUSCallbackNumber",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "msRADIUSCallbackNumber - The msRADIUSCallbackNumber attribute is used internally. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msRADIUS-FramedInterfaceId",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-RADIUS-FramedInterfaceId - Indicates the IPv6 interface identifier to be configured for the user. | ms-RADIUS-FramedInterfaceId attribute (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msRADIUSFramedIPAddress",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "msRADIUSFramedIPAddress - The msRADIUSFramedIPAddress attribute is used internally. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msRADIUS-FramedIpv6Prefix",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-RADIUS-FramedIpv6Prefix - Indicates an IPv6 prefix (and corresponding route) to be configured for the user. | ms-RADIUS-FramedIpv6Prefix attribute (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msRADIUS-FramedIpv6Route",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-RADIUS-FramedIpv6Route - Provides routing information to be configured for the user on the NAS. | ms-RADIUS-FramedIpv6Route attribute (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msRADIUSFramedRoute",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "msRADIUSFramedRoute - The msRADIUSFramedRoute attribute is used internally. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msRADIUS-SavedFramedInterfaceId",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-RADIUS-SavedFramedInterfaceId - Indicates the IPv6 interface identifier to be configured for the user. | ms-RADIUS-SavedFramedInterfaceId attribute (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msRADIUS-SavedFramedIpv6Prefix",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-RADIUS-SavedFramedIpv6Prefix - Indicates an IPv6 prefix (and corresponding route) to be configured for the user. | ms-RADIUS-SavedFramedIpv6Prefix attribute (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msRADIUS-SavedFramedIpv6Route",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-RADIUS-SavedFramedIpv6Route - Provides routing information to be configured for the user on the NAS. | ms-RADIUS-SavedFramedIpv6Route attribute (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msRADIUSServiceType",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "msRADIUSServiceType - The msRADIUSServiceType attribute is used internally. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msRASSavedCallbackNumber",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "msRASSavedCallbackNumber - The msRASSavedCallbackNumber attribute is used internally. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msRASSavedFramedIPAddress",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "msRASSavedFramedIPAddress - The msRASSavedFramedIPAddress attribute is used internally. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msRASSavedFramedRoute",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "msRASSavedFramedRoute - The msRASSavedFramedRoute attribute is used internally. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msSFU30Name",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "msSFU-30-Name - Contains the name of a map. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msSFU30NisDomain",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "msSFU-30-Nis-Domain - Contains the NIS domain. (LDAP-Syntax: String(IA5))"
+        },
+        {
+          "name": "msTSAllowLogon",
+          "type": "boolean",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Allow-Logon - Specifies whether the user is allowed to log on to the Terminal Server. The value is 1 if logon is allowed, and 0 if logon is not allowed. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "msTSBrokenConnectionAction",
+          "type": "boolean",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Broken-Connection-Action - Terminal Services session Broken Connection Action specifies the action to take when a Terminal Services session limit is reached. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "msTSConnectClientDrives",
+          "type": "boolean",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Connect-Client-Drives - Terminal Services session Connect Client Drives specifies whether to reconnect to mapped client drives at logon. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "msTSConnectPrinterDrives",
+          "type": "boolean",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Connect-Printer-Drives - Terminal Services session Connect Printer Drives specifies whether to reconnect to mapped client printers at logon. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "msTSDefaultToMainPrinter",
+          "type": "boolean",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Default-To-Main-Printer - Terminal Services Default To Main Printer specifies whether to print automatically to the client's default printer. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "msTSExpireDate",
+          "type": "dateTime",
+          "multiplicity": "0..1",
+          "documentation": "MS-TS-ExpireDate - TS expiration date. (LDAP-Syntax: String(Generalized-Time))"
+        },
+        {
+          "name": "msTSExpireDate2",
+          "type": "dateTime",
+          "multiplicity": "0..1",
+          "documentation": "MS-TS-ExpireDate2 - Expiration date of the second TS per user CAL. (LDAP-Syntax: String(Generalized-Time))"
+        },
+        {
+          "name": "msTSExpireDate3",
+          "type": "dateTime",
+          "multiplicity": "0..1",
+          "documentation": "MS-TS-ExpireDate3 - Expiration date of the third TS per user CAL. (LDAP-Syntax: String(Generalized-Time))"
+        },
+        {
+          "name": "msTSExpireDate4",
+          "type": "dateTime",
+          "multiplicity": "0..1",
+          "documentation": "MS-TS-ExpireDate4 - Expiration date of the fourth TS per user CAL. (LDAP-Syntax: String(Generalized-Time))"
+        },
+        {
+          "name": "msTSHomeDirectory",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Home-Directory - Terminal Services Home Directory specifies the Home directory for the user. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSHomeDrive",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Home-Drive - Terminal Services Home Drive specifies a Home drive for the user. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSInitialProgram",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Initial-Program - Terminal Services Session Initial Program specifies the path and file name of the application that the user wants to start automatically when the user logs on to the Terminal Server. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSLicenseVersion",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "MS-TS-LicenseVersion - Terminal server license version. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSLicenseVersion2",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "MS-TS-LicenseVersion2 - Version of the second terminal server per user CAL. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSLicenseVersion3",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "MS-TS-LicenseVersion3 - Version of the third terminal server per user CAL. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSLicenseVersion4",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "MS-TS-LicenseVersion4 - Version of the fourth terminal server per user CAL. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSLSProperty01",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "MS-TSLS-Property01 - Placeholder terminal server property 01. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSLSProperty02",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "MS-TSLS-Property02 - Placeholder terminal server property 02. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSManagingLS",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "MS-TS-ManagingLS - Terminal Services managing license server. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSManagingLS2",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "MS-TS-ManagingLS2 - Issuer name of the second terminal server per user CAL. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSManagingLS3",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "MS-TS-ManagingLS3 - Issuer name of the third terminal server per user CAL. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSManagingLS4",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "MS-TS-ManagingLS4 - Issuer name of the fourth terminal server per user CAL. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSMaxConnectionTime",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Max-Connection-Time - Terminal Services session Maximum Connection Time is the maximum amount of time, in minutes, of the Terminal Services session. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msTSMaxDisconnectionTime",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Max-Disconnection-Time - Terminal Services session Maximum Disconnection Time is the maximum amount of time, in minutes, that a disconnected Terminal Services session remains active on the terminal server. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msTSMaxIdleTime",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Max-Idle-Time - Terminal Services session Maximum Idle Time is the maximum amount of time, in minutes, that the Terminal Services session can remain idle. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msTSPrimaryDesktop",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Primary-Desktop - This attribute represents the forward link to a user's primary desktop. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msTSProfilePath",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Profile-Path - Terminal Services Profile Path specifies a roaming or mandatory profile path to use when the user logs on to the terminal server. The profile path is in the following network path format \\\\ServerName\\ProfilesFolderName\\UserName. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSProperty01",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "MS-TS-Property01 - Reserved for future use. | MS-TS-Property01 attribute (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSProperty02",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "MS-TS-Property02 - Reserved for future use. | MS-TS-Property02 attribute (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "msTSReconnectionAction",
+          "type": "boolean",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Reconnection-Action - Terminal Services session Reconnection Action specifies whether to allow reconnection to a disconnected Terminal Services session from any client computer. (LDAP-Syntax: Boolean)"
+        },
+        {
+          "name": "msTSRemoteControl",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Remote-Control - Terminal Services Remote Control specifies whether to allow remote observation or remote control of the user's Terminal Services session. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msTSSecondaryDesktops",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "ms-TS-Secondary-Desktops - This attribute represents the array of forward links to a user's secondary desktops. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "msTSWorkDirectory",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-TS-Work-Directory - Terminal Services session Work Directory specifies the working directory path for the user. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "networkAddress",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Network-Address - The TCP/IP address for a network segment. Also called the subnet address. (LDAP-Syntax: String(Teletex))"
+        },
+        {
+          "name": "ntPwdHistory",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Nt-Pwd-History - The password history of the user in Windows NT one-way format (OWF). Windows 2000 uses the Windows NT OWF. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "operatorCount",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Operator-Count - Operator count. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "o",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Organization-Name - The name of the company or organization. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "otherLoginWorkstations",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Other-Login-Workstations - Non -Windows NT or LAN Manager workstations from which a user can log on. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "homePhone",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Phone-Home-Primary - The user's main home phone number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "mobile",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Phone-Mobile-Primary - The primary mobile phone number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "pager",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Phone-Pager-Primary - The primary pager number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "photo",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "photo - An object encoded in G3 fax as explained in recommendation T.4, with an ASN.1 wrapper to make it compatible with an X.400 BodyPart as defined in X.420. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "preferredLanguage",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "preferredLanguage - The preferred written or spoken language for a person. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "preferredOU",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Preferred-OU - The Organizational Unit to show by default on user' s desktop. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "primaryGroupID",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Primary-Group-ID - Contains the relative identifier (RID) for the primary group of the user. By default, this is the RID for the Domain Users group. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "profilePath",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Profile-Path - Specifies a path to the user's profile. This value can be a null string, a local absolute path, or a UNC path. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "pwdLastSet",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Pwd-Last-Set - The date and time that the password for this account was last changed. (LDAP-Syntax: Interval)"
+        },
+        {
+          "name": "roomNumber",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "roomNumber - The room number of an object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "scriptPath",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Script-Path - This attribute specifies the path for the user's logon script. The string can be null. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "secretary",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "secretary - Contains the distinguished name of the secretary for an account. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "servicePrincipalName",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Service-Principal-Name - List of principal names used for mutual authentication with an instance of a service on this computer. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "terminalServer",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Terminal-Server - Opaque data used by the Windows NT terminal server. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "uid",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "uid - A user ID. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "unicodePwd",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Unicode-Pwd - The password of the user in Windows NT one-way format (OWF). Windows 2000 uses the Windows NT OWF. This property is used only by the operating system. Note that you cannot derive the clear password back from the OWF form of the password. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "userAccountControl",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "User-Account-Control - Flags that control the behavior of the user account. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "userParameters",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "User-Parameters - Parameters of the user. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "userPKCS12",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "userPKCS12 - PKCS 12 PFX PDU for exchange of personal identity information. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "userPrincipalName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "User-Principal-Name - This attribute contains the UPN that is an Internet-style login name for a user based on the Internet standard RFC 822. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "userSharedFolder",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "User-Shared-Folder - Specifies a UNC path to the user's shared documents folder. The path must be a network UNC path of the form \\\\Server\\Share\\Directory. This value can be a null string. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "userSharedFolderOther",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "User-Shared-Folder-Other - Specifies a UNC path to the user's additional shared documents folder. The path must be a network UNC path of the form \\\\Server\\Share\\Directory. This value can be a null string. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "userSMIMECertificate",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "User-SMIME-Certificate - Certificate distribution object or tagged certificates. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "userWorkstations",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "User-Workstations - Contains the NetBIOS or DNS names of the computers running Windows NT Workstation or Windows 2000 Professional from which the user can log on. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "x500uniqueIdentifier",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "x500uniqueIdentifier - Used to distinguish between objects when a distinguished name has been reused. This is a different attribute type from both the uid and uniqueIdentifier types. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "userCertificate",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "X509-Cert - Contains the DER-encoded X.509v3 certificates issued to the user. Note that this property contains the public key certificates issued to this user by Microsoft Certificate Service. (LDAP-Syntax: Object(Replica-Link))"
+        }
+      ],
+      "identity": [],
+      "x": 1260.0,
+      "y": 210.0
+    },
+    {
+      "id": "inetOrgPerson",
+      "name": "inetOrgPerson",
+      "stereotype": "businessObject",
+      "documentation": "Represents people who are associated with an organization in some way. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "homePostalAddress",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Address-Home - A user's home address. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "audio",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "audio - The Audio attribute type allows the storing of sounds in the Directory. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "businessCategory",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Business-Category - Descriptive text on an Organizational Unit. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "carLicense",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "carLicense - Vehicle license or registration plate. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "departmentNumber",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "departmentNumber - Identifies a department within an organization. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "displayName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Display-Name - The display name for an object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "mail",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "E-mail-Addresses - The list of email addresses for a contact. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "employeeNumber",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Employee-Number - The number assigned to an employee other than the ID. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "employeeType",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Employee-Type - The job category for an employee. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "givenName",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Given-Name - Contains the given name (first name) of the user. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "initials",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Initials - Contains the initials for parts of the user's full name. This may be used as the middle initial in the Windows Address Book. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "jpegPhoto",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "jpegPhoto - Used to store one or more images of a person using the JPEG File Interchange Format JFIF . (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "labeledURI",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "labeledURI - A Uniform Resource Identifier followed by a label. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "manager",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Manager - Contains the distinguished name of the user who is the user's manager. The manager's user object contains a directReports property that contains references to all user objects that have their manager properties set to this distinguished name. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "o",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "Organization-Name - The name of the company or organization. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "homePhone",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Phone-Home-Primary - The user's main home phone number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "mobile",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Phone-Mobile-Primary - The primary mobile phone number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "pager",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Phone-Pager-Primary - The primary pager number. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "photo",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "photo - An object encoded in G3 fax as explained in recommendation T.4, with an ASN.1 wrapper to make it compatible with an X.400 BodyPart as defined in X.420. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "preferredLanguage",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "preferredLanguage - The preferred written or spoken language for a person. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "roomNumber",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "roomNumber - The room number of an object. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "secretary",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "secretary - Contains the distinguished name of the secretary for an account. (LDAP-Syntax: Object(DS-DN))"
+        },
+        {
+          "name": "uid",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "uid - A user ID. (LDAP-Syntax: String(Unicode))"
+        },
+        {
+          "name": "userPKCS12",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "userPKCS12 - PKCS 12 PFX PDU for exchange of personal identity information. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "userSMIMECertificate",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "User-SMIME-Certificate - Certificate distribution object or tagged certificates. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "x500uniqueIdentifier",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "x500uniqueIdentifier - Used to distinguish between objects when a distinguished name has been reused. This is a different attribute type from both the uid and uniqueIdentifier types. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "userCertificate",
+          "type": "string",
+          "multiplicity": "0..*",
+          "documentation": "X509-Cert - Contains the DER-encoded X.509v3 certificates issued to the user. Note that this property contains the public key certificates issued to this user by Microsoft Certificate Service. (LDAP-Syntax: Object(Replica-Link))"
+        }
+      ],
+      "identity": [],
+      "x": 1660.0,
+      "y": 1230.0
+    },
+    {
+      "id": "ms-DS-Group-Managed-Service-Account",
+      "name": "ms-DS-Group-Managed-Service-Account",
+      "stereotype": "businessObject",
+      "documentation": "The group managed service account class is used to create an account which can be shared by different computers to run Windows services. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [
+        {
+          "name": "msDS-GroupMSAMembership",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-GroupMSAMembership - This attribute is used for access checks to determine if a requestor has permission to retrieve the password for a group MSA. (LDAP-Syntax: String(NT-Sec-Desc))"
+        },
+        {
+          "name": "msDS-ManagedPassword",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-ManagedPassword - This constructed attribute returns a blob that contains the clear-text previous and current password, TimeUntilEpochExpires, and TimeUntilNextScheduledUpdate for a group MSA. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "msDS-ManagedPasswordId",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-ManagedPasswordId - This attribute contains the key identifier for the current managed password data for a group MSA. (LDAP-Syntax: Object(Replica-Link))"
+        },
+        {
+          "name": "msDS-ManagedPasswordInterval",
+          "type": "number",
+          "multiplicity": "1",
+          "documentation": "ms-DS-ManagedPasswordInterval - This attribute is used to retrieve the number of days before a managed password is automatically changed for a group MSA. (LDAP-Syntax: Enumeration)"
+        },
+        {
+          "name": "msDS-ManagedPasswordPreviousId",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "ms-DS-ManagedPasswordPreviousId - This constructed attribute contains the key identifier for the previous managed password data for a group MSA. (LDAP-Syntax: Object(Replica-Link))"
+        }
+      ],
+      "identity": [],
+      "x": 2060.0,
+      "y": 60.0
+    },
+    {
+      "id": "ms-DS-Managed-Service-Account",
+      "name": "ms-DS-Managed-Service-Account",
+      "stereotype": "businessObject",
+      "documentation": "Service account class is used to create accounts that are used for running Windows services. (Active-Directory-Schemaklasse, Stand Windows Server 2012)",
+      "attributes": [],
+      "identity": [],
+      "x": 2060.0,
+      "y": 250.0
+    }
+  ],
+  "associations": [
+    {
+      "id": "gen-Builtin-Domain-Top",
+      "kind": "generalization",
+      "from": {
+        "classId": "Builtin-Domain"
+      },
+      "to": {
+        "classId": "Top"
+      }
+    },
+    {
+      "id": "gen-Computer-User",
+      "kind": "generalization",
+      "from": {
+        "classId": "Computer"
+      },
+      "to": {
+        "classId": "User"
+      }
+    },
+    {
+      "id": "gen-Contact-Mail-Recipient",
+      "kind": "generalization",
+      "from": {
+        "classId": "Contact"
+      },
+      "to": {
+        "classId": "Mail-Recipient"
+      }
+    },
+    {
+      "id": "gen-Contact-Organizational-Person",
+      "kind": "generalization",
+      "from": {
+        "classId": "Contact"
+      },
+      "to": {
+        "classId": "Organizational-Person"
+      }
+    },
+    {
+      "id": "gen-Container-Top",
+      "kind": "generalization",
+      "from": {
+        "classId": "Container"
+      },
+      "to": {
+        "classId": "Top"
+      }
+    },
+    {
+      "id": "gen-Domain-Top",
+      "kind": "generalization",
+      "from": {
+        "classId": "Domain"
+      },
+      "to": {
+        "classId": "Top"
+      }
+    },
+    {
+      "id": "gen-Domain-DNS-Domain",
+      "kind": "generalization",
+      "from": {
+        "classId": "Domain-DNS"
+      },
+      "to": {
+        "classId": "Domain"
+      }
+    },
+    {
+      "id": "gen-Foreign-Security-Principal-Top",
+      "kind": "generalization",
+      "from": {
+        "classId": "Foreign-Security-Principal"
+      },
+      "to": {
+        "classId": "Top"
+      }
+    },
+    {
+      "id": "gen-Group-Mail-Recipient",
+      "kind": "generalization",
+      "from": {
+        "classId": "Group"
+      },
+      "to": {
+        "classId": "Mail-Recipient"
+      }
+    },
+    {
+      "id": "gen-Group-Security-Principal",
+      "kind": "generalization",
+      "from": {
+        "classId": "Group"
+      },
+      "to": {
+        "classId": "Security-Principal"
+      }
+    },
+    {
+      "id": "gen-Group-Top",
+      "kind": "generalization",
+      "from": {
+        "classId": "Group"
+      },
+      "to": {
+        "classId": "Top"
+      }
+    },
+    {
+      "id": "gen-Mail-Recipient-Top",
+      "kind": "generalization",
+      "from": {
+        "classId": "Mail-Recipient"
+      },
+      "to": {
+        "classId": "Top"
+      }
+    },
+    {
+      "id": "gen-Organizational-Person-Person",
+      "kind": "generalization",
+      "from": {
+        "classId": "Organizational-Person"
+      },
+      "to": {
+        "classId": "Person"
+      }
+    },
+    {
+      "id": "gen-Organizational-Unit-Top",
+      "kind": "generalization",
+      "from": {
+        "classId": "Organizational-Unit"
+      },
+      "to": {
+        "classId": "Top"
+      }
+    },
+    {
+      "id": "gen-Person-Top",
+      "kind": "generalization",
+      "from": {
+        "classId": "Person"
+      },
+      "to": {
+        "classId": "Top"
+      }
+    },
+    {
+      "id": "gen-Security-Principal-Top",
+      "kind": "generalization",
+      "from": {
+        "classId": "Security-Principal"
+      },
+      "to": {
+        "classId": "Top"
+      }
+    },
+    {
+      "id": "gen-User-Mail-Recipient",
+      "kind": "generalization",
+      "from": {
+        "classId": "User"
+      },
+      "to": {
+        "classId": "Mail-Recipient"
+      }
+    },
+    {
+      "id": "gen-User-Organizational-Person",
+      "kind": "generalization",
+      "from": {
+        "classId": "User"
+      },
+      "to": {
+        "classId": "Organizational-Person"
+      }
+    },
+    {
+      "id": "gen-User-Security-Principal",
+      "kind": "generalization",
+      "from": {
+        "classId": "User"
+      },
+      "to": {
+        "classId": "Security-Principal"
+      }
+    },
+    {
+      "id": "gen-inetOrgPerson-User",
+      "kind": "generalization",
+      "from": {
+        "classId": "inetOrgPerson"
+      },
+      "to": {
+        "classId": "User"
+      }
+    },
+    {
+      "id": "gen-ms-DS-Group-Managed-Service-Account-Computer",
+      "kind": "generalization",
+      "from": {
+        "classId": "ms-DS-Group-Managed-Service-Account"
+      },
+      "to": {
+        "classId": "Computer"
+      }
+    },
+    {
+      "id": "gen-ms-DS-Managed-Service-Account-Computer",
+      "kind": "generalization",
+      "from": {
+        "classId": "ms-DS-Managed-Service-Account"
+      },
+      "to": {
+        "classId": "Computer"
+      }
+    }
+  ],
+  "stores": []
+}
