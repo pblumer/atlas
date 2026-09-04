@@ -8348,11 +8348,11 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
             <span class="vp-actions">${selectMode
               ? (() => {
                   const n = scopeAllActive ? allActive : picked.size;
-                  return `<button class="btn danger sm" data-term-go ${n ? "" : "disabled"} title="Terminate the selected instances">Terminate${n ? ` ${n}` : ""}</button>
-                 <button class="btn neutral sm${scopeAllActive ? " on" : ""}" data-term-all title="Select every running instance of this version">All active (${allActive})</button>
-                 <button class="btn neutral sm" data-term-off title="Leave selection mode">Done</button>`;
+                  return `<button class="btn danger small" data-term-go ${n ? "" : "disabled"} title="Terminate the selected instances">Terminate${n ? ` ${n}` : ""}</button>
+                 <button class="btn neutral small${scopeAllActive ? " on" : ""}" data-term-all title="Select every running instance of this version">All active (${allActive})</button>
+                 <button class="btn neutral small" data-term-off title="Leave selection mode">Done</button>`;
                 })()
-              : `<button class="btn neutral sm" data-term-on title="Select running instances to terminate in bulk">&#9745; Select</button>`}
+              : `<button class="btn neutral small" data-term-on title="Select running instances to terminate in bulk">&#9745; Select</button>`}
             </span>
           </div>`;
       // The search row is what makes this panel usable at scale: a bare instance key
@@ -8361,13 +8361,13 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       // when the list is a page out of hundreds of thousands.
       const searchRow = `<form class="vp-search" title="Find an instance of this version by key or by variable content">
           <input type="text" class="vp-search-q" value="${esc(searchDraft)}" placeholder="Instance key, or name=value…" aria-label="Find an instance" spellcheck="false" autocomplete="off"/>
-          <button class="btn neutral sm" type="submit" title="Search this version's instances">Find</button>
-          ${searchQuery ? '<button class="btn ghost sm" type="button" data-search-clear title="Clear the search and go back to the newest instances">Clear</button>' : ""}
+          <button class="btn neutral small" type="submit" title="Search this version's instances">Find</button>
+          ${searchQuery ? '<button class="btn ghost small" type="button" data-search-clear title="Clear the search and go back to the newest instances">Clear</button>' : ""}
         </form>${searchError ? `<p class="muted vp-search-err">${esc(searchError)}</p>` : ""}`;
       const more = !searchQuery && (moreActive || moreFinished)
         ? (atPageLimit()
           ? `<div class="vp-more"><span class="muted">Showing the newest ${instances.length}. Use the search above to reach a specific instance.</span></div>`
-          : `<div class="vp-more"><button class="btn ghost sm" type="button" data-load-more title="Load the next page of older instances">Load more</button></div>`)
+          : `<div class="vp-more"><button class="btn ghost small" type="button" data-load-more title="Load the next page of older instances">Load more</button></div>`)
         : "";
       const emptyNote = searchQuery
         ? `<p class="muted" style="margin:0">No instance of this version matches “${esc(searchQuery)}”.</p>`

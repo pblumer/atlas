@@ -237,7 +237,6 @@ ol.steps li { margin: 6px 0; }
    on a red fill. */
 .btn.danger:not(.ghost) { background: var(--danger); border-color: var(--danger); color: #fff; }
 .btn.danger:not(.ghost):hover { background: #a5322a; border-color: #a5322a; }
-.btn.sm { padding: 4px 10px; font-size: 12px; border-radius: 5px; }
 /* A button that holds a state rather than firing once. The look is drawn from
    `aria-pressed`, so what a screen reader is told and what the eye sees cannot drift
    apart — there is no second class to keep in step
@@ -1506,6 +1505,11 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .doc-version .doc-note { margin: 2px 0 4px; font-size: 12px; }
 .doc-version .row { gap: 8px; align-items: center; margin-top: 2px; }
 .doc-link { font-size: 12px; }
+/* The one small button. There were two — .btn.sm and .btn.small, different
+   padding and a different radius — so two small buttons side by side were
+   visibly different heights depending on which file drew them
+   (ADR-draft-shared-ui-primitives). This is the one that survived, on use.
+   api/webassets_internal_test.go keeps the other from coming back. */
 .btn.small { padding: 2px 8px; font-size: 12px; }
 
 /* The Deploy & run confirmation: a success line plus the link that completes the

@@ -59,10 +59,10 @@ export function incidentWorkerChip(inc) {
 function incidentWorkerAction(inc) {
   if (!inc.connector) return "";
   if (!inc.connectorId) {
-    return `<a class="btn neutral sm" href="#/console/workers"
+    return `<a class="btn neutral small" href="#/console/workers"
       title="No worker is configured under this name — add one under Console &rsaquo; Workers">&#9881; Configure &#8599;</a>`;
   }
-  return `<button class="btn neutral sm" data-fix-conn="${esc(String(inc.connectorId))}" data-inc="${esc(String(inc.elementInstanceKey))}"
+  return `<button class="btn neutral small" data-fix-conn="${esc(String(inc.connectorId))}" data-inc="${esc(String(inc.elementInstanceKey))}"
     title="Change what this task talks to — endpoint, provider, credential — and retry against it">&#9881; Worker&hellip;</button>`;
 }
 
@@ -77,7 +77,7 @@ function incidentWorkerAction(inc) {
 // at all when no form is bound — which is most tasks, and why Fix variables… stays.
 function incidentRepairAction(inc) {
   if (!inc.repairForm) return "";
-  return `<button class="btn neutral sm" data-repair="${esc(String(inc.elementInstanceKey))}" data-inc="${esc(String(inc.elementInstanceKey))}"
+  return `<button class="btn neutral small" data-repair="${esc(String(inc.elementInstanceKey))}" data-inc="${esc(String(inc.elementInstanceKey))}"
     title="Repair this instance through the fields this task's author said matter, instead of raw JSON">&#9873; Repair&hellip;</button>`;
 }
 
@@ -93,12 +93,12 @@ export function incidentRowHTML(inc, { label = "", showInstance = true } = {}) {
       ${incidentWorkerChip(inc)}
       <div class="inc-actions">
         ${incidentRepairAction(inc)}
-        <button class="btn neutral sm" data-fix-vars="${esc(String(inc.processInstanceKey))}" data-inc="${esc(String(inc.elementInstanceKey))}"
+        <button class="btn neutral small" data-fix-vars="${esc(String(inc.processInstanceKey))}" data-inc="${esc(String(inc.elementInstanceKey))}"
           title="Correct the instance's variables before retrying — a retry alone repeats whatever failed">&#9998; Fix variables&hellip;</button>
         ${incidentWorkerAction(inc)}
-        <button class="btn neutral sm" data-resolve="${esc(String(inc.elementInstanceKey))}"
+        <button class="btn neutral small" data-resolve="${esc(String(inc.elementInstanceKey))}"
           title="Clear the incident and hand the job one more attempt">&#8635; Resolve &amp; retry</button>
-        <button class="btn neutral sm" data-complete="${esc(String(inc.elementInstanceKey))}"
+        <button class="btn neutral small" data-complete="${esc(String(inc.elementInstanceKey))}"
           title="Finish this task by hand and let the process continue — recorded with your name and the reason you give">&#10003; Complete manually&hellip;</button></div>
     </div>`;
 }

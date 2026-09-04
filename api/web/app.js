@@ -2367,7 +2367,7 @@ function appearanceCard() {
   return `
     <div class="card" style="margin-top:18px">
       <div class="between"><h2>Appearance</h2>
-        <button type="button" class="btn ghost sm" id="theme-reset" title="Clear the custom brand colour and restore the default accent">Reset to default</button></div>
+        <button type="button" class="btn ghost small" id="theme-reset" title="Clear the custom brand colour and restore the default accent">Reset to default</button></div>
       <p class="muted" style="margin:6px 0 14px">Tint the interface with your organisation's brand
       colour. The accent recolours buttons, links, the active navigation and highlights across every
       view — applied for everyone on this instance.</p>
@@ -2380,7 +2380,7 @@ function appearanceCard() {
         <input type="text" id="theme-hex" class="theme-hex" value="${esc(active)}"
           spellcheck="false" aria-label="Brand colour hex" />
         <span class="theme-preview">
-          <button type="button" class="btn sm" tabindex="-1">Primary</button>
+          <button type="button" class="btn small" tabindex="-1">Primary</button>
           <a href="#" onclick="return false" class="theme-link">Link</a>
           <span class="pill">Accent</span>
         </span>
@@ -2388,14 +2388,14 @@ function appearanceCard() {
 
       <div class="logo-row">
         <div class="between"><h3 style="margin:0">Logo</h3>
-          <button type="button" class="btn ghost sm" id="logo-remove"${hasLogoCached() ? "" : " hidden"} title="Remove the uploaded logo and restore the built-in mark">Remove logo</button></div>
+          <button type="button" class="btn ghost small" id="logo-remove"${hasLogoCached() ? "" : " hidden"} title="Remove the uploaded logo and restore the built-in mark">Remove logo</button></div>
         <p class="muted" style="margin:6px 0 12px">Replace the built-in mark with your organisation's logo —
         a PNG or SVG up to 512&nbsp;KiB, shown in the top bar and on the login screen for everyone on this instance.</p>
         <div class="logo-controls">
           <span class="mark logo-sample${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
             hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
           }</span>
-          <label class="btn sm" style="cursor:pointer">
+          <label class="btn small" style="cursor:pointer">
             Upload logo…
             <input type="file" id="logo-file" accept="image/png,image/svg+xml" hidden />
           </label>
@@ -3046,7 +3046,7 @@ async function renderAppDeployments(id) {
     <td class="muted">${(r.members || []).length}</td>
     <td class="muted">${esc(r.note || "—")}</td>
     <td class="row-actions">${targets.length
-      ? `<button class="btn ghost sm" data-promote="${r.version}" title="Ship this release to a deployment target">Promote…</button>`
+      ? `<button class="btn ghost small" data-promote="${r.version}" title="Ship this release to a deployment target">Promote…</button>`
       : ""}</td>
   </tr>`;
 
@@ -5450,7 +5450,7 @@ async function viewIncidents() {
           <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
           <td>${esc(r.message || "—")}${incidentWorkerChip(r)}</td>
           <td class="row-actions">
-            <button class="btn sm" data-resolve="${i}" title="Resolve this incident">Resolve…</button>
+            <button class="btn small" data-resolve="${i}" title="Resolve this incident">Resolve…</button>
             ${dropdown("⋯", "icon-btn", incidentMenu(r, i))}</td>
         </tr>`;
       }).join("");
@@ -5929,8 +5929,8 @@ async function viewWorkers() {
             <td class="wk-num">${c.pid || "&mdash;"}</td>
             <td class="wk-num">${c.starts}</td>
             <td class="row-actions">
-              ${(c.log || []).length ? `<button class="btn neutral sm" data-log="${esc(c.id)}" title="Show this worker’s recent log">Log</button>` : ""}
-              <button class="btn neutral sm" data-restart="${esc(c.id)}" title="Restart this supervised worker process">&#8635; Restart</button></td>
+              ${(c.log || []).length ? `<button class="btn neutral small" data-log="${esc(c.id)}" title="Show this worker’s recent log">Log</button>` : ""}
+              <button class="btn neutral small" data-restart="${esc(c.id)}" title="Restart this supervised worker process">&#8635; Restart</button></td>
           </tr>${(c.log || []).length ? `<tr class="wk-log-row" data-dt-detail data-log-for="${esc(c.id)}" hidden>
             <td colspan="6"><pre class="wk-log">${esc((c.log || []).join("\n"))}</pre></td></tr>` : ""}`).join("")}
           </tbody></table>`;

@@ -154,7 +154,7 @@ export function secretHintHTML(shape) {
   return `<div class="secret-hint">
     <p><b>${esc(shape.worker.name)}</b> <span class="muted">(${esc(shape.worker.kind)}${shape.worker.provider ? " · " + esc(shape.worker.provider) : ""})</span> resolves this reference, and needs ${shape.what}.</p>
     ${skeleton ? `<pre class="secret-skeleton">${esc(skeleton)}</pre>
-      <button class="btn ghost sm" type="button" data-fill title="Fill the value box with a template you can edit">Insert this skeleton</button>` : ""}
+      <button class="btn ghost small" type="button" data-fill title="Fill the value box with a template you can edit">Insert this skeleton</button>` : ""}
     ${shape.note ? `<p class="muted">${shape.note}</p>` : ""}
   </div>`;
 }

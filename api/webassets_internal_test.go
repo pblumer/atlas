@@ -202,3 +202,63 @@ func TestOurEmbeddedSourcesAreTextToGrep(t *testing.T) {
 		t.Fatal("no embedded source was checked; this guard would pass vacuously")
 	}
 }
+
+// TestThereIsOneSmallButton keeps the button scale from splitting in two again.
+//
+// api/web carried `.btn.sm` and `.btn.small` at once — two CSS rules with different
+// padding and a different radius, not two names for one rule — so whether a small
+// button was 22 or 26 pixels tall depended on which file had drawn it, and two of
+// them side by side did not line up. `small` won on use (62 call sites to 21) and
+// `sm` was removed (ADR-draft-shared-ui-primitives).
+//
+// The check is on our own markup: `sm` as a bare class on a `btn`. Other uses of
+// those two letters — `avatar sm`, `submenu.sm-open` — are different words and are
+// not matched, which is why this looks for the class in a button's class list rather
+// than for the string anywhere.
+func TestThereIsOneSmallButton(t *testing.T) {
+	btnClass := regexp.MustCompile(`class="btn[^"]*\bsm\b`)
+	var checked int
+	err := fs.WalkDir(webFS, "web", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "vendor" {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		switch path.Ext(p) {
+		case ".js", ".html":
+		default:
+			return nil
+		}
+		body, err := fs.ReadFile(webFS, p)
+		if err != nil {
+			return err
+		}
+		checked++
+		if m := btnClass.FindAllString(string(body), -1); len(m) > 0 {
+			t.Errorf("%s uses the removed `sm` button size %d time(s): %v.\n"+
+				"There is one small button and it is `small`. `sm` no longer has a rule, so "+
+				"these render at the default size.", p, len(m), m)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+	// The stylesheet must not bring the second rule back either.
+	css, err := fs.ReadFile(webFS, "web/app.css")
+	if err != nil {
+		t.Fatalf("read app.css: %v", err)
+	}
+	// A rule, not a mention: the surviving rule's own comment explains what was
+	// removed and names it, which is worth keeping and is not a definition.
+	if regexp.MustCompile(`\.btn\.sm\s*[{,]`).Match(css) {
+		t.Error("app.css defines .btn.sm again; the small button is .btn.small")
+	}
+	if checked == 0 {
+		t.Fatal("no embedded source was checked; this guard would pass vacuously")
+	}
+}

@@ -129,3 +129,17 @@ test("several applications are offered as a choice before the preview is asked f
   expect(imports).toHaveLength(1);
   expect(imports[0].applicationId).toBe("app-2");
 });
+
+// The import report used to open with the focus still behind it — no focus() call
+// and no autofocus, so a keyboard reader landed on the page under the dialog while
+// looking at the dialog. It is on the shared dialog now
+// (ADR-draft-shared-ui-primitives), which puts the focus on the first thing a person
+// would edit: the name they are about to store the model under.
+test("the report takes the focus, on the field that is there to be edited", async ({ page }) => {
+  stubAPI(page, [app("app-1", "Sales")], []);
+  await openData(page);
+  await chooseFile(page);
+
+  await expect(page.locator("#im-import-report")).toBeVisible();
+  await expect(page.locator("#im-import-name")).toBeFocused();
+});
