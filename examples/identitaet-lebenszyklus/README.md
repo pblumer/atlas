@@ -191,6 +191,15 @@ Weil das eine reine Funktion der Uhrzeit bleibt, ist es replay-fest. Ein echter
 Zufallsgenerator wäre es nicht — `applyToState` läuft live *und* bei der
 Wiederherstellung (Invariante I4).
 
+Ein zweiter Fallstrick derselben Familie kam mit den Störungen dazu: „verschiedene
+Bit-Bereiche" ist **keine** Unabhängigkeit. Die Störungsklasse wurde als
+`floor(b/256) mod 20` gezogen, die Ereignisart als `floor(b/1024) mod 20` — und
+weil `floor(b/256) = 4·floor(b/1024) + 2 Bits` ist, war die eine eine Funktion der
+anderen. Bedingt auf eine Störung konnte die Klasse nur noch die Werte 12..19
+annehmen; der Ersatz-Weg (Wert 0) war toter Code und kam in 111 erzeugten Tickets
+kein einziges Mal vor. Wer zwei wirklich unabhängige Würfel braucht, dreht die
+Lehmer-Runde noch einmal, statt Bits umzusortieren.
+
 ## Störungen und der Service Desk
 
 [`service-desk-ticket.bpmn`](service-desk-ticket.bpmn) macht aus einer gemeldeten

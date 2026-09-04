@@ -120,9 +120,9 @@
     </scriptTask>
 
     <scriptTask id="s_wuerfel" name="Würfel ziehen">
-      <documentation>Vier Würfe je Ereignis, aus verschiedenen Bit-Bereichen: r wählt die Identität aus dem Nummernkreis MT-10001..MT-59000, t die Ereignisart im Tagesbetrieb, b die Art im JML-Batch, s den Service aus dem Katalog, e die Störungsklasse. Die Bit-Bereiche überschneiden sich nicht.</documentation>
+      <documentation>Vier Würfe je Ereignis, aus verschiedenen Bit-Bereichen: r wählt die Identität aus dem Nummernkreis MT-10001..MT-59000, t die Ereignisart im Tagesbetrieb, b die Art im JML-Batch, s den Service aus dem Katalog, e die Störungsklasse. Die Störungsklasse braucht eine eigene Lehmer-Runde und nicht bloss einen anderen Bit-Bereich: floor(b/256) ist 4*floor(b/1024) plus zwei Bits, e war damit eine Funktion von t. Bedingt auf t = 13 oder 14 (GESTOERT) konnte e nur die Werte 12..19 annehmen — der Ersatz-Weg (e = 0) war toter Code, und in 111 erzeugten Tickets kam er kein einziges Mal vor. Nachgemessen mit der dritten Runde: 4,99 % Ersatz bei Soll 5 %, gleichverteilt.</documentation>
       <extensionElements>
-        <zeebe:script expression="= for w in h2 return {r: modulo(w.a, 49000), t: modulo(floor(w.b / 1024), 20), b: modulo(floor(w.b / 65536), 25), s: modulo(w.b, 8), e: modulo(floor(w.b / 256), 20)}" resultVariable="wuerfel"/>
+        <zeebe:script expression="= for w in h2 return {r: modulo(w.a, 49000), t: modulo(floor(w.b / 1024), 20), b: modulo(floor(w.b / 65536), 25), s: modulo(w.b, 8), e: modulo(modulo(w.b * 48271, 2147483647), 20)}" resultVariable="wuerfel"/>
       </extensionElements>
     </scriptTask>
 
