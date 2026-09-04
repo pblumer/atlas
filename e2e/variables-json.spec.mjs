@@ -48,10 +48,13 @@ test("a structure opens where it stands, and can still be opened in a window", a
 
   // The window is still one step further in.
   await page.locator("#tab-variables .v-struct:not([hidden]) .v-big").click();
-  await expect(page.locator("#var-modal-ov")).toBeVisible();
-  await expect(page.locator("#var-modal-title")).toHaveText("customer");
-  await page.locator("#var-modal-x").click();
-  await expect(page.locator("#var-modal-ov")).toBeHidden();
+  // The window is the shared dialog now (api/web/dialog.js): built when it opens and
+  // gone when it closes, rather than a hidden div in the view being shown in place.
+  const window_ = page.locator(".modal-ov .var-modal");
+  await expect(window_).toBeVisible();
+  await expect(window_.locator(".modal-head h2")).toHaveText("customer");
+  await window_.locator(".modal-head [aria-label='Close']").click();
+  await expect(page.locator(".modal-ov .var-modal")).toHaveCount(0);
 
   // Clicking again closes it.
   await btn.click();

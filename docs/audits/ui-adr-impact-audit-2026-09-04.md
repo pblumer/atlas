@@ -136,6 +136,13 @@ The behaviour that is re-implemented each time — overlay, `role="dialog"`,
 `aria-modal`, Escape, initial focus — is mostly present in most of them, which is
 why the omissions are easy to miss: `infomodel-import.js` opens its import report
 with neither a `focus()` call nor `autofocus`, so focus stays behind the dialog.
+None of the twenty-two traps the focus, and `editor.js`'s variable window carries a
+comment claiming it does.
+
+Addressed on this branch: twenty of the twenty-two open through
+`api/web/dialog.js`. The two that do not are a different shape and are recorded as
+such rather than forced — the process search is a command palette, and the
+Developer view is a movable, resizable tool window with a split panel.
 
 ### 4.2 Button sizes
 

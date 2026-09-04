@@ -75,24 +75,26 @@ test("a structured value opens as formatted JSON, and says which write it is sho
   // and absent altogether on a touch device.
   const order = row(page, "order");
   await order.locator(".c-val.do-json").click();
-  const modal = page.locator("#var-modal-ov");
+  // The window is the shared dialog (api/web/dialog.js): built as it opens and gone
+  // when it closes, rather than one hidden div being shown and hidden in place.
+  const modal = page.locator(".modal-ov .var-modal");
   await expect(modal).toBeVisible();
-  await expect(page.locator("#var-modal-title")).toHaveText("order");
-  await expect(page.locator("#var-modal-tag")).toHaveText("object");
+  await expect(modal.locator(".modal-head h2")).toHaveText("order");
+  await expect(modal.locator(".vtag")).toHaveText("object");
   // Pretty-printed rather than the one line the table shows.
   const shown = await page.locator("#var-modal-body").textContent();
   expect(shown).toContain("\n");
   expect(shown).toContain("ORD-1");
   expect(shown).toContain("100");
 
-  await page.locator("#var-modal-x").click();
-  await expect(modal).toBeHidden();
+  await modal.locator(".modal-head [aria-label='Close']").click();
+  await expect(page.locator(".modal-ov .var-modal")).toHaveCount(0);
 
   // Every write in the trail opens too, and the window says which one it is — a trail
   // of four {2 fields} is unreadable if every window is titled the same.
   await order.locator(".do-toggle").click();
   await page.locator("#tab-data .do-trail-table .do-t-val .do-json").first().click();
-  await expect(page.locator("#var-modal-title")).toHaveText("order · write 2");
+  await expect(page.locator(".var-modal .modal-head h2")).toHaveText("order · write 2");
   const write2 = await page.locator("#var-modal-body").textContent();
   expect(write2).toContain("ORD-1");
   // The second write had no total yet; that is the point of reading the trail.

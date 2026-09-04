@@ -5,6 +5,7 @@ import {
   PRESETS, normalizeHex, currentAccent, applyAccent, applyCurrent,
   setServerAccent, resetServerAccent, syncFromServer,
 } from "./theme.js";
+import { openDialog } from "./dialog.js";
 import {
   LOGO_URL, BUILTIN_MARK, hasLogoCached, applyLogo, syncLogoFromServer,
   setServerLogo, deleteServerLogo,
@@ -3229,36 +3230,33 @@ function confirmTerminateAll(name, count) {
   const TYPE_THRESHOLD = 50;
   return new Promise((resolve) => {
     const gated = count > TYPE_THRESHOLD;
-    const ov = document.createElement("div");
-    ov.className = "modal-ov";
-    ov.innerHTML = `
-      <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Confirm termination">
-        <div class="modal-head"><h2>Terminate ${count} running instance${count === 1 ? "" : "s"}?</h2></div>
-        <div class="modal-body">
-          <p class="muted" style="margin:0 0 10px">This discards each token and moves every running instance of <b>${esc(name)}</b> (across all its versions) to the finished list as <b>terminated</b>. This can't be undone.</p>
-          ${gated ? `<label class="field"><span>Type <b>${count}</b> to confirm</span>
-            <input id="term-all-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="${count}"/></label>` : ""}
-        </div>
-        <div class="modal-foot">
-          <button class="btn neutral" data-cancel title="Cancel without terminating any instances">Cancel</button>
-          <button class="btn danger" data-confirm ${gated ? "disabled" : ""} title="Terminate every running instance of this process">Terminate ${count}</button>
-        </div>
-      </div>`;
-    document.body.appendChild(ov);
-    const input = ov.querySelector("#term-all-input");
-    const confirmBtn = ov.querySelector("[data-confirm]");
-    const close = (ok) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(ok); };
-    const onKey = (e) => { if (e.key === "Escape") close(false); };
-    document.addEventListener("keydown", onKey);
+    const body = document.createElement("div");
+    body.innerHTML = `
+      <p class="muted" style="margin:0 0 10px">This discards each token and moves every running instance of <b>${esc(name)}</b> (across all its versions) to the finished list as <b>terminated</b>. This can't be undone.</p>
+      ${gated ? `<label class="field"><span>Type <b>${count}</b> to confirm</span>
+        <input id="term-all-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="${count}"/></label>` : ""}`;
+    const input = body.querySelector("#term-all-input");
+
+    const dlg = openDialog({
+      title: `Terminate ${count} running instance${count === 1 ? "" : "s"}?`,
+      label: "Confirm termination",
+      body,
+      className: "confirm-modal",
+      onClose: (value) => resolve(value === true),
+      actions: [
+        { label: "Cancel", kind: "neutral", value: false,
+          title: "Cancel without terminating any instances" },
+        { label: `Terminate ${count}`, kind: "danger", value: true, disabled: gated,
+          attrs: { "data-confirm": "" },
+          title: "Terminate every running instance of this process" },
+      ],
+    });
+    const confirmBtn = dlg.el.querySelector("[data-confirm]");
     if (input) {
+      // Above the threshold the count has to be typed, so draining a flooded process
+      // cannot be one click on a button that happened to be under the pointer.
       input.addEventListener("input", () => { confirmBtn.disabled = input.value.trim() !== String(count); });
-      input.focus();
-    } else {
-      confirmBtn.focus();
     }
-    ov.querySelector("[data-cancel]").addEventListener("click", () => close(false));
-    confirmBtn.addEventListener("click", () => { if (!confirmBtn.disabled) close(true); });
-    ov.addEventListener("click", (e) => { if (e.target === ov) close(false); });
   });
 }
 
@@ -3268,29 +3266,23 @@ function openShareModal(proj, users, degraded, reload) {
   const nameOf = (id) => { const u = byId.get(id); return u ? u.name : id; };
   const me = AUTH.user && AUTH.user.id;
 
-  const ov = document.createElement("div");
-  ov.className = "modal-ov";
-  ov.innerHTML = `
-    <div class="modal share-modal" role="dialog" aria-modal="true" aria-label="Share project">
-      <div class="modal-head">
-        <h2>Share “${esc(p.name)}”</h2>
-        <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
-      </div>
-      <div class="modal-body" id="share-body"></div>
-      <div class="modal-foot">
-        <span class="muted small">Sharing controls who can view and edit this project’s diagrams. Running instances are not affected.</span>
-        <button type="button" class="btn" data-done title="Close this dialog">Done</button>
-      </div>
-    </div>`;
-  document.body.appendChild(ov);
-  const body = ov.querySelector("#share-body");
+  const body = document.createElement("div");
+  body.id = "share-body";
 
-  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); reload(); };
-  const onKey = (e) => { if (e.key === "Escape") close(); };
-  document.addEventListener("keydown", onKey);
-  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
-  ov.querySelector("[data-x]").addEventListener("click", close);
-  ov.querySelector("[data-done]").addEventListener("click", close);
+  // Whatever changed here is written as it is changed, so closing is the only exit
+  // and every way of closing reloads the project behind it.
+  const dlg = openDialog({
+    title: `Share “${p.name}”`,
+    label: "Share project",
+    body,
+    className: "share-modal",
+    onClose: () => reload(),
+    actions: [
+      { spacer: "Sharing controls who can view and edit this project’s diagrams. Running instances are not affected." },
+      { label: "Done", value: null, attrs: { "data-done": "" }, title: "Close this dialog" },
+    ],
+  });
+  const close = () => dlg.close(null);
 
   const roleSelect = (value, attrs) =>
     `<select ${attrs} class="role-sel">
@@ -3661,33 +3653,29 @@ function showMIMReport(res) {
   const badge = (s) => `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;color:#fff;white-space:nowrap;background:${color(s)}">${esc(s)}</span>`;
   const rows = (r.notes || []).map((n) =>
     `<tr><td>${badge(n.status)}</td><td><code>${esc(n.nodeId)}</code></td><td>${esc(n.kind)}</td><td>${esc(n.activity)}</td><td class="muted">${esc(n.detail || "")}</td></tr>`).join("");
-  const ov = document.createElement("div");
-  ov.className = "modal-ov";
-  ov.innerHTML = `
-    <div class="modal" role="dialog" aria-modal="true" aria-label="MIM import report" style="max-width:860px">
-      <div class="modal-head"><h2>MIM import — ${esc(res.name || res.processId)}</h2></div>
-      <div class="modal-body">
-        <p class="muted" style="margin:0 0 10px">${r.native} native · ${r.preserved} preserved · ${r.manualReview} to review. Preserved and review nodes keep their original XOML in the element's <b>atlas:mimSource</b> — check them before deploying.</p>
-        <div style="max-height:52vh; overflow:auto">
-          <table><thead><tr><th>Status</th><th>Node</th><th>Kind</th><th>Activity</th><th>Note</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="5" class="muted">No nodes.</td></tr>`}</tbody></table>
-        </div>
-      </div>
-      <div class="modal-foot">
-        <button class="btn neutral" data-close title="Close this report">Close</button>
-        <button class="btn" data-open title="Open the imported draft in the Modeler">Open in Modeler</button>
-      </div>
+  const body = document.createElement("div");
+  body.innerHTML = `
+    <p class="muted" style="margin:0 0 10px">${r.native} native · ${r.preserved} preserved · ${r.manualReview} to review. Preserved and review nodes keep their original XOML in the element's <b>atlas:mimSource</b> — check them before deploying.</p>
+    <div style="max-height:52vh; overflow:auto">
+      <table><thead><tr><th>Status</th><th>Node</th><th>Kind</th><th>Activity</th><th>Note</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="5" class="muted">No nodes.</td></tr>`}</tbody></table>
     </div>`;
-  document.body.appendChild(ov);
-  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
-  const onKey = (e) => { if (e.key === "Escape") close(); };
-  document.addEventListener("keydown", onKey);
-  ov.querySelector("[data-close]").addEventListener("click", close);
-  ov.querySelector("[data-open]").addEventListener("click", () => {
-    close();
-    location.hash = "#/modeler/draft/" + encodeURIComponent(res.processId);
+
+  openDialog({
+    title: `MIM import — ${res.name || res.processId}`,
+    label: "MIM import report",
+    body,
+    width: 860,
+    actions: [
+      { label: "Close", kind: "neutral", value: null, attrs: { "data-close": "" },
+        title: "Close this report" },
+      { label: "Open in Modeler", value: "open", attrs: { "data-open": "" },
+        title: "Open the imported draft in the Modeler" },
+    ],
+    onClose: (value) => {
+      if (value === "open") location.hash = "#/modeler/draft/" + encodeURIComponent(res.processId);
+    },
   });
-  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
 }
 
 // a "New worker" inline form and per-row Edit / Enable-Disable / Delete. Each
@@ -5707,33 +5695,21 @@ async function viewWorkers() {
   // worker pushes older jobs out. The dialog says so rather than letting an operator
   // read an empty list as "nothing ran".
   async function showWorkerJobs(worker) {
-    const ov = document.createElement("div");
-    ov.className = "modal-ov";
-    ov.innerHTML = `
-      <div class="modal wkjobs-modal" role="dialog" aria-modal="true" aria-label="Worker jobs">
-        <div class="modal-head">
-          <h2>${worker ? esc(worker) : "(unnamed worker)"} \u2014 recent jobs</h2>
-          <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">\u2715</button>
-        </div>
-        <div class="modal-body" id="wkjobs-body"><p class="empty">Loading\u2026</p></div>
-        <div class="modal-foot">
-          <span class="muted small">The last jobs this worker leased, newest first. The top of the
-            list is the server\u2019s memory \u2014 a restart empties it, and older jobs age out.
-            Anything under \u201cEarlier\u201d comes from the configured job-history worker and
-            outlives a restart. The durable account of the run itself stays the instance
-            timeline.</span>
-          <button type="button" class="btn" data-done title="Close this dialog">Done</button>
-        </div>
-      </div>`;
-    document.body.appendChild(ov);
-    const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
-    const onKey = (e) => { if (e.key === "Escape") close(); };
-    document.addEventListener("keydown", onKey);
-    ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
-    ov.querySelector("[data-x]").addEventListener("click", close);
-    ov.querySelector("[data-done]").addEventListener("click", close);
+    const body = document.createElement("div");
+    body.id = "wkjobs-body";
+    body.innerHTML = `<p class="empty">Loading\u2026</p>`;
 
-    const body = ov.querySelector("#wkjobs-body");
+    openDialog({
+      title: `${worker || "(unnamed worker)"} \u2014 recent jobs`,
+      label: "Worker jobs",
+      body,
+      className: "wkjobs-modal",
+      actions: [
+        { spacer: "The last jobs this worker leased, newest first. The top of the list is the server\u2019s memory \u2014 a restart empties it, and older jobs age out. Anything under \u201cEarlier\u201d comes from the configured job-history worker and outlives a restart. The durable account of the run itself stays the instance timeline." },
+        { label: "Done", value: null, attrs: { "data-done": "" }, title: "Close this dialog" },
+      ],
+    });
+
     let jobs = [];
     try {
       const out = await api("GET", `/api/v1/workers/${encodeURIComponent(worker)}/jobs`);
@@ -5748,11 +5724,11 @@ async function viewWorkers() {
       // Nothing in this run — but the history may still hold the failure someone came
       // here to read, so the section below is still asked for.
       body.innerHTML = `<p class="empty">No jobs recorded for this worker in this run.</p>`;
-      await appendHistory(ov, worker);
+      await appendHistory(body, worker);
       return;
     }
     renderRuns(body, jobs);
-    await appendHistory(ov, worker);
+    await appendHistory(body, worker);
   }
 
   // renderRuns draws a list of job runs. The ring and the clio history share it: they
@@ -5792,8 +5768,7 @@ async function viewWorkers() {
   // service: a dialog that waited on clio before showing anything would make the ring
   // — which is always there — hostage to a store that may not be. So the memory tail
   // renders first, and the history arrives under it or says why it did not.
-  async function appendHistory(ov, worker) {
-    const body = ov.querySelector("#wkjobs-body");
+  async function appendHistory(body, worker) {
     if (!body) return;
     const box = document.createElement("div");
     box.className = "wkjob-history";

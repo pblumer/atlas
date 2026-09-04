@@ -101,6 +101,16 @@ Three primitives, each an ES module export usable without `app.js`:
   The eight bespoke class families collapse onto `.modal` / `.modal-ov`;
   per-dialog styling stays a modifier class on the same structure, so
   `.json-modal`'s body layout survives without `.json-modal-overlay` existing.
+
+  Two of the twenty-two are not dialogs and do not move. The process search
+  (`.sp`) is a **command palette**: no title, no actions, an input that filters as
+  it is typed and arrow keys that walk the results. The Developer view
+  (`.dev-modal`, ADR-0145) is a **tool window**: its header is a drag handle
+  carrying a language badge, a dirty marker and its actions, it can be moved and
+  resized, and it holds a split panel with tabs. Both would have to be argued into
+  the shape of a dialog and would be worse for it. That there are three patterns
+  here rather than one is the finding; what the rule refuses is a *fourth* dialog
+  written by hand.
 - **One button scale.** `.btn.small` wins on use (54 to 15) and `.btn.sm` is
   removed, its 21 call sites rewritten. One rule, one name.
 - **An editor-bar builder** that takes the two acts and the menu groups and

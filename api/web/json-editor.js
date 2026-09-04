@@ -11,6 +11,8 @@
 //   • Format (pretty-print) button
 //   • Compact mode for inline defaults (single-row, expands on focus)
 
+import { openDialog } from "./dialog.js";
+
 // ---------- Tokenizer ----------
 
 // tokenizeJSON breaks a JSON string into typed spans for highlighting.
@@ -309,36 +311,22 @@ export function attachJSONEditor(textarea, opts = {}) {
   // Expand-to-modal: edit the value in a full-size JSON editor (a non-compact one,
   // so it carries no further expand button), writing back on Apply. The overlay is
   // tracked so destroying this editor (e.g. a removed row) tears it down too.
-  let modalOverlay = null;
+  let modalDlg = null;
   const closeModal = () => {
-    if (!modalOverlay) return;
-    try { modalOverlay._handle && modalOverlay._handle.destroy(); } catch { /* gone */ }
-    document.removeEventListener("keydown", modalOverlay._onKey, true);
-    modalOverlay.remove();
-    modalOverlay = null;
+    if (!modalDlg) return;
+    const dlg = modalDlg;
+    modalDlg = null; // before close(), whose onClose lands back here
+    dlg.close(null);
   };
   const openModal = () => {
-    if (modalOverlay || destroyed) return;
-    const overlay = document.createElement("div");
-    overlay.className = "json-modal-overlay";
-    overlay.innerHTML = `
-      <div class="json-modal" role="dialog" aria-modal="true" aria-label="Edit JSON value">
-        <div class="json-modal-head">
-          <strong>Edit JSON</strong>
-          <span style="flex:1"></span>
-          <button type="button" class="btn ghost small json-modal-fmt" title="Reformat the JSON">{ } Format</button>
-          <button type="button" class="btn ghost small json-modal-cancel" title="Close without applying changes">Cancel</button>
-          <button type="button" class="btn small json-modal-apply" title="Apply the edited JSON">Apply</button>
-        </div>
-        <div class="json-modal-body"><textarea class="json-modal-ta" spellcheck="false" aria-label="JSON value"></textarea></div>
-      </div>`;
-    document.body.appendChild(overlay);
-    modalOverlay = overlay;
-    const ta2 = overlay.querySelector(".json-modal-ta");
+    if (modalDlg || destroyed) return;
+    const body = document.createElement("div");
+    body.className = "json-modal-body";
+    body.innerHTML = `<textarea class="json-modal-ta" spellcheck="false" aria-label="JSON value"></textarea>`;
+    const ta2 = body.querySelector(".json-modal-ta");
     ta2.value = textarea.value;
     const handle = attachJSONEditor(ta2, { rows: 18 });
-    overlay._handle = handle;
-    ta2.focus();
+
     const apply = () => {
       textarea.value = handle ? handle.getValue() : ta2.value;
       renderHighlight();
@@ -346,12 +334,27 @@ export function attachJSONEditor(textarea, opts = {}) {
       textarea.dispatchEvent(new Event("change", { bubbles: true }));
       closeModal();
     };
-    overlay.querySelector(".json-modal-apply").addEventListener("click", apply);
-    overlay.querySelector(".json-modal-cancel").addEventListener("click", closeModal);
-    overlay.querySelector(".json-modal-fmt").addEventListener("click", () => { if (handle) handle.format(); });
-    overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) closeModal(); });
-    overlay._onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); closeModal(); } };
-    document.addEventListener("keydown", overlay._onKey, true);
+
+    modalDlg = openDialog({
+      title: "Edit JSON",
+      label: "Edit JSON value",
+      body,
+      className: "json-modal",
+      // The nested editor holds listeners of its own; it goes when the dialog does,
+      // however the dialog was closed.
+      onClose: () => {
+        modalDlg = null;
+        try { handle && handle.destroy(); } catch { /* gone */ }
+      },
+      actions: [
+        { label: "{ } Format", kind: "ghost", keepOpen: true, attrs: { "class": "btn ghost small json-modal-fmt" },
+          title: "Reformat the JSON", onSelect: () => { if (handle) handle.format(); } },
+        { label: "Cancel", kind: "ghost", value: null, attrs: { "class": "btn ghost small json-modal-cancel" },
+          title: "Close without applying changes" },
+        { label: "Apply", keepOpen: true, attrs: { "class": "btn small json-modal-apply" },
+          title: "Apply the edited JSON", onSelect: apply },
+      ],
+    });
   };
   const expandBtn = toolbar.querySelector(".json-expand");
   if (expandBtn) expandBtn.addEventListener("click", openModal);

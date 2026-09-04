@@ -11,6 +11,7 @@ import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } 
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { devLang } from "./dev-lang.js";
 import { attachDiagramZoom, canvasController } from "./diagram-zoom.js";
+import { openDialog } from "./dialog.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
 import { attachIdCheck } from "./idcheck.js";
@@ -7681,37 +7682,35 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
   // the server exactly as it was. Asking before deploying is what makes that possible.
   function askStartForm(formId) {
     return new Promise((resolve) => {
-      const ov = document.createElement("div");
-      ov.className = "modal-ov";
-      ov.innerHTML = `
-        <div class="modal startform-modal" role="dialog" aria-modal="true" aria-label="Start form">
-          <div class="modal-head"><h2>Start values</h2></div>
-          <div class="modal-body">
-            <div class="startform-host" id="sf-host"></div>
-            <p class="err" id="sf-err"></p>
-          </div>
-          <div class="modal-foot">
-            <button class="btn neutral" data-sf-cancel title="Close without deploying or starting anything">Cancel</button>
-            <button class="btn" data-sf-send disabled title="Deploy this diagram and start an instance with these values">Send</button>
-          </div>
-        </div>`;
-      document.body.appendChild(ov);
-      const host = ov.querySelector("#sf-host");
-      const errEl = ov.querySelector("#sf-err");
-      const sendBtn = ov.querySelector("[data-sf-send]");
+      const body = document.createElement("div");
+      body.innerHTML = `
+        <div class="startform-host" id="sf-host"></div>
+        <p class="err" id="sf-err"></p>`;
+      const host = body.querySelector("#sf-host");
+      const errEl = body.querySelector("#sf-err");
       let form = null;
       let closed = false;
-      const close = (result) => {
-        closed = true;
-        if (form) { try { form.destroy(); } catch { /* noop */ } }
-        ov.remove();
-        document.removeEventListener("keydown", onKey);
-        resolve(result);
-      };
-      const onKey = (e) => { if (e.key === "Escape") close(null); };
-      document.addEventListener("keydown", onKey);
-      ov.querySelector("[data-sf-cancel]").addEventListener("click", () => close(null));
-      ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
+
+      const dlg = openDialog({
+        title: "Start values",
+        label: "Start form",
+        body,
+        className: "startform-modal",
+        onClose: (result) => {
+          closed = true;
+          if (form) { try { form.destroy(); } catch { /* noop */ } }
+          resolve(result);
+        },
+        actions: [
+          { label: "Cancel", kind: "neutral", value: null, attrs: { "data-sf-cancel": "" },
+            title: "Close without deploying or starting anything" },
+          { label: "Send", keepOpen: true, disabled: true, attrs: { "data-sf-send": "" },
+            title: "Deploy this diagram and start an instance with these values",
+            onSelect: () => submitStartForm() },
+        ],
+      });
+      const sendBtn = dlg.el.querySelector("[data-sf-send]");
+      const close = (result) => dlg.close(result);
 
       // loadIntoHost renders the form, and is what Try again calls to render it after a
       // failure. Both halves carry a deadline (formviewer.js): a viewer bundle or a
@@ -7754,7 +7753,8 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
       };
       loadIntoHost();
 
-      sendBtn.addEventListener("click", () => {
+      // Declared, not inline, because openDialog is handed it before this point.
+      function submitStartForm() {
         if (!form) return;
         const { data, errors } = form.submit();
         if (errors && Object.keys(errors).length > 0) {
@@ -7763,7 +7763,7 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
         }
         errEl.textContent = "";
         close(data || {});
-      });
+      }
     });
   }
 
@@ -8723,39 +8723,33 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   function confirmTerminate(count, scopeAll) {
     return new Promise((resolve) => {
       const gated = count > TERMINATE_TYPE_THRESHOLD;
-      const ov = document.createElement("div");
-      ov.className = "modal-ov";
       const scopeText = scopeAll
         ? `every running instance of this version`
         : `${count} selected instance${count === 1 ? "" : "s"}`;
-      ov.innerHTML = `
-        <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Confirm termination">
-          <div class="modal-head"><h2>Terminate ${count} instance${count === 1 ? "" : "s"}?</h2></div>
-          <div class="modal-body">
-            <p class="muted" style="margin:0 0 10px">This discards each token and moves ${scopeText} to the finished list as <b>terminated</b>. This can't be undone.</p>
-            ${gated ? `<label class="field"><span>Type <b>${count}</b> to confirm</span>
-              <input id="term-confirm-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="${count}"/></label>` : ""}
-          </div>
-          <div class="modal-foot">
-            <button class="btn neutral" data-term-cancel title="Close without terminating">Cancel</button>
-            <button class="btn danger" data-term-confirm ${gated ? "disabled" : ""} title="Terminate the selected instances">Terminate ${count}</button>
-          </div>
-        </div>`;
-      document.body.appendChild(ov);
-      const input = ov.querySelector("#term-confirm-input");
-      const confirmBtn = ov.querySelector("[data-term-confirm]");
-      const close = (ok) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(ok); };
-      const onKey = (e) => { if (e.key === "Escape") close(false); };
-      document.addEventListener("keydown", onKey);
+      const body = document.createElement("div");
+      body.innerHTML = `
+        <p class="muted" style="margin:0 0 10px">This discards each token and moves ${scopeText} to the finished list as <b>terminated</b>. This can't be undone.</p>
+        ${gated ? `<label class="field"><span>Type <b>${count}</b> to confirm</span>
+          <input id="term-confirm-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="${count}"/></label>` : ""}`;
+      const input = body.querySelector("#term-confirm-input");
+
+      const dlg = openDialog({
+        title: `Terminate ${count} instance${count === 1 ? "" : "s"}?`,
+        label: "Confirm termination",
+        body,
+        className: "confirm-modal",
+        onClose: (value) => resolve(value === true),
+        actions: [
+          { label: "Cancel", kind: "neutral", value: false, attrs: { "data-term-cancel": "" },
+            title: "Close without terminating" },
+          { label: `Terminate ${count}`, kind: "danger", value: true, disabled: gated,
+            attrs: { "data-term-confirm": "" }, title: "Terminate the selected instances" },
+        ],
+      });
+      const confirmBtn = dlg.el.querySelector("[data-term-confirm]");
       if (input) {
         input.addEventListener("input", () => { confirmBtn.disabled = input.value.trim() !== String(count); });
-        input.focus();
-      } else {
-        confirmBtn.focus();
       }
-      ov.querySelector("[data-term-cancel]").addEventListener("click", () => close(false));
-      confirmBtn.addEventListener("click", () => { if (!confirmBtn.disabled) close(true); });
-      ov.addEventListener("click", (e) => { if (e.target === ov) close(false); });
     });
   }
 
@@ -9308,18 +9302,6 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <div class="ops-tab-body" id="tab-variables" hidden></div>
           <div class="ops-tab-body" id="tab-decisions" hidden></div>
           <div class="ops-tab-body" id="tab-data" hidden></div>
-        </div>
-      </div>
-      <div class="var-modal-ov" id="var-modal-ov" hidden>
-        <div class="var-modal" role="dialog" aria-modal="true" aria-labelledby="var-modal-title">
-          <div class="var-modal-head">
-            <span class="var-modal-title mono" id="var-modal-title"></span>
-            <span class="vtag obj" id="var-modal-tag"></span>
-            <span style="flex:1"></span>
-            <button class="btn ghost small vcopy vcopy-all" id="var-modal-copy" type="button" data-copy="" title="Copy all variables as JSON">Copy JSON</button>
-            <button class="icon-btn" id="var-modal-x" type="button" title="Close" aria-label="Close">✕</button>
-          </div>
-          <div class="var-modal-body"><pre class="vj-body" id="var-modal-body"></pre></div>
         </div>
       </div>
       <div class="dec-pop" id="dec-pop" hidden></div>
@@ -10061,16 +10043,35 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
 
   // openVarModal shows an object/array variable's full value as pretty-printed,
   // syntax-highlighted JSON — the deep-inspect surface the table's "···" opens.
-  const modalOv = root.querySelector("#var-modal-ov");
+  //
+  // It used to be a hidden div in the view, shown and hidden in place, with a comment
+  // claiming the focus was trapped in it. It was not — nothing trapped it, and Escape
+  // only worked while the focus happened to be inside. On the shared dialog both are
+  // true (ADR-draft-shared-ui-primitives).
+  let varDlg = null;
   function openVarModal(name, jsonText, typeLabel) {
-    root.querySelector("#var-modal-title").textContent = name;
-    root.querySelector("#var-modal-tag").textContent = typeLabel || "json";
-    root.querySelector("#var-modal-body").innerHTML = highlightJSON(jsonText);
-    root.querySelector("#var-modal-copy").dataset.copy = prettyJSON(jsonText);
-    modalOv.hidden = false;
-    root.querySelector("#var-modal-x").focus(); // so Escape closes and focus is trapped in the dialog
+    const body = document.createElement("div");
+    body.className = "var-modal-body";
+    body.innerHTML = `<pre class="vj-body" id="var-modal-body"></pre>`;
+    body.querySelector("#var-modal-body").innerHTML = highlightJSON(jsonText);
+    varDlg = openDialog({
+      title: name,
+      label: `Variable ${name}`,
+      body,
+      className: "var-modal",
+      onClose: () => { varDlg = null; },
+      actions: [
+        { spacer: typeLabel || "json", className: "vtag" },
+        { label: "Copy JSON", kind: "ghost", keepOpen: true,
+          attrs: { "id": "var-modal-copy", "data-copy": prettyJSON(jsonText), "class": "btn ghost small vcopy vcopy-all" },
+          title: "Copy all variables as JSON" },
+      ],
+    });
+    // The copy button is delegated (bindVarCopy), and the dialog is built per open, so
+    // the handler goes on each one rather than once on a container that used to stand.
+    bindVarCopy(varDlg.el, toast);
   }
-  const closeVarModal = () => { modalOv.hidden = true; };
+  const closeVarModal = () => { if (varDlg) varDlg.close(null); };
 
   // --- Decisions tab: the DMN evaluations this instance made (ADR-0066) ---
   // Rendered like the Operations decision-detail page (temis Operate style): inputs
@@ -10996,11 +10997,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (show) expandedVars.add(key); else expandedVars.delete(key);
     syncStructToggle(shownVars()); // the toolbar control flips to "Collapse all" and back
   });
-  modalOv.addEventListener("click", (e) => { if (e.target === modalOv) closeVarModal(); });
-  modalOv.addEventListener("keydown", (e) => { if (e.key === "Escape") closeVarModal(); });
-  root.querySelector("#var-modal-x").addEventListener("click", closeVarModal);
+
   bindVarCopy(varsEl, toast);
-  bindVarCopy(modalOv, toast);
   wireOpsResizer(root, viewer);
 
   // Decisions tab: hovering (or focusing) a result row backed by a decision table

@@ -6,6 +6,7 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 
 import { attachDiagramZoom, canvasController } from "./diagram-zoom.js";
+import { openDialog } from "./dialog.js";
 
 let vendorPromise;
 function loadVendor() {
@@ -482,36 +483,30 @@ function propertiesHTML(item, resolution, canEdit, observations, drift, ctx, ctx
 function pickBinding(list, current, key) {
   const chosen = new Set((current?.values || []).map((value) => value.value));
   return new Promise((resolve) => {
-    const ov = document.createElement("div");
-    ov.className = "modal-ov";
-    ov.innerHTML = `
-      <div class="modal" role="dialog" aria-modal="true" aria-label="Bind Atlas resource">
-        <div class="modal-head"><h2>Bind ${esc(key)}</h2></div>
-        <div class="modal-body">
-          <p class="muted" style="margin:0 0 10px">Only resources you may see are listed.
-            Selecting none clears the binding.</p>
-          <ul class="panorama-pick">
-            ${list.candidates.map((candidate) => `<li><label>
-              <input type="checkbox" value="${esc(candidate.id)}" ${chosen.has(candidate.id) ? "checked" : ""}/>
-              <span><b>${esc(candidate.name)}</b> <code class="muted">${esc(candidate.id)}</code></span>
-            </label></li>`).join("")}
-          </ul>
-        </div>
-        <div class="modal-foot">
-          <button class="btn neutral" data-cancel>Cancel</button>
-          <button class="btn" data-confirm>Save binding</button>
-        </div>
-      </div>`;
-    document.body.appendChild(ov);
-    const close = (result) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(result); };
-    const onKey = (event) => { if (event.key === "Escape") close(null); };
-    document.addEventListener("keydown", onKey);
-    ov.querySelector("[data-cancel]").addEventListener("click", () => close(null));
-    ov.querySelector("[data-confirm]").addEventListener("click", () => {
-      close([...ov.querySelectorAll("input:checked")].map((input) => input.value));
+    const body = document.createElement("div");
+    body.innerHTML = `
+      <p class="muted" style="margin:0 0 10px">Only resources you may see are listed.
+        Selecting none clears the binding.</p>
+      <ul class="panorama-pick">
+        ${list.candidates.map((candidate) => `<li><label>
+          <input type="checkbox" value="${esc(candidate.id)}" ${chosen.has(candidate.id) ? "checked" : ""}/>
+          <span><b>${esc(candidate.name)}</b> <code class="muted">${esc(candidate.id)}</code></span>
+        </label></li>`).join("")}
+      </ul>`;
+
+    const dlg = openDialog({
+      title: `Bind ${key}`,
+      label: "Bind Atlas resource",
+      body,
+      onClose: (value) => resolve(value),
+      actions: [
+        { label: "Cancel", kind: "neutral", value: null, attrs: { "data-cancel": "" } },
+        // An empty array is a real answer here — it is how a binding is cleared — so
+        // the value is computed when the button is pressed rather than declared.
+        { label: "Save binding", keepOpen: true, attrs: { "data-confirm": "" },
+          onSelect: () => dlg.close([...body.querySelectorAll("input:checked")].map((input) => input.value)) },
+      ],
     });
-    ov.addEventListener("click", (event) => { if (event.target === ov) close(null); });
-    ov.querySelector("input, [data-confirm]")?.focus();
   });
 }
 
