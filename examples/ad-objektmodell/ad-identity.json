@@ -124,7 +124,7 @@
           "name": "msDS-KrbTgtLink",
           "type": "string",
           "multiplicity": "0..1",
-          "documentation": "ms-DS-KrbTgt-Link - Used with RODCs to define which krbtgt\\_XXXX account corresponds to each RODC. (LDAP-Syntax: Object(DS-DN))"
+          "documentation": "ms-DS-KrbTgt-Link - Used with RODCs to define which krbtgt_XXXX account corresponds to each RODC. (LDAP-Syntax: Object(DS-DN))"
         },
         {
           "name": "msDS-NeverRevealGroup",
@@ -1726,7 +1726,7 @@
           "name": "msDS-Approx-Immed-Subordinates",
           "type": "number",
           "multiplicity": "0..1",
-          "documentation": "ms-DS-Approx-Immed-Subordinates - The value returned by this attribute is based on index sizes. This may be off by +/ \\ 8211;10 on large containers, and the error is theoretically unbounded, but using this attribute helps the UI display the contents of a container. (LDAP-Syntax: Enumeration)"
+          "documentation": "ms-DS-Approx-Immed-Subordinates - The value returned by this attribute is based on index sizes. This may be off by +/ -10 on large containers, and the error is theoretically unbounded, but using this attribute helps the UI display the contents of a container. (LDAP-Syntax: Enumeration)"
         },
         {
           "name": "msDS-AuthenticatedToAccountlist",
@@ -2104,7 +2104,7 @@
           "name": "sDRightsEffective",
           "type": "number",
           "multiplicity": "0..1",
-          "documentation": "SD-Rights-Effective - This constructed attribute returns a single DWORD value that can have up to three bits set OWNER\\_SECURITY\\_INFORMATIONDACL\\_SECURITY\\_INFORMATIONSACL\\_SECURITY\\_INFORMATION If a bit is set, then the user has write access to the corresponding part of the security descriptor. Owner means both owner and group. (LDAP-Syntax: Enumeration)"
+          "documentation": "SD-Rights-Effective - This constructed attribute returns a single DWORD value that can have up to three bits set OWNER_SECURITY_INFORMATIONDACL_SECURITY_INFORMATIONSACL_SECURITY_INFORMATION If a bit is set, then the user has write access to the corresponding part of the security descriptor. Owner means both owner and group. (LDAP-Syntax: Enumeration)"
         },
         {
           "name": "serverReferenceBL",
@@ -2399,7 +2399,7 @@
           "name": "jpegPhoto",
           "type": "string",
           "multiplicity": "0..*",
-          "documentation": "jpegPhoto - Used to store one or more images of a person using the JPEG File Interchange Format \\ JFIF\\ . (LDAP-Syntax: Object(Replica-Link))"
+          "documentation": "jpegPhoto - Used to store one or more images of a person using the JPEG File Interchange Format JFIF . (LDAP-Syntax: Object(Replica-Link))"
         },
         {
           "name": "labeledURI",
@@ -2471,7 +2471,7 @@
           "name": "maxStorage",
           "type": "number",
           "multiplicity": "0..1",
-          "documentation": "Max-Storage - The maximum amount of disk space the user can use. Use the value specified in USER\\_MAXSTORAGE\\_UNLIMITED to use all available disk space. (LDAP-Syntax: Interval)"
+          "documentation": "Max-Storage - The maximum amount of disk space the user can use. Use the value specified in USER_MAXSTORAGE_UNLIMITED to use all available disk space. (LDAP-Syntax: Interval)"
         },
         {
           "name": "msCOM-UserPartitionSetLink",
@@ -2909,7 +2909,7 @@
           "name": "msTSProfilePath",
           "type": "string",
           "multiplicity": "0..1",
-          "documentation": "ms-TS-Profile-Path - Terminal Services Profile Path specifies a roaming or mandatory profile path to use when the user logs on to the terminal server. The profile path is in the following network path format \\\\\\\\ServerName\\\\ProfilesFolderName\\\\UserName. (LDAP-Syntax: String(Unicode))"
+          "documentation": "ms-TS-Profile-Path - Terminal Services Profile Path specifies a roaming or mandatory profile path to use when the user logs on to the terminal server. The profile path is in the following network path format \\\\ServerName\\ProfilesFolderName\\UserName. (LDAP-Syntax: String(Unicode))"
         },
         {
           "name": "msTSProperty01",
@@ -2975,7 +2975,7 @@
           "name": "otherLoginWorkstations",
           "type": "string",
           "multiplicity": "0..*",
-          "documentation": "Other-Login-Workstations - Non \\ 8211;Windows NT or LAN Manager workstations from which a user can log on. (LDAP-Syntax: String(Unicode))"
+          "documentation": "Other-Login-Workstations - Non -Windows NT or LAN Manager workstations from which a user can log on. (LDAP-Syntax: String(Unicode))"
         },
         {
           "name": "homePhone",
@@ -3089,7 +3089,7 @@
           "name": "userPKCS12",
           "type": "string",
           "multiplicity": "0..*",
-          "documentation": "userPKCS12 - PKCS \\ 12 PFX PDU for exchange of personal identity information. (LDAP-Syntax: Object(Replica-Link))"
+          "documentation": "userPKCS12 - PKCS 12 PFX PDU for exchange of personal identity information. (LDAP-Syntax: Object(Replica-Link))"
         },
         {
           "name": "userPrincipalName",
@@ -3101,13 +3101,13 @@
           "name": "userSharedFolder",
           "type": "string",
           "multiplicity": "0..1",
-          "documentation": "User-Shared-Folder - Specifies a UNC path to the user's shared documents folder. The path must be a network UNC path of the form \\\\\\\\Server\\\\Share\\\\Directory. This value can be a null string. (LDAP-Syntax: String(Unicode))"
+          "documentation": "User-Shared-Folder - Specifies a UNC path to the user's shared documents folder. The path must be a network UNC path of the form \\\\Server\\Share\\Directory. This value can be a null string. (LDAP-Syntax: String(Unicode))"
         },
         {
           "name": "userSharedFolderOther",
           "type": "string",
           "multiplicity": "0..*",
-          "documentation": "User-Shared-Folder-Other - Specifies a UNC path to the user's additional shared documents folder. The path must be a network UNC path of the form \\\\\\\\Server\\\\Share\\\\Directory. This value can be a null string. (LDAP-Syntax: String(Unicode))"
+          "documentation": "User-Shared-Folder-Other - Specifies a UNC path to the user's additional shared documents folder. The path must be a network UNC path of the form \\\\Server\\Share\\Directory. This value can be a null string. (LDAP-Syntax: String(Unicode))"
         },
         {
           "name": "userSMIMECertificate",
@@ -3214,7 +3214,7 @@
           "name": "jpegPhoto",
           "type": "string",
           "multiplicity": "0..*",
-          "documentation": "jpegPhoto - Used to store one or more images of a person using the JPEG File Interchange Format \\ JFIF\\ . (LDAP-Syntax: Object(Replica-Link))"
+          "documentation": "jpegPhoto - Used to store one or more images of a person using the JPEG File Interchange Format JFIF . (LDAP-Syntax: Object(Replica-Link))"
         },
         {
           "name": "labeledURI",
@@ -3286,7 +3286,7 @@
           "name": "userPKCS12",
           "type": "string",
           "multiplicity": "0..*",
-          "documentation": "userPKCS12 - PKCS \\ 12 PFX PDU for exchange of personal identity information. (LDAP-Syntax: Object(Replica-Link))"
+          "documentation": "userPKCS12 - PKCS 12 PFX PDU for exchange of personal identity information. (LDAP-Syntax: Object(Replica-Link))"
         },
         {
           "name": "userSMIMECertificate",

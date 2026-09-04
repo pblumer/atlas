@@ -164,3 +164,22 @@ ergibt 18 Klassen, 527 Attribute und 22 Generalisierungen.
   Vererbungstiefe, in der Spalte gestapelt nach Kastenhoehe. Atlas uebernimmt
   sie. Die XMI-Variante kann das nicht -- XMI haelt die Geometrie in einer
   eigenen Datei -- dort legt Atlas ein Raster an.
+* **Textbereinigung.** Microsofts Markdown-Quellen enthalten Escapes und
+  Reste kaputter HTML-Entities (`\ 8211;` statt eines Gedankenstrichs, ein
+  doppelt escapter UNC-Pfad). `unescape()` raeumt beides auf, laesst die
+  Backslashes eines echten UNC-Pfads aber stehen.
+
+## Grenze beim Hochladen ueber MCP
+
+`atlas_import_information_model` und `atlas_save_information_model` tragen das
+Dokument inline im Aufruf. Die vollstaendige Datei mit allen 527
+Attributbeschreibungen ist 161 KB und damit zu gross dafuer. In Atlas steht
+deshalb je Attribut der erste Satz der Microsoft-Beschreibung, auf 130 Zeichen
+begrenzt; die Dateien hier tragen den vollen Text samt LDAP-Syntax. Wer den
+will, importiert `ad-identity.json` ueber die Oberflaeche.
+
+Zweite Stolperstelle: `atlas_save_information_model` ersetzt die Klassen und
+vergibt fuer jede eine neue Id. Werden nur `classes` gesendet, zeigen die
+gespeicherten Generalisierungen anschliessend ins Leere und der Server weist
+das Modell als ungueltig zurueck. `classes` und `associations` gehoeren in
+denselben Aufruf, dann werden die Enden mitgezogen.

@@ -139,7 +139,7 @@
     </ownedAttribute>
     <ownedAttribute xmi:type="uml:Property" xmi:id="Computer-msDS-KrbTgtLink" name="msDS-KrbTgtLink" type="primitive-string">
       <ownedComment xmi:type="uml:Comment" xmi:id="Computer-msDS-KrbTgtLink-doc">
-        <body>ms-DS-KrbTgt-Link - Used with RODCs to define which krbtgt\_XXXX account corresponds to each RODC. (LDAP-Syntax: Object(DS-DN))</body>
+        <body>ms-DS-KrbTgt-Link - Used with RODCs to define which krbtgt_XXXX account corresponds to each RODC. (LDAP-Syntax: Object(DS-DN))</body>
       </ownedComment>
       <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
       <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1"/>
@@ -1928,7 +1928,7 @@
     </ownedAttribute>
     <ownedAttribute xmi:type="uml:Property" xmi:id="Top-msDS-Approx-Immed-Subordinates" name="msDS-Approx-Immed-Subordinates" type="primitive-number">
       <ownedComment xmi:type="uml:Comment" xmi:id="Top-msDS-Approx-Immed-Subordinates-doc">
-        <body>ms-DS-Approx-Immed-Subordinates - The value returned by this attribute is based on index sizes. This may be off by +/ \ 8211;10 on large containers, and the error is theoretically unbounded, but using this attribute helps the UI display the contents of a container. (LDAP-Syntax: Enumeration)</body>
+        <body>ms-DS-Approx-Immed-Subordinates - The value returned by this attribute is based on index sizes. This may be off by +/ -10 on large containers, and the error is theoretically unbounded, but using this attribute helps the UI display the contents of a container. (LDAP-Syntax: Enumeration)</body>
       </ownedComment>
       <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
       <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1"/>
@@ -2369,7 +2369,7 @@
     </ownedAttribute>
     <ownedAttribute xmi:type="uml:Property" xmi:id="Top-sDRightsEffective" name="sDRightsEffective" type="primitive-number">
       <ownedComment xmi:type="uml:Comment" xmi:id="Top-sDRightsEffective-doc">
-        <body>SD-Rights-Effective - This constructed attribute returns a single DWORD value that can have up to three bits set OWNER\_SECURITY\_INFORMATIONDACL\_SECURITY\_INFORMATIONSACL\_SECURITY\_INFORMATION If a bit is set, then the user has write access to the corresponding part of the security descriptor. Owner means both owner and group. (LDAP-Syntax: Enumeration)</body>
+        <body>SD-Rights-Effective - This constructed attribute returns a single DWORD value that can have up to three bits set OWNER_SECURITY_INFORMATIONDACL_SECURITY_INFORMATIONSACL_SECURITY_INFORMATION If a bit is set, then the user has write access to the corresponding part of the security descriptor. Owner means both owner and group. (LDAP-Syntax: Enumeration)</body>
       </ownedComment>
       <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
       <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1"/>
@@ -2706,7 +2706,7 @@
     </ownedAttribute>
     <ownedAttribute xmi:type="uml:Property" xmi:id="User-jpegPhoto" name="jpegPhoto" type="primitive-string">
       <ownedComment xmi:type="uml:Comment" xmi:id="User-jpegPhoto-doc">
-        <body>jpegPhoto - Used to store one or more images of a person using the JPEG File Interchange Format \ JFIF\ . (LDAP-Syntax: Object(Replica-Link))</body>
+        <body>jpegPhoto - Used to store one or more images of a person using the JPEG File Interchange Format JFIF . (LDAP-Syntax: Object(Replica-Link))</body>
       </ownedComment>
       <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
       <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
@@ -2790,7 +2790,7 @@
     </ownedAttribute>
     <ownedAttribute xmi:type="uml:Property" xmi:id="User-maxStorage" name="maxStorage" type="primitive-number">
       <ownedComment xmi:type="uml:Comment" xmi:id="User-maxStorage-doc">
-        <body>Max-Storage - The maximum amount of disk space the user can use. Use the value specified in USER\_MAXSTORAGE\_UNLIMITED to use all available disk space. (LDAP-Syntax: Interval)</body>
+        <body>Max-Storage - The maximum amount of disk space the user can use. Use the value specified in USER_MAXSTORAGE_UNLIMITED to use all available disk space. (LDAP-Syntax: Interval)</body>
       </ownedComment>
       <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
       <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1"/>
@@ -3301,7 +3301,7 @@
     </ownedAttribute>
     <ownedAttribute xmi:type="uml:Property" xmi:id="User-msTSProfilePath" name="msTSProfilePath" type="primitive-string">
       <ownedComment xmi:type="uml:Comment" xmi:id="User-msTSProfilePath-doc">
-        <body>ms-TS-Profile-Path - Terminal Services Profile Path specifies a roaming or mandatory profile path to use when the user logs on to the terminal server. The profile path is in the following network path format \\\\ServerName\\ProfilesFolderName\\UserName. (LDAP-Syntax: String(Unicode))</body>
+        <body>ms-TS-Profile-Path - Terminal Services Profile Path specifies a roaming or mandatory profile path to use when the user logs on to the terminal server. The profile path is in the following network path format \\ServerName\ProfilesFolderName\UserName. (LDAP-Syntax: String(Unicode))</body>
       </ownedComment>
       <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
       <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1"/>
@@ -3378,7 +3378,7 @@
     </ownedAttribute>
     <ownedAttribute xmi:type="uml:Property" xmi:id="User-otherLoginWorkstations" name="otherLoginWorkstations" type="primitive-string">
       <ownedComment xmi:type="uml:Comment" xmi:id="User-otherLoginWorkstations-doc">
-        <body>Other-Login-Workstations - Non \ 8211;Windows NT or LAN Manager workstations from which a user can log on. (LDAP-Syntax: String(Unicode))</body>
+        <body>Other-Login-Workstations - Non -Windows NT or LAN Manager workstations from which a user can log on. (LDAP-Syntax: String(Unicode))</body>
       </ownedComment>
       <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
       <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
@@ -3511,7 +3511,7 @@
     </ownedAttribute>
     <ownedAttribute xmi:type="uml:Property" xmi:id="User-userPKCS12" name="userPKCS12" type="primitive-string">
       <ownedComment xmi:type="uml:Comment" xmi:id="User-userPKCS12-doc">
-        <body>userPKCS12 - PKCS \ 12 PFX PDU for exchange of personal identity information. (LDAP-Syntax: Object(Replica-Link))</body>
+        <body>userPKCS12 - PKCS 12 PFX PDU for exchange of personal identity information. (LDAP-Syntax: Object(Replica-Link))</body>
       </ownedComment>
       <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
       <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
@@ -3525,14 +3525,14 @@
     </ownedAttribute>
     <ownedAttribute xmi:type="uml:Property" xmi:id="User-userSharedFolder" name="userSharedFolder" type="primitive-string">
       <ownedComment xmi:type="uml:Comment" xmi:id="User-userSharedFolder-doc">
-        <body>User-Shared-Folder - Specifies a UNC path to the user's shared documents folder. The path must be a network UNC path of the form \\\\Server\\Share\\Directory. This value can be a null string. (LDAP-Syntax: String(Unicode))</body>
+        <body>User-Shared-Folder - Specifies a UNC path to the user's shared documents folder. The path must be a network UNC path of the form \\Server\Share\Directory. This value can be a null string. (LDAP-Syntax: String(Unicode))</body>
       </ownedComment>
       <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
       <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1"/>
     </ownedAttribute>
     <ownedAttribute xmi:type="uml:Property" xmi:id="User-userSharedFolderOther" name="userSharedFolderOther" type="primitive-string">
       <ownedComment xmi:type="uml:Comment" xmi:id="User-userSharedFolderOther-doc">
-        <body>User-Shared-Folder-Other - Specifies a UNC path to the user's additional shared documents folder. The path must be a network UNC path of the form \\\\Server\\Share\\Directory. This value can be a null string. (LDAP-Syntax: String(Unicode))</body>
+        <body>User-Shared-Folder-Other - Specifies a UNC path to the user's additional shared documents folder. The path must be a network UNC path of the form \\Server\Share\Directory. This value can be a null string. (LDAP-Syntax: String(Unicode))</body>
       </ownedComment>
       <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
       <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
@@ -3650,7 +3650,7 @@
     </ownedAttribute>
     <ownedAttribute xmi:type="uml:Property" xmi:id="inetOrgPerson-jpegPhoto" name="jpegPhoto" type="primitive-string">
       <ownedComment xmi:type="uml:Comment" xmi:id="inetOrgPerson-jpegPhoto-doc">
-        <body>jpegPhoto - Used to store one or more images of a person using the JPEG File Interchange Format \ JFIF\ . (LDAP-Syntax: Object(Replica-Link))</body>
+        <body>jpegPhoto - Used to store one or more images of a person using the JPEG File Interchange Format JFIF . (LDAP-Syntax: Object(Replica-Link))</body>
       </ownedComment>
       <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
       <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>
@@ -3734,7 +3734,7 @@
     </ownedAttribute>
     <ownedAttribute xmi:type="uml:Property" xmi:id="inetOrgPerson-userPKCS12" name="userPKCS12" type="primitive-string">
       <ownedComment xmi:type="uml:Comment" xmi:id="inetOrgPerson-userPKCS12-doc">
-        <body>userPKCS12 - PKCS \ 12 PFX PDU for exchange of personal identity information. (LDAP-Syntax: Object(Replica-Link))</body>
+        <body>userPKCS12 - PKCS 12 PFX PDU for exchange of personal identity information. (LDAP-Syntax: Object(Replica-Link))</body>
       </ownedComment>
       <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
       <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="*"/>

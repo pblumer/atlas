@@ -72,6 +72,23 @@ SYNTAX = {
 IDENTITY_CLASS, IDENTITY_ATTR = "Top", "objectGUID"
 
 
+# Numeric HTML entities that lost their ampersand somewhere upstream in Microsoft's
+# own files: "+/ \\ 8211;10" is meant to read "+/-10". Only the few punctuation
+# codepoints that actually occur are mapped, so a number followed by a semicolon in
+# ordinary prose is left alone.
+ENTITIES = {"160": " ", "8211": "-", "8212": "-", "8216": "'", "8217": "'",
+            "8220": '"', "8221": '"'}
+
+
+def unescape(text):
+    """Undoes markdown escaping and the mangled entities in the source files."""
+    text = re.sub(r"\s?\b(%s);" % "|".join(ENTITIES), lambda m: ENTITIES[m.group(1)], text.strip())
+    # A markdown backslash escape is a backslash before any character; dropping it
+    # also repairs the doubled backslashes of a UNC path.
+    text = re.sub(r"\\(.)", r"\1", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def cell(text):
     """Raeumt eine Markdown-Tabellenzelle zu blanken Bezeichnern ab."""
     text = re.sub(r"\(c-[^)]*\.md\)", " ", text)
@@ -93,7 +110,9 @@ class Schema:
 
     def front_matter(self, text, key):
         match = re.search(r"^%s:\s*(.+?)\s*$" % re.escape(key), text, re.M)
-        return match.group(1).strip() if match else ""
+        if not match:
+            return ""
+        return unescape(match.group(1))
 
     def attribute(self, filename):
         """LDAP-Name, Typ, Einwertigkeit und Beschreibung eines Attributs."""
