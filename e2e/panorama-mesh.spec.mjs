@@ -74,6 +74,18 @@ function installMock(page, mesh = graph) {
   });
 }
 
+// The depth control is a number field plus an "all" switch, so setting it is two
+// possible gestures rather than one option to pick. One helper, so every test says
+// what it wants rather than how the control is built.
+async function setDepth(page, hops) {
+  if (hops === "all") {
+    await page.locator("#mesh-depth-any").check();
+    return;
+  }
+  await page.locator("#mesh-depth-any").uncheck();
+  await page.locator("#mesh-depth").fill(String(hops));
+}
+
 test("renders the derived landscape and drills into a process", async ({ page }) => {
   installMock(page);
   const pageErrors = [];
@@ -274,7 +286,7 @@ test("selecting a node shows its blast radius and dims the rest", async ({ page 
   await expect(page.locator('[data-node-id="application:a1"]')).toHaveClass(/mesh-dimmed/);
 
   // Depth is the chosen depth: one hop stops at the direct dependent.
-  await page.locator("#mesh-depth").selectOption("1");
+  await setDepth(page, "1");
   await expect(page.locator(".mesh-impact-count")).toContainText("1");
   await expect(page.locator('[data-node-id="process:1"]')).toHaveClass(/mesh-dimmed/);
 
@@ -966,7 +978,7 @@ test("what you placed by hand survives a repaint", async ({ page }) => {
   // Anything that re-lays-out the graph. A depth change is the cheapest of them and
   // has nothing to do with where things sit, which is the point: an arrangement that
   // only survived until the next unrelated click would not be worth making.
-  await page.selectOption("#mesh-depth", "1");
+  await setDepth(page, "1");
   await expect(page.locator('[data-node-id="process:5"]')).toHaveClass(/mesh-pinned/);
   const after = await worldAt(page, "process:5");
   expect(Math.hypot(after.x - dropped.x, after.y - dropped.y)).toBeLessThan(1);
@@ -1333,13 +1345,13 @@ test("the drilldown reaches as far as the depth says", async ({ page }) => {
   installMock(page);
   await page.goto("/index.html#/panorama/starmap");
 
-  await page.selectOption("#mesh-depth", "1");
+  await setDepth(page, "1");
   await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
   const oneHop = await page.locator(".mesh-node").count();
   // Invoice's own neighbours only: the decision that only Dunning uses is two away.
   await expect(page.locator('[data-node-id="decision:credit"]')).toHaveCount(0);
 
-  await page.selectOption("#mesh-depth", "2");
+  await setDepth(page, "2");
   await expect(page.locator('[data-node-id="decision:credit"]')).toHaveCount(1);
   expect(await page.locator(".mesh-node").count()).toBeGreaterThan(oneHop);
 });
@@ -1739,7 +1751,7 @@ test("the impact answer says how bad the radius is and names it", async ({ page 
   installMock(page, radiusGraph);
   await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
-  await page.selectOption("#mesh-depth", "all");
+  await setDepth(page, "all");
   await page.locator('[data-node-id="worker:mail"]').click();
 
   const panel = page.locator(".mesh-panel");
@@ -1767,7 +1779,7 @@ test("the panel tells direct dependents from the ones further out", async ({ pag
   installMock(page, radiusGraph);
   await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
-  await page.selectOption("#mesh-depth", "all");
+  await setDepth(page, "all");
   await page.locator('[data-node-id="decision:credit"]').click();
 
   const panel = page.locator(".mesh-panel");
@@ -1783,7 +1795,7 @@ test("the landscape ranks its blast radii with nothing selected", async ({ page 
   installMock(page, radiusGraph);
   await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
-  await page.selectOption("#mesh-depth", "all");
+  await setDepth(page, "all");
 
   const rank = page.locator(".mesh-rank");
   await expect(rank.locator(".mesh-rank-head")).toContainText("Biggest blast radius");
@@ -2533,6 +2545,33 @@ test("the count on the canvas is asked for, and only where there is one", async 
   await expect(page.locator(".mesh-runs")).toHaveCount(0);
 });
 
+// A number a real server produces: the counts on this view come from the same engine
+// counters the Operations badges carry, and there they reach five and six digits. The
+// thousands are grouped with a narrow no-break space, on the canvas and in the panel
+// alike — an unbroken "50002" has to be read digit by digit, and a lifetime total is
+// the number most likely to be long.
+test("a large count is grouped in thousands, on the canvas and in the panel", async ({ page }) => {
+  installMock(page, {
+    ...runningMesh,
+    nodes: runningMesh.nodes.map((n) => n.id !== "process:1" ? n
+      : { ...n, runtime: { running: 50002, finished: 1284431, lastActivity: 0 } }),
+  });
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.getByLabel("Instances").check();
+  const runs = page.locator('[data-node-id="process:1"] .mesh-runs');
+  // textContent rather than a whitespace-normalizing matcher: the separator is the
+  // point, and normalization would accept a plain space just as happily.
+  expect(await runs.textContent()).toBe("50\u202F002 running");
+
+  await page.locator('[data-node-id="process:1"] .mesh-body').click();
+  const panel = page.locator(".mesh-panel .mesh-runtime");
+  expect(await panel.locator(".mesh-runtime-now").textContent()).toBe("50\u202F002 running");
+  await expect(panel).toContainText("1\u202F284\u202F431 finished");
+});
+
 // The panel states the tally for whichever node is selected, whether or not the
 // canvas is carrying counts — including the zero the canvas has no room to give.
 test("the panel says what a process is running, the zero included", async ({ page }) => {
@@ -2679,4 +2718,87 @@ test("an export of a path says which way it came", async ({ page }) => {
   });
   expect(svg).toContain("drilled into Invoice");
   expect(svg).toContain("via Billing");
+});
+
+// Depth is a number somebody types, or the whole graph. It was a three-option list —
+// 1 hop, 2 hops, all — which answers the question at exactly two depths and refuses
+// every other one: a reader asking "and one further?" had nothing to press.
+test("depth is a number to type, and 'all' for however far it goes", async ({ page }) => {
+  installMock(page, radiusGraph);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  // Three, which the old control could not be asked for.
+  await page.locator('[data-node-id="worker:mail"] .mesh-body').click();
+  await setDepth(page, "3");
+  await expect(page.locator(".mesh-impact-count")).toContainText("within 3 hop(s)");
+
+  // "all" makes the field inert rather than hiding it: the number the reader had is
+  // still there when they come back to it.
+  await page.locator("#mesh-depth-any").check();
+  await expect(page.locator("#mesh-depth")).toBeDisabled();
+  await expect(page.locator("#mesh-depth")).toHaveValue("3");
+  await expect(page.locator(".mesh-impact-count")).toContainText("within any hop(s)");
+
+  await page.locator("#mesh-depth-any").uncheck();
+  await expect(page.locator("#mesh-depth")).toBeEnabled();
+  await expect(page.locator(".mesh-impact-count")).toContainText("within 3 hop(s)");
+});
+
+// A field somebody is mid-edit in holds anything, and a walk of zero hops is a
+// picture of one node with nothing drawn around it — a broken answer rather than a
+// narrow one. So it is read through a floor, and put right when the field is left.
+test("a depth that is not a depth falls back to one hop", async ({ page }) => {
+  await page.goto("/panorama-impact-harness.html");
+  await expect(page.locator("#ready")).toHaveText("ready");
+  const read = await page.evaluate(() =>
+    ["", "0", "-4", "abc", "2.7", "500", "all"].map((v) => window.depthOf(v)));
+  expect(read).toEqual([1, 1, 1, 1, 2, 99, Infinity]);
+});
+
+// A picture laid out for a box the surface never had.
+//
+// The first paint happens as soon as the markup is in the document, and there are
+// ordinary reasons the surface has no box at that moment — a tab opened in the
+// background does no layout at all. The measurement then falls back to its floor,
+// the world takes that floor's nearly-square aspect, and the finished picture is
+// letterboxed into a column of a wide canvas. Nothing was wrong with the graph; it
+// was laid out for a box it never had — and it stayed wrong because nothing measured
+// again, so changing the notation, or anything else that repaints, "fixed" it.
+test("a picture laid out before the canvas had a box corrects itself", async ({ page }) => {
+  installMock(page, radiusGraph);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  // No box at all when the first layout runs, which is what a background tab hands
+  // the view. Removed once the picture is up, as switching to that tab would.
+  await page.addInitScript(() => {
+    const style = document.createElement("style");
+    style.id = "no-box";
+    style.textContent = ".mesh-surface{display:none!important}";
+    document.addEventListener("DOMContentLoaded", () => document.head.append(style));
+  });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+  await page.evaluate(() => document.getElementById("no-box")?.remove());
+
+  // The viewBox has the canvas's own shape, so there is nothing to letterbox and the
+  // picture fills the surface it was given.
+  await expect(async () => {
+    const shape = await page.evaluate(() => {
+      const s = document.querySelector(".mesh-surface").getBoundingClientRect();
+      const [, , w, h] = document.querySelector(".mesh-canvas")
+        .getAttribute("viewBox").split(" ").map(Number);
+      return { canvas: s.width / s.height, view: w / h };
+    });
+    expect(shape.view).toBeCloseTo(shape.canvas, 1);
+  }).toPass({ timeout: 4000 });
+
+  // And the nodes are spread across it rather than standing in a column: the widest
+  // gap between two of them is most of the canvas.
+  const spread = await page.evaluate(() => {
+    const xs = [...document.querySelectorAll(".mesh-node")]
+      .map((g) => g.getBoundingClientRect().x);
+    const box = document.querySelector(".mesh-surface").getBoundingClientRect();
+    return (Math.max(...xs) - Math.min(...xs)) / box.width;
+  });
+  expect(spread).toBeGreaterThan(0.5);
 });

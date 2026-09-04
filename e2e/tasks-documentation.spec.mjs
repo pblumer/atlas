@@ -3,11 +3,31 @@
 // whoever picks the task up, so the detail pane leads with it — above the metadata rows
 // and the form. The API side is covered by the Go suite; this drives the REAL app shell
 // against a mocked /api/v1 to verify the UI wiring: the block appears for a documented
-// task, keeps the author's paragraph breaks, and is absent (not stale) for one that
-// carries none.
+// task, renders the author's Markdown, and is absent (not stale) for one that carries
+// none.
+//
+// The instruction is rendered as Markdown (ADR-0250), so a
+// checklist arrives as a list. markdown.spec.mjs covers the renderer itself — including
+// that its output cannot script the page; what is checked here is the wiring: that this
+// surface renders rather than escapes, and that prose written before Markdown existed
+// still reads the way its author left it.
 import { test, expect } from "@playwright/test";
 
+// Plain prose, exactly as it was written before the field understood Markdown: two
+// paragraphs, no markers anywhere.
 const DOC = "Vergleiche die Angaben mit den Anlagen.\n\nFehlen Unterlagen, lehne ab und informiere den Antragsteller.";
+
+// The same instruction as an author writes it today.
+const MARKED_UP = [
+  "**Vor der Freigabe** prüfen:",
+  "",
+  "- Ausweis liegt bei",
+  "- Betrag stimmt mit `betrag` überein",
+  "",
+  "## Wenn etwas fehlt",
+  "",
+  "> Im Zweifel ablehnen.",
+].join("\n");
 
 const TASKS = [
   {
@@ -18,6 +38,11 @@ const TASKS = [
   {
     key: 102, processInstanceKey: 9001, elementInstanceKey: 9102, processDefKey: 1,
     processId: "freigabe", elementId: "sign", name: "Unterschreiben", priority: 50,
+  },
+  {
+    key: 103, processInstanceKey: 9001, elementInstanceKey: 9103, processDefKey: 1,
+    processId: "freigabe", elementId: "check", name: "Betrag prüfen",
+    documentation: MARKED_UP, priority: 50,
   },
 ];
 
@@ -54,8 +79,8 @@ test("a documented task leads its detail with the modeler's instruction", async 
   const doc = page.locator(".tasks-doc");
   await expect(doc).toBeVisible();
   await expect(doc.locator("h2")).toHaveText("What to do");
-  await expect(doc.locator("p")).toContainText("Vergleiche die Angaben mit den Anlagen.");
-  await expect(doc.locator("p")).toContainText("Fehlen Unterlagen, lehne ab");
+  await expect(doc.locator(".md p").first()).toHaveText("Vergleiche die Angaben mit den Anlagen.");
+  await expect(doc.locator(".md p").nth(1)).toContainText("Fehlen Unterlagen, lehne ab");
   expect(page.__errors).toEqual([]);
 });
 
@@ -70,9 +95,10 @@ test("the instruction is read before the metadata and the form", async ({ page }
   });
   expect(order).toEqual(["tasks-detail-head", "tasks-doc", "tasks-fields"]);
 
-  // The author's paragraph break survives — prose, not a squashed single line.
-  const white = await page.locator(".tasks-doc p").evaluate((el) => getComputedStyle(el).whiteSpace);
-  expect(white).toBe("pre-wrap");
+  // The author's paragraph break survives — prose, not a squashed single line. It is a
+  // second <p> now rather than a preserved newline, which is the same promise kept by
+  // the renderer instead of by `white-space`.
+  await expect(page.locator(".tasks-doc .md p")).toHaveCount(2);
   expect(page.__errors).toEqual([]);
 });
 
@@ -84,5 +110,32 @@ test("an undocumented task shows no block, not the previous task's text", async 
   await select(page, 102);
   await expect(page.locator(".tasks-detail-head h1")).toHaveText("Unterschreiben");
   await expect(page.locator(".tasks-doc")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a marked-up instruction reaches the assignee as structure, not as markers", async ({ page }) => {
+  await bootTasks(page);
+  await select(page, 103);
+
+  const doc = page.locator(".tasks-doc");
+  await expect(doc.locator(".md strong")).toHaveText("Vor der Freigabe");
+  await expect(doc.locator(".md ul li")).toHaveCount(2);
+  await expect(doc.locator(".md ul li").nth(1)).toContainText("Betrag stimmt mit betrag überein");
+  await expect(doc.locator(".md code")).toHaveText("betrag");
+  await expect(doc.locator(".md blockquote")).toContainText("Im Zweifel ablehnen.");
+  await expect(doc.locator(".md h2")).toHaveText("Wenn etwas fehlt");
+  const heading = await doc.locator(".md h2").evaluate((el) => getComputedStyle(el).textTransform);
+  expect(heading, "the modeler's heading is not the block's label").toBe("none");
+
+  // The author's own heading must not be dressed as the block's label: "WHAT TO DO" is
+  // the app talking, and a heading inside the instruction is the modeler talking.
+  const label = await doc.locator("> h2").evaluate((el) => getComputedStyle(el).textTransform);
+  expect(label).toBe("uppercase");
+
+  // None of the markers themselves are left on screen for the person doing the work.
+  const shown = await doc.locator(".md").innerText();
+  expect(shown).not.toContain("**");
+  expect(shown).not.toContain("`");
+  expect(shown).not.toContain("> ");
   expect(page.__errors).toEqual([]);
 });

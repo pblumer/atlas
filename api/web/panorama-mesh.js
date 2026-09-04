@@ -17,6 +17,9 @@ import {
 import {
   exportName, exportStyles, rasterise, save, standaloneSVG, stampLines,
 } from "./panorama-export.js";
+// The runtime counts here are the engine's own, the same ones the Operations badges
+// carry — so they are grouped in thousands the same way (numfmt.js).
+import { fmtCount } from "./numfmt.js";
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -380,6 +383,20 @@ export function labelTier(scale) {
   if (LABEL_TIERS.all * scale >= LABEL_TIERS.readable) return "all";
   if (LABEL_TIERS.anchors * scale >= LABEL_TIERS.readable) return "anchors";
   return "none";
+}
+
+// depthOf reads a typed depth as a number of hops.
+//
+// A field somebody is mid-edit in holds anything: empty, a minus sign, "1e9". The
+// floor is one hop rather than zero because a walk of zero is a picture of one node
+// with nothing drawn around it — a broken answer rather than a narrow one — and the
+// ceiling is there because the walk is bounded by the graph long before 99 anyway,
+// so a larger number is a typo rather than a question.
+export function depthOf(value) {
+  if (value === "all" || value === Infinity) return Infinity;
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(Math.max(n, 1), 99);
 }
 
 // mulberry32 is a small seeded PRNG. The seed is fixed so the initial scatter —
@@ -1612,7 +1629,7 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, instances
       ${badge}
       <text class="mesh-label" text-anchor="middle" dy="${(r + 14).toFixed(1)}"><tspan class="mesh-label-ink">${label}</tspan></text>
       ${typed ? `<text class="mesh-type" text-anchor="middle" dy="${(r + 28).toFixed(1)}"><tspan class="mesh-label-ink">[${esc(typed.name)}]</tspan></text>` : ""}
-      ${running ? `<text class="mesh-runs" text-anchor="middle" dy="${runsAt.toFixed(1)}"><tspan class="mesh-label-ink">${running} running</tspan></text>` : ""}
+      ${running ? `<text class="mesh-runs" text-anchor="middle" dy="${runsAt.toFixed(1)}"><tspan class="mesh-label-ink">${fmtCount(running)} running</tspan></text>` : ""}
       <title>${esc(nodeTitle(n, spoken))}</title></g>`;
   }).join("");
 
@@ -1761,8 +1778,8 @@ function runtimeHTML(node) {
   // nothing, which is what it knows.
   const never = !last && rt.running === 0 && rt.finished === 0;
   return `<div class="mesh-runtime">
-    <span class="mesh-runtime-now"><b>${rt.running}</b> running</span>
-    <span class="muted"><b>${rt.finished}</b> finished, all time</span>
+    <span class="mesh-runtime-now"><b>${fmtCount(rt.running)}</b> running</span>
+    <span class="muted"><b>${fmtCount(rt.finished)}</b> finished, all time</span>
     ${last ? `<span class="muted">last activity ${esc(last)}</span>` : ""}
     ${never ? `<span class="muted">never started</span>` : ""}
   </div>`;
@@ -2118,12 +2135,19 @@ export async function mountPanoramaMesh(view, { api, toast }) {
             <option value="dependencies">what it depends on</option>
             <option value="both">both directions</option>
           </select>
+          <!-- How far the walk reaches: a number somebody types, or the whole graph.
+               It was a three-option list — 1 hop, 2 hops, all — which answers the
+               question at exactly two depths and refuses every other one. A reader
+               asking "and one further?" had nothing to press. Two inputs, because
+               there are two kinds of answer: a distance, and "however far it goes". -->
           <label for="mesh-depth">Depth</label>
-          <select id="mesh-depth">
-            <option value="1">1 hop</option>
-            <option value="2" selected>2 hops</option>
-            <option value="all">all</option>
-          </select>
+          <div class="mesh-depth">
+            <input id="mesh-depth" type="number" min="1" max="99" step="1" value="2"
+              inputmode="numeric" aria-label="How many hops the walk reaches"/>
+            <label class="mesh-depth-all">
+              <input id="mesh-depth-any" type="checkbox"/> all
+            </label>
+          </div>
         </div>
         <div id="mesh-panel-slot"></div>
         <div id="mesh-findings-slot"></div>
@@ -2160,7 +2184,28 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const count = document.getElementById("mesh-count");
   const panel = document.getElementById("mesh-panel-slot");
   const dirSelect = document.getElementById("mesh-direction");
-  const depthSelect = document.getElementById("mesh-depth");
+  const depthField = document.getElementById("mesh-depth");
+  const depthAny = document.getElementById("mesh-depth-any");
+
+  // depthValue is the control read as one answer, in the spelling everything
+  // downstream already speaks: "all", or a number of hops as a string. Keeping the
+  // old vocabulary is deliberate — the saved views, the export stamp and the header
+  // count all carry it, and a stored view written last week has to keep meaning what
+  // it meant.
+  //
+  // A field somebody is mid-edit in can hold anything, empty included, so it is read
+  // through a floor rather than trusted: a walk of zero hops is a picture of one
+  // node with no dependencies drawn, which is a broken answer rather than a narrow
+  // one.
+  const depthValue = () => (depthAny.checked ? "all" : String(depthOf(depthField.value)));
+  const depthHops = () => (depthAny.checked ? Infinity : depthOf(depthField.value));
+  // Setting it from the other direction: a saved view, or a default.
+  function setDepth(value) {
+    const all = value === "all" || value === Infinity;
+    depthAny.checked = all;
+    if (!all) depthField.value = String(depthOf(value));
+    depthField.disabled = all;
+  }
   const findingsSlot = document.getElementById("mesh-findings-slot");
   const rankingSlot = document.getElementById("mesh-ranking-slot");
   const viewList = document.getElementById("mesh-view-list");
@@ -2222,10 +2267,22 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // box rather than the frame: the frame is a window, not the canvas.
   let world = { width: 1200, height: 720 };
 
+  // frameNow is the box the picture has to be laid out for, right now.
+  //
+  // The floor matters and is not defensive padding: a surface the browser has not
+  // laid out yet reports zero, and a world of zero area is not a picture. What the
+  // floor cannot do is be *right* — 320x280 is nearly square where the canvas is
+  // wide, and the world takes the frame's aspect, so a picture laid out against the
+  // floor is letterboxed into a column when it finally gets its box. That is what
+  // the observer below exists to correct.
+  function frameNow() {
+    return {
+      width: Math.max(surface.clientWidth || 0, 320),
+      height: Math.max(surface.clientHeight || 0, 280),
+    };
+  }
   function measure() {
-    const width = Math.max(surface.clientWidth || 0, 320);
-    const height = Math.max(surface.clientHeight || 0, 280);
-    frame = { width, height };
+    frame = frameNow();
   }
 
   function applyView() {
@@ -2293,7 +2350,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
 
   function paint() {
     const term = search.value.trim().toLowerCase();
-    const hops = depthSelect.value === "all" ? Infinity : Number(depthSelect.value);
+    const hops = depthHops();
     // A drilldown onto a node that is no longer in the landscape is not an empty
     // landscape — it is a question that can no longer be asked, and saying so beats
     // drawing a blank canvas somebody would read as "everything is gone".
@@ -2347,7 +2404,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const context = shown.nodes.length - (shown.matched?.size ?? shown.nodes.length);
     if (drilledAt()) {
       count.textContent = `${context} of ${graph.nodes.length} node(s) within ` +
-        `${depthSelect.value === "all" ? "any" : depthSelect.value} hop(s)`;
+        `${depthAny.checked ? "any" : depthValue()} hop(s)`;
     } else {
       count.textContent = term
         ? `${shown.matched?.size ?? 0} of ${graph.nodes.length} node(s) match` +
@@ -2364,7 +2421,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function paintRanking() {
     rankingSlot.innerHTML = rankingHTML(
       shown, dirSelect.value,
-      depthSelect.value === "all" ? Infinity : Number(depthSelect.value));
+      depthHops());
   }
 
   // refresh answers the impact question about the current selection and shows the
@@ -2377,7 +2434,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // being given. The classes go on and come off exactly as the hover highlight's do.
   function refresh() {
     const direction = dirSelect.value;
-    const depth = depthSelect.value === "all" ? Infinity : Number(depthSelect.value);
+    const depth = depthHops();
     const result = picked.length ? impactOf(shown, picked, { direction, depth }) : null;
     const highlight = result ? new Set(result.nodes) : null;
     const inWindow = new Set(picked);
@@ -2878,7 +2935,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function windowStamp() {
     if (picked.length < 2) return null;
     const direction = dirSelect.value;
-    const depth = depthSelect.value === "all" ? Infinity : Number(depthSelect.value);
+    const depth = depthHops();
     const overlap = windowOverlap(shown, picked, { direction, depth });
     if (!overlap) return null;
     const byId = new Map(shown.nodes.map((n) => [n.id, n]));
@@ -2904,7 +2961,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
           name: (graph.nodes.find((n) => n.id === drilledAt()) || {}).name || drilledAt(),
           via: trail.slice(0, -1).map((id) =>
             (graph.nodes.find((n) => n.id === id) || {}).name || id),
-          hops: depthSelect.value,
+          hops: depthValue(),
         }
       : term ? { kind: "filter", term } : { kind: "all" };
     return {
@@ -3062,7 +3119,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function openView(v) {
     search.value = v.term || "";
     dirSelect.value = v.direction || "dependents";
-    depthSelect.value = v.depth ?? "2";
+    setDepth(v.depth ?? "2");
     // A view saved before notations existed carries none, and the derived drawing is
     // what it was looking at.
     notationPick.value = notationOf(v.notation).id === v.notation ? v.notation : "atlas";
@@ -3142,7 +3199,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       name: viewName.value,
       term: search.value.trim(),
       direction: dirSelect.value,
-      depth: depthSelect.value,
+      depth: depthValue(),
       notation: notationPick.value,
       selected: only(),
       picked,
@@ -3231,13 +3288,28 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // it decides how far the picture reaches, so changing it is a different graph and
   // has to be laid out again; outside one it only bounds the impact walk, which is
   // classes on the nodes already drawn.
-  depthSelect.addEventListener("change", () => {
+  function depthChanged() {
+    depthField.disabled = depthAny.checked;
     // A drilldown is cut to the depth on screen, so changing it re-cuts the picture
     // and paint() repaints the ranking with it; otherwise only the answers change.
     if (drilledAt()) return paint();
     refresh();
     paintRanking();
+  }
+  depthAny.addEventListener("change", depthChanged);
+  // On input rather than on change: a number field only fires change when it loses
+  // focus, and a reader who types 4 and looks at the picture would be looking at the
+  // answer for 2. Typing is cheap here — outside a drilldown it is classes on nodes
+  // already drawn — and inside one the debounce below keeps a held arrow key from
+  // laying the graph out on every repeat.
+  let depthPending;
+  depthField.addEventListener("input", () => {
+    clearTimeout(depthPending);
+    depthPending = setTimeout(depthChanged, drilledAt() ? 200 : 0);
   });
+  // An empty or nonsense field is left alone while it is being typed in and put
+  // right when it is left, so the control never argues with the picture it produced.
+  depthField.addEventListener("blur", () => { depthField.value = String(depthOf(depthField.value)); });
 
   // Re-laying out on every keystroke is the wrong trade at 400 nodes, where the
   // simulation costs a few hundred milliseconds. A short debounce keeps typing
@@ -3256,15 +3328,41 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   });
   paint();
 
-  // The layout is a function of the frame, so a resized window is a different
-  // picture. Debounced, because a drag-resize fires continuously and the simulation
-  // is the expensive part.
+  // The layout is a function of the frame, so the frame is *watched* rather than
+  // assumed — and watched on the surface itself rather than on the window.
+  //
+  // This is what fixes a picture that arrives wrong and stays wrong. The first paint
+  // happens as soon as the markup is in the document, and there are ordinary reasons
+  // the surface has no box at that moment — a tab opened in the background does no
+  // layout at all, and a container mid-reflow reports zero. The measurement then
+  // falls back to its floor, the world takes that floor's nearly-square aspect, and
+  // the finished picture is letterboxed into a column of the canvas. Nothing was
+  // wrong with the graph; it was laid out for a box it never had. It stayed wrong
+  // because nothing measured again: changing the notation, or anything else that
+  // repaints, fixed it, which is exactly how the report described it.
+  //
+  // Observing the surface catches every version of that — a late box, a late
+  // stylesheet, a font that changes the chrome, a scrollbar appearing, and a resized
+  // window, which the window listener used to catch alone. Debounced, because a
+  // drag-resize fires continuously and the simulation is the expensive part, and
+  // guarded on the frame having actually changed so a repaint cannot chase its own
+  // tail through the page's scrollbar.
   let resizing;
-  const onResize = () => {
+  const reframe = () => {
+    const now = frameNow();
+    if (Math.abs(now.width - frame.width) < 2 && Math.abs(now.height - frame.height) < 2) return;
     clearTimeout(resizing);
-    resizing = setTimeout(() => { frameView = null; paint(); }, 200);
+    resizing = setTimeout(() => { frameView = null; paint(); }, 120);
   };
-  window.addEventListener("resize", onResize);
+  if (typeof ResizeObserver === "function") {
+    // No teardown: the observer's only reference is this closure, and once the view
+    // is replaced it is watching a detached element and can never fire again. The
+    // window listener it replaces had the opposite property — it outlived the view
+    // it painted, because nothing here ever removed it.
+    new ResizeObserver(reframe).observe(surface);
+  } else {
+    window.addEventListener("resize", reframe);
+  }
 
   if (fetchMs > 2000) toast(`The starmap took ${Math.round(fetchMs)} ms to derive.`);
 }

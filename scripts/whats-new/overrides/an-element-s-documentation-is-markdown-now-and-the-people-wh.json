@@ -1,0 +1,34 @@
+{
+  "tags": [
+    "Tasks",
+    "Operations",
+    "Modeler"
+  ],
+  "title": {
+    "en": "Documentation you wrote in the model now reads as you wrote it",
+    "de": "Dokumentation aus dem Modell wird jetzt so gelesen, wie sie geschrieben ist"
+  },
+  "summary": {
+    "en": "The documentation field on an element understands Markdown: headings, bullet and numbered lists, quotes, code, bold and italic, links. Where it used to arrive as a wall of asterisks and hyphens, a work instruction now reaches the person doing the work as the checklist it was written as — in the Tasks app, in the instance replay and in the Panorama properties panel. Text written before this is untouched: a line break is still a line break, and a variable name is still a variable name.",
+    "de": "Das Dokumentationsfeld eines Elements versteht Markdown: Überschriften, Aufzählungen, nummerierte Listen, Zitate, Code, fett und kursiv, Links. Wo vorher eine Wand aus Sternchen und Bindestrichen ankam, erreicht eine Arbeitsanweisung die bearbeitende Person jetzt als die Prüfliste, als die sie geschrieben wurde — in der Tasks-App, im Instanz-Replay und im Panorama-Eigenschaftenpanel. Vorher geschriebener Text bleibt unangetastet: Ein Zeilenumbruch bleibt ein Zeilenumbruch, ein Variablenname bleibt ein Variablenname."
+  },
+  "tutorial": {
+    "en": [
+      "Open a process in the Modeler and select a user task.",
+      "In the Details panel, write the instruction in the Documentation field — a heading with ##, a checklist with -, an important word in **bold**.",
+      "Deploy and start the process, then open the task in the Tasks app: the instruction stands above the form, rendered."
+    ],
+    "de": [
+      "Öffnen Sie einen Prozess im Modeler und wählen Sie eine User-Task aus.",
+      "Schreiben Sie die Anweisung im Details-Panel ins Feld Documentation — eine Überschrift mit ##, eine Prüfliste mit -, ein wichtiges Wort in **fett**.",
+      "Deployen und starten Sie den Prozess und öffnen Sie die Aufgabe in der Tasks-App: Die Anweisung steht gerendert über dem Formular."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Tasks",
+      "de": "Aufgaben öffnen"
+    },
+    "route": "#/tasks"
+  }
+}

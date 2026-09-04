@@ -55,6 +55,32 @@ _Changed_ / _Removed_ for each version.
   `atlas_save_process_diagram`
   ([ADR-draft-adjust-a-deployed-diagram](docs/adr/draft-adjust-a-deployed-diagram.md)).
 
+- **An element's documentation is Markdown now, and the people who read it see it as
+  such.** `<bpmn:documentation>` is the one field every element carries, and the Modeler
+  has treated it as Markdown for as long as the Developer View has existed: it highlights
+  the field as Markdown and offers a real editor for it. The surfaces that *show* the
+  prose printed it literally, so a checklist reached the person doing the work as a
+  column of hyphens and an emphasised "do not" as asterisks. The reasoning, and what the
+  renderer deliberately does not support, are in
+  [ADR-0250](docs/adr/0250-documentation-is-markdown.md).
+
+  A new renderer (`api/web/markdown.js`) turns it into structure in the **Tasks** app's
+  work instruction, the **Operations** instance replay's Details tab and the **Panorama**
+  properties panel: headings, bullet and numbered lists, block quotes, inline and fenced
+  code, bold, italic, strikethrough and links.
+
+  Prose written before this keeps reading the way it was written. A line break stays a
+  line break — the renderer's one deliberate divergence from CommonMark, which would
+  otherwise join consecutive lines into one paragraph — four leading spaces do not turn a
+  sentence into code, and `order_id` stays a variable name rather than becoming italics.
+
+  The renderer escapes the whole source before it parses any of it and builds every tag
+  itself, so a documentation text can give the block it is shown in structure but can
+  never script the console; a link's destination has to pass an allowlist (http, https,
+  mailto, or a route inside Atlas) or the link renders as its words. Nothing about the
+  model changes: the file, the compiler's interned copy and the API all still carry the
+  source text, and the engine still never reads it.
+
 - **The handbook is caught up with the product: six apps, the Playground, and the two
   Console screens nobody had written up.** The shell has offered six apps for a while —
   Console, Modeler, Tasks, Operations, **Panorama** and **Data** — and the welcome
@@ -135,6 +161,32 @@ _Changed_ / _Removed_ for each version.
   out are their tooltip and their accessible name, and the thing they name is listed in the
   panel below the diagram either way
   ([ADR-draft-runtime-badges-clear-of-labels](docs/adr/draft-runtime-badges-clear-of-labels.md)).
+
+- **A count on the diagram is grouped in thousands.** Reported from a running process:
+  badges reading `25864`, `50002`, `23436`, `2428` around the shapes of one diagram.
+  Every number was right and none of them was legible — a five- or six-digit run is read
+  by counting digits, and two of them side by side cannot be compared at a glance at
+  all, which is the only reason the counts are drawn on the shapes instead of listed in
+  a table.
+
+  Every count the runtime views print now groups in threes — `25 864`, `50 002`: the
+  live view's three token badges and their tooltips, the replay's execution-count
+  badges, the incident badges, the Playground's run and heat-map badges, the count pills
+  in those views' headers, and — same engine counters, same problem — the Starmap's
+  running total on a node and its running/finished tally in the panel. Anything under a
+  thousand is untouched; a separator on `999` is noise in a pill that small.
+
+  The separator is a **narrow no-break space** (U+202F), not a locale's own mark.
+  A process is modelled in one country and operated from another: `25.864` is
+  twenty-five thousand to one reader and twenty-five point eight to the next, `25,864`
+  the same disagreement mirrored, and a badge has no room to say which it meant. A space
+  is the one grouping mark no locale reads as a decimal point (ISO 31-0), and the
+  no-break variant keeps a badge on one line at any count. `toLocaleString()` was the
+  other candidate, and it is wrong here for the reason it looks right: it would make the
+  separator a property of whoever is looking, so the same screenshot pasted into a
+  ticket would say something different to the person who received it. The whole choice
+  is one constant in `api/web/numfmt.js` — a house that wants the Swiss `25'864` changes
+  it there, in one place, and every badge follows.
 
 - **Google Sheets runs on a worker, like everything else.** It shipped with an
   in-engine handler and no supervised form, so the Modeler's properties panel showed it

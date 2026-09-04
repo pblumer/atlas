@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas badge-number e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js live view against a mock `api` whose counts
+         are the ones a busy server actually shows: five and six figures, several of them
+         side by side on one element. Written as an unbroken digit run — "25864" next to
+         "50002" — a badge has to be read by counting digits, and two badges beside each
+         other cannot be compared at a glance at all, which is the whole job of putting
+         them on the diagram. The view groups the thousands instead (api/web/numfmt.js);
+         this harness is the one with numbers big enough for that to show.
+
+         It also exposes the formatter itself, so the grouping rule can be checked at its
+         edges without a diagram in the way. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+      /* Read-only here: the palette would only intercept clicks meant for the shapes. */
+      .djs-palette { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountLive } from "/editor.js";
+      import { fmtCount } from "/numfmt.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const DEF = 7;
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_busy" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="busy" name="Service-Ereignis" isExecutable="true">
+    <bpmn:startEvent id="start"><bpmn:outgoing>f1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:serviceTask id="register" name="Service-Register fortschreiben">
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="end"><bpmn:incoming>f2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="register"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="register" targetRef="end"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="busy">
+    <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="150" y="180" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="register_di" bpmnElement="register"><dc:Bounds x="250" y="158" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="end_di" bpmnElement="end"><dc:Bounds x="420" y="180" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="186" y="198"/><di:waypoint x="250" y="198"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="350" y="198"/><di:waypoint x="420" y="198"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // The task carries all three counts at once, at the magnitudes reported from the
+      // running server: 25 864 tokens completed here and moved on (visits minus the live
+      // and the cancelled), 2 428 cancelled here, 50 002 alive here now. The end event
+      // stays under a thousand on purpose — a separator there would be noise, so nothing
+      // may appear.
+      const ELEMENTS = [
+        { elementId: "start", type: "bpmn:StartEvent", tokens: 0, visits: 78294, terminated: 0, incidents: 0 },
+        { elementId: "register", type: "bpmn:ServiceTask", tokens: 50002, visits: 78294, terminated: 2428, incidents: 0 },
+        { elementId: "end", type: "bpmn:EndEvent", tokens: 0, visits: 999, terminated: 0, incidents: 0 },
+      ];
+
+      const api = async (method, url) => {
+        if (url === "/api/v1/processes") {
+          return [{ key: DEF, processId: "busy", name: "Service-Ereignis", version: 1 }];
+        }
+        if (/\/processes\/\d+\/xml$/.test(url)) return XML;
+        if (url.startsWith("/api/v1/instances?process=")) return [];
+        if (url === "/api/v1/tasks") return [];
+        if (url.includes("/runtime")) {
+          return {
+            instances: 50002, finished: 28292, tokens: 78294,
+            incidents: [], incidentsTruncated: false,
+            elements: ELEMENTS,
+          };
+        }
+        return {};
+      };
+      const apiRaw = async (method, url, body) => ({ data: await api(method, url, body), headers: new Headers() });
+
+      window.__fmtCount = fmtCount;
+      window.__mountLive = () => mountLive(view, { api, apiRaw, toast: noop, key: DEF });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

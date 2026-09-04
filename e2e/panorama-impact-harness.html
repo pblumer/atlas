@@ -12,7 +12,8 @@
     <div id="ready">loading</div>
     <script type="module">
       import {
-        blastRanking, impactFrom, impactList, impactOf, impactSummary, windowOverlap,
+        blastRanking, depthOf, impactFrom, impactList, impactOf, impactSummary,
+        windowOverlap,
       } from "/panorama-mesh.js";
       // Exposed for the spec; the spec passes a graph and options and reads the
       // result back, so every case is a table row rather than a click sequence.
@@ -33,6 +34,9 @@
       window.windowList = (graph, ids, opts, listOpts) =>
         impactList(graph, impactOf(graph, ids, opts), null, listOpts);
       window.windowOverlap = (graph, ids, opts) => windowOverlap(graph, ids, opts);
+      // How a typed depth is read. It is arithmetic over whatever a number field can
+      // hold, so it is checked as arithmetic rather than by typing into one.
+      window.depthOf = (value) => depthOf(value);
       document.getElementById("ready").textContent = "ready";
     </script>
   </body>

@@ -32,7 +32,10 @@
   no edges: the world is a budget for the layout rather than a fence around the
   arrangement; amended 2026-09-04 — a drilldown is a path through the estate rather
   than a single place, carried in the header, in a saved view and in the export's
-  scope)
+  scope; amended 2026-09-04 — §6's depth is a number somebody types beside an "all",
+  rather than a shortlist that answers at two distances; amended 2026-09-04 — §7's
+  frame is observed rather than measured once, so a picture laid out before the canvas
+  had a box corrects itself)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -639,6 +642,41 @@ unaffected.
 > makes the whole window a floor — and §10's export carries the window in the stamp,
 > because in a file the rings on three nodes are the whole point and there is no panel
 > beside it to say so.
+
+> **Amendment (2026-09-04): the frame is watched, not assumed.**
+> §7's fit is a function of the canvas's box, and the view measured that box once, at
+> the moment the markup entered the document. There are ordinary reasons it has no
+> box then — a tab opened in the background does no layout at all, a container
+> mid-reflow reports zero — and the measurement then falls back to a floor. The floor
+> keeps the world from having zero area; what it cannot do is be *right*, because it
+> is nearly square where the canvas is wide and the world takes the frame's aspect.
+> The result was a correct graph laid out for a box it never had, letterboxed into a
+> column of the canvas, and it stayed that way because nothing measured again:
+> changing the notation, or anything else that repainted, "fixed" it.
+>
+> The surface is observed instead. Any change to the box the picture was laid out for
+> — a late box, a late stylesheet, a font that resizes the chrome, a scrollbar, a
+> resized window — repaints, debounced and guarded on the frame having actually
+> changed so a repaint cannot chase its own tail. It replaces the window resize
+> listener, which watched the wrong thing and outlived the view it painted.
+
+> **Amendment (2026-09-04): depth is a number, not a shortlist.**
+> The depth control offered 1 hop, 2 hops and all — which answers the question at
+> exactly two distances and refuses every other one. "And one further?" is the
+> commonest follow-up a blast radius provokes, and there was nothing to press. It is
+> now what it always was: a distance somebody names, beside the one answer that is
+> not a distance.
+>
+> Two inputs and no more, because there are two kinds of answer. The field goes inert
+> under *all* rather than disappearing, so the number a reader had is still there when
+> they come back to it; it is read through a floor of one hop, because a walk of zero
+> is a picture of one node with nothing drawn around it — a broken answer rather than
+> a narrow one — and through a ceiling, because the walk is bounded by the graph long
+> before ninety-nine and a larger number is a typo rather than a question.
+>
+> The stored spelling does not change: "all", or a count as a string. Saved views, the
+> export stamp and the header count all carry it, and a view written last week has to
+> keep meaning what it meant.
 
 > **Amendment (2026-09-04): a drilldown is a path, not a flag.**
 > Going into a node was one step deep in practice: the state was a single id, so
