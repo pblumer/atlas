@@ -2267,10 +2267,22 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // box rather than the frame: the frame is a window, not the canvas.
   let world = { width: 1200, height: 720 };
 
+  // frameNow is the box the picture has to be laid out for, right now.
+  //
+  // The floor matters and is not defensive padding: a surface the browser has not
+  // laid out yet reports zero, and a world of zero area is not a picture. What the
+  // floor cannot do is be *right* — 320x280 is nearly square where the canvas is
+  // wide, and the world takes the frame's aspect, so a picture laid out against the
+  // floor is letterboxed into a column when it finally gets its box. That is what
+  // the observer below exists to correct.
+  function frameNow() {
+    return {
+      width: Math.max(surface.clientWidth || 0, 320),
+      height: Math.max(surface.clientHeight || 0, 280),
+    };
+  }
   function measure() {
-    const width = Math.max(surface.clientWidth || 0, 320);
-    const height = Math.max(surface.clientHeight || 0, 280);
-    frame = { width, height };
+    frame = frameNow();
   }
 
   function applyView() {
@@ -3316,15 +3328,41 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   });
   paint();
 
-  // The layout is a function of the frame, so a resized window is a different
-  // picture. Debounced, because a drag-resize fires continuously and the simulation
-  // is the expensive part.
+  // The layout is a function of the frame, so the frame is *watched* rather than
+  // assumed — and watched on the surface itself rather than on the window.
+  //
+  // This is what fixes a picture that arrives wrong and stays wrong. The first paint
+  // happens as soon as the markup is in the document, and there are ordinary reasons
+  // the surface has no box at that moment — a tab opened in the background does no
+  // layout at all, and a container mid-reflow reports zero. The measurement then
+  // falls back to its floor, the world takes that floor's nearly-square aspect, and
+  // the finished picture is letterboxed into a column of the canvas. Nothing was
+  // wrong with the graph; it was laid out for a box it never had. It stayed wrong
+  // because nothing measured again: changing the notation, or anything else that
+  // repaints, fixed it, which is exactly how the report described it.
+  //
+  // Observing the surface catches every version of that — a late box, a late
+  // stylesheet, a font that changes the chrome, a scrollbar appearing, and a resized
+  // window, which the window listener used to catch alone. Debounced, because a
+  // drag-resize fires continuously and the simulation is the expensive part, and
+  // guarded on the frame having actually changed so a repaint cannot chase its own
+  // tail through the page's scrollbar.
   let resizing;
-  const onResize = () => {
+  const reframe = () => {
+    const now = frameNow();
+    if (Math.abs(now.width - frame.width) < 2 && Math.abs(now.height - frame.height) < 2) return;
     clearTimeout(resizing);
-    resizing = setTimeout(() => { frameView = null; paint(); }, 200);
+    resizing = setTimeout(() => { frameView = null; paint(); }, 120);
   };
-  window.addEventListener("resize", onResize);
+  if (typeof ResizeObserver === "function") {
+    // No teardown: the observer's only reference is this closure, and once the view
+    // is replaced it is watching a detached element and can never fire again. The
+    // window listener it replaces had the opposite property — it outlived the view
+    // it painted, because nothing here ever removed it.
+    new ResizeObserver(reframe).observe(surface);
+  } else {
+    window.addEventListener("resize", reframe);
+  }
 
   if (fetchMs > 2000) toast(`The starmap took ${Math.round(fetchMs)} ms to derive.`);
 }
