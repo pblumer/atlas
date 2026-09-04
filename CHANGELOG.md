@@ -169,13 +169,26 @@ _Changed_ / _Removed_ for each version.
   splits the old gray badge into **gray = completed here and moved on** and **amber =
   cancelled here**, so which event actually arrived is now readable at the branch itself.
   And an event gateway's race is drawn as the one wait it is: the green count moves onto
-  the **gateway**, and its armed branches are marked `armed` instead of each repeating
-  that same count. A catch joins its gateway's group only when the gateway is its sole
-  way in, so one reachable from elsewhere as well keeps its own count.
+  the **gateway**, and its armed branches carry a dashed green outline and no live count
+  of their own — what that outline means is said once, in the live view's legend, which
+  shows the entry only for a diagram that has an event gateway in it. A catch joins its
+  gateway's group only when the gateway is its sole way in, so one reachable from
+  elsewhere as well keeps its own count.
 
-  **No backfill:** terminations were never recorded before, so the amber count starts at
-  zero on an existing store and gray keeps its old meaning for the history already
-  written. ([ADR-0249](docs/adr/0249-overlay-cancelled-tokens.md))
+  **The history is reconstructed, not started from zero.** Terminations were never
+  counted before this, and a missing one is not a neutral gap: gray is *derived* as
+  visits − live − terminated, so every uncounted cancellation reads as a completion. On
+  a real event gateway with 70 563 visits and 20 561 decided races that was 19 881 old
+  cancellations sitting in gray, making both branches look like near-equal winners —
+  precisely the misreading this change is about. The lifecycle trail
+  ([ADR-0136](docs/adr/0136-terminated-tokens-in-the-replay.md)) has recorded every one of
+  them all along, so the counters are rebuilt from it once at startup, alongside the
+  other one-time counter seedings. It tops each instance up to what the trail says
+  rather than summing, so a store that already ran the counting build is corrected
+  instead of doubled. Two limits, stated rather than hidden: an instance whose history
+  has been purged has no trail left to count, and a migrated instance's older
+  cancellations land on the version it runs under now.
+  ([ADR-0249](docs/adr/0249-overlay-cancelled-tokens.md))
 
 - **A data object can be pointed at a class you can see.** The **Type** of a data object
   in the Modeler is the link the whole information model turns on — it is what lets two

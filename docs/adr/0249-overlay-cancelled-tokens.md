@@ -11,7 +11,19 @@
 > splits the old gray "passed through" badge into **gray = completed here and moved on**
 > and **amber = cancelled here**. On top of that, an event-based gateway's race
 > (ADR-0110) is drawn as the one wait it is: the live count sits on the gateway, and its
-> armed branches are marked `armed` instead of each repeating that same count.
+> armed branches are drawn armed instead of each repeating that same count.
+
+> **Amended 2026-09-04, after first use on a running engine.** Two things this record
+> got wrong, both corrected in the same place they were decided below. **(1) "No
+> backfill" was not a neutral gap.** Gray is *derived* — `visits − live − terminated` —
+> so a cancellation the store never counted does not read as unknown, it reads as a
+> completion; on a definition with 70 563 visits and 20 561 decided races, 19 881 old
+> cancellations sat in gray and made both branches of the race look like near-equal
+> winners, which is the very thing this record exists to prevent. The counters are now
+> reconstructed once from the lifecycle trail (ADR-0136), which has recorded
+> `ReplayTerminated` all along. **(2) The word `armed` beside every branch** was one
+> label per branch per race for a fact that needed saying once: it moved into the live
+> view's legend, and the branch keeps only its dashed outline.
 
 ## Context and problem statement
 
@@ -96,10 +108,21 @@ Chosen: **option 1**, in two halves that stand on their own.
   `ElementTerminationTotals` (definition-wide) or `ElementTerminationHistory`
   (single instance) — the same pair of reads the visit counts use, so the two halves of
   the history always come from the same place.
-- **No backfill.** Terminations before this change were never recorded, so the aggregate
-  starts at zero on an existing store and the gray badge keeps its old meaning for
-  history already written. A missing count reads as "nothing was cancelled here", which
-  is the pre-existing state of knowledge, not a new claim.
+- **Reconstructed once from the lifecycle trail** (amended; this first read "no
+  backfill", and the reasoning behind that — *a missing count reads as "nothing was
+  cancelled here", which is the pre-existing state of knowledge* — was simply false.
+  Gray is derived from terminated, so an uncounted cancellation reads as a completion,
+  and on an event gateway that is half of every decided race). `backfillElementTerminations`
+  runs once at `Open`, like the ADR-0080 and ADR-0142 seedings beside it: it folds
+  `ReplayTerminated` out of the trail (ADR-0136), attributes each instance by its
+  process-instance record, and **tops each (definition, instance, element) up to what
+  the trail says** rather than summing — so a store that already ran the counting build
+  is corrected rather than doubled, and a second run computes zero. Two things it cannot
+  recover, both bounded and stated rather than papered over: an instance whose history
+  has been purged (ADR-0146) has no trail and no definition to attribute to, so its
+  aggregate keeps whatever was already counted; and a migrated instance (ADR-0162) is
+  attributed to the version it runs under now, because the trail does not carry the
+  definition an element belonged to.
 
 ### The overlay
 
@@ -110,9 +133,15 @@ Chosen: **option 1**, in two halves that stand on their own.
   gateway's group only when that gateway is its **sole** incoming flow, so a catch also
   reachable from elsewhere keeps its own count. The gateway shows the race's live count
   (the minimum over its armed branches, so a branch carrying tokens from elsewhere
-  cannot inflate it) and each armed branch shows the word `armed` in place of a number.
-- Deliberately a word, not a number: the count belongs to the race, and repeating it per
-  branch is the misreading this record exists to remove.
+  cannot inflate it) and each armed branch is drawn with a dashed green outline and no
+  live count of its own.
+- Deliberately no number there: the count belongs to the race, and repeating it per
+  branch is the misreading this record exists to remove. What the outline *means* is
+  said once, in the live view's legend, which carries the entry only for a diagram that
+  has an event gateway in it (amended; the branch first carried the word `armed` beside
+  it, which is one label per branch per race for a fact that needs saying once). The
+  branch keeps its gray and amber counts — how often it won and how often it lost is
+  exactly what the diagram could not say before.
 
 ## Consequences
 
