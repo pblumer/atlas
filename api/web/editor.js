@@ -23,6 +23,9 @@ import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
 import { attachPlayground } from "./playground.js";
 import { groupifyPanel, groupController } from "./pgroup.js";
+// Counts on the runtime views are five and six digits on a busy server, so every
+// number a badge or a count pill prints goes through the same grouping (numfmt.js).
+import { fmtCount } from "./numfmt.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -944,7 +947,7 @@ function wireProblems(root, modeler, api, applicationId) {
     const warnings = problems.filter((p) => p.severity === "warning").length;
     const total = problems.length;
 
-    countEl.textContent = String(total);
+    countEl.textContent = fmtCount(total);
     bar.classList.toggle("has-errors", errors > 0);
     bar.classList.toggle("has-warnings", errors === 0 && warnings > 0);
     filtersEl.hidden = total === 0;
@@ -6916,7 +6919,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // updateCount keeps a group's badge in step with its card total.
       const updateCount = (group) => {
         const badge = group.querySelector(".io-group-count");
-        if (badge) badge.textContent = String(group.querySelectorAll(".io-map").length);
+        if (badge) badge.textContent = fmtCount(group.querySelectorAll(".io-map").length);
       };
       // wireCard binds one mapping card: the header toggles the card open/closed
       // (except the delete button), the name field retitles the card live and saves
@@ -8200,9 +8203,9 @@ function tokenBadgesHTML(e, { tokens = e.tokens, green = null } = {}) {
   const cancelled = e.terminated || 0;
   const passed = Math.max(0, e.visits - tokens - cancelled);
   return `<div class="token-badges">` +
-    (passed > 0 ? `<div class="token-badge history" title="${passed} token(s) completed here and moved on">${passed}</div>` : "") +
-    (cancelled > 0 ? `<div class="token-badge cancelled" title="${cancelled} token(s) cancelled here — a losing event-gateway branch, an interrupted activity, or a scope torn down">${cancelled}</div>` : "") +
-    (green !== null ? green : tokens > 0 ? `<div class="token-badge" title="${tokens} live token(s)">${tokens}</div>` : "") +
+    (passed > 0 ? `<div class="token-badge history" title="${fmtCount(passed)} token(s) completed here and moved on">${fmtCount(passed)}</div>` : "") +
+    (cancelled > 0 ? `<div class="token-badge cancelled" title="${fmtCount(cancelled)} token(s) cancelled here — a losing event-gateway branch, an interrupted activity, or a scope torn down">${fmtCount(cancelled)}</div>` : "") +
+    (green !== null ? green : tokens > 0 ? `<div class="token-badge" title="${fmtCount(tokens)} live token(s)">${fmtCount(tokens)}</div>` : "") +
     `</div>`;
 }
 
@@ -8896,7 +8899,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       if (elIncidents.length) {
         canvas.addMarker(e.elementId, "atlas-incident");
         marked.push([e.elementId, "atlas-incident"]);
-        const label = elIncidents.length === 1 ? "incident" : `${elIncidents.length} incidents`;
+        const label = elIncidents.length === 1 ? "incident" : `${fmtCount(elIncidents.length)} incidents`;
         overlays.add(e.elementId, "incident", {
           position: { bottom: 4, left: 4 },
           html: `<div class="incident-badge" title="${esc(elIncidents[0].message || "")}">&#9888; ${label}</div>`,
@@ -8932,9 +8935,9 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         });
       }
     }
-    countEl.textContent = rt.instances;
-    tokenEl.textContent = rt.tokens;
-    incidentEl.textContent = incidents.length + (incidentsTruncated ? "+" : "");
+    countEl.textContent = fmtCount(rt.instances);
+    tokenEl.textContent = fmtCount(rt.tokens);
+    incidentEl.textContent = fmtCount(incidents.length) + (incidentsTruncated ? "+" : "");
     incidentPill.hidden = incidents.length === 0;
     runningCount = rt.instances || 0;
     finishedCount = rt.finished || 0;
@@ -9556,7 +9559,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
     if (rt.pools && rt.pools.length) {
       titleEl.textContent = rt.pools.map((p) => p.name || p.processId).join(" ⇄ ");
     }
-    instEl.textContent = rt.instances;
+    instEl.textContent = fmtCount(rt.instances);
     // Merged token overlay across all pools: green where a token is now, gray where
     // one has passed through — the same two-state heatmap the live view draws.
     for (const [id, m] of marked) canvas.removeMarker(id, m);
@@ -9575,7 +9578,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
     if (next.length !== flows.length) {
       const wasAtEnd = playhead >= flows.length;
       flows = next;
-      flowCountEl.textContent = String(flows.length);
+      flowCountEl.textContent = fmtCount(flows.length);
       scrub.max = String(flows.length);
       renderLog();
       if (!playing && wasAtEnd) setPlayhead(flows.length); // follow new messages live
@@ -10038,13 +10041,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       const count = isLoop ? (rounds[elId] || 0) : visits[elId];
       if (!isLoop && !count) continue;
       const title = isLoop
-        ? `${count} ${count === 1 ? "run" : "runs"} of this loop` +
-          (looping[elId] > 1 ? ` · the activity was entered ${looping[elId]} times` : "")
-        : `${count} ${count === 1 ? "execution" : "executions"}`;
+        ? `${fmtCount(count)} ${count === 1 ? "run" : "runs"} of this loop` +
+          (looping[elId] > 1 ? ` · the activity was entered ${fmtCount(looping[elId])} times` : "")
+        : `${fmtCount(count)} ${count === 1 ? "execution" : "executions"}`;
       try {
         badges.push(overlays.add(elId, { position: { top: -12, right: 12 },
           html: `<span class="ops-badge${isLoop ? " loop" : ""}" title="${esc(title)}">${
-            isLoop ? `<span class="ops-badge-m" aria-hidden="true">\u21BB</span>` : ""}<span>${count}</span></span>` }));
+            isLoop ? `<span class="ops-badge-m" aria-hidden="true">\u21BB</span>` : ""}<span>${fmtCount(count)}</span></span>` }));
       } catch { /* element not in this diagram */ }
     }
   }
@@ -10095,7 +10098,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     for (const elId of incidentElementIds()) {
       if (!registry.get(elId)) continue;
       const list = incidents.filter((i) => i.elementId === elId);
-      const label = list.length === 1 ? "incident" : `${list.length} incidents`;
+      const label = list.length === 1 ? "incident" : `${fmtCount(list.length)} incidents`;
       try {
         incBadgeIds.push(overlays.add(elId, "atlas-incident", {
           position: { bottom: 4, left: 4 },
@@ -10111,7 +10114,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const wrap = root.querySelector("#m-inc-wrap");
     if (!wrap) return;
     wrap.hidden = incidents.length === 0;
-    root.querySelector("#m-inc-n").textContent = String(incidents.length);
+    root.querySelector("#m-inc-n").textContent = fmtCount(incidents.length);
   }
 
   // incidentBlock renders the incidents this panel is responsible for: the selected

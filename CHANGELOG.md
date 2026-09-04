@@ -69,6 +69,32 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **A count on the diagram is grouped in thousands.** Reported from a running process:
+  badges reading `25864`, `50002`, `23436`, `2428` around the shapes of one diagram.
+  Every number was right and none of them was legible — a five- or six-digit run is read
+  by counting digits, and two of them side by side cannot be compared at a glance at
+  all, which is the only reason the counts are drawn on the shapes instead of listed in
+  a table.
+
+  Every count the runtime views print now groups in threes — `25 864`, `50 002`: the
+  live view's three token badges and their tooltips, the replay's execution-count
+  badges, the incident badges, the Playground's run and heat-map badges, the count pills
+  in those views' headers, and — same engine counters, same problem — the Starmap's
+  running total on a node and its running/finished tally in the panel. Anything under a
+  thousand is untouched; a separator on `999` is noise in a pill that small.
+
+  The separator is a **narrow no-break space** (U+202F), not a locale's own mark.
+  A process is modelled in one country and operated from another: `25.864` is
+  twenty-five thousand to one reader and twenty-five point eight to the next, `25,864`
+  the same disagreement mirrored, and a badge has no room to say which it meant. A space
+  is the one grouping mark no locale reads as a decimal point (ISO 31-0), and the
+  no-break variant keeps a badge on one line at any count. `toLocaleString()` was the
+  other candidate, and it is wrong here for the reason it looks right: it would make the
+  separator a property of whoever is looking, so the same screenshot pasted into a
+  ticket would say something different to the person who received it. The whole choice
+  is one constant in `api/web/numfmt.js` — a house that wants the Swiss `25'864` changes
+  it there, in one place, and every badge follows.
+
 - **Google Sheets runs on a worker, like everything else.** It shipped with an
   in-engine handler and no supervised form, so the Modeler's properties panel showed it
   as the one Worker Type reading IN-ENGINE while the twelve around it said otherwise —
