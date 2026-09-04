@@ -25,7 +25,14 @@
   replacing the previous amendment's blanket refusal, and the mapping moves to the
   server; amended 2026-09-04 — §6's impact question can be asked about several nodes
   at once, as the maintenance window it is, and states why the union is walked rather
-  than the individual answers added)
+  than the individual answers added; amended 2026-09-04 — the view is called Starmap
+  in the product, and this record keeps its own vocabulary; amended 2026-09-04 — a
+  process node can carry the engine's instance tally, under four rules that keep an
+  unread counter from reading as an idle process; amended 2026-09-04 — the canvas has
+  no edges: the world is a budget for the layout rather than a fence around the
+  arrangement; amended 2026-09-04 — a drilldown is a path through the estate rather
+  than a single place, carried in the header, in a saved view and in the export's
+  scope)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -632,6 +639,94 @@ unaffected.
 > makes the whole window a floor — and §10's export carries the window in the stamp,
 > because in a file the rings on three nodes are the whole point and there is no panel
 > beside it to say so.
+
+> **Amendment (2026-09-04): a drilldown is a path, not a flag.**
+> Going into a node was one step deep in practice: the state was a single id, so
+> going in again replaced where you were, and leaving went all the way back to the
+> whole starmap. On a graph the point of which is following dependencies, that is the
+> wrong shape — the ordinary act is to go into a node, then into one of *its*
+> dependencies, and then to want the second node back.
+>
+> The state is therefore the path: every node gone into, in order, with the last one
+> the place you are standing. Only that last one cuts the picture, so a walk of six
+> costs exactly what a drilldown of one did; the rest is history, and history is what
+> makes stepping back one node possible at all. The header carries it as stations,
+> each a way back to itself, with the whole starmap as the first — so leaving is a
+> step like any other rather than a separate escape hatch, and Escape retraces rather
+> than abandons.
+>
+> Two rules keep it readable. Going into a node already on the path **truncates back
+> to it** rather than listing it twice: a trail that can hold one station at two
+> depths makes "back to where I was" ambiguous. And a node undeployed while somebody
+> stands on it steps them back one station rather than throwing the walk away — the
+> way they came is still a real path.
+>
+> A saved view carries the path, and §10's export names it: a picture cropped to one
+> node with no account of how that node was arrived at is a narrowing its reader
+> cannot check.
+
+> **Amendment (2026-09-04): the canvas has no edges.**
+> A node dragged toward the top of the picture used to stop at the world's edge, and
+> a drag that stops reads as the view being broken rather than as a boundary being
+> enforced. The clamp was argued from the fit: the fitted view showed the *world*, so
+> a node outside it would be invisible at the very view somebody would use to go
+> looking for it. That argument died when Fit began framing the **content** — the fit
+> follows whatever has been arranged, so a node past the old edge is one press away.
+>
+> So the world is what it always was underneath: an area budget for the layout to
+> settle in, not a fence around the arrangement. A node goes where the hand puts it, a
+> pin is restored where it was put, panning works at every magnification rather than
+> only when something is off-screen, and the zoom-out bound moves from 1.6× to 4× so
+> the arrangement can be found by pulling back instead of only by giving it up to Fit.
+>
+> Bounded zoom stays, and is the one limit worth keeping: past a few multiples of the
+> fitted frame the picture is a dot in a void, which is not a view of anything.
+
+> **Amendment (2026-09-04): a process node can carry how much is running on it.**
+> §4's observation says whether a process is in trouble. It does not say whether it
+> is doing anything, and "twelve instances are live in here" is the other half of
+> what somebody about to touch a node wants to know — particularly beside the
+> maintenance window, where the question is what taking it down would interrupt.
+>
+> The node therefore carries the engine's own tally: live now, finished ever, and
+> when it last did anything. Three point reads of counters ADR-0083 already
+> maintains, not a scan — which is the whole reason it can be on every node of a
+> four-hundred-node picture, and the same argument the parked-work tally makes for
+> being collected once.
+>
+> Four rules it is drawn under:
+>
+> - **It is asked for.** Off by default, behind a switch. A structural picture that
+>   always carried a second number under every name would be a status board with
+>   arrows, and this view's job is the shape of the estate.
+> - **The canvas shows only the counts there are.** A process with nothing running
+>   carries no number: on four hundred nodes, "0 running" four hundred times hides
+>   the eleven numbers somebody switched this on to find. The legend says so, because
+>   an absence that is not explained reads as "not measured".
+> - **The panel says the zero.** For the selected node the whole tally is stated,
+>   idle included — that is where "nothing is running here" is an answer rather than
+>   clutter.
+> - **A tally that could not be read is absent, not zero.** A definition nobody has
+>   started and a counter that failed to answer are different facts, and a picture
+>   that drew the second as the first would report a quiet estate on no evidence.
+>   The same rule §3 applies to restricted nodes, applied to a number.
+>
+> A collapsed application sums the tallies it stands for, as it already sums their
+> incidents; a restricted placeholder carries none, because how busy a resource is
+> is a fact about the resource and this reader may not see it.
+
+> **Amendment (2026-09-04): the view is called Starmap.**
+> Everything a reader sees now says Starmap — the nav, the page, the exported file's
+> name and its provenance stamp, the generated ArchiMate model's name — and
+> `#/panorama/landscape` rewrites to `#/panorama/starmap`, so every bookmark and
+> pasted link from before the rename lands on the page under its current name. That
+> is the same rewrite the Workers page carries for its pre-ADR-0203 spelling, for the
+> same reason: one page, one name.
+>
+> This record and the code that draws the picture go on saying *landscape* and
+> *mesh*. They are describing a derived graph of an estate, which is what it is; the
+> rename is of the view, not of the thing it draws, and rewriting a decision record
+> to match a later product name would make it a worse record of the decision.
 
 ### 7. A stated size budget, and a server-side fallback
 

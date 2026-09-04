@@ -1509,18 +1509,22 @@ function onCallMarker(canvas, element, ev) {
 }
 
 // wireCallDrilldown gives one bpmn-js instance the drill-in gesture and the cue that
-// makes it findable: hovering a call activity rings its "+" and names what is behind
-// it, double-clicking that "+" opens it. `open(element, processId)` is the surface's
-// own idea of "in"; the process id it is handed is "" for a call activity that names
-// no callee, which a runtime surface can still answer (it knows the child instance)
-// and the Modeler answers by saying what is missing.
+// makes it findable: hovering a call activity rings its "+", putting the pointer on
+// that ring says what a double-click there does, and the double-click opens it.
+// `open(element, processId)` is the surface's own idea of "in"; the process id it is
+// handed is "" for a call activity that names no callee, which a runtime surface can
+// still answer (it knows the child instance) and the Modeler answers by saying what
+// is missing.
 //
-// The cue is not decoration. The replay's first drill-in was an invisible hotspot over
-// this very marker, and operators reported never discovering it (see
-// drawCallActivityLinks) — an affordance that appears only once the pointer is already
-// on it is one nobody finds. Ringing the marker for as long as the *shape* is hovered
-// is the smallest thing that still answers "is there a way in, and to where" before
-// the pointer is anywhere near the 14px target.
+// The cue is in two parts on purpose, and the split is where the first cut got it
+// wrong. The replay's original drill-in was an invisible hotspot over this marker and
+// operators never discovered it (see drawCallActivityLinks), so the marker is ringed
+// as soon as the *shape* is hovered: that is the whole "there is a way in here", and
+// it is silent. The sentence explaining the gesture is the intrusive part — it belongs
+// to the 14px target itself, not to the 100x80 shape around it, so it appears only
+// once the pointer is actually on the ring. It does not name the callee either: at
+// that point the reader is one double-click from seeing it, and the Modeler's panel
+// says it in full.
 //
 // Priority 1500 puts the handler above bpmn-js's own double-click (direct label
 // editing, priority 1000), so the marker never opens the rename box, and below the
@@ -1534,34 +1538,67 @@ function wireCallDrilldown(viewer, open) {
     overlays = viewer.get("overlays");
   } catch { return; } // viewer already torn down — nothing to wire
 
-  const cue = []; // overlay ids of the hover cue, so we remove only our own
+  const cue = [];   // overlay ids we own, so we remove only our own
+  let ringEl = null; // the ring's node, kept so the pointer can light it up
+  let tipId = null;  // the label's overlay id while the pointer is on the ring
+
+  const clearTip = () => {
+    if (tipId === null) return;
+    try { overlays.remove(tipId); } catch { /* gone */ }
+    const at = cue.indexOf(tipId);
+    if (at >= 0) cue.splice(at, 1);
+    tipId = null;
+  };
   const clearCue = () => {
+    tipId = null;
+    ringEl = null;
     for (const id of cue.splice(0)) { try { overlays.remove(id); } catch { /* gone */ } }
   };
-  const showCue = (element, pid) => {
+
+  // showRing marks the marker as the way in, for as long as the shape is hovered.
+  const showRing = (element) => {
+    if (ringEl) return; // already on this shape
     clearCue();
-    const target = pid ? `&ldquo;${esc(pid)}&rdquo;` : "the called process";
+    ringEl = document.createElement("span");
+    ringEl.className = "ca-drill-ring";
     try {
       cue.push(overlays.add(element.id, "atlas-call-drill", {
         // Anchored on the marker's own centre (the overlay's origin is the shape's
         // top-left, in diagram units), so the ring sits on the "+" at any zoom.
         position: { left: element.width / 2 - 0.5, top: element.height - CALL_MARKER.up + CALL_MARKER.size / 2 },
-        html: `<span class="ca-drill-ring"></span>`,
+        html: ringEl,
       }));
-      cue.push(overlays.add(element.id, "atlas-call-drill", {
-        position: { left: element.width / 2, top: element.height + 6 },
-        // The ring above scales with the diagram because it stands for the marker;
-        // this is a sentence, and a sentence rendered at 200% runs off the canvas it
-        // is explaining. Held near its own size, it stays a label at any zoom.
+    } catch { ringEl = null; /* shape without graphics (mid-import) — the gesture still works */ }
+  };
+
+  // showTip is the sentence, and it is shown only while the pointer is on the ring.
+  const showTip = (element) => {
+    if (tipId !== null) return;
+    try {
+      tipId = overlays.add(element.id, "atlas-call-drill", {
+        position: { left: element.width / 2, top: element.height + 4 },
+        // The ring scales with the diagram because it stands for the marker; this is
+        // words, and words rendered at 200% run off the canvas they are explaining.
+        // Held near their own size, they stay a label at any zoom.
         scale: { min: 0.8, max: 1 },
-        html: `<span class="ca-drill-tip">Double-click <b>&#43;</b> to open ${target}</span>`,
-      }));
-    } catch { /* shape without graphics (mid-import) — the gesture still works */ }
+        html: `<span class="ca-drill-tip">Double-click to open</span>`,
+      });
+      cue.push(tipId);
+    } catch { tipId = null; /* shape gone mid-hover */ }
   };
 
   eventBus.on("element.hover", (e) => {
     const bo = e.element && e.element.businessObject;
-    if (isCallActivity(bo)) showCue(e.element, calledProcessId(bo)); else clearCue();
+    if (isCallActivity(bo)) showRing(e.element); else clearCue();
+  });
+  // The pointer's position inside the shape decides the label: on the ring it explains
+  // the gesture, anywhere else it stays out of the reader's way.
+  eventBus.on("element.mousemove", (e) => {
+    const bo = e.element && e.element.businessObject;
+    if (!isCallActivity(bo) || !ringEl) return;
+    const on = onCallMarker(canvas, e.element, e.originalEvent);
+    ringEl.classList.toggle("on", on);
+    if (on) showTip(e.element); else clearTip();
   });
   eventBus.on("element.out", clearCue);
   eventBus.on("import.done", clearCue); // the diagram under the cue is gone
@@ -8255,8 +8292,8 @@ function badgeSpot(element, corner) {
 // counts are identical whichever event actually won (ADR-0249).
 //
 // `tokens` overrides the live count (a gateway shows its race's, which the engine parks
-// on the branches) and `green` replaces the green badge outright (an armed branch says
-// "armed" instead of repeating the count its gateway already carries).
+// on the branches) and `green` replaces the green badge outright — "" on an armed
+// branch, whose live tokens are the gateway's race and are counted there.
 function tokenBadgesHTML(e, { tokens = e.tokens, green = null } = {}) {
   const cancelled = e.terminated || 0;
   const passed = Math.max(0, e.visits - tokens - cancelled);
@@ -8350,10 +8387,14 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         <aside class="var-panel side" id="var-panel"></aside>
       </div>
       <div class="problems">
-        <span class="legend-swatch live"></span> live token
-        <span class="legend-swatch history" style="margin-left:12px"></span> passed through
-        <span class="badge" style="margin-left:12px">N</span> token count
+        <span class="legend-swatch live"></span> token here now
+        <span class="legend-swatch history" style="margin-left:12px"></span> visited
+        <span id="legend-armed" hidden title="An event-based gateway arms every branch at once, so the engine parks a token on each of them and none on the gateway. The wait is one race however many branches it has, so it is counted once — on the gateway.">
+          <span class="legend-swatch armed" style="margin-left:12px"></span> armed branch of an event gateway</span>
         <span class="legend-swatch incident" style="margin-left:12px"></span> parked on an incident
+        <span class="token-badge history" style="margin-left:16px">N</span> completed here and moved on
+        <span class="token-badge cancelled" style="margin-left:10px">N</span> cancelled here
+        <span class="token-badge" style="margin-left:10px">N</span> tokens here now
         <span style="flex:1"></span>
         <span class="muted">Polling every 1.5s</span>
       </div>
@@ -8929,8 +8970,13 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // count is the smallest of the armed branches, so a branch that also carries tokens
     // from elsewhere cannot inflate it.
     const byId = new Map((rt.elements || []).map((e) => [e.elementId, e]));
+    const gateways = eventGatewayRaces(registry);
+    // The legend carries "armed" only where the diagram can show one — it is read off
+    // the model, not the tokens, so it does not blink in and out as races are decided.
+    const armedLegend = root.querySelector("#legend-armed");
+    if (armedLegend) armedLegend.hidden = gateways.size === 0;
     const races = new Map(); // gateway id → tokens waiting in its race
-    for (const [gw, armed] of eventGatewayRaces(registry)) {
+    for (const [gw, armed] of gateways) {
       const waiting = Math.min(...armed.map((id) => (byId.get(id) || {}).tokens || 0));
       if (waiting > 0) races.set(gw, { waiting, armed });
     }
@@ -8972,19 +9018,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
             elIncidents[0].message ? ` — ${esc(elIncidents[0].message)}` : ""}">&#9888;${many}</div>`,
         });
       }
-      // An armed branch shows no count of its own: the tokens on it are the gateway's
-      // race, already counted there, and a number here would be that same wait read a
-      // second time. It says "armed" instead — what is true of the branch, and not a
-      // quantity anyone can misread as arrived events.
-      const gwId = armedNow.get(e.elementId);
-      const gwShape = gwId && registry.get(gwId);
-      const gwName = gwShape && gwShape.businessObject && gwShape.businessObject.name;
-      const armedPill = armed
-        ? `<div class="token-badge armed" title="armed by the event-based gateway ${esc(gwName || gwId)}, which carries the count — the first of its events to fire wins, the other branches are cancelled">armed</div>`
-        : null;
+      // An armed branch shows no live count of its own: the tokens on it are the
+      // gateway's race, already counted there, and a number here would be that same
+      // wait read a second time. Its dashed outline says it is armed, and the legend
+      // says what that means — once, rather than beside every branch of every race.
+      // Its gray and amber counts stay: how often this branch won and lost is exactly
+      // what the diagram could not say before.
       overlays.add(e.elementId, "tokens", {
         position: badgeSpot(shape, "br"),
-        html: tokenBadgesHTML(e, { tokens, green: armedPill }),
+        html: tokenBadgesHTML(e, { tokens, green: armed ? "" : null }),
       });
       // A user-task element with a waiting job gets a clickable "Open" badge that
       // jumps to its form. One waiting task → straight to it; several (only under

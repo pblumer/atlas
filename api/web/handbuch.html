@@ -281,7 +281,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             Entscheidungen es gibt und wie sie zusammenhängen – abgeleitet aus dem, was deployt ist.</p>
           <p class="lead" data-l="en">The <a href="#panorama">landscape</a>: which processes, workers and
             decisions exist and how they hang together – derived from what is actually deployed.</p>
-          <a class="applink" href="/#/panorama/landscape">→ Panorama</a></div>
+          <a class="applink" href="/#/panorama/starmap">→ Panorama</a></div>
         <div class="card"><b>Data</b>
           <p class="lead" data-l="de">Das <a href="#infomodell">Informationsmodell</a>: was ein «Auftrag» in
             deiner Landschaft <i>ist</i> – als UML-Klassendiagramm über allen Prozessen einer Applikation.</p>
@@ -946,7 +946,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 &lt;/definitions&gt;</code></pre>
         </details>
         <p class="rz-how"><span data-l="de">Hinter dem Gateway stehen nur wartende Ereignisse (Nachricht, Timer, Signal). Es ist eine <i>deferred choice</i>: die Umgebung entscheidet, nicht die Daten. Klassisch für „warte auf Antwort, sonst Timeout“.</span><span data-l="en">Only waiting events (message, timer, signal) may follow the gateway. It's a <i>deferred choice</i>: the environment decides, not the data. The classic "wait for a reply, otherwise time out".</span></p>
-        <p class="rz-how"><span data-l="de"><b>Zur Laufzeit:</b> Beim Erreichen des Gateways macht die Engine <b>alle</b> Zweige gleichzeitig scharf — der Token wartet also nicht auf dem Gateway, sondern auf jedem Ereignis dahinter. Das Diagramm in <a href="/#/operations">Betrieb</a> zeigt es trotzdem als <i>ein</i> Warten: die grüne Zahl steht am Gateway (so viele Instanzen sind im Rennen), die Zweige sind nur als <b>armed</b> markiert. Wer tatsächlich gewonnen hat, steht am Zweig selbst — <b>grau</b> = hier abgeschlossen und weitergelaufen, <b>bernstein</b> = hier abgebrochen, weil das andere Ereignis zuerst kam.</span><span data-l="en"><b>At runtime:</b> on reaching the gateway the engine arms <b>every</b> branch at once — the token does not wait on the gateway but on each event behind it. The diagram in <a href="/#/operations">Operations</a> still shows it as <i>one</i> wait: the green count sits on the gateway (that many instances are in the race) and the branches are merely marked <b>armed</b>. Which event actually won is on the branch itself — <b>gray</b> = completed here and moved on, <b>amber</b> = cancelled here because the other event came first.</span></p>
+        <p class="rz-how"><span data-l="de"><b>Zur Laufzeit:</b> Beim Erreichen des Gateways macht die Engine <b>alle</b> Zweige gleichzeitig scharf — der Token wartet also nicht auf dem Gateway, sondern auf jedem Ereignis dahinter. Das Diagramm in <a href="/#/operations">Betrieb</a> zeigt es trotzdem als <i>ein</i> Warten: die grüne Zahl steht am Gateway (so viele Instanzen sind im Rennen), die Zweige sind nur gestrichelt umrandet (die Legende unter dem Diagramm sagt, was das heisst). Wer tatsächlich gewonnen hat, steht am Zweig selbst — <b>grau</b> = hier abgeschlossen und weitergelaufen, <b>bernstein</b> = hier abgebrochen, weil das andere Ereignis zuerst kam.</span><span data-l="en"><b>At runtime:</b> on reaching the gateway the engine arms <b>every</b> branch at once — the token does not wait on the gateway but on each event behind it. The diagram in <a href="/#/operations">Operations</a> still shows it as <i>one</i> wait: the green count sits on the gateway (that many instances are in the race) and the branches are merely outlined dashed (the legend under the diagram says what that means). Which event actually won is on the branch itself — <b>gray</b> = completed here and moved on, <b>amber</b> = cancelled here because the other event came first.</span></p>
       </div>
       <div class="recipe" id="rz-inclusive" data-proc="recipe-inclusive">
         <h4><span class="rz-emoji" aria-hidden="true">🔱</span>
@@ -3054,7 +3054,7 @@ atlas worker --connector mssql</code></pre>
       <p data-l="en">The app has two views, and the difference between them is the most important point in this
         whole chapter:</p>
       <div class="grid2">
-        <div class="card"><b data-l="de">Landschaft &mdash; abgeleitet</b><b data-l="en">Landscape &mdash; derived</b>
+        <div class="card"><b data-l="de">Starmap &mdash; abgeleitet</b><b data-l="en">Starmap &mdash; derived</b>
           <p class="lead" data-l="de">Ein Graph, den <b>niemand gezeichnet hat</b>. Der Server rechnet ihn bei
             jeder Anfrage aus dem aus, was ohnehin da ist: deployte Prozesse, Worker, Entscheidungen, Releases.
             Er ist deshalb nie veraltet und zeigt auch auf einer Installation etwas, auf der noch niemand
@@ -3062,7 +3062,7 @@ atlas worker --connector mssql</code></pre>
           <p class="lead" data-l="en">A graph <b>nobody drew</b>. The server computes it on every request from
             what is there anyway: deployed processes, workers, decisions, releases. It is therefore never stale,
             and it shows something even on an installation where nobody has modelled anything.</p>
-          <a class="applink" href="/#/panorama/landscape">→ Landscape</a></div>
+          <a class="applink" href="/#/panorama/starmap">→ Starmap</a></div>
         <div class="card"><b data-l="de">Architektursichten &mdash; gezeichnet</b><b data-l="en">Architecture views &mdash; drawn</b>
           <p class="lead" data-l="de">ArchiMate-3.2-Diagramme, die jemand bewusst angelegt hat, um eine Aussage zu
             treffen, die aus den Daten nicht folgt &ndash; etwa welche Fachdomäne ein Prozess bedient. Ihre Elemente
@@ -4004,7 +4004,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
           <tr><td data-l="de">Connector <i>(veraltet)</i></td><td data-l="en">Connector <i>(legacy)</i></td><td data-l="de">Der frühere Name. Je nach Stelle war damit ein Worker-Typ oder ein Worker gemeint – deshalb der neue Sprachgebrauch. XML-Attribute, API und CLI tragen ihn weiter.</td><td data-l="en">The former name. Depending on where it stood it meant a worker type or a worker – which is why the vocabulary changed. XML attributes, the API and the CLI keep it.</td></tr>
                   <tr><td data-l="de">Informationsmodell</td><td data-l="en">Information model</td><td data-l="de">Ein UML-Klassendiagramm, das einer Applikation gehört und für alle ihre Prozesse gilt: was ein Auftrag <i>ist</i>. Siehe <a href="#infomodell">Kapitel</a>.</td><td data-l="en">A UML class diagram owned by an application and holding for all of its processes: what an order <i>is</i>. See the <a href="#infomodell">chapter</a>.</td></tr>
           <tr><td data-l="de">Business Key</td><td data-l="en">Business key</td><td data-l="de">Die Angabe, die sagt, dass zwei Dinge dasselbe Ding sind – die Auftragsnummer, die Referenz. BPMN hat dafür kein Gegenstück.</td><td data-l="en">The fact that says two things are the same thing – the order number, the reference. BPMN has no equivalent.</td></tr>
-          <tr><td data-l="de">Landschaft</td><td data-l="en">Landscape</td><td data-l="de">Der Graph aller Applikationen, Prozesse, Worker und Entscheidungen einer Installation. Berechnet, nicht gezeichnet. Siehe <a href="#panorama">Panorama</a>.</td><td data-l="en">The graph of every application, process, worker and decision on an installation. Computed, not drawn. See <a href="#panorama">Panorama</a>.</td></tr>
+          <tr><td data-l="de">Landschaft (Starmap)</td><td data-l="en">Landscape (Starmap)</td><td data-l="de">Der Graph aller Applikationen, Prozesse, Worker und Entscheidungen einer Installation. Berechnet, nicht gezeichnet. Die Ansicht darauf heisst <b>Starmap</b>. Siehe <a href="#panorama">Panorama</a>.</td><td data-l="en">The graph of every application, process, worker and decision on an installation. Computed, not drawn. The view onto it is called the <b>Starmap</b>. See <a href="#panorama">Panorama</a>.</td></tr>
           <tr><td>Playground</td><td data-l="de">Der Modeler-Tab, der den Entwurf mit echten Daten auf der echten Engine rechnet – in einer Wegwerf-Sandbox, ohne Deploy. Siehe <a href="#playground">Testen</a>.</td><td data-l="en">The Modeler tab that runs the draft with real data on the real engine – in a throwaway sandbox, with no deploy. See <a href="#playground">Test</a>.</td></tr>
           <tr><td>MCP</td><td data-l="de">Das Protokoll, über das ein KI-Assistent Atlas bedient. Ein Werkzeug läuft mit den Rollen dessen, der es ruft. Siehe <a href="#konten">Konten &amp; Rollen</a>.</td><td data-l="en">The protocol an AI assistant drives Atlas over. A tool runs with the roles of whoever calls it. See <a href="#konten">accounts &amp; roles</a>.</td></tr>
 </tbody>

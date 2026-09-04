@@ -150,6 +150,33 @@ type Process struct {
 	Incidents int
 	// Sites are the places in this process where that work is parked.
 	Sites []IncidentSite
+	// Runtime is what the engine has recorded about this definition's instances:
+	// how many are live, how many have finished, and when it last did anything. It
+	// is nil where the collector could not read it, which is not the same fact as
+	// zero — a process nothing has ever run and a counter that failed to read are
+	// different things, and only one of them is worth saying out loud.
+	Runtime *Runtime
+}
+
+// Runtime is a process definition's instance tally (ADR-0083's summary columns, on
+// the Starmap).
+//
+// Every field is an O(1) point read of a counter the engine already maintains, which
+// is why this can be on every node of a four-hundred-node picture: the alternative —
+// counting instances per definition — is one scan each, and on an instance with a few
+// hundred processes that is the difference between a view and an outage. It is the
+// same argument the parked-work tally already makes for being collected once.
+type Runtime struct {
+	// Running is how many instances of this definition are live right now.
+	Running int `json:"running"`
+	// Finished is how many have completed or been terminated. It never decreases —
+	// there is no un-finishing — so it is a lifetime total rather than a rate.
+	Finished int `json:"finished"`
+	// LastActivity is the Unix-nano timestamp of the most recent lifecycle event of
+	// any of its instances, or zero for a definition nothing has ever run. Zero is
+	// meaningful here in a way it is not for the counts: no activity ever is exactly
+	// what a definition nobody has started reports.
+	LastActivity int64 `json:"lastActivity,omitempty"`
 }
 
 // IncidentSite is one element of a process with unresolved incidents on it.
@@ -306,6 +333,15 @@ type Node struct {
 	// Children is how many nodes a collapsed application stands for. Set only when
 	// the graph is clustered.
 	Children int `json:"children,omitempty"`
+	// Runtime is the engine's instance tally for this node (see [Runtime]).
+	//
+	// A process node carries its own. A *collapsed* application carries the sum of
+	// the processes it stands for, for the same reason it carries their summed
+	// incident count: it is standing in for them, and reporting one child's number
+	// against the whole would understate it. An uncollapsed application carries
+	// none — its processes are on screen with their own — and no other kind can have
+	// instances at all, which is why this is absent rather than zero.
+	Runtime *Runtime `json:"runtime,omitempty"`
 }
 
 // Target is one deployment target and what this server currently knows of it.
@@ -464,6 +500,7 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 			ID: processNodeID(p.Key), Kind: KindProcess, Name: p.Name,
 			Provenance: ProvenanceDerived, ProcessID: p.ProcessID, Version: p.Version,
 			State: p.State, Reason: p.Reason, Incidents: p.Incidents, Sites: p.Sites,
+			Runtime: p.Runtime,
 		}
 		if _, ok := visibleApps[p.ApplicationID]; ok {
 			node.Application = applicationNodeID(p.ApplicationID)
@@ -720,12 +757,29 @@ func cluster(full Graph, visible []Process, appIDs []string, apps map[string]App
 	// a collapsed application stands for all of them, and reporting one child's
 	// number against the whole would understate what is parked behind it.
 	incidents := map[string]int{}
+	// And so does the instance tally, summed for the same reason: the collapsed node
+	// stands for all of them. LastActivity is the latest of theirs rather than a sum,
+	// because a timestamp is not a quantity — the question it answers is "has
+	// anything here moved lately", and the most recent child is the answer.
+	runtime := map[string]*Runtime{}
 	for _, p := range visible {
 		if _, ok := apps[p.ApplicationID]; !ok {
 			continue
 		}
 		children[p.ApplicationID]++
 		incidents[p.ApplicationID] += p.Incidents
+		if p.Runtime != nil {
+			acc := runtime[p.ApplicationID]
+			if acc == nil {
+				acc = &Runtime{}
+				runtime[p.ApplicationID] = acc
+			}
+			acc.Running += p.Runtime.Running
+			acc.Finished += p.Runtime.Finished
+			if p.Runtime.LastActivity > acc.LastActivity {
+				acc.LastActivity = p.Runtime.LastActivity
+			}
+		}
 		if have, seen := worst[p.ApplicationID]; !seen ||
 			severityRank[severityOf(p.State)] > severityRank[severityOf(have.State)] {
 			worst[p.ApplicationID] = p
@@ -738,7 +792,7 @@ func cluster(full Graph, visible []Process, appIDs []string, apps map[string]App
 	for _, id := range appIDs {
 		node := Node{
 			ID: applicationNodeID(id), Kind: KindApplication, Name: apps[id].Name,
-			Provenance: ProvenanceDerived, Children: children[id],
+			Provenance: ProvenanceDerived, Children: children[id], Runtime: runtime[id],
 		}
 		if p, ok := worst[id]; ok && p.State != "" {
 			node.State = p.State

@@ -121,7 +121,7 @@ func (m *Mesh) HandleArchiMate(w http.ResponseWriter, r *http.Request) {
 // put a quote or a path separator into a response header.
 func archiMateFilename(host string, at int64) string {
 	var b strings.Builder
-	b.WriteString("atlas-landscape")
+	b.WriteString("atlas-starmap")
 	var wrote int
 	for _, r := range host {
 		if wrote >= 40 {
@@ -184,7 +184,7 @@ func (m *Mesh) derive(w http.ResponseWriter, r *http.Request) (Graph, bool) {
 		return Graph{}, false
 	}
 	if err != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "collect landscape: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "collect starmap: "+err.Error())
 		return Graph{}, false
 	}
 	// Asking the peers happens here, off the loop and before the derivation, for the

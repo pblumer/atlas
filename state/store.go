@@ -77,6 +77,14 @@ func Open(dir string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill runtime totals: %w", err)
 	}
+	// The per-element termination counters (ADR-0249) are the latest addition, and an
+	// uncounted cancellation does not read as unknown on the overlay — it reads as a
+	// completion. The lifecycle trail has recorded them all along, so they are
+	// reconstructed once from it.
+	if err := s.backfillElementTerminationsIfNeeded(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: backfill element terminations: %w", err)
+	}
 	// The reverse call-activity link index is a later addition still. Children that
 	// already exist recorded their parent on their own record but never wrote the
 	// index, and without it a cancel of their caller would leave them running — so
@@ -490,6 +498,109 @@ func (s *Store) backfillRuntimeCountersIfNeeded() error {
 		}
 	}
 	if err := b.Set(keyMeta(metaRuntimeCountersV1), []byte{1}, nil); err != nil {
+		return err
+	}
+	return b.Commit(pebble.Sync)
+}
+
+// metaElementTerminationsV1 marks that the ADR-0249 termination counters have been
+// reconstructed from the retained lifecycle trail. Separate from the ADR-0080 marker so
+// a store that already ran that one still reconstructs these.
+const metaElementTerminationsV1 = "element_terminations_v1"
+
+// backfillElementTerminationsIfNeeded reconstructs the per-element termination counters
+// from the lifecycle trail (ADR-0136) the first time a store gains them.
+//
+// It matters more than a missing number usually would. The overlay derives "completed
+// here and moved on" as visits − live − terminated, so a cancellation that was never
+// counted does not read as unknown — it reads as a completion. On an event-based gateway
+// that is most of the history: every decided race leaves one branch completed and one
+// cancelled, so without this a long-running definition shows both branches as near-equal
+// winners, which is the exact misreading ADR-0249 exists to remove. The trail has
+// recorded ReplayTerminated all along, so the facts are there; only the counters are not.
+//
+// The reconstruction is a *delta*, not a sum: a store that ran the counting build for a
+// while before this landed has some of the trail already counted, and topping each
+// (definition, instance, element) up to what the trail says is both correct there and
+// idempotent — a second run computes zero. An instance whose record is gone (purged
+// history, ADR-0146) has no definition to attribute to and is skipped; its counters went
+// with it, and its aggregate contribution stays whatever was already counted.
+//
+// It is the most expensive of the one-time seedings — the trail is the largest retained
+// family — but it is paid once per store, at open, in exchange for a heatmap that is
+// right about history rather than only about what happens next.
+//
+// One imprecision, accepted and bounded: a migrated instance (ADR-0162) is attributed to
+// the definition it runs under now, so cancellations from before the migration land on
+// the target version. Live counting attributes each to the version it happened under;
+// only this one-time reconstruction cannot, because the trail does not carry the
+// definition the element belonged to.
+func (s *Store) backfillElementTerminationsIfNeeded() error {
+	if _, ok, err := getCopy(s.db, keyMeta(metaElementTerminationsV1)); err != nil || ok {
+		return err
+	}
+
+	// Which definition each instance belongs to — live instances and finished ones
+	// alike, since the trail outlives the run it describes.
+	defOf := map[uint64]uint64{}
+	for _, cf := range []columnFamily{cfProcessInstance, cfProcessInstanceHistory} {
+		if err := s.scanPrefix([]byte{byte(cf)}, func(k, raw []byte) error {
+			v, err := model.DecodeValue(model.VTProcessInstance, raw)
+			if err != nil {
+				return err
+			}
+			defOf[trailingKey(k)] = v.(*model.ProcessInstanceValue).ProcessDefKey
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+
+	type instElem struct {
+		def, pi uint64
+		el      int32
+	}
+	fromTrail := map[instElem]int64{}
+	if err := s.AllElementReplay(func(piKey uint64, _ int64, _ uint64, v ElementReplayValue) error {
+		if v.Action != ReplayTerminated {
+			return nil
+		}
+		def, ok := defOf[piKey]
+		if !ok {
+			return nil
+		}
+		fromTrail[instElem{def, piKey, v.ElementID}]++
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	counted := map[instElem]int64{}
+	if err := s.scanPrefix([]byte{byte(cfElementTermination)}, func(k, raw []byte) error {
+		// elTerm key: [cf][procDefKey:8][piKey:8][elementId:4]; the value is the count.
+		def := binary.BigEndian.Uint64(k[1:9])
+		pi := binary.BigEndian.Uint64(k[9:17])
+		counted[instElem{def, pi, elementIdFromVisitKey(k)}] += decodeCounter(raw)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	b := s.db.NewBatch()
+	defer b.Close()
+	for ie, n := range fromTrail {
+		delta := n - counted[ie]
+		if delta <= 0 {
+			continue
+		}
+		if err := b.Merge(keyElementTermination(ie.def, ie.pi, ie.el), encodeCounter(delta), nil); err != nil {
+			return err
+		}
+		if err := b.Merge(keyElementTerminationAgg(ie.def, ie.el), encodeCounter(delta), nil); err != nil {
+			return err
+		}
+	}
+	if err := b.Set(keyMeta(metaElementTerminationsV1), []byte{1}, nil); err != nil {
 		return err
 	}
 	return b.Commit(pebble.Sync)

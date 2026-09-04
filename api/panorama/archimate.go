@@ -115,7 +115,7 @@ func ExportArchiMate(g Graph, opts ArchiMateExport) []byte {
 	out.WriteString(`<model xmlns="` + ExchangeNamespace + `"` +
 		` xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"` +
 		` xsi:schemaLocation="` + ExchangeNamespace + " " + ExchangeNamespace + `archimate3_Model.xsd"` +
-		` identifier="id-atlas-landscape">` + "\n")
+		` identifier="id-atlas-starmap">` + "\n")
 	out.WriteString("  <name xml:lang=\"en\">" + escapeXML(modelName(opts)) + "</name>\n")
 	out.WriteString("  <documentation xml:lang=\"en\">" +
 		escapeXML(provenance(opts, notation, len(exported), restricted, dropped)) + "</documentation>\n")
@@ -241,9 +241,9 @@ func elementDocumentation(n Node) string {
 
 func modelName(opts ArchiMateExport) string {
 	if strings.TrimSpace(opts.Instance) != "" {
-		return "Atlas landscape — " + opts.Instance
+		return "Atlas starmap — " + opts.Instance
 	}
-	return "Atlas landscape"
+	return "Atlas starmap"
 }
 
 // provenance is the paragraph that keeps this document from being mistaken for one
@@ -264,19 +264,19 @@ func provenance(opts ArchiMateExport, notation Notation, elements, restricted, d
 
 	b.WriteString(fmt.Sprintf("%d element(s). ", elements))
 	if restricted > 0 {
-		b.WriteString(fmt.Sprintf("%d dependency of this landscape points at a resource the "+
+		b.WriteString(fmt.Sprintf("%d dependency of this starmap points at a resource the "+
 			"exporting reader may not see; there is no ArchiMate element for that, so it and "+
-			"its relationships are absent. This model is a part of the landscape, not all of "+
+			"its relationships are absent. This model is a part of the starmap, not all of "+
 			"it. ", restricted))
 	}
 	if dropped > 0 {
 		b.WriteString(fmt.Sprintf("%d relationship(s) had an end that is not in this model and "+
 			"are absent with it. ", dropped))
 	}
-	b.WriteString("No diagram: the landscape's arrangement is computed in the browser and " +
+	b.WriteString("No diagram: the starmap's arrangement is computed in the browser and " +
 		"belongs to whoever arranged it, so your tool's own layout is the better one. " +
 		"No observation state either — health, incidents and reachability are what the " +
-		"landscape's image export carries, dated; an architecture document that froze them " +
+		"starmap's image export carries, dated; an architecture document that froze them " +
 		"would go on asserting them.\n\n")
 
 	b.WriteString("What this vocabulary cannot carry:\n")

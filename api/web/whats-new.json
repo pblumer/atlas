@@ -69,7 +69,7 @@
           "en": "Open Panorama",
           "de": "Panorama öffnen"
         },
-        "route": "#/panorama/landscape"
+        "route": "#/panorama/starmap"
       }
     },
     {
@@ -144,6 +144,24 @@
       }
     },
     {
+      "id": "opening-a-deployed-process-in-the-modeler-lost-the-applicati",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Opening a deployed process in the Modeler lost the application it belongs to, and with it the whole vocabulary behind a data object's Type.",
+        "de": "Opening a deployed process in the Modeler lost the application it belongs to, and with it the whole vocabulary behind a data object's Type."
+      },
+      "summary": {
+        "en": "A draft carries its application; a deployed version carries it too — the deploy records it — but the route that opens one (#/modeler/d/{key}) does not name it and nothing looked it up.",
+        "de": "A draft carries its application; a deployed version carries it too — the deploy records it — but the route that opens one (#/modeler/d/{key}) does not name it and nothing looked it up."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-widened-properties-column-in-the-form-editor-gave-its-widt",
       "version": "Unreleased",
       "date": null,
@@ -181,8 +199,8 @@
         "de": "Das Diagramm sagt jetzt, welches Ereignis wirklich eingetroffen ist"
       },
       "summary": {
-        "en": "Every element on the live diagram carries two counts: how many tokens sit there now, in green, and how many have been there, in gray. The gray one counted every token that had arrived and left again — whether it finished and moved on, or was cancelled. Nowhere did that hurt more than at an event-based gateway, the \"wait for a reply, otherwise time out\" pattern: the engine arms every branch at once, so one waiting case holds a token on each of them, and every decided race leaves one branch completed and the other cancelled. Both branches therefore showed the same two numbers whatever had happened — 10 941 gray and 50 002 green on the message branch, and exactly the same on the timer branch, which reads as \"both events arrive equally often\" and never meant that. Two things change. Gray now means completed here and moved on, and a new amber count means cancelled here — so at each branch you can read how often that event actually came, and how often the other one beat it. And the race itself is drawn as the one wait it is: the green count sits on the gateway, and the events behind it are marked \"armed\" instead of each repeating that count. Counting starts with this release: cancellations that happened before it were never recorded, so the amber number begins at zero on an existing engine.",
-        "de": "Jedes Element im Live-Diagramm trägt zwei Zahlen: wie viele Token gerade hier liegen (grün) und wie viele schon hier waren (grau). Die graue zählte jeden Token, der angekommen und wieder weg war — egal ob er fertig weitergelaufen oder abgebrochen worden ist. Nirgends störte das mehr als am ereignisbasierten Gateway, dem Muster „warte auf Antwort, sonst Timeout“: die Engine macht alle Zweige gleichzeitig scharf, ein wartender Fall hält also auf jedem Zweig einen Token, und jedes entschiedene Rennen lässt einen Zweig abgeschlossen und den anderen abgebrochen zurück. Beide Zweige zeigten deshalb dieselben zwei Zahlen, was auch immer passiert war — 10 941 grau und 50 002 grün am Nachrichten-Zweig und genau dasselbe am Timer-Zweig, was sich liest wie „beide Ereignisse treffen gleich oft ein“ und das nie bedeutet hat. Zwei Dinge ändern sich. Grau heisst jetzt hier abgeschlossen und weitergelaufen, und eine neue bernsteinfarbene Zahl heisst hier abgebrochen — am Zweig selbst steht also, wie oft dieses Ereignis wirklich kam und wie oft das andere schneller war. Und das Rennen wird als das eine Warten gezeichnet, das es ist: die grüne Zahl steht am Gateway, die Ereignisse dahinter sind nur noch als „armed“ markiert. Gezählt wird ab dieser Version: Abbrüche davor wurden nie erfasst, die bernsteinfarbene Zahl beginnt auf einer bestehenden Engine also bei null."
+        "en": "Every element on the live diagram carries two counts: how many tokens sit there now, in green, and how many have been there, in gray. The gray one counted every token that had arrived and left again — whether it finished and moved on, or was cancelled. Nowhere did that hurt more than at an event-based gateway, the \"wait for a reply, otherwise time out\" pattern: the engine arms every branch at once, so one waiting case holds a token on each of them, and every decided race leaves one branch completed and the other cancelled. Both branches therefore showed the same two numbers whatever had happened — 10 941 gray and 50 002 green on the message branch, and exactly the same on the timer branch, which reads as \"both events arrive equally often\" and never meant that. Two things change. Gray now means completed here and moved on, and a new amber count means cancelled here — so at each branch you can read how often that event actually came, and how often the other one beat it. And the race itself is drawn as the one wait it is: the green count sits on the gateway, and the events behind it are outlined dashed instead of each repeating that count — what that outline means is in the legend under the diagram. The old cancellations are not lost, either: Atlas has recorded every one of them in each case’s history trail all along, and rebuilds the counts from it once when the engine starts, so the numbers are right for what already happened and not only for what happens next. Only cases whose history has already been deleted cannot be counted back.",
+        "de": "Jedes Element im Live-Diagramm trägt zwei Zahlen: wie viele Token gerade hier liegen (grün) und wie viele schon hier waren (grau). Die graue zählte jeden Token, der angekommen und wieder weg war — egal ob er fertig weitergelaufen oder abgebrochen worden ist. Nirgends störte das mehr als am ereignisbasierten Gateway, dem Muster „warte auf Antwort, sonst Timeout“: die Engine macht alle Zweige gleichzeitig scharf, ein wartender Fall hält also auf jedem Zweig einen Token, und jedes entschiedene Rennen lässt einen Zweig abgeschlossen und den anderen abgebrochen zurück. Beide Zweige zeigten deshalb dieselben zwei Zahlen, was auch immer passiert war — 10 941 grau und 50 002 grün am Nachrichten-Zweig und genau dasselbe am Timer-Zweig, was sich liest wie „beide Ereignisse treffen gleich oft ein“ und das nie bedeutet hat. Zwei Dinge ändern sich. Grau heisst jetzt hier abgeschlossen und weitergelaufen, und eine neue bernsteinfarbene Zahl heisst hier abgebrochen — am Zweig selbst steht also, wie oft dieses Ereignis wirklich kam und wie oft das andere schneller war. Und das Rennen wird als das eine Warten gezeichnet, das es ist: die grüne Zahl steht am Gateway, die Ereignisse dahinter sind nur noch gestrichelt umrandet — was das heisst, steht in der Legende unter dem Diagramm. Die alten Abbrüche sind auch nicht verloren: Atlas hat jeden einzelnen von Anfang an in der Verlaufsspur jedes Falls mitgeschrieben und baut die Zahlen daraus einmalig beim Start neu auf. Die Zahlen stimmen also für das, was schon passiert ist, und nicht erst ab jetzt. Nur Fälle, deren Historie bereits gelöscht wurde, lassen sich nicht mehr nachzählen."
       },
       "link": {
         "label": "Changelog",
@@ -195,7 +213,7 @@
       "tutorial": {
         "en": [
           "Open Operations › Processes and pick a process with an event-based gateway — the handbook's \"Antwort oder Timeout\" recipe deploys one in a click.",
-          "Start an instance. The green count appears on the gateway itself; the two events behind it are outlined dashed and say \"armed\".",
+          "Start an instance. The green count appears on the gateway itself; the two events behind it are outlined dashed — the legend under the diagram says what that means.",
           "Let one branch win: the recipe's ▶ Try it button publishes the message for you (or POST it yourself to /api/v1/messages).",
           "The branch that won carries a gray 1 — completed here and moved on. The branch that lost carries an amber 1 — cancelled here.",
           "Hover either badge: the tooltip spells out which of the two it is.",
@@ -203,7 +221,7 @@
         ],
         "de": [
           "Öffnen Sie Operations › Processes und wählen Sie einen Prozess mit ereignisbasiertem Gateway — das Rezept „Antwort oder Timeout“ im Handbuch deployt einen per Klick.",
-          "Starten Sie eine Instanz. Die grüne Zahl steht am Gateway selbst; die beiden Ereignisse dahinter sind gestrichelt umrandet und mit „armed“ markiert.",
+          "Starten Sie eine Instanz. Die grüne Zahl steht am Gateway selbst; die beiden Ereignisse dahinter sind gestrichelt umrandet — die Legende unter dem Diagramm sagt, was das heisst.",
           "Lassen Sie einen Zweig gewinnen: Der Knopf ▶ Ausprobieren im Rezept publiziert die Nachricht (oder Sie schicken sie selbst per POST an /api/v1/messages).",
           "Der Zweig, der gewonnen hat, trägt eine graue 1 — hier abgeschlossen und weitergelaufen. Der unterlegene trägt eine bernsteinfarbene 1 — hier abgebrochen.",
           "Fahren Sie über eine der Zahlen: der Tooltip sagt, welche der beiden es ist.",
@@ -314,35 +332,6 @@
       "summary": {
         "en": "Creating a user at an identity provider, looking one up, searching for one — until now Atlas did all of it from the process that runs the engine, so a slow provider held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the credential your task references is handed to that worker, exactly as it already is for REST and SOAP.",
         "de": "Einen Benutzer beim Identity Provider anlegen, einen nachschlagen, nach einem suchen — bisher machte Atlas all das im Prozess, der die Engine ausführt, sodass ein langsamer Provider Arbeit aufhielt, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Das Credential, das Ihr Task referenziert, wird an diesen Worker übergeben — genau wie bei REST und SOAP schon."
-      },
-      "link": {
-        "label": "ADR-0233",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
-      },
-      "tags": [
-        "Workers",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "sharepoint-tasks-run-on-a-worker-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "SharePoint writes moved out of the engine",
-        "de": "SharePoint-Schreibvorgänge sind aus der Engine ausgezogen"
-      },
-      "summary": {
-        "en": "Adding a row to a SharePoint list means fetching a token and calling Microsoft Graph, and until now Atlas did both from the process that runs the engine — so a slow or throttled Graph held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the site you set up in Connectors is handed to that worker. An instance whose credential you have not finished storing is simply not served yet, rather than stopping the worker.",
-        "de": "Eine Zeile in eine SharePoint-Liste zu schreiben heisst, ein Token zu holen und Microsoft Graph aufzurufen — bisher machte Atlas beides im Prozess, der die Engine ausführt, sodass ein langsames oder gebremstes Graph Arbeit aufhielt, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Die Site, die Sie unter Connectors eingerichtet haben, wird an diesen Worker übergeben. Eine Instanz, deren Credential Sie noch nicht fertig hinterlegt haben, wird einfach noch nicht bedient — statt den Worker aufzuhalten."
       },
       "link": {
         "label": "ADR-0233",

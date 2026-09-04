@@ -111,7 +111,47 @@
       };
       const apiRaw = async (method, url, body) => ({ data: await api(method, url, body), headers: new Headers() });
 
+      // A second, gateway-free definition: the "armed" legend entry is read off the
+      // model, so a diagram that cannot show one must not explain one either.
+      const PLAIN = 6;
+      const PLAIN_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_plain" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="plain" name="Geradeaus" isExecutable="true">
+    <bpmn:startEvent id="p_start"><bpmn:outgoing>pf1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:serviceTask id="p_task" name="Arbeiten"><bpmn:incoming>pf1</bpmn:incoming><bpmn:outgoing>pf2</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="p_end"><bpmn:incoming>pf2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="pf1" sourceRef="p_start" targetRef="p_task"/>
+    <bpmn:sequenceFlow id="pf2" sourceRef="p_task" targetRef="p_end"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="PD"><bpmndi:BPMNPlane id="PP" bpmnElement="plain">
+    <bpmndi:BPMNShape id="p_start_di" bpmnElement="p_start"><dc:Bounds x="150" y="180" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="p_task_di" bpmnElement="p_task"><dc:Bounds x="250" y="158" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="p_end_di" bpmnElement="p_end"><dc:Bounds x="420" y="180" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="pf1_di" bpmnElement="pf1"><di:waypoint x="186" y="198"/><di:waypoint x="250" y="198"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="pf2_di" bpmnElement="pf2"><di:waypoint x="350" y="198"/><di:waypoint x="420" y="198"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+      const PLAIN_ELEMENTS = [
+        { elementId: "p_start", type: "bpmn:StartEvent", tokens: 0, visits: 1, terminated: 0, incidents: 0 },
+        { elementId: "p_task", type: "bpmn:ServiceTask", tokens: 1, visits: 1, terminated: 0, incidents: 0 },
+      ];
+
+      const plainApi = async (method, url) => {
+        if (url === "/api/v1/processes") {
+          return [{ key: PLAIN, processId: "plain", name: "Geradeaus", version: 1 }];
+        }
+        if (/\/processes\/\d+\/xml$/.test(url)) return PLAIN_XML;
+        if (url.startsWith("/api/v1/instances?process=")) return [];
+        if (url === "/api/v1/tasks") return [];
+        if (url.includes("/runtime")) {
+          return { instances: 1, finished: 0, tokens: 1, incidents: [], incidentsTruncated: false, elements: PLAIN_ELEMENTS };
+        }
+        return {};
+      };
+      const plainApiRaw = async (method, url, body) => ({ data: await plainApi(method, url, body), headers: new Headers() });
+
       window.__mountLive = () => mountLive(view, { api, apiRaw, toast: noop, key: DEF });
+      window.__mountPlain = () => mountLive(view, { api: plainApi, apiRaw: plainApiRaw, toast: noop, key: PLAIN });
       window.__ready = true;
     </script>
   </body>

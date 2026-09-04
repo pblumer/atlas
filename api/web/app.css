@@ -1143,14 +1143,6 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    event-based gateway, an activity a boundary event interrupted, a scope torn down. Amber,
    not the incident red: nothing here is broken or waiting for an operator. */
 .token-badge.cancelled { background: var(--warn); }
-/* Armed badge: this branch of a deferred choice is waiting. Deliberately a word and not a
-   number — the number belongs to the gateway, and repeating it per branch is what made
-   two armed branches look like two events that had arrived equally often. */
-.token-badge.armed {
-  background: transparent; color: var(--ok);
-  border: 1px dashed var(--ok); box-shadow: none;
-  font-weight: 600; font-size: 11px; line-height: 18px;
-}
 /* An element whose token is parked behind an incident (ADR-0061) is drawn red over
    its live-token green, and carries a badge with the reason. Without it a stuck task
    is pixel-identical to one that is legitimately waiting, which is exactly how a
@@ -1210,16 +1202,14 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ca-child-link { color: var(--accent, #2563eb); font-weight: 600; text-decoration: none; }
 .ca-child-link:hover { text-decoration: underline; }
 
-/* The drill-in cue on a call activity (ADR-0245): while the
-   shape is hovered, the "+" BPMN draws on it is ringed and what it opens is named,
-   because the gesture that opens it — a double-click on that marker — is otherwise
-   folklore. It is deliberately a hover cue rather than another badge: in the live view
-   all four corners of a shape already carry one (incident, token counts, open task,
-   decision — hung outside the border rather than inside it,
-   ADR-draft-runtime-badges-clear-of-labels), and the marker is the one place on a
-   call activity that is about the called process by construction.
-   Pointer-events off on both parts: the double-click is handled on the canvas, and a
-   div sitting over the marker would swallow it. */
+/* The drill-in cue on a call activity (ADR-0245), in two parts. The ring appears while
+   the *shape* is hovered: it says "there is a way in here" and says it silently, which
+   is what the invisible hotspot this replaced never managed. The label belongs to the
+   14px marker rather than the shape around it, so it appears only once the pointer is
+   on the ring — a sentence that follows every pass over a task is noise, and by then
+   the reader is one double-click from the callee's own name anyway.
+   Pointer-events off on both: the double-click is handled on the canvas, and a div
+   sitting over the marker would swallow it. */
 .djs-overlay-atlas-call-drill { pointer-events: none; transform-origin: 0 0; }
 .ca-drill-ring {
   display: block; width: 26px; height: 26px; margin: -13px 0 0 -13px; box-sizing: border-box;
@@ -1227,10 +1217,13 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
      what it encloses is exactly the area the double-click is accepted in. */
   border: 2px solid var(--accent); border-radius: 7px; background: transparent;
 }
+/* Under the pointer it reads as a button rather than an outline — with a halo around
+   it, never a fill: the "+" it frames is the thing being pointed at. */
+.ca-drill-ring.on { box-shadow: 0 0 0 4px var(--accent-soft); }
 .ca-drill-tip {
   display: block; width: max-content; transform: translateX(-50%); white-space: nowrap;
-  background: var(--accent); color: #fff; border-radius: 999px; padding: 2px 9px;
-  font: 600 11px/1.6 system-ui, sans-serif; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  background: var(--accent); color: #fff; border-radius: 999px; padding: 1px 7px;
+  font: 600 10.5px/1.5 system-ui, sans-serif; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 /* "Decision" badge on a business rule task that has been evaluated: opens the
    decision-inspection panel (inputs, outputs, and how it was decided; ADR-0064). */
@@ -1293,6 +1286,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   border-top: 2.5px solid var(--ok); vertical-align: middle; margin-right: 4px;
 }
 .legend-swatch.history { border-top: 2px dashed var(--muted); }
+.legend-swatch.armed { border-top: 2.5px dashed var(--ok); }
 .legend-swatch.incident { border-top-color: var(--danger); }
 
 /* The incident block that leads the live variables panel: what is parked, why, and
@@ -3636,11 +3630,11 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    server and laid out in the browser; these rules only style the result. Node
    fills come from the kind table in panorama-mesh.js so the legend and the
    canvas cannot drift apart. */
-/* The landscape drops the centred content column (see setChrome). Everything on
-   this canvas is sized by fitting a world into it, so width withheld from the card
-   is width taken off every node, every label and every gap at once — the one view
-   where the reading column costs more than it gives. */
-.landscape-mode main { max-width: none; }
+/* The Starmap drops the centred content column (see setChrome). Everything on this
+   canvas is sized by fitting a world into it, so width withheld from the card is
+   width taken off every node, every label and every gap at once — the one view where
+   the reading column costs more than it gives. */
+.starmap-mode main { max-width: none; }
 .mesh-card { display: flex; flex-direction: column; gap: 12px; }
 /* One line, and it stays one line: the header is a row of controls, and a row that
    wraps into three stacked lines stops reading as one. What gives under pressure is
@@ -3690,6 +3684,18 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    the name's own reveal rule, so it appears when the name does. */
 .mesh-type { font-size: 11px; fill: var(--muted); pointer-events: none; }
 .mesh-application .mesh-type { font-size: 15px; }
+/* How much is running, under the name. Same size and same reveal as the type line —
+   it is an annotation on the node rather than a second label — and in the accent
+   rather than the muted grey, because unlike the type it is a number that changes. */
+.mesh-runs { font-size: 11px; fill: var(--accent); pointer-events: none; }
+.mesh-application .mesh-runs { font-size: 15px; }
+/* The instance-count switch, beside the notation picker: both change what the
+   picture draws rather than what it is about. */
+.mesh-instances {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  font-size: 13px; color: var(--text); white-space: nowrap; cursor: pointer;
+}
+.mesh-instances input { margin: 0; cursor: pointer; }
 /* What the projection drops. Collapsed by default and never absent: a projection
    that hides its loss is the failure §8's theme ban exists to prevent, and one that
    shouts it every time is one nobody reads twice. */
@@ -3925,23 +3931,45 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
 }
 .mesh-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mesh-empty-filter { margin: 0; padding: 32px; text-align: center; color: var(--muted); }
-/* Being inside a drilldown is a place you are standing, not a setting you have
-   changed — so it is stated in the header where the picture is described, with the
-   way out on the same control. */
-.mesh-drill-chip {
-  flex: none; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  padding: 5px 10px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
-  border: 1px solid var(--accent); border-radius: 999px;
-  background: var(--accent-soft); color: var(--text);
+/* Where you are standing, and how you got there. A drilldown is a place rather than
+   a setting, so it is stated in the header where the picture is described — and once
+   going in is repeatable it is a *path*, so the header carries the path rather than
+   one chip with a cross on it.
+   The row shrinks before the controls beside it do and scrolls rather than wrapping:
+   a walk six nodes deep is a long string, and a header that grows a second line
+   every time somebody follows a dependency is a header that moves the picture. */
+.mesh-trail {
+  display: flex; align-items: center; gap: 4px; flex: 0 1 auto; min-width: 0;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin;
 }
-.mesh-drill-chip:hover { border-color: var(--accent-hover); }
-.mesh-drill-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mesh-crumb {
+  flex: none; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 5px 10px; font: inherit; font-size: 12px; font-weight: 600;
+  border: 1px solid var(--border-strong); border-radius: 999px;
+  background: var(--bg); color: var(--text);
+}
+button.mesh-crumb { cursor: pointer; }
+button.mesh-crumb:hover { border-color: var(--accent); }
+button.mesh-crumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The station you are on is not a button: there is nowhere for it to go, and a
+   control that does nothing is worse than a label. It carries the accent instead,
+   because "you are here" is the one thing this row has to say at a glance. */
+.mesh-crumb-here {
+  border-color: var(--accent); background: var(--accent-soft);
+}
+.mesh-crumb-sep { flex: none; color: var(--muted); font-size: 12px; }
 .mesh-unpin {
   align-self: flex-start; padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer;
   border: 1px solid var(--border-strong); border-radius: 6px;
   background: var(--bg); color: var(--text);
 }
 .mesh-unpin:hover { border-color: var(--accent); }
+/* The engine's tally for the selected process: live now, finished ever, last seen.
+   Wrapped rather than truncated — three short facts, and the one that gets cut is
+   the one somebody was reading. */
+.mesh-runtime { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; }
+.mesh-runtime b { font-size: 13px; }
+.mesh-runtime-now b { color: var(--accent); }
 /* The maintenance window's members. A row each rather than inline chips: every one
    carries what it costs on its own, which is the number that says which of them is
    driving the window — and that number has nowhere to go on a chip. */

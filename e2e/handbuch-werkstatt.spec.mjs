@@ -226,7 +226,7 @@ test("the welcome chapter offers all six apps, Panorama and Data included", asyn
   // The routes matter more than the names: a card that names an app but links
   // somewhere else is the failure a reader meets rather than reads.
   for (const route of ["/#/console", "/#/modeler", "/#/tasks", "/#/operations",
-    "/#/panorama/landscape", "/#/data"]) {
+    "/#/panorama/starmap", "/#/data"]) {
     await expect(cards.locator(`a[href="${route}"]`)).toHaveCount(1);
   }
 });
