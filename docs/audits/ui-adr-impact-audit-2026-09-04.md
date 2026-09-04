@@ -192,6 +192,16 @@ This is the least mechanical of the three: a builder general enough for five
 surfaces is a design question, not a rewrite, and `editor-bar.spec.mjs` pins the
 Modeler bar's structure while it is answered.
 
+Answered on this branch, in the negative. Counting the acts in each bar: the
+Modeler has four (one filled, one toggle, plus an overflow menu holding five
+more), the form editor two, the class canvas one, the Panorama viewer two. The
+seven-equal-buttons problem ADR-0229 solved exists in one bar, and a builder would
+be placing a single button for three of the others. The ranks are held as a test
+over the rendered bars instead (`e2e/editor-bar-ranks.spec.mjs`), which turned up
+what the count did not: the Modeler's and the form editor's view tabs carried no
+`role="tab"` and no `aria-selected`, so which view was open was visible only as a
+CSS class.
+
 ### 4.5 What already works
 
 `toast` (`app.js:75`, used in 15 files), `enhanceTable` (`table.js:26`, applied to

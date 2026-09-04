@@ -88,10 +88,10 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
     <div class="editor form-editor">
       <div class="editor-bar">
         <a class="crumbs" id="form-back" href="#/modeler">&larr; Forms</a>
-        <div class="etabs" id="form-tabs">
-          <button type="button" data-ftab="design" class="active" title="Build the form visually">Design</button>
-          <button type="button" data-ftab="validate" title="Preview the form and check it for problems">Validate</button>
-          <button type="button" data-ftab="editor" title="Edit the form’s raw JSON schema">Editor</button>
+        <div class="etabs" id="form-tabs" role="tablist" aria-label="Form editor views">
+          <button type="button" data-ftab="design" class="active" role="tab" aria-selected="true" title="Build the form visually">Design</button>
+          <button type="button" data-ftab="validate" role="tab" aria-selected="false" title="Preview the form and check it for problems">Validate</button>
+          <button type="button" data-ftab="editor" role="tab" aria-selected="false" title="Edit the form’s raw JSON schema">Editor</button>
         </div>
         <input id="form-name" class="form-name-input" placeholder="Form name" spellcheck="false" />
         <span class="chip" id="form-id-chip"></span>
@@ -326,7 +326,11 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
     commit(activeTab);
     activeTab = tab;
     root.querySelectorAll("#form-tabs button").forEach((b) =>
-      b.classList.toggle("active", b.dataset.ftab === tab));
+      {
+        const on = b.dataset.ftab === tab;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-selected", on ? "true" : "false");
+      });
     Object.keys(panes).forEach((k) =>
       panes[k].el.classList.toggle("active", k === tab));
     await load(tab);

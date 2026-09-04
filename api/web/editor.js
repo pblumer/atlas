@@ -526,10 +526,10 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     <div class="editor">
       <div class="editor-bar">
         ${editorCrumbs(project, crumb)}
-        <div class="etabs">
-          <button data-tab="design" class="active" title="Draw the diagram and its flow">Design</button>
-          <button data-tab="implement" title="Configure the technical details of each element">Implement</button>
-          <button data-tab="playground" title="Run this diagram on the real engine in a throwaway sandbox — no deploy, no side effects">Playground</button>
+        <div class="etabs" role="tablist" aria-label="Editor views">
+          <button data-tab="design" class="active" role="tab" aria-selected="true" title="Draw the diagram and its flow">Design</button>
+          <button data-tab="implement" role="tab" aria-selected="false" title="Configure the technical details of each element">Implement</button>
+          <button data-tab="playground" role="tab" aria-selected="false" title="Run this diagram on the real engine in a throwaway sandbox — no deploy, no side effects">Playground</button>
         </div>
         <div style="flex:1"></div>
         <button class="btn neutral toggle" id="vars-toggle" type="button" aria-pressed="false" title="Show the variables this diagram writes, and who writes them (F4)">Variables</button>
@@ -1276,8 +1276,15 @@ function wireBarMenu(root) {
 function wireTabs(root, onChange) {
   root.querySelectorAll(".etabs button").forEach((b) => {
     b.addEventListener("click", () => {
-      root.querySelectorAll(".etabs button").forEach((x) => x.classList.remove("active"));
+      // aria-selected moves with the class: which tab is on is state, and a tab that
+      // only says so in a class says it to sighted readers alone. The Panorama
+      // viewer's view tabs were the only ones that already did this.
+      root.querySelectorAll(".etabs button").forEach((x) => {
+        x.classList.remove("active");
+        x.setAttribute("aria-selected", "false");
+      });
       b.classList.add("active");
+      b.setAttribute("aria-selected", "true");
       if (onChange) onChange();
     });
   });

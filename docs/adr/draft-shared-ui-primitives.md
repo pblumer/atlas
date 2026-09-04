@@ -113,12 +113,28 @@ Three primitives, each an ES module export usable without `app.js`:
   written by hand.
 - **One button scale.** `.btn.small` wins on use (54 to 15) and `.btn.sm` is
   removed, its 21 call sites rewritten. One rule, one name.
-- **An editor-bar builder** that takes the two acts and the menu groups and
-  emits the structure ADR-0229 decided, so the Modeler, the form editor, the
-  DMN editor, the information-model editor and the Panorama viewer state their
-  acts rather than draw their bars. Ids stay caller-supplied, which is what
-  keeps `editor-bar.spec.mjs` and every `wire*` function reaching the same
-  elements.
+- **The editor bar's ranks as a checked rule, not a builder.** This is the one
+  place the record's first answer did not survive contact with the other four bars.
+  A builder was proposed on the assumption that they had the same problem the
+  Modeler's had. Measured, they do not: the Modeler's bar had seven equal buttons
+  mixing four kinds of act, while the form editor has two, the class canvas has
+  one, and the Panorama viewer has two with its save in the canvas toolbox. There
+  is no rank there to get wrong, and a builder would be placing a single button for
+  three of the five.
+
+  Their left-hand halves are not the same object either — breadcrumbs, a title with
+  a revision, a row of view tabs — and `.im-bar` differs from `.editor-bar` because
+  the class canvas sits in a card and the others are full-bleed. A builder general
+  enough for all of that is the configuration language this record warned about.
+
+  What is worth keeping is the reasoning rather than the markup, so it is held as a
+  test over the rendered bars: at most one filled act, every control that holds a
+  state saying so in the vocabulary for what it is, tabs inside a tablist, and no
+  bar growing back past a handful of direct acts without an overflow menu. That
+  found something a builder would have papered over: the Modeler's and the form
+  editor's view tabs said "active" in a class and nothing else, so which view you
+  were in reached sighted readers alone. The Panorama viewer's view tabs were the
+  only ones already doing it properly.
 
 - **A diagram zoom**: zoom in, zoom out, fit, ctrl+wheel, and the current factor
   stated rather than inferred. It attaches to already-rendered markup, the way
@@ -147,12 +163,12 @@ primitive grows — that change is reviewed once for everyone, which is the poin
   parts that are easy to forget. A diagram can be approached whoever drew it.
   Two of the rules are grep-checkable and can be a test: no `btn sm` in
   `api/web`, no overlay class outside the primitive's.
-- **Negative / trade-offs accepted:** a migration across nine files for dialogs
-  and five for bars, all of it behaviour-preserving but none of it free, and a
-  window in which both the primitive and the hand-written version exist. The
-  bar builder has to be general enough for five editors without becoming a
-  configuration language; if it cannot be, that is a finding worth recording
-  rather than a builder worth forcing.
+- **Negative / trade-offs accepted:** a migration across ten files for dialogs,
+  all of it behaviour-preserving but none of it free, and a window in which both
+  the primitive and the hand-written version exist. The bar builder was the
+  trade-off that did not pay: it had to be general enough for five editors without
+  becoming a configuration language, and it could not be — recorded above as a
+  finding rather than forced.
 - **Follow-ups / risks to watch:** the diagram rule is the one with no mechanical
   check — "this SVG is a diagram" is not something grep can decide, so it holds by
   review, and a hand-drawn diagram added without zoom would pass CI. `editor.js`
