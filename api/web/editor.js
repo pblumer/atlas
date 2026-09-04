@@ -9461,64 +9461,155 @@ export async function mountCollaboration(root, { api, toast, key }) {
 // it owns its own viewer and does NOT touch the shared navigation lifecycle
 // (cleanup/current/generation), so it can live alongside the Tasks view. Returns a
 // handle with destroy(); the caller tears it down when the selection changes.
-export async function mountTaskProcess(container, { api, instanceKey, activeElementId }) {
+//
+// A call activity's "+" drills in here too (ADR-0245), but it *descends in place*
+// rather than navigating (ADR-draft-tasks-call-activity-descent): this diagram sits
+// beside a form somebody is filling in, and a hash change would tear the Tasks view —
+// and that half-typed form — down. Landing on the Operations replay would not even be
+// reachable for many of the people who see this view: the timeline behind it is an
+// operator's route, and the assignee working the task is not necessarily one. So the
+// panel walks down into the child instance and offers a way back, which is the whole
+// of "what is inside this box" without leaving the task. `onInstance` is called with
+// the instance now on screen whenever that changes, so what the Tasks pane shows
+// beside the diagram (its variables) follows it.
+export async function mountTaskProcess(container, { api, instanceKey, activeElementId, onInstance }) {
   let viewer = null;
   let destroyed = false;
+  let mounted = false;   // the first level is the caller's own; it does not re-notify
+  let noteTimer = null;  // the transient "no child yet" message's own timer
+  // The instances descended from, oldest first — one entry per call activity followed,
+  // each naming what "back" returns to. Empty while the task's own instance is on
+  // screen, which is where every mount starts and where most of them stay.
+  const trail = [];
   const handle = {
     destroy() {
       destroyed = true;
+      if (noteTimer) { clearTimeout(noteTimer); noteTimer = null; }
       if (viewer) { try { viewer.destroy(); } catch { /* already gone */ } viewer = null; }
     },
   };
-  const fail = (msg) => { if (!destroyed && container) container.innerHTML = `<p class="tp-msg muted">${esc(msg)}</p>`; };
+  // fail replaces the panel with why it is empty — and, when this happened partway
+  // down a descent, with the way back out of it: a reader stranded on an error
+  // message with no control on it would have to reselect the task to recover.
+  const fail = (msg) => {
+    if (destroyed || !container) return;
+    container.innerHTML = `<p class="tp-msg muted">${esc(msg)}</p>`;
+    if (trail.length) drawBar("");
+  };
+
+  // levelLabel names one level the way the assignee reads a process: its name, and
+  // its process id when the model carries no name.
+  const levelLabel = (tl, v) => {
+    const bo = rootProcess(v);
+    return (bo && (bo.name || bo.id)) || (tl && tl.processId) ||
+      (tl && tl.instanceKey ? `Instance ${tl.instanceKey}` : "the called process");
+  };
+
+  // drawBar puts the descent's chrome over the diagram: where you are, and one way
+  // back up. Nothing at the top level — the common case is a task whose process
+  // calls nothing, and it must look exactly as it always did.
+  const drawBar = (here) => {
+    if (destroyed || !container) return null;
+    const bar = document.createElement("div");
+    bar.className = "tp-drill";
+    const back = trail.length ? trail[trail.length - 1] : null;
+    if (back) {
+      bar.innerHTML =
+        `<button type="button" class="tp-drill-back" title="Back to the calling process">&#8617; ${esc(back.label)}</button>` +
+        (here ? `<span class="tp-drill-here" title="The called process you drilled into">&#8627; ${esc(here)}</span>` : "");
+      bar.querySelector(".tp-drill-back").addEventListener("click", () => {
+        const to = trail.pop();
+        if (to) show(to.key, to.activeId);
+      });
+    }
+    container.appendChild(bar);
+    return bar;
+  };
+
+  // note says, briefly and where the gesture happened, why a double-click did
+  // nothing — a call activity the token has not reached has no child to descend
+  // into, and silence would read as a broken affordance.
+  const note = (msg) => {
+    if (destroyed || !container) return;
+    let bar = container.querySelector(".tp-drill");
+    if (!bar) { bar = document.createElement("div"); bar.className = "tp-drill"; container.appendChild(bar); }
+    let el = bar.querySelector(".tp-drill-note");
+    if (!el) { el = document.createElement("span"); el.className = "tp-drill-note"; bar.appendChild(el); }
+    el.textContent = msg;
+    if (noteTimer) clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => { if (el.parentNode) el.remove(); noteTimer = null; }, 5000);
+  };
 
   let lib;
   try { lib = await loadBpmn(); } catch (e) { fail("Could not load the diagram viewer: " + e.message); return handle; }
   if (destroyed) return handle;
 
-  // The timeline resolves the instance's definition (for the diagram) and carries
-  // its progress (steps walked + the current token frame).
-  let tl;
-  try { tl = await api("GET", `/api/v1/instances/${instanceKey}/timeline`); }
-  catch (e) { fail("Could not load the process progress: " + e.message); return handle; }
-  if (destroyed) return handle;
-  if (!tl || !tl.processDefKey) { fail("No process diagram is available for this task."); return handle; }
+  // show renders one instance into the container, replacing whichever level is on
+  // screen. `activeId` is the task's own element — "you are here" — and belongs to
+  // the top level only: a child instance is being looked *at*, not worked in.
+  const show = async (key, activeId) => {
+    let tl;
+    try { tl = await api("GET", `/api/v1/instances/${key}/timeline`); }
+    catch (e) { fail("Could not load the process progress: " + e.message); return; }
+    if (destroyed) return;
+    if (!tl || !tl.processDefKey) { fail("No process diagram is available for this task."); return; }
 
-  container.innerHTML = "";
-  viewer = newModeler(lib.BpmnJS, lib.moddle, container);
-  try {
-    const xml = await api("GET", `/api/v1/processes/${tl.processDefKey}/xml`);
-    if (destroyed) return handle;
-    await viewer.importXML(typeof xml === "string" ? xml : String(xml));
-    viewer.get("canvas").zoom("fit-viewport");
-  } catch (e) {
-    if (destroyed) return handle;
-    fail("Could not render the process diagram: " + e.message);
-    return handle;
-  }
-  if (destroyed) return handle;
+    if (viewer) { try { viewer.destroy(); } catch { /* already gone */ } viewer = null; }
+    if (noteTimer) { clearTimeout(noteTimer); noteTimer = null; }
+    container.innerHTML = "";
+    const v = newModeler(lib.BpmnJS, lib.moddle, container);
+    viewer = v;
+    try {
+      const xml = await api("GET", `/api/v1/processes/${tl.processDefKey}/xml`);
+      if (destroyed) return;
+      await v.importXML(typeof xml === "string" ? xml : String(xml));
+      v.get("canvas").zoom("fit-viewport");
+    } catch (e) {
+      if (destroyed) return;
+      fail("Could not render the process diagram: " + e.message);
+      return;
+    }
+    if (destroyed) return;
 
-  const canvas = viewer.get("canvas");
-  const registry = viewer.get("elementRegistry");
-  try { drawImplBadges(viewer); } catch { /* best-effort type icons */ }
+    const canvas = v.get("canvas");
+    const registry = v.get("elementRegistry");
+    try { drawImplBadges(v); } catch { /* best-effort type icons */ }
 
-  const frames = tl.frames || [];
-  const steps = tl.steps || [];
-  const tokens = frames.length ? (frames[frames.length - 1].tokens || []) : [];
-  const liveOn = new Set(tokens.map((t) => t.elementId));
-  // Everything walked so far, grayed — except where a token lives now (that must
-  // read as active, not history) and the task's own element (shown as "you are here").
-  for (const s of steps) {
-    if (!s.elementId || liveOn.has(s.elementId) || s.elementId === activeElementId) continue;
-    if (registry.get(s.elementId)) canvas.addMarker(s.elementId, "atlas-visited");
-  }
-  // Live tokens on other branches, highlighted green (or orange while waiting at a join).
-  for (const token of tokens) {
-    if (token.elementId === activeElementId || !registry.get(token.elementId)) continue;
-    canvas.addMarker(token.elementId, token.state === "waiting" ? "atlas-token-waiting" : "atlas-active");
-  }
-  // The task's own element: "you are here".
-  if (activeElementId && registry.get(activeElementId)) canvas.addMarker(activeElementId, "atlas-selected");
+    const frames = tl.frames || [];
+    const steps = tl.steps || [];
+    const tokens = frames.length ? (frames[frames.length - 1].tokens || []) : [];
+    const liveOn = new Set(tokens.map((t) => t.elementId));
+    // Everything walked so far, grayed — except where a token lives now (that must
+    // read as active, not history) and the task's own element (shown as "you are here").
+    for (const s of steps) {
+      if (!s.elementId || liveOn.has(s.elementId) || s.elementId === activeId) continue;
+      if (registry.get(s.elementId)) canvas.addMarker(s.elementId, "atlas-visited");
+    }
+    // Live tokens on other branches, highlighted green (or orange while waiting at a join).
+    for (const token of tokens) {
+      if (token.elementId === activeId || !registry.get(token.elementId)) continue;
+      canvas.addMarker(token.elementId, token.state === "waiting" ? "atlas-token-waiting" : "atlas-active");
+    }
+    // The task's own element: "you are here".
+    if (activeId && registry.get(activeId)) canvas.addMarker(activeId, "atlas-selected");
+
+    const label = levelLabel(tl, v);
+    drawBar(label);
+
+    // The drill-in: this level's own steps carry the child each call activity
+    // started, so the descent needs nothing the view has not already loaded.
+    wireCallDrilldown(v, (element) => {
+      const s = steps.find((x) => x.elementId === element.id && x.childInstanceKey);
+      if (!s) { note("This call activity has not started a child instance yet."); return; }
+      trail.push({ key, activeId, label });
+      return show(s.childInstanceKey, "");
+    });
+
+    if (mounted && onInstance) onInstance(key);
+    mounted = true;
+  };
+
+  await show(instanceKey, activeElementId);
   return handle;
 }
 

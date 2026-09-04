@@ -2142,6 +2142,33 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tp-canvas .djs-palette,
 .tp-canvas .djs-context-pad,
 .tp-canvas .djs-direct-editing-parent { display: none !important; }
+/* The drill-down chrome inside the Tasks app's process view
+   (ADR-draft-tasks-call-activity-descent). Double-clicking
+   a call activity's "+" descends into the child instance *in place* rather than
+   navigating: this diagram sits beside a form somebody is filling in, and Operations —
+   where the full replay lives — is a role the assignee may not hold. So the descent
+   needs its own two words of chrome: where you are, and the way back. It sits over the
+   diagram (the canvas is position:relative) and only appears once you have descended. */
+.tp-drill {
+  position: absolute; z-index: 5; top: 8px; left: 8px; right: 8px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; pointer-events: none;
+}
+.tp-drill > * { pointer-events: auto; }
+.tp-drill-back {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 999px; padding: 3px 11px; cursor: pointer;
+  font: 600 12px/1.5 system-ui, sans-serif; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.tp-drill-back:hover { border-color: var(--accent); color: var(--accent); }
+.tp-drill-here {
+  border-radius: 999px; padding: 3px 11px; background: var(--accent); color: #fff;
+  font: 600 12px/1.5 system-ui, sans-serif; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.tp-drill-note {
+  border-radius: 999px; padding: 3px 11px; background: var(--surface); color: var(--muted);
+  border: 1px solid var(--border); font: 12px/1.5 system-ui, sans-serif;
+}
+
 /* The instance's current variables, listed beneath the diagram in the Process tab. */
 .tp-vars { margin-top: 16px; max-width: 640px; }
 .tp-vars-head { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }

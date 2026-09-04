@@ -110,6 +110,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   instance selected the "+" opens the **child instance** this caller started (on its own live
   view), under "All instances" the called process's live view. The hover cue names the callee
   before the pointer is near the marker. Drives the real `mountLive` against a mock `api`.
+- **`tasks-call-activity.spec.mjs`** (ADR-draft-tasks-call-activity-descent): the same
+  gesture in the **Tasks app's Process tab**, where it must *not* navigate — the diagram
+  sits beside a form somebody is filling in, and Operations is a role the assignee may not
+  hold. The "+" descends into the child instance in place (the task detail stays on screen
+  and the hash does not change), the variables under the diagram follow the descent, the
+  back control returns to the caller with its "you are here" marker restored, and a call
+  activity no token has reached says so instead of doing nothing. Drives the real app
+  shell against a mocked `/api/v1`.
 - **`call-activity-modeler.spec.mjs`** (ADR-0076, ADR-0245): the
   **Process ID picker + create-new** in the Modeler's call-activity Implement panel — selecting
   the call activity offers a datalist of existing callees (deployed processes and drafts), and
