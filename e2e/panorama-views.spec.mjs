@@ -190,3 +190,21 @@ test("a view remembers whether it was showing instance counts", async ({ page })
   }), WORLD);
   expect(before.instances).toBe(false);
 });
+
+// The path into the picture is the narrowing a saved view is most likely to be
+// about: somebody who followed a dependency four deep and saved it saved the walk,
+// not the last node.
+test("a view remembers the path it was standing on", async ({ page }) => {
+  const walked = await page.evaluate((world) => window.views.captureView({
+    name: "Down the mail path", term: "", direction: "dependents", depth: "2",
+    trail: ["application:a1", "process:1", "worker:c1"], world, at: 1700000000000,
+  }), WORLD);
+  expect(walked.trail).toEqual(["application:a1", "process:1", "worker:c1"]);
+
+  // No walk is null rather than an empty array: the whole starmap is not a path of
+  // length zero, it is the absence of one, and the two read differently on reopening.
+  const whole = await page.evaluate((world) => window.views.captureView({
+    name: "All", term: "", direction: "dependents", depth: "2", world, at: 1700000000000,
+  }), WORLD);
+  expect(whole.trail).toBeNull();
+});

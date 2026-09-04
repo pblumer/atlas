@@ -7985,6 +7985,19 @@ async function resolveProject(projectId) {
 async function viewEditor(key, projectId) {
   const gen = navGen;
   const mod = await import("./editor.js");
+  // A deployed version carries the application it was deployed from, and the route
+  // that opens one (#/modeler/d/{key}) does not name it. Resolving it here is not
+  // cosmetic: without an application there is no information model to read, so a data
+  // object's Type field offers no classes, shows no class, and cannot even say that
+  // the one typed is unmodelled — it silently degrades to a plain text box, which is
+  // exactly what it looked like before there was an information model at all.
+  if (!projectId && key != null) {
+    try {
+      const procs = await api("GET", "/api/v1/processes");
+      const d = (procs || []).find((x) => String(x.key) === String(key));
+      projectId = (d && d.projectId) || "";
+    } catch { /* best-effort, as for a draft: the field falls back to plain text */ }
+  }
   const project = await resolveProject(projectId);
   // The mount's own generation guard can't see this wrapper's pre-mount awaits: a
   // superseded wrapper would run the mount to completion and clobber the newer view.

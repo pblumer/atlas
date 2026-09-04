@@ -28,7 +28,11 @@
   than the individual answers added; amended 2026-09-04 — the view is called Starmap
   in the product, and this record keeps its own vocabulary; amended 2026-09-04 — a
   process node can carry the engine's instance tally, under four rules that keep an
-  unread counter from reading as an idle process)
+  unread counter from reading as an idle process; amended 2026-09-04 — the canvas has
+  no edges: the world is a budget for the layout rather than a fence around the
+  arrangement; amended 2026-09-04 — a drilldown is a path through the estate rather
+  than a single place, carried in the header, in a saved view and in the export's
+  scope)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -635,6 +639,48 @@ unaffected.
 > makes the whole window a floor — and §10's export carries the window in the stamp,
 > because in a file the rings on three nodes are the whole point and there is no panel
 > beside it to say so.
+
+> **Amendment (2026-09-04): a drilldown is a path, not a flag.**
+> Going into a node was one step deep in practice: the state was a single id, so
+> going in again replaced where you were, and leaving went all the way back to the
+> whole starmap. On a graph the point of which is following dependencies, that is the
+> wrong shape — the ordinary act is to go into a node, then into one of *its*
+> dependencies, and then to want the second node back.
+>
+> The state is therefore the path: every node gone into, in order, with the last one
+> the place you are standing. Only that last one cuts the picture, so a walk of six
+> costs exactly what a drilldown of one did; the rest is history, and history is what
+> makes stepping back one node possible at all. The header carries it as stations,
+> each a way back to itself, with the whole starmap as the first — so leaving is a
+> step like any other rather than a separate escape hatch, and Escape retraces rather
+> than abandons.
+>
+> Two rules keep it readable. Going into a node already on the path **truncates back
+> to it** rather than listing it twice: a trail that can hold one station at two
+> depths makes "back to where I was" ambiguous. And a node undeployed while somebody
+> stands on it steps them back one station rather than throwing the walk away — the
+> way they came is still a real path.
+>
+> A saved view carries the path, and §10's export names it: a picture cropped to one
+> node with no account of how that node was arrived at is a narrowing its reader
+> cannot check.
+
+> **Amendment (2026-09-04): the canvas has no edges.**
+> A node dragged toward the top of the picture used to stop at the world's edge, and
+> a drag that stops reads as the view being broken rather than as a boundary being
+> enforced. The clamp was argued from the fit: the fitted view showed the *world*, so
+> a node outside it would be invisible at the very view somebody would use to go
+> looking for it. That argument died when Fit began framing the **content** — the fit
+> follows whatever has been arranged, so a node past the old edge is one press away.
+>
+> So the world is what it always was underneath: an area budget for the layout to
+> settle in, not a fence around the arrangement. A node goes where the hand puts it, a
+> pin is restored where it was put, panning works at every magnification rather than
+> only when something is off-screen, and the zoom-out bound moves from 1.6× to 4× so
+> the arrangement can be found by pulling back instead of only by giving it up to Fit.
+>
+> Bounded zoom stays, and is the one limit worth keeping: past a few multiples of the
+> fitted frame the picture is a dot in a void, which is not a view of anything.
 
 > **Amendment (2026-09-04): a process node can carry how much is running on it.**
 > §4's observation says whether a process is in trouble. It does not say whether it

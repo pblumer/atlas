@@ -678,11 +678,13 @@ function layout(nodes, edges, { width, height, iterations = 220, pinned, from, m
     const pin = pinned?.get(n.id);
     const was = from?.get(n.id);
     if (pin) {
-      // Clamped, because the world is sized from the graph and the frame's shape:
-      // a resize can make it smaller than it was when the pin was placed, and a pin
-      // outside the world would put the node somewhere the fitted view never shows.
-      n.x = Math.min(Math.max(pin.x, 0), width);
-      n.y = Math.min(Math.max(pin.y, 0), height);
+      // Wherever it was put, world or no world. The clamp that used to be here was
+      // the same argument place() made — a pin outside the world is somewhere the
+      // fitted view never shows — and it stopped holding when the fit began framing
+      // the content: a pin beyond the edge is inside the next Fit, and a resize that
+      // shrinks the world no longer drags an arrangement back through it.
+      n.x = pin.x;
+      n.y = pin.y;
       n.held = true;
     } else if (anchored && was) {
       n.x = was.x; n.y = was.y;
@@ -845,10 +847,13 @@ export function fitView(box, frame, reserve = { width: 0, height: 0 }) {
 }
 
 // ZOOM_RANGE bounds how far the viewer can push the frame, as multiples of the
-// fitted one. Out is capped because zooming out past the content only adds the empty
-// space the fit exists to remove; in is capped where a node fills the frame and
-// there is nothing further to see.
-const ZOOM_RANGE = { min: 1 / 24, max: 1.6 };
+// fitted one. In is capped where a node fills the frame and there is nothing further
+// to see. Out was capped at 1.6 on the argument that zooming past the content only
+// adds the empty space the fit exists to remove — true when the content could not
+// leave the world, and no longer true now that a node can be dragged anywhere: past
+// the fitted frame there is arrangement to find, and pulling back to look for it is
+// how somebody finds it without giving up their arrangement to Fit.
+const ZOOM_RANGE = { min: 1 / 24, max: 4 };
 
 // zoomView returns the frame after zooming by `factor` about a point, in the same
 // user units as the frame itself. Zooming about the pointer rather than the centre
@@ -2041,7 +2046,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       <button id="mesh-drill-in" type="button" class="mesh-drill-in" disabled
         aria-label="Zoom into the selected node"
         title="Zoom into the selected node and what it touches">→</button>
-      <button id="mesh-drill-out" type="button" class="mesh-drill-chip" hidden></button>
+      <!-- The path taken through the estate: every node gone into, in order, each
+           one a way back to it. "All" is the first station, so leaving is a step
+           like any other rather than a separate escape hatch. -->
+      <nav id="mesh-drill-trail" class="mesh-trail" aria-label="Where you are" hidden></nav>
       <!-- Which vocabulary the picture is drawn in. Beside the picture rather than in
            the side column, because it changes the drawing rather than the answer
            about it (ADR-0211 §8). -->
@@ -2143,7 +2151,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   </div>`;
 
   const search = document.getElementById("mesh-search");
-  const drillOut = document.getElementById("mesh-drill-out");
+  const drillTrail = document.getElementById("mesh-drill-trail");
   const drillIn = document.getElementById("mesh-drill-in");
   const surface = document.getElementById("mesh-surface");
   const zoomIn = document.getElementById("mesh-zoom-in");
@@ -2173,15 +2181,23 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // it did; the panel changes shape at two.
   let picked = [];
   const only = () => (picked.length === 1 ? picked[0] : null);
-  // drilled is the node the landscape has been reduced to, or null for all of it.
+  // trail is the path of nodes somebody has gone into, in the order they went. Empty
+  // is the whole starmap; the last entry is where they are standing now.
   //
-  // A drilldown is a *place to stand*, not a filter over names: it is the one node
-  // somebody double-clicked and whatever is within the depth already on screen. It
-  // and the search box are two ways of asking the same kind of question, so only one
-  // of them is ever in force — entering one clears the other, because two narrowings
-  // compounding invisibly is how a picture ends up showing something nobody asked
-  // for and nobody can undo.
-  let drilled = null;
+  // A drilldown is a *place to stand*, not a filter over names: it is the node
+  // somebody went into and whatever is within the depth already on screen. Going in
+  // again from there is the point — the picture recentres on the new node, and the
+  // way somebody got there is the path they followed through the estate. That is
+  // what makes this a trail rather than a flag: the graph is re-cut from the current
+  // node every time, so the sequence is history, and history is what lets a reader
+  // step back one node instead of all the way out.
+  //
+  // It and the search box are two ways of asking the same kind of question, so only
+  // one of them is ever in force — entering one clears the other, because two
+  // narrowings compounding invisibly is how a picture ends up showing something
+  // nobody asked for and nobody can undo.
+  let trail = [];
+  const drilledAt = () => (trail.length ? trail[trail.length - 1] : null);
   // pinned holds every node somebody has dragged, by id, at the world coordinates
   // they dropped it on. It is the whole of the arrangement: the layout reads it on
   // every paint, so a hand-placed node survives filtering, selecting and resizing —
@@ -2284,9 +2300,16 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // A drilldown onto a node that is no longer in the landscape is not an empty
     // landscape — it is a question that can no longer be asked, and saying so beats
     // drawing a blank canvas somebody would read as "everything is gone".
-    const drilledGraph = drilled ? drillInto(graph, drilled, hops) : null;
-    if (drilled && !drilledGraph) {
-      drilled = null;
+    // Cut from where the reader is standing. Only the last node matters to the
+    // picture — the ones before it are how they got here — so a trail of six is the
+    // same cost as a drilldown of one.
+    const here = drilledAt();
+    const drilledGraph = here ? drillInto(graph, here, hops) : null;
+    if (here && !drilledGraph) {
+      // The node under the reader's feet was undeployed while they stood on it. Step
+      // back rather than throwing the whole path away: the way they came is still a
+      // real path, and dropping it would cost them the walk as well as the node.
+      trail = trail.slice(0, -1);
       toast("That node is no longer in this starmap.");
     }
     shown = drilledGraph || filterGraph(graph, term);
@@ -2325,7 +2348,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // node matched the term would be the header agreeing with the drawing and both
     // of them misreporting the search.
     const context = shown.nodes.length - (shown.matched?.size ?? shown.nodes.length);
-    if (drilled) {
+    if (drilledAt()) {
       count.textContent = `${context} of ${graph.nodes.length} node(s) within ` +
         `${depthSelect.value === "all" ? "any" : depthSelect.value} hop(s)`;
     } else {
@@ -2377,7 +2400,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // Nothing selected is nothing to go into, and being already inside a node is not
     // a place you can go into again.
     // Going into a node needs one node. Several is a window rather than a place.
-    drillIn.disabled = !only() || drilled === only();
+    drillIn.disabled = !only() || drilledAt() === only();
     if (picked.length > 1) {
       const nodes = picked.map((id) => shown.nodes.find((n) => n.id === id)).filter(Boolean);
       panel.innerHTML = windowPanelHTML(nodes, result, direction, depth, {
@@ -2541,13 +2564,22 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // wholesale by "Release", so it is never a state somebody is stuck in.
   let moving = null;
 
-  // place puts a node at a point and keeps it inside the world, because the world is
-  // what the fitted view shows: a node moved past its edge would be invisible at the
-  // very view somebody would use to go looking for it.
+  // place puts a node where the hand put it, anywhere.
+  //
+  // It used to clamp into the world, on the argument that the fitted view shows the
+  // world and a node outside it would be invisible at the view somebody would use to
+  // find it. That argument stopped being true when Fit started framing the *content*
+  // rather than the world: the fit follows whatever has been dragged, so a node moved
+  // past the old edge is still one press of Fit away. What the clamp actually did was
+  // refuse the gesture — a node against the top of the canvas simply stopped, which
+  // reads as the picture being broken rather than as a boundary being enforced.
+  //
+  // So the world is a budget for the *layout* to settle in, not a fence around the
+  // arrangement. Panning is unconditional for the same reason (see the pointerdown
+  // handler): once a node can be anywhere, the frame has to be able to go there.
   function place(node, x, y) {
-    const r = node.r ?? 12;
-    node.x = Math.min(Math.max(x, r), world.width - r);
-    node.y = Math.min(Math.max(y, r), world.height - r);
+    node.x = x;
+    node.y = y;
   }
 
   // pin records where a node has been put, and marks it as put there.
@@ -2646,10 +2678,12 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // node is one of them. The browser's own gesture is held off by the stylesheet
     // instead (the canvas takes no text selection) and by the move below.
     if (node && beginDrag(node.getAttribute("data-node-id"), event)) return;
-    // Panning is only meaningful once something is off-screen. At the fitted frame
-    // the whole landscape is already visible, so a drag there could only push it
-    // out of view and reintroduce the empty space the fit exists to remove.
-    if (!frameView || frameView.w >= baseView().w) return;
+    // Panning always, at any magnification. It used to be refused at the fitted
+    // frame — everything was on screen there, so a drag could only push the picture
+    // into the empty space the fit exists to remove. That is no longer the whole
+    // truth: a node can now be dragged anywhere (see place), so there is somewhere to
+    // pan *to*, and a canvas that only moves when zoomed in is a canvas whose rules
+    // a reader has to discover. Fit is the way back, and it is one button.
     const from = pointToFrame(event);
     if (!from) return;
     panning = { from, start: frameView || baseView(), id: event.pointerId };
@@ -2746,19 +2780,40 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // double-click its previous job — releasing one pinned node — and that moved into
   // the panel beside the node it is about, where it is visible instead of being
   // folklore.
+  // The trail, as a row of stations. Every one of them is a place the reader stood,
+  // and pressing one goes back to it — which is the difference between a path and a
+  // history you can only leave: following a dependency four nodes deep and then
+  // wanting the second one back is the ordinary case, not the exotic one.
+  //
+  // The whole starmap is the first station, so leaving is a step like any other
+  // rather than a separate escape hatch. The last station is where you are, and is
+  // not a button: there is nowhere for it to go.
   function paintDrillChip() {
-    if (!drilled) {
-      drillOut.hidden = true;
+    if (!trail.length) {
+      drillTrail.hidden = true;
+      drillTrail.innerHTML = "";
       return;
     }
-    const node = graph.nodes.find((n) => n.id === drilled);
-    drillOut.hidden = false;
-    drillOut.textContent = `Inside ${node?.name || drilled} ✕`;
-    drillOut.title = "Back to the whole starmap";
+    const nameOf = (id) => (graph.nodes.find((n) => n.id === id) || {}).name || id;
+    const stations = [
+      `<button type="button" class="mesh-crumb" data-crumb="-1"
+        title="Back to the whole starmap">All</button>`,
+      ...trail.map((id, i) => (i === trail.length - 1
+        ? `<span class="mesh-crumb mesh-crumb-here" aria-current="true">${esc(nameOf(id))}</span>`
+        : `<button type="button" class="mesh-crumb" data-crumb="${i}"
+            title="Back to ${esc(nameOf(id))}">${esc(nameOf(id))}</button>`)),
+    ];
+    drillTrail.hidden = false;
+    drillTrail.innerHTML = stations.join(`<span class="mesh-crumb-sep" aria-hidden="true">›</span>`);
   }
 
+  // Going into a node from wherever you are standing. It appends rather than
+  // replaces, so the path is kept — and going into a node already on the path
+  // truncates back to it instead of visiting it twice, because a trail that can
+  // contain the same node at two depths is a trail nobody can read.
   function drillTo(id) {
-    drilled = id;
+    const seen = trail.indexOf(id);
+    trail = seen >= 0 ? trail.slice(0, seen + 1) : [...trail, id];
     // The search box and the drilldown are two ways of asking the same kind of
     // question, so entering one clears the other rather than compounding with it.
     search.value = "";
@@ -2769,13 +2824,16 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     paint();
   }
 
-  function drillOutOf() {
-    if (!drilled) return;
-    drilled = null;
+  // One station back, not all the way out. Stepping out of the fourth node lands on
+  // the third, which is where the reader came from — throwing away the whole walk
+  // because they wanted one node back is the behaviour this replaces.
+  function drillBack(to = trail.length - 2) {
+    if (!trail.length) return;
+    trail = to < 0 ? [] : trail.slice(0, to + 1);
     frameView = null;
-    // The selection is left alone, so the landscape comes back with the thing that
-    // was being read still marked in it: leaving a drilldown should not mean having
-    // to find the node again.
+    // The selection is left alone, so the picture comes back with the thing that was
+    // being read still marked in it: stepping back should not mean having to find
+    // the node again.
     paint();
   }
 
@@ -2786,7 +2844,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     if (only()) drillTo(only());
   });
 
-  drillOut.addEventListener("click", drillOutOf);
+  drillTrail.addEventListener("click", (event) => {
+    const at = event.target.closest?.("[data-crumb]")?.getAttribute("data-crumb");
+    if (at !== null && at !== undefined) drillBack(Number(at));
+  });
   // Escape is what leaves a thing you have gone into, in every other view — and it
   // has to work wherever the focus happens to be, because somebody who has just
   // double-clicked a circle has not focused anything in particular.
@@ -2795,10 +2856,12 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // the page: the landscape is one route of a single-page app, and a handler that
   // outlived it would act on a picture nobody is looking at.
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || !drilled) return;
+    if (event.key !== "Escape" || !trail.length) return;
     if (!document.body.contains(view)) return;
     event.preventDefault();
-    drillOutOf();
+    // One station, so Escape retraces the path a node at a time. Pressing it enough
+    // times still lands on the whole starmap, which is what it did before.
+    drillBack();
   });
 
   // Exporting the picture (ADR-0211 §10).
@@ -2835,10 +2898,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const term = search.value.trim();
     const status = graph.status || {};
     const spoken = notationOf(notationPick.value);
-    const scope = drilled
+    const scope = drilledAt()
       ? {
           kind: "drill",
-          name: (graph.nodes.find((n) => n.id === drilled) || {}).name || drilled,
+          // Where the reader is standing, and the path they took to get there. A
+          // file cropped to one node with no account of how it was reached is a
+          // picture whose narrowing cannot be checked.
+          name: (graph.nodes.find((n) => n.id === drilledAt()) || {}).name || drilledAt(),
+          via: trail.slice(0, -1).map((id) =>
+            (graph.nodes.find((n) => n.id === id) || {}).name || id),
           hops: depthSelect.value,
         }
       : term ? { kind: "filter", term } : { kind: "all" };
@@ -2978,6 +3046,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const parts = [];
     if (v.term) parts.push(`filter “${v.term}”`);
     if (v.instances) parts.push("with instance counts");
+    if (v.trail?.length) parts.push(`${v.trail.length} step(s) in`);
     if (v.picked?.length) parts.push(`a window of ${v.picked.length} node(s)`);
     else if (v.selected) parts.push(`watching ${v.selected}`);
     if (v.zoom < 1) parts.push(`zoomed to ${Math.round(v.zoom * 100)}%`);
@@ -3003,6 +3072,12 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // A view saved before the counts existed carries none, and false is the picture
     // it was looking at.
     instancesToggle.checked = Boolean(v.instances);
+    // The walk, before the paint that draws it: the picture a view saved is the one
+    // cut from the last station, so restoring the path is part of restoring the
+    // picture rather than something done to it afterwards. Stations whose nodes are
+    // gone are dropped, and a walk that loses its last one is a walk back to where
+    // it still leads.
+    trail = (v.trail || []).filter((id) => graph.nodes.some((n) => n.id === id));
     picked = [];
     pinned.clear();
     frameView = null;
@@ -3075,6 +3150,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       selected: only(),
       picked,
       instances: instancesToggle.checked,
+      trail,
       frameView,
       world,
       pinned,
@@ -3161,7 +3237,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   depthSelect.addEventListener("change", () => {
     // A drilldown is cut to the depth on screen, so changing it re-cuts the picture
     // and paint() repaints the ranking with it; otherwise only the answers change.
-    if (drilled) return paint();
+    if (drilledAt()) return paint();
     refresh();
     paintRanking();
   });
@@ -3172,9 +3248,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   let pending;
   search.addEventListener("input", () => {
     clearTimeout(pending);
-    // Typing is asking about the whole landscape again. Leaving the drilldown in
-    // force would search inside it while the box says otherwise.
-    drilled = null;
+    // Typing is asking about the whole landscape again. Leaving the trail in force
+    // would search inside it while the box says otherwise.
+    trail = [];
     // A filter changes what is on screen, so the frame the viewer had zoomed into is
     // about a picture that no longer exists. Refitting is the honest reset; keeping
     // the old frame would land them on empty space and read as a broken view.

@@ -518,10 +518,12 @@ test("opens fitted to the content and zooms from there", async ({ page }) => {
   expect(await canvas.getAttribute("viewBox")).toBe(fitted);
 });
 
-// Panning is gated on there being something off-screen. At the fitted frame the
-// whole landscape is already visible, so a drag there could only push it out of
-// view and hand back the empty space the fit exists to remove.
-test("pans once zoomed in, and is inert at the fitted frame", async ({ page }) => {
+// Panning at any magnification, the fitted frame included. It used to be refused
+// there — everything was on screen, so a drag could only push the picture into the
+// empty space the fit exists to remove — and that stopped being the whole truth when
+// a node became draggable anywhere: there is somewhere to pan *to*, and a canvas that
+// only moves when zoomed in is a canvas whose rules a reader has to discover.
+test("pans at any magnification, without also selecting", async ({ page }) => {
   installMock(page);
   await page.goto("/index.html#/panorama/starmap");
 
@@ -539,6 +541,13 @@ test("pans once zoomed in, and is inert at the fitted frame", async ({ page }) =
   };
 
   await drag();
+  const pannedAtFit = await canvas.getAttribute("viewBox");
+  expect(pannedAtFit).not.toBe(fitted);
+  // A translation, not a rescale — the same rule as when zoomed in.
+  expect(pannedAtFit.split(" ").slice(2)).toEqual(fitted.split(" ").slice(2));
+  // And Fit is the way back, which is what makes an unbounded canvas navigable
+  // rather than a place to get lost in.
+  await page.locator("#mesh-zoom-fit").click();
   expect(await canvas.getAttribute("viewBox")).toBe(fitted);
 
   await page.locator("#mesh-zoom-in").click();
@@ -1294,15 +1303,17 @@ test("double-clicking a node goes into it", async ({ page }) => {
   installMock(page);
   await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-node")).toHaveCount(7);
-  await expect(page.locator("#mesh-drill-out")).toBeHidden();
+  await expect(page.locator("#mesh-drill-trail")).toBeHidden();
 
   await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
 
   // Invoice, and what it touches at the depth already on screen (2 hops): its
   // application, both processes, the restricted placeholder, the mail worker, and
   // the decision Dunning uses. Not the unresolved archive dependency's siblings.
-  await expect(page.locator("#mesh-drill-out")).toBeVisible();
-  await expect(page.locator("#mesh-drill-out")).toContainText("Inside Invoice");
+  await expect(page.locator("#mesh-drill-trail")).toBeVisible();
+  // Where you are, and the way back out — the whole starmap is the first station.
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Invoice");
+  await expect(page.locator('.mesh-crumb[data-crumb="-1"]')).toHaveText("All");
   await expect(page.locator('[data-node-id="process:1"]')).toHaveCount(1);
   await expect(page.locator('[data-node-id="worker:c1"]')).toHaveCount(1);
 
@@ -1340,18 +1351,18 @@ test("leaving a drilldown restores the landscape with the node still marked", as
   await page.goto("/index.html#/panorama/starmap");
 
   await page.locator('[data-node-id="worker:c1"] .mesh-body').dblclick();
-  await expect(page.locator("#mesh-drill-out")).toBeVisible();
+  await expect(page.locator("#mesh-drill-trail")).toBeVisible();
 
-  await page.locator("#mesh-drill-out").click();
-  await expect(page.locator("#mesh-drill-out")).toBeHidden();
+  await page.locator('.mesh-crumb[data-crumb="-1"]').click();
+  await expect(page.locator("#mesh-drill-trail")).toBeHidden();
   await expect(page.locator(".mesh-node")).toHaveCount(7);
   await expect(page.locator(".mesh-panel-head")).toContainText("ops-mail");
 
   // Escape is the other way out, the one it is everywhere else.
   await page.locator('[data-node-id="process:2"] .mesh-body').dblclick();
-  await expect(page.locator("#mesh-drill-out")).toBeVisible();
+  await expect(page.locator("#mesh-drill-trail")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.locator("#mesh-drill-out")).toBeHidden();
+  await expect(page.locator("#mesh-drill-trail")).toBeHidden();
   await expect(page.locator(".mesh-node")).toHaveCount(7);
 });
 
@@ -1373,7 +1384,7 @@ test("a search leaves the drilldown rather than compounding with it", async ({ p
 
   // And typing goes back to asking about the whole landscape.
   await page.fill("#mesh-search", "dunning");
-  await expect(page.locator("#mesh-drill-out")).toBeHidden();
+  await expect(page.locator("#mesh-drill-trail")).toBeHidden();
   await expect(page.locator("#mesh-count")).toContainText("match");
 });
 
@@ -2103,8 +2114,8 @@ test("the arrow goes into the selected node, and says when there is nowhere to g
 
   // The same place the double-click goes: the node and what it touches, with the
   // chip that says where you are standing.
-  await expect(page.locator("#mesh-drill-out")).toBeVisible();
-  await expect(page.locator("#mesh-drill-out")).toContainText("Invoice");
+  await expect(page.locator("#mesh-drill-trail")).toBeVisible();
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Invoice");
   // A drilldown counts what is within the reach on screen rather than what matched a
   // term, and the count says so — which is the sentence that moved to its own line.
   await expect(page.locator("#mesh-count")).toContainText("hop(s)");
@@ -2582,4 +2593,117 @@ test("the panel says what a process is running, the zero included", async ({ pag
   // A worker has no instances at all — not zero of them — so it says nothing.
   await page.locator('[data-node-id="worker:c1"] .mesh-body').click();
   await expect(page.locator(".mesh-panel .mesh-runtime")).toHaveCount(0);
+});
+
+// The canvas has no edges. A node goes where the hand puts it — the world is a budget
+// for the layout to settle in, not a fence around the arrangement — and the fit
+// follows, so nothing dragged out of sight is lost.
+test("a node can be dragged past the edge of the world, and Fit brings it back", async ({ page }) => {
+  installMock(page);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const node = page.locator('[data-node-id="process:1"]');
+  const before = await node.evaluate((g) => g.getAttribute("transform"));
+
+  // Straight up and well past the top: the direction the clamp used to refuse.
+  const box = await node.boundingBox();
+  const canvas = await page.locator(".mesh-canvas").boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, canvas.y - 260, { steps: 10 });
+  await page.mouse.up();
+
+  const after = await node.evaluate((g) => g.getAttribute("transform"));
+  expect(after).not.toBe(before);
+  // Above the world's own top edge, which is where the clamp used to stop it.
+  const y = Number(after.match(/-?[\d.]+/g)[1]);
+  expect(y).toBeLessThan(0);
+
+  // And it is still findable: Fit frames the arrangement as it now is, so the node
+  // that was dragged out of the frame is inside the next one.
+  await page.locator("#mesh-zoom-fit").click();
+  const view = (await page.locator(".mesh-canvas").getAttribute("viewBox")).split(" ").map(Number);
+  expect(y).toBeGreaterThan(view[1]);
+  expect(y).toBeLessThan(view[1] + view[3]);
+});
+
+// Going into a node is repeatable: each one becomes the new centre, and the path is
+// kept so a reader can follow a dependency as far as it goes and still get back to
+// where they were two nodes ago.
+test("going into a node is repeatable, and the path is the way back", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator('[data-node-id="application:a1"] .mesh-body').dblclick();
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Billing");
+
+  // From inside Billing, into one of its processes: the picture recentres and the
+  // station is appended rather than replacing the one before it.
+  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Invoice");
+  await expect(page.locator("#mesh-drill-trail .mesh-crumb")).toHaveText(["All", "Billing", "Invoice"]);
+
+  // And on, from there. The depth is what bounds each picture; the trail is history.
+  await page.locator('[data-node-id="worker:c1"] .mesh-body').dblclick();
+  await expect(page.locator("#mesh-drill-trail .mesh-crumb"))
+    .toHaveText(["All", "Billing", "Invoice", "ops-mail"]);
+
+  // Escape steps back one station rather than throwing the walk away.
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Invoice");
+
+  // And any earlier station is one press away — following four deep and wanting the
+  // second one back is the ordinary case, not the exotic one.
+  await page.locator('.mesh-crumb[data-crumb="0"]').click();
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Billing");
+  await expect(page.locator("#mesh-drill-trail .mesh-crumb")).toHaveText(["All", "Billing"]);
+
+  await page.locator('.mesh-crumb[data-crumb="-1"]').click();
+  await expect(page.locator("#mesh-drill-trail")).toBeHidden();
+  await expect(page.locator(".mesh-node")).toHaveCount(7);
+});
+
+// A path that visited a node already on it truncates back to that node rather than
+// listing it twice: a trail that can contain the same station at two depths is a
+// trail nobody can read, and "back to where I was" would then be ambiguous.
+test("stepping into a node already on the path returns to it", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator('[data-node-id="application:a1"] .mesh-body').dblclick();
+  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+  await expect(page.locator("#mesh-drill-trail .mesh-crumb")).toHaveText(["All", "Billing", "Invoice"]);
+
+  await page.locator('[data-node-id="application:a1"] .mesh-body').dblclick();
+  await expect(page.locator("#mesh-drill-trail .mesh-crumb")).toHaveText(["All", "Billing"]);
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Billing");
+});
+
+// An exported picture cropped to one node, with no account of how that node was
+// arrived at, is a narrowing the reader cannot check (ADR-0211 §10).
+test("an export of a path says which way it came", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator('[data-node-id="application:a1"] .mesh-body').dblclick();
+  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#mesh-export-svg").click(),
+  ]);
+  const stream = await download.createReadStream();
+  const svg = await new Promise((resolve, reject) => {
+    let out = "";
+    stream.on("data", (chunk) => (out += chunk));
+    stream.on("end", () => resolve(out));
+    stream.on("error", reject);
+  });
+  expect(svg).toContain("drilled into Invoice");
+  expect(svg).toContain("via Billing");
 });
