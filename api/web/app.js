@@ -11,7 +11,7 @@ import {
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
 import { copyText } from "./clipboard.js";
-// Documentation prose is Markdown (ADR-draft-documentation-is-markdown). The renderer
+// Documentation prose is Markdown (ADR-0250). The renderer
 // is a module of its own because every surface that shows an element's documentation
 // has to agree on what the markup means — and on the escaping that keeps it inert.
 import { renderMarkdown, markdownToPlain } from "./markdown.js";

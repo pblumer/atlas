@@ -139,7 +139,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   entirely, and the edit is undoable; the process (nothing selected), a pool *and* the process
   it executes, a black-box pool and the collaboration each take their own. Assertions are on
   the exported XML, because passthrough is the whole contract.
-- **`markdown.spec.mjs`** ([ADR-draft-documentation-is-markdown](../docs/adr/draft-documentation-is-markdown.md)):
+- **`markdown.spec.mjs`** ([ADR-0250](../docs/adr/0250-documentation-is-markdown.md)):
   the **documentation Markdown renderer** (`api/web/markdown.js`). Two claims, both of
   which need a browser. That prose written before the renderer existed still reads the way
   its author left it — paragraphs, line breaks, a variable name that is not italics. And

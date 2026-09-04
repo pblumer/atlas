@@ -334,7 +334,7 @@ test("a viewer is offered no authoring at all", async ({ page }) => {
 
 // An element's documentation comes out of a foreign modelling tool and is shown to
 // whoever opens the landscape, so it is rendered by the shared Markdown module rather
-// than escaped into one paragraph (ADR-draft-documentation-is-markdown). The renderer's
+// than escaped into one paragraph (ADR-0250). The renderer's
 // own guarantees — including that this text cannot script the console — are covered in
 // markdown.spec.mjs; what is checked here is that the panel renders it and that the
 // section's label still reads as the app's, not the author's.

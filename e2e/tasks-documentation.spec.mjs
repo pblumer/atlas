@@ -6,7 +6,7 @@
 // task, renders the author's Markdown, and is absent (not stale) for one that carries
 // none.
 //
-// The instruction is rendered as Markdown (ADR-draft-documentation-is-markdown), so a
+// The instruction is rendered as Markdown (ADR-0250), so a
 // checklist arrives as a list. markdown.spec.mjs covers the renderer itself — including
 // that its output cannot script the page; what is checked here is the wiring: that this
 // surface renders rather than escapes, and that prose written before Markdown existed

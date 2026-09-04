@@ -1971,7 +1971,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* ---------- Documentation prose (Markdown) ----------
    An element's documentation is written as Markdown and rendered by markdown.js
-   (ADR-draft-documentation-is-markdown). One ruleset serves every surface that shows
+   (ADR-0250). One ruleset serves every surface that shows
    it — the Tasks app's work instruction today, the replay's Details tab and the
    exported document next — so the same text reads the same wherever it is read, which
    is the whole promise of documenting once and publishing everywhere.

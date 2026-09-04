@@ -1,5 +1,5 @@
 // e2e for the documentation Markdown renderer (api/web/markdown.js,
-// ADR-draft-documentation-is-markdown).
+// ADR-0250).
 //
 // Two things are being established here, and they are not the same kind of claim.
 //

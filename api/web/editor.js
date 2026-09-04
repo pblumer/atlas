@@ -20,7 +20,7 @@ import { migrateInstanceFlow } from "./migrationdialog.js";
 import { formFieldKeys, formFieldTypes, loadFormViewer, withLoadDeadline } from "./formviewer.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
-// Documentation prose is Markdown (ADR-draft-documentation-is-markdown). The replay
+// Documentation prose is Markdown (ADR-0250). The replay
 // renders it with the same module the Tasks app uses, so the same text cannot mean two
 // things depending on which surface a reader is standing in front of.
 import { renderMarkdown } from "./markdown.js";

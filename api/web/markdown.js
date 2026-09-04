@@ -8,7 +8,7 @@
 // every reading surface printed it as literal text, so a heading arrived as a hash and
 // an emphasised "do not" arrived as asterisks.
 //
-// This module is the renderer they were missing (ADR-draft-documentation-is-markdown).
+// This module is the renderer they were missing (ADR-0250).
 // It is deliberately small and closed: it parses a subset and *builds* every tag
 // itself, so no fragment of the source is ever passed through as markup. That matters
 // more here than in most Markdown. The author and the reader are different people with

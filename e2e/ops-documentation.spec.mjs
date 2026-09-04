@@ -4,7 +4,7 @@
 // off the rendered diagram — no extra request, and it works for every element, including
 // one this instance never reached. Driven through the real vendored bpmn-js.
 //
-// The prose is rendered as Markdown (ADR-draft-documentation-is-markdown) by the same
+// The prose is rendered as Markdown (ADR-0250) by the same
 // module the Tasks app uses; markdown.spec.mjs covers the renderer, including that its
 // output cannot script the page. What is checked here is that this panel renders rather
 // than escapes, and that plain prose written before Markdown still reads as written.

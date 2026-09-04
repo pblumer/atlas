@@ -21,7 +21,7 @@ _Changed_ / _Removed_ for each version.
   prose printed it literally, so a checklist reached the person doing the work as a
   column of hyphens and an emphasised "do not" as asterisks. The reasoning, and what the
   renderer deliberately does not support, are in
-  [ADR-draft-documentation-is-markdown](docs/adr/draft-documentation-is-markdown.md).
+  [ADR-0250](docs/adr/0250-documentation-is-markdown.md).
 
   A new renderer (`api/web/markdown.js`) turns it into structure in the **Tasks** app's
   work instruction, the **Operations** instance replay's Details tab and the **Panorama**

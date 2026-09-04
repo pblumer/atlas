@@ -1,4 +1,4 @@
-# ADR-DRAFT: Documentation prose is Markdown, rendered by one closed renderer
+# ADR-0250: Documentation prose is Markdown, rendered by one closed renderer
 
 - **Status:** Proposed
 - **Date:** 2026-09-04

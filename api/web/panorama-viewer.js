@@ -3,7 +3,7 @@
 // Atlas-owned diagram-js renderer vendored under vendor/archimate.
 
 // An element's documentation is prose, and prose in Atlas is Markdown
-// (ADR-draft-documentation-is-markdown). It is rendered with the shared module rather
+// (ADR-0250). It is rendered with the shared module rather
 // than escaped into one paragraph, which also matters here in a way it does not
 // elsewhere: this text comes out of a foreign modelling tool, so it is exactly the kind
 // of string that must be inert. renderMarkdown escapes before it parses.
