@@ -2157,19 +2157,31 @@ test("the key says what each line style means, and only for the ones drawn", asy
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   const rules = page.locator(".mesh-rules");
-  await expect(rules).toContainText("Solid line");
-  await expect(rules).toContainText("depends on");
-  await expect(rules).toContainText("Dashed line");
-  await expect(rules).toContainText("belongs to");
-  // Drawn with the styles they are explaining, by the same values the canvas uses:
-  // a key whose dashed swatch is solid is worse than no key.
-  await expect(rules.locator("svg line")).toHaveCount(2);
+  await expect(rules).toContainText("Solid line — calls");
+  await expect(rules).toContainText("Dashed line — uses");
+  await expect(rules).toContainText("Dotted line — belongs to");
+
+  // Drawn by the rules that drew the canvas, not by a copy of them: each swatch
+  // carries the edge's own class, and what a reader sees is the computed stroke.
+  await expect(rules.locator("svg line")).toHaveCount(3);
   const dashes = await rules.locator("svg line").evaluateAll(
-    (els) => els.map((el) => el.getAttribute("stroke-dasharray")));
-  expect(dashes).toEqual([null, "4 4"]);
+    (els) => els.map((el) => getComputedStyle(el).strokeDasharray));
+  // Three distinct strokes, and the canvas draws each kind with the same one.
+  expect(new Set(dashes).size).toBe(3);
+  const canvas = await page.locator(".mesh-edges line").evaluateAll((els) => {
+    const seen = {};
+    for (const el of els) {
+      const kind = [...el.classList].find((c) => c.startsWith("mesh-edge-"));
+      seen[kind] = getComputedStyle(el).strokeDasharray;
+    }
+    return seen;
+  });
+  expect(canvas["mesh-edge-calls"]).toBe(dashes[0]);
+  expect(canvas["mesh-edge-uses"]).toBe(dashes[1]);
+  expect(canvas["mesh-edge-contains"]).toBe(dashes[2]);
 
   // And only what is on screen. A landscape of applications alone has no containment
-  // and no dependency drawn between them, so neither is claimed.
+  // and no dependency drawn between them, so none of the three is claimed.
   await installMock(page, {
     nodes: [
       { id: "application:a1", kind: "application", name: "Billing", provenance: "derived" },
@@ -2260,17 +2272,16 @@ test("a landscape of forty nodes keeps room between them", async ({ page }) => {
   expect(gaps[Math.floor(gaps.length / 2)]).toBeGreaterThan(66);
 });
 
-// The fit places node *centres* inside a margin, so the margin has to cover what
-// hangs off a centre: the largest application's outline above it and its 26px name
-// below.
+// An exported landscape is a picture with a provenance stamp under it, and the two
+// have to stay apart. They did not: the harvested stylesheet carries `.mesh-canvas`,
+// which is 100% of the surface the canvas fills in the page, and a CSS property beats
+// the width and height the export puts on the clone — so the picture was laid out
+// against the whole file, letterboxed inside it, and hung its lowest names across the
+// stamp while leaving a dead strip along the top.
 //
-// On screen the frame is the content's own box padded by that margin, so an
-// under-reserved margin only makes the picture a little tight. An exported file
-// frames the world itself, edge to edge with no letterboxing, and its provenance
-// stamp begins a couple of dozen pixels under that edge — so there the shortfall
-// shows as a name touching the stamp and reading as part of it. Checked where it
-// shows, in the pixels the file is drawn at.
-test("an export keeps its names clear of the stamp under the picture", async ({ page }) => {
+// Checked by rendering the file, because that is the only place the bug exists: every
+// coordinate in it was right, and what went wrong was the box they were resolved in.
+test("an exported landscape stays inside its own band", async ({ page }) => {
   installMock(page, estate());
   await page.setViewportSize({ width: 1600, height: 950 });
   await page.goto("/index.html#/panorama/landscape");
@@ -2288,32 +2299,64 @@ test("an export keeps its names clear of the stamp under the picture", async ({ 
     stream.on("error", reject);
   });
 
-  // Rendered rather than reasoned about: text is laid out by the browser, and the
-  // question is where the glyphs land. Measured with getBBox in the canvas's own
-  // coordinates rather than with a client rect — a nested <svg> clips its children,
-  // so a client rect reports every overflowing node as sitting exactly on the edge.
-  const clearance = await page.evaluate((file) => {
-    const host = document.createElement("div");
-    host.innerHTML = file;
-    document.body.append(host);
-    const canvas = host.querySelector(".mesh-canvas");
-    const [, top, vw, height] = canvas.getAttribute("viewBox").split(/[\s,]+/).map(Number);
-    // World units to the pixels the file is drawn at, which is what a reader sees.
-    const px = Number(canvas.getAttribute("width")) / vw;
-    return Math.min(...[...canvas.querySelectorAll(".mesh-node")].map((g) => {
-      const [x, y] = (g.getAttribute("transform").match(/-?[\d.]+/g) || [0, 0]).map(Number);
-      // The outline and the name — what a reader sees. The halo and the hit target
-      // around every node are deliberately larger than the node and invisible.
-      const parts = [...g.querySelectorAll(".mesh-body, .mesh-label, .mesh-type")]
-        .map((el) => el.getBBox());
-      return Math.min(
-        y + Math.min(...parts.map((b) => b.y)) - top,
-        top + height - (y + Math.max(...parts.map((b) => b.y + b.height))),
-      ) * px;
-    }));
-  }, svg);
+  // Served as its own document rather than injected into this one: an <svg> inside a
+  // page inherits the page's box, which is the very thing under test.
+  await page.route("**/exported-landscape.svg", (route) =>
+    route.fulfill({ contentType: "image/svg+xml", body: svg }));
+  await page.goto("/exported-landscape.svg");
 
-  // The stamp's first line of text rises to within a few pixels of the picture's
-  // bottom edge, so a name ending flush against that edge is a name in the stamp.
-  expect(clearance).toBeGreaterThan(12);
+  const laid = await page.evaluate(() => {
+    const canvas = document.querySelector(".mesh-canvas");
+    // The rule the stamp is written under, drawn across the full width at the
+    // picture's bottom edge.
+    const rule = [...document.querySelectorAll("line")]
+      .find((l) => l.getAttribute("x1") === "0").getBoundingClientRect().top;
+    const nodes = [...document.querySelectorAll(".mesh-node")]
+      .map((g) => g.getBoundingClientRect());
+    return {
+      rule,
+      band: canvas.getBoundingClientRect().height,
+      lowest: Math.max(...nodes.map((b) => b.bottom)),
+      highest: Math.min(...nodes.map((b) => b.top)),
+    };
+  });
+
+  // Nothing the picture draws reaches the stamp.
+  expect(laid.lowest).toBeLessThan(laid.rule);
+  // And the picture is not sitting in the middle of a taller box: what it draws fills
+  // the band it was given, give or take the margin a name needs. Without this the
+  // overlap comes back the moment the picture is centred in something else.
+  expect(laid.lowest - laid.highest).toBeGreaterThan(laid.rule * 0.9);
+});
+
+// Where the key sits. It is a reference — consulted while looking at the picture,
+// not read on the way to it — so it belongs under the canvas rather than between the
+// controls and the thing they control.
+test("the key sits under the picture, and the zoom controls stay on it", async ({ page }) => {
+  installMock(page, estate());
+  await page.setViewportSize({ width: 1600, height: 950 });
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const box = async (sel) => await page.locator(sel).boundingBox();
+  const canvas = await box(".mesh-surface");
+  const legend = await box(".mesh-legend");
+
+  // Under it, and in its column: the key explains the picture, so it stays the
+  // picture's width rather than dropping below whichever column is taller.
+  expect(legend.y).toBeGreaterThanOrEqual(canvas.y + canvas.height - 1);
+  expect(Math.abs(legend.width - canvas.width)).toBeLessThan(4);
+  expect(Math.abs(legend.x - canvas.x)).toBeLessThan(4);
+
+  // And the zoom panel still floats in the canvas's own corner. It is positioned
+  // against an ancestor, so giving that ancestor the key as well sinks the buttons to
+  // the bottom of the key — off the picture they act on.
+  const zoom = await box(".mesh-zoom");
+  expect(zoom.y).toBeGreaterThan(canvas.y);
+  expect(zoom.y + zoom.height).toBeLessThanOrEqual(canvas.y + canvas.height);
+  expect(zoom.x + zoom.width).toBeLessThanOrEqual(canvas.x + canvas.width);
+  // Still wired to the picture rather than merely present.
+  await expect(page.locator("#mesh-zoom-in")).toBeVisible();
+  await page.locator("#mesh-zoom-in").click();
+  await expect(page.locator(".mesh-canvas")).toHaveClass(/mesh-zoomed/);
 });

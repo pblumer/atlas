@@ -776,7 +776,7 @@ func (t *Tx) PutVariable(v *model.VariableValue) error {
 // holds. Finding the old entry needs the old value, which only a read can supply — so
 // the read happens, but only when one of the two sides is indexed. A process that
 // declares nothing therefore pays nothing here, which is the whole point of the
-// declaration (ADR-draft-searchable-variables).
+// declaration (ADR-0244).
 //
 // The read is of state, not of a clock or a definition, so the fold stays
 // deterministic (I4): live and replay read the same batch and reach the same entry.
