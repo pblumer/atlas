@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Bewegt genau eine Identität: eine kurzlebige Instanz, die eine Nachricht wirft.
+
+  Warum je Ziel eine eigene Instanz: ein Message-Throw wertet den
+  Korrelationsschlüssel im *Instanz*-Scope aus, nicht im Iterations-Scope einer
+  Multi-Instance. Eine Schleife im Fächer könnte den Schlüssel also nicht je Runde
+  wechseln — eine Kind-Instanz je Ziel kann es, weil sie ihre identityId als
+  Startvariable bekommt.
+
+  Die Nutzlast der Nachricht sind die Variablen dieser Instanz (ADR-0035). Der
+  Fächer speist deshalb nur, was beim Ziel ankommen soll.
+
+  v2: mutation und loeschfrist ergänzt. Damit deckt der Dispatcher alle fünf
+  Nachrichten des Lebenszyklus ab und ein Lastgenerator kann eine Identität von
+  ERFASST bis zum Terminate-Ende führen.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_identitaet_bewegung_eins" targetNamespace="http://atlas/identity">
+  <message id="Msg_b_eintritt" name="identitaet-eintritt">
+    <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
+  </message>
+  <message id="Msg_b_mutation" name="identitaet-mutation">
+    <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
+  </message>
+  <message id="Msg_b_austritt" name="identitaet-austritt">
+    <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
+  </message>
+  <message id="Msg_b_loeschfrist" name="identitaet-loeschfrist">
+    <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
+  </message>
+  <message id="Msg_b_service" name="service-ereignis">
+    <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
+  </message>
+  <process id="identitaet-bewegung-eins" name="Identität bewegen (eine)" isExecutable="true">
+    <documentation>Wirft eine Nachricht an die Identität in identityId. Startvariablen: identityId, bewegung (eintritt|mutation|austritt|loeschfrist|service); für ein Service-Ereignis zusätzlich serviceId, serviceName, serviceStatus, zeitpunkt; für eine Mutation zusätzlich zeitpunkt, neueOrgEinheit, neueFunktion.</documentation>
+    <startEvent id="start" name="Start"/>
+    <exclusiveGateway id="gw_art" name="welche Bewegung?" default="bf3"/>
+    <sendTask id="s_eintritt" name="Eintritt melden" messageRef="Msg_b_eintritt"/>
+    <sendTask id="s_mutation" name="Mutation melden" messageRef="Msg_b_mutation"/>
+    <sendTask id="s_austritt" name="Austritt melden" messageRef="Msg_b_austritt"/>
+    <sendTask id="s_loeschfrist" name="Löschfrist melden" messageRef="Msg_b_loeschfrist"/>
+    <sendTask id="s_service" name="Service-Ereignis melden" messageRef="Msg_b_service"/>
+    <endEvent id="end" name="gemeldet"/>
+    <sequenceFlow id="bf0" sourceRef="start" targetRef="gw_art"/>
+    <sequenceFlow id="bf1" name="Eintritt" sourceRef="gw_art" targetRef="s_eintritt">
+      <conditionExpression xsi:type="tFormalExpression">= bewegung = "eintritt"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="bf2" name="Austritt" sourceRef="gw_art" targetRef="s_austritt">
+      <conditionExpression xsi:type="tFormalExpression">= bewegung = "austritt"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="bf7" name="Mutation" sourceRef="gw_art" targetRef="s_mutation">
+      <conditionExpression xsi:type="tFormalExpression">= bewegung = "mutation"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="bf8" name="Löschfrist" sourceRef="gw_art" targetRef="s_loeschfrist">
+      <conditionExpression xsi:type="tFormalExpression">= bewegung = "loeschfrist"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="bf3" name="Service" sourceRef="gw_art" targetRef="s_service"/>
+    <sequenceFlow id="bf4" sourceRef="s_eintritt" targetRef="end"/>
+    <sequenceFlow id="bf5" sourceRef="s_austritt" targetRef="end"/>
+    <sequenceFlow id="bf6" sourceRef="s_service" targetRef="end"/>
+    <sequenceFlow id="bf9" sourceRef="s_mutation" targetRef="end"/>
+    <sequenceFlow id="bf10" sourceRef="s_loeschfrist" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="identitaet-bewegung-eins">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="342" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw" bpmnElement="gw_art" isMarkerVisible="true"><dc:Bounds x="260" y="335" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="238" y="392" width="95" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_eintritt" bpmnElement="s_eintritt"><dc:Bounds x="420" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_mutation" bpmnElement="s_mutation"><dc:Bounds x="420" y="200" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_austritt" bpmnElement="s_austritt"><dc:Bounds x="420" y="320" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_loeschfrist" bpmnElement="s_loeschfrist"><dc:Bounds x="420" y="440" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_service" bpmnElement="s_service"><dc:Bounds x="420" y="560" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="640" y="342" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_bf0" bpmnElement="bf0"><di:waypoint x="196" y="360"/><di:waypoint x="260" y="360"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf1" bpmnElement="bf1"><di:waypoint x="285" y="335"/><di:waypoint x="285" y="120"/><di:waypoint x="420" y="120"/><bpmndi:BPMNLabel><dc:Bounds x="295" y="98" width="50" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf7" bpmnElement="bf7"><di:waypoint x="285" y="335"/><di:waypoint x="285" y="240"/><di:waypoint x="420" y="240"/><bpmndi:BPMNLabel><dc:Bounds x="295" y="218" width="55" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf2" bpmnElement="bf2"><di:waypoint x="310" y="360"/><di:waypoint x="420" y="360"/><bpmndi:BPMNLabel><dc:Bounds x="320" y="338" width="50" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf8" bpmnElement="bf8"><di:waypoint x="285" y="385"/><di:waypoint x="285" y="480"/><di:waypoint x="420" y="480"/><bpmndi:BPMNLabel><dc:Bounds x="295" y="458" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf3" bpmnElement="bf3"><di:waypoint x="285" y="385"/><di:waypoint x="285" y="600"/><di:waypoint x="420" y="600"/><bpmndi:BPMNLabel><dc:Bounds x="295" y="578" width="50" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf4" bpmnElement="bf4"><di:waypoint x="520" y="120"/><di:waypoint x="658" y="120"/><di:waypoint x="658" y="342"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf9" bpmnElement="bf9"><di:waypoint x="520" y="240"/><di:waypoint x="658" y="240"/><di:waypoint x="658" y="342"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf5" bpmnElement="bf5"><di:waypoint x="520" y="360"/><di:waypoint x="640" y="360"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf10" bpmnElement="bf10"><di:waypoint x="520" y="480"/><di:waypoint x="658" y="480"/><di:waypoint x="658" y="378"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf6" bpmnElement="bf6"><di:waypoint x="520" y="600"/><di:waypoint x="658" y="600"/><di:waypoint x="658" y="378"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
