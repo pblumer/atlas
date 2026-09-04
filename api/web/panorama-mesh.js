@@ -1808,17 +1808,27 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     <div class="mesh-subhead">
       <span id="mesh-count" class="muted"></span>
     </div>
-    <div id="mesh-legend-slot"></div>
     <div class="mesh-body">
-      <div class="mesh-stage">
-        <div id="mesh-surface" class="mesh-surface"></div>
-        <div class="mesh-zoom" role="group" aria-label="Zoom">
-          <button id="mesh-zoom-in" type="button" title="Zoom in">+</button>
-          <button id="mesh-zoom-out" type="button" title="Zoom out">−</button>
-          <button id="mesh-zoom-fit" type="button" title="Fit the whole landscape">Fit</button>
-          <button id="mesh-release" type="button" disabled
-            title="Put every node you have dragged back where the layout puts it">Release</button>
+      <div class="mesh-plot">
+        <!-- The stage is the canvas and the controls that float over it, and nothing
+             else: the surface's contents are replaced on every repaint, so anything
+             inside it is drawn once and then gone. -->
+        <div class="mesh-stage">
+          <div id="mesh-surface" class="mesh-surface"></div>
+          <div class="mesh-zoom" role="group" aria-label="Zoom">
+            <button id="mesh-zoom-in" type="button" title="Zoom in">+</button>
+            <button id="mesh-zoom-out" type="button" title="Zoom out">−</button>
+            <button id="mesh-zoom-fit" type="button" title="Fit the whole landscape">Fit</button>
+            <button id="mesh-release" type="button" disabled
+              title="Put every node you have dragged back where the layout puts it">Release</button>
+          </div>
         </div>
+        <!-- The key sits under the picture: it is a reference, consulted while looking
+             at the canvas rather than read on the way to it, and above the picture it
+             pushed the thing it explains down the page. Under the canvas and not under
+             the whole body, so it stays against the picture rather than below
+             whichever of the two columns happens to be taller. -->
+        <div id="mesh-legend-slot"></div>
       </div>
       <aside class="mesh-side">
         <div class="mesh-controls">

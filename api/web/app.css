@@ -3627,7 +3627,12 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    The canvas fills it exactly and the viewBox is computed to the same aspect ratio,
    which is what removes the empty bands a settled graph used to sit inside: with
    preserveAspectRatio's default, any mismatch between the two is letterboxed. */
-.mesh-stage { position: relative; flex: 1; min-width: 0; }
+/* The picture and the key that explains it, in one column beside the side panel. The
+   stage is only the canvas and the controls floating over it, so those controls keep
+   the canvas's own corner: measured against a box that also held the key they would
+   sink to the bottom of it. */
+.mesh-plot { display: flex; flex-direction: column; gap: 12px; flex: 1; min-width: 0; }
+.mesh-stage { position: relative; }
 .mesh-surface {
   overflow: hidden; border: 1px solid var(--border); border-radius: 8px;
   height: clamp(460px, 72vh, 960px);
@@ -3848,7 +3853,7 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
 /* Impact analysis (ADR-0211 §6). The canvas and the panel are one answer: the
    highlight says which, the panel says how many and whether the count is a floor. */
 .mesh-body { display: flex; gap: 12px; align-items: flex-start; }
-.mesh-body .mesh-stage { flex: 1; min-width: 0; }
+.mesh-body .mesh-plot { flex: 1; min-width: 0; }
 /* Narrower than it was: the canvas is the view, and 260px of permanent sidebar on
    a 1280px screen took a fifth of the picture for a panel that is empty until
    somebody selects something. */
@@ -4020,7 +4025,7 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 @media (max-width: 900px) {
   .mesh-body { flex-direction: column; }
   .mesh-side { width: 100%; }
-  .mesh-stage { width: 100%; }
+  .mesh-plot { width: 100%; }
 }
 
 /* Atlas bindings in the Panorama properties panel (ADR-0189 §4). A binding shows

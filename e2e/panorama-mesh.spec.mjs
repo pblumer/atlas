@@ -2328,3 +2328,35 @@ test("an exported landscape stays inside its own band", async ({ page }) => {
   // overlap comes back the moment the picture is centred in something else.
   expect(laid.lowest - laid.highest).toBeGreaterThan(laid.rule * 0.9);
 });
+
+// Where the key sits. It is a reference — consulted while looking at the picture,
+// not read on the way to it — so it belongs under the canvas rather than between the
+// controls and the thing they control.
+test("the key sits under the picture, and the zoom controls stay on it", async ({ page }) => {
+  installMock(page, estate());
+  await page.setViewportSize({ width: 1600, height: 950 });
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const box = async (sel) => await page.locator(sel).boundingBox();
+  const canvas = await box(".mesh-surface");
+  const legend = await box(".mesh-legend");
+
+  // Under it, and in its column: the key explains the picture, so it stays the
+  // picture's width rather than dropping below whichever column is taller.
+  expect(legend.y).toBeGreaterThanOrEqual(canvas.y + canvas.height - 1);
+  expect(Math.abs(legend.width - canvas.width)).toBeLessThan(4);
+  expect(Math.abs(legend.x - canvas.x)).toBeLessThan(4);
+
+  // And the zoom panel still floats in the canvas's own corner. It is positioned
+  // against an ancestor, so giving that ancestor the key as well sinks the buttons to
+  // the bottom of the key — off the picture they act on.
+  const zoom = await box(".mesh-zoom");
+  expect(zoom.y).toBeGreaterThan(canvas.y);
+  expect(zoom.y + zoom.height).toBeLessThanOrEqual(canvas.y + canvas.height);
+  expect(zoom.x + zoom.width).toBeLessThanOrEqual(canvas.x + canvas.width);
+  // Still wired to the picture rather than merely present.
+  await expect(page.locator("#mesh-zoom-in")).toBeVisible();
+  await page.locator("#mesh-zoom-in").click();
+  await expect(page.locator(".mesh-canvas")).toHaveClass(/mesh-zoomed/);
+});
