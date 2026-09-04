@@ -306,9 +306,11 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := []instanceResp{}
-	scanErr := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+	var defs defIndex
+	scanErr := s.readOffLoop(func(rv *state.ReadView, d defIndex) error {
 		var err error
-		out, err = searchInstances(rv, defs, defKey, raw, pred)
+		defs = d
+		out, err = searchInstances(rv, d, defKey, raw, pred)
 		return err
 	})
 	switch {
@@ -318,6 +320,15 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "search instances: "+scanErr.Error())
 		return
+	}
+	// Nothing here does not yet mean nothing anywhere: history retention hard-deletes
+	// finished instances once the exporter has them (ADR-0115), and from then on the
+	// exported log is the only place they exist. The rows it answers with are marked,
+	// because they describe instances this server cannot act on any more.
+	if shouldAskArchive(out, pred) {
+		archive := s.searchArchive(r.Context(), defKey, pred)
+		w.Header().Set("X-Archive-State", archive.State)
+		out = append(out, archiveRows(archive.Instances, defs)...)
 	}
 	httpapi.JSON(w, http.StatusOK, out)
 }
