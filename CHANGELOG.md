@@ -12,6 +12,27 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The edges in the landscape nugget missed the nodes they connect.** The scene that
+  shows Panorama drew its edges as divs rotated by an angle computed from percentage
+  coordinates — and x is a share of the container's width while y is a share of its
+  height, so on anything that is not square both the angle and the length come out of
+  mixed units. On the 745×280 stage the page actually renders, an edge landed 22 degrees
+  off and 41 pixels too long, running straight past the node it was supposed to reach.
+
+  It is the failure mode this whole chapter is built to avoid, and it still got through:
+  the picture renders, the scene advances, no selector breaks, nothing throws and nothing
+  logs. It surfaced only from looking at a rendered frame.
+
+  The edges are an SVG now, with `preserveAspectRatio="none"`, so an endpoint sits
+  exactly on its coordinate whatever the aspect ratio, and `vector-effect:
+  non-scaling-stroke` keeps the line from being stretched with it. `e2e/nuggets.spec.mjs`
+  gains the assertion that was missing: for every edge, both ends land on a node.
+  Confirmed by moving one edge's endpoint and watching it fail — the first attempt at
+  that check was itself broken, matching against unescaped quotes that the JSON block
+  does not contain, so it never challenged the test at all.
+
 ### Added
 
 - **A deployed diagram can be tidied up without redeploying it.** You only find out that

@@ -2,6 +2,24 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-edges-in-the-landscape-nugget-missed-the-nodes-they-conn",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The edges in the landscape nugget missed the nodes they connect.",
+        "de": "The edges in the landscape nugget missed the nodes they connect."
+      },
+      "summary": {
+        "en": "The scene that shows Panorama drew its edges as divs rotated by an angle computed from percentage coordinates — and x is a share of the container's width while y is a share of its height, so on anything that is not square both the angle and the length come out of mixed units.",
+        "de": "The scene that shows Panorama drew its edges as divs rotated by an angle computed from percentage coordinates — and x is a share of the container's width while y is a share of its height, so on anything that is not square both the angle and the length come out of mixed units."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-deployed-diagram-can-be-tidied-up-without-redeploying-it",
       "version": "Unreleased",
       "date": null,
@@ -360,24 +378,6 @@
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-data-object-s-value-opens-as-formatted-json",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A data object's value opens as formatted JSON.",
-        "de": "A data object's value opens as formatted JSON."
-      },
-      "summary": {
-        "en": "In an instance's Data tab, a structured value showed as {3 fields} and the whole of it was reachable only as a tooltip — unreadable past a few lines, impossible to scroll, select or copy from, and absent altogether on a touch device.",
-        "de": "In an instance's Data tab, a structured value showed as {3 fields} and the whole of it was reachable only as a tooltip — unreadable past a few lines, impossible to scroll, select or copy from, and absent altogether on a touch device."
-      },
-      "link": {
-        "label": "ADR-0053",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0053-first-class-data-objects.md"
       }
     }
   ]
