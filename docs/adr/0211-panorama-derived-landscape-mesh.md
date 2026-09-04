@@ -30,7 +30,9 @@
   process node can carry the engine's instance tally, under four rules that keep an
   unread counter from reading as an idle process; amended 2026-09-04 — the canvas has
   no edges: the world is a budget for the layout rather than a fence around the
-  arrangement)
+  arrangement; amended 2026-09-04 — a drilldown is a path through the estate rather
+  than a single place, carried in the header, in a saved view and in the export's
+  scope)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -637,6 +639,31 @@ unaffected.
 > makes the whole window a floor — and §10's export carries the window in the stamp,
 > because in a file the rings on three nodes are the whole point and there is no panel
 > beside it to say so.
+
+> **Amendment (2026-09-04): a drilldown is a path, not a flag.**
+> Going into a node was one step deep in practice: the state was a single id, so
+> going in again replaced where you were, and leaving went all the way back to the
+> whole starmap. On a graph the point of which is following dependencies, that is the
+> wrong shape — the ordinary act is to go into a node, then into one of *its*
+> dependencies, and then to want the second node back.
+>
+> The state is therefore the path: every node gone into, in order, with the last one
+> the place you are standing. Only that last one cuts the picture, so a walk of six
+> costs exactly what a drilldown of one did; the rest is history, and history is what
+> makes stepping back one node possible at all. The header carries it as stations,
+> each a way back to itself, with the whole starmap as the first — so leaving is a
+> step like any other rather than a separate escape hatch, and Escape retraces rather
+> than abandons.
+>
+> Two rules keep it readable. Going into a node already on the path **truncates back
+> to it** rather than listing it twice: a trail that can hold one station at two
+> depths makes "back to where I was" ambiguous. And a node undeployed while somebody
+> stands on it steps them back one station rather than throwing the walk away — the
+> way they came is still a real path.
+>
+> A saved view carries the path, and §10's export names it: a picture cropped to one
+> node with no account of how that node was arrived at is a narrowing its reader
+> cannot check.
 
 > **Amendment (2026-09-04): the canvas has no edges.**
 > A node dragged toward the top of the picture used to stop at the world's edge, and

@@ -81,7 +81,13 @@ export function scopeText(scope = {}) {
   if (scope.kind === "filter" && scope.term) return `filtered by “${scope.term}”`;
   if (scope.kind === "drill") {
     const hops = scope.hops === "all" || scope.hops === Infinity ? "any" : scope.hops;
-    return `drilled into ${scope.name || "one node"}, within ${hops} hop(s)`;
+    // The path, when there is one. A picture cropped to one node with no account of
+    // how that node was arrived at is a narrowing the reader cannot check — and
+    // following a dependency four deep and exporting the fourth is exactly when the
+    // route matters most.
+    const via = Array.isArray(scope.via) && scope.via.length
+      ? ` (via ${scope.via.join(" › ")})` : "";
+    return `drilled into ${scope.name || "one node"}${via}, within ${hops} hop(s)`;
   }
   return "the whole starmap";
 }
