@@ -145,3 +145,47 @@ test("the chapter and its nuggets read in both languages", async ({ page }) => {
     await expect(rh.locator(`.nug-cap [data-l="${lang}"]`).first()).toBeVisible();
   }
 });
+
+// The landscape scene draws edges between nodes, and getting that wrong is
+// invisible to every other test here: the picture still renders, the scene still
+// advances, no selector breaks. The first version rotated a div by an angle
+// computed from percentages — x a share of the width, y a share of the height —
+// so on a 745x280 stage an edge came out 22 degrees off and 41px too long and
+// ran straight past the node it was supposed to reach.
+test("every edge in the landscape ends on the nodes it connects", async ({ page }) => {
+  await page.goto("/handbuch.html");
+  const result = await page.evaluate(async () => {
+    const data = JSON.parse(document.getElementById("nug-data").textContent);
+    // Find the scene that draws a mesh, whichever nugget and index it sits at.
+    for (const nug of data.nuggets) {
+      const i = nug.scenes.findIndex((s) => s.stage.includes("nug-mesh"));
+      if (i < 0) continue;
+      const host = document.querySelector(`[data-nugget="${nug.id}"]`);
+      host.scrollIntoView();
+      host.querySelector(`.nug-steps i[data-i="${i}"]`).click();
+      await new Promise((r) => setTimeout(r, 700));
+      const mesh = host.querySelector(".nug-scene.on .nug-mesh");
+      const box = mesh.getBoundingClientRect();
+      const nodes = [...mesh.querySelectorAll("i")].map((n) => {
+        const b = n.getBoundingClientRect();
+        return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+      });
+      const near = (p) => nodes.some((n) => Math.hypot(n.x - p.x, n.y - p.y) < 12);
+      const bad = [];
+      for (const ln of mesh.querySelectorAll("line")) {
+        // viewBox is 0..100 on both axes with preserveAspectRatio="none", so a
+        // coordinate is a share of the box on its own axis.
+        const at = (cx, cy) => ({
+          x: box.left + (+ln.getAttribute(cx)) / 100 * box.width,
+          y: box.top + (+ln.getAttribute(cy)) / 100 * box.height,
+        });
+        if (!near(at("x1", "y1"))) bad.push("start of an edge sits on no node");
+        if (!near(at("x2", "y2"))) bad.push("end of an edge sits on no node");
+      }
+      return { edges: mesh.querySelectorAll("line").length, bad };
+    }
+    return { edges: 0, bad: ["no scene draws a mesh"] };
+  });
+  expect(result.edges).toBeGreaterThan(2);
+  expect(result.bad).toEqual([]);
+});
