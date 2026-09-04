@@ -525,10 +525,15 @@ var offloadableKinds = map[string][]int32{
 // call with a provisioning vocabulary, the same one thing that cannot travel.
 // scimWorkerEnv is the third caller of one collector rather than a third copy of it.
 //
-// The credential-bearing kinds the engine cannot yet hand over stay in the engine
-// until an operator moves their secrets themselves, with --offload-connectors.
+// temis is the thirteenth and the last (ADR-0233, slice 7), and it is the one that
+// did not copy the others: a central decision is a business rule task, and its
+// completion carries a durable evaluation record rather than only variables. Moving
+// it meant widening the engine-worker completion contract so a worker can report the
+// evaluation it performed — which is why it went last.
+//
+// With it the record's "owed a worker half" table is empty.
 func DefaultOffloadedKinds() []string {
-	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "scim", "script", connectorKindSharePoint, "soap", "webscrape"}
+	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "scim", "script", connectorKindSharePoint, "soap", connectorKindTemis, "webscrape"}
 }
 
 // DefaultSupervisedWorkerOnlyKinds are the worker-only Worker Types Atlas supervises

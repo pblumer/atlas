@@ -25,14 +25,19 @@ import (
 // error, exactly like any worker failure. sink, if non-nil, observes each result.
 func Handler(store state.Reader, lookup dmn.ProcessLookup, reg *Registry, sink func(dmn.Result)) job.CompletingHandler {
 	return dmn.DecisionHandler(store, lookup, func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail) (dmn.Evaluator, error) {
+		// Resolved down to the connector name here rather than looked up directly, so
+		// the in-engine path asks the registry the same question [Run] asks it — and
+		// fails with the same sentence when nothing answers.
 		name := cp.Intern(detail.Connector)
-		client, ok := reg.Client(name)
-		if !ok {
+		if _, ok := reg.Client(name); !ok {
 			return nil, reg.Unresolved("temis", name)
 		}
 		return func(ctx context.Context, decisionId string, inputs map[string]any) (dmn.Evaluation, error) {
-			out, err := client.Evaluate(ctx, decisionId, inputs)
-			return dmn.Evaluation{Outputs: out}, err
+			res, err := Run(ctx, Job{Connector: name, DecisionID: decisionId, Inputs: inputs}, reg)
+			if err != nil {
+				return dmn.Evaluation{}, err
+			}
+			return dmn.Evaluation{Outputs: res.Outputs, Trace: res.Trace}, nil
 		}, nil
 	}, sink)
 }
