@@ -2143,7 +2143,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tp-canvas .djs-context-pad,
 .tp-canvas .djs-direct-editing-parent { display: none !important; }
 /* The drill-down chrome inside the Tasks app's process view
-   (ADR-draft-tasks-call-activity-descent). Double-clicking
+   (ADR-0246). Double-clicking
    a call activity's "+" descends into the child instance *in place* rather than
    navigating: this diagram sits beside a form somebody is filling in, and Operations —
    where the full replay lives — is a role the assignee may not hold. So the descent

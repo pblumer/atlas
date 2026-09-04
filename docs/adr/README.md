@@ -299,6 +299,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0243](0243-shared-ui-primitives.md) | The views are built from shared parts | Proposed |
 | [0244](0244-searchable-variables.md) | Searchable variables — a declared value index | Accepted |
 | [0245](0245-call-activity-drilldown.md) | The call activity's "+" is the way into the process it calls | Accepted |
+| [0246](0246-tasks-call-activity-descent.md) | The Tasks app descends into a called process instead of navigating to it | Accepted |
 
 ## Status values
 

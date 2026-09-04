@@ -9463,7 +9463,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
 // handle with destroy(); the caller tears it down when the selection changes.
 //
 // A call activity's "+" drills in here too (ADR-0245), but it *descends in place*
-// rather than navigating (ADR-draft-tasks-call-activity-descent): this diagram sits
+// rather than navigating (ADR-0246): this diagram sits
 // beside a form somebody is filling in, and a hash change would tear the Tasks view —
 // and that half-typed form — down. Landing on the Operations replay would not even be
 // reachable for many of the people who see this view: the timeline behind it is an

@@ -6961,7 +6961,7 @@ async function viewTasks(preselectKey) {
       state.mountedProc = await mod.mountTaskProcess(host, {
         api, instanceKey: t.processInstanceKey, activeElementId: t.elementId,
         // Drilling into a call activity descends into the child instance in place
-        // (ADR-draft-tasks-call-activity-descent). The variables below the diagram
+        // (ADR-0246). The variables below the diagram
         // follow it, so the tab keeps
         // reading as one thing: this is the process, and this is what it carries.
         onInstance: (key) => renderProcVars(t, key),

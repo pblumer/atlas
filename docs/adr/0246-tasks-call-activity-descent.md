@@ -1,4 +1,4 @@
-# ADR-DRAFT: The Tasks app descends into a called process instead of navigating to it
+# ADR-0246: The Tasks app descends into a called process instead of navigating to it
 
 - **Status:** Accepted
 - **Date:** 2026-09-04

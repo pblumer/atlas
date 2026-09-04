@@ -351,7 +351,7 @@ _Changed_ / _Removed_ for each version.
   making (the child's key is on the caller's own timeline) and no permission it did not
   already have. A call activity the token has not reached says so rather than doing
   nothing, and a task whose process calls nothing looks exactly as it did.
-  ([ADR-draft-tasks-call-activity-descent](docs/adr/draft-tasks-call-activity-descent.md),
+  ([ADR-0246](docs/adr/0246-tasks-call-activity-descent.md),
   `e2e/tasks-call-activity.spec.mjs`)
 
 - **A model can say what it wants to be found by.** [ADR-0241](docs/adr/0241-finding-an-instance.md)
