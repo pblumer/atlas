@@ -11,6 +11,10 @@ import {
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
 import { copyText } from "./clipboard.js";
+// Documentation prose is Markdown (ADR-draft-documentation-is-markdown). The renderer
+// is a module of its own because every surface that shows an element's documentation
+// has to agree on what the markup means — and on the escaping that keeps it inert.
+import { renderMarkdown, markdownToPlain } from "./markdown.js";
 import {
   incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixWorkerFlow,
   incidentWorkerChip,
@@ -7067,8 +7071,13 @@ async function viewTasks(preselectKey) {
     // whoever picks the task up — what to check, which rule applies, when to refuse. It
     // leads the detail, above the metadata rows, because it is what the assignee needs
     // before doing anything; a task whose element carries none simply shows no block.
+    //
+    // It is rendered as Markdown, not escaped into one paragraph: a work instruction is
+    // a list of checks and an emphasised "do not", and the person doing the work should
+    // read it as one. renderMarkdown escapes the source before it parses anything, so
+    // the modeller's prose can style this block but can never script it.
     const docBlock = (t.documentation || "").trim()
-      ? `<div class="tasks-doc"><h2>What to do</h2><p>${esc(t.documentation.trim())}</p></div>`
+      ? `<div class="tasks-doc"><h2>What to do</h2><div class="md">${renderMarkdown(t.documentation)}</div></div>`
       : "";
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
@@ -7498,7 +7507,7 @@ async function viewInfoModels() {
     return `<tr data-name="${esc(`${m.name} ${app ? app.name : ""}`.toLowerCase())}">
       <td><div class="artifact-name"><span class="chip">UML</span>
         <a href="#/data/m/${encodeURIComponent(m.id)}"><b>${esc(m.name)}</b></a></div>
-        ${m.documentation ? `<div class="muted" style="font-size:12px; padding-left:54px">${esc(m.documentation)}</div>` : ""}</td>
+        ${m.documentation ? `<div class="muted" style="font-size:12px; padding-left:54px">${esc(markdownToPlain(m.documentation))}</div>` : ""}</td>
       <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}` : `<span class="muted">Missing application</span>`}</td>
       <td class="muted">${m.classes} ${m.classes === 1 ? "class" : "classes"}</td>
       <td class="muted">${m.associations}</td>

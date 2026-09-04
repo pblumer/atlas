@@ -139,16 +139,27 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   entirely, and the edit is undoable; the process (nothing selected), a pool *and* the process
   it executes, a black-box pool and the collaboration each take their own. Assertions are on
   the exported XML, because passthrough is the whole contract.
+- **`markdown.spec.mjs`** ([ADR-draft-documentation-is-markdown](../docs/adr/draft-documentation-is-markdown.md)):
+  the **documentation Markdown renderer** (`api/web/markdown.js`). Two claims, both of
+  which need a browser. That prose written before the renderer existed still reads the way
+  its author left it — paragraphs, line breaks, a variable name that is not italics. And
+  that the output is safe to hand to `innerHTML`: the harness inserts it into the live DOM
+  and the spec asks the parser what was built, so raw HTML in a documentation text is text,
+  a `javascript:` or `data:` destination loses its href and keeps its words, and nothing
+  the payloads try to run ever runs.
 - **`tasks-documentation.spec.mjs`** (ADR-0025 amended): a user task's documentation in the
   **Tasks app** — the detail pane leads with the modeler's instruction (above the metadata
-  rows and the form), keeps the author's paragraph breaks, and shows no block at all for a
+  rows and the form), renders the author's Markdown as structure (a checklist arrives as a
+  list, and the modeler's own heading is not dressed as the block's label), keeps prose
+  written before Markdown reading the way it was written, and shows no block at all for a
   task whose element carries none. Drives the real app shell against a mocked `/api/v1`.
 - **`ops-documentation.spec.mjs`** (ADR-0025 amended): element documentation in the
   **Operations instance replay** — the Details tab shows what the modeler wrote about the
-  selected element (paragraph breaks intact), the process's own when nothing is selected,
-  nothing at all for an undocumented element, and — for a branch this instance never took
-  — the element's identity plus its documentation instead of the old silent fallback to
-  the process panel. Reads it off the rendered model; no server call involved.
+  selected element (paragraph breaks intact, Markdown rendered as structure), the
+  process's own when nothing is selected, nothing at all for an undocumented element,
+  and — for a branch this instance never took — the element's identity plus its
+  documentation instead of the old silent fallback to the process panel. Reads it off the
+  rendered model; no server call involved.
 
 - **`pdf-writer.spec.mjs`** (ADR-0143): the dependency-free **PDF writer** behind the process
   documentation export (`api/web/pdf.js`). A PDF is only valid if its cross-reference table

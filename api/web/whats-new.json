@@ -23,6 +23,48 @@
       ]
     },
     {
+      "id": "an-element-s-documentation-is-markdown-now-and-the-people-wh",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Documentation you wrote in the model now reads as you wrote it",
+        "de": "Dokumentation aus dem Modell wird jetzt so gelesen, wie sie geschrieben ist"
+      },
+      "summary": {
+        "en": "The documentation field on an element understands Markdown: headings, bullet and numbered lists, quotes, code, bold and italic, links. Where it used to arrive as a wall of asterisks and hyphens, a work instruction now reaches the person doing the work as the checklist it was written as — in the Tasks app, in the instance replay and in the Panorama properties panel. Text written before this is untouched: a line break is still a line break, and a variable name is still a variable name.",
+        "de": "Das Dokumentationsfeld eines Elements versteht Markdown: Überschriften, Aufzählungen, nummerierte Listen, Zitate, Code, fett und kursiv, Links. Wo vorher eine Wand aus Sternchen und Bindestrichen ankam, erreicht eine Arbeitsanweisung die bearbeitende Person jetzt als die Prüfliste, als die sie geschrieben wurde — in der Tasks-App, im Instanz-Replay und im Panorama-Eigenschaftenpanel. Vorher geschriebener Text bleibt unangetastet: Ein Zeilenumbruch bleibt ein Zeilenumbruch, ein Variablenname bleibt ein Variablenname."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Tasks",
+        "Operations",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a process in the Modeler and select a user task.",
+          "In the Details panel, write the instruction in the Documentation field — a heading with ##, a checklist with -, an important word in **bold**.",
+          "Deploy and start the process, then open the task in the Tasks app: the instruction stands above the form, rendered."
+        ],
+        "de": [
+          "Öffnen Sie einen Prozess im Modeler und wählen Sie eine User-Task aus.",
+          "Schreiben Sie die Anweisung im Details-Panel ins Feld Documentation — eine Überschrift mit ##, eine Prüfliste mit -, ein wichtiges Wort in **fett**.",
+          "Deployen und starten Sie den Prozess und öffnen Sie die Aufgabe in der Tasks-App: Die Anweisung steht gerendert über dem Formular."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Tasks",
+          "de": "Aufgaben öffnen"
+        },
+        "route": "#/tasks"
+      }
+    },
+    {
       "id": "the-handbook-is-caught-up-with-the-product-six-apps-the-play",
       "version": "Unreleased",
       "date": null,
@@ -48,6 +90,51 @@
           "de": "Panorama öffnen"
         },
         "route": "#/panorama/starmap"
+      }
+    },
+    {
+      "id": "a-count-on-the-diagram-is-grouped-in-thousands",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Big numbers on the diagram are readable at a glance",
+        "de": "Grosse Zahlen im Diagramm sind auf einen Blick lesbar"
+      },
+      "summary": {
+        "en": "The live diagram writes its counts onto the shapes themselves — how many tokens completed here, how many were cancelled here, how many are here right now. On a busy process those are five and six digits, and printed as one unbroken run they stopped being readable: 25864 next to 50002 next to 23436 is four numbers you have to count out digit by digit, and two of them side by side cannot be compared at all — which is the whole point of having them on the diagram rather than in a table. They are now grouped in threes: 25 864, 50 002. The separator is a space rather than a dot or a comma, because those two mean opposite things depending on where the reader sits — 25.864 is twenty-five thousand in Zurich and twenty-five point eight in Boston — and a badge has no room to explain which it meant. A space is the one grouping mark nobody reads as a decimal point, and it is the same in every country, so a screenshot means the same thing to whoever you send it to. It is a narrow, non-breaking space, so a badge still fits on one line however large the count gets. Numbers below a thousand are left exactly as they were. The same grouping runs through the replay's execution counts, the incident badges, the Playground's run and heat-map badges, the running/tokens/incidents pills above the diagram, and the instance counts Panorama's Starmap puts under a process.",
+        "de": "Das Live-Diagramm schreibt seine Zahlen direkt auf die Elemente — wie viele Token hier abgeschlossen und weitergelaufen sind, wie viele hier abgebrochen wurden, wie viele gerade hier liegen. Bei einem gut ausgelasteten Prozess sind das fünf- und sechsstellige Zahlen, und als durchgehende Ziffernfolge waren sie nicht mehr lesbar: 25864 neben 50002 neben 23436 muss man Ziffer für Ziffer abzählen, und zwei solche Zahlen nebeneinander lassen sich gar nicht vergleichen — wozu stehen sie dann überhaupt am Element statt in einer Tabelle. Jetzt sind sie in Dreiergruppen gesetzt: 25 864, 50 002. Als Trennzeichen dient ein Leerzeichen und weder Punkt noch Komma, denn die beiden bedeuten je nach Leser das Gegenteil — 25.864 ist in Zürich fünfundzwanzigtausend und in Boston fünfundzwanzig Komma acht — und ein Badge hat keinen Platz, das zu erklären. Ein Leerzeichen liest niemand als Dezimaltrennzeichen, und es ist in jedem Land dasselbe; ein Screenshot bedeutet also für alle dasselbe. Es ist ein schmales, geschütztes Leerzeichen, damit ein Badge auch bei grossen Zahlen einzeilig bleibt. Zahlen unter tausend bleiben unverändert. Dieselbe Gruppierung gilt für die Ausführungszähler im Replay, die Incident-Badges, die Badges des Playgrounds, die Pillen über dem Diagramm (laufend, Token, Incidents) und die Instanzzahlen, die die Starmap in Panorama unter einen Prozess schreibt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations › Processes and pick a process that has been running for a while — the counts have to be large enough to see the difference.",
+          "Open its live view. Each shape carries up to three counts: gray for completed here and moved on, amber for cancelled here, green for alive here now.",
+          "Read any count past a thousand: the thousands are set apart by a thin space (25 864), and the tooltip you get on hover spells the number the same way.",
+          "Look at the pills in the header — running, tokens total, incidents — they are grouped the same way.",
+          "Open one instance's ▶ Replay: the execution count on each element is grouped too."
+        ],
+        "de": [
+          "Öffnen Sie Operations › Processes und wählen Sie einen Prozess, der schon eine Weile läuft — die Zahlen müssen gross genug sein, damit der Unterschied sichtbar wird.",
+          "Öffnen Sie die Live-Ansicht. Jedes Element trägt bis zu drei Zahlen: grau für hier abgeschlossen und weitergelaufen, bernstein für hier abgebrochen, grün für gerade hier.",
+          "Lesen Sie eine Zahl über tausend: die Tausender stehen durch ein schmales Leerzeichen abgesetzt (25 864), und der Tooltip beim Darüberfahren schreibt sie genauso.",
+          "Schauen Sie auf die Pillen in der Kopfzeile — laufend, Token gesamt, Incidents — sie sind gleich gruppiert.",
+          "Öffnen Sie das ▶ Replay einer Instanz: auch die Ausführungszähler an den Elementen sind gruppiert."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
       }
     },
     {
@@ -260,64 +347,6 @@
       "tags": [
         "Workers",
         "Decisions",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "scim-tasks-run-on-a-worker-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "User provisioning moved out of the engine",
-        "de": "User-Provisionierung ist aus der Engine ausgezogen"
-      },
-      "summary": {
-        "en": "Creating a user at an identity provider, looking one up, searching for one — until now Atlas did all of it from the process that runs the engine, so a slow provider held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the credential your task references is handed to that worker, exactly as it already is for REST and SOAP.",
-        "de": "Einen Benutzer beim Identity Provider anlegen, einen nachschlagen, nach einem suchen — bisher machte Atlas all das im Prozess, der die Engine ausführt, sodass ein langsamer Provider Arbeit aufhielt, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Das Credential, das Ihr Task referenziert, wird an diesen Worker übergeben — genau wie bei REST und SOAP schon."
-      },
-      "link": {
-        "label": "ADR-0233",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
-      },
-      "tags": [
-        "Workers",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "sharepoint-tasks-run-on-a-worker-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "SharePoint writes moved out of the engine",
-        "de": "SharePoint-Schreibvorgänge sind aus der Engine ausgezogen"
-      },
-      "summary": {
-        "en": "Adding a row to a SharePoint list means fetching a token and calling Microsoft Graph, and until now Atlas did both from the process that runs the engine — so a slow or throttled Graph held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the site you set up in Connectors is handed to that worker. An instance whose credential you have not finished storing is simply not served yet, rather than stopping the worker.",
-        "de": "Eine Zeile in eine SharePoint-Liste zu schreiben heisst, ein Token zu holen und Microsoft Graph aufzurufen — bisher machte Atlas beides im Prozess, der die Engine ausführt, sodass ein langsames oder gebremstes Graph Arbeit aufhielt, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Die Site, die Sie unter Connectors eingerichtet haben, wird an diesen Worker übergeben. Eine Instanz, deren Credential Sie noch nicht fertig hinterlegt haben, wird einfach noch nicht bedient — statt den Worker aufzuhalten."
-      },
-      "link": {
-        "label": "ADR-0233",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
-      },
-      "tags": [
-        "Workers",
         "Connectors"
       ],
       "try": {

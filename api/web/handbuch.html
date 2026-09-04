@@ -908,7 +908,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             Bei einer <b>User-Task</b> ist er mehr als eine Notiz: die <a href="/#/tasks">Tasks-App</a> zeigt ihn
             der bearbeitenden Person über dem Formular als Arbeitsanweisung. Schreib ihn dort also an die Person,
             die die Aufgabe erledigt. Im <a href="/#/operations">Instanz-Replay</a> steht die Doku des gewählten
-            Elements unter seinen Eigenschaften — auch bei einem Zweig, den diese Instanz nie genommen hat.</p>
+            Elements unter seinen Eigenschaften — auch bei einem Zweig, den diese Instanz nie genommen hat.
+            Der Text versteht <b>Markdown</b>: Überschriften, Aufzählungen, <code>Code</code>, Fettes, Kursives,
+            Zitate und Links. Tasks-App und Instanz-Replay zeigen ihn gerendert, eine Prüfliste kommt bei der
+            bearbeitenden Person also als Liste an und nicht als Zeile voller Bindestriche. Wer schlicht Text schreibt,
+            bekommt schlicht diesen Text: Zeilenumbrüche bleiben Zeilenumbrüche.</p>
           <p data-l="en">Every element has a <b>Documentation</b> field in the Details panel — right below its name
             and id. Put there <i>why</i> the step exists, the rule behind it and who owns it; for the process
             itself (nothing selected), the summary a reader wants before following the diagram. The text is part
@@ -917,7 +921,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             task</b> it is more than a note: the <a href="/#/tasks">Tasks app</a> shows it to the assignee above
             the form as the work instruction, so write that one to the person who will do the work. The
             <a href="/#/operations">instance replay</a> shows the selected element's documentation under its
-            properties — including for a branch this instance never took.</p></li>
+            properties — including for a branch this instance never took. The text understands
+            <b>Markdown</b>: headings, bullet and numbered lists, <code>code</code>, bold, italic, quotes and
+            links. The Tasks app and the instance replay render it, so a checklist reaches the assignee as a
+            list rather than as a line full of hyphens. Write plain prose and you get plain prose: a line break stays a line break.</p></li>
         <li><b data-l="de">Prüfen &amp; aufräumen</b><b data-l="en">Validate &amp; tidy</b>
           <p data-l="de">Der Modeler validiert live. Aufgeräumtes Layout ist Teil der Arbeit, nicht Kür.</p>
           <p data-l="en">The Modeler validates live. A tidy layout is part of the job, not a bonus.</p></li>

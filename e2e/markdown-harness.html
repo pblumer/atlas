@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas documentation Markdown e2e harness</title>
+    <!-- Drives the real api/web/markdown.js. The module's contract is "this string is
+         safe to hand to innerHTML", and that is a claim about a browser, not about a
+         string: only a real DOM can say whether a payload became an element, whether an
+         event handler survived, and whether a link's href still points where the
+         renderer said it does. So the harness inserts the output into the live page and
+         the spec inspects what the parser actually built. -->
+  </head>
+  <body>
+    <div id="out"></div>
+    <script type="module">
+      import { renderMarkdown, markdownToPlain } from "/markdown.js";
+
+      // Anything that manages to execute records itself here. It stays empty in every
+      // test; a payload that fires appends to it and the assertion names what ran.
+      window.__executed = [];
+      window.__pwned = (what) => window.__executed.push(what || "unknown");
+
+      window.__md = { renderMarkdown, markdownToPlain };
+
+      // render inserts the rendered HTML the way every reading surface does — innerHTML
+      // into a live element — and hands back the DOM's own view of it.
+      window.__render = (src) => {
+        const host = document.getElementById("out");
+        host.innerHTML = renderMarkdown(src);
+        return host.innerHTML;
+      };
+
+      // tags lists the element names the parser built, so a test can say "no <script>
+      // and no <img> came out of this" without guessing at string shapes.
+      window.__tags = () => [...document.getElementById("out").querySelectorAll("*")]
+        .map((el) => el.tagName.toLowerCase());
+
+      // links reports each anchor as the browser resolved it: the href attribute as
+      // written, the property the browser would navigate to, and the rel/target.
+      window.__links = () => [...document.getElementById("out").querySelectorAll("a")]
+        .map((a) => ({
+          attr: a.getAttribute("href"),
+          href: a.href,
+          protocol: a.protocol,
+          target: a.getAttribute("target") || "",
+          rel: a.getAttribute("rel") || "",
+          text: a.textContent,
+        }));
+
+      window.__ready = true;
+    </script>
+  </body>
+</html>

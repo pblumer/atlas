@@ -1,0 +1,37 @@
+{
+  "tags": [
+    "Operations",
+    "Modeler"
+  ],
+  "title": {
+    "en": "Big numbers on the diagram are readable at a glance",
+    "de": "Grosse Zahlen im Diagramm sind auf einen Blick lesbar"
+  },
+  "summary": {
+    "en": "The live diagram writes its counts onto the shapes themselves — how many tokens completed here, how many were cancelled here, how many are here right now. On a busy process those are five and six digits, and printed as one unbroken run they stopped being readable: 25864 next to 50002 next to 23436 is four numbers you have to count out digit by digit, and two of them side by side cannot be compared at all — which is the whole point of having them on the diagram rather than in a table. They are now grouped in threes: 25 864, 50 002. The separator is a space rather than a dot or a comma, because those two mean opposite things depending on where the reader sits — 25.864 is twenty-five thousand in Zurich and twenty-five point eight in Boston — and a badge has no room to explain which it meant. A space is the one grouping mark nobody reads as a decimal point, and it is the same in every country, so a screenshot means the same thing to whoever you send it to. It is a narrow, non-breaking space, so a badge still fits on one line however large the count gets. Numbers below a thousand are left exactly as they were. The same grouping runs through the replay's execution counts, the incident badges, the Playground's run and heat-map badges, the running/tokens/incidents pills above the diagram, and the instance counts Panorama's Starmap puts under a process.",
+    "de": "Das Live-Diagramm schreibt seine Zahlen direkt auf die Elemente — wie viele Token hier abgeschlossen und weitergelaufen sind, wie viele hier abgebrochen wurden, wie viele gerade hier liegen. Bei einem gut ausgelasteten Prozess sind das fünf- und sechsstellige Zahlen, und als durchgehende Ziffernfolge waren sie nicht mehr lesbar: 25864 neben 50002 neben 23436 muss man Ziffer für Ziffer abzählen, und zwei solche Zahlen nebeneinander lassen sich gar nicht vergleichen — wozu stehen sie dann überhaupt am Element statt in einer Tabelle. Jetzt sind sie in Dreiergruppen gesetzt: 25 864, 50 002. Als Trennzeichen dient ein Leerzeichen und weder Punkt noch Komma, denn die beiden bedeuten je nach Leser das Gegenteil — 25.864 ist in Zürich fünfundzwanzigtausend und in Boston fünfundzwanzig Komma acht — und ein Badge hat keinen Platz, das zu erklären. Ein Leerzeichen liest niemand als Dezimaltrennzeichen, und es ist in jedem Land dasselbe; ein Screenshot bedeutet also für alle dasselbe. Es ist ein schmales, geschütztes Leerzeichen, damit ein Badge auch bei grossen Zahlen einzeilig bleibt. Zahlen unter tausend bleiben unverändert. Dieselbe Gruppierung gilt für die Ausführungszähler im Replay, die Incident-Badges, die Badges des Playgrounds, die Pillen über dem Diagramm (laufend, Token, Incidents) und die Instanzzahlen, die die Starmap in Panorama unter einen Prozess schreibt."
+  },
+  "tutorial": {
+    "en": [
+      "Open Operations › Processes and pick a process that has been running for a while — the counts have to be large enough to see the difference.",
+      "Open its live view. Each shape carries up to three counts: gray for completed here and moved on, amber for cancelled here, green for alive here now.",
+      "Read any count past a thousand: the thousands are set apart by a thin space (25 864), and the tooltip you get on hover spells the number the same way.",
+      "Look at the pills in the header — running, tokens total, incidents — they are grouped the same way.",
+      "Open one instance's ▶ Replay: the execution count on each element is grouped too."
+    ],
+    "de": [
+      "Öffnen Sie Operations › Processes und wählen Sie einen Prozess, der schon eine Weile läuft — die Zahlen müssen gross genug sein, damit der Unterschied sichtbar wird.",
+      "Öffnen Sie die Live-Ansicht. Jedes Element trägt bis zu drei Zahlen: grau für hier abgeschlossen und weitergelaufen, bernstein für hier abgebrochen, grün für gerade hier.",
+      "Lesen Sie eine Zahl über tausend: die Tausender stehen durch ein schmales Leerzeichen abgesetzt (25 864), und der Tooltip beim Darüberfahren schreibt sie genauso.",
+      "Schauen Sie auf die Pillen in der Kopfzeile — laufend, Token gesamt, Incidents — sie sind gleich gruppiert.",
+      "Öffnen Sie das ▶ Replay einer Instanz: auch die Ausführungszähler an den Elementen sind gruppiert."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

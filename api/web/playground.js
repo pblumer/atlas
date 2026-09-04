@@ -16,6 +16,10 @@
 //
 // See ADR-0215.
 
+// A batch run's counts reach five and six digits, and they are printed in the same
+// badges the runtime views use — so they are grouped the same way (numfmt.js).
+import { fmtCount } from "./numfmt.js";
+
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -987,7 +991,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
         drawn.overlays.push(overlays.add(id, "pg-visits", {
           position: { bottom: 4, right: 4 },
           html: `<div class="token-badges"><div class="token-badge history"
-            title="step ${at.join(", ")} of this case">${at.join(", ")}</div></div>`,
+            title="step ${at.map(fmtCount).join(", ")} of this case">${at.map(fmtCount).join(", ")}</div></div>`,
         }));
       } catch { /* shape without graphics */ }
     }
@@ -1008,7 +1012,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       try {
         drawn.overlays.push(overlays.add(id, "pg-visits", {
           position: { bottom: 4, right: 4 },
-          html: `<div class="token-badges"><div class="token-badge history" title="${count} token(s) passed through">${count}</div></div>`,
+          html: `<div class="token-badges"><div class="token-badge history" title="${fmtCount(count)} token(s) passed through">${fmtCount(count)}</div></div>`,
         }));
       } catch { /* shape without graphics */ }
     }
@@ -1044,7 +1048,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
   }
 
   // overlayFormat renders one of a measure's values for a badge and for the legend.
-  const overlayFormat = (key, v) => (key === "work" || key === "wait" ? fmtDur(v) : String(v));
+  const overlayFormat = (key, v) => (key === "work" || key === "wait" ? fmtDur(v) : fmtCount(v));
 
   function drawOverlay(canvas, overlays, registry) {
     const key = state.overlay;
