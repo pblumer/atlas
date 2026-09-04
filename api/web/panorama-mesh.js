@@ -915,16 +915,37 @@ export function degreesOf(graph) {
 //   - Unknown ids return null rather than an empty set, for the same reason: an
 //     empty answer means "nothing depends on this", and that is a claim.
 //
-// Returns { nodes, direct, edges, truncatedBy, complete } or null.
-export function impactFrom(graph, startId, { direction = "dependents", depth = Infinity } = {}) {
+// Returns { starts, nodes, direct, edges, truncatedBy, complete } or null.
+export function impactFrom(graph, startId, opts = {}) {
+  return impactOf(graph, [startId], opts);
+}
+
+// impactOf is the same question asked about several nodes at once: what stops if all
+// of these go down together.
+//
+// It is one walk from all of them rather than a walk each, and that is the whole
+// point rather than an optimisation. Blast radii overlap, so the union is not the
+// sum — two services that share a queue break the same eleven things, and a window
+// panel that added their counts would say twenty-two where the truth is eleven.
+// Seeding the frontier with every start makes the union the thing that is computed
+// and the individual totals the thing derived from it (see windowOverlap), which is
+// the direction that cannot produce a number nobody could reach.
+//
+// An id that is not in this picture makes the whole answer null, as it does for one:
+// a window is a claim about a specific set, and silently planning around two of the
+// three nodes somebody named is worse than refusing.
+export function impactOf(graph, startIds, { direction = "dependents", depth = Infinity } = {}) {
+  const starts = [...new Set(startIds || [])];
+  if (!starts.length) return null;
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
-  if (!byId.has(startId)) return null;
-  const walked = walkImpact(edgeIndex(graph), byId, startId, { direction, depth });
+  if (starts.some((id) => !byId.has(id))) return null;
+  const walked = walkImpact(edgeIndex(graph), byId, starts, { direction, depth });
   return {
+    starts,
     nodes: [...walked.hops.keys()],
-    // The nodes with an edge straight to this one. They are the difference between
-    // "who do I call about this" and "how far does it go": a direct dependent breaks
-    // at its own boundary, and everything past it breaks because that one did.
+    // The nodes with an edge straight to one of these. They are the difference
+    // between "who do I call about this" and "how far does it go": a direct dependent
+    // breaks at its own boundary, and everything past it breaks because that one did.
     direct: [...walked.hops].filter(([, hop]) => hop === 1).map(([id]) => id),
     edges: walked.edges,
     truncatedBy: walked.truncatedBy,
@@ -955,7 +976,7 @@ function edgeIndex(graph) {
 //
 // hops maps every reached node to its distance from the start, which is what makes
 // "direct" answerable; edges are collected only when a caller wants to draw them.
-function walkImpact(index, byId, startId, { direction, depth, edges: wantEdges = true }) {
+function walkImpact(index, byId, starts, { direction, depth, edges: wantEdges = true }) {
   const step = (id) => {
     const out = [];
     if (direction !== "dependencies") {
@@ -967,7 +988,8 @@ function walkImpact(index, byId, startId, { direction, depth, edges: wantEdges =
     return out;
   };
 
-  const hops = new Map([[startId, 0]]);
+  const from = new Set(starts);
+  const hops = new Map([...from].map((id) => [id, 0]));
   const seenEdges = new Set();
   const edges = [];
   const truncatedBy = [];
@@ -978,14 +1000,16 @@ function walkImpact(index, byId, startId, { direction, depth, edges: wantEdges =
   // walk runs and the answer is a floor. Skipping the start instead would have
   // answered "nothing depends on this", which is the one thing a boundary must
   // never be allowed to say.
-  if (byId.get(startId)?.kind === "restricted") truncatedBy.push(startId);
-  let frontier = [startId];
+  for (const id of from) {
+    if (byId.get(id)?.kind === "restricted") truncatedBy.push(id);
+  }
+  let frontier = [...from];
   for (let hop = 0; hop < depth && frontier.length; hop++) {
     const next = [];
     for (const id of frontier) {
       // A placeholder stands for something we may not see, so its own edges are not
       // ours to follow — it is a boundary, not a waypoint.
-      if (id !== startId && byId.get(id)?.kind === "restricted") continue;
+      if (!from.has(id) && byId.get(id)?.kind === "restricted") continue;
       for (const [edge, other] of step(id)) {
         if (wantEdges && !seenEdges.has(edge)) {
           seenEdges.add(edge);
@@ -1014,7 +1038,11 @@ function walkImpact(index, byId, startId, { direction, depth, edges: wantEdges =
 export function impactSummary(graph, result, startId) {
   if (!result) return null;
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
-  const others = result.nodes.filter((id) => id !== startId);
+  // Every node the question was asked about, not only the one named here. With a
+  // window of three, the other two are things the reader is taking down on purpose —
+  // counting them as collateral would inflate the answer with the plan itself.
+  const from = new Set(result.starts || [startId]);
+  const others = result.nodes.filter((id) => !from.has(id));
   const bySeverity = { critical: 0, attention: 0, ok: 0, unknown: 0 };
   for (const id of others) {
     const sev = byId.get(id)?.severity;
@@ -1042,8 +1070,9 @@ export function impactList(graph, result, startId, { limit = 8 } = {}) {
   if (!result) return [];
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const direct = new Set(result.direct);
+  const from = new Set(result.starts || [startId]);
   return result.nodes
-    .filter((id) => id !== startId)
+    .filter((id) => !from.has(id))
     .map((id) => ({ ...(byId.get(id) || { id }), direct: direct.has(id) }))
     .sort((a, b) =>
       ((SEVERITY_ORDER[b.severity] ?? 0) - (SEVERITY_ORDER[a.severity] ?? 0)) ||
@@ -1070,7 +1099,7 @@ export function blastRanking(graph, { direction = "dependents", depth = Infinity
   const index = edgeIndex(graph);
   const rows = [];
   for (const node of graph.nodes) {
-    const walked = walkImpact(index, byId, node.id, { direction, depth, edges: false });
+    const walked = walkImpact(index, byId, [node.id], { direction, depth, edges: false });
     const total = walked.hops.size - 1;
     if (total <= 0) continue;
     rows.push({
@@ -1088,6 +1117,65 @@ export function blastRanking(graph, { direction = "dependents", depth = Infinity
     ((SEVERITY_ORDER[b.severity] ?? 0) - (SEVERITY_ORDER[a.severity] ?? 0)) ||
     String(a.name || a.id).localeCompare(String(b.name || b.id)));
   return rows.slice(0, limit);
+}
+
+// windowOverlap is the arithmetic a maintenance window needs and a count cannot give.
+//
+// The question behind it is not "what does each of these break" but "what does the
+// evening cost". Those differ, and the difference is the whole reason to plan a
+// window rather than three changes: blast radii overlap, so three services that
+// break twelve, nine and seven things do not break twenty-eight. Adding the counts
+// is the mistake this function exists to make impossible — the union is walked (see
+// impactOf) and the individual totals are reported beside it, so the two numbers are
+// on screen together and the reader can see how much of the cost is shared.
+//
+// Two things it reports that a single answer has no way to say:
+//
+//   - **shared** — how many nodes sit in more than one radius. It is a count of
+//     nodes rather than the difference between the two totals, because with three or
+//     more starts a node reached by all of them is double-counted twice and "sum
+//     minus union" would name a number that is not a set of anything.
+//   - **covered** — the selected nodes that another selected node already takes down.
+//     Taking those down changes nothing the window does not already do, which is
+//     worth knowing before writing it into a change request.
+//
+// Every individual total excludes the other selected nodes for the same reason the
+// union does: they are going down on purpose, and counting the plan as its own
+// collateral inflates every number in the panel.
+export function windowOverlap(graph, startIds, { direction = "dependents", depth = Infinity } = {}) {
+  const union = impactOf(graph, startIds, { direction, depth });
+  if (!union) return null;
+  const from = new Set(union.starts);
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const index = edgeIndex(graph);
+
+  const reachedBy = new Map();
+  const each = union.starts.map((id) => {
+    const walked = walkImpact(index, byId, [id], { direction, depth, edges: false });
+    const reach = [...walked.hops.keys()].filter((other) => !from.has(other));
+    for (const other of reach) reachedBy.set(other, (reachedBy.get(other) || 0) + 1);
+    const node = byId.get(id) || {};
+    return {
+      id, name: node.name, kind: node.kind, severity: node.severity,
+      total: reach.length,
+      // The other selected nodes this one reaches, which is what makes one of them
+      // redundant in the window rather than merely overlapping with it.
+      covers: [...walked.hops.keys()].filter((other) => other !== id && from.has(other)),
+      complete: walked.truncatedBy.length === 0,
+    };
+  });
+
+  const covered = new Set();
+  for (const row of each) for (const id of row.covers) covered.add(id);
+  return {
+    starts: union.starts,
+    each,
+    total: union.nodes.filter((id) => !from.has(id)).length,
+    sum: each.reduce((n, row) => n + row.total, 0),
+    shared: [...reachedBy.values()].filter((times) => times > 1).length,
+    covered: [...covered],
+    complete: union.complete,
+  };
 }
 
 // hrefFor is the drilldown. A process node leads to the Operations live view —
@@ -1639,6 +1727,60 @@ function sitesHTML(node) {
 // server does not sort.
 const SEVERITY_ORDER = { critical: 3, attention: 2, ok: 1, unknown: 0 };
 
+// shortLabel is a node in one word. A restricted placeholder has no name to give —
+// that is the point of it — so it falls back to what its kind is called.
+const shortLabel = (n) => n.name ||
+  String((KIND[n.kind] || {}).label || n.kind || n.id).split(" — ")[0];
+
+// The three pieces an impact answer is made of, written once because two panels now
+// render them: one node's radius, and a maintenance window's. Two copies would have
+// drifted the first time one of them was worded better.
+
+// impactMixHTML is how bad the radius already is, and how much of it is one edge
+// away. The mix is read for triage and never as cause: these nodes report their own
+// state, and a panel implying the selection produced it would be wrong the first
+// time somebody checked — so `cause` names what is *not* being claimed.
+function impactMixHTML(summary, cause) {
+  if (!summary || !summary.total) return "";
+  const classes = ["critical", "attention", "ok", "unknown"].filter((k) => summary.bySeverity[k]);
+  return `
+    <div class="mesh-impact-mix">${classes.map((k) => `
+      <span class="mesh-impact-chip mesh-sev-${k}"><b>${summary.bySeverity[k]}</b>
+        ${esc(SEVERITY[k].label.split(" — ")[0].toLowerCase())}</span>`).join("")}
+    </div>
+    <p class="mesh-note"><b>${summary.direct}</b> directly, <b>${summary.indirect}</b>
+      further out. What those nodes report is their own state — this says what the
+      blast radius currently looks like, not what ${esc(cause)} caused.</p>`;
+}
+
+// impactListHTML names the nodes the count is counting, so the answer can be acted
+// on rather than only repeated.
+function impactListHTML(graph, result, startId, summary) {
+  const named = graph && result ? impactList(graph, result, startId) : [];
+  if (!named.length) return "";
+  return `
+    <ul class="mesh-impact-list">${named.map((n) => `<li>
+      <button type="button" class="mesh-impact-go mesh-sev-${esc(n.severity || "unknown")}"
+        data-finding="${esc(n.id)}">
+        <span class="mesh-impact-who">${esc(shortLabel(n))}</span>
+        <span class="mesh-impact-hop">${n.direct ? "directly" : "further out"}${
+          n.state ? ` · ${esc(STATE_TEXT[n.state] || n.state)}` : ""}</span>
+      </button></li>`).join("")}</ul>
+    ${summary && summary.total > named.length
+      ? `<p class="mesh-note">${summary.total - named.length} more, worst first above.</p>`
+      : ""}`;
+}
+
+// An answer that stopped at a permission boundary must not read as a complete one.
+// This is the rule the mesh applies to the picture, applied to the analysis over it:
+// the count is a floor, not a total.
+function truncationHTML(result) {
+  if (!result || result.complete) return "";
+  return `<p class="mesh-note mesh-truncated"><b>Incomplete.</b> The walk stopped at
+    ${result.truncatedBy.length} node(s) outside your access, so there may be more
+    beyond them. Treat the count as a lower bound.</p>`;
+}
+
 // impactPanelHTML states the answer in words beside the picture. The counts are the
 // point — a highlighted subgraph tells you *which*, a count tells you *how many*,
 // and "17 things depend on this worker" is the sentence somebody repeats in a
@@ -1648,7 +1790,9 @@ function impactPanelHTML(node, result, direction, depth,
   if (!node) {
     return `<div class="mesh-panel mesh-panel-empty">
       <b>Nothing selected</b>
-      <p>Select a node to see what depends on it, and what it depends on.</p></div>`;
+      <p>Select a node to see what depends on it, and what it depends on.</p>
+      <p>Hold ${modifierName()} while clicking to plan a maintenance window over
+        several nodes at once.</p></div>`;
   }
   const typed = typeIn(node.kind, notation);
   const kindLabel = typed
@@ -1674,39 +1818,9 @@ function impactPanelHTML(node, result, direction, depth,
   // panel that implied this one produced it would be wrong the first time somebody
   // checked.
   const summary = graph && result ? impactSummary(graph, result, node.id) : null;
-  const classes = summary
-    ? ["critical", "attention", "ok", "unknown"].filter((k) => summary.bySeverity[k])
-    : [];
-  const mix = summary && summary.total ? `
-    <div class="mesh-impact-mix">${classes.map((k) => `
-      <span class="mesh-impact-chip mesh-sev-${k}"><b>${summary.bySeverity[k]}</b>
-        ${esc(SEVERITY[k].label.split(" — ")[0].toLowerCase())}</span>`).join("")}
-    </div>
-    <p class="mesh-note"><b>${summary.direct}</b> directly, <b>${summary.indirect}</b>
-      further out. What those nodes report is their own state — this says what the
-      blast radius currently looks like, not what this node caused.</p>` : "";
-
-  // The nodes themselves, so the answer can be acted on rather than only counted.
-  const named = graph && result ? impactList(graph, result, node.id) : [];
-  const shortLabel = (n) => n.name ||
-    String((KIND[n.kind] || {}).label || n.kind || n.id).split(" — ")[0];
-  const list = named.length ? `
-    <ul class="mesh-impact-list">${named.map((n) => `<li>
-      <button type="button" class="mesh-impact-go mesh-sev-${esc(n.severity || "unknown")}"
-        data-finding="${esc(n.id)}">
-        <span class="mesh-impact-who">${esc(shortLabel(n))}</span>
-        <span class="mesh-impact-hop">${n.direct ? "directly" : "further out"}${
-          n.state ? ` · ${esc(STATE_TEXT[n.state] || n.state)}` : ""}</span>
-      </button></li>`).join("")}</ul>
-    ${summary && summary.total > named.length
-      ? `<p class="mesh-note">${summary.total - named.length} more, worst first above.</p>`
-      : ""}` : "";
-
-  const truncation = result && !result.complete
-    ? `<p class="mesh-note mesh-truncated"><b>Incomplete.</b> The walk stopped at
-        ${result.truncatedBy.length} node(s) outside your access, so there may be more
-        beyond them. Treat the count as a lower bound.</p>`
-    : "";
+  const mix = impactMixHTML(summary, "this node");
+  const list = impactListHTML(graph, result, node.id, summary);
+  const truncation = truncationHTML(result);
   // The finding, in words, above the impact count. A node's colour says which class
   // it is in; only the state and the reason say what to do about it, and where the
   // severity was inherited the panel names the descendant it came from — a red
@@ -1734,6 +1848,90 @@ function impactPanelHTML(node, result, direction, depth,
     ${list}
     ${drill}
     ${release}
+    <p class="mesh-note">Hold ${modifierName()} and click another node to plan a
+      maintenance window over both — their blast radii overlap, and the window says by
+      how much.</p>
+  </div>`;
+}
+
+// modifierName is the key this platform expects for "add to the selection". Naming
+// the wrong one is worse than naming none: a reader who tries Ctrl on a Mac and gets
+// a context menu concludes the feature is broken rather than that the hint was.
+function modifierName() {
+  const platform = globalThis.navigator?.platform || "";
+  const agent = globalThis.navigator?.userAgent || "";
+  return /Mac|iPhone|iPad/.test(`${platform} ${agent}`) ? "⌘" : "Ctrl";
+}
+
+// windowPanelHTML answers the question a maintenance window actually asks: not what
+// each of these breaks, but what the evening costs.
+//
+// The two numbers are on screen together on purpose. "One at a time these come to
+// 28; together 19" is the whole finding — it is what tells somebody that batching
+// three changes into one window is nearly free, or that it is not — and either
+// number alone invites the other to be guessed, always by adding. See windowOverlap
+// for why the union is the thing computed and the individual totals the thing
+// derived.
+function windowPanelHTML(nodes, result, direction, depth, { graph = null, overlap = null } = {}) {
+  const summary = graph && result ? impactSummary(graph, result, null) : null;
+  const others = summary ? summary.total : 0;
+  const word = direction === "dependents" ? "depend on these" : "are needed by these";
+  const hops = depth === Infinity ? "any" : depth;
+  const covered = new Set(overlap?.covered || []);
+  const each = new Map((overlap?.each || []).map((row) => [row.id, row]));
+
+  // What is in the window, each with what it costs on its own — because the reader
+  // assembled this set one node at a time and the next question is which of them is
+  // carrying the cost. The remove button is on the chip rather than in a menu: a set
+  // somebody builds by clicking has to be unbuildable the same way.
+  const members = nodes.map((n) => {
+    const row = each.get(n.id);
+    const notes = [];
+    if (row) notes.push(`${row.total} on its own`);
+    // A node another member already takes down. Worth saying plainly: it makes no
+    // difference to the window, and somebody is about to write it into a change
+    // request as though it did.
+    if (covered.has(n.id)) notes.push("already down with the others");
+    // Two lines in one button, the shape the findings and the impact list already
+    // use: the name is what a reader scans for and must never be the part that gets
+    // squeezed out when the sub-line is long.
+    return `<li class="mesh-window-item">
+      <button type="button" class="mesh-window-who mesh-sev-${esc(n.severity || "unknown")}"
+        data-window-go="${esc(n.id)}" title="Find ${esc(shortLabel(n))} on the canvas">
+        <span class="mesh-window-name">${esc(shortLabel(n))}</span>
+        <span class="mesh-window-cost">${esc(notes.join(" · "))}</span>
+      </button>
+      <button type="button" class="mesh-window-drop" data-window-drop="${esc(n.id)}"
+        aria-label="Take ${esc(shortLabel(n))} out of this window">×</button>
+    </li>`;
+  }).join("");
+
+  // The comparison, stated as two totals and the reason they differ. `shared` is a
+  // count of nodes rather than the arithmetic difference, which past two nodes is
+  // not the size of anything (see windowOverlap).
+  const compare = overlap && overlap.starts.length > 1 ? `
+    <p class="mesh-note">One at a time these come to <b>${overlap.sum}</b>;
+      together <b>${overlap.total}</b>.
+      ${overlap.shared
+        ? `<b>${overlap.shared}</b> node(s) sit in more than one radius, which is
+           where the difference is.`
+        : `Nothing is in two of these radii, so the window costs each of them in
+           full.`}</p>` : "";
+
+  return `<div class="mesh-panel">
+    <div class="mesh-panel-head">
+      <b>Maintenance window</b>
+      <span class="muted">${nodes.length} node(s) going down together</span>
+    </div>
+    <ul class="mesh-window-list">${members}</ul>
+    <div class="mesh-impact-count"><b>${others}</b> node(s) ${word}
+      <span class="muted">within ${hops} hop(s)</span></div>
+    ${impactMixHTML(summary, "this window")}
+    ${compare}
+    ${truncationHTML(result)}
+    ${impactListHTML(graph, result, null, summary)}
+    <p class="mesh-note">Hold ${modifierName()} and click to add or remove a node.</p>
+    <button type="button" class="mesh-window-close" data-window-clear="1">Close this window</button>
   </div>`;
 }
 
@@ -1895,7 +2093,12 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const exportModelBtn = document.getElementById("mesh-export-archimate");
   const exportPngBtn = document.getElementById("mesh-export-png");
 
-  let selected = null;
+  // The selection is a list rather than one id, because a maintenance window is a
+  // question about several nodes at once and the union of their blast radii is not
+  // the sum (see windowOverlap). One entry is the ordinary case and reads exactly as
+  // it did; the panel changes shape at two.
+  let picked = [];
+  const only = () => (picked.length === 1 ? picked[0] : null);
   // drilled is the node the landscape has been reduced to, or null for all of it.
   //
   // A drilldown is a *place to stand*, not a filter over names: it is the one node
@@ -2016,7 +2219,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     paintDrillChip();
     // A selection that the filter removed is no longer selected: highlighting a node
     // that is not on screen would leave the panel describing something invisible.
-    if (selected && !shown.nodes.some((n) => n.id === selected)) selected = null;
+    picked = picked.filter((id) => shown.nodes.some((n) => n.id === id));
 
     measure();
     // Where everything currently is, so a repaint while something is pinned carries
@@ -2079,11 +2282,16 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function refresh() {
     const direction = dirSelect.value;
     const depth = depthSelect.value === "all" ? Infinity : Number(depthSelect.value);
-    const result = selected ? impactFrom(shown, selected, { direction, depth }) : null;
+    const result = picked.length ? impactOf(shown, picked, { direction, depth }) : null;
     const highlight = result ? new Set(result.nodes) : null;
+    const inWindow = new Set(picked);
     for (const [id, g] of nodeEls) {
       g.classList.toggle("mesh-in-impact", Boolean(highlight?.has(id)));
       g.classList.toggle("mesh-dimmed", Boolean(highlight) && !highlight.has(id));
+      // Which of the lit nodes are the ones going down, as opposed to the ones that
+      // go with them. Without it a window of three reads as one undifferentiated
+      // blob and the reader cannot check the set they assembled against the picture.
+      g.classList.toggle("mesh-picked", inWindow.has(id));
     }
     for (const line of edgeEls) {
       const inside = Boolean(highlight?.has(line.dataset.from) && highlight.has(line.dataset.to));
@@ -2092,16 +2300,39 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     }
     // Nothing selected is nothing to go into, and being already inside a node is not
     // a place you can go into again.
-    drillIn.disabled = !selected || drilled === selected;
+    // Going into a node needs one node. Several is a window rather than a place.
+    drillIn.disabled = !only() || drilled === only();
+    if (picked.length > 1) {
+      const nodes = picked.map((id) => shown.nodes.find((n) => n.id === id)).filter(Boolean);
+      panel.innerHTML = windowPanelHTML(nodes, result, direction, depth, {
+        graph: shown, overlap: windowOverlap(shown, picked, { direction, depth }),
+      });
+      return;
+    }
     panel.innerHTML = impactPanelHTML(
-      shown.nodes.find((n) => n.id === selected) || null, result, direction, depth,
-      { pinned: pinned.has(selected), graph: shown, notation: notationOf(notationPick.value) });
+      shown.nodes.find((n) => n.id === only()) || null, result, direction, depth,
+      { pinned: pinned.has(only()), graph: shown, notation: notationOf(notationPick.value) });
   }
 
-  // Releasing the one node the panel is about, without disturbing the arrangement
-  // around it.
+  // What the panel's own buttons do. Releasing a hand-placed node lives beside the
+  // node it is about; the window's do too, because a set assembled by clicking has to
+  // come apart without a modifier anybody has to be told about.
   panel.addEventListener("click", (event) => {
-    const id = event.target.closest?.("[data-unpin]")?.getAttribute("data-unpin");
+    const target = event.target;
+    const drop = target.closest?.("[data-window-drop]")?.getAttribute("data-window-drop");
+    if (drop) {
+      picked = picked.filter((id) => id !== drop);
+      refresh();
+      return;
+    }
+    if (target.closest?.("[data-window-clear]")) {
+      picked = [];
+      refresh();
+      return;
+    }
+    const go = target.closest?.("[data-window-go]")?.getAttribute("data-window-go");
+    if (go) { frameOn(go); return; }
+    const id = target.closest?.("[data-unpin]")?.getAttribute("data-unpin");
     if (!id || !pinned.has(id)) return;
     pinned.delete(id);
     const node = at.get(id);
@@ -2137,8 +2368,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     }
   }
 
-  function select(id) {
-    selected = selected === id ? null : id; // clicking the selection again clears it
+  // A plain click asks about one node; the same click with the platform's own
+  // add-to-selection key builds a maintenance window out of several. Toggling either
+  // way, because a set somebody assembles by clicking has to come apart the same way
+  // — and clicking the lone selection again still clears it, which is how this
+  // behaved before there was more than one.
+  function select(id, { add = false } = {}) {
+    if (!id) picked = [];
+    else if (add) picked = picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id];
+    else picked = picked.length === 1 && picked[0] === id ? [] : [id];
     refresh();
   }
 
@@ -2419,8 +2657,11 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   surface.addEventListener("click", (event) => {
     if (dragged) { dragged = false; return; }
     const node = event.target.closest("[data-node-id]");
-    if (node) select(node.getAttribute("data-node-id"));
-    else select(null);
+    // Shift as well as the platform key: it is what a list expects, and on a canvas
+    // there is no range for it to mean anything else.
+    const add = event.ctrlKey || event.metaKey || event.shiftKey;
+    if (node) select(node.getAttribute("data-node-id"), { add });
+    else if (!add) select(null); // a modifier-click on the background is a miss, not a clear
   });
   // Drilling into a node: the landscape reduced to it and what it touches.
   //
@@ -2445,7 +2686,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // The search box and the drilldown are two ways of asking the same kind of
     // question, so entering one clears the other rather than compounding with it.
     search.value = "";
-    selected = id;
+    picked = [id];
     // Refitted, because the picture that comes back is a different graph in a
     // different world, and a frame from the old one lands on nothing.
     frameView = null;
@@ -2466,7 +2707,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // than two behaviours: a reader who has clicked a node and wants to see only it has
   // a control to press, and one who already knows the gesture keeps it.
   drillIn.addEventListener("click", () => {
-    if (selected) drillTo(selected);
+    if (only()) drillTo(only());
   });
 
   drillOut.addEventListener("click", drillOutOf);
@@ -2494,6 +2735,26 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // between them they are the only place the answer exists — and it is assembled at
   // the moment of export rather than at load, since a filter or a drilldown is
   // exactly what changes what the file contains.
+  // windowStamp is the maintenance window as the file has to carry it (ADR-0211 §10):
+  // who is in it, and what it costs together and apart. Computed here rather than
+  // read off the panel, because the panel is markup and the numbers have to be the
+  // ones the analysis produced.
+  function windowStamp() {
+    if (picked.length < 2) return null;
+    const direction = dirSelect.value;
+    const depth = depthSelect.value === "all" ? Infinity : Number(depthSelect.value);
+    const overlap = windowOverlap(shown, picked, { direction, depth });
+    if (!overlap) return null;
+    const byId = new Map(shown.nodes.map((n) => [n.id, n]));
+    return {
+      members: picked.map((id) => shortLabel(byId.get(id) || { id })),
+      total: overlap.total,
+      sum: overlap.sum,
+      direction,
+      hops: depth === Infinity ? "any" : depth,
+    };
+  }
+
   function exportMeta() {
     const term = search.value.trim();
     const status = graph.status || {};
@@ -2525,6 +2786,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // of it this file happens to show.
       restricted: graph.restricted || 0,
       clustered: Boolean(graph.clustered),
+      // What the rings on the picture mean. Only when there is more than one: a
+      // single selection is not a window, and its ring is explained by the fact that
+      // somebody clicked it.
+      window: windowStamp(),
       partial: Boolean(status.partial),
       unavailable: (status.unavailable || []).map((u) => ({
         ...u, label: STATE_TEXT[u.state] || u.state,
@@ -2627,7 +2892,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function viewSummary(v) {
     const parts = [];
     if (v.term) parts.push(`filter “${v.term}”`);
-    if (v.selected) parts.push(`watching ${v.selected}`);
+    if (v.picked?.length) parts.push(`a window of ${v.picked.length} node(s)`);
+    else if (v.selected) parts.push(`watching ${v.selected}`);
     if (v.zoom < 1) parts.push(`zoomed to ${Math.round(v.zoom * 100)}%`);
     if (v.pins?.length) parts.push(`${v.pins.length} node(s) placed by hand`);
     return parts.length ? parts.join(" · ") : "the whole landscape";
@@ -2648,7 +2914,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // A view saved before notations existed carries none, and the derived drawing is
     // what it was looking at.
     notationPick.value = notationOf(v.notation).id === v.notation ? v.notation : "atlas";
-    selected = null;
+    picked = [];
     pinned.clear();
     frameView = null;
     paint();
@@ -2657,17 +2923,20 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       paint();
     }
     updateRelease();
-    // The selection last, and only if the node is still there. A landscape is
-    // derived: what a view was watching can have been undeployed since, and the
-    // panel must not describe something that is not on the screen.
-    if (v.selected && shown.nodes.some((n) => n.id === v.selected)) {
-      selected = v.selected;
-      refresh();
-    }
+    // The selection last, and only the members still on screen. A landscape is
+    // derived: what a view was watching can have been undeployed since, and the panel
+    // must not describe something that is not there. A window that lost one member is
+    // reopened as the rest of itself and says so — silently planning around two of
+    // the three nodes somebody saved would be the worse answer.
+    const wanted = v.picked?.length ? v.picked : (v.selected ? [v.selected] : []);
+    picked = wanted.filter((id) => shown.nodes.some((n) => n.id === id));
+    if (picked.length) refresh();
     frameView = frameFor(v, world, (id) => at.get(id));
     applyView();
-    say(v.selected && !selected
-      ? `Opened “${v.name}”. The node it was watching is no longer in this landscape.`
+    const lost = wanted.length - picked.length;
+    say(lost
+      ? `Opened “${v.name}”. ${lost} of the node(s) it was watching ${
+        lost === 1 ? "is" : "are"} no longer in this landscape.`
       : "");
   }
 
@@ -2678,10 +2947,18 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // same gesture — the findings, the impact answer's own list, and the ranking — and
   // they behave identically because they are one function.
   function goToNode(id) {
+    if (!at.get(id)) return;
+    picked = [id];
+    refresh();
+    frameOn(id);
+  }
+
+  // Bringing a node on screen without answering a different question about it. The
+  // window panel needs exactly this: its members are buttons, and pressing one to
+  // find it on the canvas must not collapse the window into a selection of one.
+  function frameOn(id) {
     const node = id && at.get(id);
     if (!node) return;
-    selected = id;
-    refresh();
     // Held at whatever magnification is already in use if the view is zoomed, so a
     // reader working close in is not thrown back out; otherwise close enough to read
     // the node and what is immediately around it.
@@ -2706,7 +2983,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       direction: dirSelect.value,
       depth: depthSelect.value,
       notation: notationPick.value,
-      selected,
+      selected: only(),
+      picked,
       frameView,
       world,
       pinned,
@@ -2779,7 +3057,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const node = event.target.closest("[data-node-id]");
     if (!node) return;
     event.preventDefault();
-    select(node.getAttribute("data-node-id"));
+    select(node.getAttribute("data-node-id"),
+      { add: event.ctrlKey || event.metaKey || event.shiftKey });
   });
   dirSelect.addEventListener("change", () => {
     refresh();

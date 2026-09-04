@@ -129,6 +129,17 @@ export function stampLines(meta = {}) {
       `and this is not a ${spoken.short} document.` });
     for (const loss of spoken.loss || []) lines.push({ text: `— ${loss}` });
   }
+  // A maintenance window is rings on three nodes and nothing else. On screen the
+  // panel beside the canvas says what they are; in a file there is no panel, and a
+  // picture with three circled nodes and no sentence is a picture whose whole point
+  // has to be guessed at.
+  const plan = meta.window;
+  if (plan?.members?.length > 1) {
+    lines.push({ text: `Maintenance window — ${plan.members.join(", ")} going down ` +
+      `together. ${plan.total} node(s) ${plan.direction === "dependencies"
+        ? "are needed by them" : "depend on them"} within ${plan.hops} hop(s); ` +
+      `one at a time they come to ${plan.sum}.` });
+  }
   if (meta.restricted > 0) {
     lines.push({ text: `${meta.restricted} node(s) in this landscape are hidden by your ` +
       `access. Their dependencies are drawn, their identities are not — this picture is ` +
@@ -276,11 +287,13 @@ const EXPORT_OVERRIDES = `
    The names fade in over 80ms, which is nothing on screen and is most of the time a
    rasterizer spends: without this the export can come out with faded labels. */
 .mesh-label-ink{transition:none;}
-/* The adjacency halo belongs to the pointer, and a file has none. It is invisible
-   unless the canvas is in its hover state, so this only fixes the case where the
-   export was taken while one node was lit — where it would have been the single
-   node with a ring around it and nothing to explain why. */
-.mesh-halo{display:none;}`;
+/* The halo ring used to be hidden outright here, because it belongs to the pointer
+   and a file has none. It no longer can be: the same ring now marks the members of a
+   maintenance window, which is a fact about the picture rather than about the mouse,
+   and hiding it would take the three nodes the file is *about* out of the file. The
+   hover state is removed from the clone instead (see below), which is the precise
+   fix — with the mesh-relating class gone no hover rule can match, and the ring is
+   back to meaning only what the selection put there. */`;
 
 // exportStyles is the stylesheet the artifact carries: the resolved theme, the
 // landscape's own rules, and the few overrides above.
@@ -334,7 +347,11 @@ export function standaloneSVG(source, {
     }
     el.removeAttribute("tabindex");
   }
-  clone.classList.remove("mesh-zoomed", "mesh-beating", "mesh-names-anchors");
+  // The hover state goes with the pointer that made it. Without this a file exported
+  // while one node happened to be lit carries that node's ring and its neighbours'
+  // — and now that the ring also marks a maintenance window, a stale hover would be
+  // indistinguishable from the thing the picture is about.
+  clone.classList.remove("mesh-zoomed", "mesh-beating", "mesh-names-anchors", "mesh-relating");
   // Every name is painted. Which names appear on screen is decided by magnification
   // — how large the text is against the reader's window — and an artifact has no
   // magnification: it is zoomed by whatever opens it. A file that hid the names it
