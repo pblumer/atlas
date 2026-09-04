@@ -81,11 +81,11 @@ func TestSearchByDeclaredVariableIsExact(t *testing.T) {
 	if len(rows[0].Variables) != 1 || rows[0].Variables[0].Value != "MT-1998" {
 		t.Errorf("row variables = %+v, want the matched identityId", rows[0].Variables)
 	}
-	// Exact, not substring: a value that merely contains the query is not a hit.
+	// Whole, not partial: a value that merely starts with the query is not a hit.
 	if got := do("identityId=MT-19"); len(got) != 0 {
-		t.Errorf("identityId=MT-19 matched %d rows, want 0 — a declared name matches exactly", len(got))
+		t.Errorf("identityId=MT-19 matched %d rows, want 0 — a term is matched whole", len(got))
 	}
-	// A trailing * asks the other question an ordered index can answer.
+	// A * asks the other question an ordered index can answer, and asks it explicitly.
 	if got := do("identityId=MT-*"); len(got) != 2 {
 		t.Errorf("identityId=MT-* matched %d rows, want 2", len(got))
 	}
