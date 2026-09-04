@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas diagram zoom e2e harness</title>
+    <!-- Drives the real api/web/diagram-zoom.js against a stand-in diagram: an SVG
+         with a viewBox and an intrinsic size, exactly the shape renderDrgSvg emits. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; background: #fff; }
+      #host { width: 400px; height: 300px; }
+    </style>
+  </head>
+  <body>
+    <div id="host">
+      <div id="canvas" style="overflow:auto;height:100%">
+        <svg id="diagram" viewBox="0 0 800 600" width="800" height="600"
+             style="max-width:100%;height:auto;display:block">
+          <rect x="10" y="10" width="200" height="100" fill="#ccc"/>
+        </svg>
+      </div>
+    </div>
+    <script type="module">
+      import { attachDiagramZoom } from "/diagram-zoom.js";
+      window.__handle = attachDiagramZoom(document.getElementById("canvas"), {
+        label: "Decision requirements graph",
+      });
+      // The scale the tests assert on, read off the element rather than off any
+      // internal state, so the assertions describe what a reader sees.
+      window.__scale = () =>
+        document.getElementById("diagram").getBoundingClientRect().width / 800;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

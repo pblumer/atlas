@@ -145,3 +145,60 @@ func TestVendoredBundlesMatchTheirRecordedChecksums(t *testing.T) {
 		t.Fatal("no vendored bundle was checked against a recorded sum")
 	}
 }
+
+// TestOurEmbeddedSourcesAreTextToGrep keeps the hand-written half of api/web
+// readable by the tools everyone actually uses on it.
+//
+// grep, ripgrep, git diff, most editors and every grep-driven CI check classify a
+// file as binary the moment it carries a NUL byte, and then skip it silently — no
+// error, no mention, just no matches from that file. api/web/editor.js carried one
+// for a while (a composite key written with a raw NUL separator), which made the
+// largest UI file in the tree invisible to searches nobody thought to run with -a.
+//
+// The byte was not only a nuisance to tooling: the same key went through a data-key
+// attribute, and the HTML parser replaces U+0000 in an attribute value with U+FFFD,
+// so the value read back never equalled the one written (e2e/decision-picker.spec.mjs
+// covers what that broke). Both problems have one rule: our sources say what they
+// mean with escape sequences, not with raw control bytes.
+//
+// Vendored bundles are exempt: they are third-party build output, guarded by their
+// recorded checksums above, and not ours to edit.
+func TestOurEmbeddedSourcesAreTextToGrep(t *testing.T) {
+	var checked int
+	err := fs.WalkDir(webFS, "web", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "vendor" {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		switch path.Ext(p) {
+		case ".js", ".css", ".html", ".json":
+		default:
+			return nil
+		}
+		body, err := fs.ReadFile(webFS, p)
+		if err != nil {
+			return err
+		}
+		checked++
+		if i := strings.IndexByte(string(body), 0); i >= 0 {
+			line := 1 + strings.Count(string(body[:i]), "\n")
+			t.Errorf("%s carries a NUL byte at line %d.\n"+
+				"grep and friends treat the whole file as binary and skip it without saying so. "+
+				"Write the character as an escape sequence (\\u0000) instead of emitting the byte — "+
+				"and if it travels through an HTML attribute, use a separator that survives parsing: "+
+				"the parser turns U+0000 into U+FFFD.", p, line)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+	if checked == 0 {
+		t.Fatal("no embedded source was checked; this guard would pass vacuously")
+	}
+}

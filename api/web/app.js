@@ -8068,9 +8068,16 @@ async function viewDmnViewer(refId) {
       <h1>${esc(title)} <span class="muted" style="font-size:14px;font-weight:normal">· DMN view</span></h1>
       <div class="row">${editBtn}</div>
     </div>
-    <div id="dmn-canvas" style="overflow:auto;border:1px solid #e5e7eb;border-radius:10px;background:var(--diagram-bg);padding:8px">${renderDrgSvg(g)}</div>
+    <div id="dmn-canvas" style="overflow:auto;height:min(70vh,640px);border:1px solid #e5e7eb;border-radius:10px;background:var(--diagram-bg);padding:8px">${renderDrgSvg(g)}</div>
     <p class="muted" style="font-size:12px">Diese Entscheidung kann direkt in Atlas bearbeitet (<b>Bearbeiten</b>) oder in einem Business-Rule-Task über den Decision-Picker des Modelers verwendet werden.</p></div>`;
   wireEdit();
+  // A requirements graph can be wider than the column and denser than 100% makes
+  // readable, and this one is drawn by hand rather than by diagram-js — so the zoom
+  // every other canvas in Atlas has comes from the shared primitive. The frame is
+  // given a fixed height above because zoom needs something to scroll inside.
+  const { attachDiagramZoom } = await import("./diagram-zoom.js");
+  if (superseded(gen)) return;
+  attachDiagramZoom(document.getElementById("dmn-canvas"), { label: `${title}, decision requirements graph` });
 }
 
 // borderPoint returns the point on a box's border (centre cx,cy, size w×h) in the

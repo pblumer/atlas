@@ -50,6 +50,15 @@ in `editor.js`, `form-editor.js` and `panorama-viewer.js`; `infomodel-editor.js`
 brings `im-bar`; `playground.js` has `pg-bar-in` / `pg-bar-out`; `dmn-editor.js`
 has no bar at all. The rank rules from ADR-0229 hold in exactly one of them.
 
+**A diagram is zoomable wherever a framework supplies it, and nowhere else.**
+The BPMN modeler and its live and replay views, the DMN editor, the class canvas
+and the Panorama viewer are all diagram-js underneath, so they zoom because
+diagram-js zooms. `renderDrgSvg` (`app.js:8092`) draws the decision requirements
+graph as plain SVG and says so in its own comment — "Read-only: no interaction,
+just a faithful picture" — inside a frame whose only concession to size is
+`overflow:auto`. Whether a reader can get closer to a diagram therefore depends
+on which library happened to draw it, which is not a property of the diagram.
+
 The question this record answers is not "which shade of grey". It is whether
 "small and shared" from ADR-0012 is a hope or a rule, and what it applies to.
 
@@ -101,24 +110,33 @@ Three primitives, each an ES module export usable without `app.js`:
   keeps `editor-bar.spec.mjs` and every `wire*` function reaching the same
   elements.
 
+- **A diagram zoom** for the diagrams Atlas draws itself: zoom in, zoom out, fit,
+  ctrl+wheel, and the current factor stated rather than inferred. It attaches to
+  already-rendered markup, the way `groupifyPanel` does, so a renderer stays a
+  renderer. The framework-backed canvases keep diagram-js's own zoom — the rule is
+  that a diagram can be approached, not that one implementation supplies it.
+
 The rule that follows: **a view does not draw a dialog, a bar, or a button size
-of its own.** If a view needs something the primitives do not offer, the
+of its own, and does not present a diagram that cannot be zoomed.** If a view needs something the primitives do not offer, the
 primitive grows — that change is reviewed once for everyone, which is the point.
 
 ### Consequences
 
 - **Positive:** the ADR-0229 reasoning applies wherever there is a bar rather
   than only in `editor.js`. A dialog behaves the same everywhere, including the
-  parts that are easy to forget. Two of the three rules are grep-checkable and
-  can be a test: no `btn sm` in `api/web`, no overlay class outside the
-  primitive's.
+  parts that are easy to forget. A diagram can be approached whoever drew it.
+  Two of the rules are grep-checkable and can be a test: no `btn sm` in
+  `api/web`, no overlay class outside the primitive's.
 - **Negative / trade-offs accepted:** a migration across nine files for dialogs
   and five for bars, all of it behaviour-preserving but none of it free, and a
   window in which both the primitive and the hand-written version exist. The
   bar builder has to be general enough for five editors without becoming a
   configuration language; if it cannot be, that is a finding worth recording
   rather than a builder worth forcing.
-- **Follow-ups / risks to watch:** `editor.js` is large and mounts standalone,
+- **Follow-ups / risks to watch:** the diagram rule is the one with no mechanical
+  check — "this SVG is a diagram" is not something grep can decide, so it holds by
+  review, and a hand-drawn diagram added without zoom would pass CI. `editor.js`
+  is large and mounts standalone,
   so its imports need checking against every harness that loads it. Whether the
   DMN editor should have a bar at all is a product question this record does not
   settle — it only says that if it gets one, the one it gets is the shared one.

@@ -27,6 +27,8 @@ inconsistency rather than as failure.
 | Dialogs built by hand | 22 in 10 files | 8 CSS class families for one object |
 | Button-size call sites to unify | 21 (`sm`) vs 62 (`small`) | Two rules with different metrics |
 | Editor surfaces with a bar | 5 | 3 class names, 1 editor with no bar |
+| Diagram surfaces without zoom | 1 of 6 | The hand-drawn one; the other five inherit it from diagram-js |
+| Diagram surfaces with visible zoom controls | 1 of 6 | Elsewhere zoom is ctrl+wheel, which is not discoverable |
 | Shared primitives that already work | 3 | `toast`, `enhanceTable`, `openPickModal` |
 
 The two records differ sharply in shape, and that matters more than their
@@ -142,7 +144,23 @@ metrics, not two spellings. Call sites: `small` 62 across eight files, `sm` 21
 across four (`app.js` 8, `editor.js` 6, `incidents.js` 6, `secret-shapes.js` 1).
 Unifying on `small` is 21 mechanical edits and the deletion of one CSS rule.
 
-### 4.3 Editor bars
+### 4.3 Diagram zoom
+
+Six surfaces present a diagram. Five are diagram-js underneath — the BPMN modeler
+and its live and replay views (`editor.js`), the DMN editor (`dmn-editor.js`), the
+class canvas (`infomodel-editor.js`), the Panorama viewer and mesh
+(`panorama-viewer.js`, `panorama-mesh.js`) — and zoom because diagram-js zooms.
+The sixth, `renderDrgSvg` (`app.js:8092`), is drawn by hand as plain SVG and states
+its own position in a comment: "Read-only: no interaction, just a faithful
+picture." Its frame offered `overflow:auto` and nothing else, so the only way to
+get closer to a decision requirements graph was the browser's page zoom, which
+scales the console around it.
+
+Visible zoom controls are rarer still: only the Panorama mesh has them
+(`mesh-zoom-in` / `-out` / `-fit`). Everywhere else zoom is ctrl+wheel, which
+works but is not discoverable.
+
+### 4.4 Editor bars
 
 Five editing surfaces, three bar class names, one surface without a bar:
 `editor-bar` (`editor.js`, `form-editor.js`, `panorama-viewer.js`), `im-bar`
@@ -154,7 +172,7 @@ This is the least mechanical of the three: a builder general enough for five
 surfaces is a design question, not a rewrite, and `editor-bar.spec.mjs` pins the
 Modeler bar's structure while it is answered.
 
-### 4.4 What already works
+### 4.5 What already works
 
 `toast` (`app.js:75`, used in 15 files), `enhanceTable` (`table.js:26`, applied to
 every view's tables on every navigation) and `openPickModal` (`pickmodal.js:27`)
@@ -211,7 +229,7 @@ disjoint code. If both are accepted, the low-risk order is:
 Steps 1 and 2 are worth doing even if the route table is rejected. The reverse is
 also true; nothing here is all-or-nothing.
 
-## 7. Incidental finding: the NUL byte in `editor.js`
+## 7. Incidental finding: the NUL byte in `editor.js` (fixed in this branch)
 
 `api/web/editor.js:6534` embeds a raw NUL byte in the source as a key separator
 instead of writing an escape sequence for it. Consequences: `grep` treats the file
@@ -219,10 +237,20 @@ as binary and skips it without `-a`, so the largest UI file is invisible to ever
 text-based search, review grep and any grep-driven CI check; and the byte survives
 into the `go:embed`'d asset.
 
-The fix is to write the separator as a JavaScript escape sequence rather than as
-the byte itself. Behaviour is identical, and the file becomes text to every tool
-that looks at it. This is unrelated to both records and can be fixed
-independently.
+It was also not only a tooling nuisance, which is what the first pass of this audit
+assumed. The same key is written into a `data-key` attribute and read back from it,
+and the HTML parser replaces U+0000 in an attribute value with U+FFFD — measured in
+Chromium: an attribute written as `A<NUL>B` reads back as `41,fffd,42`, while
+`U+001F` survives as `41,1f,42`. The key read back therefore never equalled the key
+written, the lookup in `editor.js` fell through to "first decision with this id",
+and a business rule task picking between two models that share a decision id
+adopted the wrong model's inputs and result variable — the one case the composite
+key exists for.
+
+Fixed on this branch: the separator is now `U+001F`, written as an escape sequence.
+`e2e/decision-picker.spec.mjs` covers the behaviour (it fails against the old
+separator), and `TestOurEmbeddedSourcesAreTextToGrep` in
+`api/webassets_internal_test.go` keeps a raw NUL out of the embedded sources.
 
 ## 8. What this audit does not cover
 

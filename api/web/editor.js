@@ -6531,7 +6531,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // given input target is preserved when re-picking.
     const fpick = body.querySelector("#f-decision-pick");
     if (fpick && api) {
-      const decKey = (d) => `${d.modelRef} ${d.id}`;
+      // A decision id is unique per model, not engine-wide (ADR-0072), so an option
+      // is identified by model + id. The separator has to survive the round trip
+      // through the data-key attribute below: the HTML parser replaces U+0000 in an
+      // attribute value with U+FFFD, so a NUL separator made every key read back
+      // differ from the key written and the lookup fell through to "first decision
+      // with this id" -- the wrong model in exactly the case the key exists for.
+      // U+001F survives parsing and cannot occur in a model ref or a decision id.
+      const decKey = (d) => `${d.modelRef}\u001f${d.id}`;
       // The picker offers every decision the engine can resolve, not just this
       // project's own references: a business rule task routinely calls a decision
       // that lives in another project or is shared engine-wide (ADR-0034 project
