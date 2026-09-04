@@ -518,7 +518,7 @@ const APPS = [
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
-  { id: "panorama", name: "Panorama", route: "#/panorama/landscape", on: true, role: "modeler" },
+  { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
   { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
 ];
 
@@ -553,7 +553,7 @@ const TOPNAV = {
     { name: "Start", route: "#/tasks/start", role: "operator" },
   ],
   panorama: [
-    { name: "Landscape", route: "#/panorama/landscape", role: "modeler" },
+    { name: "Starmap", route: "#/panorama/starmap", role: "modeler" },
     { name: "Models", route: "#/panorama", role: "modeler" },
   ],
   // The two altitudes of process data, and the reason the UML class diagram was the
@@ -984,12 +984,12 @@ function setChrome(appId, route) {
   // The Tasks inbox is a wide three-pane layout, so it drops the centered
   // max-width the default content column uses while keeping normal padding.
   document.body.classList.toggle("tasks-mode", appId === "tasks");
-  // The landscape is a picture of a whole estate, and its legibility is a function
-  // of the pixels it gets: the world is fitted to the canvas, so every pixel of
-  // width the column withholds comes back off every node and every gap between
-  // them. It drops the centred column for the same reason the Tasks inbox does,
-  // and keeps the padding.
-  document.body.classList.toggle("landscape-mode", route === "#/panorama/landscape");
+  // The Starmap is a picture of a whole estate, and its legibility is a function of
+  // the pixels it gets: the world is fitted to the canvas, so every pixel of width
+  // the column withholds comes back off every node and every gap between them. It
+  // drops the centred column for the same reason the Tasks inbox does, and keeps the
+  // padding.
+  document.body.classList.toggle("starmap-mode", route === "#/panorama/starmap");
 }
 
 // ---------- What's New ----------
@@ -7937,10 +7937,14 @@ async function viewPanoramaModels() {
   });
 }
 
-// The derived landscape mesh (ADR-0211). Panorama's landing view: it is computed
-// from what this server already holds, so it has something to show before anybody
-// has modeled anything.
-async function viewPanoramaLandscape() {
+// The Starmap (ADR-0211's derived landscape mesh). Panorama's landing view: it is
+// computed from what this server already holds, so it has something to show before
+// anybody has modeled anything.
+//
+// "Starmap" is the name on the page; the record and the code that draws it still say
+// landscape and mesh, which is what they are describing. The rename is of the view,
+// not of the thing it draws.
+async function viewPanoramaStarmap() {
   const gen = navGen;
   const mod = await import("./panorama-mesh.js");
   if (superseded(gen)) return;
@@ -8338,7 +8342,7 @@ function routeTitle(path) {
     [/^#\/data\/instances$/, "Instances · Data"],
     [/^#\/data\/m\//, "Class diagram · Data"],
     [/^#\/data$/, "Model · Data"],
-    [/^#\/panorama\/landscape$/, "Landscape · Panorama"],
+    [/^#\/panorama\/starmap$/, "Starmap · Panorama"],
     [/^#\/panorama\/models\//, "Architecture view · Panorama"],
     [/^#\/panorama$/, "Models · Panorama"],
   ];
@@ -8359,6 +8363,13 @@ async function route() {
   // carrying a second route: one page, one name, and the old URL lands on it.
   if (/^#\/console\/connectors\b/.test(hash)) {
     location.replace(hash.replace("#/console/connectors", "#/console/workers"));
+    return;
+  }
+  // #/panorama/landscape is the view's previous name. Same rewrite, same reason: it
+  // is one page under one name, and every bookmark, saved link and pasted URL from
+  // before the rename lands on it.
+  if (/^#\/panorama\/landscape\b/.test(hash)) {
+    location.replace(hash.replace("#/panorama/landscape", "#/panorama/starmap"));
     return;
   }
   const [path, arg] = [hash.replace(/\?.*$/, ""), hash];
@@ -8432,7 +8443,7 @@ async function route() {
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/operations/call-activities") return await viewCallActivities();
-    if (path === "#/panorama/landscape") return await viewPanoramaLandscape();
+    if (path === "#/panorama/starmap") return await viewPanoramaStarmap();
     if (path === "#/panorama") return await viewPanoramaModels();
     const pm = path.match(/^#\/panorama\/models\/(.+)$/);
     if (pm) return await viewPanoramaModel(decodeURIComponent(pm[1]));

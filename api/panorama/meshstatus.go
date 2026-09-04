@@ -102,17 +102,17 @@ type UnavailableState struct {
 var unobservableWithoutPeers = []UnavailableState{
 	{
 		State: StateUnreachable,
-		Reason: "Nothing on this landscape is reached over the network — no deployment target " +
+		Reason: "Nothing on this starmap is reached over the network — no deployment target " +
 			"is drawn here — so it cannot report that something could not be reached. " +
-			"Configure a deployment target and this landscape reports it, as the " +
+			"Configure a deployment target and this starmap reports it, as the " +
 			"observation projection over a model's bindings already does (ADR-0189 §6).",
 	},
 	{
 		State: StateStale,
 		Reason: "Every fact here is read from this server's own state when the request is " +
-			"served, so no observation on this landscape has a freshness contract to " +
+			"served, so no observation on this starmap has a freshness contract to " +
 			"exceed. Only a peer's answer holds one: configure a deployment target and " +
-			"this landscape reports it, as the observation projection over a model's " +
+			"this starmap reports it, as the observation projection over a model's " +
 			"bindings already does (ADR-0189 §6).",
 	},
 }

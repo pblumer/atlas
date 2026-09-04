@@ -76,7 +76,7 @@ var notations = []Notation{
 		},
 		Loss: []string{
 			"Nothing here was modelled. This is Atlas's own resources in ArchiMate's vocabulary — a picture, and a document generated from it, neither of which anybody drew.",
-			"Relationships are derived from two facts. ArchiMate tells serving from triggering from assignment; the landscape knows only that a process calls another and that it uses a worker or a decision, and the export picks one ArchiMate type per fact.",
+			"Relationships are derived from two facts. ArchiMate tells serving from triggering from assignment; the starmap knows only that a process calls another and that it uses a worker or a decision, and the export picks one ArchiMate type per fact.",
 			"A worker becomes an Application Service with nothing behind it. Atlas holds the worker's name and type and never what is on the other side, so there is no Technology Service to realize it.",
 			"Restricted placeholders have no ArchiMate element — they stand for resources this reader may not see, which is a fact about the reader rather than about the architecture — and are absent from the exported document.",
 			"The type is written out rather than drawn as ArchiMate's corner icon.",
@@ -97,7 +97,7 @@ var notations = []Notation{
 			"External systems are absent. C4 puts the thing a component talks to on the diagram; Atlas holds no model of what is behind a worker, only its name and type.",
 			"Relationships carry no technology or protocol label, which is most of what a C4 arrow is for.",
 			"Restricted and unresolved placeholders have no C4 element and keep their own shape.",
-			"There is no Person and no Software System: the landscape is derived from what this server runs, and neither is a thing Atlas holds.",
+			"There is no Person and no Software System: the starmap is derived from what this server runs, and neither is a thing Atlas holds.",
 		},
 	},
 }
