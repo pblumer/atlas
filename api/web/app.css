@@ -3612,11 +3612,11 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    server and laid out in the browser; these rules only style the result. Node
    fills come from the kind table in panorama-mesh.js so the legend and the
    canvas cannot drift apart. */
-/* The landscape drops the centred content column (see setChrome). Everything on
-   this canvas is sized by fitting a world into it, so width withheld from the card
-   is width taken off every node, every label and every gap at once — the one view
-   where the reading column costs more than it gives. */
-.landscape-mode main { max-width: none; }
+/* The Starmap drops the centred content column (see setChrome). Everything on this
+   canvas is sized by fitting a world into it, so width withheld from the card is
+   width taken off every node, every label and every gap at once — the one view where
+   the reading column costs more than it gives. */
+.starmap-mode main { max-width: none; }
 .mesh-card { display: flex; flex-direction: column; gap: 12px; }
 /* One line, and it stays one line: the header is a row of controls, and a row that
    wraps into three stacked lines stops reading as one. What gives under pressure is

@@ -15,6 +15,6 @@
       "en": "Open Panorama",
       "de": "Panorama öffnen"
     },
-    "route": "#/panorama/landscape"
+    "route": "#/panorama/starmap"
   }
 }

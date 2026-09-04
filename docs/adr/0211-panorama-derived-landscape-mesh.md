@@ -25,7 +25,8 @@
   replacing the previous amendment's blanket refusal, and the mapping moves to the
   server; amended 2026-09-04 — §6's impact question can be asked about several nodes
   at once, as the maintenance window it is, and states why the union is walked rather
-  than the individual answers added)
+  than the individual answers added; amended 2026-09-04 — the view is called Starmap
+  in the product, and this record keeps its own vocabulary)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -632,6 +633,19 @@ unaffected.
 > makes the whole window a floor — and §10's export carries the window in the stamp,
 > because in a file the rings on three nodes are the whole point and there is no panel
 > beside it to say so.
+
+> **Amendment (2026-09-04): the view is called Starmap.**
+> Everything a reader sees now says Starmap — the nav, the page, the exported file's
+> name and its provenance stamp, the generated ArchiMate model's name — and
+> `#/panorama/landscape` rewrites to `#/panorama/starmap`, so every bookmark and
+> pasted link from before the rename lands on the page under its current name. That
+> is the same rewrite the Workers page carries for its pre-ADR-0203 spelling, for the
+> same reason: one page, one name.
+>
+> This record and the code that draws the picture go on saying *landscape* and
+> *mesh*. They are describing a derived graph of an estate, which is what it is; the
+> rename is of the view, not of the thing it draws, and rewriting a decision record
+> to match a later product name would make it a worse record of the decision.
 
 ### 7. A stated size budget, and a server-side fallback
 

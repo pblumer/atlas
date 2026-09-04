@@ -83,7 +83,7 @@ export function scopeText(scope = {}) {
     const hops = scope.hops === "all" || scope.hops === Infinity ? "any" : scope.hops;
     return `drilled into ${scope.name || "one node"}, within ${hops} hop(s)`;
   }
-  return "the whole landscape";
+  return "the whole starmap";
 }
 
 // exportName is the file's name. Sortable date first, because the second thing
@@ -91,7 +91,7 @@ export function scopeText(scope = {}) {
 export function exportName(extension, at = new Date()) {
   const stamp = `${at.getFullYear()}${pad2(at.getMonth() + 1)}${pad2(at.getDate())}-` +
     `${pad2(at.getHours())}${pad2(at.getMinutes())}`;
-  return `atlas-landscape-${stamp}.${extension}`;
+  return `atlas-starmap-${stamp}.${extension}`;
 }
 
 // stampLines is what §10 requires rendered into the artifact, in the order somebody
@@ -102,7 +102,7 @@ export function exportName(extension, at = new Date()) {
 // taken in. A reader who was not there has no other source for any of it.
 export function stampLines(meta = {}) {
   const notation = meta.notation?.projection ? ` · ${meta.notation.short}` : "";
-  const lines = [{ weight: "bold", text: `Atlas landscape${notation} — ${scopeText(meta.scope)}` }];
+  const lines = [{ weight: "bold", text: `Atlas starmap${notation} — ${scopeText(meta.scope)}` }];
 
   const drawn = meta.drawn || {};
   const facts = [
@@ -141,12 +141,12 @@ export function stampLines(meta = {}) {
       `one at a time they come to ${plan.sum}.` });
   }
   if (meta.restricted > 0) {
-    lines.push({ text: `${meta.restricted} node(s) in this landscape are hidden by your ` +
+    lines.push({ text: `${meta.restricted} node(s) in this starmap are hidden by your ` +
       `access. Their dependencies are drawn, their identities are not — this picture is ` +
       `filtered, and says so rather than looking complete.` });
   }
   if (meta.clustered) {
-    lines.push({ text: `This landscape exceeded its size budget and is collapsed to ` +
+    lines.push({ text: `This starmap exceeded its size budget and is collapsed to ` +
       `applications; each one states how many nodes it stands for.` });
   }
   if (meta.partial) {
@@ -416,7 +416,7 @@ export function standaloneSVG(source, {
   }).join("");
 
   const svg = `<svg xmlns="${XMLNS}" width="${width}" height="${height}"
-  viewBox="0 0 ${width} ${height}" role="img" aria-label="Atlas derived landscape">
+  viewBox="0 0 ${width} ${height}" role="img" aria-label="Atlas derived starmap">
   <style><![CDATA[${css}]]></style>
   <rect width="${width}" height="${height}" fill="${esc(background)}"/>
   ${new XMLSerializer().serializeToString(clone)}

@@ -105,7 +105,7 @@ func TestExportedUnresolvedDependencyIsAnElementThatSaysItIsMissing(t *testing.T
 // A restricted placeholder has no ArchiMate element: it stands for a resource this
 // reader may not see, which is a fact about the reader rather than about the
 // architecture. Leaving it out silently would be the drop ADR-0211 §8 forbids, so
-// the document counts it and says the model is a part of the landscape.
+// the document counts it and says the model is a part of the starmap.
 func TestExportedRestrictedPlaceholderIsAbsentAndDeclared(t *testing.T) {
 	xml := exportedLandscape(t)
 	if strings.Contains(xml, "restricted") && !strings.Contains(xml, "may not see") {
@@ -113,7 +113,7 @@ func TestExportedRestrictedPlaceholderIsAbsentAndDeclared(t *testing.T) {
 	}
 	for _, want := range []string{
 		"points at a resource the exporting reader may not see",
-		"a part of the landscape, not all of it",
+		"a part of the starmap, not all of it",
 		"relationship(s) had an end that is not in this model",
 	} {
 		if !strings.Contains(xml, want) {
