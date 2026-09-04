@@ -295,6 +295,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0239](0239-off-loop-queries.md) | Read-only queries run off the run loop, on a consistent view | Proposed |
 | [0240](0240-modeler-variables-on-the-bar.md) | Variables stays on the Modeler's bar, as a pressed button with a shortcut | Accepted |
 | [0241](0241-finding-an-instance.md) | Finding an instance — a key lookup and a per-definition index | Accepted |
+| [0242](0242-one-route-table-for-the-shell.md) | One route table describes the shell | Proposed |
+| [0243](0243-shared-ui-primitives.md) | The views are built from shared parts | Proposed |
 
 ## Status values
 

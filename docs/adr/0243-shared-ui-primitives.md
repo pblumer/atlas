@@ -1,4 +1,4 @@
-# ADR-DRAFT: The views are built from shared parts
+# ADR-0243: The views are built from shared parts
 
 - **Status:** Proposed
 - **Date:** 2026-09-04
@@ -150,5 +150,5 @@ primitive grows — that change is reviewed once for everyone, which is the poin
 - follows ADR-0012, which accepted "no components" and asked that helpers stay
   small and shared
 - generalises ADR-0229, which decided what an editor bar is for, in the Modeler
-- paired with ADR-draft-one-route-table-for-the-shell, which takes the same
+- paired with ADR-0242, which takes the same
   question one level up: what the shell around these views decides

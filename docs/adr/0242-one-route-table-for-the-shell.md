@@ -1,4 +1,4 @@
-# ADR-DRAFT: One route table describes the shell
+# ADR-0242: One route table describes the shell
 
 - **Status:** Proposed
 - **Date:** 2026-09-04
@@ -168,5 +168,5 @@ guarding them.
 
 - builds on ADR-0012 (the buildless app shell this table describes)
 - honours ADR-0209 (roles decide what a person is offered)
-- paired with ADR-draft-shared-ui-primitives, which takes the same question one
+- paired with ADR-0243, which takes the same question one
   level down: what the views inside the shell are built from

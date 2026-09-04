@@ -6,8 +6,8 @@
 **Audit date:** 2026-09-04
 **Scope:** `api/web/` (44 ES modules, `app.css`, `index.html`) and `e2e/` (76 specs),
 audited against the two records proposed in
-[`draft-one-route-table-for-the-shell.md`](../adr/draft-one-route-table-for-the-shell.md)
-and [`draft-shared-ui-primitives.md`](../adr/draft-shared-ui-primitives.md).
+[`0242-one-route-table-for-the-shell.md`](../adr/0242-one-route-table-for-the-shell.md)
+and [`0243-shared-ui-primitives.md`](../adr/0243-shared-ui-primitives.md).
 Engine, compiler, state and API packages are out of scope — neither record touches them.
 
 ## 1. Executive summary
