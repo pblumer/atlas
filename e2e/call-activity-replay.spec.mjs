@@ -70,3 +70,52 @@ test("a plain element carries no child link", async ({ page }) => {
   await expect(page.locator("#tab-details")).toContainText("Start_1");
   await expect(page.locator("#tab-details")).not.toContainText("Called process");
 });
+
+// --- The gesture on the marker itself --------------------------------------------
+// The badge above is the always-visible affordance; the "+" is the one the marker
+// itself suggests, and the one that has to work on every surface a call activity is
+// drawn on. The replay's canvas is small next to the transport bar and the history
+// tree, so these get a taller window than the file's default.
+test.describe("drilling in through the + marker", () => {
+  test.use({ viewport: { width: 1280, height: 900 } });
+
+  // markerCenter is the screen position of the "+" bpmn-js drew on a shape — located
+  // by the `data-marker` attribute its own renderer writes, so the gesture's hit test
+  // and the drawing cannot drift apart silently.
+  async function markerCenter(page, elementId) {
+    const box = await page
+      .locator(`[data-element-id="${elementId}"] path[data-marker="sub-process"]`)
+      .boundingBox();
+    if (!box) throw new Error(`no sub-process marker on ${elementId}`);
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  }
+
+  test("double-clicking the + drills into the child replay", async ({ page }) => {
+    const child = await page.evaluate(() => window.__CHILD);
+    const at = await markerCenter(page, "CallActivity_1");
+    await page.mouse.dblclick(at.x, at.y);
+
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/operations/i/${child}`);
+    expect(page.__errors, "page errors during replay").toEqual([]);
+  });
+
+  test("a call activity that started no child opens the called process instead", async ({ page }) => {
+    // CallActivity_2 ran but never created a child, so there is no instance to drill
+    // into — and a dead gesture on the one element whose contents are elsewhere is
+    // worse than landing one level out, on the process it calls.
+    const at = await markerCenter(page, "CallActivity_2");
+    await page.mouse.dblclick(at.x, at.y);
+
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe("#/operations/p/55");
+    expect(page.__errors, "page errors during replay").toEqual([]);
+  });
+
+  test("double-clicking the shape away from the + navigates nowhere", async ({ page }) => {
+    const shape = await page.locator('[data-element-id="CallActivity_1"] .djs-hit').first().boundingBox();
+    await page.mouse.dblclick(shape.x + shape.width * 0.25, shape.y + shape.height * 0.25);
+
+    await page.waitForTimeout(300); // give a navigation that must not happen time to
+    expect(await page.evaluate(() => location.hash)).toBe("");
+    expect(page.__errors, "page errors during replay").toEqual([]);
+  });
+});

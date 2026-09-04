@@ -297,6 +297,24 @@ const SEVERITY = {
   unknown: { glyph: "?", stroke: "", label: "Unwatched — nothing here observes it" },
 };
 
+// EDGE_KEY is what each derived edge means, in the order the key lists them.
+//
+// Three kinds, three claims — this application holds that process, this process
+// invokes that one, this process needs that worker — and until now two of them were
+// drawn alike. The ArchiMate export has always told them apart (Assignment,
+// Triggering, Serving), so the canvas was the one surface where the distinction the
+// data carries was not on screen.
+//
+// The strokes live in the stylesheet, keyed by the same kind (.mesh-edge-*), and the
+// legend draws its swatches with those classes rather than with a copy of them. The
+// order here is the order the key reads in, and it is deliberate: the two kinds that
+// carry a failure path first, the structure they hang on last.
+const EDGE_KEY = [
+  ["calls", "Solid line — calls: a process invokes another process"],
+  ["uses", "Dashed line — uses: a process depends on a worker or a decision"],
+  ["contains", "Dotted line — belongs to: an application and the processes it holds"],
+];
+
 // PULSE_BUDGET is how many beating nodes the view will animate at once.
 //
 // A landscape where three things are wrong should draw the eye to those three. One
@@ -697,11 +715,14 @@ function layout(nodes, edges, { width, height, iterations = 220, pinned, from, m
 // fitToFrame places *centres* inside this margin, so anything the margin does not
 // cover leaves the frame: the biggest application is drawn at r = 42 (KIND.r 30 plus
 // its full growth), and its name — 26px, baseline at r + 14 — reaches about 62 below
-// that centre. At the 26 and 42 these were, a node on the top edge could put 16 units
-// of its own outline outside the frame, and the bottom edge left so little to spare
-// that an exported landscape came down to within five pixels of the provenance stamp
-// beneath it, where the last row of names and the first line of the stamp read as
-// one. 46 and 68 are those two numbers with a little room over.
+// that centre. At the 26 and 42 these were, a node landing on the top edge could put
+// 16 units of its own outline outside the frame and one on the bottom edge 20 units
+// of its name; 46 and 68 are those two numbers with a little room over.
+//
+// (An earlier note here blamed the margin for an export whose lowest names were drawn
+// across the provenance stamp. That was a different bug — the file laid the picture
+// out against the whole page rather than against its band, see standaloneSVG — and
+// the margin is only what the arithmetic above says it is.)
 //
 // The sides stay under the widest name on purpose. A long name is centred, so
 // covering it would mean reserving half a label on both edges — the picture would
@@ -1252,32 +1273,23 @@ function legendEntries(graph, notation) {
       };
     });
 
-  // The two line types — the half of the picture the shapes above do not explain.
+  // The line styles — the half of the picture the shapes above do not explain.
   // Every swatch so far names a *thing*; every line on the canvas is a claim about
-  // how the estate hangs together, drawn in two styles that nothing on the page
-  // named until now. A reader could see that some edges were dashed and had no way
-  // to find out what the dashes meant.
+  // how the estate hangs together, and a reader could see that some edges were drawn
+  // differently with no way to find out from what.
   //
-  // Solid carries two derived facts rather than one, and the label says so. `calls`
-  // and `uses` are separate edges in the mesh and separate relationships in the
-  // ArchiMate export, but this canvas draws them alike — and a key splitting them
-  // into two identical swatches would be describing a distinction that is not on
-  // screen, which is the way a legend stops being trustworthy.
+  // One row per kind the picture actually contains, and the swatch is drawn with the
+  // canvas's own class rather than with a copy of its dash pattern — the same rule
+  // paints both, so the key cannot come to disagree with the picture it explains.
+  // That holds in an exported file too: the harvested stylesheet carries every
+  // `.mesh-` rule, this one included.
   const edgeKinds = new Set((graph.edges || []).map((e) => e.kind));
-  const rule = (dashed) => `<line x1="1" y1="8" x2="15" y2="8" stroke="var(--mesh-line)"
-    stroke-width="1.6"${dashed ? ' stroke-dasharray="4 4" opacity="0.75"' : ""}/>`;
-  if (edgeKinds.has("calls") || edgeKinds.has("uses")) {
+  for (const [kind, label] of EDGE_KEY) {
+    if (!edgeKinds.has(kind)) continue;
     entries.push({
       group: "edge", tone: "",
-      label: "Solid line — depends on: a process calls another, or uses a worker or decision",
-      mark: rule(false),
-    });
-  }
-  if (edgeKinds.has("contains")) {
-    entries.push({
-      group: "edge", tone: "",
-      label: "Dashed line — belongs to: an application and the processes it holds",
-      mark: rule(true),
+      label,
+      mark: `<line x1="1" y1="8" x2="15" y2="8" class="mesh-edge mesh-edge-${kind}"/>`,
     });
   }
 
@@ -1432,14 +1444,16 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation } = {}) {
   const ms = layout(nodes, graph.edges, { width, height, pinned, from, margin }) + layoutMs;
   const at = new Map(nodes.map((n) => [n.id, n]));
 
+  // One class per derived kind; the stylesheet gives each its own stroke and EDGE_KEY
+  // names it for the legend. A kind this build does not know still draws — as the
+  // plain line, unexplained — rather than not drawing at all.
   const edges = graph.edges.map((e) => {
     const a = at.get(e.from), b = at.get(e.to);
     if (!a || !b) return "";
-    const dashed = e.kind === "contains";
     return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}"
       x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"
       data-from="${esc(e.from)}" data-to="${esc(e.to)}"
-      class="mesh-edge${dashed ? " mesh-edge-contains" : ""}"/>`;
+      class="mesh-edge mesh-edge-${esc(e.kind || "calls")}"/>`;
   }).join("");
 
   const circles = nodes.map((n) => {
@@ -1794,17 +1808,27 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     <div class="mesh-subhead">
       <span id="mesh-count" class="muted"></span>
     </div>
-    <div id="mesh-legend-slot"></div>
     <div class="mesh-body">
-      <div class="mesh-stage">
-        <div id="mesh-surface" class="mesh-surface"></div>
-        <div class="mesh-zoom" role="group" aria-label="Zoom">
-          <button id="mesh-zoom-in" type="button" title="Zoom in">+</button>
-          <button id="mesh-zoom-out" type="button" title="Zoom out">−</button>
-          <button id="mesh-zoom-fit" type="button" title="Fit the whole landscape">Fit</button>
-          <button id="mesh-release" type="button" disabled
-            title="Put every node you have dragged back where the layout puts it">Release</button>
+      <div class="mesh-plot">
+        <!-- The stage is the canvas and the controls that float over it, and nothing
+             else: the surface's contents are replaced on every repaint, so anything
+             inside it is drawn once and then gone. -->
+        <div class="mesh-stage">
+          <div id="mesh-surface" class="mesh-surface"></div>
+          <div class="mesh-zoom" role="group" aria-label="Zoom">
+            <button id="mesh-zoom-in" type="button" title="Zoom in">+</button>
+            <button id="mesh-zoom-out" type="button" title="Zoom out">−</button>
+            <button id="mesh-zoom-fit" type="button" title="Fit the whole landscape">Fit</button>
+            <button id="mesh-release" type="button" disabled
+              title="Put every node you have dragged back where the layout puts it">Release</button>
+          </div>
         </div>
+        <!-- The key sits under the picture: it is a reference, consulted while looking
+             at the canvas rather than read on the way to it, and above the picture it
+             pushed the thing it explains down the page. Under the canvas and not under
+             the whole body, so it stays against the picture rather than below
+             whichever of the two columns happens to be taller. -->
+        <div id="mesh-legend-slot"></div>
       </div>
       <aside class="mesh-side">
         <div class="mesh-controls">
