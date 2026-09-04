@@ -401,6 +401,7 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 		elementStepInstancePrefix(piKey),
 		elementReplayInstancePrefix(piKey),
 		elementVisitInstancePrefix(procDefKey, piKey),
+		elementTerminationInstancePrefix(procDefKey, piKey),
 		variableSnapshotScopePrefix(piKey),
 		variableAuditScopePrefix(piKey),
 		decisionEvaluationScopePrefix(piKey),
@@ -1024,6 +1025,14 @@ func (t *Tx) IncElementVisitAgg(procDefKey uint64, elementId int32) error {
 	return t.mergeCounter(keyElementVisitAgg(procDefKey, elementId), 1)
 }
 
+// IncElementTerminationAgg bumps a definition-element cumulative-termination count
+// when a token leaves the element cancelled instead of completed. Never decremented —
+// it is the retained historical half of the heatmap that says a token got here and
+// then did *not* go on (ADR-draft-overlay-cancelled-tokens).
+func (t *Tx) IncElementTerminationAgg(procDefKey uint64, elementId int32) error {
+	return t.mergeCounter(keyElementTerminationAgg(procDefKey, elementId), 1)
+}
+
 // --- Element-visit history ---
 //
 // Every time a token activates an element, its per-(definition, instance,
@@ -1041,6 +1050,18 @@ func (t *Tx) IncElementVisitAgg(procDefKey uint64, elementId int32) error {
 func (t *Tx) RecordElementVisit(procDefKey, piKey uint64, elementId int32) error {
 	t.scratch = appendCounter(t.scratch[:0], 1)
 	return t.b.Merge(keyElementVisit(procDefKey, piKey, elementId), t.scratch, nil)
+}
+
+// RecordElementTermination adds one to the termination counter for an element
+// instance's element. Called from applyToState when an element instance is terminated
+// — the losing branch of an event-based gateway, a scope torn down, an activity
+// interrupted by a boundary event — so the retained heatmap can tell a token that
+// completed here from one that was cancelled here. A write-only Merge like the visit
+// counter beside it, so it neither reads nor allocates on the hot path (I1) and
+// rebuilds identically on replay (I4).
+func (t *Tx) RecordElementTermination(procDefKey, piKey uint64, elementId int32) error {
+	t.scratch = appendCounter(t.scratch[:0], 1)
+	return t.b.Merge(keyElementTermination(procDefKey, piKey, elementId), t.scratch, nil)
 }
 
 // --- Message-flow history ---

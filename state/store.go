@@ -401,6 +401,17 @@ func (q queries) ElementVisitTotals(procDefKey uint64, fn func(elementId int32, 
 	})
 }
 
+// ElementTerminationTotals calls fn with each of a definition's elements and how many
+// tokens left it cancelled rather than completed — the counterpart of
+// ElementVisitTotals, read the same way in O(elements) from a maintained counter
+// (ADR-0080, ADR-draft-overlay-cancelled-tokens). An element nothing was ever cancelled
+// on is absent, so a caller that folds this over the visit totals leaves it at zero.
+func (q queries) ElementTerminationTotals(procDefKey uint64, fn func(elementId int32, count int64) error) error {
+	return q.scanPrefix(runtimeCountPrefix(cfElementTerminationAgg, procDefKey), func(k, raw []byte) error {
+		return fn(elementIdFromCountKey(k), decodeCounter(raw))
+	})
+}
+
 // metaRuntimeCountersV1 marks that the ADR-0080 runtime counters have been seeded
 // from pre-existing state. Its presence makes the backfill a one-time migration.
 const metaRuntimeCountersV1 = "runtime_counters_v1"
@@ -1026,6 +1037,21 @@ func (q queries) ElementVisitHistory(procDefKey, instanceFilter uint64, fn func(
 	prefix := elementVisitDefPrefix(procDefKey)
 	if instanceFilter != 0 {
 		prefix = elementVisitInstancePrefix(procDefKey, instanceFilter)
+	}
+	return q.scanPrefix(prefix, func(k, raw []byte) error {
+		return fn(elementIdFromVisitKey(k), decodeCounter(raw))
+	})
+}
+
+// ElementTerminationHistory folds the token-termination counters for a process
+// definition, calling fn with each element index and how many tokens were cancelled on
+// it — the same scan shape as ElementVisitHistory, over the same key layout, so the two
+// halves of "a token was here and left" are read identically. instanceFilter == 0
+// aggregates the definition's instances; a non-zero one isolates that instance.
+func (q queries) ElementTerminationHistory(procDefKey, instanceFilter uint64, fn func(elementId int32, count int64) error) error {
+	prefix := elementTerminationDefPrefix(procDefKey)
+	if instanceFilter != 0 {
+		prefix = elementTerminationInstancePrefix(procDefKey, instanceFilter)
 	}
 	return q.scanPrefix(prefix, func(k, raw []byte) error {
 		return fn(elementIdFromVisitKey(k), decodeCounter(raw))

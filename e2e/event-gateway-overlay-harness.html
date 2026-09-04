@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas event-gateway overlay e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js live view against a mock `api` serving one
+         deferred choice (ADR-0110) mid-race: three instances have reached the gateway,
+         two are still waiting on both of its branches, one was decided by the message.
+         The engine parks a token on every armed branch and none on the gateway, so drawn
+         literally the diagram counts one wait twice and shows both branches the identical
+         number whatever actually happened. The overlay has to read the other way round:
+         the race counted once, on the gateway; the branches marked armed; and the losing
+         branch's cancelled token told apart from the winner's completed one
+         (ADR-draft-overlay-cancelled-tokens). -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+      /* Read-only here: the palette would only intercept clicks meant for the shapes. */
+      .djs-palette { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountLive } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000;
+      const ns = (ms) => ms * 1e6;
+      const DEF = 5;
+      window.__DEF = DEF;
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_gw" targetNamespace="http://atlas/bpmn">
+  <bpmn:message id="Msg_go" name="go"/>
+  <bpmn:process id="race" name="Antwort oder Timeout" isExecutable="true">
+    <bpmn:startEvent id="start"><bpmn:outgoing>f1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:eventBasedGateway id="gw" name="nächstes Ereignis">
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing><bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="reply" name="Antwort">
+      <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f4</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="med" messageRef="Msg_go"/>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="timeout" name="Timeout">
+      <bpmn:incoming>f3</bpmn:incoming><bpmn:outgoing>f5</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="ted"><bpmn:timeDuration>PT30S</bpmn:timeDuration></bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="end_reply"><bpmn:incoming>f4</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="end_timeout"><bpmn:incoming>f5</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="gw"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="gw" targetRef="reply"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="gw" targetRef="timeout"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="reply" targetRef="end_reply"/>
+    <bpmn:sequenceFlow id="f5" sourceRef="timeout" targetRef="end_timeout"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="race">
+    <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="150" y="180" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="gw_di" bpmnElement="gw"><dc:Bounds x="250" y="173" width="50" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="reply_di" bpmnElement="reply"><dc:Bounds x="380" y="100" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="timeout_di" bpmnElement="timeout"><dc:Bounds x="380" y="260" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="end_reply_di" bpmnElement="end_reply"><dc:Bounds x="500" y="100" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="end_timeout_di" bpmnElement="end_timeout"><dc:Bounds x="500" y="260" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="186" y="198"/><di:waypoint x="250" y="198"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="275" y="173"/><di:waypoint x="275" y="118"/><di:waypoint x="380" y="118"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="275" y="223"/><di:waypoint x="275" y="278"/><di:waypoint x="380" y="278"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><di:waypoint x="416" y="118"/><di:waypoint x="500" y="118"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><di:waypoint x="416" y="278"/><di:waypoint x="500" y="278"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // Three instances reached the gateway. Two are still racing — each holding a token
+      // on *both* branches, which is what the engine really stores. The third was decided
+      // by the message: its reply catch completed and moved on, its timer catch was
+      // cancelled. So the two branches have identical visits and identical live tokens,
+      // and differ only in `terminated` — the number that says which event actually came.
+      const ELEMENTS = [
+        { elementId: "start", type: "bpmn:StartEvent", tokens: 0, visits: 3, terminated: 0, incidents: 0 },
+        { elementId: "gw", type: "bpmn:EventBasedGateway", tokens: 0, visits: 3, terminated: 0, incidents: 0 },
+        { elementId: "reply", type: "bpmn:IntermediateCatchEvent", tokens: 2, visits: 3, terminated: 0, incidents: 0 },
+        { elementId: "timeout", type: "bpmn:IntermediateCatchEvent", tokens: 2, visits: 3, terminated: 1, incidents: 0 },
+        { elementId: "end_reply", type: "bpmn:EndEvent", tokens: 0, visits: 1, terminated: 0, incidents: 0 },
+      ];
+
+      const instances = [
+        { key: 900001, processDefKey: DEF, state: "active", createdAt: ns(T), variables: [] },
+        { key: 900002, processDefKey: DEF, state: "active", createdAt: ns(T + 1000), variables: [] },
+      ];
+
+      const api = async (method, url) => {
+        if (url === "/api/v1/processes") {
+          return [{ key: DEF, processId: "race", name: "Antwort oder Timeout", version: 1 }];
+        }
+        if (/\/processes\/\d+\/xml$/.test(url)) return XML;
+        if (url.startsWith("/api/v1/instances?process=")) {
+          const state = new URL(url, location.origin).searchParams.get("state");
+          return state === "finished" ? [] : instances;
+        }
+        if (url === "/api/v1/tasks") return [];
+        if (url.includes("/runtime")) {
+          return {
+            instances: 2, finished: 1, tokens: 4,
+            incidents: [], incidentsTruncated: false,
+            elements: ELEMENTS,
+          };
+        }
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        return {};
+      };
+      const apiRaw = async (method, url, body) => ({ data: await api(method, url, body), headers: new Headers() });
+
+      window.__mountLive = () => mountLive(view, { api, apiRaw, toast: noop, key: DEF });
+      window.__ready = true;
+    </script>
+  </body>
+</html>
