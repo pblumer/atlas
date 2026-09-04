@@ -6,7 +6,7 @@
 **Audit date:** 2026-09-04
 **Scope:** `api/web/` (44 ES modules, `app.css`, `index.html`) and `e2e/` (76 specs),
 audited against the two records proposed in
-[`draft-one-route-table-for-the-shell.md`](../adr/draft-one-route-table-for-the-shell.md)
+[`draft-every-route-says-where-it-is.md`](../adr/draft-every-route-says-where-it-is.md)
 and [`draft-shared-ui-primitives.md`](../adr/draft-shared-ui-primitives.md).
 Engine, compiler, state and API packages are out of scope — neither record touches them.
 
@@ -20,8 +20,8 @@ inconsistency rather than as failure.
 |---|---:|---|
 | Routes served by the hash router | 41 | One dispatcher, four further lists describing the same routes |
 | Lists that must agree per route | 5 | `route()`, `TOPNAV`+`setChrome`, `routeTitle`, help mapping, `fullBleed` |
-| Routes with no active navigation entry | 15 | Every detail/deep-link route |
-| Routes with no page title | 8 | Tab reads a bare `Atlas` |
+| Routes with no active navigation entry | 15 | Every detail/deep-link route — fixed on this branch |
+| Routes with no page title | 8 | Tab read a bare `Atlas` — fixed on this branch |
 | Canvas views missing full-bleed layout | 3 | DMN viewer, class canvas, Panorama model |
 | Distinct "way back" markup shapes | 4 | Plus views with none |
 | Dialogs built by hand | 22 in 10 files | 8 CSS class families for one object |
@@ -65,7 +65,7 @@ same blind spot today. See §7.
 2026-08-31 to 2026-09-04). Change-frequency figures below are a lower bound over
 the visible window, not a project-lifetime rate.
 
-## 3. Against `draft-one-route-table-for-the-shell`
+## 3. Against `draft-every-route-says-where-it-is`
 
 ### 3.1 The five lists, measured
 
@@ -224,11 +224,21 @@ effort; the figures below are what a planner needs to form their own estimate.
 | Defects closed on landing | 30 named symptoms | 1 named (focus), plus the visual inconsistency |
 | Defects prevented afterwards | The whole class — a missing field fails a test | The whole class for buttons and dialogs |
 
-**The strongest argument for the route table is not the 30 symptoms.** It is that
-none of them is currently detectable without a browser: today the only way to
-learn that a route has no title is to visit it. A table turns five hand-checked
-properties into fields a unit test can require of every row. That is a change in
-what the project can know about its own UI, and it does not decay.
+**The argument this audit first made for the route table does not hold.** It said
+the symptoms were not detectable without a browser, and that a table would turn
+five hand-checked properties into fields a unit test could require. The first half
+is true and the second does not follow: this project runs six hundred browser
+tests, so "needs a browser" is not a cost. A test that walks every route and
+asserts what a reader gets closes the same class of defect — for a tenth of the
+work and none of the blast radius.
+
+That is what was done on this branch (`e2e/route-sweep.spec.mjs`, and the record
+renamed to `draft-every-route-says-where-it-is`): the eight missing titles were
+added, the active-entry match became the longest entry a route sits under rather
+than string equality, and both are now asserted for every route the dispatcher
+serves. What the table would still buy is one entry instead of five when a surface
+is added, plus the two properties the sweep does not assert — which chrome a route
+gets, and where its way back points.
 
 **The strongest argument against doing it now is churn.** `app.js` is the
 highest-churn file in the tree. A structural rewrite of its router is a
@@ -250,8 +260,8 @@ disjoint code. If both are accepted, the low-risk order is:
    days, and it establishes the "primitive plus test" pattern cheaply.
 2. **Dialog opener** — 22 sites, each independently reviewable, closing the focus
    defect on the way through.
-3. **Route table** — one pass, landed quickly to avoid churn, with the table
-   assertions written first (they are what makes the change worth its risk).
+3. **Route sweep** — the test first, then the two repairs it demands. Done on
+   this branch; it is what the route table's risk was being spent on.
 4. **Editor-bar builder** — last, because it is the one whose design question is
    genuinely open, and because the three before it will have shown whether the
    primitive-plus-test pattern holds in this codebase.

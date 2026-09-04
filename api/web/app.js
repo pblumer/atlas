@@ -972,8 +972,17 @@ function setChrome(appId, route) {
     (APPS.find((a) => a.id === appId) || {}).name || "Atlas";
   paintApps();
   const topnav = document.getElementById("topnav");
-  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => mayUse(t.role)).map((t) =>
-    `<a href="${t.route}" class="${t.route === route ? "active" : ""}">${t.name}` +
+  // Which entry is on. A detail route is inside a section, not beside it, so the
+  // match is the longest entry the route sits under rather than string equality:
+  // #/operations/i/9 belongs to Instances, and #/operations/decisions/x to Decisions
+  // rather than to Instances, which is what "longest" buys over "starts with".
+  // Equality alone left every deep link marking nothing at all
+  // (ADR-draft-every-route-says-where-it-is; e2e/route-sweep.spec.mjs).
+  const offered = (TOPNAV[appId] || []).filter((t) => mayUse(t.role));
+  const under = offered.filter((t) => route === t.route || route.startsWith(t.route + "/"));
+  const on = under.sort((a, b) => b.route.length - a.route.length)[0];
+  topnav.innerHTML = offered.map((t) =>
+    `<a href="${t.route}" class="${on && t.route === on.route ? "active" : ""}">${t.name}` +
     (t.badge ? `<span class="nav-badge" data-badge="${t.badge}" hidden></span>` : "") + `</a>`
   ).join("");
   syncIncidentBadge(appId); // the nav says how many tokens are stuck, before anything is opened
@@ -8285,6 +8294,8 @@ function routeTitle(path) {
     [/^#\/console\/backup$/, "Backup · Console"],
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/console\/workers$/, "Workers · Console"],
+    [/^#\/console\/ai-access$/, "AI access · Console"],
+    [/^#\/console\/audit$/, "Audit log · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
     [/^#\/modeler\/form\//, "Form · Modeler"],
@@ -8296,6 +8307,12 @@ function routeTitle(path) {
     [/^#\/tasks\/start$/, "Start a process · Tasks"],
     [/^#\/tasks\/t\//, "Task · Tasks"],
     [/^#\/tasks$/, "Tasks"],
+    [/^#\/operations\/incidents$/, "Incidents · Operations"],
+    [/^#\/operations\/workers$/, "Workers · Operations"],
+    [/^#\/operations\/outbox$/, "Outbox · Operations"],
+    [/^#\/operations\/ad-mock$/, "Mock directory · Operations"],
+    [/^#\/operations\/sql-mock$/, "Mock database · Operations"],
+    [/^#\/operations\/call-activities$/, "Call activities · Operations"],
     [/^#\/operations\/decisions\//, "Decision · Operations"],
     [/^#\/operations\/decisions$/, "Decisions · Operations"],
     [/^#\/operations\/c\//, "Collaboration · Operations"],

@@ -1,4 +1,4 @@
-# ADR-DRAFT: One route table describes the shell
+# ADR-DRAFT: Every route says where it is
 
 - **Status:** Proposed
 - **Date:** 2026-09-04
@@ -83,6 +83,9 @@ do over thirty-five routes.
 1. **Repair the five lists in place.** Make the active-entry match a prefix,
    add the eight missing titles, add the three missing canvases to `fullBleed`,
    and settle on one breadcrumb markup.
+1b. **Repair them, and add a test that walks every route** and asserts what a
+   reader should get from it, so the class of defect cannot come back even though
+   the five lists remain five.
 2. **One declarative route table.** A single array of route descriptors — the
    pattern, the app, the view handler, the title, the navigation entry it
    belongs under, the help chapter, the chrome, the parent route, the role.
@@ -92,56 +95,65 @@ do over thirty-five routes.
 
 ## Decision outcome
 
-Chosen option: **"One declarative route table"** (option 2).
+Chosen option: **"Repair the lists, and guard them with a route sweep"**
+(option 1b) — with the route table (option 2) held as a named option rather than
+taken now.
 
-A route is described once, as data:
+The first draft of this record chose the table, on the argument that the thirty
+symptoms were not detectable without a browser. That argument does not hold: the
+project runs six hundred browser tests, so "needs a browser" is not a cost here.
+Once a test can walk every route and say what is missing, the table is no longer
+what makes the shell checkable — it is only what makes it cheaper to extend.
 
-```js
-{ pattern: /^#\/operations\/i\/(\d+)$/, app: "operations", nav: "#/operations",
-  title: (m) => `Instance ${m[1]}`, help: "betrieb", chrome: "default",
-  parent: "#/operations", role: "operator", view: (m) => viewInstanceReplay(+m[1]) }
-```
+So the defects are fixed where they are, and `e2e/route-sweep.spec.mjs` walks
+every route the dispatcher serves and asserts two things a reader should always
+get:
 
-`route()` finds the first descriptor whose pattern matches and does what it says:
-set the app name, mark `nav` active, compose the title, point the help menu at
-`help`, apply `chrome`, render `view`. `setChrome` stops deciding anything —
-it applies. The four hand-maintained lists become one, and the properties that
-used to be forgotten one at a time become fields that a test can require of
-every row.
+- **the browser tab names the page** — `routeTitle` gained the eight rules it was
+  missing, six of them because `/^#\/operations$/` is anchored and no page under
+  Operations inherited from it;
+- **the secondary navigation marks where the route sits** — `setChrome` now finds
+  the longest entry the route sits under instead of comparing strings, so
+  `#/operations/i/9` marks Instances and `#/operations/decisions/x` marks
+  Decisions rather than Instances. Equality alone left every deep link marking
+  nothing.
 
-The distinction between where a route *is* and where it *sits* becomes explicit:
-`nav` names the navigation entry to mark (so a detail route marks its section)
-and `parent` names the route one level up (so a detail view renders one
-breadcrumb shape from data instead of hand-writing its own). A page that is
-itself a navigation entry has `nav` equal to its own route and no `parent`.
+The test carries its own list of routes, which is a sixth list and deliberately
+so: a test that read the router's own tables could only agree with them. Adding a
+route means adding a line there, and that line is what fails when the new route
+has no title.
 
-What does not change: the re-entrancy guard. `navGen` and the `superseded(gen)`
-checks stay exactly as they are — they solve a different problem (a handler
-landing after a newer navigation), and `router-reentrancy.spec.mjs` keeps
-guarding them.
+**What the table would still buy, and when to take it.** One entry instead of
+five when a surface is added, and the two properties this sweep does not assert —
+which chrome a route gets (`fullBleed` still names five routes by substring and
+misses three canvases) and where a route's way back points (four markup shapes,
+and some views with none). Neither is a defect a reader would call a bug, and
+both are why the table is worth keeping on the table. Take it when adding a
+surface has been five edits often enough to be felt, or when the way back is
+being unified anyway — with the sweep already in place, so the migration has
+something to prove itself against.
+
+What does not change either way: the re-entrancy guard. `navGen` and the
+`superseded(gen)` checks stay exactly as they are — they solve a different problem
+(a handler landing after a newer navigation), and `router-reentrancy.spec.mjs`
+keeps guarding them.
 
 ### Consequences
 
-- **Positive:** a new surface is one row. A test over the table can assert what
-  no test can assert today — every route has a title, an anchor in the
-  navigation, a help chapter and a reachable parent; every `nav` value names a
-  real `TOPNAV` entry; every `role` is one `mayUse` knows. Those are table
-  assertions in a plain unit test, not Playwright runs.
-- **Negative / trade-offs accepted:** a migration inside an 8'479-line file,
-  touching the router, the chrome and every view handler's entry point. Pattern
-  order becomes load-bearing and has to be stated as such — first match wins,
-  which is what the current prefix tests already rely on silently
-  (`#/operations/decisions` before `#/operations`). The table is a fifth shape
-  until the four it replaces are gone, so the migration is worth doing in one
-  pass rather than route by route.
-- **Follow-ups / risks to watch:** the `#/console/connectors` → `#/console/workers`
-  redirect (the pre-ADR-0203 spelling) is a rewrite, not a view, and needs a
-  place in the table rather than a special case before it. The 67
-  `href="#/…"` literals across the views keep pointing at routes by hand; the
-  table does not make them safe, and a later test that checks every literal
-  against it would. Whether `parent` should be a route or a stack (a form inside
-  a project inside the Modeler) is open — a single level covers every current
-  view, and the field can grow.
+- **Positive:** the two defects a reader meets — an unnamed tab, a navigation bar
+  that marks nothing — are gone across all forty-one routes, and a forty-second
+  route cannot reintroduce them silently. The cost was two rules and one comparison,
+  in a file that is the highest-churn in the tree, rather than a rewrite of its
+  router.
+- **Negative / trade-offs accepted:** the five lists are still five, so adding a
+  surface is still five edits in four shapes — two of which now fail a test when
+  forgotten, and three of which do not. The sweep's route list has to be kept in
+  step by hand; it is one more list, and the one that is supposed to disagree.
+- **Follow-ups / risks to watch:** `fullBleed` and the way back are unasserted, and
+  both are what the table would settle. The longest-prefix match is a rule about
+  route shape: a future entry that is a prefix of an unrelated route would mark the
+  wrong section, which the sweep would not catch because it only counts that
+  *something* is marked.
 
 ## Pros and cons of the options
 
@@ -150,7 +162,14 @@ guarding them.
 - Bad: leaves five lists to keep in step, so the next surface re-opens the same
   gaps. Nothing fails when an entry is forgotten, which is the actual defect.
 
-### Option 2 — One declarative route table (chosen)
+### Option 1b — Repair them, and sweep every route (chosen)
+- Good: closes the same gaps and, unlike option 1, makes the class of defect fail
+  a test. A tenth of the work of the table and none of its blast radius.
+- Bad: does not reduce five lists to one, so the maintenance cost stays; and it
+  asserts what a reader gets, not what a route declares, so chrome and the way
+  back stay outside it.
+
+### Option 2 — One declarative route table
 - Good: one place to add a surface; the shell's decisions become data and
   therefore testable without a browser; the "where am I" and "where does this
   sit" questions get explicit fields.
