@@ -9566,15 +9566,23 @@ export async function mountTaskProcess(container, { api, instanceKey, activeElem
   // note says, briefly and where the gesture happened, why a double-click did
   // nothing — a call activity the token has not reached has no child to descend
   // into, and silence would read as a broken affordance.
+  //
+  // It gets its own strip along the *bottom* of the canvas rather than joining the
+  // descent's bar at the top. A diagram is drawn from its top-left, so a message up
+  // there lands on the elements it is about; the space under a short process is the
+  // one part of this panel that is reliably empty.
   const note = (msg) => {
     if (destroyed || !container) return;
-    let bar = container.querySelector(".tp-drill");
-    if (!bar) { bar = document.createElement("div"); bar.className = "tp-drill"; container.appendChild(bar); }
-    let el = bar.querySelector(".tp-drill-note");
-    if (!el) { el = document.createElement("span"); el.className = "tp-drill-note"; bar.appendChild(el); }
-    el.textContent = msg;
+    let bar = container.querySelector(".tp-drill.tp-drill-bottom");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.className = "tp-drill tp-drill-bottom";
+      bar.innerHTML = `<span class="tp-drill-note"></span>`;
+      container.appendChild(bar);
+    }
+    bar.querySelector(".tp-drill-note").textContent = msg;
     if (noteTimer) clearTimeout(noteTimer);
-    noteTimer = setTimeout(() => { if (el.parentNode) el.remove(); noteTimer = null; }, 5000);
+    noteTimer = setTimeout(() => { bar.remove(); noteTimer = null; }, 5000);
   };
 
   let lib;

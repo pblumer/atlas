@@ -2158,6 +2158,9 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px; pointer-events: none;
 }
 .tp-drill > * { pointer-events: auto; }
+/* The transient note sits along the bottom instead: a diagram is drawn from its
+   top-left, so a message at the top covers the elements it is about. */
+.tp-drill-bottom { top: auto; bottom: 8px; }
 .tp-drill-back {
   border: 1px solid var(--border); background: var(--surface); color: var(--text);
   border-radius: 999px; padding: 3px 11px; cursor: pointer;
