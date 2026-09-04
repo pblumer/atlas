@@ -186,3 +186,66 @@ test("the accounts chapter names the four roles and the cost of federating them"
     await expect(chapter).toContainText(text);
   }
 });
+
+// Panorama and Data are two of the six apps the shell offers, and the handbook
+// taught neither for a while — it still said "the four apps" while app.js had six.
+// A missing chapter is invisible in a way a wrong sentence is not: nothing fails,
+// nobody notices, and the app that goes undocumented is the one nobody discovers.
+// These hold the two chapters, in both languages, and hold the count itself.
+test("the landscape and data chapters exist, in both languages", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  for (const anchor of ["#panorama", "#infomodell"]) {
+    await expect(page.locator(`#toc a[href="${anchor}"]`)).toBeVisible();
+    await expect(page.locator(`main section${anchor}`)).toHaveCount(1);
+  }
+
+  // Each chapter has to carry the load-bearing fact of its subject in whichever
+  // language is on screen. A chapter that exists in one is half a chapter.
+  for (const [lang, panorama, infomodel] of [
+    ["de", "abgeleitet", "Business Key"],
+    ["en", "derived", "business key"],
+  ]) {
+    await page.click(`#lang-${lang}`);
+    await expect(page.locator("#panorama").locator(`[data-l="${lang}"]`, { hasText: panorama }).first())
+      .toBeVisible();
+    await expect(page.locator("#infomodell").locator(`[data-l="${lang}"]`, { hasText: infomodel }).first())
+      .toBeVisible();
+  }
+});
+
+test("the welcome chapter offers all six apps, Panorama and Data included", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  const cards = page.locator("#willkommen .grid2 .card");
+  await expect(cards).toHaveCount(6);
+  // The routes matter more than the names: a card that names an app but links
+  // somewhere else is the failure a reader meets rather than reads.
+  for (const route of ["/#/console", "/#/modeler", "/#/tasks", "/#/operations",
+    "/#/panorama/landscape", "/#/data"]) {
+    await expect(cards.locator(`a[href="${route}"]`)).toHaveCount(1);
+  }
+});
+
+// The Playground is the Modeler tab that answers "what does this model do with
+// *this* data" — the question the token simulation deliberately does not answer.
+// It sits inside the test chapter rather than owning one, so the card that names
+// it is the only way a reader finds it, and the anchor it points at has to exist.
+test("the test chapter leads to the Playground", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  // The page picks its language from navigator.language when nobody has chosen,
+  // so a test that does not choose is testing whichever locale the runner has.
+  // The card has to lead there in both.
+  for (const lang of ["de", "en"]) {
+    await page.click(`#lang-${lang}`);
+    await expect(page.locator(`#testen [data-l="${lang}"] a[href="#playground"]`).first()).toBeVisible();
+  }
+  await expect(page.locator("#playground")).toHaveCount(1);
+});

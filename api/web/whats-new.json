@@ -2,6 +2,77 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-handbook-is-caught-up-with-the-product-six-apps-the-play",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The handbook now covers all six apps",
+        "de": "Das Handbuch deckt jetzt alle sechs Apps ab"
+      },
+      "summary": {
+        "en": "Two of the six apps in the grid menu were not in the handbook at all: Panorama, which shows the landscape of everything deployed and how it hangs together, and Data, where you say what an order actually is across all your processes. Both now have a chapter, in German and English. So does the Playground — the Modeler tab that runs your draft against two hundred cases on the real engine, without deploying anything — and the two Console screens for connecting an AI assistant and reading who shared what with whom. The help menu's On this page entry points at the right chapter from those screens now, instead of dropping you at the top of the handbook.",
+        "de": "Zwei der sechs Apps im Rastermenü kamen im Handbuch überhaupt nicht vor: Panorama, das die Landschaft alles Deployten und ihre Zusammenhänge zeigt, und Data, wo festgehalten wird, was ein Auftrag über alle Prozesse hinweg tatsächlich ist. Beide haben jetzt ein Kapitel, auf Deutsch und Englisch. Ebenso der Playground — der Modeler-Tab, der Ihren Entwurf mit zweihundert Fällen auf der echten Engine durchrechnet, ohne etwas zu deployen — und die zwei Console-Seiten für den Anschluss eines KI-Assistenten und dafür, wer was mit wem geteilt hat. Der Eintrag «Auf dieser Seite» im Hilfemenü führt von diesen Bildschirmen nun ins passende Kapitel, statt an den Anfang des Handbuchs."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Handbook"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Panorama",
+          "de": "Panorama öffnen"
+        },
+        "route": "#/panorama/landscape"
+      }
+    },
+    {
+      "id": "a-search-term-found-more-than-it-was-asked-for",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A search finds what you typed, not what resembles it",
+        "de": "Die Suche findet, was du eingibst — nicht, was ihm ähnelt"
+      },
+      "summary": {
+        "en": "kdnr=MT-100 also returned MT-10001. Every search term was quietly widened into a substring, so naming one customer gave you a list holding another beside it, with no way to ask about only the one you meant. Worse, it was not consistent: a variable the model declared searchable was matched exactly, any other as a substring — so the same query meant two things depending on the model, which you cannot see from the search box. A term is now matched whole. Widen it yourself with * for any run of characters and ? for exactly one, so *MT-1* is the old behaviour asked for explicitly, and write \\* or \\? to search for those characters themselves. The same rule now guards bulk termination, where an unasked-for widening selected instances you had not named.",
+        "de": "kdnr=MT-100 lieferte auch MT-10001. Jeder Suchbegriff wurde still zu einem Teilstring erweitert — wer einen Kunden benannte, bekam einen zweiten danebengestellt, ohne Möglichkeit, nur nach dem gemeinten zu fragen. Schlimmer noch: es war nicht einmal einheitlich. Eine vom Modell als searchable deklarierte Variable wurde exakt getroffen, jede andere als Teilstring — dieselbe Anfrage bedeutete also je nach Modell zwei verschiedene Dinge, und das sieht man dem Suchfeld nicht an. Ein Begriff wird jetzt vollständig verglichen. Erweitern tust du selbst: * steht für beliebig viele Zeichen, ? für genau eines, *MT-1* ist also das alte Verhalten, ausdrücklich verlangt; \\* und \\? suchen nach den Zeichen selbst. Dieselbe Regel schützt jetzt auch die Massenbeendigung, wo eine ungefragte Erweiterung Instanzen ausgewählt hat, die du nicht benannt hattest."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Search"
+      ],
+      "tutorial": {
+        "en": [
+          "In Operations, open a version's live view and type a full value into the search box beside the diagram — kdnr=MT-100 now finds MT-100 and nothing else.",
+          "Add * where you want any run of characters: kdnr=MT-1* for everything starting with MT-1, *MT-1* for everything containing it.",
+          "Use ? for exactly one character: kdnr=MT-10? matches MT-100 and MT-10X, but not MT-1000.",
+          "To search for a literal star or question mark, escape it: kdnr=10\\* finds the value 10*."
+        ],
+        "de": [
+          "In Operations die Live-Ansicht einer Version öffnen und einen vollständigen Wert in das Suchfeld neben dem Diagramm eingeben — kdnr=MT-100 findet jetzt MT-100 und sonst nichts.",
+          "Ein * setzen, wo beliebig viele Zeichen stehen dürfen: kdnr=MT-1* für alles, was mit MT-1 beginnt, *MT-1* für alles, worin es vorkommt.",
+          "? steht für genau ein Zeichen: kdnr=MT-10? trifft MT-100 und MT-10X, aber nicht MT-1000.",
+          "Für einen echten Stern oder ein Fragezeichen das Zeichen maskieren: kdnr=10\\* findet den Wert 10*."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "a-widened-properties-column-in-the-form-editor-gave-its-widt",
       "version": "Unreleased",
       "date": null,
@@ -27,6 +98,53 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
+      }
+    },
+    {
+      "id": "the-live-diagram-tells-a-token-that-got-through-from-one-tha",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The diagram now says which event actually arrived",
+        "de": "Das Diagramm sagt jetzt, welches Ereignis wirklich eingetroffen ist"
+      },
+      "summary": {
+        "en": "Every element on the live diagram carries two counts: how many tokens sit there now, in green, and how many have been there, in gray. The gray one counted every token that had arrived and left again — whether it finished and moved on, or was cancelled. Nowhere did that hurt more than at an event-based gateway, the \"wait for a reply, otherwise time out\" pattern: the engine arms every branch at once, so one waiting case holds a token on each of them, and every decided race leaves one branch completed and the other cancelled. Both branches therefore showed the same two numbers whatever had happened — 10 941 gray and 50 002 green on the message branch, and exactly the same on the timer branch, which reads as \"both events arrive equally often\" and never meant that. Two things change. Gray now means completed here and moved on, and a new amber count means cancelled here — so at each branch you can read how often that event actually came, and how often the other one beat it. And the race itself is drawn as the one wait it is: the green count sits on the gateway, and the events behind it are marked \"armed\" instead of each repeating that count. Counting starts with this release: cancellations that happened before it were never recorded, so the amber number begins at zero on an existing engine.",
+        "de": "Jedes Element im Live-Diagramm trägt zwei Zahlen: wie viele Token gerade hier liegen (grün) und wie viele schon hier waren (grau). Die graue zählte jeden Token, der angekommen und wieder weg war — egal ob er fertig weitergelaufen oder abgebrochen worden ist. Nirgends störte das mehr als am ereignisbasierten Gateway, dem Muster „warte auf Antwort, sonst Timeout“: die Engine macht alle Zweige gleichzeitig scharf, ein wartender Fall hält also auf jedem Zweig einen Token, und jedes entschiedene Rennen lässt einen Zweig abgeschlossen und den anderen abgebrochen zurück. Beide Zweige zeigten deshalb dieselben zwei Zahlen, was auch immer passiert war — 10 941 grau und 50 002 grün am Nachrichten-Zweig und genau dasselbe am Timer-Zweig, was sich liest wie „beide Ereignisse treffen gleich oft ein“ und das nie bedeutet hat. Zwei Dinge ändern sich. Grau heisst jetzt hier abgeschlossen und weitergelaufen, und eine neue bernsteinfarbene Zahl heisst hier abgebrochen — am Zweig selbst steht also, wie oft dieses Ereignis wirklich kam und wie oft das andere schneller war. Und das Rennen wird als das eine Warten gezeichnet, das es ist: die grüne Zahl steht am Gateway, die Ereignisse dahinter sind nur noch als „armed“ markiert. Gezählt wird ab dieser Version: Abbrüche davor wurden nie erfasst, die bernsteinfarbene Zahl beginnt auf einer bestehenden Engine also bei null."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Events"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations › Processes and pick a process with an event-based gateway — the handbook's \"Antwort oder Timeout\" recipe deploys one in a click.",
+          "Start an instance. The green count appears on the gateway itself; the two events behind it are outlined dashed and say \"armed\".",
+          "Let one branch win: the recipe's ▶ Try it button publishes the message for you (or POST it yourself to /api/v1/messages).",
+          "The branch that won carries a gray 1 — completed here and moved on. The branch that lost carries an amber 1 — cancelled here.",
+          "Hover either badge: the tooltip spells out which of the two it is.",
+          "Switch the instance picker from \"All instances\" to a single one to read the same thing for that case alone."
+        ],
+        "de": [
+          "Öffnen Sie Operations › Processes und wählen Sie einen Prozess mit ereignisbasiertem Gateway — das Rezept „Antwort oder Timeout“ im Handbuch deployt einen per Klick.",
+          "Starten Sie eine Instanz. Die grüne Zahl steht am Gateway selbst; die beiden Ereignisse dahinter sind gestrichelt umrandet und mit „armed“ markiert.",
+          "Lassen Sie einen Zweig gewinnen: Der Knopf ▶ Ausprobieren im Rezept publiziert die Nachricht (oder Sie schicken sie selbst per POST an /api/v1/messages).",
+          "Der Zweig, der gewonnen hat, trägt eine graue 1 — hier abgeschlossen und weitergelaufen. Der unterlegene trägt eine bernsteinfarbene 1 — hier abgebrochen.",
+          "Fahren Sie über eine der Zahlen: der Tooltip sagt, welche der beiden es ist.",
+          "Stellen Sie die Instanzauswahl von „All instances“ auf eine einzelne um — dieselbe Lesart, nur für diesen Fall."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
       }
     },
     {
@@ -212,86 +330,6 @@
       "summary": {
         "en": "Searching a directory, adding an entry, changing a password — until now Atlas did all three from the process that runs the engine, so a slow or unreachable directory held up work that had nothing to do with it. They run in a worker Atlas starts and supervises itself now. Nothing to configure: the bind passwords and client certificates your models reference are handed to that worker, and the pooled connections that make repeat binds cheap move along with them.",
         "de": "Ein Verzeichnis durchsuchen, einen Eintrag anlegen, ein Passwort ändern — bisher machte Atlas alle drei im Prozess, der die Engine ausführt, sodass ein langsames oder nicht erreichbares Verzeichnis Arbeit aufhielt, die nichts damit zu tun hatte. Sie laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Die Bind-Passwörter und Client-Zertifikate, die Ihre Modelle referenzieren, werden an diesen Worker übergeben — und die gepoolten Verbindungen, die wiederholte Binds günstig machen, ziehen mit um."
-      },
-      "link": {
-        "label": "ADR-0233",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
-      },
-      "tags": [
-        "Workers",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "a-non-interrupting-message-or-signal-boundary-event-now-fire",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A reminder attached to a task now fires every time, not just the first",
-        "de": "Eine Erinnerung an einer Aufgabe feuert jetzt jedes Mal, nicht nur beim ersten Mal"
-      },
-      "summary": {
-        "en": "A non-interrupting boundary event is how a model says remind me: it fires beside a running task and leaves the task running. On a timer that repeats it already fired on every occurrence — but on a message or a signal it fired once and then stopped listening, so the second message matched nothing at all: no incident, no log line, and no way for the sender to tell. It now stays armed for as long as its task runs, and every message takes the reminder branch again. A model that only ever expected to hear the first one will now hear them all; an interrupting event, or a condition on the reminder branch, is how you ask for exactly one.",
-        "de": "Ein nicht-unterbrechendes Boundary-Ereignis ist die Art, wie ein Modell «erinnere mich» sagt: Es feuert neben einer laufenden Aufgabe und lässt sie weiterlaufen. Bei einem wiederkehrenden Timer tat es das schon bisher bei jedem Mal — bei einer Nachricht oder einem Signal dagegen genau einmal, danach hörte es auf zuzuhören: Die zweite Nachricht traf auf nichts, ohne Incident, ohne Logzeile und ohne dass der Absender es hätte merken können. Es bleibt jetzt scharf, solange seine Aufgabe läuft, und jede Nachricht nimmt den Erinnerungszweig erneut. Ein Modell, das nur die erste erwartet hat, hört nun alle; wer genau eine will, nimmt ein unterbrechendes Ereignis oder eine Bedingung auf dem Erinnerungszweig."
-      },
-      "link": {
-        "label": "ADR-0236",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0236-repeating-non-interrupting-boundary-events.md"
-      },
-      "tags": [
-        "Operations",
-        "Modeler"
-      ]
-    },
-    {
-      "id": "clio-tasks-run-on-a-worker-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Event-store tasks moved out of the engine",
-        "de": "Event-Store-Tasks sind aus der Engine ausgezogen"
-      },
-      "summary": {
-        "en": "Writing an event, reading a subject's history, folding its state — until now Atlas did all three from the process that runs the engine, so a slow event store held up work that had nothing to do with it. They run in a worker Atlas starts and supervises itself now. Nothing to configure: the store you set up in Connectors is handed to that worker, including a store you reach without a token.",
-        "de": "Ein Event schreiben, die Historie eines Subjects lesen, seinen Zustand falten — bisher machte Atlas alle drei im Prozess, der die Engine ausführt, sodass ein langsamer Event-Store Arbeit aufhielt, die nichts damit zu tun hatte. Sie laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Der Store, den Sie unter Connectors eingerichtet haben, wird an diesen Worker übergeben — auch einer, den Sie ohne Token erreichen."
-      },
-      "link": {
-        "label": "ADR-0233",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
-      },
-      "tags": [
-        "Workers",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "rest-and-ldif-tasks-no-longer-run-on-the-engine-s-own-loop",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "REST calls now run in a worker, not in the engine",
-        "de": "REST-Aufrufe laufen jetzt im Worker, nicht mehr in der Engine"
-      },
-      "summary": {
-        "en": "Until now Atlas made a REST task's HTTP call from its own process — the same process that runs the engine. A slow or hung host on the other end therefore held up work that had nothing to do with it. REST and LDIF tasks now run in a worker Atlas starts and supervises itself, so a call that hangs is one worker you can see and restart in the Workers view, not a number in a timeout. Nothing to configure: authenticated REST tasks keep working, because Atlas hands the worker exactly the secrets the deployed models use.",
-        "de": "Bisher hat Atlas den HTTP-Aufruf eines REST-Tasks im eigenen Prozess gemacht — in demselben, der die Engine ausführt. Ein langsamer oder hängender Host auf der Gegenseite hielt damit Arbeit auf, die nichts damit zu tun hatte. REST- und LDIF-Tasks laufen jetzt in einem Worker, den Atlas selbst startet und überwacht: Ein hängender Aufruf ist damit ein Worker, den Sie in der Workers-Ansicht sehen und neu starten können, und keine Zahl in einem Timeout. Zu konfigurieren ist nichts — authentifizierte REST-Tasks laufen weiter, weil Atlas dem Worker genau die Geheimnisse übergibt, die die deployten Modelle verwenden."
       },
       "link": {
         "label": "ADR-0233",

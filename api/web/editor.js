@@ -8118,12 +8118,63 @@ function wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft) {
   onCalleeClick = { root, fn: onClick };
 }
 
+// eventGatewayRaces reads the deferred choices out of the diagram (ADR-0110): an
+// event-based gateway arms every branch's catch event at once, so at runtime one waiting
+// instance holds a token on *every* branch and none on the gateway. Drawn literally that
+// is misleading twice over — the same wait is counted once per branch, and two branches
+// showing the identical number look like two events that arrived equally often. So the
+// overlay draws the race where an operator looks for it: one green count on the gateway,
+// and the armed branches marked as armed rather than counted.
+//
+// A catch is only folded into its gateway's group when the gateway is its *sole* way in;
+// one reachable from somewhere else as well carries tokens that are not part of the race,
+// and keeps its own count. Returns each gateway's armed branches
+// (ADR-0249).
+function eventGatewayRaces(registry) {
+  const members = new Map(); // gateway id → [armed catch id]
+  for (const el of registry.getAll()) {
+    const bo = el.businessObject;
+    if (el.labelTarget || !bo || bo.$type !== "bpmn:EventBasedGateway") continue;
+    const armed = (el.outgoing || [])
+      .map((f) => f.target)
+      .filter((t) => t && (t.incoming || []).length === 1)
+      .map((t) => t.id);
+    if (armed.length) members.set(el.id, armed);
+  }
+  return members;
+}
+
+// tokenBadgesHTML renders an element's counts: how many tokens completed here and moved
+// on (gray), how many were cancelled here (amber), and how many are live here now
+// (green). A visit is recorded on activation, so visits already counts the live and the
+// cancelled — what moved on is the difference. Reading past → present, left to right.
+// Each badge is drawn only when non-zero, so a purely historical element keeps a single
+// gray badge and a just-entered one a single green badge (no "0", never a doubled count).
+//
+// Cancelled is its own number rather than more gray because "a token got here" and "a
+// token got through" are different facts, and merging them makes a deferred choice
+// unreadable: both branches of an event gateway are visited and both leave, so the gray
+// counts are identical whichever event actually won (ADR-0249).
+//
+// `tokens` overrides the live count (a gateway shows its race's, which the engine parks
+// on the branches) and `green` replaces the green badge outright (an armed branch says
+// "armed" instead of repeating the count its gateway already carries).
+function tokenBadgesHTML(e, { tokens = e.tokens, green = null } = {}) {
+  const cancelled = e.terminated || 0;
+  const passed = Math.max(0, e.visits - tokens - cancelled);
+  return `<div class="token-badges">` +
+    (passed > 0 ? `<div class="token-badge history" title="${passed} token(s) completed here and moved on">${passed}</div>` : "") +
+    (cancelled > 0 ? `<div class="token-badge cancelled" title="${cancelled} token(s) cancelled here — a losing event-gateway branch, an interrupted activity, or a scope torn down">${cancelled}</div>` : "") +
+    (green !== null ? green : tokens > 0 ? `<div class="token-badge" title="${tokens} live token(s)">${tokens}</div>` : "") +
+    `</div>`;
+}
+
 // mountLive renders a deployed process read-only and overlays runtime state,
 // polling for updates: elements holding a token right now are green, elements a
-// token has only passed through are gray (the history heatmap), each badged with
-// its count. This is the differentiator a standalone modeler can't offer — the
-// diagram shows where the engine's tokens are now and the distribution of where
-// they have flowed, so a finished process still tells its story.
+// token completed on are gray and ones it was cancelled on are amber (the history
+// heatmap), each badged with its count. This is the differentiator a standalone
+// modeler can't offer — the diagram shows where the engine's tokens are now and the
+// distribution of where they have flowed, so a finished process still tells its story.
 //
 // The view is organized around one process: a version picker swaps which deployed
 // definition is shown, and an instance picker either aggregates every instance's
@@ -8275,6 +8326,13 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   let searchQuery = "";     // the active instance search; "" means the plain listing
   let searchDraft = "";     // what is currently typed, kept across the 1.5s poll's rebuilds
   let searchError = "";     // what the last search failed with, shown in the panel
+  // archiveState is what the exported event log had to say about a search this
+  // server's own store could not answer: "" when it was not consulted, otherwise
+  // available / empty / notConfigured / refused / unreachable. It is kept apart from
+  // searchError because "no archive is configured" is a fact about this server, not
+  // a failure of the search — and telling an operator "nothing found" when nothing
+  // was ever looked in would be the wrong answer to the wrong question.
+  let archiveState = "";
   let liveTasks = [];       // open user-task jobs for this version, refreshed each poll
   let runningCount = 0;     // active instances of this version (from runtime), may exceed the listed page
   // Bulk-terminate selection over the "All instances" list. selectMode shows a
@@ -8330,7 +8388,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     instSel.innerHTML =
       `<option value="all"${selected === "all" ? " selected" : ""}>${esc(label)}</option>` +
       instances.map((r) =>
-        `<option value="${r.key}"${String(r.key) === selected ? " selected" : ""}>${r.key} · ${esc(r.state)}</option>`
+        `<option value="${r.key}"${String(r.key) === selected ? " selected" : ""}>${r.key} · ${esc(r.state)}${r.archived ? " · archived" : ""}</option>`
       ).join("");
   }
 
@@ -8399,13 +8457,18 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     searchError = "";
     if (!q) {
       instSig = "";
+      archiveState = "";
       await refreshInstances();
       renderVariables();
       return;
     }
     let rows;
+    archiveState = "";
     try {
-      rows = await api("GET", `/api/v1/instances/search?process=${encodeURIComponent(key)}&q=${encodeURIComponent(q)}`);
+      const { data, headers } = await apiRaw("GET",
+        `/api/v1/instances/search?process=${encodeURIComponent(key)}&q=${encodeURIComponent(q)}`);
+      rows = data || [];
+      archiveState = headers.get("X-Archive-State") || "";
     } catch (e) {
       searchError = e.message;
       rows = [];
@@ -8416,6 +8479,13 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (selected !== "all" && !rows.some((r) => String(r.key) === selected)) selected = "all";
     renderVariables();
   }
+
+  // archivedPill marks a row the exported event log answered for. The instance was
+  // hard-deleted here by history retention, so the row is a record of something that
+  // ran, not a handle on something that is running: nothing beside it offers to open,
+  // replay or terminate it, because none of those would find anything.
+  const archivedPill = '<span class="pill off" title="This instance was removed from this server by history retention. ' +
+    'What is shown comes from the exported event log — it cannot be opened, replayed or terminated.">archived</span>';
 
   // JSON variable values are shown with a collapsible preview (first 60 chars)
   // instead of blowing out the chip; hover to see the full value.
@@ -8597,8 +8667,8 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       // is a point read on the server, and anything else is a variable search scoped
       // to this version. It sits above the list so it is the first thing reached
       // when the list is a page out of hundreds of thousands.
-      const searchRow = `<form class="vp-search" title="Find an instance of this version by key, or by a variable's value. A variable the model declares searchable is matched exactly and found by index; any other is matched as a substring by reading through the version's instances. A trailing * asks for a prefix.">
-          <input type="text" class="vp-search-q" value="${esc(searchDraft)}" placeholder="Instance key, or name=value (name* for a prefix)…" aria-label="Find an instance" spellcheck="false" autocomplete="off"/>
+      const searchRow = `<form class="vp-search" title="Find an instance of this version by key, or by a variable's value. A term is matched whole: kdnr=MT-100 finds MT-100 and not MT-10001. Use * for any run of characters and ? for exactly one — *MT-1* finds anything containing MT-1 — and \\* or \\? to search for those characters themselves. A variable the model declares searchable is found by index; any other by reading through the version's instances. If nothing here matches and an event log is exported, instances history retention has removed are looked up there and shown marked as archived.">
+          <input type="text" class="vp-search-q" value="${esc(searchDraft)}" placeholder="Instance key, or name=value (* and ? for wildcards)…" aria-label="Find an instance" spellcheck="false" autocomplete="off"/>
           <button class="btn neutral sm" type="submit" title="Search this version's instances">Find</button>
           ${searchQuery ? '<button class="btn ghost sm" type="button" data-search-clear title="Clear the search and go back to the newest instances">Clear</button>' : ""}
         </form>${searchError ? `<p class="muted vp-search-err">${esc(searchError)}</p>` : ""}`;
@@ -8607,8 +8677,21 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
           ? `<div class="vp-more"><span class="muted">Showing the newest ${instances.length}. Use the search above to reach a specific instance.</span></div>`
           : `<div class="vp-more"><button class="btn ghost sm" type="button" data-load-more title="Load the next page of older instances">Load more</button></div>`)
         : "";
+      // An empty result has more than one cause, and they are not interchangeable.
+      // "Nothing matched" is about the data; "no event log is configured" and "the
+      // log could not be reached" are about this server, and an operator told the
+      // first when the truth is the second stops looking for an instance that exists.
+      const archiveNote = {
+        notConfigured: "Instances this server no longer holds are not searchable: no event log is exported. " +
+          "Enable the OpenSearch exporter to make purged history findable.",
+        refused: "The event log store declined the query, so purged history was not searched. " +
+          "Its credentials here may not carry read access to the index Atlas writes.",
+        unreachable: "The event log store could not be reached, so purged history was not searched — " +
+          "which is not the same as there having been none.",
+      }[archiveState] || "";
       const emptyNote = searchQuery
-        ? `<p class="muted" style="margin:0">No instance of this version matches “${esc(searchQuery)}”.</p>`
+        ? `<p class="muted" style="margin:0">No instance of this version matches “${esc(searchQuery)}”.</p>` +
+          (archiveNote ? `<p class="muted vp-archive-note" style="margin:6px 0 0">${esc(archiveNote)}</p>` : "")
         : `<p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`;
       html = !instances.length
         ? `<div class="vp-head"><span class="vp-title">Variables</span></div>${searchRow}${emptyNote}`
@@ -8626,9 +8709,10 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
               ${active
                 ? '<span class="pill ok"><span class="dot"></span>active</span>'
                 : `<span class="pill">${esc(r.state)}</span>`}
-              <span class="vp-inst-actions">${ts.length
+              ${r.archived ? archivedPill : ""}
+              <span class="vp-inst-actions">${r.archived ? "" : `${ts.length
                 ? `<a class="task-link inline" href="#/tasks/t/${ts[0].key}" title="Open the waiting task's form">&#128203; Task&#8599;</a>`
-                : ""}<a class="replay-link" href="#/operations/i/${r.key}" title="Replay this instance step by step">&#9654; Replay</a></span>
+                : ""}<a class="replay-link" href="#/operations/i/${r.key}" title="Replay this instance step by step">&#9654; Replay</a>`}</span>
             </div>
             ${instanceMeta(r)}
             <div class="vp-inst-vars">${varChips(r.variables)}</div>
@@ -8645,11 +8729,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
             <span class="vp-title">Variables · instance ${inst.key}
               ${inst.state === "active"
                 ? '<span class="pill ok"><span class="dot"></span>active</span>'
-                : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}</span>
-            <span class="vp-actions">${copyAllBtn(inst.variables)}<a class="replay-link" href="#/operations/i/${inst.key}" title="Replay this instance step by step">&#9654; Replay</a></span>
+                : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}
+              ${inst.archived ? archivedPill : ""}</span>
+            <span class="vp-actions">${copyAllBtn(inst.variables)}${inst.archived ? "" : `<a class="replay-link" href="#/operations/i/${inst.key}" title="Replay this instance step by step">&#9654; Replay</a>`}</span>
           </div>
+          ${inst.archived
+            ? `<p class="muted vp-archive-note">This instance is no longer on this server — history retention removed it. What is shown is what the exported event log recorded when it ran, so it cannot be opened, replayed or terminated, and it will not change again.</p>`
+            : ""}
           ${instanceMeta(inst)}
-          ${renderTaskLinks(tasksFor(inst.key))}
+          ${inst.archived ? "" : renderTaskLinks(tasksFor(inst.key))}
           <div class="vars">${renderVarsBody(inst.variables, jsonCollapsed)}</div>`;
       }
     }
@@ -8726,15 +8814,34 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       arr.push(inc);
       incidentsByElement.set(inc.elementId, arr);
     }
+    // A deferred choice is one wait, so it is drawn once: the race count moves onto its
+    // event-based gateway, and its armed branches are marked armed instead of each
+    // repeating the same number (ADR-0110, ADR-0249). The
+    // count is the smallest of the armed branches, so a branch that also carries tokens
+    // from elsewhere cannot inflate it.
+    const byId = new Map((rt.elements || []).map((e) => [e.elementId, e]));
+    const races = new Map(); // gateway id → tokens waiting in its race
+    for (const [gw, armed] of eventGatewayRaces(registry)) {
+      const waiting = Math.min(...armed.map((id) => (byId.get(id) || {}).tokens || 0));
+      if (waiting > 0) races.set(gw, { waiting, armed });
+    }
+    const armedNow = new Map(); // armed catch id → its gateway, while that race is live
+    for (const [gw, race] of races) for (const id of race.armed) armedNow.set(id, gw);
+
     // Each element is drawn in one of two states: green if it holds a live token
     // right now, gray if tokens have only passed through it (history). Together
     // they show the flow distribution even once every instance has finished — a
     // gray trail with green where tokens are still alive.
     for (const e of rt.elements) {
       if (!registry.get(e.elementId)) continue;
-      const live = e.tokens > 0;
+      // The gateway carries its race's tokens even though the engine parked them on the
+      // branches; an armed branch is drawn armed, and its count is the gateway's to show.
+      const race = races.get(e.elementId);
+      const tokens = e.tokens + (race ? race.waiting : 0);
+      const armed = armedNow.has(e.elementId);
+      const live = tokens > 0;
       if (!live && !(e.visits > 0)) continue;
-      const marker = live ? "atlas-active" : "atlas-visited";
+      const marker = armed ? "atlas-armed" : live ? "atlas-active" : "atlas-visited";
       canvas.addMarker(e.elementId, marker);
       marked.push([e.elementId, marker]);
       // A parked element is drawn red over its live-token green, and says why: the
@@ -8749,23 +8856,19 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
           html: `<div class="incident-badge" title="${esc(elIncidents[0].message || "")}">&#9888; ${label}</div>`,
         });
       }
-      // Two badges per element: how many tokens have already passed through
-      // (gray) and how many are live here right now (green). A visit is recorded
-      // on activation, so e.visits already counts the live tokens — the number
-      // that has moved on is the difference. Gray sits left, green right, reading
-      // past → present. Each badge is drawn only when non-zero, so a purely
-      // historical element keeps a single gray badge and a just-entered one a
-      // single green badge (no "0", never a doubled count).
-      const passed = Math.max(0, e.visits - e.tokens);
-      const grayBadge = passed > 0
-        ? `<div class="token-badge history" title="${passed} token(s) passed through">${passed}</div>`
-        : "";
-      const greenBadge = e.tokens > 0
-        ? `<div class="token-badge" title="${e.tokens} live token(s)">${e.tokens}</div>`
-        : "";
+      // An armed branch shows no count of its own: the tokens on it are the gateway's
+      // race, already counted there, and a number here would be that same wait read a
+      // second time. It says "armed" instead — what is true of the branch, and not a
+      // quantity anyone can misread as arrived events.
+      const gwId = armedNow.get(e.elementId);
+      const gwShape = gwId && registry.get(gwId);
+      const gwName = gwShape && gwShape.businessObject && gwShape.businessObject.name;
+      const armedPill = armed
+        ? `<div class="token-badge armed" title="armed by the event-based gateway ${esc(gwName || gwId)}, which carries the count — the first of its events to fire wins, the other branches are cancelled">armed</div>`
+        : null;
       overlays.add(e.elementId, "tokens", {
         position: { bottom: 4, right: 4 },
-        html: `<div class="token-badges">${grayBadge}${greenBadge}</div>`,
+        html: tokenBadgesHTML(e, { tokens, green: armedPill }),
       });
       // A user-task element with a waiting job gets a clickable "Open" badge that
       // jumps to its form. One waiting task → straight to it; several (only under
@@ -9529,15 +9632,23 @@ export async function mountTaskProcess(container, { api, instanceKey, activeElem
   // note says, briefly and where the gesture happened, why a double-click did
   // nothing — a call activity the token has not reached has no child to descend
   // into, and silence would read as a broken affordance.
+  //
+  // It gets its own strip along the *bottom* of the canvas rather than joining the
+  // descent's bar at the top. A diagram is drawn from its top-left, so a message up
+  // there lands on the elements it is about; the space under a short process is the
+  // one part of this panel that is reliably empty.
   const note = (msg) => {
     if (destroyed || !container) return;
-    let bar = container.querySelector(".tp-drill");
-    if (!bar) { bar = document.createElement("div"); bar.className = "tp-drill"; container.appendChild(bar); }
-    let el = bar.querySelector(".tp-drill-note");
-    if (!el) { el = document.createElement("span"); el.className = "tp-drill-note"; bar.appendChild(el); }
-    el.textContent = msg;
+    let bar = container.querySelector(".tp-drill.tp-drill-bottom");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.className = "tp-drill tp-drill-bottom";
+      bar.innerHTML = `<span class="tp-drill-note"></span>`;
+      container.appendChild(bar);
+    }
+    bar.querySelector(".tp-drill-note").textContent = msg;
     if (noteTimer) clearTimeout(noteTimer);
-    noteTimer = setTimeout(() => { if (el.parentNode) el.remove(); noteTimer = null; }, 5000);
+    noteTimer = setTimeout(() => { bar.remove(); noteTimer = null; }, 5000);
   };
 
   let lib;

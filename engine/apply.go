@@ -166,6 +166,19 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			action := state.ReplayCompleted
 			if h.Intent == model.IntentTerminated {
 				action = state.ReplayTerminated
+				// Retain the cancellation as its own counter, per instance and per
+				// definition, so the overlay's history can say a token got here and
+				// did not go on. Without it "passed through" is visits minus live
+				// tokens, which counts a cancelled loser exactly like a winner — and
+				// on an event-based gateway that is half of every decided race
+				// (ADR-0249). Derived from the event payload
+				// alone, like the visit beside it, so replay rebuilds it (I4).
+				if err := tx.RecordElementTermination(v.element.ProcessDefKey, v.element.ProcessInstanceKey, v.element.ElementId); err != nil {
+					return err
+				}
+				if err := tx.IncElementTerminationAgg(v.element.ProcessDefKey, v.element.ElementId); err != nil {
+					return err
+				}
 			}
 			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, action); err != nil {
 				return err

@@ -12,6 +12,61 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The handbook is caught up with the product: six apps, the Playground, and the two
+  Console screens nobody had written up.** The shell has offered six apps for a while —
+  Console, Modeler, Tasks, Operations, **Panorama** and **Data** — and the welcome
+  chapter still opened with "the four apps". A missing chapter behaves differently from
+  a wrong sentence: nothing fails, nobody notices, and the app nobody reads about is the
+  app nobody discovers. The word "Panorama" appeared in the page zero times,
+  "Informationsmodell" zero times, "Playground" zero times.
+
+  Both apps now have a chapter of their own, in both languages, under a new **Landscape
+  & data** group in the table of contents:
+
+  - **Panorama** ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md),
+    [ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md)) leads with the
+    distinction the app turns on: the landscape is **derived** and the architecture
+    views are **drawn**. Which store each node comes from, what each edge is a fact
+    *about* rather than an assertion of, how to read size and why the layout is
+    reproducible — and the one thing about saved views a reader has to know before
+    relying on them: they live in that browser and are shared with nobody.
+  - **The information model** ([ADR-0230](docs/adr/0230-process-information-model.md),
+    [ADR-0232](docs/adr/0232-uml-model-import.md)) starts where BPMN stops, because that
+    is what makes the app make sense: a `dataObject` is scoped to one process
+    definition, `itemSubjectRef` points into a schema language BPMN deliberately leaves
+    open, and so "which processes touch the same order?" has no answer at all. Then the
+    business key as the fact that answers it, the three steps from a class to a resolved
+    deploy, and what an import does with what it cannot keep.
+
+  Three more gaps closed in chapters that already existed:
+
+  - **The Playground** ([ADR-0215](docs/adr/0215-modeler-playground.md)) is a section of
+    its own in *Test & simulate*, which until now offered a reader the token simulation
+    and a real deploy and nothing in between. It is positioned against the token
+    simulation by what that one deliberately does *not* do — no FEEL, no conditions, no
+    DMN, no data — and it says the two things that surprise people: editing the diagram
+    invalidates the run, and leaving the editor releases the sandbox, because a sandbox
+    is a live engine on the server.
+  - **AI access** ([ADR-0200](docs/adr/0200-mcp-oauth-resource-server.md)) answers the
+    operator's actual question — what the page hands you, and the two things it checks
+    first, one of which (the published origin behind a TLS proxy) is otherwise met as
+    "the connector just doesn't work". Its second half is for everybody: a person's own
+    approvals are theirs to withdraw.
+  - **The audit log** ([ADR-0184](docs/adr/0184-grant-audit-log.md)) gets its four
+    actions, who may read it, and the case that surprises — with authentication off
+    there is no actor, so nothing is recorded at all.
+
+  The **contextual help** knows about all of it: the "?" menu's *On this page* entry had
+  no rule for Panorama, Data, AI access or the audit log, so all four fell through to
+  "Welcome to Atlas" — help that lands a reader at the top of a page reads as help that
+  does not work. Two tests now hold the join the two files cannot see between them:
+  every anchor `handbookHelp()` hands out must be a section the handbook has, and every
+  app the shell offers must be a card in the welcome chapter. Both were written by
+  confirming they fail against a broken anchor and a wrong route, rather than by
+  observing that they pass.
+
 ### Changed
 
 - **Google Sheets runs on a worker, like everything else.** It shipped with an
@@ -33,7 +88,41 @@ _Changed_ / _Removed_ for each version.
   Type must be handed to its supervised worker, so the next kind added without that
   fails a test instead of a properties panel.
 
+
 ### Fixed
+
+- **A search term found more than it was asked for.** Reported from use:
+  `kdnr=MT-100` also returned MT-10001. The instance search widened every term into a
+  substring match, so an operator who named one customer got a list holding another one
+  beside it, with nothing on either row to tell them apart — and no way to ask about
+  only the one they meant.
+
+  It was not even consistent with itself. The value index
+  ([ADR-0244](docs/adr/0244-searchable-variables.md)) answers a
+  declared name exactly, so the same query matched exactly when the model carried
+  `atlas:searchable` for that name and matched as a substring when it did not. Whether
+  a name is declared is a property of the model: invisible from the search box,
+  changeable by a redeployment, and it had come to decide what a query means.
+
+  A term is now matched **whole**, and widening is something you ask for, in the two
+  shapes everyone knows from shells and file pickers: `*` for any run of characters,
+  `?` for exactly one, and a backslash to escape either, so a value that really contains
+  a star is still reachable. One rule for declared and undeclared names, for
+  `name=value` and free text, for the live index, the instance walk and the archive.
+  Under the index a pattern splits into its literal head and the rest: no wildcard is
+  the exact seek that already existed, and a wildcard seeks to a neighbourhood and
+  matches the full pattern before reporting anything — without that, `MT-1?` would
+  answer with every `MT-1` value the index holds.
+
+  The same predicate filters **bulk termination**, so an implicit widening there
+  selected instances the operator had not named. That is the version of this bug that
+  does not merely confuse.
+
+  This is a behaviour change: free text that used to match a value it occurred in now
+  matches one it equals, so `retail` becomes `*retail*`. The search hint, the handbook,
+  the OpenAPI summary and the MCP tool description all state the rule, because changing
+  what a query means in silence would be worse than the behaviour it replaces.
+  ([ADR-0248](docs/adr/0248-search-terms-are-literal.md))
 
 - **A widened Properties column in the form editor gave its width to white space, not
   to the panel.** The Design tab's side columns are resizable — our own affordance on
@@ -53,6 +142,40 @@ _Changed_ / _Removed_ for each version.
   drag, for a width a previous session saved, and with the column collapsed to its rail.
 
 ### Changed
+
+- **The live diagram tells a token that got through from one that was cancelled — and
+  draws a deferred choice once.** An element on the runtime overlay carried two numbers:
+  green for the tokens live on it, gray for the ones that had "passed through". Gray was
+  `visits − tokens`, and a visit is recorded on *activation*, so it counted every token
+  that had arrived and left — whether it completed and moved on, or was terminated: a
+  losing event-gateway branch, an activity a boundary event interrupted, a scope torn
+  down.
+
+  On an **event-based gateway** ([ADR-0110](docs/adr/0110-event-based-gateways.md)) that
+  was not imprecision but a wrong answer, because cancellation there is not an exception
+  — it is half of every outcome. The gateway arms *all* of its branches and completes
+  itself, so a waiting instance holds a token on each branch and none on the gateway,
+  and every decided race activates both branches and leaves both. The two branches
+  therefore showed the *identical* pair of numbers whatever had actually happened — on
+  one production diagram, `10 941` gray and `50 002` green on the message branch and the
+  same on the timer branch, which reads as "these two events arrive equally often" and is
+  not what either number means.
+
+  Three things changed, none of them in the engine's semantics. A terminated element
+  instance now bumps a retained counter of its own, per instance and per definition,
+  mirroring the visit counters beside it ([ADR-0022](docs/adr/0022-element-visit-history.md),
+  [ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) — a write-only merge on the
+  fold path, derived from the committed event alone, so replay rebuilds it. The overlay
+  splits the old gray badge into **gray = completed here and moved on** and **amber =
+  cancelled here**, so which event actually arrived is now readable at the branch itself.
+  And an event gateway's race is drawn as the one wait it is: the green count moves onto
+  the **gateway**, and its armed branches are marked `armed` instead of each repeating
+  that same count. A catch joins its gateway's group only when the gateway is its sole
+  way in, so one reachable from elsewhere as well keeps its own count.
+
+  **No backfill:** terminations were never recorded before, so the amber count starts at
+  zero on an existing store and gray keeps its old meaning for the history already
+  written. ([ADR-0249](docs/adr/0249-overlay-cancelled-tokens.md))
 
 - **A data object can be pointed at a class you can see.** The **Type** of a data object
   in the Modeler is the link the whole information model turns on — it is what lets two
@@ -310,6 +433,33 @@ _Changed_ / _Removed_ for each version.
   integration back on the run loop.
 
 ### Added
+
+- **An instance that is gone is still findable.** History retention hard-deletes a
+  finished instance once the exporter has it ([ADR-0115](docs/adr/0115-history-retention-hard-delete.md)) —
+  that was the whole bargain of [ADR-0114](docs/adr/0114-opensearch-event-exporter.md):
+  delete the data corpses, but keep them searchable somewhere first. Somewhere turned
+  out to be nowhere an operator could reach. The search asked this server's own store,
+  the store no longer had the instance, and the answer came back empty, which reads
+  exactly like "this never existed".
+
+  The search now falls back to the exported log. It asks two questions rather than one,
+  because the export is a stream of events and not a table of instances: first which
+  instances held a matching variable — a terms aggregation over the scope key, so a
+  value written five times is one answer and the response stays small — then what those
+  instances were, as a bounded page of hits with an explicit field list.
+
+  A row that comes back this way is marked **archived**, and that is the point rather
+  than a detail. The instance does not exist here: it cannot be opened, replayed or
+  terminated, and what the row reports is what the log recorded, not what is true now.
+  So the panel offers no Replay and no task link beside it, the picker says the word
+  too, and the row carries no element instance count — the archive knows of no live
+  tokens, and a zero meaning "none recorded" must not be dressed up as a measurement.
+
+  An empty result now distinguishes its causes. "Nothing matched" is about the data;
+  "no event log is exported", "the store declined" and "the store could not be reached"
+  are about this server, and an operator told the first when the truth is one of the
+  others stops looking for an instance that exists.
+  ([ADR-0247](docs/adr/0247-instance-archive-search.md))
 
 - **A call activity's `+` is now the way into the process it calls.** A call activity is
   the one element on a diagram whose contents are somewhere else — a separate model,

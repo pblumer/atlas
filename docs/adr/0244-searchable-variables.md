@@ -88,11 +88,17 @@ sides is indexed: a process that declares nothing never pays it. `DeleteVariable
 drops the entry; the ADR-0146 purge drops the instance's entries, read off the
 variables that are about to go.
 
-**`name=value` becomes exact for a declared name**, and a trailing `*` asks for a
-prefix. This changes no existing answer: a declaration is the only way into the
-index path, and no model could carry one before now. An undeclared name keeps the
-substring walk it always had. The index path requires `?process=`, because the
-declaration is per definition — the same reason ADR-0241's paged listing does.
+**`name=value` is answered from the index for a declared name.** This changes no
+existing answer: a declaration is the only way into the index path, and no model
+could carry one before now. An undeclared name keeps the walk it always had. The
+index path requires `?process=`, because the declaration is per definition — the
+same reason ADR-0241's paged listing does.
+
+What a term *means* — matched whole, widened only by an explicit `*` or `?` — is
+not decided here but in `draft-search-terms-are-literal`. That record came out of
+this one: making the index path exact while the walk stayed a substring search
+left the same query meaning two different things depending on whether the model
+declared the name, which is not something an operator can see from the search box.
 
 ### Consequences
 

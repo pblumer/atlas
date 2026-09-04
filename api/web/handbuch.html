@@ -216,6 +216,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <a href="#testen"><span data-l="de">Testen &amp; Simulieren</span><span data-l="en">Test &amp; simulate</span></a>
     <a href="#betrieb"><span data-l="de">Betrieb &amp; Incidents</span><span data-l="en">Operations &amp; incidents</span></a>
     <a href="#konten"><span data-l="de">Konten, Rollen &amp; Anmeldung</span><span data-l="en">Accounts, roles &amp; sign-in</span></a>
+    <h4 data-l="de">Landschaft &amp; Daten</h4><h4 data-l="en">Landscape &amp; data</h4>
+    <a href="#panorama"><span data-l="de">Panorama</span><span data-l="en">Panorama</span></a>
+    <a href="#infomodell"><span data-l="de">Informationsmodell</span><span data-l="en">Information model</span></a>
     <h4 data-l="de">Prozess-Developer</h4><h4 data-l="en">Process developer</h4>
     <a href="#rolle"><span data-l="de">Die Rolle</span><span data-l="en">The role</span></a>
     <a href="#werkstatt"><span data-l="de">Werkstatt: eine Applikation</span><span data-l="en">Workshop: an application</span></a>
@@ -245,9 +248,13 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         process as a diagram, deploy it, and Atlas runs it step by step – reliably, traceably and durably stored.
         Decisions live in <b>DMN</b> tables.</p>
 
-      <h3 data-l="de">Die vier Apps</h3><h3 data-l="en">The four apps</h3>
-      <p data-l="de">Oben links im Raster-Menü (⊞) wechselst du zwischen den Apps:</p>
-      <p data-l="en">Switch between the apps via the grid menu (⊞) in the top-left corner:</p>
+      <h3 data-l="de">Die sechs Apps</h3><h3 data-l="en">The six apps</h3>
+      <p data-l="de">Oben links im Raster-Menü (⊞) wechselst du zwischen den Apps. Das Menü zeigt nur,
+        was deine <a href="#konten">Rolle</a> erreicht – wer keine Modelle bearbeiten darf, sieht Modeler,
+        Panorama und Data gar nicht erst.</p>
+      <p data-l="en">Switch between the apps via the grid menu (⊞) in the top-left corner. The menu offers only
+        what your <a href="#konten">role</a> reaches – somebody who may not edit models is not shown the Modeler,
+        Panorama or Data at all.</p>
       <div class="grid2">
         <div class="card"><b>Console</b>
           <p class="lead" data-l="de">Überblick über Deployments und Engine-Gesundheit – und die Stelle, an der
@@ -256,8 +263,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <a href="#formulare">workers</a> and their credentials are configured. Your starting point.</p>
           <a class="applink" href="/#/console">→ Console</a></div>
         <div class="card"><b>Modeler</b>
-          <p class="lead" data-l="de">BPMN- und DMN-Modelle im Browser zeichnen, testen und deployen.</p>
-          <p class="lead" data-l="en">Draw, test and deploy BPMN and DMN models in the browser.</p>
+          <p class="lead" data-l="de">BPMN- und DMN-Modelle im Browser zeichnen, im
+            <a href="#playground">Playground</a> durchrechnen und deployen.</p>
+          <p class="lead" data-l="en">Draw BPMN and DMN models in the browser, run them through the
+            <a href="#playground">Playground</a>, and deploy them.</p>
           <a class="applink" href="/#/modeler">→ Modeler</a></div>
         <div class="card"><b>Tasks</b>
           <p class="lead" data-l="de">Der Posteingang für menschliche Aufgaben (User-Tasks) mit Formularen.</p>
@@ -267,6 +276,18 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <p class="lead" data-l="de">Laufende Instanzen beobachten, Incidents lösen, Entscheidungen prüfen.</p>
           <p class="lead" data-l="en">Watch running instances, resolve incidents, inspect decisions.</p>
           <a class="applink" href="/#/operations">→ Operations</a></div>
+        <div class="card"><b>Panorama</b>
+          <p class="lead" data-l="de">Die <a href="#panorama">Landschaft</a>: welche Prozesse, Worker und
+            Entscheidungen es gibt und wie sie zusammenhängen – abgeleitet aus dem, was deployt ist.</p>
+          <p class="lead" data-l="en">The <a href="#panorama">landscape</a>: which processes, workers and
+            decisions exist and how they hang together – derived from what is actually deployed.</p>
+          <a class="applink" href="/#/panorama/landscape">→ Panorama</a></div>
+        <div class="card"><b>Data</b>
+          <p class="lead" data-l="de">Das <a href="#infomodell">Informationsmodell</a>: was ein «Auftrag» in
+            deiner Landschaft <i>ist</i> – als UML-Klassendiagramm über allen Prozessen einer Applikation.</p>
+          <p class="lead" data-l="en">The <a href="#infomodell">information model</a>: what an "order"
+            <i>is</i> in your landscape – a UML class diagram above every process of an application.</p>
+          <a class="applink" href="/#/data">→ Data</a></div>
       </div>
     </section>
 
@@ -317,7 +338,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <b data-l="de">Eine menschliche Aufgabe erledigen</b>
           <b data-l="en">Complete a human task</b>
           <p data-l="de">Enthält der Prozess einen <b>User-Task</b>, landet er im
-            <a href="/#/tasks">Tasks</a>-Posteingang. Aufgabe öffnen, Formular ausfüllen, abschließen –
+            <a href="/#/tasks">Tasks</a>-Posteingang. Aufgabe öffnen, Formular ausfüllen, abschliessen –
             der Token läuft weiter.</p>
           <p data-l="en">If the process contains a <b>user task</b>, it appears in the
             <a href="/#/tasks">Tasks</a> inbox. Open the task, fill in the form, complete it –
@@ -763,8 +784,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de">Der Token parkt als <b>Job</b> vom Typ <code>payment</code>, bis ein Worker ihn abschließt; scheitert er, wird bis <code>retries</code>-mal erneut versucht, danach entsteht ein Incident. Für REST, E-Mail, SharePoint &amp; Co. musst du keinen Worker selbst schreiben: nimm die fertigen Vorlagen der eingebauten <a href="#formulare">Worker-Typen</a> aus dem <a href="/#/modeler/repository">Repository</a>.</span><span data-l="en">The token parks as a <b>job</b> of type <code>payment</code> until a worker completes it; on failure it retries up to <code>retries</code> times, then raises an incident. For REST, e-mail, SharePoint &amp; co. you need not write a worker at all: use the ready-made templates of the built-in <a href="#formulare">worker types</a> in the <a href="/#/modeler/repository">Repository</a>.</span></p>
-        <p class="rz-how"><span data-l="de"><b>Retries</b> hat jede Aufgabe, die als Job läuft — Service- und Send-Task, jede <a href="#formulare">Worker-Aufgabe</a> (Mail, REST, Jira …), Skript-Task (PowerShell &amp; Co.) und Business-Rule-Task. Im Modeler steht das Feld unter <i>Failure handling</i>; leer bedeutet den Standard <code>3</code>, <code>1</code> heißt „ein Versuch, kein Retry“. Weniger als 1 lehnt der Deploy ab — ein Job ohne Versuch würde nie ausgeliefert.</span><span data-l="en"><b>Retries</b> is a property of every task that runs as a job — service and send tasks, every <a href="#formulare">worker task</a> (mail, REST, Jira …), script tasks (PowerShell &amp; co.) and business rule tasks. The Modeler shows the field under <i>Failure handling</i>; empty means the default of <code>3</code>, and <code>1</code> means "one attempt, no retry". Below 1 the deploy is refused — a job with no attempt would never be handed out.</span></p>
+        <p class="rz-how"><span data-l="de">Der Token parkt als <b>Job</b> vom Typ <code>payment</code>, bis ein Worker ihn abschliesst; scheitert er, wird bis <code>retries</code>-mal erneut versucht, danach entsteht ein Incident. Für REST, E-Mail, SharePoint &amp; Co. musst du keinen Worker selbst schreiben: nimm die fertigen Vorlagen der eingebauten <a href="#formulare">Worker-Typen</a> aus dem <a href="/#/modeler/repository">Repository</a>.</span><span data-l="en">The token parks as a <b>job</b> of type <code>payment</code> until a worker completes it; on failure it retries up to <code>retries</code> times, then raises an incident. For REST, e-mail, SharePoint &amp; co. you need not write a worker at all: use the ready-made templates of the built-in <a href="#formulare">worker types</a> in the <a href="/#/modeler/repository">Repository</a>.</span></p>
+        <p class="rz-how"><span data-l="de"><b>Retries</b> hat jede Aufgabe, die als Job läuft — Service- und Send-Task, jede <a href="#formulare">Worker-Aufgabe</a> (Mail, REST, Jira …), Skript-Task (PowerShell &amp; Co.) und Business-Rule-Task. Im Modeler steht das Feld unter <i>Failure handling</i>; leer bedeutet den Standard <code>3</code>, <code>1</code> heisst „ein Versuch, kein Retry“. Weniger als 1 lehnt der Deploy ab — ein Job ohne Versuch würde nie ausgeliefert.</span><span data-l="en"><b>Retries</b> is a property of every task that runs as a job — service and send tasks, every <a href="#formulare">worker task</a> (mail, REST, Jira …), script tasks (PowerShell &amp; co.) and business rule tasks. The Modeler shows the field under <i>Failure handling</i>; empty means the default of <code>3</code>, and <code>1</code> means "one attempt, no retry". Below 1 the deploy is refused — a job with no attempt would never be handed out.</span></p>
       </div>
       <div class="recipe" id="rz-dmn" data-proc="recipe-dmn">
         <h4><span class="rz-emoji" aria-hidden="true">📐</span>
@@ -925,6 +946,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 &lt;/definitions&gt;</code></pre>
         </details>
         <p class="rz-how"><span data-l="de">Hinter dem Gateway stehen nur wartende Ereignisse (Nachricht, Timer, Signal). Es ist eine <i>deferred choice</i>: die Umgebung entscheidet, nicht die Daten. Klassisch für „warte auf Antwort, sonst Timeout“.</span><span data-l="en">Only waiting events (message, timer, signal) may follow the gateway. It's a <i>deferred choice</i>: the environment decides, not the data. The classic "wait for a reply, otherwise time out".</span></p>
+        <p class="rz-how"><span data-l="de"><b>Zur Laufzeit:</b> Beim Erreichen des Gateways macht die Engine <b>alle</b> Zweige gleichzeitig scharf — der Token wartet also nicht auf dem Gateway, sondern auf jedem Ereignis dahinter. Das Diagramm in <a href="/#/operations">Betrieb</a> zeigt es trotzdem als <i>ein</i> Warten: die grüne Zahl steht am Gateway (so viele Instanzen sind im Rennen), die Zweige sind nur als <b>armed</b> markiert. Wer tatsächlich gewonnen hat, steht am Zweig selbst — <b>grau</b> = hier abgeschlossen und weitergelaufen, <b>bernstein</b> = hier abgebrochen, weil das andere Ereignis zuerst kam.</span><span data-l="en"><b>At runtime:</b> on reaching the gateway the engine arms <b>every</b> branch at once — the token does not wait on the gateway but on each event behind it. The diagram in <a href="/#/operations">Operations</a> still shows it as <i>one</i> wait: the green count sits on the gateway (that many instances are in the race) and the branches are merely marked <b>armed</b>. Which event actually won is on the branch itself — <b>gray</b> = completed here and moved on, <b>amber</b> = cancelled here because the other event came first.</span></p>
       </div>
       <div class="recipe" id="rz-inclusive" data-proc="recipe-inclusive">
         <h4><span class="rz-emoji" aria-hidden="true">🔱</span>
@@ -1039,7 +1061,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de">Ein Start-Event mit <code>timerEventDefinition</code> braucht kein <code>CreateInstance</code> – die Engine startet die Instanzen selbst. <code>R/PT24H</code> heißt „alle 24&nbsp;Stunden, unbegrenzt oft“.</span><span data-l="en">A start event with a <code>timerEventDefinition</code> needs no <code>CreateInstance</code> – the engine starts the instances itself. <code>R/PT24H</code> means "every 24 hours, indefinitely".</span></p>
+        <p class="rz-how"><span data-l="de">Ein Start-Event mit <code>timerEventDefinition</code> braucht kein <code>CreateInstance</code> – die Engine startet die Instanzen selbst. <code>R/PT24H</code> heisst „alle 24&nbsp;Stunden, unbegrenzt oft“.</span><span data-l="en">A start event with a <code>timerEventDefinition</code> needs no <code>CreateInstance</code> – the engine starts the instances itself. <code>R/PT24H</code> means "every 24 hours, indefinitely".</span></p>
       </div>
       <div class="recipe" id="rz-boundary-timer" data-proc="recipe-boundary-timer">
         <h4><span class="rz-emoji" aria-hidden="true">⏰</span>
@@ -1082,7 +1104,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <h4><span class="rz-emoji" aria-hidden="true">📨</span>
           <span data-l="de">Nachricht empfangen</span><span data-l="en">Receive a message</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
-          <span data-l="de">Auf ein Ereignis von außen warten – korreliert auf die richtige Instanz.</span><span data-l="en">Wait for an outside event – correlated to the right instance.</span></p>
+          <span data-l="de">Auf ein Ereignis von aussen warten – korreliert auf die richtige Instanz.</span><span data-l="en">Wait for an outside event – correlated to the right instance.</span></p>
                 <div class="rz-diagram">
           <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
         </div>
@@ -1612,7 +1634,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de"><code>zeebe:input</code> wertet <code>source</code> (FEEL) im Instanz-Kontext aus und legt es unter <code>target</code> <b>lokal für die Aufgabe</b> ab – so sieht der Worker nur <code>income</code>/<code>age</code> statt des ganzen <code>applicant</code>. <code>zeebe:output</code> schreibt das Ergebnis zurück in den Instanz-Kontext. Achtung: ein <code>target</code> ist ein <b>Variablenname, kein Pfad</b> – <code>scoring.value</code> legte eine Variable an, die wörtlich so heißt, statt ein Feld in <code>scoring</code> zu setzen, und der Deploy weist das darum ab (<code>variable.dotted-target</code>). Verschachtelt wird in der Expression: <code>{value: result}</code> nach <code>scoring</code> – das ergibt die Variable <code>scoring</code> mit dem Feld <code>value</code>, das <code>scoring.value</code> dann auch wirklich liest. So bleiben Aufgaben entkoppelt und wiederverwendbar.</span><span data-l="en"><code>zeebe:input</code> evaluates <code>source</code> (FEEL) in the instance scope and binds it under <code>target</code> <b>locally to the task</b> – so the worker sees only <code>income</code>/<code>age</code>, not the whole <code>applicant</code>. <code>zeebe:output</code> writes the result back into the instance scope. Careful: a <code>target</code> is a <b>variable name, not a path</b> – <code>scoring.value</code> would create a variable called literally that instead of setting a field inside <code>scoring</code>, which is why the deploy refuses it (<code>variable.dotted-target</code>). Nest in the expression instead: <code>{value: result}</code> into <code>scoring</code> – that yields a <code>scoring</code> variable with a <code>value</code> field, which <code>scoring.value</code> then really does read. This keeps tasks decoupled and reusable.</span></p>
+        <p class="rz-how"><span data-l="de"><code>zeebe:input</code> wertet <code>source</code> (FEEL) im Instanz-Kontext aus und legt es unter <code>target</code> <b>lokal für die Aufgabe</b> ab – so sieht der Worker nur <code>income</code>/<code>age</code> statt des ganzen <code>applicant</code>. <code>zeebe:output</code> schreibt das Ergebnis zurück in den Instanz-Kontext. Achtung: ein <code>target</code> ist ein <b>Variablenname, kein Pfad</b> – <code>scoring.value</code> legte eine Variable an, die wörtlich so heisst, statt ein Feld in <code>scoring</code> zu setzen, und der Deploy weist das darum ab (<code>variable.dotted-target</code>). Verschachtelt wird in der Expression: <code>{value: result}</code> nach <code>scoring</code> – das ergibt die Variable <code>scoring</code> mit dem Feld <code>value</code>, das <code>scoring.value</code> dann auch wirklich liest. So bleiben Aufgaben entkoppelt und wiederverwendbar.</span><span data-l="en"><code>zeebe:input</code> evaluates <code>source</code> (FEEL) in the instance scope and binds it under <code>target</code> <b>locally to the task</b> – so the worker sees only <code>income</code>/<code>age</code>, not the whole <code>applicant</code>. <code>zeebe:output</code> writes the result back into the instance scope. Careful: a <code>target</code> is a <b>variable name, not a path</b> – <code>scoring.value</code> would create a variable called literally that instead of setting a field inside <code>scoring</code>, which is why the deploy refuses it (<code>variable.dotted-target</code>). Nest in the expression instead: <code>{value: result}</code> into <code>scoring</code> – that yields a <code>scoring</code> variable with a <code>value</code> field, which <code>scoring.value</code> then really does read. This keeps tasks decoupled and reusable.</span></p>
       </div>
       <div class="recipe" id="rz-dataobject" data-proc="recipe-dataobject">
         <h4><span class="rz-emoji" aria-hidden="true">🗂️</span>
@@ -1956,7 +1978,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         the instance is created) or at a <b>user task</b> (in the Tasks inbox). The Modeler has a form editor;
         submitted fields become process variables.</p>
 
-      <h3 data-l="de">Worker – Atlas mit der Außenwelt verbinden</h3><h3 data-l="en">Workers – wiring Atlas to the outside</h3>
+      <h3 data-l="de">Worker – Atlas mit der Aussenwelt verbinden</h3><h3 data-l="en">Workers – wiring Atlas to the outside</h3>
       <p data-l="de">Ein <b>Service-Task</b> erledigt die Arbeit nicht selbst. Er erzeugt ein <b>Job</b>-Arbeitspaket,
         Atlas schreibt es dauerhaft weg – und erst danach darf ein <b>Worker</b> es holen und das Fremdsystem
         anfassen. Diese Reihenfolge ist der Grund, warum ein Ausfall draussen nie einen Fall hier drinnen verliert:
@@ -2127,19 +2149,26 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
             for understanding gateways and branches visually.</p>
         </div>
         <div class="card">
-          <b data-l="de">② FEEL „Test expression"</b><b data-l="en">② FEEL "Test expression"</b>
+          <b data-l="de">② Playground (Modeler)</b><b data-l="en">② Playground (Modeler)</b>
+          <p class="lead" data-l="de">Den Entwurf mit echten Daten auf der echten Engine rechnen lassen – in einer
+            Wegwerf-Sandbox, ohne Deploy und ohne Nebenwirkungen. <a href="#playground">Mehr dazu unten.</a></p>
+          <p class="lead" data-l="en">Run the draft with real data on the real engine – in a throwaway sandbox,
+            with no deploy and no side effects. <a href="#playground">More below.</a></p>
+        </div>
+        <div class="card">
+          <b data-l="de">③ FEEL „Test expression"</b><b data-l="en">③ FEEL "Test expression"</b>
           <p class="lead" data-l="de">Ausdrücke mit Beispieldaten prüfen, bevor sie im Modell landen.</p>
           <p class="lead" data-l="en">Check expressions against sample data before they go into the model.</p>
         </div>
         <div class="card">
-          <b data-l="de">③ Echt ausführen &amp; beobachten</b><b data-l="en">③ Run for real &amp; observe</b>
+          <b data-l="de">④ Echt ausführen &amp; beobachten</b><b data-l="en">④ Run for real &amp; observe</b>
           <p class="lead" data-l="de">Instanz starten und in <a href="/#/operations">Operations</a> die Timeline,
             Variablen und den aktiven Token Schritt für Schritt verfolgen.</p>
           <p class="lead" data-l="en">Start an instance and follow the timeline, variables and active token step by
             step in <a href="/#/operations">Operations</a>.</p>
         </div>
         <div class="card">
-          <b data-l="de">④ Conformance-Galerie</b><b data-l="en">④ Conformance gallery</b>
+          <b data-l="de">⑤ Conformance-Galerie</b><b data-l="en">⑤ Conformance gallery</b>
           <p class="lead" data-l="de">Jedes BPMN-Muster als kleines, lauffähiges Szenario – ein Knopf deployt und
             führt es gegen deine Instanz aus.</p>
           <p class="lead" data-l="en">Every BPMN pattern as a small runnable scenario – one button deploys and runs
@@ -2147,7 +2176,7 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
           <a class="applink" href="/conformance-gallery.html" target="_blank" rel="noopener">→ <span data-l="de">Galerie öffnen</span><span data-l="en">Open the gallery</span> ↗</a>
         </div>
         <div class="card">
-          <b data-l="de">⑤ Worker ohne Fremdsystem</b><b data-l="en">⑤ A worker without the real system</b>
+          <b data-l="de">⑥ Worker ohne Fremdsystem</b><b data-l="en">⑥ A worker without the real system</b>
           <p class="lead" data-l="de">Ein Service-Task, der ein fremdes System anfasst, lässt sich auch ohne dieses
             ausprobieren: <b>Mail</b> als Vorschau in den Postausgang, <b>Active Directory</b> als Mockup gegen ein
             Verzeichnis, das es nicht gibt.</p>
@@ -2155,6 +2184,102 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
             <b>mail</b> as a preview into the outbox, <b>Active Directory</b> as a mockup against a directory that
             does not exist.</p>
         </div>
+      </div>
+
+      <div id="playground" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Der Playground: den Entwurf durchrechnen</h3>
+      <h3 data-l="en">The Playground: running the draft through</h3>
+      <p data-l="de">Zwischen «das Diagramm sieht richtig aus» und «der Prozess verhält sich richtig» lag lange
+        nichts. Die <b>Token-Simulation</b> bewegt Token entlang der Flüsse, wertet aber bewusst <b>kein</b> FEEL,
+        keine Bedingungen, kein DMN und keine Daten aus &ndash; sie beantwortet «wohin <i>kann</i> ein Token
+        gehen», nie «was passiert mit <i>diesen</i> Daten». Und ein echtes Deploy beantwortet zwar alles, füllt
+        dafür aber die Laufzeit mit Wegwerf-Instanzen, löst echte Nebenwirkungen aus und läuft eine Instanz nach
+        der anderen.</p>
+      <p data-l="en">Between "the diagram looks right" and "the process behaves right" there was nothing for a long
+        time. The <b>token simulation</b> moves tokens along the flows but deliberately evaluates <b>no</b> FEEL, no
+        conditions, no DMN and no data &ndash; it answers "where <i>can</i> a token go", never "what happens with
+        <i>this</i> data". And a real deploy answers everything, at the price of filling the runtime with throwaway
+        instances, firing real side effects, and running one instance at a time.</p>
+      <p data-l="de">Der <b>Playground</b> ist der dritte Weg: ein eigener Tab im Modeler, neben <b>Design</b> und
+        <b>Implement</b>.</p>
+      <p data-l="en">The <b>Playground</b> is the third way: its own tab in the Modeler, beside <b>Design</b> and
+        <b>Implement</b>.</p>
+
+      <h3 data-l="de">Was dabei wirklich läuft</h3><h3 data-l="en">What actually runs</h3>
+      <p data-l="de">Kein zweiter, vereinfachter Interpreter &ndash; sondern <b>die echte Engine in einer
+        Wegwerf-Sandbox</b>. Der Lauf bekommt eine eigene Partition, einen eigenen Schreiber, ein eigenes Log in
+        einem temporären Verzeichnis und einen eigenen Zustandsspeicher. Nichts davon ist von der dauerhaften
+        Engine aus erreichbar, und alles wird am Ende verworfen.</p>
+      <p data-l="en">Not a second, simplified interpreter &ndash; but <b>the real engine in a throwaway
+        sandbox</b>. The run gets its own partition, its own writer, its own log in a temporary directory and its
+        own state store. None of it is reachable from the durable engine, and all of it is discarded at the end.</p>
+      <ul>
+        <li data-l="de">Kompiliert wird der <b>Entwurf auf dem Bildschirm</b>, mit dem echten Compiler. Was sich
+          nicht deployen lässt, läuft auch hier nicht &ndash; die Prüfung ist dieselbe.</li>
+        <li data-l="en">What is compiled is the <b>draft on screen</b>, with the real compiler. A model that will
+          not deploy will not run here either &ndash; it is the same validation.</li>
+        <li data-l="de">Kontrollfluss, FEEL-Bedingungen, Gateways, Multi-Instance, Boundary-Events,
+          <a href="#dmn">DMN</a>-Entscheidungen und <a href="#infomodell">Datenobjekte</a> sind der
+          <b>Produktionspfad</b>, weil es keinen zweiten gibt.</li>
+        <li data-l="en">Control flow, FEEL conditions, gateways, multi-instance, boundary events,
+          <a href="#dmn">DMN</a> decisions and <a href="#infomodell">data objects</a> are the <b>production code
+          path</b>, because there is no other one.</li>
+        <li data-l="de">Die Uhr gehört dem Lauf, nicht der Wand. Ist nichts mehr auszuführen, springt die Zeit zum
+          nächsten fälligen Timer &ndash; ein Prozess mit dreitägiger Eskalation ist in Millisekunden durch.</li>
+        <li data-l="en">The clock belongs to the run, not to the wall. When nothing is runnable, time jumps to the
+          next due timer &ndash; a process with a three-day escalation finishes in milliseconds.</li>
+        <li data-l="de">Ein Job, der auf einen Menschen wartet, wird zu einem <b>Complete</b>-Knopf; der
+          abgeschlossene Schritt wird zurück auf die Zeichenfläche gemalt.</li>
+        <li data-l="en">A job waiting for a person becomes a <b>Complete</b> button; the completed step is painted
+          back onto the canvas.</li>
+      </ul>
+
+      <h3 data-l="de">Ein Datensatz statt eines Einzelfalls</h3><h3 data-l="en">A dataset instead of one case</h3>
+      <p data-l="de">Die Frage vor einem Go-live lautet selten «funktioniert dieser eine Fall», sondern: <i>Hier
+        sind zweihundert echte Fälle &ndash; welche Wege nimmt der Prozess, wo staut es sich, und wie lange dauert
+        es?</i> Dafür nimmt der Playground einen Datensatz entgegen: als hochgeladene CSV-Datei oder als
+        <b>Beschreibung</b> &ndash; je Feld dessen Art und Parameter, aus denen die Fälle erzeugt werden. Beschrieben
+        reisen zwanzig Zeilen zum Server statt fünfhundert im Browser gebauter.</p>
+      <p data-l="en">The question before a go-live is rarely "does this one case work" but: <i>here are two hundred
+        real cases &ndash; which paths does the process take, where does it pile up, and how long does it take?</i>
+        For that the Playground takes a dataset: an uploaded CSV file, or a <b>description</b> &ndash; each field's
+        kind and parameters, from which the cases are generated. Described, twenty lines travel to the server
+        instead of five hundred built in the browser.</p>
+      <p data-l="de">Wie lange ein Service-Task «dauert» und wie oft er scheitert, wird dabei vom Diagramm
+        abgelesen &ndash; eine Zeile je Task, die die Autorin gezeichnet hat.</p>
+      <p data-l="en">How long a service task "takes" and how often it fails is read off the diagram &ndash; a row
+        per task the author drew.</p>
+
+      <h3 data-l="de">Was der Bericht zeigt</h3><h3 data-l="en">What the report shows</h3>
+      <ul>
+        <li data-l="de"><b>Engpässe</b>, nach Wartezeit gerankt &ndash; nicht nach Bearbeitungszeit. Der Schritt,
+          der lange dauert, ist selten der, vor dem sich die Fälle stauen.</li>
+        <li data-l="en"><b>Bottlenecks</b>, ranked by queueing time &ndash; not by processing time. The step that
+          takes long is rarely the one cases pile up in front of.</li>
+        <li data-l="de">Eine <b>Heatmap</b> über Formen <i>und</i> Sequenzflüsse, die auch die Pfade benennt, die
+          die Daten nie erreicht haben. Ein nie begangener Zweig ist ein Befund, kein leeres Feld.</li>
+        <li data-l="en">A <b>heat map</b> over shapes <i>and</i> sequence flows that also names the paths the data
+          never reached. A branch nobody walked is a finding, not an empty cell.</li>
+        <li data-l="de">Ein <b>Umschalter</b> für jeweils eine Kennzahl &ndash; Kennzahlen übereinander gelegt
+          ergeben eine Textur, keine Aussage.</li>
+        <li data-l="en">A <b>switcher</b> for one measure at a time &ndash; measures laid over each other produce a
+          texture, not a statement.</li>
+        <li data-l="de">Jede <b>Ergebniszeile öffnet ihren Fall</b> auf dem Diagramm, nummeriert in der Reihenfolge
+          seines Durchlaufs und stehend an der Stelle, an der ein unvollendeter aufgehört hat.</li>
+        <li data-l="en">Every <b>result row opens its case</b> on the diagram, numbered in the order it went through
+          and standing where an unfinished one stopped.</li>
+      </ul>
+      <div class="note warn">
+        <div class="lbl" data-l="de">Zwei Dinge, die überraschen können</div>
+        <div class="lbl" data-l="en">Two things that can surprise</div>
+        <p data-l="de">Wer das Diagramm nach einem Lauf <b>bearbeitet</b>, bekommt gesagt, dass der Lauf nicht mehr
+          dazu passt &ndash; ein Bericht zu einem Modell, das es nicht mehr gibt, wäre schlimmer als keiner. Und wer
+          den Editor <b>verlässt</b>, gibt die Sandbox sofort frei, statt sie bis zum Ablauf ihrer Frist stehen zu
+          lassen: eine Sandbox ist eine laufende Engine auf dem Server.</p>
+        <p data-l="en">If you <b>edit</b> the diagram after a run, you are told the run no longer matches it &ndash;
+          a report about a model that no longer exists would be worse than none. And <b>leaving</b> the editor
+          releases the sandbox immediately rather than leaving it to its TTL: a sandbox is a live engine on the
+          server.</p>
       </div>
 
       <h3 data-l="de">Ein Verzeichnis einrichten</h3>
@@ -2335,8 +2460,8 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
 
       <div class="note warn">
         <span class="lbl" data-l="de">Nicht auf einem Produktivsystem</span><span class="lbl" data-l="en">Not on a production system</span>
-        <p data-l="de" style="margin:.3em 0 0">Ein Mockup-Worker sieht von außen aus wie ein funktionierender: Er
-          schließt jede Aufgabe erfolgreich ab. Zwei Stellen verraten den Unterschied – die Karte in der Konsole
+        <p data-l="de" style="margin:.3em 0 0">Ein Mockup-Worker sieht von aussen aus wie ein funktionierender: Er
+          schliesst jede Aufgabe erfolgreich ab. Zwei Stellen verraten den Unterschied – die Karte in der Konsole
           und die Warnung im Worker-Log. Und das Verzeichnis lebt im Worker-Prozess: ein Neustart beginnt wieder
           beim Startbestand.</p>
         <p data-l="en" style="margin:.3em 0 0">A mockup worker looks exactly like a working one from the outside:
@@ -2398,7 +2523,7 @@ atlas worker --connector mssql</code></pre>
         a warning – it does not refuse to start. Every statement then fails naming itself, which points at the
         missing seed rather than hiding it. <code>ATLAS_MSSQL_CONNECTORS</code> is still required here, because a
         task names a worker and a mockup with no names has nothing a task could address.</p>
-      <p data-l="de">Für die drei Datenbank-Worker-Typen gilt das <b>gleichermaßen</b>, mit dem Präfix des
+      <p data-l="de">Für die drei Datenbank-Worker-Typen gilt das <b>gleichermassen</b>, mit dem Präfix des
         jeweiligen Produkts: <code>ATLAS_MARIADB_CONNECTORS</code>, <code>ATLAS_MARIADB_MOCK</code>,
         <code>ATLAS_MARIADB_MOCK_SEED</code> — und ebenso <code>ATLAS_POSTGRES_…</code>. Es ist derselbe Code:
         gleiches Mockup, gleiche Startdatei, gleiche Verweigerung bei einer nicht hinterlegten Anweisung, die
@@ -2441,7 +2566,7 @@ atlas worker --connector mssql</code></pre>
       "error": "Violation of UNIQUE KEY constraint 'UQ_personen_mail'" }
   ]
 }</code></pre>
-      <p data-l="de">Groß-/Kleinschreibung und Zeilenumbrüche sind egal — sonst nichts: Eine andere Spaltenliste
+      <p data-l="de">Gross-/Kleinschreibung und Zeilenumbrüche sind egal — sonst nichts: Eine andere Spaltenliste
         ist eine andere Anweisung. Und eine Antwort darf <b>scheitern</b>. Das ist keine Spielerei: Ein doppelt
         zugestellter Job, der ein zweites Mal einfügt, ist in einem Identity-Prozess kein Sonderfall, sondern der
         Normalfall der Zustellgarantie — und im Mockup lässt er sich auslösen, wann immer man will.</p>
@@ -2541,9 +2666,13 @@ atlas worker --connector mssql</code></pre>
           Suche über die Prozessvariablen dieser Version. Damit die Wertsuche ebenfalls ein einzelner
           Zugriff wird, sagt das Modell, wonach gesucht werden soll:
           <code>&lt;bpmn:process atlas:searchable="identityId,item"&gt;</code>. Für eine so deklarierte
-          Variable trifft <code>name=wert</code> dann <b>genau</b> diesen Wert (ein <code>*</code> am Ende
-          sucht nach Präfix); alles andere bleibt eine Teilstring-Suche, die die Instanzen der Version
-          durchliest. Ein Prozess, der nichts deklariert, zahlt dafür nichts.</li>
+          Variable beantwortet der Index die Suche; alles andere liest die Instanzen der Version durch. Was
+          du eingibst, wird dabei <b>vollständig</b> verglichen: <code>kdnr=MT-100</code> findet
+          <code>MT-100</code> und nicht <code>MT-10001</code>. Erweitern tust du selbst – <code>*</code> steht
+          für beliebig viele Zeichen, <code>?</code> für genau eines, also findet <code>*MT-1*</code> alles,
+          worin <code>MT-1</code> vorkommt. Willst du nach einem echten Stern oder Fragezeichen suchen,
+          schreibe <code>\*</code> oder <code>\?</code>. Ein Prozess, der nichts deklariert, zahlt dafür
+          nichts.</li>
         <li data-l="en"><b><a href="/#/operations">Instances</a></b> – all runs, their state, variables and a
           complete timeline per instance. A version can hold hundreds of thousands of instances, so the list
           shows a <b>page</b> ("80 of 150") rather than everything: <b>Load more</b> fetches the next one, and
@@ -2551,9 +2680,12 @@ atlas worker --connector mssql</code></pre>
           the instance count) or <code>name=value</code> to search this version's process variables. To make
           the value search one read too, the model says what it wants to be found by:
           <code>&lt;bpmn:process atlas:searchable="identityId,item"&gt;</code>. For a variable declared that
-          way, <code>name=value</code> matches that value <b>exactly</b> (a trailing <code>*</code> asks for a
-          prefix); anything else stays a substring search that reads through the version's instances. A
-          process that declares nothing pays nothing for it.</li>
+          way the index answers the search; anything else reads through the version's instances. Either way
+          what you type is matched <b>whole</b>: <code>kdnr=MT-100</code> finds <code>MT-100</code> and not
+          <code>MT-10001</code>. Widening is yours to ask for – <code>*</code> stands for any run of
+          characters and <code>?</code> for exactly one, so <code>*MT-1*</code> finds anything containing
+          <code>MT-1</code>. To search for a real star or question mark, write <code>\*</code> or
+          <code>\?</code>. A process that declares nothing pays nothing for it.</li>
         <li data-l="de"><b><a href="/#/operations/incidents">Incidents</a></b> – wenn ein Token nicht weiterkommt
           (Job fehlgeschlagen, Ausdrucksfehler, fehlende Variable), entsteht ein <b>Incident</b>. Du behebst die
           Ursache und löst ihn auf – die Instanz läuft weiter. Du musst dafür nicht in die Liste: das steckengebliebene
@@ -2805,6 +2937,416 @@ atlas worker --connector mssql</code></pre>
         <a class="applink" href="https://github.com/pblumer/atlas/blob/main/docs/install.md#single-sign-on-with-an-identity-provider" target="_blank" rel="noopener"><code>docs/install.md</code>&nbsp;↗</a>.</p>
       <p data-l="en">Setting up a provider, registering the redirect URI and the full list of options:
         <a class="applink" href="https://github.com/pblumer/atlas/blob/main/docs/install.md#single-sign-on-with-an-identity-provider" target="_blank" rel="noopener"><code>docs/install.md</code>&nbsp;↗</a>.</p>
+
+      <h3 data-l="de">Einen KI-Assistenten anschliessen</h3><h3 data-l="en">Connecting an AI assistant</h3>
+      <p data-l="de">Atlas lässt sich von einem KI-Assistenten über <b>MCP</b> bedienen. Damit ein gehosteter
+        Assistent das darf, ist Atlas ein <b>OAuth-Resource-Server</b> mit dem kleinsten Authorization-Server, mit
+        dem ein regelkonformer Client tatsächlich spricht. Eingerichtet wird das unter
+        <a href="/#/console/ai-access">Console&nbsp;→&nbsp;AI access</a>.</p>
+      <p data-l="en">Atlas can be driven by an AI assistant over <b>MCP</b>. For a hosted assistant to be allowed
+        to, Atlas is an <b>OAuth resource server</b> with the smallest authorization server a compliant client will
+        actually talk to. It is set up under
+        <a href="/#/console/ai-access">Console&nbsp;→&nbsp;AI access</a>.</p>
+      <p data-l="de">Die Seite fragt, für welche Applikation der Zugang gilt, erzeugt die Zugangsdaten und zeigt
+        genau die Werte, nach denen der Verbindungsdialog des Assistenten fragt &ndash; je mit Kopierknopf, und
+        <b>einmalig</b>. Zwei Dinge prüft sie vorher:</p>
+      <p data-l="en">The page asks which application the access is for, creates the credentials and shows exactly
+        the values the assistant's connector dialog asks for &ndash; each with a copy button, and <b>once</b>. Two
+        things it checks first:</p>
+      <ul>
+        <li data-l="de"><b>Die veröffentlichte Herkunft.</b> Jede ausgegebene URL stammt aus dem, was Atlas in
+          seinen Discovery-Dokumenten veröffentlicht, nicht aus der Adresszeile des Browsers. Steht Atlas hinter
+          einem TLS-Proxy, ohne dass die externe Adresse konfiguriert ist, lauten diese URLs
+          <code>http://…</code> &ndash; kein gehosteter Client kann sie verwenden. Die Seite sagt das dort, wo die
+          Korrektur eine einzige Einstellung ist, statt es als «Connector funktioniert einfach nicht» enden zu
+          lassen.</li>
+        <li data-l="en"><b>The published origin.</b> Every URL handed out comes from what Atlas publishes in its
+          discovery documents, not from the browser's address bar. Behind a TLS proxy with no external address
+          configured, those URLs read <code>http://…</code> &ndash; no hosted client can use them. The page says so
+          where the fix is a single setting, rather than letting it surface as "the connector just doesn't
+          work".</li>
+        <li data-l="de"><b>Ob Selbstregistrierung offen ist.</b> Ist sie es, wird das Formular gar nicht gebraucht:
+          Der Assistent richtet sich allein aus der MCP-Adresse ein. Standardmässig ist sie aus.</li>
+        <li data-l="en"><b>Whether self-registration is open.</b> If it is, the form is unnecessary: the assistant
+          sets itself up from the MCP URL alone. It is off by default.</li>
+      </ul>
+      <div class="note tip">
+        <div class="lbl" data-l="de">Freigaben gehören dir</div><div class="lbl" data-l="en">Approvals are yours</div>
+        <p data-l="de">Die zweite Hälfte der Seite ist nicht nur für Administratorinnen: <b>Jede Person sieht ihre
+          eigenen Freigaben und kann sie zurückziehen.</b> Für die meisten ist ein Bildschirm der einzige Ort, an
+          dem sie das je tun werden. Und weil ein MCP-Werkzeug mit den Rollen dessen läuft, der es ruft, kann ein
+          Assistent nie mehr als die Person, die ihn freigegeben hat.</p>
+        <p data-l="en">The second half of the page is not only for administrators: <b>every person sees their own
+          approvals and can withdraw them.</b> For most people a screen is the only place they will ever do that.
+          And because an MCP tool runs with the roles of whoever calls it, an assistant can never do more than the
+          person who approved it.</p>
+      </div>
+
+      <h3 data-l="de">Das Revisionsprotokoll</h3><h3 data-l="en">The audit log</h3>
+      <p data-l="de">Wer eine Applikation für wen freigibt, ist die Zugriffskontrolle des Produkts &ndash; und
+        früher hinterliess sie keine Spur: Ein Mitglied erschien oder verschwand, und niemand konnte sagen, wer das
+        wann getan hatte. <a href="/#/console/audit">Console&nbsp;→&nbsp;Audit log</a> zeigt diese Änderungen über
+        <b>alle</b> Applikationen hinweg, die neuesten zuerst (die letzten 200).</p>
+      <p data-l="en">Who shares an application with whom is the product's access-control surface &ndash; and it
+        used to leave no trace: a member appeared or disappeared and nobody could say who did it, or when.
+        <a href="/#/console/audit">Console&nbsp;→&nbsp;Audit log</a> shows those changes across <b>every</b>
+        application, newest first (the 200 most recent).</p>
+      <table>
+        <thead><tr>
+          <th data-l="de">Aktion</th><th data-l="en">Action</th>
+          <th data-l="de">Wird festgehalten, wenn</th><th data-l="en">Recorded when</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><b data-l="de">Share</b><b data-l="en">Share</b></td>
+            <td data-l="de">Ein Mitglied hinzukommt oder seine Rolle wechselt.</td>
+            <td data-l="en">A member is added or their role changes.</td></tr>
+          <tr><td><b data-l="de">Revoke</b><b data-l="en">Revoke</b></td>
+            <td data-l="de">Ein Mitglied entzogen wird.</td>
+            <td data-l="en">A member is revoked.</td></tr>
+          <tr><td><b data-l="de">Visibility</b><b data-l="en">Visibility</b></td>
+            <td data-l="de">Die Sichtbarkeit wechselt &ndash; mit Vorher und Nachher.</td>
+            <td data-l="en">Visibility changes &ndash; with from and to.</td></tr>
+          <tr><td><b data-l="de">Transfer</b><b data-l="en">Transfer</b></td>
+            <td data-l="de">Die Eigentümerschaft übergeht.</td>
+            <td data-l="en">Ownership moves.</td></tr>
+        </tbody>
+      </table>
+      <ul>
+        <li data-l="de">Ein Eintrag ist <b>unveränderlich</b> und wird nur angehängt; er wird geschrieben,
+          <i>nachdem</i> die Änderung erfolgreich war.</li>
+        <li data-l="en">An entry is <b>immutable</b> and only ever appended; it is written <i>after</i> the change
+          has succeeded.</li>
+        <li data-l="de">Das globale Protokoll ist <b>Administratorinnen</b> vorbehalten. Die Historie <i>einer</i>
+          Applikation sieht auch, wem sie gehört.</li>
+        <li data-l="en">The global log is for <b>administrators</b>. The history of a <i>single</i> application is
+          also visible to whoever owns it.</li>
+        <li data-l="de"><b>Ohne eingeschaltete Authentisierung wird nichts aufgezeichnet</b> &ndash; ohne
+          angemeldete Person gibt es weder einen Handelnden noch eine Freigabe, die zu protokollieren wäre.</li>
+        <li data-l="en"><b>With authentication off, nothing is recorded</b> &ndash; with no principal there is no
+          actor and no grant to audit.</li>
+      </ul>
+    </section>
+
+    <!-- ==================== PANORAMA ==================== -->
+    <section id="panorama">
+      <h2 data-l="de">Panorama: die Landschaft</h2><h2 data-l="en">Panorama: the landscape</h2>
+      <p class="lead" data-l="de">Ein einzelnes Diagramm beantwortet, was <i>ein</i> Prozess tut. Sobald es mehr
+        als eine Handvoll gibt, stellt sich die Frage eine Ebene höher: Welche Prozesse gibt es überhaupt, welcher
+        ruft welchen auf, an welchen Workern hängen sie, und was bricht, wenn ich diesen einen anfasse?
+        <b>Panorama</b> beantwortet genau diese Frage.</p>
+      <p class="lead" data-l="en">A single diagram answers what <i>one</i> process does. Once there are more than a
+        handful, the question moves one level up: which processes exist at all, which one calls which, which workers
+        do they hang off, and what breaks if I touch this one? <b>Panorama</b> answers exactly that.</p>
+
+      <p data-l="de">Die App hat zwei Ansichten, und der Unterschied zwischen ihnen ist der wichtigste Punkt des
+        ganzen Kapitels:</p>
+      <p data-l="en">The app has two views, and the difference between them is the most important point in this
+        whole chapter:</p>
+      <div class="grid2">
+        <div class="card"><b data-l="de">Landschaft &mdash; abgeleitet</b><b data-l="en">Landscape &mdash; derived</b>
+          <p class="lead" data-l="de">Ein Graph, den <b>niemand gezeichnet hat</b>. Der Server rechnet ihn bei
+            jeder Anfrage aus dem aus, was ohnehin da ist: deployte Prozesse, Worker, Entscheidungen, Releases.
+            Er ist deshalb nie veraltet und zeigt auch auf einer Installation etwas, auf der noch niemand
+            modelliert hat.</p>
+          <p class="lead" data-l="en">A graph <b>nobody drew</b>. The server computes it on every request from
+            what is there anyway: deployed processes, workers, decisions, releases. It is therefore never stale,
+            and it shows something even on an installation where nobody has modelled anything.</p>
+          <a class="applink" href="/#/panorama/landscape">→ Landscape</a></div>
+        <div class="card"><b data-l="de">Architektursichten &mdash; gezeichnet</b><b data-l="en">Architecture views &mdash; drawn</b>
+          <p class="lead" data-l="de">ArchiMate-3.2-Diagramme, die jemand bewusst angelegt hat, um eine Aussage zu
+            treffen, die aus den Daten nicht folgt &ndash; etwa welche Fachdomäne ein Prozess bedient. Ihre Elemente
+            können an Atlas-Ressourcen gebunden werden.</p>
+          <p class="lead" data-l="en">ArchiMate 3.2 diagrams somebody deliberately created to state something the
+            data does not imply &ndash; which business domain a process serves, say. Their elements can be bound to
+            Atlas resources.</p>
+          <a class="applink" href="/#/panorama">→ Models</a></div>
+      </div>
+
+      <h3 data-l="de">Woraus die Landschaft besteht</h3><h3 data-l="en">What the landscape is made of</h3>
+      <p data-l="de">Jeder Knoten stammt aus einem Bestand, den Atlas ohnehin führt. Nichts davon wird für Panorama
+        zusätzlich gespeichert:</p>
+      <p data-l="en">Every node comes from a store Atlas keeps anyway. None of it is stored a second time for
+        Panorama:</p>
+      <table>
+        <thead><tr>
+          <th data-l="de">Knoten</th><th data-l="en">Node</th>
+          <th data-l="de">Kommt her aus</th><th data-l="en">Comes from</th>
+        </tr></thead>
+        <tbody>
+          <tr><td data-l="de">Prozess-Applikation</td><td data-l="en">Process application</td>
+            <td data-l="de">Den angelegten Applikationen</td><td data-l="en">The applications that exist</td></tr>
+          <tr><td data-l="de">BPMN-Prozess</td><td data-l="en">BPMN process</td>
+            <td data-l="de">Den deployten Prozessen, gruppiert unter ihrer Applikation</td>
+            <td data-l="en">Deployed processes, grouped under their application</td></tr>
+          <tr><td data-l="de">Worker</td><td data-l="en">Worker</td>
+            <td data-l="de">Den eingerichteten Workern und ihren Platzierungen</td>
+            <td data-l="en">The configured workers and their placements</td></tr>
+          <tr><td data-l="de">Job- und Worker-Type</td><td data-l="en">Job type and Worker Type</td>
+            <td data-l="de">Dem Job-Type-Register</td><td data-l="en">The job type registry</td></tr>
+          <tr><td data-l="de">DMN-Entscheidung</td><td data-l="en">DMN decision</td>
+            <td data-l="de">Dem DMN-Register</td><td data-l="en">The DMN registry</td></tr>
+          <tr><td data-l="de">Release und Deployment-Ziel</td><td data-l="en">Release and deployment target</td>
+            <td data-l="de">Den Release- und Ziel-Einträgen</td><td data-l="en">The release and target records</td></tr>
+        </tbody>
+      </table>
+
+      <p data-l="de">Die <b>Kanten</b> sind keine Behauptungen, sondern Fakten, auf die Atlas zeigen kann:</p>
+      <p data-l="en">The <b>edges</b> are not assertions but facts Atlas can point at:</p>
+      <ul>
+        <li data-l="de"><b>Prozess → Prozess</b> &ndash; weil eine <a href="#elemente">Call-Activity</a> ihn aufruft.</li>
+        <li data-l="en"><b>Process → process</b> &ndash; because a <a href="#elemente">call activity</a> calls it.</li>
+        <li data-l="de"><b>Prozess → Worker</b> &ndash; weil ein Service-Task dort platziert ist.</li>
+        <li data-l="en"><b>Process → worker</b> &ndash; because a service task is placed there.</li>
+        <li data-l="de"><b>Prozess → Entscheidung</b> &ndash; weil ein Business-Rule-Task sie bindet.</li>
+        <li data-l="en"><b>Process → decision</b> &ndash; because a business rule task binds it.</li>
+        <li data-l="de"><b>Applikation → Release → Ziel</b> &ndash; aus den Release- und Ziel-Einträgen.</li>
+        <li data-l="en"><b>Application → release → target</b> &ndash; from the release and target records.</li>
+      </ul>
+      <div class="note tip">
+        <div class="lbl" data-l="de">Darum ist das nützlich</div><div class="lbl" data-l="en">Why this is useful</div>
+        <p data-l="de">Die Frage «was passiert, wenn ich diesen Worker abschalte» ist damit keine Recherche mehr,
+          sondern ein Klick: Panorama zeigt, welche Prozesse an ihm hängen. Genau dafür sind abgeleitete Kanten da
+          &ndash; eine gezeichnete Landkarte hätte den Worker vergessen, den letzte Woche jemand hinzugefügt hat.</p>
+        <p data-l="en">"What happens if I switch this worker off" stops being research and becomes a click:
+          Panorama shows which processes hang off it. That is what derived edges are for &ndash; a drawn map would
+          have forgotten the worker somebody added last week.</p>
+      </div>
+
+      <h3 data-l="de">Die Bildsprache lesen</h3><h3 data-l="en">Reading the picture</h3>
+      <ul>
+        <li data-l="de"><b>Grösse sagt zweierlei.</b> Die Art bestimmt das Band &ndash; eine Applikation ist immer
+          grösser als ein Prozess, ein Prozess immer grösser als ein Blatt &ndash; und innerhalb des Bandes wächst
+          ein Knoten mit seiner Vernetzung. Ein viel genutzter Worker ist also grösser als ein einsamer und bleibt
+          trotzdem kleiner als jeder Prozess.</li>
+        <li data-l="en"><b>Size says two things.</b> The kind sets the band &ndash; an application is always larger
+          than a process, a process always larger than a leaf &ndash; and within the band a node grows with its
+          connectivity. A much-used worker is therefore drawn larger than a lonely one and still smaller than any
+          process.</li>
+        <li data-l="de"><b>Das Layout ist reproduzierbar.</b> Die Kräftesimulation läuft mit fester Iterationszahl,
+          nicht animiert: derselbe Graph landet bei jedem Aufruf an derselben Stelle. Ein Neuladen, das das Bild
+          verschiebt, wäre als Veränderung missverständlich.</li>
+        <li data-l="en"><b>The layout is reproducible.</b> The force simulation runs a fixed number of iterations
+          rather than animating: the same graph lands in the same place every time. A reload that moved the picture
+          would read as a change.</li>
+        <li data-l="de"><b>«Nicht sichtbar» und «nicht deployt» sind verschieden</b> und werden verschieden
+          gezeichnet. Ein Knoten, den deine Rolle nicht sehen darf, ist eine andere Aussage als einer, den es nicht
+          gibt.</li>
+        <li data-l="en"><b>"Restricted" and "unresolved" are different</b> and are drawn differently. A node your
+          role may not see is a different finding from one that does not exist.</li>
+        <li data-l="de"><b>Bei sehr grossen Landschaften</b> kommt der Graph bereits auf Applikationen
+          zusammengefasst an &ndash; und die Ansicht sagt das, statt es zu verschweigen.</li>
+        <li data-l="en"><b>On very large landscapes</b> the payload arrives already collapsed to applications
+          &ndash; and the view says so rather than hiding it.</li>
+      </ul>
+
+      <h3 data-l="de">Gespeicherte Ansichten</h3><h3 data-l="en">Saved views</h3>
+      <p data-l="de">Wer sich auf einen Ausschnitt eingerichtet hat &ndash; gefiltert, gezoomt, angeordnet &ndash;
+        kann ihn als benannte Ansicht sichern, statt die Arbeit morgen zu wiederholen.</p>
+      <p data-l="en">Once you have set yourself up on a section &ndash; filtered, zoomed, arranged &ndash; you can
+        save it as a named view instead of redoing the work tomorrow.</p>
+      <div class="note warn">
+        <div class="lbl" data-l="de">Wichtige Einschränkung</div><div class="lbl" data-l="en">Important limit</div>
+        <p data-l="de">Gespeicherte Ansichten liegen im <b>Speicher deines Browsers</b>, wie jeder andere gemerkte
+          UI-Zustand in Atlas. Sie werden <b>mit niemandem geteilt</b> und folgen dir <b>nicht auf ein anderes
+          Gerät</b>. Wer eine Ansicht weitergeben will, exportiert sie als Bild. Es sind maximal 24 Ansichten;
+          die 25. wird abgelehnt, statt die älteste stillschweigend zu verwerfen.</p>
+        <p data-l="en">Saved views live in <b>your browser's own storage</b>, like every other remembered piece of
+          UI state in Atlas. They are <b>shared with nobody</b> and do <b>not follow you to another machine</b>.
+          To pass one on, export it as an image. There is a cap of 24 views; the 25th is refused rather than
+          silently dropping the oldest.</p>
+      </div>
+
+      <h3 data-l="de">Architektursichten</h3><h3 data-l="en">Architecture views</h3>
+      <p data-l="de">Unter <b>Models</b> liegen gezeichnete ArchiMate-3.2-Diagramme. Sie beantworten, was aus den
+        Daten nicht folgt: fachliche Zuordnung, Zielbilder, Zuständigkeiten. Die Diagrammfläche ist eine
+        <b>Leseansicht</b> &ndash; das kanonische XML bleibt auf dem Server unangetastet und wird hier nur
+        dargestellt.</p>
+      <p data-l="en">Under <b>Models</b> live drawn ArchiMate 3.2 diagrams. They answer what the data does not
+        imply: business ownership, target states, responsibilities. The diagram surface is a <b>read-only
+        projection</b> &ndash; the canonical XML stays untouched on the server and is only rendered here.</p>
+      <p data-l="de">Der interessante Teil sind die <b>Bindungen</b>: Ein Element der Zeichnung kann auf eine
+        Atlas-Ressource zeigen &ndash; auf einen Prozess, einen Worker, eine Entscheidung. Das Dokument speichert
+        dabei nur die Kennung; der angezeigte Name kommt immer vom Server. Eine Zeichnung kann deshalb keinen
+        veralteten Namen festhalten.</p>
+      <p data-l="en">The interesting part is the <b>bindings</b>: an element of the drawing can point at an Atlas
+        resource &ndash; a process, a worker, a decision. The document stores only the id; the name shown always
+        comes from the server. A drawing therefore cannot hold a stale copy of a name.</p>
+      <div class="note">
+        <div class="lbl" data-l="de">Was Panorama nicht ist</div><div class="lbl" data-l="en">What Panorama is not</div>
+        <p data-l="de">Kein Monitoring und keine Zeitreihen-Datenbank. Panorama korreliert, was Atlas ohnehin weiss,
+          und legt keine Messreihen an. Für den laufenden Betrieb einer einzelnen Instanz ist
+          <a href="#betrieb">Operations</a> der richtige Ort.</p>
+        <p data-l="en">Not a monitoring system and not a time-series database. Panorama correlates what Atlas knows
+          anyway and keeps no series of samples. For the running state of a single instance,
+          <a href="#betrieb">Operations</a> is the right place.</p>
+      </div>
+    </section>
+
+    <!-- ==================== INFORMATION MODEL ==================== -->
+    <section id="infomodell">
+      <h2 data-l="de">Informationsmodell: was die Daten <i>sind</i></h2>
+      <h2 data-l="en">Information model: what the data <i>is</i></h2>
+      <p class="lead" data-l="de">Ein <a href="#konzepte">Datenobjekt</a> im Prozess ist ein echtes, typisiertes
+        Ding mit Wert und Historie &ndash; aber nur <b>innerhalb einer Prozessdefinition</b>. Zwei Prozesse, die
+        beide einen <code>auftrag</code> führen, führen zwei völlig unabhängige Dinge, und nichts sagt irgendwo,
+        dass dasselbe gemeint ist. Die App <b>Data</b> schliesst genau diese Lücke.</p>
+      <p class="lead" data-l="en">A <a href="#konzepte">data object</a> in a process is a real, typed thing with a
+        value and a history &ndash; but only <b>inside one process definition</b>. Two processes that both carry an
+        <code>order</code> carry two entirely unrelated things, and nothing anywhere states that they mean the same
+        one. The <b>Data</b> app closes exactly that gap.</p>
+
+      <h3 data-l="de">Warum BPMN hier aufhört</h3><h3 data-l="en">Where BPMN stops</h3>
+      <p data-l="de">Das ist keine Lücke in Atlas, sondern eine Eigenschaft des Standards:</p>
+      <p data-l="en">This is not a gap in Atlas but a property of the standard:</p>
+      <ul>
+        <li data-l="de">Ein <code>dataObject</code> gehört der Prozessdefinition, die es deklariert. Sein Name ist
+          eine Zeichenkette, die nur dort gilt.</li>
+        <li data-l="en">A <code>dataObject</code> belongs to the process definition that declares it. Its name is a
+          string local to that definition.</li>
+        <li data-l="de">BPMNs Typ-Steckplatz <code>itemSubjectRef</code> zeigt absichtlich <i>in eine andere
+          Sprache</i> &ndash; der Standard lässt offen, wohin. Ohne ein Gegenüber ist er eine Zeichenkette ohne
+          Bedeutung.</li>
+        <li data-l="en">BPMN's type slot <code>itemSubjectRef</code> deliberately points <i>into some other
+          schema language</i> &ndash; the specification leaves the target open. With nothing on the other side it
+          is a string without meaning.</li>
+        <li data-l="de">Die Frage «welche Prozesse fassen denselben Auftrag an?» hat damit schlicht keine Antwort.
+          Und das ist die Frage, die zählt, sobald es mehr als einen Prozess gibt.</li>
+        <li data-l="en">So the question "which processes touch the same order?" has no answer at all. And that is
+          the question that matters as soon as there is more than one process.</li>
+      </ul>
+      <p data-l="de">Die Antwort der OMG auf diese Frage war immer «das gehört in einen anderen Standard», und
+        dieser andere Standard ist <b>UML</b>. Deshalb ist das Informationsmodell ein UML-Klassendiagramm.</p>
+      <p data-l="en">The OMG's own answer has always been "that belongs to another standard", and that other
+        standard is <b>UML</b>. Which is why the information model is a UML class diagram.</p>
+
+      <h3 data-l="de">Was ein Modell enthält</h3><h3 data-l="en">What a model holds</h3>
+      <p data-l="de">Ein Informationsmodell gehört einer <a href="#werkstatt">Applikation</a> und gilt für
+        <b>alle ihre Prozesse</b>. Es beschreibt Begriffe, keine Tabellen &ndash; wo ein Datum tatsächlich
+        gespeichert wird, ist eine andere Frage und wird pro Speicher entschieden.</p>
+      <p data-l="en">An information model belongs to an <a href="#werkstatt">application</a> and holds for
+        <b>all of its processes</b>. It describes concepts, not tables &ndash; where a datum is actually persisted
+        is a different question, settled per store.</p>
+      <ul>
+        <li data-l="de"><b>Klassen</b> mit ihren Attributen, Typen und Kardinalitäten.</li>
+        <li data-l="en"><b>Classes</b> with their attributes, types and multiplicities.</li>
+        <li data-l="de"><b>Beziehungen</b> zwischen ihnen.</li>
+        <li data-l="en"><b>Relationships</b> between them.</li>
+        <li data-l="de"><b>Der Business Key</b> &ndash; siehe unten. Das ist der Teil, auf den es ankommt.</li>
+        <li data-l="en"><b>The business key</b> &ndash; see below. That is the part that matters.</li>
+      </ul>
+      <p data-l="de">Welche Klassenarten es gibt, welche Beziehung zwischen welchen laufen darf und welche
+        primitiven Typen zur Verfügung stehen, <b>liefert der Server</b>; die Zeichenfläche hält keine eigene
+        Kopie davon. Zwei Kopien einer Regelmatrix wären der Weg zu einer Leinwand, die einen Pfeil zeichnen
+        lässt, den der Server anschliessend ablehnt.</p>
+      <p data-l="en">Which class kinds exist, which relationship may run between which of them and which primitive
+        types are available all <b>come from the server</b>; the canvas keeps no copy. Two copies of a rule matrix
+        is how you get a canvas that lets somebody draw an arrow the server then rejects.</p>
+
+      <h3 data-l="de">Der Business Key</h3><h3 data-l="en">The business key</h3>
+      <p data-l="de">Der <b>Business Key</b> ist die eine Angabe, für die BPMN kein Gegenstück hat: die Tatsache,
+        die sagt, dass zwei Dinge <i>dasselbe</i> Ding sind. Bei einem Auftrag ist das die Auftragsnummer, bei
+        einer Bewerbung die Referenz, bei einer Person die Sozialversicherungsnummer &ndash; was immer im
+        Fachbereich als Identität gilt.</p>
+      <p data-l="en">The <b>business key</b> is the one fact BPMN has no equivalent for: the fact that says two
+        things are the <i>same</i> thing. For an order it is the order number, for an application the reference,
+        for a person a social security number &ndash; whatever counts as identity in the business.</p>
+      <div class="note tip">
+        <div class="lbl" data-l="de">Wenn du nur eine Sache modellierst</div>
+        <div class="lbl" data-l="en">If you model only one thing</div>
+        <p data-l="de">Dann den Business Key. Klassennamen kann jeder rekonstruieren; der Schlüssel ist die
+          Angabe, die beim Abtippen eines fremden Modells als Erstes verlorengeht &ndash; und ohne ihn lässt sich
+          nicht sagen, ob der Auftrag in Prozess A und der in Prozess B derselbe ist.</p>
+        <p data-l="en">Then the business key. Class names anybody can reconstruct; the key is the fact that goes
+          missing first when somebody retypes a foreign model &ndash; and without it there is no way to say whether
+          the order in process A and the one in process B are the same one.</p>
+      </div>
+
+      <h3 data-l="de">Wie das Modell den Prozess trifft</h3><h3 data-l="en">Where the model meets the process</h3>
+      <ol class="steps">
+        <li><b data-l="de">Klasse modellieren</b><b data-l="en">Model the class</b>
+          <p data-l="de">In <a href="/#/data">Data → Model</a> eine Klasse anlegen, ihre Attribute erfassen und
+            ihren Business Key markieren.</p>
+          <p data-l="en">In <a href="/#/data">Data → Model</a>, create a class, give it attributes and mark its
+            business key.</p></li>
+        <li><b data-l="de">Datenobjekt darauf zeigen lassen</b><b data-l="en">Point a data object at it</b>
+          <p data-l="de">Im Modeler das Feld <b>Type</b> des Datenobjekts. Es bietet die Klassen an, die diese
+            Applikation modelliert &ndash; gruppiert nach Modell und je mit ihrem Business Key, weil ein Name allein
+            nicht verrät, ob es die richtige Klasse ist. Darunter wird die Klasse selbst gezeigt.</p>
+          <p data-l="en">The data object's <b>Type</b> field in the Modeler. It offers the classes this application
+            models &ndash; grouped by model and each carrying its business key, because a name alone does not tell
+            you whether it is the right class. Below it, the class itself is shown.</p></li>
+        <li><b data-l="de">Deployen</b><b data-l="en">Deploy</b>
+          <p data-l="de">Beim Deploy wird der Typ gegen das Modell aufgelöst &ndash; einmal, zur Deploy-Zeit. Zur
+            Laufzeit liest die Engine weiterhin nur ganzzahlige Indizes; das Modell kostet den laufenden Prozess
+            nichts.</p>
+          <p data-l="en">At deploy time the type is resolved against the model &ndash; once. At runtime the engine
+            still reads integer indices only; the model costs the running process nothing.</p></li>
+      </ol>
+      <p data-l="de">Das Feld bleibt ein Freitextfeld. Ein Diagramm wird regelmässig gezeichnet, bevor das
+        Vokabular existiert, das es benennt &ndash; eine Klasse einzutippen, die noch niemand modelliert hat, muss
+        möglich bleiben. Steht dort ein Name ohne Klasse, legt <b>Model it now</b> sie an der richtigen Stelle an:
+        als Geschäftsobjekt ohne Attribute und ohne Business Key, weil beides der Autorin gehört und Raten schlechter
+        wäre als Offenlassen.</p>
+      <p data-l="en">The field stays free text. A diagram is routinely drawn before the vocabulary it names exists
+        &ndash; typing a class nothing models yet has to stay possible. Where the name has no class, <b>Model it
+        now</b> adds it where it belongs: a business object with no attributes and no business key, because both
+        are the author's to choose and guessing would be worse than leaving them open.</p>
+
+      <h3 data-l="de">Ein bestehendes Modell einlesen</h3><h3 data-l="en">Reading in an existing model</h3>
+      <p data-l="de">Meistens ist das Modell längst da &ndash; in Enterprise Architect, Papyrus, Visual Paradigm,
+        oft Jahre bevor der erste Prozess gezeichnet wird. <b>Import…</b> liest zwei Dokumentarten: Atlas' eigenes
+        JSON und das <b>XMI</b>, das UML-Werkzeuge exportieren.</p>
+      <p data-l="en">Usually the model exists already &ndash; in Enterprise Architect, Papyrus, Visual Paradigm,
+        often years before the first process is drawn. <b>Import…</b> reads two kinds of document: Atlas's own JSON
+        and the <b>XMI</b> UML tools export.</p>
+      <p data-l="de">Zwei Eigenschaften des Imports sind wichtiger als die Formatliste:</p>
+      <p data-l="en">Two properties of the import matter more than the list of formats:</p>
+      <ul>
+        <li data-l="de"><b>Er sagt, was verlorengeht</b> &ndash; Element für Element. Ein Import, der seine Verluste
+          verschweigt, ist schlimmer als kein Import, weil die Lücke erst auffällt, wenn ein Deploy gegen eine
+          Klasse auflöst, die still ihren Schlüssel verloren hat.</li>
+        <li data-l="en"><b>It reports what it loses</b> &ndash; element by element. A lossy read that hides its
+          losses is worse than no read at all, because the gap stays invisible until a deploy resolves against a
+          class that quietly lost its key.</li>
+        <li data-l="de"><b>Er speichert nur, was gültig ist.</b> Was auf der Platte landet, ist immer ein Modell,
+          das die Prüfung besteht &ndash; ein Deploy trifft nie ein halbes Modell.</li>
+        <li data-l="en"><b>It stores only what is valid.</b> What lands on disk is always a model that passes
+          validation &ndash; a deploy never meets a half-model.</li>
+      </ul>
+      <p data-l="de">Denselben Weg gibt es in die andere Richtung: Ein Modell aus einer Applikation lässt sich in
+        eine andere oder auf eine andere Installation übernehmen, ohne es abzutippen.</p>
+      <p data-l="en">The same path exists in the other direction: a model authored in one application can be moved
+        to another, or to another installation, without retyping it.</p>
+
+      <h3 data-l="de">Zwei Höhen: Model und Instances</h3><h3 data-l="en">Two altitudes: Model and Instances</h3>
+      <p data-l="de">Die App teilt sich in genau die zwei Ebenen, die auch UML unterscheidet &ndash; und die Atlas
+        ohnehin schon trennt, nämlich Entwurfszeit und Laufzeit:</p>
+      <p data-l="en">The app splits into exactly the two levels UML distinguishes &ndash; and that Atlas already
+        separates anyway, namely design time and run time:</p>
+      <table>
+        <thead><tr>
+          <th data-l="de">Ansicht</th><th data-l="en">View</th>
+          <th data-l="de">Beantwortet</th><th data-l="en">Answers</th>
+          <th data-l="de">Rolle</th><th data-l="en">Role</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><b>Model</b></td>
+            <td data-l="de">Was ein Auftrag <i>ist</i> &ndash; die Typebene, das Klassendiagramm.</td>
+            <td data-l="en">What an order <i>is</i> &ndash; the type level, the class diagram.</td>
+            <td><code>modeler</code></td></tr>
+          <tr><td><b>Instances</b></td>
+            <td data-l="de">Welche Aufträge gerade unterwegs sind &ndash; die Instanzebene, gruppiert nach dem Typ,
+              den das Modell deklariert, und filterbar nach Business Key.</td>
+            <td data-l="en">Which orders are out there right now &ndash; the instance level, grouped by the type the
+              model declares and filterable by business key.</td>
+            <td><code>operator</code></td></tr>
+        </tbody>
+      </table>
+      <p data-l="de">Ein Datenobjekt ohne deklarierten Typ wird in <b>Instances</b> nicht versteckt, sondern als
+        <i>ohne deklarierten Typ</i> ausgewiesen. Der Filter steht in der Adresse, ein gefundenes Datum ist also
+        ein Link, den man weiterschicken kann.</p>
+      <p data-l="en">A data object with no declared type is not hidden in <b>Instances</b> but shown as
+        <i>no declared type</i>. The filter lives in the URL, so a datum you found is a link you can send on.</p>
     </section>
 
     <!-- ==================== ROLE: PROCESS DEVELOPER ==================== -->
@@ -3449,7 +3991,12 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
           <tr><td>Worker</td><td data-l="de">Ein konfiguriertes Ziel eines Worker-Typs: Endpoint plus Identität. Diesen Namen nennt ein Task.</td><td data-l="en">A configured target of a worker type: endpoint plus identity. This is the name a task states.</td></tr>
           <tr><td data-l="de">Worker-Instanz</td><td data-l="en">Worker instance</td><td data-l="de">Ein laufender Prozess, der Jobs abholt. Null bis viele pro Worker; Skalieren heisst mehr Instanzen.</td><td data-l="en">A running process that leases jobs. Zero to many per worker; scaling means more instances.</td></tr>
           <tr><td data-l="de">Connector <i>(veraltet)</i></td><td data-l="en">Connector <i>(legacy)</i></td><td data-l="de">Der frühere Name. Je nach Stelle war damit ein Worker-Typ oder ein Worker gemeint – deshalb der neue Sprachgebrauch. XML-Attribute, API und CLI tragen ihn weiter.</td><td data-l="en">The former name. Depending on where it stood it meant a worker type or a worker – which is why the vocabulary changed. XML attributes, the API and the CLI keep it.</td></tr>
-        </tbody>
+                  <tr><td data-l="de">Informationsmodell</td><td data-l="en">Information model</td><td data-l="de">Ein UML-Klassendiagramm, das einer Applikation gehört und für alle ihre Prozesse gilt: was ein Auftrag <i>ist</i>. Siehe <a href="#infomodell">Kapitel</a>.</td><td data-l="en">A UML class diagram owned by an application and holding for all of its processes: what an order <i>is</i>. See the <a href="#infomodell">chapter</a>.</td></tr>
+          <tr><td data-l="de">Business Key</td><td data-l="en">Business key</td><td data-l="de">Die Angabe, die sagt, dass zwei Dinge dasselbe Ding sind – die Auftragsnummer, die Referenz. BPMN hat dafür kein Gegenstück.</td><td data-l="en">The fact that says two things are the same thing – the order number, the reference. BPMN has no equivalent.</td></tr>
+          <tr><td data-l="de">Landschaft</td><td data-l="en">Landscape</td><td data-l="de">Der Graph aller Applikationen, Prozesse, Worker und Entscheidungen einer Installation. Berechnet, nicht gezeichnet. Siehe <a href="#panorama">Panorama</a>.</td><td data-l="en">The graph of every application, process, worker and decision on an installation. Computed, not drawn. See <a href="#panorama">Panorama</a>.</td></tr>
+          <tr><td>Playground</td><td data-l="de">Der Modeler-Tab, der den Entwurf mit echten Daten auf der echten Engine rechnet – in einer Wegwerf-Sandbox, ohne Deploy. Siehe <a href="#playground">Testen</a>.</td><td data-l="en">The Modeler tab that runs the draft with real data on the real engine – in a throwaway sandbox, with no deploy. See <a href="#playground">Test</a>.</td></tr>
+          <tr><td>MCP</td><td data-l="de">Das Protokoll, über das ein KI-Assistent Atlas bedient. Ein Werkzeug läuft mit den Rollen dessen, der es ruft. Siehe <a href="#konten">Konten &amp; Rollen</a>.</td><td data-l="en">The protocol an AI assistant drives Atlas over. A tool runs with the roles of whoever calls it. See <a href="#konten">accounts &amp; roles</a>.</td></tr>
+</tbody>
       </table>
       <p class="lead" data-l="de">Ausführlicheres Glossar (mit Engine-Interna) im Repository unter
         <code>docs/architecture/glossary.md</code>.</p>

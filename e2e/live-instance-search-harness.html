@@ -140,13 +140,42 @@
         return {};
       };
 
+      // __archive stands in for the exported event log. A test sets it to
+      // { state, rows } to say what the archive answered for a query this server's
+      // own store could not match — which is the only situation the real server asks
+      // it in. Left null, nothing is archived and the header is absent, which is the
+      // shape a server without an exporter answers in.
+      window.__archive = null;
+
+      // __purge removes an instance from this server's own store, the way history
+      // retention does. It is what lets a test run the same search across the moment
+      // an instance stops being live and starts being archived.
+      window.__purge = (key) => {
+        for (const list of [activeRows, doneRows]) {
+          const at = list.findIndex((r) => r.key === key);
+          if (at >= 0) list.splice(at, 1);
+        }
+      };
+
       const apiRaw = async (method, url, body) => {
         if (method === "GET" && url.startsWith("/api/v1/instances?")) {
           window.__requests.push(url);
           return listResponse(url);
         }
+        if (method === "GET" && url.startsWith("/api/v1/instances/search")) {
+          const data = await api(method, url, body);
+          const headers = new Headers();
+          if (!data.length && window.__archive) {
+            headers.set("X-Archive-State", window.__archive.state);
+            return { data: (window.__archive.rows || []).map((r) => ({ ...r, archived: true })), headers };
+          }
+          return { data, headers };
+        }
         return { data: await api(method, url, body), headers: new Headers() };
       };
+
+      // __rows exposes the store's own instances so a test can arrange one.
+      window.__rows = () => activeRows.concat(doneRows);
 
       window.__mountLive = () => mountLive(view, { api, apiRaw, toast: noop, key: DEF });
       window.__ready = true;

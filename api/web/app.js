@@ -855,6 +855,17 @@ function handbookHelp(path) {
   if (path.startsWith("#/operations/decisions")) return H("dmn", "Learn DMN");
   if (path.startsWith("#/operations/call-activities")) return H("elemente", "BPMN elements");
   if (path.startsWith("#/operations")) return H("betrieb", "Operations & incidents");
+  // Panorama and Data each have a chapter of their own, and both are places a
+  // person arrives at without having read anything: the landscape because it is
+  // the one view that says something before you have modelled, the information
+  // model because a data object's Type field links straight into it.
+  if (path.startsWith("#/panorama")) return H("panorama", "Panorama: the landscape");
+  if (path.startsWith("#/data")) return H("infomodell", "The information model");
+  // The two Console screens whose chapter is not the Console's own: connecting an
+  // assistant and reading the grant history are both access control, and that is
+  // where the accounts chapter puts them.
+  if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
+  if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
   // Organization pointed at the worker chapter only because the worker cards used to
   // sit on it; with those on their own page it points there instead, and Organization
@@ -4840,7 +4851,7 @@ async function viewInstances() {
       <button class="btn" type="submit" title="Find instances whose process variables match">Search variables</button>
       <button class="btn ghost" type="button" id="var-clear" hidden title="Clear the variable search and its results">Clear</button>
     </form>
-    <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">A bare instance key is looked up directly — one read, whatever the instance count. Otherwise: contains <code>=</code> → structured <code>name=value</code> (name exact, value substring), else free text across variable names and values. A variable the model declares <code>atlas:searchable</code> is found by index instead — matched exactly, or as a prefix with a trailing <code>*</code> — when the search is narrowed to one version.</p>
+    <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">A bare instance key is looked up directly — one read, whatever the instance count. Otherwise: contains <code>=</code> → structured <code>name=value</code> (name exact), else the term is matched against variable names and values. A term is matched <b>whole</b>: <code>kdnr=MT-100</code> finds <code>MT-100</code> and not <code>MT-10001</code>. Widen it yourself with <code>*</code> for any run of characters and <code>?</code> for exactly one — <code>*MT-1*</code> for anything containing <code>MT-1</code> — and write <code>\\*</code> or <code>\\?</code> to search for those characters themselves. A variable the model declares <code>atlas:searchable</code> is found by index when the search is narrowed to one version.</p>
     <div id="var-panel" hidden></div>
     <div id="ops-inc-note"></div>
     <div class="card" id="proc-card" style="padding:0">
