@@ -518,10 +518,12 @@ test("opens fitted to the content and zooms from there", async ({ page }) => {
   expect(await canvas.getAttribute("viewBox")).toBe(fitted);
 });
 
-// Panning is gated on there being something off-screen. At the fitted frame the
-// whole landscape is already visible, so a drag there could only push it out of
-// view and hand back the empty space the fit exists to remove.
-test("pans once zoomed in, and is inert at the fitted frame", async ({ page }) => {
+// Panning at any magnification, the fitted frame included. It used to be refused
+// there — everything was on screen, so a drag could only push the picture into the
+// empty space the fit exists to remove — and that stopped being the whole truth when
+// a node became draggable anywhere: there is somewhere to pan *to*, and a canvas that
+// only moves when zoomed in is a canvas whose rules a reader has to discover.
+test("pans at any magnification, without also selecting", async ({ page }) => {
   installMock(page);
   await page.goto("/index.html#/panorama/starmap");
 
@@ -539,6 +541,13 @@ test("pans once zoomed in, and is inert at the fitted frame", async ({ page }) =
   };
 
   await drag();
+  const pannedAtFit = await canvas.getAttribute("viewBox");
+  expect(pannedAtFit).not.toBe(fitted);
+  // A translation, not a rescale — the same rule as when zoomed in.
+  expect(pannedAtFit.split(" ").slice(2)).toEqual(fitted.split(" ").slice(2));
+  // And Fit is the way back, which is what makes an unbounded canvas navigable
+  // rather than a place to get lost in.
+  await page.locator("#mesh-zoom-fit").click();
   expect(await canvas.getAttribute("viewBox")).toBe(fitted);
 
   await page.locator("#mesh-zoom-in").click();
@@ -2555,4 +2564,38 @@ test("the panel says what a process is running, the zero included", async ({ pag
   // A worker has no instances at all — not zero of them — so it says nothing.
   await page.locator('[data-node-id="worker:c1"] .mesh-body').click();
   await expect(page.locator(".mesh-panel .mesh-runtime")).toHaveCount(0);
+});
+
+// The canvas has no edges. A node goes where the hand puts it — the world is a budget
+// for the layout to settle in, not a fence around the arrangement — and the fit
+// follows, so nothing dragged out of sight is lost.
+test("a node can be dragged past the edge of the world, and Fit brings it back", async ({ page }) => {
+  installMock(page);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const node = page.locator('[data-node-id="process:1"]');
+  const before = await node.evaluate((g) => g.getAttribute("transform"));
+
+  // Straight up and well past the top: the direction the clamp used to refuse.
+  const box = await node.boundingBox();
+  const canvas = await page.locator(".mesh-canvas").boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, canvas.y - 260, { steps: 10 });
+  await page.mouse.up();
+
+  const after = await node.evaluate((g) => g.getAttribute("transform"));
+  expect(after).not.toBe(before);
+  // Above the world's own top edge, which is where the clamp used to stop it.
+  const y = Number(after.match(/-?[\d.]+/g)[1]);
+  expect(y).toBeLessThan(0);
+
+  // And it is still findable: Fit frames the arrangement as it now is, so the node
+  // that was dragged out of the frame is inside the next one.
+  await page.locator("#mesh-zoom-fit").click();
+  const view = (await page.locator(".mesh-canvas").getAttribute("viewBox")).split(" ").map(Number);
+  expect(y).toBeGreaterThan(view[1]);
+  expect(y).toBeLessThan(view[1] + view[3]);
 });
