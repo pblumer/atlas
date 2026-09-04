@@ -81,27 +81,39 @@ async function showCalledProcessPanel(page) {
   await page.locator(".pgroup-head", { hasText: "Called process" }).click();
 }
 
-test("hovering a call activity names what its + opens", async ({ page }) => {
+test("hovering the shape rings the +, and only the + explains itself", async ({ page }) => {
   await page.locator("#f-call-processid").fill("pruefe-auftrag");
   await page.locator("#f-call-processid").blur(); // committing the field writes the model
   const shape = await page.locator('[data-element-id="Activity_ca"] .djs-hit').first().boundingBox();
   await page.mouse.move(shape.x + shape.width * 0.3, shape.y + shape.height * 0.3);
 
+  // On the shape: the ring, silently. A sentence that follows every pass over a task
+  // is noise, which is what this used to be.
+  await expect(page.locator(".ca-drill-ring")).toBeVisible();
+  await expect(page.locator(".ca-drill-tip")).toHaveCount(0);
+
+  // On the marker: the ring lights up and the gesture is spelled out — short, and
+  // without the callee's name, which the panel beside the diagram already carries.
+  const at = await markerCenter(page, "Activity_ca");
+  await page.mouse.move(at.x, at.y);
   const tip = page.locator(".ca-drill-tip");
   await expect(tip).toBeVisible();
-  await expect(tip).toContainText("pruefe-auftrag");
-  await expect(tip).toContainText("Double-click");
+  await expect(tip).toHaveText("Double-click to open");
+  await expect(page.locator(".ca-drill-ring")).toHaveClass(/\bon\b/);
+  expect((await tip.boundingBox()).width, "the label stays a label").toBeLessThan(180);
+
+  // Back onto the shape body: the sentence goes, the ring stays.
+  await page.mouse.move(shape.x + shape.width * 0.3, shape.y + shape.height * 0.3);
+  await expect(page.locator(".ca-drill-tip")).toHaveCount(0);
   await expect(page.locator(".ca-drill-ring")).toBeVisible();
 
-  // The cue must never be in the way of the gesture it advertises.
-  for (const sel of [".ca-drill-tip", ".ca-drill-ring"]) {
-    const events = await page.locator(sel).evaluate((el) => getComputedStyle(el).pointerEvents);
-    expect(events, `${sel} must not take pointer events`).toBe("none");
-  }
+  // Neither part may ever be in the way of the gesture it advertises.
+  const events = await page.locator(".ca-drill-ring").evaluate((el) => getComputedStyle(el).pointerEvents);
+  expect(events, "the ring must not take pointer events").toBe("none");
 
   // Off the shape again, the cue goes.
   await page.mouse.move(shape.x - 60, shape.y - 40);
-  await expect(page.locator(".ca-drill-tip")).toHaveCount(0);
+  await expect(page.locator(".ca-drill-ring")).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });
 

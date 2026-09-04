@@ -472,9 +472,9 @@ _Changed_ / _Removed_ for each version.
 
   **Double-click the `+`** and the called process opens — the same gesture in the
   Modeler, the live view, the instance replay and the collaboration replay. Hovering the
-  shape rings the marker and names what is behind it, so the gesture is visible before
-  the pointer is anywhere near it; the replay's badge and *Called process* link stay
-  exactly where they were. Where "in" lands is what each surface knows: the Modeler
+  shape rings the marker, silently, so the way in is visible before the pointer is
+  anywhere near a 14px target; putting the pointer on that ring spells the gesture out.
+  The replay's badge and *Called process* link stay exactly where they were. Where "in" lands is what each surface knows: the Modeler
   opens the callee's **draft** where one holds that id and its newest deployed version
   otherwise, the live view opens the **child instance** this caller started (or, under
   *All instances*, the called process's own live view), and the replay opens the child's
