@@ -298,6 +298,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0242](0242-one-route-table-for-the-shell.md) | One route table describes the shell | Proposed |
 | [0243](0243-shared-ui-primitives.md) | The views are built from shared parts | Proposed |
 | [0244](0244-searchable-variables.md) | Searchable variables — a declared value index | Accepted |
+| [0245](0245-call-activity-drilldown.md) | The call activity's "+" is the way into the process it calls | Accepted |
 
 ## Status values
 

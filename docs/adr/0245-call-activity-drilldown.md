@@ -1,4 +1,4 @@
-# ADR-DRAFT: The call activity's "+" is the way into the process it calls
+# ADR-0245: The call activity's "+" is the way into the process it calls
 
 - **Status:** Accepted
 - **Date:** 2026-09-04

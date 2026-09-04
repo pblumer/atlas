@@ -1436,7 +1436,7 @@ function makePoolProcessCaptions(modeler) {
   return refresh;
 }
 
-// --- Call-activity drill-down (ADR-0076, ADR-draft-call-activity-drilldown) ------
+// --- Call-activity drill-down (ADR-0076, ADR-0245) ------
 //
 // A call activity is the one element on a diagram whose contents are somewhere else:
 // the process it calls is a separate model, deployed on its own, and at runtime a
@@ -1448,7 +1448,7 @@ function makePoolProcessCaptions(modeler) {
 // being readable as one thing.
 //
 // So the marker is the door, everywhere it is drawn: double-click the "+" and the
-// called process opens (ADR-draft-call-activity-drilldown). The gesture is wired
+// called process opens (ADR-0245). The gesture is wired
 // identically on every surface (wireCallDrilldown) because it has to be learnable
 // once; what differs is only where "in" lands, which each surface supplies — the
 // Modeler opens the callee's model, the runtime views open what it is doing now.

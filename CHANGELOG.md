@@ -312,7 +312,7 @@ _Changed_ / _Removed_ for each version.
   editing a draft, and asks before discarding when there is nowhere to put the edits.
   The **Called process** panel also gained an *Open called process* button, which is the
   same door for a keyboard.
-  ([ADR-draft-call-activity-drilldown](docs/adr/draft-call-activity-drilldown.md),
+  ([ADR-0245](docs/adr/0245-call-activity-drilldown.md),
   `e2e/call-activity-modeler.spec.mjs`, `e2e/call-activity-live.spec.mjs`,
   `e2e/call-activity-replay.spec.mjs`)
 

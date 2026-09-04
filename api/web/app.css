@@ -1174,7 +1174,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ca-child-link { color: var(--accent, #2563eb); font-weight: 600; text-decoration: none; }
 .ca-child-link:hover { text-decoration: underline; }
 
-/* The drill-in cue on a call activity (ADR-draft-call-activity-drilldown): while the
+/* The drill-in cue on a call activity (ADR-0245): while the
    shape is hovered, the "+" BPMN draws on it is ringed and what it opens is named,
    because the gesture that opens it — a double-click on that marker — is otherwise
    folklore. It is deliberately a hover cue rather than another badge: in the live view
