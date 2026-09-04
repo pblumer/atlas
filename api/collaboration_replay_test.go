@@ -57,8 +57,9 @@ type collabRuntime struct {
 	Instances int `json:"instances"`
 	Tokens    int `json:"tokens"`
 	Elements  []struct {
-		ElementID string `json:"elementId"`
-		Visits    int    `json:"visits"`
+		ElementID  string `json:"elementId"`
+		Visits     int    `json:"visits"`
+		Terminated int    `json:"terminated"`
 	} `json:"elements"`
 	MessageFlows []struct {
 		At                int64  `json:"at"`
@@ -386,5 +387,91 @@ func TestCollaborationRuntimeRedeployKeepsLatestPools(t *testing.T) {
 	}
 	if len(rt.Pools) != 2 {
 		t.Errorf("pools after redeploy = %d, want 2 (latest version only): %s", len(rt.Pools), body)
+	}
+}
+
+// raceCollabBPMN is a two-pool collaboration whose left pool holds a deferred choice
+// (ADR-0110): the answering pool's message races a timer. It is the smallest
+// collaboration in which a token is cancelled rather than completed.
+const raceCollabBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <collaboration id="Collab_race">
+    <participant id="P_waiter" name="Waiter" processRef="waiter"/>
+    <participant id="P_answerer" name="Answerer" processRef="answerer"/>
+  </collaboration>
+  <message id="Msg_go" name="go"/>
+  <process id="waiter" isExecutable="true">
+    <startEvent id="w_start"/>
+    <eventBasedGateway id="w_gw"/>
+    <intermediateCatchEvent id="w_reply"><messageEventDefinition messageRef="Msg_go"/></intermediateCatchEvent>
+    <intermediateCatchEvent id="w_timeout"><timerEventDefinition><timeDuration>PT30S</timeDuration></timerEventDefinition></intermediateCatchEvent>
+    <endEvent id="w_end_reply"/>
+    <endEvent id="w_end_timeout"/>
+    <sequenceFlow id="wf1" sourceRef="w_start" targetRef="w_gw"/>
+    <sequenceFlow id="wf2" sourceRef="w_gw" targetRef="w_reply"/>
+    <sequenceFlow id="wf3" sourceRef="w_gw" targetRef="w_timeout"/>
+    <sequenceFlow id="wf4" sourceRef="w_reply" targetRef="w_end_reply"/>
+    <sequenceFlow id="wf5" sourceRef="w_timeout" targetRef="w_end_timeout"/>
+  </process>
+  <process id="answerer" isExecutable="true">
+    <startEvent id="a_start"/>
+    <intermediateThrowEvent id="a_throw"><messageEventDefinition messageRef="Msg_go"/></intermediateThrowEvent>
+    <endEvent id="a_end"/>
+    <sequenceFlow id="af1" sourceRef="a_start" targetRef="a_throw"/>
+    <sequenceFlow id="af2" sourceRef="a_throw" targetRef="a_end"/>
+  </process>
+</definitions>`
+
+// TestCollaborationRuntimeReportsCancelledTokens: the merged overlay a collaboration
+// draws carries the cancelled half of the history too, or the same deferred choice that
+// is readable on a single process becomes unreadable the moment it is drawn in a pool —
+// both branches visited once, and nothing saying which event actually came
+// (ADR-0249).
+func TestCollaborationRuntimeReportsCancelledTokens(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", raceCollabBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var dep collabDeployResp
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	keyByProc := map[string]uint64{}
+	for _, d := range dep.Deployments {
+		keyByProc[d.ProcessID] = d.Key
+	}
+
+	// The waiter arms both branches first; the answerer then throws, so the message
+	// branch wins and the timer branch is cancelled.
+	for _, proc := range []string{"waiter", "answerer"} {
+		code, body = doReq(t, ts, http.MethodPost,
+			fmt.Sprintf("/api/v1/processes/%d/instances", keyByProc[proc]), "{}", "application/json")
+		if code != http.StatusOK {
+			t.Fatalf("start %s: status=%d body=%s", proc, code, body)
+		}
+	}
+
+	code, body = doReq(t, ts, http.MethodGet,
+		fmt.Sprintf("/api/v1/collaborations/%d/runtime", keyByProc["waiter"]), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("collaboration runtime: status=%d body=%s", code, body)
+	}
+	var rt collabRuntime
+	if err := json.Unmarshal(body, &rt); err != nil {
+		t.Fatalf("decode runtime: %v (%s)", err, body)
+	}
+	got := map[string]struct{ visits, terminated int }{}
+	for _, e := range rt.Elements {
+		got[e.ElementID] = struct{ visits, terminated int }{e.Visits, e.Terminated}
+	}
+	if e := got["w_reply"]; e.visits != 1 || e.terminated != 0 {
+		t.Errorf("w_reply = %+v, want 1 visit and 0 terminated (it won)", e)
+	}
+	if e := got["w_timeout"]; e.visits != 1 || e.terminated != 1 {
+		t.Errorf("w_timeout = %+v, want 1 visit and 1 terminated (it was cancelled)", e)
+	}
+	if e := got["a_throw"]; e.terminated != 0 {
+		t.Errorf("a_throw = %+v, want nothing cancelled in the answering pool", e)
 	}
 }

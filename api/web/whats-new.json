@@ -101,6 +101,53 @@
       }
     },
     {
+      "id": "the-live-diagram-tells-a-token-that-got-through-from-one-tha",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The diagram now says which event actually arrived",
+        "de": "Das Diagramm sagt jetzt, welches Ereignis wirklich eingetroffen ist"
+      },
+      "summary": {
+        "en": "Every element on the live diagram carries two counts: how many tokens sit there now, in green, and how many have been there, in gray. The gray one counted every token that had arrived and left again — whether it finished and moved on, or was cancelled. Nowhere did that hurt more than at an event-based gateway, the \"wait for a reply, otherwise time out\" pattern: the engine arms every branch at once, so one waiting case holds a token on each of them, and every decided race leaves one branch completed and the other cancelled. Both branches therefore showed the same two numbers whatever had happened — 10 941 gray and 50 002 green on the message branch, and exactly the same on the timer branch, which reads as \"both events arrive equally often\" and never meant that. Two things change. Gray now means completed here and moved on, and a new amber count means cancelled here — so at each branch you can read how often that event actually came, and how often the other one beat it. And the race itself is drawn as the one wait it is: the green count sits on the gateway, and the events behind it are marked \"armed\" instead of each repeating that count. Counting starts with this release: cancellations that happened before it were never recorded, so the amber number begins at zero on an existing engine.",
+        "de": "Jedes Element im Live-Diagramm trägt zwei Zahlen: wie viele Token gerade hier liegen (grün) und wie viele schon hier waren (grau). Die graue zählte jeden Token, der angekommen und wieder weg war — egal ob er fertig weitergelaufen oder abgebrochen worden ist. Nirgends störte das mehr als am ereignisbasierten Gateway, dem Muster „warte auf Antwort, sonst Timeout“: die Engine macht alle Zweige gleichzeitig scharf, ein wartender Fall hält also auf jedem Zweig einen Token, und jedes entschiedene Rennen lässt einen Zweig abgeschlossen und den anderen abgebrochen zurück. Beide Zweige zeigten deshalb dieselben zwei Zahlen, was auch immer passiert war — 10 941 grau und 50 002 grün am Nachrichten-Zweig und genau dasselbe am Timer-Zweig, was sich liest wie „beide Ereignisse treffen gleich oft ein“ und das nie bedeutet hat. Zwei Dinge ändern sich. Grau heisst jetzt hier abgeschlossen und weitergelaufen, und eine neue bernsteinfarbene Zahl heisst hier abgebrochen — am Zweig selbst steht also, wie oft dieses Ereignis wirklich kam und wie oft das andere schneller war. Und das Rennen wird als das eine Warten gezeichnet, das es ist: die grüne Zahl steht am Gateway, die Ereignisse dahinter sind nur noch als „armed“ markiert. Gezählt wird ab dieser Version: Abbrüche davor wurden nie erfasst, die bernsteinfarbene Zahl beginnt auf einer bestehenden Engine also bei null."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Events"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations › Processes and pick a process with an event-based gateway — the handbook's \"Antwort oder Timeout\" recipe deploys one in a click.",
+          "Start an instance. The green count appears on the gateway itself; the two events behind it are outlined dashed and say \"armed\".",
+          "Let one branch win: the recipe's ▶ Try it button publishes the message for you (or POST it yourself to /api/v1/messages).",
+          "The branch that won carries a gray 1 — completed here and moved on. The branch that lost carries an amber 1 — cancelled here.",
+          "Hover either badge: the tooltip spells out which of the two it is.",
+          "Switch the instance picker from \"All instances\" to a single one to read the same thing for that case alone."
+        ],
+        "de": [
+          "Öffnen Sie Operations › Processes und wählen Sie einen Prozess mit ereignisbasiertem Gateway — das Rezept „Antwort oder Timeout“ im Handbuch deployt einen per Klick.",
+          "Starten Sie eine Instanz. Die grüne Zahl steht am Gateway selbst; die beiden Ereignisse dahinter sind gestrichelt umrandet und mit „armed“ markiert.",
+          "Lassen Sie einen Zweig gewinnen: Der Knopf ▶ Ausprobieren im Rezept publiziert die Nachricht (oder Sie schicken sie selbst per POST an /api/v1/messages).",
+          "Der Zweig, der gewonnen hat, trägt eine graue 1 — hier abgeschlossen und weitergelaufen. Der unterlegene trägt eine bernsteinfarbene 1 — hier abgebrochen.",
+          "Fahren Sie über eine der Zahlen: der Tooltip sagt, welche der beiden es ist.",
+          "Stellen Sie die Instanzauswahl von „All instances“ auf eine einzelne um — dieselbe Lesart, nur für diesen Fall."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "a-data-object-can-be-pointed-at-a-class-you-can-see",
       "version": "Unreleased",
       "date": null,
@@ -299,28 +346,6 @@
         },
         "route": "#/console/workers"
       }
-    },
-    {
-      "id": "a-non-interrupting-message-or-signal-boundary-event-now-fire",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A reminder attached to a task now fires every time, not just the first",
-        "de": "Eine Erinnerung an einer Aufgabe feuert jetzt jedes Mal, nicht nur beim ersten Mal"
-      },
-      "summary": {
-        "en": "A non-interrupting boundary event is how a model says remind me: it fires beside a running task and leaves the task running. On a timer that repeats it already fired on every occurrence — but on a message or a signal it fired once and then stopped listening, so the second message matched nothing at all: no incident, no log line, and no way for the sender to tell. It now stays armed for as long as its task runs, and every message takes the reminder branch again. A model that only ever expected to hear the first one will now hear them all; an interrupting event, or a condition on the reminder branch, is how you ask for exactly one.",
-        "de": "Ein nicht-unterbrechendes Boundary-Ereignis ist die Art, wie ein Modell «erinnere mich» sagt: Es feuert neben einer laufenden Aufgabe und lässt sie weiterlaufen. Bei einem wiederkehrenden Timer tat es das schon bisher bei jedem Mal — bei einer Nachricht oder einem Signal dagegen genau einmal, danach hörte es auf zuzuhören: Die zweite Nachricht traf auf nichts, ohne Incident, ohne Logzeile und ohne dass der Absender es hätte merken können. Es bleibt jetzt scharf, solange seine Aufgabe läuft, und jede Nachricht nimmt den Erinnerungszweig erneut. Ein Modell, das nur die erste erwartet hat, hört nun alle; wer genau eine will, nimmt ein unterbrechendes Ereignis oder eine Bedingung auf dem Erinnerungszweig."
-      },
-      "link": {
-        "label": "ADR-0236",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0236-repeating-non-interrupting-boundary-events.md"
-      },
-      "tags": [
-        "Operations",
-        "Modeler"
-      ]
     }
   ]
 }

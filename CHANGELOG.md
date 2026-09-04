@@ -143,6 +143,40 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The live diagram tells a token that got through from one that was cancelled — and
+  draws a deferred choice once.** An element on the runtime overlay carried two numbers:
+  green for the tokens live on it, gray for the ones that had "passed through". Gray was
+  `visits − tokens`, and a visit is recorded on *activation*, so it counted every token
+  that had arrived and left — whether it completed and moved on, or was terminated: a
+  losing event-gateway branch, an activity a boundary event interrupted, a scope torn
+  down.
+
+  On an **event-based gateway** ([ADR-0110](docs/adr/0110-event-based-gateways.md)) that
+  was not imprecision but a wrong answer, because cancellation there is not an exception
+  — it is half of every outcome. The gateway arms *all* of its branches and completes
+  itself, so a waiting instance holds a token on each branch and none on the gateway,
+  and every decided race activates both branches and leaves both. The two branches
+  therefore showed the *identical* pair of numbers whatever had actually happened — on
+  one production diagram, `10 941` gray and `50 002` green on the message branch and the
+  same on the timer branch, which reads as "these two events arrive equally often" and is
+  not what either number means.
+
+  Three things changed, none of them in the engine's semantics. A terminated element
+  instance now bumps a retained counter of its own, per instance and per definition,
+  mirroring the visit counters beside it ([ADR-0022](docs/adr/0022-element-visit-history.md),
+  [ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) — a write-only merge on the
+  fold path, derived from the committed event alone, so replay rebuilds it. The overlay
+  splits the old gray badge into **gray = completed here and moved on** and **amber =
+  cancelled here**, so which event actually arrived is now readable at the branch itself.
+  And an event gateway's race is drawn as the one wait it is: the green count moves onto
+  the **gateway**, and its armed branches are marked `armed` instead of each repeating
+  that same count. A catch joins its gateway's group only when the gateway is its sole
+  way in, so one reachable from elsewhere as well keeps its own count.
+
+  **No backfill:** terminations were never recorded before, so the amber count starts at
+  zero on an existing store and gray keeps its old meaning for the history already
+  written. ([ADR-0249](docs/adr/0249-overlay-cancelled-tokens.md))
+
 - **A data object can be pointed at a class you can see.** The **Type** of a data object
   in the Modeler is the link the whole information model turns on — it is what lets two
   processes agree that their `order` is the same kind of thing, and what a write to a

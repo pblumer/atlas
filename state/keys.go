@@ -49,6 +49,8 @@ const (
 	cfInstanceByDef          columnFamily = 0x24 // piByDef:<procDefKey>:<piKey> → nil
 	cfInstanceDoneByDef      columnFamily = 0x25 // piDoneByDef:<procDefKey>:<completedAt>:<piKey> → nil
 	cfVariableIndex          columnFamily = 0x26 // varIdx:<name>:<value>:0x00:<piKey> → nil
+	cfElementTermination     columnFamily = 0x27 // elTerm:<procDefKey>:<piKey>:<elementId> → int64 count
+	cfElementTerminationAgg  columnFamily = 0x28 // elTermAgg:<procDefKey>:<elementId> → int64 cumulative terminations (merge)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -118,8 +120,17 @@ func keyElementVisitAgg(procDefKey uint64, elementId int32) []byte {
 	return appendBE32(runtimeCountPrefix(cfElementVisitAgg, procDefKey), uint32(elementId))
 }
 
+// keyElementTerminationAgg keys a definition-element cumulative-termination counter:
+// the tokens that left the element cancelled rather than completed. Kept apart from the
+// visit aggregate because "arrived here" and "was cancelled here" are different facts,
+// and an event-based gateway's branches only differ in the second
+// (ADR-0249). Incremented on termination, never decremented.
+func keyElementTerminationAgg(procDefKey uint64, elementId int32) []byte {
+	return appendBE32(runtimeCountPrefix(cfElementTerminationAgg, procDefKey), uint32(elementId))
+}
+
 // elementIdFromCountKey extracts the trailing element index from a per-element
-// runtime counter key (token or visit).
+// runtime counter key (token, visit, or termination).
 func elementIdFromCountKey(k []byte) int32 {
 	return int32(binary.BigEndian.Uint32(k[len(k)-4:]))
 }
@@ -291,9 +302,28 @@ func elementVisitInstancePrefix(procDefKey, piKey uint64) []byte {
 	return appendBE64(elementVisitDefPrefix(procDefKey), piKey)
 }
 
-// elementIdFromVisitKey extracts the trailing element index from a visit key.
+// elementIdFromVisitKey extracts the trailing element index from a per-instance
+// history counter key — a visit or a termination, which share the key shape.
 func elementIdFromVisitKey(k []byte) int32 {
 	return int32(binary.BigEndian.Uint32(k[len(k)-4:]))
+}
+
+// keyElementTermination keys the per-instance termination counter for one BPMN
+// element — the cancelled half of the visit history, laid out identically so a
+// definition-wide and a single-instance read are the same two prefix scans.
+func keyElementTermination(procDefKey, piKey uint64, elementId int32) []byte {
+	return appendBE32(elementTerminationInstancePrefix(procDefKey, piKey), uint32(elementId))
+}
+
+// elementTerminationDefPrefix scans every termination recorded for a definition,
+// across all of its instances.
+func elementTerminationDefPrefix(procDefKey uint64) []byte {
+	return appendBE64([]byte{byte(cfElementTermination)}, procDefKey)
+}
+
+// elementTerminationInstancePrefix scans the terminations of a single instance.
+func elementTerminationInstancePrefix(procDefKey, piKey uint64) []byte {
+	return appendBE64(elementTerminationDefPrefix(procDefKey), piKey)
 }
 
 // keyMessageFlow keys a retained message-flow history record. The receiver

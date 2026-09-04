@@ -192,6 +192,13 @@ test("a call activity that has not run says so instead of doing nothing", async 
 
   await expect(page.locator(".tp-drill-note")).toContainText("not started a child instance");
   await expect(page.locator('#tp-canvas [data-element-id="review"]')).toBeVisible(); // still the caller
+
+  // And it says it out of the way: a diagram is drawn from its top-left, so the note
+  // goes along the bottom of the canvas rather than over the elements it is about.
+  const canvas = await page.locator("#tp-canvas").boundingBox();
+  const note = await page.locator(".tp-drill-note").boundingBox();
+  expect(note.y).toBeGreaterThan(canvas.y + canvas.height / 2);
+  expect(note.y + note.height).toBeLessThanOrEqual(canvas.y + canvas.height);
   expect(page.__errors).toEqual([]);
 });
 
