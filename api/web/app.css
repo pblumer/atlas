@@ -1345,6 +1345,10 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 .var-panel .vp-search-q:focus { outline: none; border-color: var(--accent); }
 .var-panel .vp-search-err { margin: -4px 0 8px; font-size: 12px; color: var(--danger); }
+/* An archive note is information, not a failure: it explains where a row came from,
+   or why purged history was not searched. It reads in the muted voice rather than
+   the danger one, which is reserved for something that actually went wrong. */
+.var-panel .vp-archive-note { font-size: 12px; line-height: 1.5; }
 /* "Load more" walks the newest-first cursor into older instances. */
 .var-panel .vp-more { display: flex; justify-content: center; margin-top: 8px; }
 

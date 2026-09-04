@@ -8016,6 +8016,13 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   let searchQuery = "";     // the active instance search; "" means the plain listing
   let searchDraft = "";     // what is currently typed, kept across the 1.5s poll's rebuilds
   let searchError = "";     // what the last search failed with, shown in the panel
+  // archiveState is what the exported event log had to say about a search this
+  // server's own store could not answer: "" when it was not consulted, otherwise
+  // available / empty / notConfigured / refused / unreachable. It is kept apart from
+  // searchError because "no archive is configured" is a fact about this server, not
+  // a failure of the search — and telling an operator "nothing found" when nothing
+  // was ever looked in would be the wrong answer to the wrong question.
+  let archiveState = "";
   let liveTasks = [];       // open user-task jobs for this version, refreshed each poll
   let runningCount = 0;     // active instances of this version (from runtime), may exceed the listed page
   // Bulk-terminate selection over the "All instances" list. selectMode shows a
@@ -8071,7 +8078,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     instSel.innerHTML =
       `<option value="all"${selected === "all" ? " selected" : ""}>${esc(label)}</option>` +
       instances.map((r) =>
-        `<option value="${r.key}"${String(r.key) === selected ? " selected" : ""}>${r.key} · ${esc(r.state)}</option>`
+        `<option value="${r.key}"${String(r.key) === selected ? " selected" : ""}>${r.key} · ${esc(r.state)}${r.archived ? " · archived" : ""}</option>`
       ).join("");
   }
 
@@ -8140,13 +8147,18 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     searchError = "";
     if (!q) {
       instSig = "";
+      archiveState = "";
       await refreshInstances();
       renderVariables();
       return;
     }
     let rows;
+    archiveState = "";
     try {
-      rows = await api("GET", `/api/v1/instances/search?process=${encodeURIComponent(key)}&q=${encodeURIComponent(q)}`);
+      const { data, headers } = await apiRaw("GET",
+        `/api/v1/instances/search?process=${encodeURIComponent(key)}&q=${encodeURIComponent(q)}`);
+      rows = data || [];
+      archiveState = headers.get("X-Archive-State") || "";
     } catch (e) {
       searchError = e.message;
       rows = [];
@@ -8157,6 +8169,13 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (selected !== "all" && !rows.some((r) => String(r.key) === selected)) selected = "all";
     renderVariables();
   }
+
+  // archivedPill marks a row the exported event log answered for. The instance was
+  // hard-deleted here by history retention, so the row is a record of something that
+  // ran, not a handle on something that is running: nothing beside it offers to open,
+  // replay or terminate it, because none of those would find anything.
+  const archivedPill = '<span class="pill off" title="This instance was removed from this server by history retention. ' +
+    'What is shown comes from the exported event log — it cannot be opened, replayed or terminated.">archived</span>';
 
   // JSON variable values are shown with a collapsible preview (first 60 chars)
   // instead of blowing out the chip; hover to see the full value.
@@ -8338,7 +8357,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       // is a point read on the server, and anything else is a variable search scoped
       // to this version. It sits above the list so it is the first thing reached
       // when the list is a page out of hundreds of thousands.
-      const searchRow = `<form class="vp-search" title="Find an instance of this version by key, or by a variable's value. A variable the model declares searchable is matched exactly and found by index; any other is matched as a substring by reading through the version's instances. A trailing * asks for a prefix.">
+      const searchRow = `<form class="vp-search" title="Find an instance of this version by key, or by a variable's value. A variable the model declares searchable is matched exactly and found by index; any other is matched as a substring by reading through the version's instances. A trailing * asks for a prefix. If nothing here matches and an event log is exported, instances history retention has removed are looked up there and shown marked as archived.">
           <input type="text" class="vp-search-q" value="${esc(searchDraft)}" placeholder="Instance key, or name=value (name* for a prefix)…" aria-label="Find an instance" spellcheck="false" autocomplete="off"/>
           <button class="btn neutral sm" type="submit" title="Search this version's instances">Find</button>
           ${searchQuery ? '<button class="btn ghost sm" type="button" data-search-clear title="Clear the search and go back to the newest instances">Clear</button>' : ""}
@@ -8348,8 +8367,21 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
           ? `<div class="vp-more"><span class="muted">Showing the newest ${instances.length}. Use the search above to reach a specific instance.</span></div>`
           : `<div class="vp-more"><button class="btn ghost sm" type="button" data-load-more title="Load the next page of older instances">Load more</button></div>`)
         : "";
+      // An empty result has more than one cause, and they are not interchangeable.
+      // "Nothing matched" is about the data; "no event log is configured" and "the
+      // log could not be reached" are about this server, and an operator told the
+      // first when the truth is the second stops looking for an instance that exists.
+      const archiveNote = {
+        notConfigured: "Instances this server no longer holds are not searchable: no event log is exported. " +
+          "Enable the OpenSearch exporter to make purged history findable.",
+        refused: "The event log store declined the query, so purged history was not searched. " +
+          "Its credentials here may not carry read access to the index Atlas writes.",
+        unreachable: "The event log store could not be reached, so purged history was not searched — " +
+          "which is not the same as there having been none.",
+      }[archiveState] || "";
       const emptyNote = searchQuery
-        ? `<p class="muted" style="margin:0">No instance of this version matches “${esc(searchQuery)}”.</p>`
+        ? `<p class="muted" style="margin:0">No instance of this version matches “${esc(searchQuery)}”.</p>` +
+          (archiveNote ? `<p class="muted vp-archive-note" style="margin:6px 0 0">${esc(archiveNote)}</p>` : "")
         : `<p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`;
       html = !instances.length
         ? `<div class="vp-head"><span class="vp-title">Variables</span></div>${searchRow}${emptyNote}`
@@ -8367,9 +8399,10 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
               ${active
                 ? '<span class="pill ok"><span class="dot"></span>active</span>'
                 : `<span class="pill">${esc(r.state)}</span>`}
-              <span class="vp-inst-actions">${ts.length
+              ${r.archived ? archivedPill : ""}
+              <span class="vp-inst-actions">${r.archived ? "" : `${ts.length
                 ? `<a class="task-link inline" href="#/tasks/t/${ts[0].key}" title="Open the waiting task's form">&#128203; Task&#8599;</a>`
-                : ""}<a class="replay-link" href="#/operations/i/${r.key}" title="Replay this instance step by step">&#9654; Replay</a></span>
+                : ""}<a class="replay-link" href="#/operations/i/${r.key}" title="Replay this instance step by step">&#9654; Replay</a>`}</span>
             </div>
             ${instanceMeta(r)}
             <div class="vp-inst-vars">${varChips(r.variables)}</div>
@@ -8386,11 +8419,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
             <span class="vp-title">Variables · instance ${inst.key}
               ${inst.state === "active"
                 ? '<span class="pill ok"><span class="dot"></span>active</span>'
-                : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}</span>
-            <span class="vp-actions">${copyAllBtn(inst.variables)}<a class="replay-link" href="#/operations/i/${inst.key}" title="Replay this instance step by step">&#9654; Replay</a></span>
+                : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}
+              ${inst.archived ? archivedPill : ""}</span>
+            <span class="vp-actions">${copyAllBtn(inst.variables)}${inst.archived ? "" : `<a class="replay-link" href="#/operations/i/${inst.key}" title="Replay this instance step by step">&#9654; Replay</a>`}</span>
           </div>
+          ${inst.archived
+            ? `<p class="muted vp-archive-note">This instance is no longer on this server — history retention removed it. What is shown is what the exported event log recorded when it ran, so it cannot be opened, replayed or terminated, and it will not change again.</p>`
+            : ""}
           ${instanceMeta(inst)}
-          ${renderTaskLinks(tasksFor(inst.key))}
+          ${inst.archived ? "" : renderTaskLinks(tasksFor(inst.key))}
           <div class="vars">${renderVarsBody(inst.variables, jsonCollapsed)}</div>`;
       }
     }
