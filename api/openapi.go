@@ -250,7 +250,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/summary", s.handleInstancesSummary, apiOp{
 			summary: "Per-definition instance counts (active/completed) — lean count-only scan for the operations overview", tag: "Instances", role: RoleOperator, resp: jsonBody("Instance summary", tArray())}},
 		{"GET", "/api/v1/instances/search", s.handleSearchInstances, apiOp{
-			summary: "Find instances by key or variable content — ?q= a bare instance key (point read, live or finished), or name=value (name exact, value substring), or free text over variable names and values; ?process=<key> narrows the search to one definition and reads its index instead of every instance — and for a variable that definition declares atlas:searchable, name=value is an exact match answered by the value index (trailing * for a prefix)", tag: "Instances", role: RoleOperator,
+			summary: "Find instances by key or variable content — ?q= a bare instance key (point read, live or finished), or name=value (name exact), or a term matched over variable names and values; a term is matched whole, with * for any run of characters and ? for exactly one, and \\* or \\? for those characters literally; ?process=<key> narrows the search to one definition and reads its index instead of every instance — and for a variable that definition declares atlas:searchable, the value index answers it", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Matching instances", tArray())}},
 		// Every signed-in identity, not the operator role the rest of this group carries:
 		// a task form is prefilled from the variables of the instance the task belongs to,

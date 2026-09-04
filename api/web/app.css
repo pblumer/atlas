@@ -258,7 +258,7 @@ ol.steps li { margin: 6px 0; }
 .field { display: block; margin: 10px 0; font-size: 13px; color: var(--muted); }
 /* A row of secondary actions under a field (e.g. the call-activity "create new
    process" button); nudged up so it reads as attached to the field above. */
-.field-actions { margin: -4px 0 10px; }
+.field-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 10px; }
 .field input[type="text"],
 .field input[type="email"],
 .field input[type="password"],
@@ -1173,6 +1173,28 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ca-child-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ca-child-link { color: var(--accent, #2563eb); font-weight: 600; text-decoration: none; }
 .ca-child-link:hover { text-decoration: underline; }
+
+/* The drill-in cue on a call activity (ADR-0245): while the
+   shape is hovered, the "+" BPMN draws on it is ringed and what it opens is named,
+   because the gesture that opens it — a double-click on that marker — is otherwise
+   folklore. It is deliberately a hover cue rather than another badge: in the live view
+   all four corners of a shape already carry one (incident, token counts, open task,
+   decision), and the marker is the one place on a call activity that is about the
+   called process by construction.
+   Pointer-events off on both parts: the double-click is handled on the canvas, and a
+   div sitting over the marker would swallow it. */
+.djs-overlay-atlas-call-drill { pointer-events: none; transform-origin: 0 0; }
+.ca-drill-ring {
+  display: block; width: 26px; height: 26px; margin: -13px 0 0 -13px; box-sizing: border-box;
+  /* No fill: the ring frames the "+" it is pointing at rather than covering it, and
+     what it encloses is exactly the area the double-click is accepted in. */
+  border: 2px solid var(--accent); border-radius: 7px; background: transparent;
+}
+.ca-drill-tip {
+  display: block; width: max-content; transform: translateX(-50%); white-space: nowrap;
+  background: var(--accent); color: #fff; border-radius: 999px; padding: 2px 9px;
+  font: 600 11px/1.6 system-ui, sans-serif; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
 /* "Decision" badge on a business rule task that has been evaluated: opens the
    decision-inspection panel (inputs, outputs, and how it was decided; ADR-0064). */
 .decision-badge {
@@ -1345,6 +1367,10 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 .var-panel .vp-search-q:focus { outline: none; border-color: var(--accent); }
 .var-panel .vp-search-err { margin: -4px 0 8px; font-size: 12px; color: var(--danger); }
+/* An archive note is information, not a failure: it explains where a row came from,
+   or why purged history was not searched. It reads in the muted voice rather than
+   the danger one, which is reserved for something that actually went wrong. */
+.var-panel .vp-archive-note { font-size: 12px; line-height: 1.5; }
 /* "Load more" walks the newest-first cursor into older instances. */
 .var-panel .vp-more { display: flex; justify-content: center; margin-top: 8px; }
 
@@ -2120,6 +2146,33 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tp-canvas .djs-palette,
 .tp-canvas .djs-context-pad,
 .tp-canvas .djs-direct-editing-parent { display: none !important; }
+/* The drill-down chrome inside the Tasks app's process view
+   (ADR-0246). Double-clicking
+   a call activity's "+" descends into the child instance *in place* rather than
+   navigating: this diagram sits beside a form somebody is filling in, and Operations —
+   where the full replay lives — is a role the assignee may not hold. So the descent
+   needs its own two words of chrome: where you are, and the way back. It sits over the
+   diagram (the canvas is position:relative) and only appears once you have descended. */
+.tp-drill {
+  position: absolute; z-index: 5; top: 8px; left: 8px; right: 8px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; pointer-events: none;
+}
+.tp-drill > * { pointer-events: auto; }
+.tp-drill-back {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 999px; padding: 3px 11px; cursor: pointer;
+  font: 600 12px/1.5 system-ui, sans-serif; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.tp-drill-back:hover { border-color: var(--accent); color: var(--accent); }
+.tp-drill-here {
+  border-radius: 999px; padding: 3px 11px; background: var(--accent); color: #fff;
+  font: 600 12px/1.5 system-ui, sans-serif; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.tp-drill-note {
+  border-radius: 999px; padding: 3px 11px; background: var(--surface); color: var(--muted);
+  border: 1px solid var(--border); font: 12px/1.5 system-ui, sans-serif;
+}
+
 /* The instance's current variables, listed beneath the diagram in the Process tab. */
 .tp-vars { margin-top: 16px; max-width: 640px; }
 .tp-vars-head { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
@@ -3740,7 +3793,14 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    own stroke is carrying the severity (ADR-0211 §4), and painting over a red node to
    say "connected" would trade a finding for a hint. The node in hand takes the
    stronger ring, so it is never in doubt which one is being asked about. */
-.mesh-halo { fill: none; stroke: var(--accent); stroke-width: 0; opacity: 0; }
+/* non-scaling-stroke for the same reason the edges have it: this ring is drawn in
+   world units, and the opening view of a large landscape scales those by about a
+   half — which took a 2.5-unit ring to a little over a pixel, exactly where the
+   landscape is busiest and the ring is doing the most work. */
+.mesh-halo {
+  fill: none; stroke: var(--accent); stroke-width: 0; opacity: 0;
+  vector-effect: non-scaling-stroke;
+}
 .mesh-relating .mesh-related .mesh-halo {
   stroke-width: 2.5; opacity: 0.7; transition: opacity 90ms linear;
 }
@@ -3840,6 +3900,48 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
   background: var(--bg); color: var(--text);
 }
 .mesh-unpin:hover { border-color: var(--accent); }
+/* The maintenance window's members. A row each rather than inline chips: every one
+   carries what it costs on its own, which is the number that says which of them is
+   driving the window — and that number has nowhere to go on a chip. */
+.mesh-window-list {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px;
+}
+.mesh-window-item { display: flex; align-items: stretch; gap: 6px; }
+/* The same two-line button the findings and the impact list use, for the same
+   reason: the name is what a reader scans for, so it gets the first line to itself
+   and what the node costs goes underneath rather than competing for the width. */
+.mesh-window-who {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px;
+  text-align: left; padding: 5px 8px; font: inherit; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); border-left-width: 3px; border-radius: 6px;
+  background: var(--surface); color: var(--text);
+}
+.mesh-window-who:hover { border-color: var(--accent); }
+.mesh-window-who.mesh-sev-critical { border-left-color: var(--danger); }
+.mesh-window-who.mesh-sev-attention { border-left-color: var(--mesh-attention); }
+.mesh-window-name {
+  font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* What this member costs on its own, and whether the rest of the window already
+   takes it down. Said in words rather than by fading the row: it is still in the
+   window and still going down — it just costs nothing extra — and a greyed row
+   would read as "not counted". */
+.mesh-window-cost { font-size: 11px; color: var(--muted); }
+.mesh-window-drop {
+  flex: none; width: 22px; height: 22px; line-height: 1; padding: 0; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--muted); font: inherit; font-size: 13px;
+}
+.mesh-window-drop:hover { border-color: var(--danger); color: var(--text); }
+.mesh-window-close {
+  align-self: flex-start; padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--bg); color: var(--text);
+}
+.mesh-window-close:hover { border-color: var(--accent); }
+.mesh-window-list :focus-visible, .mesh-window-close:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
 /* A filtered node on its own answers "does this exist" and nothing else, so the
    filter keeps one hop of neighbourhood around every match. Those are context rather
    than results, and are drawn as such: a search that presented things which do not
@@ -4008,6 +4110,13 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
 .mesh-node:focus-visible .mesh-body { stroke: var(--accent); stroke-width: 3; }
 .mesh-in-impact .mesh-body { stroke-width: 3; }
 line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
+/* The nodes the question is *about*, as against the ones that come with them. With
+   one selected the distinction is idle — the answer is obviously about the node you
+   clicked. With a maintenance window of three it is the whole picture: a lit blob
+   that does not say which of its nodes are the ones going down cannot be checked
+   against the set the reader assembled. A second ring outside the outline rather
+   than a colour, so it survives beside a severity that already owns the outline. */
+.mesh-picked .mesh-halo { stroke-width: 2; opacity: 1; }
 /* Dimmed rather than hidden: the rest of the landscape stays visible as context,
    so an impact set reads as a part of the whole rather than as the whole. */
 /* Outside the impact set. It was 0.22, which on white is nearly gone: the answer

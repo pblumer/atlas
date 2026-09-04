@@ -94,7 +94,7 @@ export function removeView(views, id) {
 // graph and the shape of the window, so a coordinate captured on one screen means
 // somewhere else on another — and a saved view that reopened on empty space would be
 // worse than no saved view. The pins go the same way, for the same reason.
-export function captureView({ name, term, direction, depth, notation, selected, frameView, world, pinned, at, id }) {
+export function captureView({ name, term, direction, depth, notation, selected, picked, frameView, world, pinned, at, id }) {
   const width = Math.max(world?.width || 0, 1), height = Math.max(world?.height || 0, 1);
   const zoom = frameView ? Math.min(Math.max(frameView.w / width, 0), 1) : 1;
   const centre = frameView
@@ -113,6 +113,12 @@ export function captureView({ name, term, direction, depth, notation, selected, 
     // whatever the page happened to be showing.
     notation: notation || "atlas",
     selected: selected || null,
+    // A maintenance window is several nodes at once, and it is the question somebody
+    // saved rather than a stray multi-click — the same argument the filter and the
+    // depth already make for being stored. `selected` stays the *single* watched node
+    // so that everything reading it, the frame anchor included, keeps meaning one
+    // thing; a window carries its members here instead.
+    picked: Array.isArray(picked) && picked.length > 1 ? [...picked] : null,
     zoom,
     centre,
     pins: [...(pinned || [])].map(([nodeId, p]) => [nodeId, p.x / width, p.y / height]),
@@ -132,7 +138,11 @@ export function frameFor(view, world, positionOf) {
   const zoom = Math.min(Math.max(view?.zoom ?? 1, 0), 1);
   if (!(zoom > 0 && zoom < 1)) return null;
   const w = world.width * zoom, h = world.height * zoom;
-  const anchor = view.selected && positionOf ? positionOf(view.selected) : null;
+  // A window has no one node it is about, so it is anchored on the first one chosen —
+  // the node the reader started from, and the only member with a claim to be the
+  // place the view reopens at.
+  const anchorId = view.selected || view.picked?.[0] || null;
+  const anchor = anchorId && positionOf ? positionOf(anchorId) : null;
   const cx = anchor ? anchor.x : (view.centre?.fx ?? 0.5) * world.width;
   const cy = anchor ? anchor.y : (view.centre?.fy ?? 0.5) * world.height;
   return { x: cx - w / 2, y: cy - h / 2, w, h };

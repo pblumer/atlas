@@ -5,9 +5,11 @@
     <title>Atlas call-activity modeler picker e2e harness</title>
     <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, with a
          diagram containing a call activity, to verify the Implement panel's Process ID
-         picker (deployed processes + drafts) and the "create new process" flow
-         (ADR-0076). Mounted in deployment mode (key set, draftId null) so no live
-         collaboration SSE is attached. -->
+         picker (deployed processes + drafts), the "create new process" flow, and the
+         drill-down into the called process — the "+" marker's double-click and the
+         panel's Open button (ADR-0076). __mount() is the deployment mode (key set,
+         draftId null), __mountDraft() the draft one, where leaving for the callee has
+         to save the caller first. -->
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
@@ -22,29 +24,46 @@
       const view = document.getElementById("view");
       const noop = () => {};
 
-      // A caller with one call activity (Activity_ca), no called-process id yet.
+      // The live collaboration session (ADR-0140) is not what this harness is about,
+      // and the draft mount would open an SSE this static server cannot serve. Without
+      // EventSource attachCollab is a no-op by its own first line.
+      delete window.EventSource;
+
+      // A caller with two call activities: Activity_ca has no called-process id yet
+      // (the picker and "create new" work on that one), and Activity_ca2 already calls
+      // a deployed process — so the drill-down can be driven on a diagram nobody has
+      // edited, which is the case that must neither save nor ask.
       const CALLER_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_caller" targetNamespace="http://atlas/bpmn">
   <bpmn:process id="caller" name="Test Call Activity" isExecutable="true">
     <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
     <bpmn:callActivity id="Activity_ca" name="Tu Was Call Activity"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing></bpmn:callActivity>
-    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:callActivity id="Activity_ca2" name="Auftrag prüfen">
+      <bpmn:extensionElements><zeebe:calledElement processId="pruefe-auftrag"/></bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f2</bpmn:incoming></bpmn:endEvent>
     <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Activity_ca"/>
-    <bpmn:sequenceFlow id="f1" sourceRef="Activity_ca" targetRef="End_1"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Activity_ca" targetRef="Activity_ca2"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="Activity_ca2" targetRef="End_1"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="caller">
     <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Activity_ca_di" bpmnElement="Activity_ca"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="420" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_ca2_di" bpmnElement="Activity_ca2"><dc:Bounds x="420" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="580" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="520" y="138"/><di:waypoint x="580" y="138"/></bpmndi:BPMNEdge>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
-      // Existing callees the picker should offer.
+      // Existing callees the picker should offer, and the drill-down opens. Two
+      // versions of pruefe-auftrag, so "open the callee" has to pick the newest.
       const PROCESSES = [
-        { processId: "pruefe-auftrag", name: "Prüfe Auftrag", version: 2 },
-        { processId: "child", name: "Child", version: 1 },
+        { key: 91, processId: "pruefe-auftrag", name: "Prüfe Auftrag", version: 1 },
+        { key: 92, processId: "pruefe-auftrag", name: "Prüfe Auftrag", version: 2 },
+        { key: 93, processId: "child", name: "Child", version: 1 },
       ];
       const DRAFTS = [{ processId: "entwurf-x", name: "Entwurf X" }];
 
@@ -55,6 +74,7 @@
         window.__calls.push({ method, url, body });
         if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return CALLER_XML;
         if (method === "GET" && /\/processes$/.test(url)) return PROCESSES;
+        if (method === "GET" && /\/drafts\/[^/]+\/xml$/.test(url)) return CALLER_XML;
         if (method === "GET" && /\/drafts$/.test(url)) return DRAFTS;
         if (method === "POST" && /\/drafts/.test(url)) {
           // Echo a saved-draft response; the process id is parsed from the XML body.
@@ -66,6 +86,8 @@
       };
 
       window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });
+      // The same caller, opened as the saved draft it would be while it is authored.
+      window.__mountDraft = () => mountEditor(view, { api, toast: noop, draftId: "caller" });
       window.__selectCa = () =>
         window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get("Activity_ca"));
       window.__ready = true;

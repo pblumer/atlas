@@ -9,10 +9,14 @@
 //   - The task creates a job carrying the reserved [compiler.GoogleSheetsJobType]. The
 //     processor never performs the outbound call itself, so it stays allocation-free
 //     (invariant I1) and free of any HTTP dependency.
-//   - The in-process [Handler] — a Worker Instance inside the server — pulls those
-//     jobs, calls Google off the processor goroutine and after fsync (invariant I2,
-//     never inside applyToState / I4), and completes the job, writing what Google
-//     returned into the task's result variable, which drives the token onward.
+//   - A Worker Instance pulls those jobs, calls Google off the processor goroutine
+//     and after fsync (invariant I2, never inside applyToState / I4), and completes
+//     the job, writing what Google returned into the task's result variable, which
+//     drives the token onward. By default that instance is a *separate process* Atlas
+//     supervises (ADR-0164): a service-account private key is the whole identity, and
+//     it has no business on the engine's run loop. [Handler] is the same work
+//     registered in-process, which an operator opts into with
+//     --in-process-connectors.
 //   - The credential lives in a server-side [Registry] keyed by Worker name, so a model
 //     names a Worker and never carries a key (ADR-0036/0041). Only what the task is
 //     *about* — the operation, the spreadsheet, the range and the values — is authored

@@ -9,21 +9,21 @@
     "de": "Dem Modell sagen, wonach eine Instanz zu finden ist"
   },
   "summary": {
-    "en": "Pasting an instance key already lands instantly. Searching by a business value — an identity, an order number, a case reference — still had to read through every instance of the version, because nothing knew that value was worth finding. Now the model says so: add atlas:searchable=\"identityId,item\" to the process, and identityId=MT-1998 becomes a direct lookup whose cost is the number of matches, not the number of instances. A trailing * searches by prefix instead. For a declared variable the query means exactly that value rather than a part of it; everything else keeps the substring search it always had, and a process that declares nothing is unaffected.",
-    "de": "Ein eingefügter Instanzschlüssel landet bereits sofort. Die Suche nach einem Geschäftswert — einer Identität, einer Auftragsnummer, einem Fallbezug — musste dagegen weiterhin alle Instanzen der Version durchlesen, weil nichts wusste, dass dieser Wert des Suchens wert ist. Jetzt sagt es das Modell: atlas:searchable=\"identityId,item\" am Prozess, und identityId=MT-1998 wird ein direkter Zugriff, dessen Aufwand die Zahl der Treffer ist und nicht die Zahl der Instanzen. Ein * am Ende sucht stattdessen nach Präfix. Für eine deklarierte Variable trifft die Anfrage genau diesen Wert und nicht einen Teil davon; alles andere behält die Teilstring-Suche, und ein Prozess, der nichts deklariert, bleibt unberührt."
+    "en": "Pasting an instance key already lands instantly. Searching by a business value — an identity, an order number, a case reference — still had to read through every instance of the version, because nothing knew that value was worth finding. Now the model says so: add atlas:searchable=\"identityId,item\" to the process, and identityId=MT-1998 becomes a direct lookup whose cost is the number of matches, not the number of instances. A process that declares nothing is unaffected and pays nothing for it.",
+    "de": "Ein eingefügter Instanzschlüssel landet bereits sofort. Die Suche nach einem Geschäftswert — einer Identität, einer Auftragsnummer, einem Fallbezug — musste dagegen weiterhin alle Instanzen der Version durchlesen, weil nichts wusste, dass dieser Wert des Suchens wert ist. Jetzt sagt es das Modell: atlas:searchable=\"identityId,item\" am Prozess, und identityId=MT-1998 wird ein direkter Zugriff, dessen Aufwand die Zahl der Treffer ist und nicht die Zahl der Instanzen. Ein Prozess, der nichts deklariert, bleibt unberührt und zahlt nichts dafür."
   },
   "tutorial": {
     "en": [
       "In the Modeler, open the process and add atlas:searchable to it, listing the variable names you want to find instances by — for example identityId,item.",
       "Deploy the version. From its first instance on, those variables are indexed.",
       "In Operations, open that version's live view and type identityId=MT-1998 into the search box beside the diagram.",
-      "Use a trailing * — identityId=MT-* — when you know only the beginning of the value."
+      "Use * for any run of characters and ? for exactly one — identityId=MT-* — when you know only part of the value."
     ],
     "de": [
       "Im Modeler den Prozess öffnen und atlas:searchable ergänzen, mit den Variablennamen, über die Instanzen gefunden werden sollen — etwa identityId,item.",
       "Die Version deployen. Ab ihrer ersten Instanz sind diese Variablen indiziert.",
       "In Operations die Live-Ansicht dieser Version öffnen und identityId=MT-1998 in das Suchfeld neben dem Diagramm eingeben.",
-      "Ein * am Ende — identityId=MT-* — verwenden, wenn nur der Anfang des Werts bekannt ist."
+      "* steht für beliebig viele Zeichen, ? für genau eines — identityId=MT-* — wenn nur ein Teil des Werts bekannt ist."
     ]
   },
   "try": {

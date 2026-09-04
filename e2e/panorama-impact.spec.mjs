@@ -255,3 +255,124 @@ test("the ranking answers the direction and depth it is given", async ({ page })
   // Credit score's second dependent is two hops away, so at depth 1 it is not there.
   expect(oneHop.find((r) => r.name === "Credit score").total).toBe(1);
 });
+
+// A maintenance window: several nodes going down together (ADR-0211 §6 asked of a
+// set rather than of a node).
+//
+// This landscape exists to make the overlap provable rather than plausible:
+//
+//   shared ──calls──> p1        shared ──calls──> p2
+//   onlyA  ──calls──> p1        onlyB  ──calls──> p2
+//   p1     ──uses──>  mail      p2     ──uses──>  mail
+//
+// Take p1 down and onlyA and shared stop. Take p2 down and onlyB and shared stop.
+// Take both down together and three things stop, not four: `shared` is in both radii
+// and can only stop once.
+const window2 = {
+  nodes: [
+    { id: "process:p1", kind: "process", name: "P1", provenance: "derived", processId: "p1", version: 1 },
+    { id: "process:p2", kind: "process", name: "P2", provenance: "derived", processId: "p2", version: 1 },
+    { id: "process:onlyA", kind: "process", name: "OnlyA", provenance: "derived", processId: "onlya", version: 1 },
+    { id: "process:onlyB", kind: "process", name: "OnlyB", provenance: "derived", processId: "onlyb", version: 1 },
+    { id: "process:shared", kind: "process", name: "Shared", provenance: "derived", processId: "shared", version: 1, severity: "critical" },
+    { id: "worker:mail", kind: "worker", name: "ops-mail", provenance: "derived", workerType: "mail" },
+  ],
+  edges: [
+    { from: "process:shared", to: "process:p1", kind: "calls" },
+    { from: "process:shared", to: "process:p2", kind: "calls" },
+    { from: "process:onlyA", to: "process:p1", kind: "calls" },
+    { from: "process:onlyB", to: "process:p2", kind: "calls" },
+    { from: "process:p1", to: "worker:mail", kind: "uses" },
+    { from: "process:p2", to: "worker:mail", kind: "uses" },
+  ],
+  restricted: 0,
+  clustered: false,
+};
+const deep = { direction: "dependents", depth: Infinity };
+
+// The claim the whole feature rests on: the union is walked, not added up.
+test("a window of two costs less than the two on their own", async ({ page }) => {
+  const o = await page.evaluate(([g, ids, opts]) => window.windowOverlap(g, ids, opts),
+    [window2, ["process:p1", "process:p2"], deep]);
+
+  // Three things stop, not four.
+  expect(o.total).toBe(3);
+  expect(o.sum).toBe(4);
+  // And the panel can say why: one node is in both radii.
+  expect(o.shared).toBe(1);
+  expect(o.each.map((row) => [row.name, row.total])).toEqual([["P1", 2], ["P2", 2]]);
+});
+
+// The other half of the same rule: a set whose radii do not touch costs the sum, and
+// the panel must not imply a saving that is not there.
+test("a window over unrelated nodes costs each of them in full", async ({ page }) => {
+  const o = await page.evaluate(([g, ids, opts]) => window.windowOverlap(g, ids, opts),
+    [window2, ["process:onlyA", "process:onlyB"], deep]);
+  expect(o.total).toBe(0);
+  expect(o.sum).toBe(0);
+  expect(o.shared).toBe(0);
+});
+
+// A node the window already takes down is not collateral: it is part of the plan,
+// and counting it would inflate the answer with the plan itself.
+test("the window's own members are never counted as what it breaks", async ({ page }) => {
+  const alone = await page.evaluate(([g, id, opts]) => window.impactSummary(g, id, opts),
+    [window2, "process:p1", deep]);
+  // On its own p1 stops two: Shared and OnlyA.
+  expect(alone.total).toBe(2);
+
+  // Put Shared in the window as well and it stops being collateral — one thing is
+  // left outside the plan.
+  const withShared = await page.evaluate(([g, ids, opts]) => window.windowSummary(g, ids, opts),
+    [window2, ["process:p1", "process:shared"], deep]);
+  expect(withShared.total).toBe(1);
+
+  // And the panel can say that Shared was going down anyway, which is what stops it
+  // being written into a change request as though it changed something.
+  const o = await page.evaluate(([g, ids, opts]) => window.windowOverlap(g, ids, opts),
+    [window2, ["process:p1", "process:shared"], deep]);
+  expect(o.covered).toEqual(["process:shared"]);
+});
+
+// The severity mix and the named list are the same two answers, over the set.
+test("a window reports the shape of its radius, not only the size", async ({ page }) => {
+  const s = await page.evaluate(([g, ids, opts]) => window.windowSummary(g, ids, opts),
+    [window2, ["process:p1", "process:p2"], deep]);
+  expect(s.total).toBe(3);
+  expect(s.direct).toBe(3);        // every one of them has an edge to p1 or p2
+  expect(s.bySeverity.critical).toBe(1);
+
+  const list = await page.evaluate(([g, ids, opts]) => window.windowList(g, ids, opts),
+    [window2, ["process:p1", "process:p2"], deep]);
+  // Worst first, as everywhere else.
+  expect(list[0].name).toBe("Shared");
+  // The worker is what p1 and p2 *use*; nothing about it depends on them, so it is
+  // not in an answer about what stops.
+  expect(list.map((n) => n.name).sort()).toEqual(["OnlyA", "OnlyB", "Shared"]);
+});
+
+// A window is a claim about a named set. Planning around two of the three nodes
+// somebody asked about would be worse than refusing to answer.
+test("a window naming a node that is not here is refused rather than trimmed", async ({ page }) => {
+  const o = await page.evaluate(([g, ids, opts]) => window.impactOf(g, ids, opts),
+    [window2, ["process:p1", "process:gone"], deep]);
+  expect(o).toBeNull();
+});
+
+// The permission boundary carries through the union: one incomplete walk makes the
+// window's total a floor, and a floor presented as a total is the failure §6 exists
+// to prevent.
+test("a window that reaches a boundary reports a floor", async ({ page }) => {
+  const withRestricted = {
+    ...window2,
+    nodes: [...window2.nodes, { id: "restricted:1", kind: "restricted", provenance: "derived" }],
+    edges: [...window2.edges, { from: "restricted:1", to: "process:p2", kind: "calls" }],
+    restricted: 1,
+  };
+  const o = await page.evaluate(([g, ids, opts]) => window.windowOverlap(g, ids, opts),
+    [withRestricted, ["process:p1", "process:p2"], deep]);
+  expect(o.complete).toBe(false);
+  // p1's own walk never reaches it, so only p2's row is a floor.
+  expect(o.each.find((r) => r.name === "P1").complete).toBe(true);
+  expect(o.each.find((r) => r.name === "P2").complete).toBe(false);
+});

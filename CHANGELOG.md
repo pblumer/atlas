@@ -67,7 +67,62 @@ _Changed_ / _Removed_ for each version.
   confirming they fail against a broken anchor and a wrong route, rather than by
   observing that they pass.
 
+### Changed
+
+- **Google Sheets runs on a worker, like everything else.** It shipped with an
+  in-engine handler and no supervised form, so the Modeler's properties panel showed it
+  as the one Worker Type reading IN-ENGINE while the twelve around it said otherwise —
+  and a fresh install called Google, with a service-account private key, from the
+  engine's run loop. ADR-0164 has one exception left and it is the FEEL script task;
+  this was not meant to be a second.
+
+  The engine now hands each configured Google identity to the worker it supervises
+  (`ATLAS_GOOGLESHEETS_*`, the whole credential bundle as one opaque value, the way
+  SharePoint and the SQL kinds do), the `worker` package serves the kind, and
+  `googlesheets` joins the default offload set. The in-engine form stays as the opt-in
+  `--in-process-connectors` fallback every managed kind keeps.
+
+  The guard that should have caught this was a canary asserting the *opposite* — that
+  some managed kind was still unprovisioned, so a related check could not become a
+  tautology. Google Sheets was the last one. It is now inverted: every managed Worker
+  Type must be handed to its supervised worker, so the next kind added without that
+  fails a test instead of a properties panel.
+
+
 ### Fixed
+
+- **A search term found more than it was asked for.** Reported from use:
+  `kdnr=MT-100` also returned MT-10001. The instance search widened every term into a
+  substring match, so an operator who named one customer got a list holding another one
+  beside it, with nothing on either row to tell them apart — and no way to ask about
+  only the one they meant.
+
+  It was not even consistent with itself. The value index
+  ([ADR-0244](docs/adr/0244-searchable-variables.md)) answers a
+  declared name exactly, so the same query matched exactly when the model carried
+  `atlas:searchable` for that name and matched as a substring when it did not. Whether
+  a name is declared is a property of the model: invisible from the search box,
+  changeable by a redeployment, and it had come to decide what a query means.
+
+  A term is now matched **whole**, and widening is something you ask for, in the two
+  shapes everyone knows from shells and file pickers: `*` for any run of characters,
+  `?` for exactly one, and a backslash to escape either, so a value that really contains
+  a star is still reachable. One rule for declared and undeclared names, for
+  `name=value` and free text, for the live index, the instance walk and the archive.
+  Under the index a pattern splits into its literal head and the rest: no wildcard is
+  the exact seek that already existed, and a wildcard seeks to a neighbourhood and
+  matches the full pattern before reporting anything — without that, `MT-1?` would
+  answer with every `MT-1` value the index holds.
+
+  The same predicate filters **bulk termination**, so an implicit widening there
+  selected instances the operator had not named. That is the version of this bug that
+  does not merely confuse.
+
+  This is a behaviour change: free text that used to match a value it occurred in now
+  matches one it equals, so `retail` becomes `*retail*`. The search hint, the handbook,
+  the OpenAPI summary and the MCP tool description all state the rule, because changing
+  what a query means in silence would be worse than the behaviour it replaces.
+  ([ADR-0248](docs/adr/0248-search-terms-are-literal.md))
 
 - **A widened Properties column in the form editor gave its width to white space, not
   to the panel.** The Design tab's side columns are resizable — our own affordance on
@@ -344,6 +399,76 @@ _Changed_ / _Removed_ for each version.
   integration back on the run loop.
 
 ### Added
+
+- **An instance that is gone is still findable.** History retention hard-deletes a
+  finished instance once the exporter has it ([ADR-0115](docs/adr/0115-history-retention-hard-delete.md)) —
+  that was the whole bargain of [ADR-0114](docs/adr/0114-opensearch-event-exporter.md):
+  delete the data corpses, but keep them searchable somewhere first. Somewhere turned
+  out to be nowhere an operator could reach. The search asked this server's own store,
+  the store no longer had the instance, and the answer came back empty, which reads
+  exactly like "this never existed".
+
+  The search now falls back to the exported log. It asks two questions rather than one,
+  because the export is a stream of events and not a table of instances: first which
+  instances held a matching variable — a terms aggregation over the scope key, so a
+  value written five times is one answer and the response stays small — then what those
+  instances were, as a bounded page of hits with an explicit field list.
+
+  A row that comes back this way is marked **archived**, and that is the point rather
+  than a detail. The instance does not exist here: it cannot be opened, replayed or
+  terminated, and what the row reports is what the log recorded, not what is true now.
+  So the panel offers no Replay and no task link beside it, the picker says the word
+  too, and the row carries no element instance count — the archive knows of no live
+  tokens, and a zero meaning "none recorded" must not be dressed up as a measurement.
+
+  An empty result now distinguishes its causes. "Nothing matched" is about the data;
+  "no event log is exported", "the store declined" and "the store could not be reached"
+  are about this server, and an operator told the first when the truth is one of the
+  others stops looking for an instance that exists.
+  ([ADR-0247](docs/adr/0247-instance-archive-search.md))
+
+- **A call activity's `+` is now the way into the process it calls.** A call activity is
+  the one element on a diagram whose contents are somewhere else — a separate model,
+  deployed on its own, and at runtime a separate instance. BPMN says so with the `+` in
+  the bottom edge of the shape, and until now that marker pointed at nothing: in the
+  Modeler the called process id sat in the panel as text, and reaching the process it
+  named meant remembering the id, going back to the process list and finding it by hand.
+  The live view and the collaboration replay offered nothing at all; only the instance
+  replay had a way in, through its `↳` badge.
+
+  **Double-click the `+`** and the called process opens — the same gesture in the
+  Modeler, the live view, the instance replay and the collaboration replay. Hovering the
+  shape rings the marker and names what is behind it, so the gesture is visible before
+  the pointer is anywhere near it; the replay's badge and *Called process* link stay
+  exactly where they were. Where "in" lands is what each surface knows: the Modeler
+  opens the callee's **draft** where one holds that id and its newest deployed version
+  otherwise, the live view opens the **child instance** this caller started (or, under
+  *All instances*, the called process's own live view), and the replay opens the child's
+  replay — falling back to the called process, and saying so, for a call activity that
+  never started one. Leaving the Modeler saves the caller first when the session is
+  editing a draft, and asks before discarding when there is nowhere to put the edits.
+  The **Called process** panel also gained an *Open called process* button, which is the
+  same door for a keyboard.
+  ([ADR-0245](docs/adr/0245-call-activity-drilldown.md),
+  `e2e/call-activity-modeler.spec.mjs`, `e2e/call-activity-live.spec.mjs`,
+  `e2e/call-activity-replay.spec.mjs`)
+
+- **The Tasks app follows a call activity too — down, not away.** The Process tab beside a
+  task shows what has already run and what is still ahead, and its call activities carry
+  the same `+` as everywhere else. It was the one surface the drill-down left out, for a
+  good reason and with the wrong conclusion: a hash change out of the Tasks app would tear
+  down the half-filled form in the pane next to it, and the Operations replay it would
+  land on is an operator's route the assignee may not hold.
+
+  So here the gesture **descends in place**: the panel re-renders on the child instance
+  the call activity started, a bar over the diagram says where you are and offers one way
+  back, and the variables listed underneath follow the descent — a called process is a
+  separate instance with separate variables. It costs no request the view was not already
+  making (the child's key is on the caller's own timeline) and no permission it did not
+  already have. A call activity the token has not reached says so rather than doing
+  nothing, and a task whose process calls nothing looks exactly as it did.
+  ([ADR-0246](docs/adr/0246-tasks-call-activity-descent.md),
+  `e2e/tasks-call-activity.spec.mjs`)
 
 - **A model can say what it wants to be found by.** [ADR-0241](docs/adr/0241-finding-an-instance.md)
   made a version's instances a bounded page and an instance key a point read, and named
@@ -1041,12 +1166,14 @@ _Changed_ / _Removed_ for each version.
   request body is recorded, never checked, and nothing is stateful.
 
   **A document published as a tree of files is read as one.** That is how most large
-  APIs ship — DigitalOcean's is a single entry file of references into a hundred others
+  APIs ship — DigitalOcean's is a single entry file of references into a thousand more
   — and each reference resolves against the directory of the file it is written in, so a
   path item two directories down reaches its schemas the way its author meant. What may
   be read is bounded on purpose: this mock serves what it reads and authenticates
   nobody, so references may not climb out of the document's own directory unless
-  `--spec-root` says they may, and a `$ref` to a URL is refused.
+  `--spec-root` says they may, and a `$ref` to a URL is refused. DigitalOcean's own
+  published document — 659 operations assembled from 1141 files — is served in under
+  half a second, with their example data in it.
 
   `GET /__mock/calls` is the journal of what a run actually did — method, path,
   operation, status, the `X-Request-ID` a job carries, and the body it sent — and
