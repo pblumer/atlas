@@ -2078,3 +2078,67 @@ test("a landscape draws even when the notations cannot be read", async ({ page }
     (options) => options.map((o) => o.value));
   expect(offered).toEqual(["atlas"]);
 });
+
+// Going into a node, as a control rather than only as a gesture. A double-click is
+// something you have to be told about, and the drilldown is what this view is for
+// once the landscape is larger than a screenful.
+test("the arrow goes into the selected node, and says when there is nowhere to go", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const arrow = page.locator("#mesh-drill-in");
+  // Nothing selected is nothing to go into. Dimmed rather than hidden, so a reader
+  // can learn the control is there before they need it.
+  await expect(arrow).toBeDisabled();
+  await expect(arrow).toBeVisible();
+
+  await page.locator('[data-node-id="process:1"] .mesh-body').click();
+  await expect(arrow).toBeEnabled();
+  await arrow.click();
+
+  // The same place the double-click goes: the node and what it touches, with the
+  // chip that says where you are standing.
+  await expect(page.locator("#mesh-drill-out")).toBeVisible();
+  await expect(page.locator("#mesh-drill-out")).toContainText("Invoice");
+  // A drilldown counts what is within the reach on screen rather than what matched a
+  // term, and the count says so — which is the sentence that moved to its own line.
+  await expect(page.locator("#mesh-count")).toContainText("hop(s)");
+  // And it is not a place you can go into again.
+  await expect(arrow).toBeDisabled();
+});
+
+// The header is a row of controls; how much of the landscape is on screen is a
+// reading of the picture rather than a control on it. It used to sit in the row as
+// the one item with no width of its own, so flexbox gave every control the size it
+// asked for and squeezed the sentence into a column one word wide — and squeezed the
+// search box into an empty stub with no visible purpose at all.
+test("the header is one row of controls, with the count on its own line", async ({ page }) => {
+  installMock(page);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const count = page.locator(".mesh-subhead #mesh-count");
+  await expect(count).toContainText("node(s)");
+
+  const head = await page.locator(".mesh-head").boundingBox();
+  const sub = await page.locator(".mesh-subhead").boundingBox();
+  // Below, not beside.
+  expect(sub.y).toBeGreaterThanOrEqual(head.y + head.height - 1);
+  // Right-aligned: the text ends where the row does rather than starting where it does.
+  const text = await count.boundingBox();
+  expect(sub.x + sub.width - (text.x + text.width)).toBeLessThan(4);
+  expect(text.x - sub.x).toBeGreaterThan(40);
+
+  // And the controls are on one line: every one of them shares the header's row.
+  const boxes = await page.locator(
+    ".mesh-head h1, .mesh-search, #mesh-drill-in, .mesh-notation-pick, .mesh-export"
+  ).evaluateAll((els) => els.map((el) => el.getBoundingClientRect().top));
+  expect(Math.max(...boxes) - Math.min(...boxes)).toBeLessThan(20);
+
+  // The search box is a control somebody can use, not the few-pixel stub it became
+  // once the header filled up.
+  const box = await page.locator(".mesh-search").boundingBox();
+  expect(box.width).toBeGreaterThan(150);
+});
