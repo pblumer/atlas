@@ -2728,3 +2728,50 @@ test("a depth that is not a depth falls back to one hop", async ({ page }) => {
     ["", "0", "-4", "abc", "2.7", "500", "all"].map((v) => window.depthOf(v)));
   expect(read).toEqual([1, 1, 1, 1, 2, 99, Infinity]);
 });
+
+// A picture laid out for a box the surface never had.
+//
+// The first paint happens as soon as the markup is in the document, and there are
+// ordinary reasons the surface has no box at that moment — a tab opened in the
+// background does no layout at all. The measurement then falls back to its floor,
+// the world takes that floor's nearly-square aspect, and the finished picture is
+// letterboxed into a column of a wide canvas. Nothing was wrong with the graph; it
+// was laid out for a box it never had — and it stayed wrong because nothing measured
+// again, so changing the notation, or anything else that repaints, "fixed" it.
+test("a picture laid out before the canvas had a box corrects itself", async ({ page }) => {
+  installMock(page, radiusGraph);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  // No box at all when the first layout runs, which is what a background tab hands
+  // the view. Removed once the picture is up, as switching to that tab would.
+  await page.addInitScript(() => {
+    const style = document.createElement("style");
+    style.id = "no-box";
+    style.textContent = ".mesh-surface{display:none!important}";
+    document.addEventListener("DOMContentLoaded", () => document.head.append(style));
+  });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+  await page.evaluate(() => document.getElementById("no-box")?.remove());
+
+  // The viewBox has the canvas's own shape, so there is nothing to letterbox and the
+  // picture fills the surface it was given.
+  await expect(async () => {
+    const shape = await page.evaluate(() => {
+      const s = document.querySelector(".mesh-surface").getBoundingClientRect();
+      const [, , w, h] = document.querySelector(".mesh-canvas")
+        .getAttribute("viewBox").split(" ").map(Number);
+      return { canvas: s.width / s.height, view: w / h };
+    });
+    expect(shape.view).toBeCloseTo(shape.canvas, 1);
+  }).toPass({ timeout: 4000 });
+
+  // And the nodes are spread across it rather than standing in a column: the widest
+  // gap between two of them is most of the canvas.
+  const spread = await page.evaluate(() => {
+    const xs = [...document.querySelectorAll(".mesh-node")]
+      .map((g) => g.getBoundingClientRect().x);
+    const box = document.querySelector(".mesh-surface").getBoundingClientRect();
+    return (Math.max(...xs) - Math.min(...xs)) / box.width;
+  });
+  expect(spread).toBeGreaterThan(0.5);
+});
