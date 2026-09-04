@@ -3542,8 +3542,33 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    fills come from the kind table in panorama-mesh.js so the legend and the
    canvas cannot drift apart. */
 .mesh-card { display: flex; flex-direction: column; gap: 12px; }
-.mesh-head { display: flex; align-items: baseline; gap: 12px; }
+/* One line, and it stays one line: the header is a row of controls, and a row that
+   wraps into three stacked lines stops reading as one. What gives under pressure is
+   the search box, down to a floor where its placeholder is still readable; below
+   that the row wraps rather than leaving the empty stub it used to become. */
+.mesh-head { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; }
 .mesh-head h1 { margin: 0; }
+/* What is on screen, under the row that changes it. It used to sit in the head as
+   the one item with no width of its own: flexbox gave every control the size it
+   asked for and squeezed the sentence into a column one word wide. Right-aligned
+   because it is a reading of the picture rather than a control on it, and the eye
+   should find the controls first. */
+.mesh-subhead {
+  display: flex; justify-content: flex-end; align-items: baseline; gap: 8px;
+  margin-top: -4px; font-size: 13px;
+}
+/* Going into the selected node. Square, because it is an action on one thing rather
+   than a phrase, and next to the search because both narrow the picture. */
+.mesh-drill-in {
+  width: 28px; height: 28px; padding: 0; font-size: 15px; line-height: 1;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text); cursor: pointer; flex: none;
+}
+.mesh-drill-in:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.mesh-drill-in:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Nothing selected is nothing to go into. Dimmed rather than hidden, so the control
+   is somewhere a reader can learn about before they need it. */
+.mesh-drill-in:disabled { opacity: 0.4; cursor: default; }
 /* Export sits at the end of the head, pushed away from the search box: it acts on
    the picture as a whole, and a button that saves a file should not be adjacent to
    the one that narrows what would be in it. */
@@ -3552,7 +3577,11 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    it. */
 .mesh-notation { margin-left: auto; font-size: 13px; color: var(--muted); }
 .mesh-notation-pick {
-  height: 28px; padding: 0 6px; font-size: 13px;
+  /* Sized by its longest option, not by the row. Every select on this page inherits
+     width:100% from the form styling, which in a flex row means "take all of it" —
+     and it did, absorbing the slack the auto-margin was meant to hold and squeezing
+     the search box back into the stub this row exists to keep it out of. */
+  width: auto; flex: none; height: 28px; padding: 0 6px; font-size: 13px;
   border: 1px solid var(--border); border-radius: 6px;
   background: var(--surface); color: var(--text);
 }
@@ -3750,8 +3779,17 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 a .mesh-node { cursor: pointer; }
 a:hover .mesh-node .mesh-body { stroke-width: 3; }
 a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; }
+/* A floor, not just a share. It was flex:1 with min-width:0, so once the head
+   carried a notation picker and three export buttons the search collapsed to an
+   empty box a few pixels wide — a control with no visible purpose, which is worse
+   than an absent one. */
 .mesh-search {
-  flex: 1; min-width: 0; max-width: 320px; padding: 6px 10px;
+  /* A width of its own rather than a share of the row: growing to fill pushed the
+     notation picker and the export buttons onto lines of their own, and a header in
+     three stacked rows is not a header. It shrinks under pressure, down to a floor
+     where the placeholder is still readable, and wraps only when the window really
+     is too narrow for one line. */
+  flex: 0 1 260px; min-width: 140px; max-width: 320px; padding: 6px 10px;
   border: 1px solid var(--border-strong); border-radius: 6px;
   background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
 }
@@ -3950,6 +3988,12 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
    part of a whole, and the whole has to stay legible for the part to mean
    anything. */
 .mesh-dimmed { opacity: 0.42; }
+@media (max-width: 1180px) {
+  /* Narrow enough that one line would squeeze the search past reading. Wrapping puts
+     the notation and the exports on a line of their own, which is a header of two
+     rows rather than a control nobody can use. */
+  .mesh-head { flex-wrap: wrap; }
+}
 @media (max-width: 900px) {
   .mesh-body { flex-direction: column; }
   .mesh-side { width: 100%; }
