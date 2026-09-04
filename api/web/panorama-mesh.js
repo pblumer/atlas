@@ -17,6 +17,7 @@ import {
 import {
   exportName, exportStyles, rasterise, save, standaloneSVG, stampLines,
 } from "./panorama-export.js";
+import { attachDiagramZoom } from "./diagram-zoom.js";
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -1733,10 +1734,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     <div class="mesh-body">
       <div class="mesh-stage">
         <div id="mesh-surface" class="mesh-surface"></div>
-        <div class="mesh-zoom" role="group" aria-label="Zoom">
-          <button id="mesh-zoom-in" type="button" title="Zoom in">+</button>
-          <button id="mesh-zoom-out" type="button" title="Zoom out">−</button>
-          <button id="mesh-zoom-fit" type="button" title="Fit the whole landscape">Fit</button>
+        <div class="mesh-zoom" role="group" aria-label="Canvas controls">
+          <div class="mesh-zoom-slot"></div>
           <button id="mesh-release" type="button" disabled
             title="Put every node you have dragged back where the layout puts it">Release</button>
         </div>
@@ -1785,9 +1784,6 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const search = document.getElementById("mesh-search");
   const drillOut = document.getElementById("mesh-drill-out");
   const surface = document.getElementById("mesh-surface");
-  const zoomIn = document.getElementById("mesh-zoom-in");
-  const zoomOut = document.getElementById("mesh-zoom-out");
-  const zoomFit = document.getElementById("mesh-zoom-fit");
   const release = document.getElementById("mesh-release");
   const legendSlot = document.getElementById("mesh-legend-slot");
   const count = document.getElementById("mesh-count");
@@ -1848,9 +1844,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     frame = { width, height };
   }
 
+  // The shared zoom control (diagram-zoom.js), attached further down once the
+  // functions it drives exist. applyView restates the factor through it, because the
+  // view moves by more than the buttons: the wheel, a drag, a drilldown, a refit.
+  let meshZoom = null;
+
   function applyView() {
     const svg = surface.querySelector("svg");
     if (!svg) return;
+    if (meshZoom) meshZoom.sync();
     const v = frameView || baseView();
     svg.setAttribute("viewBox", `${v.x.toFixed(2)} ${v.y.toFixed(2)} ${v.w.toFixed(2)} ${v.h.toFixed(2)}`);
     svg.classList.toggle("mesh-zoomed", frameView !== null);
@@ -2316,12 +2318,28 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     zoom(event.deltaY > 0 ? 1.18 : 1 / 1.18, focus);
   }, { passive: false });
 
-  zoomIn.addEventListener("click", () => zoom(1 / 1.3));
-  zoomOut.addEventListener("click", () => zoom(1.3));
+
   // Fit reframes onto the content as it is now, arrangement included: somebody who
   // has dragged half the landscape into a shape and then asks to see all of it is
   // asking about the shape they made, not about the one the layout proposed.
-  zoomFit.addEventListener("click", () => { frameView = null; refit(); applyView(); });
+  // The mesh frames itself with a viewBox rather than a canvas transform, so "zoom"
+  // here is the ratio of the fitted width to the shown width — the control asks in
+  // those terms and the mesh keeps its own clamping (zoomView's ZOOM_RANGE).
+  meshZoom = attachDiagramZoom(surface, {
+    label: "Landscape",
+    mount: document.querySelector(".mesh-zoom-slot"),
+    controller: {
+      get: () => {
+        const base = baseView(), cur = frameView || base;
+        return cur.w > 0 ? base.w / cur.w : 1;
+      },
+      set: (z) => {
+        const base = baseView(), cur = frameView || base;
+        if (z > 0 && cur.w > 0) zoom((base.w / z) / cur.w);
+      },
+      fit: () => { frameView = null; refit(); applyView(); },
+    },
+  });
 
   surface.addEventListener("click", (event) => {
     if (dragged) { dragged = false; return; }

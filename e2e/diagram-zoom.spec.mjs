@@ -95,10 +95,10 @@ test.describe("over a canvas that owns its zoom", () => {
   });
 
   test("the buttons drive the canvas rather than resizing anything", async ({ page }) => {
-    await page.locator(".dzoom button[aria-label='Zoom in']").click();
+    await page.locator("#frame .dzoom button[aria-label='Zoom in']").click();
     expect(await page.evaluate(() => window.__z())).toBeGreaterThan(1);
 
-    await page.locator(".dzoom button[aria-label='Fit the diagram']").click();
+    await page.locator("#frame .dzoom button[aria-label='Fit the diagram']").click();
     expect(await page.evaluate(() => window.__calls.some((c) => c[0] === "fit"))).toBe(true);
     expect(page.__errors).toEqual([]);
   });
@@ -118,14 +118,55 @@ test.describe("over a canvas that owns its zoom", () => {
     // over a diagram takes clicks meant for the shapes beneath it. Only the buttons
     // may be targets; the box around them must not be.
     const boxTakesPointer = await page.evaluate(() => {
-      const el = document.querySelector(".dzoom");
+      const el = document.querySelector("#frame .dzoom");
       return getComputedStyle(el).pointerEvents !== "none";
     });
     expect(boxTakesPointer).toBe(false);
     const buttonTakesPointer = await page.evaluate(() => {
-      const el = document.querySelector(".dzoom button");
+      const el = document.querySelector("#frame .dzoom button");
       return getComputedStyle(el).pointerEvents === "auto";
     });
     expect(buttonTakesPointer).toBe(true);
+  });
+});
+
+// The Panorama surfaces already had zoom buttons, in a box shared with other tools
+// (undo/redo/save on the viewer, "release" on the mesh). Unifying them onto the
+// shared control means mounting it into that box rather than floating a second
+// control over the same canvas.
+test.describe("mounted into an existing toolbox", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/diagram-zoom-controller-harness.html");
+    await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+  });
+
+  test("the control goes in the toolbox, beside what was already there", async ({ page }) => {
+    const inBox = page.locator("#toolbox .dzoom");
+    await expect(inBox).toHaveCount(1);
+    // Mounted, so it is not positioned over anything and needs no wrapper.
+    expect(await page.evaluate(() =>
+      getComputedStyle(document.querySelector("#toolbox .dzoom")).position)).toBe("static");
+    // The tool it was mounted beside is untouched.
+    await expect(page.locator("#toolbox #other")).toBeVisible();
+  });
+
+  test("a mounted control drives its own canvas, not the other one", async ({ page }) => {
+    await page.locator("#toolbox .dzoom button[aria-label='Zoom in']").click();
+    expect(await page.evaluate(() => window.__mountedZ())).toBeGreaterThan(1);
+    expect(await page.evaluate(() => window.__z())).toBe(1);
+  });
+
+  test("the stated factor is what the canvas settled on, not what was asked", async ({ page }) => {
+    // A canvas clamps to its own range — the Panorama mesh does, and so does
+    // diagram-js. Stating the request rather than the result would put a percentage
+    // on screen that the diagram does not have.
+    const before = await page.locator("#toolbox .dzoom-level").textContent();
+    for (let i = 0; i < 10; i++) {
+      await page.locator("#toolbox .dzoom button[aria-label='Zoom in']").click();
+    }
+    const stated = parseInt(await page.locator("#toolbox .dzoom-level").textContent(), 10);
+    const actual = Math.round((await page.evaluate(() => window.__mountedZ())) * 100);
+    expect(stated).toBe(actual);
+    expect(before).not.toBe(String(stated) + "%");
   });
 });

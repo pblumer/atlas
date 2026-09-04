@@ -510,11 +510,11 @@ test("opens fitted to the content and zooms from there", async ({ page }) => {
   const centredInHeight = Math.abs((spread.top - viewY) - (fitH - reserveH - spread.y) / 2) < 12;
   expect(centredInWidth || centredInHeight).toBe(true);
 
-  await page.locator("#mesh-zoom-in").click();
+  await page.locator(".mesh-zoom button[aria-label='Zoom in']").click();
   const zoomed = Number((await canvas.getAttribute("viewBox")).split(" ")[2]);
   expect(zoomed).toBeLessThan(fitW);
 
-  await page.locator("#mesh-zoom-fit").click();
+  await page.locator(".mesh-zoom button[aria-label='Fit the diagram']").click();
   expect(await canvas.getAttribute("viewBox")).toBe(fitted);
 });
 
@@ -541,7 +541,7 @@ test("pans once zoomed in, and is inert at the fitted frame", async ({ page }) =
   await drag();
   expect(await canvas.getAttribute("viewBox")).toBe(fitted);
 
-  await page.locator("#mesh-zoom-in").click();
+  await page.locator(".mesh-zoom button[aria-label='Zoom in']").click();
   const zoomed = await canvas.getAttribute("viewBox");
   await drag();
   const panned = await canvas.getAttribute("viewBox");
@@ -608,7 +608,7 @@ test("zooming in brings the names out", async ({ page }) => {
   await expect(canvas).not.toHaveClass(/mesh-names-all/);
   const before = await canvas.getAttribute("viewBox");
 
-  for (let i = 0; i < 6; i++) await page.locator("#mesh-zoom-in").click();
+  for (let i = 0; i < 6; i++) await page.locator(".mesh-zoom button[aria-label='Zoom in']").click();
 
   await expect(canvas).toHaveClass(/mesh-names-all/);
   await expect(page.locator('[data-node-id="process:0"] .mesh-label-ink')).toHaveCSS("opacity", "1");
@@ -1066,8 +1066,8 @@ test("a saved view brings the whole setup back", async ({ page }) => {
   await expect(page.locator("#mesh-count")).toContainText("1 of 7");
   await page.locator('[data-node-id="process:1"]').click();
   await expect(page.locator(".mesh-impact-count")).toBeVisible();
-  await page.locator("#mesh-zoom-in").click();
-  await page.locator("#mesh-zoom-in").click();
+  await page.locator(".mesh-zoom button[aria-label='Zoom in']").click();
+  await page.locator(".mesh-zoom button[aria-label='Zoom in']").click();
   await dragBy(page, "process:1", 60, 40);
   const framed = await page.locator(".mesh-canvas").getAttribute("viewBox");
 
@@ -1079,7 +1079,7 @@ test("a saved view brings the whole setup back", async ({ page }) => {
   // Everything back to where a reload leaves it.
   await page.locator("#mesh-release").click();
   await page.fill("#mesh-search", "");
-  await page.locator("#mesh-zoom-fit").click();
+  await page.locator(".mesh-zoom button[aria-label='Fit the diagram']").click();
   await expect(page.locator(".mesh-node")).toHaveCount(7);
 
   await page.locator(".mesh-view-open").click();
@@ -1624,8 +1624,8 @@ test("exports the landscape as a stamped, self-contained SVG", async ({ page }) 
 
   // Zoomed in first, on purpose: a file cropped to the reader's window would drop
   // nodes and say nothing about it.
-  await page.locator("#mesh-zoom-in").click();
-  await page.locator("#mesh-zoom-in").click();
+  await page.locator(".mesh-zoom button[aria-label='Zoom in']").click();
+  await page.locator(".mesh-zoom button[aria-label='Zoom in']").click();
   await expect(page.locator(".mesh-canvas")).toHaveClass(/mesh-zoomed/);
 
   const [download] = await Promise.all([
@@ -1822,7 +1822,7 @@ test("Fit frames the arrangement, not the empty sheet around it", async ({ page 
 
   // Pin one node, which is all it takes for the layout to stop fitting.
   await dragBy(page, "process:3", 90, -60);
-  await page.locator("#mesh-zoom-fit").click();
+  await page.locator(".mesh-zoom button[aria-label='Fit the diagram']").click();
 
   const framing = await page.evaluate(() => {
     const svg = document.querySelector(".mesh-canvas");
@@ -2077,4 +2077,31 @@ test("a landscape draws even when the notations cannot be read", async ({ page }
   const offered = await page.locator("#mesh-notation option").evaluateAll(
     (options) => options.map((o) => o.value));
   expect(offered).toEqual(["atlas"]);
+});
+
+// The zoom buttons are the shared control (api/web/diagram-zoom.js,
+// ADR-draft-shared-ui-primitives) rather than three buttons this view drew for
+// itself, which is what makes them the same buttons the Modeler and the class canvas
+// carry. It brings a stated factor with it, and the view moves by more than the
+// buttons — the wheel and a drag move it too — so the number has to follow the
+// picture rather than count the clicks.
+test("the landscape states its zoom factor, and it follows the picture", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+
+  const level = page.locator(".mesh-zoom .dzoom-level");
+  await expect(level).toHaveText("100%"); // fitted is 100% by definition here
+
+  await page.locator(".mesh-zoom button[aria-label='Zoom in']").click();
+  const zoomed = parseInt(await level.textContent(), 10);
+  expect(zoomed).toBeGreaterThan(100);
+
+  // The wheel is not the control, and the control still has to say where the view is.
+  const canvas = page.locator(".mesh-canvas");
+  await canvas.hover();
+  await page.mouse.wheel(0, -240);
+  await expect(level).not.toHaveText(`${zoomed}%`);
+
+  await page.locator(".mesh-zoom button[aria-label='Fit the diagram']").click();
+  await expect(level).toHaveText("100%");
 });

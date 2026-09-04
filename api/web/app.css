@@ -702,6 +702,14 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 .panorama-tools > * { pointer-events: auto; }
 .panorama-tools .icon-btn { width: 30px; height: 28px; border-radius: 4px; font-weight: 700; }
+/* The shared zoom control sits in this toolbox (diagram-zoom.js). It keeps the
+   toolbox's shape rather than the floating control's, so the column reads as one
+   set of tools and not as two. */
+.panorama-tools .dzoom { gap: 3px; }
+.panorama-tools .dzoom .btn {
+  width: 30px; min-width: 30px; height: 28px; padding: 0;
+  border-radius: 4px; font-weight: 700;
+}
 .panorama-canvas { flex: 1; min-width: 0; height: 100%; position: relative; overflow: hidden; background: var(--diagram-bg); }
 .panorama-canvas .djs-container { font-family: inherit; }
 .panorama-canvas .archimate-label { font: 600 12px/1.3 ui-sans-serif, system-ui, sans-serif; fill: #20252a; pointer-events: none; }
@@ -4814,6 +4822,14 @@ button.im-problem:hover { background: var(--accent-soft); }
 }
 .dzoom > * { pointer-events: auto; }
 .dzoom .btn { min-width: 26px; padding: 2px 6px; }
+/* Mounted into a toolbox the caller already has: it is one group of tools among
+   several, so it drops the floating box and takes the host's. */
+.dzoom.dzoom-mounted {
+  position: static; padding: 0; border: 0; background: none; box-shadow: none;
+  pointer-events: auto;
+}
+.dzoom.dzoom-vertical { flex-direction: column; }
+.dzoom.dzoom-vertical .dzoom-level { min-width: 0; width: 100%; font-size: 10px; }
 .dzoom-level {
   min-width: 44px; text-align: center;
   font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted, #6b7280);

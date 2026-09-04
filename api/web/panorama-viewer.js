@@ -5,6 +5,8 @@
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 
+import { attachDiagramZoom, canvasController } from "./diagram-zoom.js";
+
 let vendorPromise;
 function loadVendor() {
   if (globalThis.AtlasArchiMate) return Promise.resolve(globalThis.AtlasArchiMate);
@@ -706,9 +708,7 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
       <div class="panorama-palette" aria-label="Add an element"></div>
       <div class="panorama-stage">
         <div class="panorama-tools" aria-label="Canvas controls">
-          <button class="icon-btn" data-tool="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
-          <button class="icon-btn" data-tool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
-          <button class="icon-btn" data-tool="fit" title="Fit diagram" aria-label="Fit diagram">⊡</button>
+          <div class="panorama-zoom-slot"></div>
           <span class="panorama-tool-sep" aria-hidden="true"></span>
           <button class="icon-btn" data-tool="undo" title="Undo" aria-label="Undo" disabled>↺</button>
           <button class="icon-btn" data-tool="redo" title="Redo" aria-label="Redo" disabled>↻</button>
@@ -941,9 +941,16 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
     canvas.innerHTML = c4PanelHTML(projection);
   });
 
-  container.querySelector('[data-tool="zoom-in"]').addEventListener("click", () => viewer?.zoom(1.2));
-  container.querySelector('[data-tool="zoom-out"]').addEventListener("click", () => viewer?.zoom(1 / 1.2));
-  container.querySelector('[data-tool="fit"]').addEventListener("click", () => viewer?.fit());
+  // Zoom is the shared control (ADR-draft-shared-ui-primitives), mounted into the
+  // toolbox this canvas already has rather than floated as a second box over it. The
+  // viewer is rebuilt on a view switch, so the controller asks for the current one
+  // each time instead of holding the canvas it was attached to.
+  attachDiagramZoom(canvas, {
+    label: "ArchiMate diagram",
+    mount: container.querySelector(".panorama-zoom-slot"),
+    orientation: "vertical",
+    controller: canvasController(() => viewer && viewer.canvas),
+  });
   // reload re-reads the document after the server has changed it. The canvas never
   // creates content itself, so this is how what was written becomes what is drawn —
   // and it is why there can never be a shape on screen the document does not have.

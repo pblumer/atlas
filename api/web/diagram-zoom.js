@@ -31,6 +31,11 @@ const STEP = 1.25; // one press, a quarter closer — enough to see, small enoug
 // the control is placed inside `frame`. Without one, `frame` must be the scrolling
 // element (overflow:auto) around an <svg>, and the svg is what gets resized.
 //
+// `mount` puts the control inside an element the caller already has instead of over
+// the diagram — for a surface whose zoom buttons share a box with other tools, which
+// is how both Panorama surfaces are built. `orientation: "vertical"` stacks it, for a
+// toolbox that runs down the side rather than across.
+//
 // Returns a handle: { zoom(factor), fit(), destroy() }. `label` names the diagram
 // for assistive technology; pass what the diagram is, e.g. "Decision requirements
 // graph". Calling it twice on the same frame is a no-op, so a view that re-renders
@@ -67,8 +72,14 @@ export function attachDiagramZoom(frame, opts = {}) {
 
   const apply = (next) => {
     z = Math.min(MAX, Math.max(MIN, next));
-    if (ctl) ctl.set(z);
-    else {
+    if (ctl) {
+      ctl.set(z);
+      // A canvas clamps to its own range — the Panorama mesh does, diagram-js does —
+      // so the factor on screen is read back rather than assumed. Stating the request
+      // instead of the result would put a percentage on screen the diagram is not at.
+      const settled = Number(ctl.get());
+      if (Number.isFinite(settled) && settled > 0) z = settled;
+    } else {
       svg.style.width = (baseW * z).toFixed(1) + "px";
       svg.style.height = (baseH * z).toFixed(1) + "px";
     }
@@ -105,7 +116,9 @@ export function attachDiagramZoom(frame, opts = {}) {
   };
 
   const controls = document.createElement("div");
-  controls.className = "dzoom";
+  controls.className = "dzoom"
+    + (opts.mount ? " dzoom-mounted" : "")
+    + (opts.orientation === "vertical" ? " dzoom-vertical" : "");
   if (opts.label) controls.setAttribute("aria-label", `Zoom: ${opts.label}`);
   controls.append(
     btn("Zoom out", "−", () => apply(z / STEP)),
@@ -114,11 +127,15 @@ export function attachDiagramZoom(frame, opts = {}) {
     btn("Fit the diagram", "⤢", doFit),
   );
 
-  // The controls sit over the top-right corner. A canvas pans internally, so they go
-  // inside its frame; a scrolling frame would carry them away with the content, so
-  // that one gets a wrapper to position them against instead.
+  // Where the controls go. Given a mount, into it — the caller has already decided
+  // where its tools live and this is one of them. Otherwise over the top-right
+  // corner: inside the frame for a canvas, which pans internally, and against a
+  // wrapper for a scrolling frame, which would otherwise carry them away with the
+  // content.
   let wrap = null;
-  if (ctl) {
+  if (opts.mount) {
+    opts.mount.appendChild(controls);
+  } else if (ctl) {
     if (getComputedStyle(frame).position === "static") frame.style.position = "relative";
     frame.appendChild(controls);
   } else {

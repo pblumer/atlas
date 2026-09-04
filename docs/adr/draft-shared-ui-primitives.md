@@ -119,6 +119,13 @@ Three primitives, each an ES module export usable without `app.js`:
   zoomed on ctrl+wheel all along, and nothing on screen said so. A control a reader
   cannot see is a control they do not have.
 
+  A surface whose zoom buttons already share a box with other tools — both Panorama
+  surfaces do, the viewer's with undo, redo and save, the mesh's with "release" —
+  mounts the control into that box rather than floating a second one over the same
+  canvas. That is what "one control" has to mean to be worth stating: not one
+  position, which no two of these surfaces could agree on, but one set of buttons,
+  one behaviour and one stated factor wherever they sit.
+
 The rule that follows: **a view does not draw a dialog, a bar, or a button size
 of its own, and does not present a diagram that cannot be zoomed.** If a view needs something the primitives do not offer, the
 primitive grows — that change is reviewed once for everyone, which is the point.
@@ -138,13 +145,7 @@ primitive grows — that change is reviewed once for everyone, which is the poin
   rather than a builder worth forcing.
 - **Follow-ups / risks to watch:** the diagram rule is the one with no mechanical
   check — "this SVG is a diagram" is not something grep can decide, so it holds by
-  review, and a hand-drawn diagram added without zoom would pass CI. The two Panorama
-  surfaces are a stated exception rather than an oversight: both already carry visible
-  zoom buttons of their own, and the viewer's sit in a toolbox with undo, redo and
-  save, so replacing them would either split that toolbox or float a second control
-  over the same canvas. They are worth unifying when that toolbox is next touched, not
-  before — the rule they are held to is that a diagram can be zoomed and says so,
-  which they satisfy. `editor.js`
+  review, and a hand-drawn diagram added without zoom would pass CI. `editor.js`
   is large and mounts standalone,
   so its imports need checking against every harness that loads it. Whether the
   DMN editor should have a bar at all is a product question this record does not

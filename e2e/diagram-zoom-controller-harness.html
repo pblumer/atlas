@@ -15,6 +15,7 @@
   </head>
   <body>
     <div id="frame"></div>
+    <div id="toolbox" style="display:flex;gap:4px"><button id="other">Other</button></div>
     <script type="module">
       import { attachDiagramZoom } from "/diagram-zoom.js";
 
@@ -24,6 +25,15 @@
       let z = 1;
       window.__calls = calls;
       window.__z = () => z;
+      // A second control mounted into an existing toolbox: what the Panorama
+      // surfaces need, since their zoom buttons share a box with other tools.
+      let mz = 1;
+      window.__mountedZ = () => mz;
+      window.__mounted = attachDiagramZoom(document.getElementById("frame2") || document.createElement("div"), {
+        label: "Mounted canvas",
+        mount: document.getElementById("toolbox"),
+        controller: { get: () => mz, set: (n) => { mz = n; }, fit: () => { mz = 1; } },
+      });
       window.__handle = attachDiagramZoom(document.getElementById("frame"), {
         label: "Test canvas",
         controller: {

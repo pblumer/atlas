@@ -29,6 +29,7 @@ inconsistency rather than as failure.
 | Editor surfaces with a bar | 5 | 3 class names, 1 editor with no bar |
 | Diagram surfaces without zoom | 1 of 6 | The hand-drawn one; the other five inherit it from diagram-js |
 | Diagram surfaces with visible zoom controls | 2 of 6 | Both Panorama; elsewhere zoom was ctrl+wheel and unannounced |
+| Distinct sets of zoom buttons | 2 | Two hand-built ones over six surfaces, four of which had none |
 | Shared primitives that already work | 3 | `toast`, `enhanceTable`, `openPickModal` |
 
 The two records differ sharply in shape, and that matters more than their
@@ -166,9 +167,11 @@ Addressed on this branch: the shared control from `api/web/diagram-zoom.js` is
 attached where a diagram is created — in `newModeler` (which is every BPMN surface:
 the editor, the live view, the replay, the task diagram), on the class canvas, on
 the DMN editor's requirements graph, and on the hand-drawn graph in the DMN view.
-The two Panorama surfaces keep their own buttons, which is a stated exception in the
-record rather than an omission: they already show zoom controls, and the viewer's
-share a toolbox with undo, redo and save.
+The two Panorama surfaces, whose zoom buttons share a box with other tools, mount
+the same control into that box instead of keeping their own: the viewer's toolbox
+(vertical, beside undo, redo and save) and the mesh's (horizontal, beside "release")
+now hold the same three buttons and the same stated factor as every other diagram.
+All six surfaces are on one control.
 
 ### 4.4 Editor bars
 
