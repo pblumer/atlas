@@ -137,6 +137,39 @@ Identitäten ist rund ein Ereignis alle 30 Sekunden, in der Spitze vier pro Minu
 Der Sinn des Generators ist nicht Last, sondern eine Oberfläche, die sich bewegt
 wie im Betrieb — neben 50.000 ruhenden Instanzen und 150.000 Tokens.
 
+### Echtzeit oder Zeitraffer
+
+Es gibt den Generator zweimal, mit **derselben Prozess-ID**:
+
+| Datei | Takt | Ein Tag dauert | Spitze |
+|---|---|---|---|
+| [`identitaet-tageslast.bpmn`](identitaet-tageslast.bpmn) | `R/PT1M` | 24 Stunden | 4 Ereignisse/Takt |
+| [`identitaet-tageslast-zeitraffer.bpmn`](identitaet-tageslast-zeitraffer.bpmn) | `R/PT10S` | **24 Minuten** | 40 Ereignisse/Takt |
+
+Die gemeinsame Prozess-ID ist Absicht: beim Deploy zieht Atlas die Start-Timer der
+Vorversion zurück (ADR-0051). Es läuft also immer genau einer von beiden, und
+Umschalten heisst schlicht, den anderen zu deployen — kein Abschalten von Hand,
+keine doppelte Last.
+
+Der Zeitraffer rechnet 60-fach: eine Realminute ist eine simulierte Stunde.
+
+```
+simstd = floor(Realsekunde des Tages / 60) mod 24     (+1 je Realminute)
+simmin = Realsekunde des Tages mod 60                 (+1 je Realsekunde)
+```
+
+Sechs Takte je simulierter Stunde, je Takt der Zehn-Minuten-Anteil der
+Stundenmenge. Tagesmenge und Mischung bleiben identisch: 1.914 Ereignisse auf
+1.914 verschiedene Identitäten je simuliertem Tag, kein Doppeltreffer.
+
+Ein Unterschied ist bewusst: der JML-Batch läuft im Zeitraffer über die ganze
+simulierte Stunde 02 statt über zehn simulierte Minuten. Zehn simulierte Minuten
+sind zehn Realsekunden und damit genau ein Takt — bei Timer-Drift fiele er mal
+doppelt, mal gar nicht hinein.
+
+Der Preis des Zeitraffers ist Historie: rund 4.800 kurzlebige Dispatcher-Instanzen
+je Stunde Zuschauen.
+
 ### Warum die Streuung ein Zufallsersatz mit Vorsicht ist
 
 FEEL hat kein `random()`, und die Wanduhr allein taugt nicht als Ersatz. Der Takt

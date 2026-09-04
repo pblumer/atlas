@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tageslast im Zeitraffer — 60-fach.
+
+  Gleiche Prozess-ID wie identitaet-tageslast.bpmn, mit Absicht: beim Deploy
+  zieht Atlas die Start-Timer der Vorversion zurück (ADR-0051), es läuft also
+  immer genau einer von beiden. Umschalten heisst: den anderen deployen.
+  Kein Abschalten von Hand, keine doppelte Last.
+
+  Warum es den Zeitraffer gibt: die Echtzeit-Variante ist ehrlich, aber langsam
+  zum Zuschauen. Ein Arbeitstag von 50.000 Identitäten sind ~1.800 Ereignisse,
+  also eines alle 30 Sekunden; die Lebenszyklus-Spur bewegt sich dreimal pro
+  Stunde. Hier läuft derselbe Tag in 24 Minuten ab: Nachtruhe, JML-Batch,
+  Vormittagsspitze, Mittagstal, Nachmittag, Feierabend — am Stück sichtbar.
+
+  Zeitrechnung: der Takt ist PT10S, eine Realminute ist eine simulierte Stunde.
+
+      simstd = floor(Realsekunde des Tages / 60) mod 24     (+1 je Realminute)
+      simmin = Realsekunde des Tages mod 60                 (+1 je Realsekunde)
+
+  Sechs Takte je simulierter Stunde, je Takt also der Zehn-Minuten-Anteil der
+  Stundenmenge. 24 Realminuten sind ein simulierter Tag, 60 simulierte Tage
+  passen in einen echten. Die Menge je Tag bleibt dieselbe wie in Echtzeit —
+  gemessen über einen simulierten Tag: 1.914 Ereignisse auf 1.914 verschiedene
+  Identitäten, kein Doppeltreffer, Spitzentakt 40 Ereignisse.
+
+  Der JML-Batch läuft hier über die ganze simulierte Stunde 02 statt über zehn
+  simulierte Minuten. Grund ist die Robustheit: zehn simulierte Minuten sind
+  zehn Realsekunden und damit genau ein Takt — bei Timer-Drift fiele er mal
+  doppelt, mal gar nicht hinein. Über die Stunde verteilt trifft ihn jeder der
+  sechs Takte.
+
+  Alles Übrige — Mengengerüst, Servicekatalog, Mischung, Lehmer-Streuung — ist
+  identisch mit identitaet-tageslast.bpmn; die Begründungen stehen dort.
+
+  Abschalten: Definition löschen. Zurück auf Echtzeit: identitaet-tageslast.bpmn
+  deployen.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_identitaet_tageslast_zeitraffer" targetNamespace="http://atlas/identity">
+  <process id="identitaet-tageslast" name="Identitäten-Tageslast (Zeitraffer 60x)" isExecutable="true">
+    <documentation>Spielt einen kompletten Arbeitstag von 50.000 Identitäten in 24 Minuten ab: eine Realminute ist eine simulierte Stunde. Gleiche Tagesmenge und Mischung wie die Echtzeit-Variante. Läuft ohne Zutun von aussen.</documentation>
+
+    <startEvent id="tick" name="alle 10 Sekunden">
+      <timerEventDefinition><timeCycle xsi:type="tFormalExpression">R/PT10S</timeCycle></timerEventDefinition>
+    </startEvent>
+
+    <scriptTask id="s_uhr" name="Simulierte Zeit bestimmen">
+      <documentation>rs ist die Realsekunde des Tages und zugleich der einzige Eingang in die Streuung — jeder Takt bekommt einen anderen Wert. Die simulierte Stunde läuft aus derselben Zahl, nur 60-fach schneller.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= {rs: now().hour * 3600 + now().minute * 60 + now().second, simstd: modulo(floor((now().hour * 3600 + now().minute * 60 + now().second) / 60), 24), simmin: modulo(now().hour * 3600 + now().minute * 60 + now().second, 60), ztp: substring(string(now()), 1, 19)}" resultVariable="takt"/>
+      </extensionElements>
+    </scriptTask>
+
+    <scriptTask id="s_simuhr" name="Sim-Uhrzeit stellen">
+      <documentation>Nur zum Hinsehen: die simulierte Uhrzeit als HH:MM in den Variablen der Takt-Instanz, damit in der Oberfläche ablesbar ist, welche Tageszeit gerade gespielt wird.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= (if takt.simstd &lt; 10 then &quot;0&quot; else &quot;&quot;) + string(takt.simstd) + &quot;:&quot; + (if takt.simmin &lt; 10 then &quot;0&quot; else &quot;&quot;) + string(takt.simmin)" resultVariable="simUhrzeit"/>
+      </extensionElements>
+    </scriptTask>
+
+    <scriptTask id="s_profil" name="Tagesform laden">
+      <documentation>Ereignisse je Takt nach simulierter Stunde — der Zehn-Minuten-Anteil der Stundenmenge, also das Zehnfache der Minutenwerte aus der Echtzeit-Variante. Stunde 2 steht auf 0, weil der JML-Batch sie überschreibt.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= [{h:0,n:0},{h:1,n:0},{h:2,n:0},{h:3,n:0},{h:4,n:0},{h:5,n:0},{h:6,n:10},{h:7,n:20},{h:8,n:40},{h:9,n:40},{h:10,n:40},{h:11,n:30},{h:12,n:10},{h:13,n:20},{h:14,n:30},{h:15,n:30},{h:16,n:20},{h:17,n:10},{h:18,n:10},{h:19,n:0},{h:20,n:0},{h:21,n:0},{h:22,n:0},{h:23,n:0}]" resultVariable="profil"/>
+      </extensionElements>
+    </scriptTask>
+
+    <scriptTask id="s_katalog" name="Servicekatalog laden">
+      <documentation>Acht Business Services mit Organisationseinheit und Funktion. Der Zugriff läuft über einen Filter; string join auf der einelementigen Trefferliste liefert den Wert als Zeichenkette.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= [{k:0,id:&quot;notebook-standard&quot;,name:&quot;Notebook Standard&quot;,org:&quot;Finanzen&quot;,fkt:&quot;Sachbearbeitung&quot;},{k:1,id:&quot;mobil-iphone&quot;,name:&quot;Mobiltelefon&quot;,org:&quot;Personal&quot;,fkt:&quot;Fachspezialist&quot;},{k:2,id:&quot;m365-e5&quot;,name:&quot;Microsoft 365 E5&quot;,org:&quot;IT-Betrieb&quot;,fkt:&quot;Systemtechnik&quot;},{k:3,id:&quot;vpn-remote&quot;,name:&quot;VPN Fernzugriff&quot;,org:&quot;Vertrieb&quot;,fkt:&quot;Kundenberatung&quot;},{k:4,id:&quot;sap-rolle-fi&quot;,name:&quot;SAP-Rolle Finanzen&quot;,org:&quot;Produktion&quot;,fkt:&quot;Fertigungsplanung&quot;},{k:5,id:&quot;badge-zutritt&quot;,name:&quot;Zutrittsbadge&quot;,org:&quot;Einkauf&quot;,fkt:&quot;Disposition&quot;},{k:6,id:&quot;druck-kontingent&quot;,name:&quot;Druckkontingent&quot;,org:&quot;Recht&quot;,fkt:&quot;Rechtsdienst&quot;},{k:7,id:&quot;teams-telefonie&quot;,name:&quot;Teams-Telefonie&quot;,org:&quot;Marketing&quot;,fkt:&quot;Kommunikation&quot;}]" resultVariable="katalog"/>
+      </extensionElements>
+    </scriptTask>
+
+    <scriptTask id="s_menge" name="Takt-Menge bestimmen">
+      <documentation>In der simulierten Stunde 02 läuft der JML-Batch aus SAP: neun Sätze je Takt, sechs Takte lang — die Ein- und Austritte sowie die abgelaufenen Löschfristen des Tages. Sonst gilt die Tagesform.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= if takt.simstd = 2 then {batch: true, n: 9} else {batch: false, n: sum(profil[h = takt.simstd].n)}" resultVariable="menge"/>
+      </extensionElements>
+    </scriptTask>
+
+    <exclusiveGateway id="gw_last" name="Ereignisse fällig?" default="tf_ruhe"/>
+
+    <scriptTask id="s_hash" name="Mischen (Runde 1)">
+      <documentation>Lehmer-Schritt auf der Realsekunde des Tages, je Ereignis um dessen Nummer versetzt. 4096 als Versatz hält die bis zu 40 Ereignisse eines Takts sicher auseinander; das Produkt bleibt unter 3,2e11 und damit exakt in doppelter Genauigkeit.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= for i in 1..menge.n return modulo((takt.rs * 4096 + i) * 48271, 2147483647)" resultVariable="h1"/>
+      </extensionElements>
+    </scriptTask>
+
+    <scriptTask id="s_hash2" name="Mischen (Runde 2)">
+      <documentation>Zweiter Lehmer-Schritt. Aus einer Runde allein liessen sich keine vier unabhängigen Würfel ziehen: die niedrigen Bits eines einzelnen Schrittes bleiben untereinander korreliert.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= for x in h1 return {a: x, b: modulo(x * 48271, 2147483647)}" resultVariable="h2"/>
+      </extensionElements>
+    </scriptTask>
+
+    <scriptTask id="s_wuerfel" name="Würfel ziehen">
+      <documentation>Vier Würfe je Ereignis, aus verschiedenen Bit-Bereichen: r wählt die Identität aus dem Nummernkreis MT-10001..MT-59000, t die Ereignisart im Tagesbetrieb, b die Art im JML-Batch, s den Service aus dem Katalog.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= for w in h2 return {r: modulo(w.a, 49000), t: modulo(floor(w.b / 1024), 20), b: modulo(floor(w.b / 65536), 25), s: modulo(w.b, 8)}" resultVariable="wuerfel"/>
+      </extensionElements>
+    </scriptTask>
+
+    <scriptTask id="s_plan" name="Bewegungen planen">
+      <documentation>Mischung im Tagesbetrieb: 25 % bestellt, 25 % in Betrieb, 15 % gekündigt, 10 % Störung, 10 % dekommissioniert, 15 % Stammdaten-Mutation. Im JML-Batch: 48 % Eintritt, 48 % Austritt, 4 % Löschfrist.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= for w in wuerfel return {identityId: &quot;MT-&quot; + string(10001 + w.r), zeitpunkt: takt.ztp, bewegung: if menge.batch then (if w.b &lt; 12 then &quot;eintritt&quot; else if w.b &lt; 24 then &quot;austritt&quot; else &quot;loeschfrist&quot;) else (if w.t &lt; 17 then &quot;service&quot; else &quot;mutation&quot;), serviceId: string join(katalog[k = w.s].id, &quot;&quot;), serviceName: string join(katalog[k = w.s].name, &quot;&quot;), serviceStatus: if w.t &lt; 5 then &quot;BESTELLT&quot; else if w.t &lt; 10 then &quot;IN_BETRIEB&quot; else if w.t &lt; 13 then &quot;GEKUENDIGT&quot; else if w.t &lt; 15 then &quot;GESTOERT&quot; else &quot;DEKOMMISSIONIERT&quot;, neueOrgEinheit: string join(katalog[k = w.s].org, &quot;&quot;), neueFunktion: string join(katalog[k = w.s].fkt, &quot;&quot;)}" resultVariable="auftraege"/>
+      </extensionElements>
+    </scriptTask>
+
+    <callActivity id="fan" name="Bewegungen melden">
+      <documentation>Je Auftrag eine kurzlebige Dispatcher-Instanz, weil ein Message-Throw den Korrelationsschlüssel im Instanz-Scope auswertet. propagateAllParentVariables ist aus: sonst wanderten Katalog, Profil und Auftragsliste als Nachrichten-Nutzlast in jede getroffene Identität.</documentation>
+      <extensionElements>
+        <zeebe:calledElement processId="identitaet-bewegung-eins" propagateAllParentVariables="false"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="= item.identityId" target="identityId"/>
+          <zeebe:input source="= item.bewegung" target="bewegung"/>
+          <zeebe:input source="= item.serviceId" target="serviceId"/>
+          <zeebe:input source="= item.serviceName" target="serviceName"/>
+          <zeebe:input source="= item.serviceStatus" target="serviceStatus"/>
+          <zeebe:input source="= item.zeitpunkt" target="zeitpunkt"/>
+          <zeebe:input source="= item.neueOrgEinheit" target="neueOrgEinheit"/>
+          <zeebe:input source="= item.neueFunktion" target="neueFunktion"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <multiInstanceLoopCharacteristics>
+        <extensionElements>
+          <zeebe:loopCharacteristics inputCollection="= auftraege" inputElement="item"/>
+        </extensionElements>
+      </multiInstanceLoopCharacteristics>
+    </callActivity>
+
+    <endEvent id="end" name="Takt erledigt"/>
+
+    <sequenceFlow id="tf0" sourceRef="tick" targetRef="s_uhr"/>
+    <sequenceFlow id="tf11" sourceRef="s_uhr" targetRef="s_simuhr"/>
+    <sequenceFlow id="tf1" sourceRef="s_simuhr" targetRef="s_profil"/>
+    <sequenceFlow id="tf2" sourceRef="s_profil" targetRef="s_katalog"/>
+    <sequenceFlow id="tf3" sourceRef="s_katalog" targetRef="s_menge"/>
+    <sequenceFlow id="tf4" sourceRef="s_menge" targetRef="gw_last"/>
+    <sequenceFlow id="tf5" name="ja" sourceRef="gw_last" targetRef="s_hash">
+      <conditionExpression xsi:type="tFormalExpression">= menge.n &gt; 0</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="tf_ruhe" name="Nachtruhe" sourceRef="gw_last" targetRef="end"/>
+    <sequenceFlow id="tf6" sourceRef="s_hash" targetRef="s_hash2"/>
+    <sequenceFlow id="tf9" sourceRef="s_hash2" targetRef="s_wuerfel"/>
+    <sequenceFlow id="tf10" sourceRef="s_wuerfel" targetRef="s_plan"/>
+    <sequenceFlow id="tf7" sourceRef="s_plan" targetRef="fan"/>
+    <sequenceFlow id="tf8" sourceRef="fan" targetRef="end"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="identitaet-tageslast">
+      <bpmndi:BPMNShape id="di_tick" bpmnElement="tick"><dc:Bounds x="160" y="182" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="142" y="225" width="80" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_uhr" bpmnElement="s_uhr"><dc:Bounds x="250" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_simuhr" bpmnElement="s_simuhr"><dc:Bounds x="390" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_profil" bpmnElement="s_profil"><dc:Bounds x="530" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_katalog" bpmnElement="s_katalog"><dc:Bounds x="670" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_menge" bpmnElement="s_menge"><dc:Bounds x="810" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_last" bpmnElement="gw_last" isMarkerVisible="true"><dc:Bounds x="955" y="175" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="935" y="138" width="92" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_hash" bpmnElement="s_hash"><dc:Bounds x="1050" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_hash2" bpmnElement="s_hash2"><dc:Bounds x="1190" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_wuerfel" bpmnElement="s_wuerfel"><dc:Bounds x="1330" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_plan" bpmnElement="s_plan"><dc:Bounds x="1470" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_fan" bpmnElement="fan"><dc:Bounds x="1610" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="1770" y="182" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="1755" y="225" width="70" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_tf0" bpmnElement="tf0"><di:waypoint x="196" y="200"/><di:waypoint x="250" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf11" bpmnElement="tf11"><di:waypoint x="350" y="200"/><di:waypoint x="390" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf1" bpmnElement="tf1"><di:waypoint x="490" y="200"/><di:waypoint x="530" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf2" bpmnElement="tf2"><di:waypoint x="630" y="200"/><di:waypoint x="670" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf3" bpmnElement="tf3"><di:waypoint x="770" y="200"/><di:waypoint x="810" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf4" bpmnElement="tf4"><di:waypoint x="910" y="200"/><di:waypoint x="955" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf5" bpmnElement="tf5"><di:waypoint x="1005" y="200"/><di:waypoint x="1050" y="200"/><bpmndi:BPMNLabel><dc:Bounds x="1012" y="182" width="30" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf_ruhe" bpmnElement="tf_ruhe"><di:waypoint x="980" y="225"/><di:waypoint x="980" y="330"/><di:waypoint x="1788" y="330"/><di:waypoint x="1788" y="218"/><bpmndi:BPMNLabel><dc:Bounds x="1350" y="308" width="70" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf6" bpmnElement="tf6"><di:waypoint x="1150" y="200"/><di:waypoint x="1190" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf9" bpmnElement="tf9"><di:waypoint x="1290" y="200"/><di:waypoint x="1330" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf10" bpmnElement="tf10"><di:waypoint x="1430" y="200"/><di:waypoint x="1470" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf7" bpmnElement="tf7"><di:waypoint x="1570" y="200"/><di:waypoint x="1610" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf8" bpmnElement="tf8"><di:waypoint x="1710" y="200"/><di:waypoint x="1770" y="200"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
