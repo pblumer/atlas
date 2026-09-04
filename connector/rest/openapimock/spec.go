@@ -191,7 +191,7 @@ func compile(data []byte, path, root string) (*Spec, error) {
 		return nil, err
 	}
 
-	files := &documents{root: root, byPath: map[string]map[string]any{}}
+	files := &documents{root: root, byPath: map[string]map[string]any{}, limit: maxSpecFiles}
 	if path != "" {
 		files.byPath[path] = doc
 	}

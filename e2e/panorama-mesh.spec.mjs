@@ -2360,3 +2360,101 @@ test("the key sits under the picture, and the zoom controls stay on it", async (
   await page.locator("#mesh-zoom-in").click();
   await expect(page.locator(".mesh-canvas")).toHaveClass(/mesh-zoomed/);
 });
+
+// A maintenance window: several nodes taken down together (ADR-0211 §6 asked of a
+// set). The landscape is built so the overlap is a fact rather than a guess — Shared
+// calls both P1 and P2, so it stops either way and can only stop once.
+const windowMesh = {
+  nodes: [
+    { id: "process:p1", kind: "process", name: "P1", provenance: "derived", processId: "p1", version: 1 },
+    { id: "process:p2", kind: "process", name: "P2", provenance: "derived", processId: "p2", version: 1 },
+    { id: "process:onlyA", kind: "process", name: "OnlyA", provenance: "derived", processId: "onlya", version: 1 },
+    { id: "process:onlyB", kind: "process", name: "OnlyB", provenance: "derived", processId: "onlyb", version: 1 },
+    { id: "process:shared", kind: "process", name: "Shared", provenance: "derived", processId: "shared", version: 1 },
+  ],
+  edges: [
+    { from: "process:shared", to: "process:p1", kind: "calls" },
+    { from: "process:shared", to: "process:p2", kind: "calls" },
+    { from: "process:onlyA", to: "process:p1", kind: "calls" },
+    { from: "process:onlyB", to: "process:p2", kind: "calls" },
+  ],
+  restricted: 0,
+  clustered: false,
+};
+
+async function openWindow(page) {
+  installMock(page, windowMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.locator('[data-node-id="process:p1"] .mesh-body').click();
+  await page.locator('[data-node-id="process:p2"] .mesh-body').click({ modifiers: ["Control"] });
+  await expect(page.locator(".mesh-panel")).toContainText("Maintenance window");
+}
+
+test("a window says what the evening costs, not what each change costs", async ({ page }) => {
+  await openWindow(page);
+  const panel = page.locator(".mesh-panel");
+  await expect(panel).toContainText("2 node(s) going down together");
+
+  // The union. Three things stop — Shared, OnlyA, OnlyB — and Shared stops once.
+  await expect(panel.locator(".mesh-impact-count")).toContainText("3");
+  // And the comparison, which is the whole reason to plan a window rather than two
+  // changes: 4 apart, 3 together, because one node is in both radii.
+  await expect(panel).toContainText("One at a time these come to");
+  const compare = await panel.locator(".mesh-note", { hasText: "One at a time" }).textContent();
+  expect(compare.replace(/\s+/g, " ")).toContain("come to 4");
+  expect(compare.replace(/\s+/g, " ")).toContain("together 3");
+  expect(compare.replace(/\s+/g, " ")).toContain("1 node(s) sit in more than one radius");
+
+  // Each member carries what it costs on its own, which is what says whether one of
+  // them is driving the window.
+  await expect(panel.locator(".mesh-window-item")).toHaveCount(2);
+  await expect(panel.locator(".mesh-window-item").first()).toContainText("2 on its own");
+
+  // The picture says which nodes are the ones going down, as against the ones that
+  // go with them.
+  await expect(page.locator(".mesh-picked")).toHaveCount(2);
+  await expect(page.locator('[data-node-id="process:shared"]')).toHaveClass(/mesh-in-impact/);
+  await expect(page.locator('[data-node-id="process:shared"]')).not.toHaveClass(/mesh-picked/);
+});
+
+test("a window comes apart the way it was built", async ({ page }) => {
+  await openWindow(page);
+
+  // From the panel, without a modifier: a set assembled by clicking has to be
+  // unbuildable by clicking.
+  await page.locator('[data-window-drop="process:p2"]').click();
+  await expect(page.locator(".mesh-panel")).not.toContainText("Maintenance window");
+  await expect(page.locator(".mesh-panel-head")).toContainText("P1");
+  await expect(page.locator(".mesh-picked")).toHaveCount(1);
+
+  // And with one, back on the canvas.
+  await page.locator('[data-node-id="process:p2"] .mesh-body').click({ modifiers: ["Control"] });
+  await expect(page.locator(".mesh-panel")).toContainText("Maintenance window");
+  await page.locator("[data-window-clear]").click();
+  await expect(page.locator(".mesh-panel")).toContainText("Nothing selected");
+  await expect(page.locator(".mesh-picked")).toHaveCount(0);
+});
+
+// A window is rings on two nodes and nothing else. On screen the panel says what they
+// are; a file has no panel, and §10 is the rule that it has to carry what it is.
+test("an exported window says which nodes it is about", async ({ page }) => {
+  await openWindow(page);
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#mesh-export-svg").click(),
+  ]);
+  const stream = await download.createReadStream();
+  const svg = await new Promise((resolve, reject) => {
+    let out = "";
+    stream.on("data", (chunk) => (out += chunk));
+    stream.on("end", () => resolve(out));
+    stream.on("error", reject);
+  });
+  expect(svg).toContain("Maintenance window");
+  expect(svg).toContain("P1, P2");
+  expect(svg).toContain("going down");
+  // The rings survive into the file: they are what the sentence is about.
+  expect(svg.match(/mesh-picked/g)?.length).toBeGreaterThanOrEqual(2);
+});

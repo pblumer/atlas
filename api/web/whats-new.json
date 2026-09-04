@@ -2,6 +2,49 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "a-search-term-found-more-than-it-was-asked-for",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A search finds what you typed, not what resembles it",
+        "de": "Die Suche findet, was du eingibst — nicht, was ihm ähnelt"
+      },
+      "summary": {
+        "en": "kdnr=MT-100 also returned MT-10001. Every search term was quietly widened into a substring, so naming one customer gave you a list holding another beside it, with no way to ask about only the one you meant. Worse, it was not consistent: a variable the model declared searchable was matched exactly, any other as a substring — so the same query meant two things depending on the model, which you cannot see from the search box. A term is now matched whole. Widen it yourself with * for any run of characters and ? for exactly one, so *MT-1* is the old behaviour asked for explicitly, and write \\* or \\? to search for those characters themselves. The same rule now guards bulk termination, where an unasked-for widening selected instances you had not named.",
+        "de": "kdnr=MT-100 lieferte auch MT-10001. Jeder Suchbegriff wurde still zu einem Teilstring erweitert — wer einen Kunden benannte, bekam einen zweiten danebengestellt, ohne Möglichkeit, nur nach dem gemeinten zu fragen. Schlimmer noch: es war nicht einmal einheitlich. Eine vom Modell als searchable deklarierte Variable wurde exakt getroffen, jede andere als Teilstring — dieselbe Anfrage bedeutete also je nach Modell zwei verschiedene Dinge, und das sieht man dem Suchfeld nicht an. Ein Begriff wird jetzt vollständig verglichen. Erweitern tust du selbst: * steht für beliebig viele Zeichen, ? für genau eines, *MT-1* ist also das alte Verhalten, ausdrücklich verlangt; \\* und \\? suchen nach den Zeichen selbst. Dieselbe Regel schützt jetzt auch die Massenbeendigung, wo eine ungefragte Erweiterung Instanzen ausgewählt hat, die du nicht benannt hattest."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Search"
+      ],
+      "tutorial": {
+        "en": [
+          "In Operations, open a version's live view and type a full value into the search box beside the diagram — kdnr=MT-100 now finds MT-100 and nothing else.",
+          "Add * where you want any run of characters: kdnr=MT-1* for everything starting with MT-1, *MT-1* for everything containing it.",
+          "Use ? for exactly one character: kdnr=MT-10? matches MT-100 and MT-10X, but not MT-1000.",
+          "To search for a literal star or question mark, escape it: kdnr=10\\* finds the value 10*."
+        ],
+        "de": [
+          "In Operations die Live-Ansicht einer Version öffnen und einen vollständigen Wert in das Suchfeld neben dem Diagramm eingeben — kdnr=MT-100 findet jetzt MT-100 und sonst nichts.",
+          "Ein * setzen, wo beliebig viele Zeichen stehen dürfen: kdnr=MT-1* für alles, was mit MT-1 beginnt, *MT-1* für alles, worin es vorkommt.",
+          "? steht für genau ein Zeichen: kdnr=MT-10? trifft MT-100 und MT-10X, aber nicht MT-1000.",
+          "Für einen echten Stern oder ein Fragezeichen das Zeichen maskieren: kdnr=10\\* findet den Wert 10*."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "a-widened-properties-column-in-the-form-editor-gave-its-widt",
       "version": "Unreleased",
       "date": null,
@@ -297,35 +340,6 @@
         "Operations",
         "Modeler"
       ]
-    },
-    {
-      "id": "clio-tasks-run-on-a-worker-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Event-store tasks moved out of the engine",
-        "de": "Event-Store-Tasks sind aus der Engine ausgezogen"
-      },
-      "summary": {
-        "en": "Writing an event, reading a subject's history, folding its state — until now Atlas did all three from the process that runs the engine, so a slow event store held up work that had nothing to do with it. They run in a worker Atlas starts and supervises itself now. Nothing to configure: the store you set up in Connectors is handed to that worker, including a store you reach without a token.",
-        "de": "Ein Event schreiben, die Historie eines Subjects lesen, seinen Zustand falten — bisher machte Atlas alle drei im Prozess, der die Engine ausführt, sodass ein langsamer Event-Store Arbeit aufhielt, die nichts damit zu tun hatte. Sie laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Der Store, den Sie unter Connectors eingerichtet haben, wird an diesen Worker übergeben — auch einer, den Sie ohne Token erreichen."
-      },
-      "link": {
-        "label": "ADR-0233",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
-      },
-      "tags": [
-        "Workers",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
-      }
     }
   ]
 }

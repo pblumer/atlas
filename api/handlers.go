@@ -458,6 +458,11 @@ type instanceResp struct {
 	CompletedAt      int64          `json:"completedAt,omitempty"`
 	CorrelationKey   string         `json:"correlationKey,omitempty"`
 	Variables        []variableView `json:"variables"`
+	// Archived marks a row the exported event log answered for rather than this
+	// server's own store: the instance was hard-deleted by history retention
+	// (ADR-0115) and exists only in the archive. It cannot be opened, cancelled or
+	// migrated, and what it reports is what the log recorded, not what is true now.
+	Archived bool `json:"archived,omitempty"`
 }
 
 type statsResp struct {

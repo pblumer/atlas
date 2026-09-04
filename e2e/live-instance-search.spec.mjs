@@ -144,3 +144,105 @@ test.describe("the live instance panel", () => {
     expect(page.__errors).toEqual([]);
   });
 });
+
+test.describe("an instance the archive answers for", () => {
+  // The row the exported event log hands back for an instance history retention
+  // removed from this server. It carries no element instances, because the archive
+  // knows of no live tokens.
+  const purged = {
+    key: 900001, processDefKey: 7, processId: "identitaet", version: 1,
+    elementInstances: 0, state: "completed", createdAt: 1_722_000_000_000_000_000,
+    completedAt: 1_722_000_900_000_000_000,
+    variables: [{ name: "identityId", value: "MT-1998", kind: "string" }],
+  };
+
+  const searchArchive = async (page, archive, q) => {
+    await open(page);
+    await page.evaluate((a) => { window.__archive = a; }, archive);
+    await searchBox(page).fill(q);
+    await searchBox(page).press("Enter");
+  };
+
+  test("is found, and is visibly not a live one", async ({ page }) => {
+    await searchArchive(page, { state: "available", rows: [purged] }, "identityId=MT-1998");
+
+    await expect(cards(page)).toHaveCount(1);
+    const card = cards(page).first();
+    await expect(card).toContainText("900001");
+    await expect(card.locator(".pill", { hasText: "archived" })).toBeVisible();
+  });
+
+  test("offers nothing that would act on an instance that is gone", async ({ page }) => {
+    await searchArchive(page, { state: "available", rows: [purged] }, "identityId=MT-1998");
+
+    // Replay reads the instance's events from this server's store. For an instance
+    // the store no longer has, the link would lead nowhere — so it is not offered.
+    await expect(cards(page).first().locator(".replay-link")).toHaveCount(0);
+  });
+
+  test("keeps its marking after the poll rebuilds the panel", async ({ page }) => {
+    await searchArchive(page, { state: "available", rows: [purged] }, "identityId=MT-1998");
+    await expect(cards(page).first().locator(".pill", { hasText: "archived" })).toBeVisible();
+
+    // The panel rebuilds every 1.5s. A signature that ignored archived-ness would
+    // keep the first render and, worse, could redraw the row as an ordinary one.
+    await page.waitForTimeout(2000);
+    await expect(cards(page)).toHaveCount(1);
+    await expect(cards(page).first().locator(".pill", { hasText: "archived" })).toBeVisible();
+  });
+
+  // The picker is the list an operator chooses from before ever seeing a row, so the
+  // marking has to reach it too. This runs one query across the moment an instance
+  // stops being live and starts being archived — the same key, the same state, the
+  // same query — and holds that the option changes with it.
+  test("the picker stops calling a purged instance live", async ({ page }) => {
+    await open(page);
+    const q = "identityId=MT-1998";
+    // A finished instance the local store still has, matched by a variable.
+    const key = await page.evaluate((needle) => {
+      const row = window.__rows().find((r) => r.state !== "active");
+      row.variables = [{ name: "identityId", value: needle, kind: "string" }];
+      return row.key;
+    }, "MT-1998");
+    await searchBox(page).fill(q);
+    await searchBox(page).press("Enter");
+    const picker = page.locator("#instance-sel");
+    await expect(picker).toContainText(String(key));
+    await expect(picker).not.toContainText("archived");
+
+    // Retention removes it; the archive answers the same query with the same key and
+    // the same state.
+    await page.evaluate(([k, needle]) => {
+      window.__purge(k);
+      window.__archive = { state: "available", rows: [{
+        key: k, processDefKey: 7, processId: "identitaet", version: 1,
+        elementInstances: 0, state: "completed",
+        variables: [{ name: "identityId", value: needle, kind: "string" }],
+      }] };
+    }, [key, "MT-1998"]);
+    await searchBox(page).fill(q);
+    await searchBox(page).press("Enter");
+    await expect(picker).toContainText("archived");
+  });
+
+  test("says why nothing was found when there is no archive to search", async ({ page }) => {
+    await searchArchive(page, { state: "notConfigured", rows: [] }, "identityId=NOBODY");
+
+    await expect(cards(page)).toHaveCount(0);
+    const panel = page.locator("#var-panel");
+    await expect(panel).toContainText("No instance of this version matches");
+    // "Nothing matched" and "nothing was looked in" are different facts. An operator
+    // told only the first stops looking for an instance that does exist.
+    await expect(panel.locator(".vp-archive-note")).toContainText("no event log is exported");
+  });
+
+  test("separates a store that declined from one that could not be reached", async ({ page }) => {
+    await searchArchive(page, { state: "refused", rows: [] }, "identityId=NOBODY");
+    await expect(page.locator("#var-panel .vp-archive-note")).toContainText("declined");
+
+    await page.evaluate(() => { window.__archive = { state: "unreachable", rows: [] }; });
+    await searchBox(page).fill("identityId=NOBODY2");
+    await searchBox(page).press("Enter");
+    await expect(page.locator("#var-panel .vp-archive-note")).toContainText("could not be reached");
+  });
+});
