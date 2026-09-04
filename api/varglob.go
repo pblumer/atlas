@@ -2,7 +2,7 @@ package api
 
 import "strings"
 
-// Wildcards in an instance search (ADR-0241, ADR-draft-searchable-variables).
+// Wildcards in an instance search (ADR-0241, ADR-0244).
 //
 // A search term is literal. "kdnr=MT-100" asks for MT-100 and gets MT-100 — not
 // MT-10001, which is a different customer. The search used to widen every term into

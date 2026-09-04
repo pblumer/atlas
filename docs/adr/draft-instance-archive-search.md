@@ -18,7 +18,7 @@ list — indistinguishable from "no such instance ever existed". The export was 
 archive for somebody else's tooling, and the operator holding a customer number
 from two years ago had no way in.
 
-ADR-0241 and ADR-draft-searchable-variables made the *live* search fast. This
+ADR-0241 and ADR-0244 made the *live* search fast. This
 record is about the instances those paths cannot see at all.
 
 ## Decision drivers

@@ -13,7 +13,7 @@ nothing on either row to tell them apart. That is not a helpful widening: MT-100
 and MT-10001 are two different customers, and the search offered no way to ask
 about only one of them.
 
-It was also not consistent with itself. ADR-draft-searchable-variables gave a
+It was also not consistent with itself. ADR-0244 gave a
 declared name an exact index lookup, so `kdnr=MT-100` matched exactly when the
 model carried `atlas:searchable="kdnr"` and matched as a substring when it did
 not. Whether a name is declared is a property of the model. It is not visible
@@ -35,7 +35,7 @@ mean to name, and there the cost is not a confusing list.
   question; it just has to be asked.
 - **No new vocabulary.** Operators already know `*` and `?` from shells and file
   pickers.
-- **Cheap under an ordered index.** The seek that ADR-draft-searchable-variables
+- **Cheap under an ordered index.** The seek that ADR-0244
   bought must survive: an exact term stays one seek, and a wild one must still
   reach its neighbourhood rather than scanning.
 
@@ -68,7 +68,7 @@ an exponential search — the box is reachable by anyone who may look at instanc
 
 Under the value index a pattern is split into its **literal head** and the rest.
 No wildcard means the head is the whole term and the lookup is the exact seek
-ADR-draft-searchable-variables built. A wildcard means the head is a seek to a
+ADR-0244 built. A wildcard means the head is a seek to a
 neighbourhood and everything it returns is matched against the full pattern
 before it is reported — without that, `MT-1?` would answer with every MT-1 value
 the index holds. A pattern with no head at all (`*0001`) reads that name's whole

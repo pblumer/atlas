@@ -21,7 +21,7 @@ _Changed_ / _Removed_ for each version.
   only the one they meant.
 
   It was not even consistent with itself. The value index
-  ([ADR-draft-searchable-variables](docs/adr/draft-searchable-variables.md)) answers a
+  ([ADR-0244](docs/adr/0244-searchable-variables.md)) answers a
   declared name exactly, so the same query matched exactly when the model carried
   `atlas:searchable` for that name and matched as a substring when it did not. Whether
   a name is declared is a property of the model: invisible from the search box,
