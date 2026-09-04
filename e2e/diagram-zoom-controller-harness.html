@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas diagram zoom (controller) e2e harness</title>
+    <!-- The second way api/web/diagram-zoom.js is used: over a canvas that owns its
+         own zoom (diagram-js does, and so does the Panorama mesh). The control does
+         not resize anything itself — it asks the canvas, which is what keeps one set
+         of buttons over every diagram in Atlas. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; background: #fff; }
+      #frame { width: 400px; height: 300px; background: #f3f4f6; }
+    </style>
+  </head>
+  <body>
+    <div id="frame"></div>
+    <script type="module">
+      import { attachDiagramZoom } from "/diagram-zoom.js";
+
+      // A stand-in for diagram-js's canvas: it holds a factor and records that fit
+      // was asked for, so the tests asserts on what the control asked of it.
+      const calls = [];
+      let z = 1;
+      window.__calls = calls;
+      window.__z = () => z;
+      window.__handle = attachDiagramZoom(document.getElementById("frame"), {
+        label: "Test canvas",
+        controller: {
+          get: () => z,
+          set: (next) => { z = next; calls.push(["set", Number(next.toFixed(4))]); },
+          fit: () => { z = 0.5; calls.push(["fit"]); },
+        },
+      });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

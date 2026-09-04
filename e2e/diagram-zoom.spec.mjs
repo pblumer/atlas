@@ -84,3 +84,48 @@ test("zoom stays within bounds however hard it is pushed", async ({ page }) => {
   expect(await scale(page)).toBeGreaterThanOrEqual(0.2);
   expect(page.__errors).toEqual([]);
 });
+
+// A canvas that owns its zoom (diagram-js, the Panorama mesh) gets the same control
+// driving it instead of the SVG-resizing default, so one set of buttons sits over
+// every diagram in Atlas rather than three sets over some of them.
+test.describe("over a canvas that owns its zoom", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/diagram-zoom-controller-harness.html");
+    await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+  });
+
+  test("the buttons drive the canvas rather than resizing anything", async ({ page }) => {
+    await page.locator(".dzoom button[aria-label='Zoom in']").click();
+    expect(await page.evaluate(() => window.__z())).toBeGreaterThan(1);
+
+    await page.locator(".dzoom button[aria-label='Fit the diagram']").click();
+    expect(await page.evaluate(() => window.__calls.some((c) => c[0] === "fit"))).toBe(true);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("the control sits inside the frame and does not wrap it", async ({ page }) => {
+    // A canvas pans internally instead of scrolling, so the control belongs in the
+    // frame. Wrapping the frame would be a second box around a sized element and is
+    // how a canvas loses its height.
+    const inside = await page.evaluate(() =>
+      !!document.getElementById("frame").querySelector(".dzoom"));
+    expect(inside).toBe(true);
+    expect(await page.evaluate(() => !!document.querySelector(".dzoom-wrap"))).toBe(false);
+  });
+
+  test("the control box does not steal clicks from the diagram under it", async ({ page }) => {
+    // app.css already learned this the hard way for .panorama-tools: a floating box
+    // over a diagram takes clicks meant for the shapes beneath it. Only the buttons
+    // may be targets; the box around them must not be.
+    const boxTakesPointer = await page.evaluate(() => {
+      const el = document.querySelector(".dzoom");
+      return getComputedStyle(el).pointerEvents !== "none";
+    });
+    expect(boxTakesPointer).toBe(false);
+    const buttonTakesPointer = await page.evaluate(() => {
+      const el = document.querySelector(".dzoom button");
+      return getComputedStyle(el).pointerEvents === "auto";
+    });
+    expect(buttonTakesPointer).toBe(true);
+  });
+});

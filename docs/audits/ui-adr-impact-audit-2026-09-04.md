@@ -28,7 +28,7 @@ inconsistency rather than as failure.
 | Button-size call sites to unify | 21 (`sm`) vs 62 (`small`) | Two rules with different metrics |
 | Editor surfaces with a bar | 5 | 3 class names, 1 editor with no bar |
 | Diagram surfaces without zoom | 1 of 6 | The hand-drawn one; the other five inherit it from diagram-js |
-| Diagram surfaces with visible zoom controls | 1 of 6 | Elsewhere zoom is ctrl+wheel, which is not discoverable |
+| Diagram surfaces with visible zoom controls | 2 of 6 | Both Panorama; elsewhere zoom was ctrl+wheel and unannounced |
 | Shared primitives that already work | 3 | `toast`, `enhanceTable`, `openPickModal` |
 
 The two records differ sharply in shape, and that matters more than their
@@ -156,9 +156,19 @@ picture." Its frame offered `overflow:auto` and nothing else, so the only way to
 get closer to a decision requirements graph was the browser's page zoom, which
 scales the console around it.
 
-Visible zoom controls are rarer still: only the Panorama mesh has them
-(`mesh-zoom-in` / `-out` / `-fit`). Everywhere else zoom is ctrl+wheel, which
-works but is not discoverable.
+Visible zoom controls were rarer still. Only the two Panorama surfaces had any: the
+mesh (`mesh-zoom-in` / `-out` / `-fit`) and the viewer (`data-tool="zoom-in"` and
+its neighbours, inside the toolbox that also holds undo, redo and save). On the
+BPMN canvas, the class canvas and the DMN editor, zoom existed and said nothing —
+ctrl+wheel works on all three, and a reader has no way to learn that.
+
+Addressed on this branch: the shared control from `api/web/diagram-zoom.js` is
+attached where a diagram is created — in `newModeler` (which is every BPMN surface:
+the editor, the live view, the replay, the task diagram), on the class canvas, on
+the DMN editor's requirements graph, and on the hand-drawn graph in the DMN view.
+The two Panorama surfaces keep their own buttons, which is a stated exception in the
+record rather than an omission: they already show zoom controls, and the viewer's
+share a toolbox with undo, redo and save.
 
 ### 4.4 Editor bars
 

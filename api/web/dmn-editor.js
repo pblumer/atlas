@@ -22,6 +22,8 @@ const DMN_CSS = [
   "vendor/dmn/assets/properties-panel.css",
 ];
 
+import { attachDiagramZoom, canvasController } from "./diagram-zoom.js";
+
 let dmnReady; // memoized loader promise → window.AtlasDmn (Modeler + properties panel)
 function loadDmn() {
   if (dmnReady) return dmnReady;
@@ -245,6 +247,7 @@ export async function openDmnEditor({ api, toast, projectId, modelRef }) {
     // The view switcher lets the author move between the DRG overview and each
     // decision's table without hunting for a double-click. The properties panel
     // only applies to the DRG view, so its column is shown only there.
+    let drdZoom = null;
     const renderViews = () => {
       const views = modeler.getViews();
       const active = modeler.getActiveView();
@@ -257,8 +260,24 @@ export async function openDmnEditor({ api, toast, projectId, modelRef }) {
         viewsBar.appendChild(b);
       }
       propsPanel.hidden = !(active && active.type === "drd");
+      // The requirements graph is a diagram and zooms like every other one
+      // (ADR-draft-shared-ui-primitives); a decision table is a table, so the control
+      // comes off rather than sitting there doing nothing.
+      const isDrd = !!(active && active.type === "drd");
+      if (drdZoom) { drdZoom.show(isDrd); if (isDrd) drdZoom.sync(); }
     };
     modeler.on("views.changed", renderViews);
+
+    // dmn-js swaps a whole viewer per view, so the control asks for the active one
+    // each time rather than holding on to the canvas of whichever view was open when
+    // it was attached. canvasController already answers 1 while there is none.
+    drdZoom = attachDiagramZoom(canvas, {
+      label: "Decision requirements graph",
+      controller: canvasController(() => {
+        const v = modeler.getActiveViewer();
+        return v && typeof v.get === "function" ? v.get("canvas", false) : null;
+      }),
+    });
 
     let xml;
     if (editing) {

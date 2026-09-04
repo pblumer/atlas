@@ -4802,12 +4802,17 @@ button.im-problem:hover { background: var(--accent-soft); }
    top-right corner so they hold still while the diagram scrolls under them. */
 .dzoom-wrap { position: relative; }
 .dzoom {
-  position: absolute; top: 8px; right: 8px; z-index: 2;
+  position: absolute; top: 8px; right: 8px; z-index: 8;
   display: flex; align-items: center; gap: 2px;
   padding: 2px; border-radius: 8px;
   background: var(--card, #fff); border: 1px solid var(--line, #e5e7eb);
   box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+  /* The box takes no pointer events, only its buttons do — the lesson
+     .panorama-tools already carries: a floating control over a diagram otherwise
+     steals the clicks meant for the shapes under it. */
+  pointer-events: none;
 }
+.dzoom > * { pointer-events: auto; }
 .dzoom .btn { min-width: 26px; padding: 2px 6px; }
 .dzoom-level {
   min-width: 44px; text-align: center;

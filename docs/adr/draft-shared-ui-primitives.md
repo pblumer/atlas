@@ -110,11 +110,14 @@ Three primitives, each an ES module export usable without `app.js`:
   keeps `editor-bar.spec.mjs` and every `wire*` function reaching the same
   elements.
 
-- **A diagram zoom** for the diagrams Atlas draws itself: zoom in, zoom out, fit,
-  ctrl+wheel, and the current factor stated rather than inferred. It attaches to
-  already-rendered markup, the way `groupifyPanel` does, so a renderer stays a
-  renderer. The framework-backed canvases keep diagram-js's own zoom — the rule is
-  that a diagram can be approached, not that one implementation supplies it.
+- **A diagram zoom**: zoom in, zoom out, fit, ctrl+wheel, and the current factor
+  stated rather than inferred. It attaches to already-rendered markup, the way
+  `groupifyPanel` does, so a renderer stays a renderer. It works two ways from one
+  control — over a canvas that owns its zoom it only asks (diagram-js answers), and
+  over a picture Atlas drew as SVG it resizes. That distinction matters because the
+  ability was never the missing part on the framework-backed canvases: diagram-js has
+  zoomed on ctrl+wheel all along, and nothing on screen said so. A control a reader
+  cannot see is a control they do not have.
 
 The rule that follows: **a view does not draw a dialog, a bar, or a button size
 of its own, and does not present a diagram that cannot be zoomed.** If a view needs something the primitives do not offer, the
@@ -135,7 +138,13 @@ primitive grows — that change is reviewed once for everyone, which is the poin
   rather than a builder worth forcing.
 - **Follow-ups / risks to watch:** the diagram rule is the one with no mechanical
   check — "this SVG is a diagram" is not something grep can decide, so it holds by
-  review, and a hand-drawn diagram added without zoom would pass CI. `editor.js`
+  review, and a hand-drawn diagram added without zoom would pass CI. The two Panorama
+  surfaces are a stated exception rather than an oversight: both already carry visible
+  zoom buttons of their own, and the viewer's sit in a toolbox with undo, redo and
+  save, so replacing them would either split that toolbox or float a second control
+  over the same canvas. They are worth unifying when that toolbox is next touched, not
+  before — the rule they are held to is that a diagram can be zoomed and says so,
+  which they satisfy. `editor.js`
   is large and mounts standalone,
   so its imports need checking against every harness that loads it. Whether the
   DMN editor should have a bar at all is a product question this record does not

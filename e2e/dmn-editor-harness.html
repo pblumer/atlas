@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas DMN editor e2e harness</title>
+    <!-- Drives the real api/web/dmn-editor.js against a mock `api` holding one model
+         with a decision, so both of its views exist: the requirements graph (a
+         diagram, which zooms) and the decision table (a table, which does not). -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      import { openDmnEditor } from "/dmn-editor.js";
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" id="Definitions_1" name="Einstufung" namespace="http://atlas/dmn">
+  <decision id="stufe" name="Stufe">
+    <decisionTable id="t1">
+      <input id="i1" label="Alter"><inputExpression id="ie1" typeRef="number"><text>alter</text></inputExpression></input>
+      <output id="o1" name="stufe" typeRef="string"/>
+      <rule id="r1"><inputEntry id="ien1"><text>&gt;= 18</text></inputEntry><outputEntry id="oe1"><text>"erwachsen"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI><dmndi:DMNDiagram id="d1">
+    <dmndi:DMNShape id="s1" dmnElementRef="stufe"><dc:Bounds x="160" y="100" width="180" height="80"/></dmndi:DMNShape>
+  </dmndi:DMNDiagram></dmndi:DMNDI>
+</definitions>`;
+
+      const api = async (method, url) => {
+        if (method === "GET" && /\/dmn-models\/[^/]+\/xml$/.test(url)) return XML;
+        return {};
+      };
+
+      window.__open = () => openDmnEditor({ api, toast: () => {}, projectId: "", modelRef: "dmn/einstufung" });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

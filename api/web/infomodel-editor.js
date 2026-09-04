@@ -16,6 +16,7 @@
 // and Save sends it back against the revision it read.
 
 import { groupifyPanel, groupController } from "./pgroup.js";
+import { attachDiagramZoom, canvasController } from "./diagram-zoom.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -132,6 +133,15 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     onSelection: (bo) => onCanvasSelection(bo),
     onChange: () => absorbMoves(),
   });
+  // diagram-js has zoomed on ctrl+wheel since this canvas was drawn on it (ADR-0237);
+  // what it never had was anything on screen saying so. The control is the shared one,
+  // so this canvas zooms like every other diagram in Atlas
+  // (ADR-draft-shared-ui-primitives).
+  const canvasZoom = attachDiagramZoom(canvasEl, {
+    label: "Class diagram",
+    controller: canvasController(() => canvas.canvas),
+  });
+  if (canvasZoom) canvas.diagram.get("eventBus").on("canvas.viewbox.changed", canvasZoom.sync);
 
   // syncCanvas brings the drawing up to date with the model. It is a reconciliation
   // rather than a redraw because the panel edits on every keystroke: a redraw would

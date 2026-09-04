@@ -10,6 +10,7 @@ import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { devLang } from "./dev-lang.js";
+import { attachDiagramZoom, canvasController } from "./diagram-zoom.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
 import { attachIdCheck } from "./idcheck.js";
@@ -119,7 +120,20 @@ function patchZeebeModdle(zeebe) {
 function newModeler(BpmnJS, moddle, container, extraModules) {
   const opts = { container, moddleExtensions: moddle };
   if (extraModules && extraModules.length) opts.additionalModules = extraModules;
-  return new BpmnJS(opts);
+  const inst = new BpmnJS(opts);
+  // Every BPMN surface in Atlas is made here — the editor, the live view, the
+  // replay, the task's diagram — so this is where they all get the same zoom
+  // control (ADR-draft-shared-ui-primitives). diagram-js has always zoomed on
+  // ctrl+wheel; what was missing was anything on screen saying so.
+  const handle = attachDiagramZoom(container, {
+    label: "Process diagram",
+    controller: canvasController(() => inst.get("canvas")),
+  });
+  // The canvas is zoomed by more than this control: every caller fits after import,
+  // and a scroll gesture moves it too. Restate the factor whenever it changes rather
+  // than asking each caller to remember to.
+  if (handle) inst.on("canvas.viewbox.changed", handle.sync);
+  return inst;
 }
 
 // blankXML builds an empty diagram with a UNIQUE process id. The process id is
