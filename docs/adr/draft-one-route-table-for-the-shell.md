@@ -136,7 +136,7 @@ guarding them.
   pass rather than route by route.
 - **Follow-ups / risks to watch:** the `#/console/connectors` → `#/console/workers`
   redirect (the pre-ADR-0203 spelling) is a rewrite, not a view, and needs a
-  place in the table rather than a special case before it. Over a hundred
+  place in the table rather than a special case before it. The 67
   `href="#/…"` literals across the views keep pointing at routes by hand; the
   table does not make them safe, and a later test that checks every literal
   against it would. Whether `parent` should be a route or a stack (a form inside

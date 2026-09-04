@@ -24,10 +24,11 @@ which file drew it.
 **Dialogs: eight class families for one thing.** `app.css` carries `.modal` /
 `.modal-ov` (the generic one), plus `.confirm-modal`, `.conn-modal`, `.dev-modal`
 / `.dev-overlay`, `.dmn-modal` / `.dmn-overlay`, `.inc-vars-modal`, `.json-modal`
-/ `.json-modal-overlay` and `.mig-modal`. Nine files build dialog markup by hand
-(`app.js`, `editor.js`, `incidents.js`, `migrationdialog.js`, `workerdialog.js`,
-`infomodel-import.js`, `panorama-viewer.js`, `pickmodal.js`, `json-editor.js`),
-and each re-implements the same behaviour: append an overlay, `role="dialog"` and
+/ `.json-modal-overlay` and `.mig-modal`. Twenty-two dialogs across ten files
+build their markup by hand (`app.js` 5, `incidents.js` 4, `editor.js` 3,
+`migrationdialog.js` 3, `workerdialog.js` 2, and one each in `dev-view.js`,
+`infomodel-import.js`, `json-editor.js`, `panorama-viewer.js` and
+`pickmodal.js`), and each re-implements the same behaviour: append an overlay, `role="dialog"` and
 `aria-modal`, close on Escape, put the focus somewhere sensible. Where an
 implementation leaves a piece out, nothing notices — `infomodel-import.js` opens
 its import report with neither a `focus()` call nor an `autofocus` attribute, so
@@ -38,7 +39,8 @@ that dialog opens with the focus still behind it. No file uses the platform's
 (`app.css:240`, `padding: 4px 10px; border-radius: 5px`) and `.btn.small`
 (`app.css:1501`, `padding: 2px 8px`) are two rules, not two names for one rule:
 a `small` button and an `sm` button next to each other are visibly different
-heights. `small` is used 54 times, `sm` 15.
+heights. `small` is used 62 times across eight files, `sm` 21 across four
+(`app.js` 8, `editor.js` 6, `incidents.js` 6, `secret-shapes.js` 1).
 
 **The editor bar is a Modeler idea, not a shared one.** ADR-0229 worked out what
 the top of an editor is for and gave a reasoned answer — two acts and a menu,
@@ -91,7 +93,7 @@ Three primitives, each an ES module export usable without `app.js`:
   per-dialog styling stays a modifier class on the same structure, so
   `.json-modal`'s body layout survives without `.json-modal-overlay` existing.
 - **One button scale.** `.btn.small` wins on use (54 to 15) and `.btn.sm` is
-  removed, its fifteen call sites rewritten. One rule, one name.
+  removed, its 21 call sites rewritten. One rule, one name.
 - **An editor-bar builder** that takes the two acts and the menu groups and
   emits the structure ADR-0229 decided, so the Modeler, the form editor, the
   DMN editor, the information-model editor and the Panorama viewer state their
