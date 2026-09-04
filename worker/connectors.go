@@ -286,6 +286,24 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.SharePointJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunSharePointJob(ctx, j, reg)
 			})
+		case "googlesheets":
+			reg, names, err := googleSheetsRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve Google Sheets, holding no identity to act as. Not an
+				// error, for the reason SharePoint's and Jira's identical branches are
+				// not: this worker very likely serves other kinds, and an identity
+				// nobody has configured yet must park its tasks rather than take down
+				// the kinds that are configured.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.GoogleSheetsJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunGoogleSheetsJob(ctx, j, reg)
+			})
 		case "remedy":
 			reg, names, err := remedyRegistryFromEnv(env)
 			if err != nil {
@@ -408,7 +426,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "clio", "csv", "entra", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "scim", "script", "sharepoint", "soap", "temis", "webscrape"}
+	return []string{"ad", "clio", "csv", "entra", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "scim", "script", "sharepoint", "soap", "temis", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

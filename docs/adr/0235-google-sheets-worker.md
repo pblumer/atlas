@@ -162,6 +162,22 @@ its own doc comment put it. This record makes it the second, so it **moves into
 `connector/oauth2` as `oauth2.ServiceAccount`** and mail delegates to it. Two copies of
 a JWT signer is precisely the duplication that package was extracted to end.
 
+### Where it runs
+
+On a worker, by default. The Worker Type keeps an in-engine form — every managed kind
+does, and `--in-process-connectors` is how an operator asks for it — but a fresh
+install serves Google Sheets from a process Atlas supervises, with the credential
+handed over at spawn like SharePoint's and Jira's.
+
+This is not a detail the record can leave to the wiring, because getting it wrong is
+invisible in a diff. The first cut registered the in-process handler and stopped there,
+which is a complete, working, fully tested Worker Type that runs a service-account
+private key on the engine's run loop — and the only place that showed was a badge in
+the Modeler's properties panel reading IN-ENGINE beside twelve Worker Types that said
+otherwise. ADR-0164's rule survives by being checked, so it is checked:
+TestEveryManagedKindIsProvisioned now holds that every managed Worker Type is handed to
+its supervised worker, which is the precondition for defaulting it onto one at all.
+
 ### Consequences
 
 - **Positive:** a spreadsheet becomes a first-class process data source and sink,

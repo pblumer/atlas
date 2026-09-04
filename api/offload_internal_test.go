@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -432,20 +431,27 @@ const jiraPullBPMN = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmn:process>
 </bpmn:definitions>`
 
-// The check above is only worth anything if it could fail, and it could not if every
-// managed kind were provisioned. Naming the ones that are not is what keeps it a
-// real constraint rather than a tautology that grew one.
-func TestSomeManagedKindsAreStillNotProvisioned(t *testing.T) {
+// Every managed Worker Type is now handed to its supervised worker, and this holds
+// that it stays that way.
+//
+// It used to assert the opposite: that *some* managed kind was still unprovisioned, so
+// that the check above could not quietly become a tautology. Google Sheets was the last
+// one, and with it the world that test was written for ended — which is the moment to
+// invert it rather than delete it, because the property worth guarding changed
+// direction rather than disappearing.
+//
+// What it catches now is the mistake that made this inversion necessary. A managed kind
+// added without a provisionedConnectorKinds entry cannot be defaulted onto a worker: it
+// keeps an in-engine handler, the Modeler's placement badge says so, and ADR-0164's
+// "a connector task belongs on a worker" quietly acquires an exception nobody decided
+// on. That is not visible in a diff — it is visible only as a badge in a properties
+// panel, which is where it was found.
+func TestEveryManagedKindIsProvisioned(t *testing.T) {
 	provisioned := (&Server{}).provisionedConnectorKinds()
-	var unprovisioned []string
 	for _, k := range managedConnectorKinds {
 		if _, handed := provisioned[k.name]; !handed {
-			unprovisioned = append(unprovisioned, k.name)
+			t.Errorf("managed kind %q is not handed to a supervised worker: add a %sWorkerEnv "+
+				"to provisionedConnectorKinds, or it can never leave the engine's run loop", k.name, k.name)
 		}
 	}
-	if len(unprovisioned) == 0 {
-		t.Fatal("every managed kind is provisioned, so the default-set check can no longer fail; " +
-			"give it something else to hold, or drop it")
-	}
-	t.Logf("managed kinds a supervised worker is not handed: %s", strings.Join(unprovisioned, ", "))
 }
