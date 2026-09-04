@@ -2540,9 +2540,13 @@ atlas worker --connector mssql</code></pre>
           Suche über die Prozessvariablen dieser Version. Damit die Wertsuche ebenfalls ein einzelner
           Zugriff wird, sagt das Modell, wonach gesucht werden soll:
           <code>&lt;bpmn:process atlas:searchable="identityId,item"&gt;</code>. Für eine so deklarierte
-          Variable trifft <code>name=wert</code> dann <b>genau</b> diesen Wert (ein <code>*</code> am Ende
-          sucht nach Präfix); alles andere bleibt eine Teilstring-Suche, die die Instanzen der Version
-          durchliest. Ein Prozess, der nichts deklariert, zahlt dafür nichts.</li>
+          Variable beantwortet der Index die Suche; alles andere liest die Instanzen der Version durch. Was
+          du eingibst, wird dabei <b>vollständig</b> verglichen: <code>kdnr=MT-100</code> findet
+          <code>MT-100</code> und nicht <code>MT-10001</code>. Erweitern tust du selbst – <code>*</code> steht
+          für beliebig viele Zeichen, <code>?</code> für genau eines, also findet <code>*MT-1*</code> alles,
+          worin <code>MT-1</code> vorkommt. Willst du nach einem echten Stern oder Fragezeichen suchen,
+          schreibe <code>\*</code> oder <code>\?</code>. Ein Prozess, der nichts deklariert, zahlt dafür
+          nichts.</li>
         <li data-l="en"><b><a href="/#/operations">Instances</a></b> – all runs, their state, variables and a
           complete timeline per instance. A version can hold hundreds of thousands of instances, so the list
           shows a <b>page</b> ("80 of 150") rather than everything: <b>Load more</b> fetches the next one, and
@@ -2550,9 +2554,12 @@ atlas worker --connector mssql</code></pre>
           the instance count) or <code>name=value</code> to search this version's process variables. To make
           the value search one read too, the model says what it wants to be found by:
           <code>&lt;bpmn:process atlas:searchable="identityId,item"&gt;</code>. For a variable declared that
-          way, <code>name=value</code> matches that value <b>exactly</b> (a trailing <code>*</code> asks for a
-          prefix); anything else stays a substring search that reads through the version's instances. A
-          process that declares nothing pays nothing for it.</li>
+          way the index answers the search; anything else reads through the version's instances. Either way
+          what you type is matched <b>whole</b>: <code>kdnr=MT-100</code> finds <code>MT-100</code> and not
+          <code>MT-10001</code>. Widening is yours to ask for – <code>*</code> stands for any run of
+          characters and <code>?</code> for exactly one, so <code>*MT-1*</code> finds anything containing
+          <code>MT-1</code>. To search for a real star or question mark, write <code>\*</code> or
+          <code>\?</code>. A process that declares nothing pays nothing for it.</li>
         <li data-l="de"><b><a href="/#/operations/incidents">Incidents</a></b> – wenn ein Token nicht weiterkommt
           (Job fehlgeschlagen, Ausdrucksfehler, fehlende Variable), entsteht ein <b>Incident</b>. Du behebst die
           Ursache und löst ihn auf – die Instanz läuft weiter. Du musst dafür nicht in die Liste: das steckengebliebene

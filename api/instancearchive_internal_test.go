@@ -67,7 +67,7 @@ func hasClause(fs []any, kind, field string, value any) bool {
 // the scope key answers exactly that, and answers it small — which is what keeps
 // the response inside the bound the client enforces.
 func TestArchiveScopeQueryAsksForDistinctInstances(t *testing.T) {
-	q, err := archiveScopeQuery(varQuery{rawName: "identityId", rawValue: "MT-1998"})
+	q, err := archiveScopeQuery(varQuery{rawName: "identityId", pattern: "MT-1998", literal: "MT-1998"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -106,20 +106,22 @@ func TestArchiveScopeQueryAsksForDistinctInstances(t *testing.T) {
 	}
 }
 
-// A trailing * is the same question here as it is against the local index: match by
-// prefix rather than exactly. The two must not be confusable, because a prefix
-// clause answering an exact query would report instances that merely start alike.
+// A wildcard is the same question here as it is against the local index. The two must
+// not be confusable: a wildcard clause answering a literal query would report
+// instances that merely resemble the one asked for, which is exactly what a literal
+// search exists to rule out. OpenSearch spells * and ? the same way, so the pattern
+// goes over as typed.
 func TestArchiveScopeQueryHonoursAPrefix(t *testing.T) {
-	q, err := archiveScopeQuery(varQuery{rawName: "identityId", rawValue: "MT-", prefix: true})
+	q, err := archiveScopeQuery(varQuery{rawName: "identityId", pattern: "MT-*", literal: "MT-", wild: true})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
 	fs := filters(t, decodeQuery(t, q))
-	if !hasClause(fs, "prefix", "value.Text.keyword", "MT-") {
-		t.Errorf("filters %v do not match by prefix", fs)
+	if !hasClause(fs, "wildcard", "value.Text.keyword", "MT-*") {
+		t.Errorf("filters %v do not match the pattern as a wildcard", fs)
 	}
-	if hasClause(fs, "term", "value.Text.keyword", "MT-") {
-		t.Errorf("filters %v also match exactly — a prefix query must not do both", fs)
+	if hasClause(fs, "term", "value.Text.keyword", "MT-*") {
+		t.Errorf("filters %v also match the pattern literally — it must not do both", fs)
 	}
 }
 
@@ -311,7 +313,7 @@ func TestSearchArchiveFindsAPurgedInstance(t *testing.T) {
 	}}
 	s := archiveServer(t, q)
 
-	got := s.searchArchive(context.Background(), 42, varQuery{rawName: "identityId", rawValue: "MT-1998", structured: true})
+	got := s.searchArchive(context.Background(), 42, varQuery{rawName: "identityId", pattern: "MT-1998", literal: "MT-1998", structured: true})
 	if got.State != archiveAvailable {
 		t.Fatalf("state = %q (%s), want available", got.State, got.Reason)
 	}
@@ -334,7 +336,7 @@ func TestSearchArchiveStopsWhenNothingMatched(t *testing.T) {
 	q := &queueSearcher{bodies: [][]byte{[]byte(`{"aggregations":{"instances":{"buckets":[]}}}`)}}
 	s := archiveServer(t, q)
 
-	got := s.searchArchive(context.Background(), 0, varQuery{rawName: "identityId", rawValue: "nobody", structured: true})
+	got := s.searchArchive(context.Background(), 0, varQuery{rawName: "identityId", pattern: "nobody", literal: "nobody", structured: true})
 	if got.State != archiveEmpty {
 		t.Errorf("state = %q, want empty", got.State)
 	}
@@ -347,7 +349,7 @@ func TestSearchArchiveStopsWhenNothingMatched(t *testing.T) {
 // are different facts, and only one of them is about the data.
 func TestSearchArchiveSaysWhenItIsNotConfigured(t *testing.T) {
 	s := storesFor(t)
-	got := s.searchArchive(context.Background(), 0, varQuery{rawName: "x", rawValue: "y", structured: true})
+	got := s.searchArchive(context.Background(), 0, varQuery{rawName: "x", pattern: "y", literal: "y", structured: true})
 	if got.State != archiveNotConfigured {
 		t.Errorf("state = %q, want notConfigured", got.State)
 	}
@@ -360,11 +362,11 @@ func TestSearchArchiveSaysWhenItIsNotConfigured(t *testing.T) {
 // and the network — so they must not be flattened into one outcome.
 func TestSearchArchiveSeparatesRefusedFromUnreachable(t *testing.T) {
 	refused := archiveServer(t, &queueSearcher{errs: []error{opensearch.ErrSearchRefused}})
-	if got := refused.searchArchive(context.Background(), 0, varQuery{rawName: "x", rawValue: "y", structured: true}); got.State != archiveRefused {
+	if got := refused.searchArchive(context.Background(), 0, varQuery{rawName: "x", pattern: "y", literal: "y", structured: true}); got.State != archiveRefused {
 		t.Errorf("state = %q, want refused", got.State)
 	}
 	down := archiveServer(t, &queueSearcher{errs: []error{errors.New("dial tcp: no route to host")}})
-	if got := down.searchArchive(context.Background(), 0, varQuery{rawName: "x", rawValue: "y", structured: true}); got.State != archiveUnreachable {
+	if got := down.searchArchive(context.Background(), 0, varQuery{rawName: "x", pattern: "y", literal: "y", structured: true}); got.State != archiveUnreachable {
 		t.Errorf("state = %q, want unreachable", got.State)
 	}
 }
@@ -373,7 +375,7 @@ func TestSearchArchiveSeparatesRefusedFromUnreachable(t *testing.T) {
 // an empty archive.
 func TestSearchArchiveRefusesAnUnreadableAnswer(t *testing.T) {
 	s := archiveServer(t, &queueSearcher{bodies: [][]byte{[]byte(`{"aggregations":`)}})
-	if got := s.searchArchive(context.Background(), 0, varQuery{rawName: "x", rawValue: "y", structured: true}); got.State != archiveUnreachable {
+	if got := s.searchArchive(context.Background(), 0, varQuery{rawName: "x", pattern: "y", literal: "y", structured: true}); got.State != archiveUnreachable {
 		t.Errorf("state = %q, want unreachable", got.State)
 	}
 }
@@ -423,8 +425,8 @@ func TestArchiveRowSurvivesAMissingDefinition(t *testing.T) {
 // The archive is a fallback, not a second opinion. It is asked only when this
 // server's own store had nothing to say — and only for a question it can answer.
 func TestArchiveIsAskedOnlyWhenTheLiveStoreCameUpEmpty(t *testing.T) {
-	structured := varQuery{rawName: "identityId", rawValue: "MT-1998", structured: true}
-	free := varQuery{rawName: "", rawValue: "Testperson"}
+	structured := varQuery{rawName: "identityId", pattern: "MT-1998", literal: "MT-1998", structured: true}
+	free := varQuery{pattern: "Testperson", literal: "Testperson"}
 	oneRow := []instanceResp{{Key: 7}}
 
 	cases := []struct {

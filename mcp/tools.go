@@ -191,13 +191,15 @@ func runtimeTools() []Tool {
 			Name: "atlas_search_instances",
 			Description: "Find instances by key or variable content. 'q' is a bare process instance key (looked up " +
 				"directly, live or finished, and returned with its whole variable set), or \"name=value\" (variable " +
-				"name exact, value substring), or free text matched over variable names and values. A content query " +
-				"returns the matching instances (active first, then most-recently-completed), each with the variables " +
-				"that matched; that result is capped.",
+				"name exact), or a term matched over variable names and values. A term is matched whole — " +
+				"\"kdnr=MT-100\" finds MT-100 and not MT-10001 — with * for any run of characters and ? for exactly " +
+				"one, so \"*MT-1*\" is the substring search; \\* and \\? match those characters literally. A content " +
+				"query returns the matching instances (active first, then most-recently-completed), each with the " +
+				"variables that matched; that result is capped.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"q":       stringProp("The query: a bare instance key, or \"name=value\" (name exact, value substring), or free text over variable names/values. When 'process' names a definition that declares the variable atlas:searchable, \"name=value\" is an exact match served by the value index, and a trailing * makes it a prefix."),
+					"q":       stringProp("The query: a bare instance key, or \"name=value\" (name exact), or a term over variable names/values. The term is matched whole; use * for any run of characters and ? for exactly one, and \\* or \\? for those characters themselves. When 'process' names a definition that declares the variable atlas:searchable, the value index answers it — exactly for a literal term, and from the pattern's literal head for a wild one."),
 					"process": stringProp("Optional process definition key: narrows the search to that version, which also makes it read that version's index instead of every instance."),
 				},
 				"required": []any{"q"},

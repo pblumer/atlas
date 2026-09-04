@@ -23,21 +23,26 @@ import (
 const maxInstanceSearchResults = 200
 
 // varQuery is a parsed instance-variable search. Two shapes: a structured
-// name=value match (variable name exact, value substring) when the query
-// contains "="; otherwise a free-text substring over variable names and values.
+// name=value match (variable name exact, value matched against the pattern) when the
+// query contains "="; otherwise a free-text pattern over variable names and values.
 // All comparisons are case-insensitive.
+//
+// A pattern is literal unless it says otherwise: see [globMatch]. What the operator
+// typed is what is matched, and * and ? are how they ask for more.
 type varQuery struct {
 	structured bool
 	name       string // lower-cased variable name; structured only
-	needle     string // lower-cased substring (value in structured, term in free-text)
-	// rawName and rawValue are the two halves as typed. The walk above is
-	// case-insensitive; the value index is a byte-ordered index, so its seek needs the
-	// case the operator wrote and the value the writer stored.
-	rawName  string
-	rawValue string
-	// prefix says the value ended in "*": ask the index for every value starting with
-	// rawValue rather than equal to it — the other question an ordered index answers.
-	prefix bool
+	pattern    string // the value pattern (structured) or the free-text one, as typed
+	// rawName is the name half as typed. The walk is case-insensitive; the value index
+	// is byte-ordered, so its seek needs the case the operator wrote and the writer
+	// stored.
+	rawName string
+	// literal is the pattern's leading run of ordinary characters and wild says
+	// something follows it. Together they are what an ordered index can act on: seek
+	// to literal, then match the rest. Without a wildcard, literal is the whole
+	// pattern and the seek is an exact one.
+	literal string
+	wild    bool
 }
 
 // parseVarQuery interprets a raw ?q= value. ok is false for a blank query (the
@@ -52,26 +57,29 @@ func parseVarQuery(q string) (varQuery, bool) {
 	if i := strings.IndexByte(q, '='); i >= 0 {
 		if name := strings.TrimSpace(q[:i]); name != "" {
 			value := strings.TrimSpace(q[i+1:])
-			prefix := strings.HasSuffix(value, "*")
+			literal, wild := globPrefix(value)
 			return varQuery{
 				structured: true,
 				name:       strings.ToLower(name),
-				needle:     strings.ToLower(strings.TrimSuffix(value, "*")),
+				pattern:    value,
 				rawName:    name,
-				rawValue:   strings.TrimSuffix(value, "*"),
-				prefix:     prefix,
+				literal:    literal,
+				wild:       wild,
 			}, true
 		}
 	}
-	return varQuery{needle: strings.ToLower(q)}, true
+	literal, wild := globPrefix(q)
+	return varQuery{pattern: q, literal: literal, wild: wild}, true
 }
 
-// match reports whether a variable satisfies the query.
+// match reports whether a variable satisfies the query. The name half of a structured
+// query is still compared exactly — a name is something the operator knows, not
+// something they hunt for — and the value half against the pattern.
 func (p varQuery) match(v variableView) bool {
 	if p.structured {
-		return strings.ToLower(v.Name) == p.name && strings.Contains(strings.ToLower(v.Value), p.needle)
+		return strings.ToLower(v.Name) == p.name && globMatch(p.pattern, v.Value)
 	}
-	return strings.Contains(strings.ToLower(v.Name), p.needle) || strings.Contains(strings.ToLower(v.Value), p.needle)
+	return globMatch(p.pattern, v.Name) || globMatch(p.pattern, v.Value)
 }
 
 // instanceKeyQuery reports the process instance key a query names, when the query
@@ -244,7 +252,7 @@ func searchInstances(rv *state.ReadView, defs defIndex, defKey uint64, raw strin
 // the same name would land in the same range.
 func searchByIndex(rv *state.ReadView, defs defIndex, defKey uint64, pred varQuery) ([]instanceResp, error) {
 	out := []instanceResp{}
-	err := rv.InstancesByVariable(pred.rawName, pred.rawValue, pred.prefix, func(piKey uint64) error {
+	err := rv.InstancesByVariable(pred.rawName, pred.literal, pred.wild, func(piKey uint64) error {
 		if len(out) >= maxInstanceSearchResults {
 			return errListTruncated
 		}
@@ -258,13 +266,20 @@ func searchByIndex(rv *state.ReadView, defs defIndex, defKey uint64, pred varQue
 			return nil
 		}
 		row := newInstanceRow(piKey, pi, defs)
+		// The seek reached this instance by the pattern's literal head, which for a wild
+		// pattern is only a neighbourhood: "MT-1?" seeks to "MT-1" and the index happily
+		// offers MT-1000 as well. So what the index found is matched against the whole
+		// pattern here, which is also what puts the matched variable on the row.
 		if err := rv.VariablesOfScope(piKey, func(vv *model.VariableValue) error {
-			if vv.Name == pred.rawName {
-				row.Variables = append(row.Variables, toVariableView(vv))
+			if view := toVariableView(vv); pred.match(view) {
+				row.Variables = append(row.Variables, view)
 			}
 			return nil
 		}); err != nil {
 			return err
+		}
+		if len(row.Variables) == 0 {
+			return nil
 		}
 		out = append(out, row)
 		return nil

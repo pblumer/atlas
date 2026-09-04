@@ -35,9 +35,13 @@ import (
 // it returns them small enough to stay well inside the response bound the client
 // enforces.
 func archiveScopeQuery(pred varQuery) ([]byte, error) {
-	match := map[string]any{"term": map[string]any{"value.Text.keyword": pred.rawValue}}
-	if pred.prefix {
-		match = map[string]any{"prefix": map[string]any{"value.Text.keyword": pred.rawValue}}
+	// A literal pattern is a term lookup; a wild one is a wildcard query. OpenSearch
+	// spells its wildcards the same way this search does — * for any run, ? for one,
+	// backslash to escape — so the pattern goes over as typed rather than through a
+	// translation that could disagree with the local matcher about an edge.
+	match := map[string]any{"term": map[string]any{"value.Text.keyword": pred.pattern}}
+	if pred.wild {
+		match = map[string]any{"wildcard": map[string]any{"value.Text.keyword": pred.pattern}}
 	}
 	return json.Marshal(map[string]any{
 		"size": 0,
