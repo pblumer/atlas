@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -153,5 +154,96 @@ func TestGoogleSheetsBadgeSaysOnAWorker(t *testing.T) {
 	srv.do(func() { got = srv.placementOfCatalogKind(connectorKindGoogleSheets) })
 	if got != placementWorker {
 		t.Errorf("the Modeler shows googlesheets as %q, want %q — a connector task belongs on a worker (ADR-0164)", got, placementWorker)
+	}
+}
+
+// An identity an operator set on the host is inherited by the child already, so
+// nothing is rendered for it — but its name must stay in the list, or a store identity
+// would silently take the whole list away from it and the host one would stop being
+// served the moment somebody added a record in the Console.
+func TestSupervisedGoogleSheetsEnvKeepsHostNamesInTheList(t *testing.T) {
+	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	saveGoogleSheetsWorker(t, srv, "1", "aus-dem-store", "", "google-creds")
+	t.Setenv("ATLAS_CONNECTOR_GOOGLE_CREDS_TOKEN", googleBundle(t))
+	t.Setenv("ATLAS_GOOGLESHEETS_CONNECTORS", "vom-host")
+
+	env := envOf(t, srv.googleSheetsWorkerEnv())
+	names := strings.Split(env["ATLAS_GOOGLESHEETS_CONNECTORS"], ",")
+	if !slices.Contains(names, "vom-host") || !slices.Contains(names, "aus-dem-store") {
+		t.Errorf("the rendered list is %v, want the union of host and store identities", names)
+	}
+	// Nothing is rendered for the host one: the child inherits its variables as they are.
+	if _, ok := env["ATLAS_GOOGLESHEETS_VOM_HOST_CREDENTIALS"]; ok {
+		t.Error("a credential was rendered for an identity the child already inherits")
+	}
+}
+
+// Two names that fold to one environment variable would silently give one the other's
+// credential — a service-account key handed to the wrong identity. The second is left
+// out rather than overwriting the first.
+func TestSupervisedGoogleSheetsEnvRefusesACollidingName(t *testing.T) {
+	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	saveGoogleSheetsWorker(t, srv, "1", "acme-eins", "", "google-creds")
+	saveGoogleSheetsWorker(t, srv, "2", "acme.eins", "", "google-creds")
+	t.Setenv("ATLAS_CONNECTOR_GOOGLE_CREDS_TOKEN", googleBundle(t))
+
+	env := envOf(t, srv.googleSheetsWorkerEnv())
+	names := strings.Split(env["ATLAS_GOOGLESHEETS_CONNECTORS"], ",")
+	if len(names) != 1 {
+		t.Errorf("the rendered list is %v, want only the identity that won the fold", names)
+	}
+	// Whichever won, exactly one credential variable exists for the folded name.
+	if _, ok := env["ATLAS_GOOGLESHEETS_ACME_EINS_CREDENTIALS"]; !ok {
+		t.Errorf("env = %v, want the one folded credential", env)
+	}
+}
+
+// An authored endpoint is rendered; a record of another kind, and a disabled one, are
+// not this worker's to serve.
+func TestSupervisedGoogleSheetsEnvRendersAnEndpointAndSkipsWhatIsNotItsOwn(t *testing.T) {
+	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	saveGoogleSheetsWorker(t, srv, "1", "acme", "https://sheets.internal", "google-creds")
+	if err := srv.connectors.Save(connector{
+		ID: "2", Name: "aus", Kind: connectorKindGoogleSheets, CredentialsRef: "google-creds", Enabled: false, CreatedAt: 2,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := srv.connectors.Save(connector{
+		ID: "3", Name: "post", Kind: connectorKindMail, Endpoint: "smtp:587", Sender: "a@x", Enabled: true, CreatedAt: 3,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	t.Setenv("ATLAS_CONNECTOR_GOOGLE_CREDS_TOKEN", googleBundle(t))
+
+	env := envOf(t, srv.googleSheetsWorkerEnv())
+	if got := env["ATLAS_GOOGLESHEETS_ACME_ENDPOINT"]; got != "https://sheets.internal" {
+		t.Errorf("endpoint = %q, want the authored override", got)
+	}
+	if got := env["ATLAS_GOOGLESHEETS_CONNECTORS"]; got != "acme" {
+		t.Errorf("the rendered list is %q, want only the enabled Google identity", got)
+	}
+}
+
+// A store that cannot be read renders nothing rather than a half list: a supervised
+// worker handed half its identities would serve some tasks and park others with no
+// sign of why.
+func TestSupervisedGoogleSheetsEnvOnAnUnreadableStore(t *testing.T) {
+	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
+	if env := srv.googleSheetsWorkerEnv(); env != nil {
+		t.Errorf("rendered %v from a store that cannot be read; want nothing", env)
+	}
+}
+
+// A name with nothing an environment variable can be built from is left out rather
+// than rendered as ATLAS_GOOGLESHEETS__CREDENTIALS, which would be one nameless slot
+// every such identity overwrote in turn.
+func TestSupervisedGoogleSheetsEnvSkipsANameThatFoldsToNothing(t *testing.T) {
+	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	saveGoogleSheetsWorker(t, srv, "1", "—", "", "google-creds")
+	t.Setenv("ATLAS_CONNECTOR_GOOGLE_CREDS_TOKEN", googleBundle(t))
+
+	if env := srv.googleSheetsWorkerEnv(); env != nil {
+		t.Errorf("rendered %v for a name no variable can carry; want nothing", env)
 	}
 }
