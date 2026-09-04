@@ -2533,6 +2533,33 @@ test("the count on the canvas is asked for, and only where there is one", async 
   await expect(page.locator(".mesh-runs")).toHaveCount(0);
 });
 
+// A number a real server produces: the counts on this view come from the same engine
+// counters the Operations badges carry, and there they reach five and six digits. The
+// thousands are grouped with a narrow no-break space, on the canvas and in the panel
+// alike — an unbroken "50002" has to be read digit by digit, and a lifetime total is
+// the number most likely to be long.
+test("a large count is grouped in thousands, on the canvas and in the panel", async ({ page }) => {
+  installMock(page, {
+    ...runningMesh,
+    nodes: runningMesh.nodes.map((n) => n.id !== "process:1" ? n
+      : { ...n, runtime: { running: 50002, finished: 1284431, lastActivity: 0 } }),
+  });
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.getByLabel("Instances").check();
+  const runs = page.locator('[data-node-id="process:1"] .mesh-runs');
+  // textContent rather than a whitespace-normalizing matcher: the separator is the
+  // point, and normalization would accept a plain space just as happily.
+  expect(await runs.textContent()).toBe("50\u202F002 running");
+
+  await page.locator('[data-node-id="process:1"] .mesh-body').click();
+  const panel = page.locator(".mesh-panel .mesh-runtime");
+  expect(await panel.locator(".mesh-runtime-now").textContent()).toBe("50\u202F002 running");
+  await expect(panel).toContainText("1\u202F284\u202F431 finished");
+});
+
 // The panel states the tally for whichever node is selected, whether or not the
 // canvas is carrying counts — including the zero the canvas has no room to give.
 test("the panel says what a process is running, the zero included", async ({ page }) => {

@@ -17,6 +17,9 @@ import {
 import {
   exportName, exportStyles, rasterise, save, standaloneSVG, stampLines,
 } from "./panorama-export.js";
+// The runtime counts here are the engine's own, the same ones the Operations badges
+// carry — so they are grouped in thousands the same way (numfmt.js).
+import { fmtCount } from "./numfmt.js";
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -1612,7 +1615,7 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, instances
       ${badge}
       <text class="mesh-label" text-anchor="middle" dy="${(r + 14).toFixed(1)}"><tspan class="mesh-label-ink">${label}</tspan></text>
       ${typed ? `<text class="mesh-type" text-anchor="middle" dy="${(r + 28).toFixed(1)}"><tspan class="mesh-label-ink">[${esc(typed.name)}]</tspan></text>` : ""}
-      ${running ? `<text class="mesh-runs" text-anchor="middle" dy="${runsAt.toFixed(1)}"><tspan class="mesh-label-ink">${running} running</tspan></text>` : ""}
+      ${running ? `<text class="mesh-runs" text-anchor="middle" dy="${runsAt.toFixed(1)}"><tspan class="mesh-label-ink">${fmtCount(running)} running</tspan></text>` : ""}
       <title>${esc(nodeTitle(n, spoken))}</title></g>`;
   }).join("");
 
@@ -1761,8 +1764,8 @@ function runtimeHTML(node) {
   // nothing, which is what it knows.
   const never = !last && rt.running === 0 && rt.finished === 0;
   return `<div class="mesh-runtime">
-    <span class="mesh-runtime-now"><b>${rt.running}</b> running</span>
-    <span class="muted"><b>${rt.finished}</b> finished, all time</span>
+    <span class="mesh-runtime-now"><b>${fmtCount(rt.running)}</b> running</span>
+    <span class="muted"><b>${fmtCount(rt.finished)}</b> finished, all time</span>
     ${last ? `<span class="muted">last activity ${esc(last)}</span>` : ""}
     ${never ? `<span class="muted">never started</span>` : ""}
   </div>`;
