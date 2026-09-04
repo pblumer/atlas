@@ -13,9 +13,12 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/entra"
+	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
+	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
@@ -115,6 +118,11 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 		jobType string
 		want    string         // payload kind, which is what the worker dispatches on
 		fields  map[string]any // fields a worker reads, and what the model authored
+		// variables overrides the shared set for a case that needs its own. A kind
+		// whose payload is *every* variable the task sees — clio's write body — reads
+		// the shared set exactly, so a case that merely needed one more expression
+		// would otherwise change what an unrelated case asserts.
+		variables string
 	}{
 		{
 			name:    "rest",
@@ -260,9 +268,102 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 			want:   "postgres",
 			fields: map[string]any{"connector": "hr-db", "operation": "query", "statement": "SELECT 1", "product": "postgres"},
 		},
+		{
+			// Google Sheets. The Worker's *name* travels and the service-account
+			// private key does not — it is a worker record and a vault secret, which
+			// the worker resolves for itself (ADR-0235).
+			//
+			// Two fields here exist only because the engine resolved them. The
+			// spreadsheet was authored as the URL a person copies out of the browser
+			// and leaves as a bare id, because a worker that had to strip /edit#gid=0
+			// would be re-deciding what the model meant. And `values` was a FEEL
+			// variable holding rows: what travels is [][]any, already projected, so a
+			// worker never has to know what a FEEL context is.
+			name:      "googlesheets",
+			variables: `{"variables":{"sheetUrl":"https://docs.google.com/spreadsheets/d/1AbCdEfGh/edit#gid=0","zeilen":[["Ada","Lovelace"]]}}`,
+			element:   `<atlas:googleSheetsConnector connector="acme" operation="append-row" spreadsheet="=sheetUrl" range="Eingang!A:B" values="=zeilen" resultVariable="antwort"/>`,
+			jobType:   compiler.GoogleSheetsJobType,
+			want:      "googlesheets",
+			fields: map[string]any{
+				"connector": "acme", "operation": "append-row",
+				"spreadsheet": "1AbCdEfGh", "range": "Eingang!A:B",
+				"values":         []any{[]any{"Ada", "Lovelace"}},
+				"resultVariable": "antwort",
+			},
+		},
+		{
+			// LDAP authors its own server (ADR-0154), so the endpoint travels and the
+			// credentials do not: bindSecretRef is a *reference* the worker resolves
+			// against whatever secret store it has, which is the whole point of
+			// keeping it a reference (ADR-0041/0168).
+			name:      "ldap",
+			variables: `{"variables":{"ldapFilter":"(uid=ada)"}}`,
+			element:   `<atlas:ldapConnector url="ldaps://dir.example.com" bindDN="cn=svc,dc=example,dc=com" bindSecret="ldap-bind" operation="search" baseDN="ou=people,dc=example,dc=com" scope="sub" filter="=ldapFilter" resultVariable="treffer"/>`,
+			jobType:   compiler.LdapJobType,
+			want:      "ldap",
+			fields: map[string]any{
+				"url": "ldaps://dir.example.com", "operation": "search",
+				"baseDN": "ou=people,dc=example,dc=com", "scope": "sub",
+				"filter": "(uid=ada)", "bindSecretRef": "ldap-bind",
+				"resultVariable": "treffer",
+			},
+		},
+		{
+			// SOAP is REST's arm exactly: everything about the call is model data and
+			// travels resolved, while the credential behind `auth` stays a reference.
+			// The body is the field that had to be resolved here — it is a FEEL
+			// expression over the instance's variables, and a worker has no scope
+			// chain to evaluate one against.
+			name:      "soap",
+			variables: `{"variables":{"soapBody":"<GetRate><ccy>EUR</ccy></GetRate>"}}`,
+			element:   `<atlas:soapConnector endpoint="https://example.com/svc" operation="GetRate" soapVersion="1.2" body="=soapBody" resultVariable="kurs"/>`,
+			jobType:   compiler.SoapJobType,
+			want:      "soap",
+			fields: map[string]any{
+				"endpoint": "https://example.com/svc", "operation": "GetRate",
+				"body": "<GetRate><ccy>EUR</ccy></GetRate>", "resultVariable": "kurs",
+			},
+		},
+		{
+			// SharePoint names its instance and the Graph endpoint stays with the
+			// worker — a URL is half a credential (ADR-0141/0168). requestId is the
+			// job key, frozen at resolve time rather than recomputed where the retry
+			// happens, so a retried job carries the key of the job it retries.
+			name: "sharepoint",
+			element: `<atlas:sharePointConnector connector="contoso" site="contoso.sharepoint.com,/sites/ops" list="Onboarding" resultVariable="angelegt">` +
+				`<atlas:itemField name="Title" value="=userDN"/>` +
+				`</atlas:sharePointConnector>`,
+			jobType: compiler.SharePointJobType,
+			want:    "sharepoint",
+			fields: map[string]any{
+				"connector": "contoso", "site": "contoso.sharepoint.com,/sites/ops",
+				"list":   "Onboarding",
+				"fields": map[string]any{"Title": "cn=ada,dc=example,dc=com"},
+			},
+		},
+		{
+			// SCIM sends the authored operation and its operands, not the method and
+			// URL derived from them: a parked job's payload is read by an operator,
+			// and the derivation's own failure cases belong where both halves reach
+			// them (ADR-0168).
+			name:      "scim",
+			variables: `{"variables":{"scimFilter":"userName eq \"ada\""}}`,
+			element:   `<atlas:scimConnector baseUrl="https://idp.example.com/scim/v2" resource="Users" operation="search" filter="=scimFilter" resultVariable="konten"/>`,
+			jobType:   compiler.ScimJobType,
+			want:      "scim",
+			fields: map[string]any{
+				"operation": "search", "baseUrl": "https://idp.example.com/scim/v2",
+				"resource": "Users", "filter": `userName eq "ada"`,
+				"resultVariable": "konten",
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := leaseConnectorPayload(t, tc.name+"-proc", tc.element, tc.jobType, vars)
+			instanceVars := vars
+			if tc.variables != "" {
+				instanceVars = tc.variables
+			}
+			got := leaseConnectorPayload(t, tc.name+"-proc", tc.element, tc.jobType, instanceVars)
 			if got.Kind != tc.want {
 				t.Errorf("payload kind = %q, want %q: the worker dispatches on this", got.Kind, tc.want)
 			}
@@ -489,6 +590,9 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.SharePointJobTypeIndex", sharepoint.Job{}},
 		{"compiler.ScimJobTypeIndex", scim.Job{}},
 		{"compiler.TemisDecisionJobTypeIndex", temis.Job{}},
+		{"compiler.GoogleSheetsJobTypeIndex", googlesheets.Job{}},
+		{"compiler.CsvImportJobTypeIndex", csvimport.Job{}},
+		{"compiler.LdifJobTypeIndex", ldif.Job{}},
 	} {
 		t.Run(tc.arm, func(t *testing.T) {
 			sent, ok := arms[tc.arm]
