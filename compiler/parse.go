@@ -572,7 +572,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		b.SetHistoryTtl(nanos)
 	}
-	// The searchable variable names (ADR-draft-searchable-variables): resolved here, at
+	// The searchable variable names (ADR-0244): resolved here, at
 	// deploy time, so the runtime never parses the attribute and the engine asks the
 	// compiled process one question per variable write (I5). A declaration that cannot
 	// mean anything — a nameless entry, or the same name twice — fails the deploy, for

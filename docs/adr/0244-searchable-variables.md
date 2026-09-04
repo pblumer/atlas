@@ -1,4 +1,4 @@
-# ADR-DRAFT: Searchable variables — a declared value index
+# ADR-0244: Searchable variables — a declared value index
 
 - **Status:** Accepted
 - **Date:** 2026-09-03

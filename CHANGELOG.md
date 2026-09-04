@@ -306,7 +306,7 @@ _Changed_ / _Removed_ for each version.
   a substring of it, which changes no answer anybody gets today: a declaration is the
   only way into that path, and no model could carry one before now. An undeclared name
   keeps the substring search it always had.
-  ([ADR-draft-searchable-variables](docs/adr/draft-searchable-variables.md))
+  ([ADR-0244](docs/adr/0244-searchable-variables.md))
 
   **A process that declares nothing pays nothing** — one length check per variable
   write, and no index entries. That is the whole reason it is a declaration and not a

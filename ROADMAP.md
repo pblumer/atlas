@@ -818,7 +818,7 @@ What it takes to run this for real.
   gained `?process=`, and the live view's instance panel stops loading every instance
   of a version: one page per half, an honest "80 of 150", **Load more**, and a search
   box beside the list. The **variable value index** followed
-  ([ADR-draft-searchable-variables](docs/adr/draft-searchable-variables.md)): a process
+  ([ADR-0244](docs/adr/0244-searchable-variables.md)): a process
   declares `atlas:searchable="identityId,item"`, resolved at deploy time (I5), and for a
   declared name `identityId=MT-1998` is a seek whose cost is the number of matches — a
   trailing `*` asks for a prefix. A process that declares nothing pays one length check
