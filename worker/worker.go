@@ -76,6 +76,56 @@ type ExecFunc func(ctx context.Context, j Job) (map[string]any, error)
 // Run implements [Exec].
 func (f ExecFunc) Run(ctx context.Context, j Job) (map[string]any, error) { return f(ctx, j) }
 
+// Outcome is everything a job's work produced: the variables it completes with, and
+// — for a central business rule task — the decision evaluation to retain.
+//
+// It mirrors [job.Completion] on the in-process side, and for the same reason: a
+// decision's record is durable (ADR-0066), so once the evaluation happens on a worker
+// the worker has to be able to report it. Every other kind completes with variables
+// alone, which is why [Exec] stays the ordinary shape.
+type Outcome struct {
+	Variables map[string]any
+	Decision  *DecisionReport
+}
+
+// DecisionReport is a worker's account of a decision it evaluated: which decision, the
+// inputs it was handed, the outputs it got and the service's trace.
+//
+// It is an account, not a record. The engine stamps which element instance it belongs
+// to from the job's own lease, so a report cannot attach itself to a task other than
+// the one it holds.
+type DecisionReport struct {
+	DecisionID string         `json:"decisionId"`
+	Inputs     map[string]any `json:"inputs,omitempty"`
+	Outputs    map[string]any `json:"outputs,omitempty"`
+	Trace      string         `json:"trace,omitempty"`
+}
+
+// CompletingExec is the widest exec shape: work that completes with more than
+// variables. [Exec] is the decision-less special case, and the ladder is
+// deliberately the one the job package already has (Handler / OutputHandler /
+// CompletingHandler) so the two sides of the protocol are described the same way.
+//
+// A handler implementing both is used as a CompletingExec.
+type CompletingExec interface {
+	RunCompleting(ctx context.Context, j Job) (Outcome, error)
+}
+
+// CompletingExecFunc adapts a function to [CompletingExec].
+type CompletingExecFunc func(ctx context.Context, j Job) (Outcome, error)
+
+// Run implements [Exec] by discarding the decision half, so a CompletingExecFunc can
+// stand wherever an Exec is required.
+func (f CompletingExecFunc) Run(ctx context.Context, j Job) (map[string]any, error) {
+	out, err := f(ctx, j)
+	return out.Variables, err
+}
+
+// RunCompleting implements [CompletingExec].
+func (f CompletingExecFunc) RunCompleting(ctx context.Context, j Job) (Outcome, error) {
+	return f(ctx, j)
+}
+
 // Options configures a [Worker].
 type Options struct {
 	// Server is the base URL of the Atlas to work for, e.g. http://localhost:8080.
@@ -224,7 +274,7 @@ func (w *Worker) pollOnce(ctx context.Context, jobType string) error {
 // engine rather than returned: the retry and incident machinery is what an operator
 // sees, and a worker that swallowed the error would park the token silently.
 func (w *Worker) work(ctx context.Context, j Job) {
-	vars, err := w.opts.Handlers[j.Type].Run(ctx, j)
+	out, err := runHandler(ctx, w.opts.Handlers[j.Type], j)
 	if err != nil {
 		if failErr := w.fail(ctx, j, err.Error()); failErr != nil && ctx.Err() == nil {
 			// Nothing else to do: the lease will elapse and the job is offered again.
@@ -232,7 +282,18 @@ func (w *Worker) work(ctx context.Context, j Job) {
 		}
 		return
 	}
-	_ = w.complete(ctx, j, vars)
+	_ = w.complete(ctx, j, out)
+}
+
+// runHandler runs one job through whichever shape its handler implements. A handler
+// that only knows variables is the ordinary case and stays untouched; one that can
+// report a decision is asked for the wider outcome.
+func runHandler(ctx context.Context, h Exec, j Job) (Outcome, error) {
+	if c, ok := h.(CompletingExec); ok {
+		return c.RunCompleting(ctx, j)
+	}
+	vars, err := h.Run(ctx, j)
+	return Outcome{Variables: vars}, err
 }
 
 func (w *Worker) activate(ctx context.Context, jobType string) ([]Job, error) {
@@ -256,10 +317,16 @@ func (w *Worker) activate(ctx context.Context, jobType string) ([]Job, error) {
 	return out.Jobs, nil
 }
 
-func (w *Worker) complete(ctx context.Context, j Job, vars map[string]any) error {
+func (w *Worker) complete(ctx context.Context, j Job, out Outcome) error {
 	body := map[string]any{"worker": w.opts.ID, "leaseToken": j.LeaseToken}
-	if len(vars) > 0 {
-		body["variables"] = vars
+	if len(out.Variables) > 0 {
+		body["variables"] = out.Variables
+	}
+	// Only a business rule task has one, and the engine ignores it on any other job
+	// type — sending it is what lets a decision evaluated out here still be retained
+	// as the durable record an operator reads (ADR-0066).
+	if out.Decision != nil {
+		body["decision"] = out.Decision
 	}
 	return w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/complete", body, nil)
 }

@@ -84,6 +84,36 @@
       }
     },
     {
+      "id": "central-decisions-run-on-a-worker-now-and-the-last-in-proces",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Nothing calls out from the engine any more",
+        "de": "Nichts ruft mehr aus der Engine heraus"
+      },
+      "summary": {
+        "en": "Asking a decision service for an answer was the last piece of work Atlas still did from the process that runs your processes. It now runs in a worker Atlas starts and supervises itself — and with it, every integration has moved: mail, files, directories, ticket systems, web services, identity providers, event stores. A slow or unreachable system somewhere else can no longer hold up work that has nothing to do with it. Decisions keep their full record: what was asked, what came back, and which rules fired, exactly as before.",
+        "de": "Einen Entscheidungsdienst nach einer Antwort zu fragen war die letzte Arbeit, die Atlas noch in dem Prozess erledigte, der Ihre Prozesse ausführt. Sie läuft jetzt in einem Worker, den Atlas selbst startet und überwacht — und damit sind alle Integrationen umgezogen: Mail, Dateien, Verzeichnisse, Ticketsysteme, Web Services, Identity Provider, Event-Stores. Ein langsames oder nicht erreichbares System anderswo kann keine Arbeit mehr aufhalten, die nichts damit zu tun hat. Entscheidungen behalten ihren vollständigen Nachweis: was gefragt wurde, was zurückkam und welche Regeln gefeuert haben — unverändert."
+      },
+      "link": {
+        "label": "ADR-0233",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
+      },
+      "tags": [
+        "Workers",
+        "Decisions",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "scim-tasks-run-on-a-worker-now",
       "version": "Unreleased",
       "date": null,
@@ -277,49 +307,6 @@
           "de": "Worker öffnen"
         },
         "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "finding-one-instance-among-a-few-hundred-thousand",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Find one instance among hundreds of thousands",
-        "de": "Eine Instanz unter Hunderttausenden finden"
-      },
-      "summary": {
-        "en": "The question you usually arrive with is about one instance: where is MT-1998, what happened to the one this ticket names. Until now every way of asking it read through every instance in the engine — so on a busy version the search took a long time and, worse, held the engine up while it ran. Paste an instance key into the search box and it now comes back at once, however many instances exist, running or long finished. Searching by variable content is scoped to the version you are looking at. And the instance list beside the diagram no longer loads everything: it shows a page, says what that page was drawn from (\"80 of 150\"), and lets you load more or search for the one you want.",
-        "de": "Die Frage, mit der man meistens kommt, betrifft eine einzelne Instanz: Wo ist MT-1998, was ist mit der aus diesem Ticket passiert? Bisher las jede Art, sie zu stellen, jede Instanz der Engine durch — auf einer stark genutzten Version dauerte die Suche also lange und hielt dabei auch noch die Engine auf. Ein in das Suchfeld eingefügter Instanzschlüssel kommt jetzt sofort zurück, egal wie viele Instanzen es gibt, laufend oder längst beendet. Die Suche über Variableninhalte bleibt auf die Version beschränkt, die Sie gerade ansehen. Und die Instanzliste neben dem Diagramm lädt nicht mehr alles: Sie zeigt eine Seite, sagt dazu, woraus diese Seite stammt („80 von 150\"), und lässt Sie nachladen oder gezielt nach der einen suchen."
-      },
-      "link": {
-        "label": "ADR-0239",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0239-off-loop-queries.md"
-      },
-      "tags": [
-        "Operations",
-        "Search"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations and pick a process version to see its live diagram.",
-          "In the panel beside the diagram, type an instance key into the search box and press Find — the instance comes back on its own.",
-          "Or type name=value (for example identityId=MT-1998) to search that version's process variables.",
-          "Clear the search to go back to the newest instances, and use Load more to walk further back."
-        ],
-        "de": [
-          "Operations öffnen und eine Prozessversion wählen, um ihr Live-Diagramm zu sehen.",
-          "Im Panel neben dem Diagramm einen Instanzschlüssel ins Suchfeld eingeben und Find drücken — die Instanz kommt für sich allein zurück.",
-          "Oder name=wert eingeben (etwa identityId=MT-1998), um die Prozessvariablen dieser Version zu durchsuchen.",
-          "Die Suche leeren, um zu den neuesten Instanzen zurückzukehren, und mit Load more weiter zurückgehen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]

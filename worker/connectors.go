@@ -142,6 +142,25 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.ScimJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return runScim(ctx, j, client, secret)
 			})
+		case "temis":
+			// The one kind whose handler completes with more than variables: a central
+			// decision's evaluation is retained as a durable record (ADR-0066), so the
+			// worker reports it and the engine folds it. CompletingExecFunc is the
+			// wider shape for exactly that.
+			reg, names, err := temisRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve temis, holding no decision service to ask. Not an
+				// error, for the reason mail's and clio's identical branches are not.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.TemisDecisionJobType] = CompletingExecFunc(func(ctx context.Context, j Job) (Outcome, error) {
+				return RunTemisJob(ctx, j, reg)
+			})
 		case "mail":
 			reg, names, err := mailRegistryFromEnv(env)
 			if err != nil {
@@ -389,7 +408,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "clio", "csv", "entra", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "scim", "script", "sharepoint", "soap", "webscrape"}
+	return []string{"ad", "clio", "csv", "entra", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "scim", "script", "sharepoint", "soap", "temis", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

@@ -120,28 +120,58 @@ idempotency key that de-duplicates the retry.
 
 ### What is still in the engine, and is now a list
 
-| Kind | Owed |
-|---|---|
-| `temis` | Worker half |
+*Empty.* Every kind that reaches another system now has a worker half; the slices
+landed in the order of their difficulty: `rest`/`ldif`, `clio`, `ldap`, `soap`,
+`sharepoint`, `scim`, and finally `temis`, which needed the engine↔worker completion
+contract widened before it could move at all.
 
-Each is one slice of the same shape the landed kinds took: resolve the authored detail
-against the instance's variables in the engine, put the resolved values (never the
-credential) on the payload arm, unmarshal them into the kind's `Job` in
-`worker/connectors.go`, and hand the credential over at spawn where one exists. The
-payload/struct parity test (`TestEveryPayloadArmSendsTheWholeResolvedJob`) is what
-keeps each of them honest.
+Six of the seven took the same shape: resolve the authored detail against the
+instance's variables in the engine, put the resolved values (never the credential) on
+the payload arm, unmarshal them into the kind's `Job` in `worker/connectors.go`, and
+hand the credential over at spawn where one exists. The payload/struct parity test
+(`TestEveryPayloadArmSendsTheWholeResolvedJob`) is what keeps each of them honest.
 
-Until a kind's slice lands it keeps working in-engine, and the Workers view keeps
-marking it — that marking is now a countdown against this table rather than an
-open-ended notice.
+`temis` was the seventh and did not fit that shape, which is why it went last. A
+central decision is a **business rule task**, not a connector task, and its completion
+carries something no other job's does: a durable evaluation record — inputs, outputs
+and the service's trace — retained so an operator can see how a decision was made
+(ADR-0066). Nothing in the engine↔worker protocol could carry one: `CompleteJobWithDecision`
+existed only on the in-process runner, and the HTTP completion a worker posts had no
+field for it.
+
+So this slice widened that contract rather than copying the others. The division it
+draws is the part worth remembering: the worker is believed about the **evaluation** —
+which decision, what it was asked, what came back, and the trace — and is believed
+about nothing else. Which element instance the decision belongs to is stamped by the
+engine from the job the worker held a lease on, so a report cannot attach itself to a
+task it did not run. And the record's provenance is unchanged by the move, which looks
+like it should have changed and does not: a central decision's trace has always been
+the remote service's account of its own evaluation. Offloading changed which process
+makes that call, not who authored the trace.
 
 ### `--in-process-connectors`
 
 Stays, and logs a deprecation warning at startup naming this record and the kind it
 was given. It is the escape hatch for an operator who has a reason — a worker that
-cannot reach a host the engine can, a credential they have not moved yet — and it
-becomes an error once the table above is empty, which is the moment option 2 stops
-breaking anyone.
+cannot reach a host the engine can, a credential they have not moved yet.
+
+**Amended when the table emptied.** This section originally said the flag "becomes an
+error once the table above is empty, which is the moment option 2 stops breaking
+anyone". The table is empty, and that sentence turns out to contradict this record's
+own second decision driver — *no running deployment may break, including for an
+operator who deliberately runs one in-engine today*. Both cannot hold: an installation
+passing `--in-process-connectors` today would stop starting.
+
+The premise was wrong rather than the conclusion. Option 2 stopped breaking anyone who
+was blocked *by a missing worker half* — that was the gap the table tracked. It did
+not stop breaking the operator the escape hatch was written for in the same paragraph,
+whose reason is a network position, not an unbuilt worker. Those are different people
+and only the first was counted.
+
+So the flag stays what it is, and whether it is ever removed is a decision with its own
+argument to make and its own migration to state — not a consequence that falls out of
+this table reaching zero. What *has* changed is that using it is now always a choice
+about deployment topology, never a workaround for something Atlas cannot do yet.
 
 ## Consequences
 
@@ -155,10 +185,11 @@ breaking anyone.
   thing to get right at spawn, and a reference that collides on its environment name is
   handed over once and warned about, exactly as AD's is. A REST call also gains a
   process hop, which is the trade ADR-0164 already accepted.
-- **Follow-ups / risks to watch:** six slices; the `--in-process-connectors` warning
-  becoming an error when the last lands; and a check that no *new* connector kind ever
-  ships with an in-engine handler and no worker half — the rule is only as good as the
-  next kind added.
+- **Follow-ups / risks to watch:** all seven slices have landed. What is left to watch
+  is a check that no *new* kind ever ships with an in-engine handler and no worker half
+  — the rule is only as good as the next kind added — and the open question this record
+  no longer answers for itself: whether `--in-process-connectors` is ever removed, and
+  what that migration would owe the operator who uses it deliberately.
 
 ## Links
 

@@ -170,6 +170,9 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		"soap": s.soapWorkerEnv,
 		// SCIM is REST's shape with a provisioning vocabulary. Same reason again.
 		"scim": s.scimWorkerEnv,
+		// temis is clio's shape with a decision service: endpoint in the connector
+		// store, token in the vault, neither readable by a supervised worker.
+		connectorKindTemis: s.temisWorkerEnv,
 		// SharePoint is a managed kind like Jira: the site's address and its OAuth
 		// bundle are a record and a vault secret, so a supervised worker holding
 		// neither could serve no SharePoint task at all.
@@ -440,6 +443,85 @@ func (s *Server) clioWorkerEnv() []string {
 		return nil
 	}
 	return append(env, clioConnectorsEnv+"="+strings.Join(names, ","))
+}
+
+const (
+	temisEnvPrefix     = "ATLAS_TEMIS_"
+	temisConnectorsEnv = temisEnvPrefix + "CONNECTORS"
+)
+
+// temisWorkerEnv renders the decision services a supervised temis worker needs
+// (ADR-0233, slice 7). It is clioWorkerEnv's shape with a decision service in place
+// of an event store: the endpoint is a connector record and the token a vault
+// reference behind it, neither of which a supervised worker can read.
+//
+// A service with no token is still handed over, for clio's reason rather than
+// Remedy's: a decision service run beside Atlas may be reachable without one, and
+// dropping it would leave a working installation unserved.
+//
+// It reads the connector store and the vault, so it runs on the run-loop goroutine
+// (invariant I3), like buildTemisClients does.
+func (s *Server) temisWorkerEnv() []string {
+	var (
+		env       []string
+		names     []string
+		fromStore bool
+	)
+	seen := map[string]bool{}
+	addName := func(n string) {
+		if n = strings.TrimSpace(n); n != "" && !seen[n] {
+			seen[n] = true
+			names = append(names, n)
+		}
+	}
+	// Services an operator set directly on the host: inherited by the child as they
+	// are, so nothing is rendered for them — they are only kept in the list below.
+	for _, name := range splitConnectorList(os.Getenv(temisConnectorsEnv)) {
+		addName(name)
+	}
+	s.do(func() {
+		recs, err := s.connectors.LoadAll()
+		if err != nil {
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the connector store for a supervised temis worker",
+				slog.String("error", err.Error()))
+			return
+		}
+		sort.Slice(recs, func(i, j int) bool { return recs[i].Name < recs[j].Name })
+		taken := map[string]string{}
+		for _, c := range recs {
+			if c.Kind != connectorKindTemis || !c.Enabled {
+				continue
+			}
+			envKey := connectorEnvKey(c.Name)
+			if envKey == "" {
+				continue
+			}
+			if first, dup := taken[envKey]; dup {
+				logging.Warn(logging.WorkerSupervisorFailed,
+					"two temis services share one environment name; the second is not handed to the supervised worker",
+					slog.String("connector", c.Name), slog.String("collidesWith", first))
+				continue
+			}
+			endpoint := strings.TrimSpace(c.Endpoint)
+			if endpoint == "" {
+				// Nothing to reach: left out rather than handed over half-filled, so
+				// the worker starts and the Console shows it as configured-not-working.
+				continue
+			}
+			taken[envKey] = c.Name
+			key := temisEnvPrefix + envKey + "_"
+			env = append(env, key+"URL="+endpoint)
+			if token := strings.TrimSpace(s.resolveConnectorSecret(c.CredentialsRef)); token != "" {
+				env = append(env, key+"TOKEN="+token)
+			}
+			addName(c.Name)
+			fromStore = true
+		}
+	})
+	if !fromStore {
+		return nil
+	}
+	return append(env, temisConnectorsEnv+"="+strings.Join(names, ","))
 }
 
 const (

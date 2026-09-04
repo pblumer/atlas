@@ -1,0 +1,22 @@
+{
+  "tags": [
+    "Workers",
+    "Decisions",
+    "Connectors"
+  ],
+  "title": {
+    "en": "Nothing calls out from the engine any more",
+    "de": "Nichts ruft mehr aus der Engine heraus"
+  },
+  "summary": {
+    "en": "Asking a decision service for an answer was the last piece of work Atlas still did from the process that runs your processes. It now runs in a worker Atlas starts and supervises itself — and with it, every integration has moved: mail, files, directories, ticket systems, web services, identity providers, event stores. A slow or unreachable system somewhere else can no longer hold up work that has nothing to do with it. Decisions keep their full record: what was asked, what came back, and which rules fired, exactly as before.",
+    "de": "Einen Entscheidungsdienst nach einer Antwort zu fragen war die letzte Arbeit, die Atlas noch in dem Prozess erledigte, der Ihre Prozesse ausführt. Sie läuft jetzt in einem Worker, den Atlas selbst startet und überwacht — und damit sind alle Integrationen umgezogen: Mail, Dateien, Verzeichnisse, Ticketsysteme, Web Services, Identity Provider, Event-Stores. Ein langsames oder nicht erreichbares System anderswo kann keine Arbeit mehr aufhalten, die nichts damit zu tun hat. Entscheidungen behalten ihren vollständigen Nachweis: was gefragt wurde, was zurückkam und welche Regeln gefeuert haben — unverändert."
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Worker öffnen"
+    },
+    "route": "#/console/workers"
+  }
+}
