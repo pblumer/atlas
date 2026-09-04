@@ -23,7 +23,9 @@
   derived landscape under the same four constraints; amended 2026-09-03 — §8's
   ArchiMate projection becomes an exportable document under stated conditions,
   replacing the previous amendment's blanket refusal, and the mapping moves to the
-  server)
+  server; amended 2026-09-04 — §6's impact question can be asked about several nodes
+  at once, as the maintenance window it is, and states why the union is walked rather
+  than the individual answers added)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -595,6 +597,41 @@ unaffected.
 > nodes that point at a placeholder are in this caller's own picture, so they are
 > walked — and "nothing depends on this" is the single claim §6 says a boundary must
 > never be allowed to make. It now reports them, as a floor.
+
+> **Amendment (2026-09-04): the impact question can be asked about several nodes at
+> once, because a maintenance window is not one change.**
+> Everything above answers "what breaks if *this* goes down". The question somebody
+> actually brings to a change window is "what breaks if these three go down together",
+> and it is a different question with a different answer: blast radii overlap, so
+> three services that break twelve, nine and seven things do not break twenty-eight.
+> A reader who has the single answer three times will add them, because that is the
+> only arithmetic a page of three numbers offers.
+>
+> So the selection becomes a set, and the walk is seeded with all of it — the union
+> is the thing computed and the individual totals are derived from it, which is the
+> direction that cannot produce a number nobody could reach. Three rules follow, and
+> each is a way the panel could otherwise lie:
+>
+> - **The members are not their own collateral.** A node in the window is going down
+>   on purpose. Counting it among the things the window breaks inflates the answer
+>   with the plan itself, so every total — the union's and each member's — excludes
+>   the whole set.
+> - **Both numbers are on screen.** "One at a time these come to 28; together 19" is
+>   the finding; either number alone invites the other to be guessed, always by
+>   adding. The difference is explained by a count of the nodes sitting in more than
+>   one radius rather than by subtracting the totals, because past two members a node
+>   reached by all of them is double-counted twice and "sum minus union" names a
+>   number that is not the size of any set.
+> - **A member the rest already takes down says so.** It changes nothing the window
+>   does not already do, and somebody is otherwise about to write it into a change
+>   request as though it did.
+>
+> A window naming a node that is not in this picture is refused rather than trimmed:
+> planning around two of the three nodes somebody asked about is worse than declining
+> to answer. The permission boundary carries through unchanged — one incomplete walk
+> makes the whole window a floor — and §10's export carries the window in the stamp,
+> because in a file the rings on three nodes are the whole point and there is no panel
+> beside it to say so.
 
 ### 7. A stated size budget, and a server-side fallback
 

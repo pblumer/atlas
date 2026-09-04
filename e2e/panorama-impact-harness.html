@@ -12,7 +12,7 @@
     <div id="ready">loading</div>
     <script type="module">
       import {
-        blastRanking, impactFrom, impactList, impactSummary,
+        blastRanking, impactFrom, impactList, impactOf, impactSummary, windowOverlap,
       } from "/panorama-mesh.js";
       // Exposed for the spec; the spec passes a graph and options and reads the
       // result back, so every case is a table row rather than a click sequence.
@@ -24,6 +24,15 @@
       window.impactList = (graph, id, opts, listOpts) =>
         impactList(graph, impactFrom(graph, id, opts), id, listOpts);
       window.blastRanking = (graph, opts) => blastRanking(graph, opts);
+      // The same walk asked about several nodes at once — a maintenance window — and
+      // the arithmetic that compares taking them down together with taking them down
+      // one at a time.
+      window.impactOf = (graph, ids, opts) => impactOf(graph, ids, opts);
+      window.windowSummary = (graph, ids, opts) =>
+        impactSummary(graph, impactOf(graph, ids, opts), null);
+      window.windowList = (graph, ids, opts, listOpts) =>
+        impactList(graph, impactOf(graph, ids, opts), null, listOpts);
+      window.windowOverlap = (graph, ids, opts) => windowOverlap(graph, ids, opts);
       document.getElementById("ready").textContent = "ready";
     </script>
   </body>

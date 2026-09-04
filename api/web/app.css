@@ -3789,7 +3789,14 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    own stroke is carrying the severity (ADR-0211 §4), and painting over a red node to
    say "connected" would trade a finding for a hint. The node in hand takes the
    stronger ring, so it is never in doubt which one is being asked about. */
-.mesh-halo { fill: none; stroke: var(--accent); stroke-width: 0; opacity: 0; }
+/* non-scaling-stroke for the same reason the edges have it: this ring is drawn in
+   world units, and the opening view of a large landscape scales those by about a
+   half — which took a 2.5-unit ring to a little over a pixel, exactly where the
+   landscape is busiest and the ring is doing the most work. */
+.mesh-halo {
+  fill: none; stroke: var(--accent); stroke-width: 0; opacity: 0;
+  vector-effect: non-scaling-stroke;
+}
 .mesh-relating .mesh-related .mesh-halo {
   stroke-width: 2.5; opacity: 0.7; transition: opacity 90ms linear;
 }
@@ -3889,6 +3896,48 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
   background: var(--bg); color: var(--text);
 }
 .mesh-unpin:hover { border-color: var(--accent); }
+/* The maintenance window's members. A row each rather than inline chips: every one
+   carries what it costs on its own, which is the number that says which of them is
+   driving the window — and that number has nowhere to go on a chip. */
+.mesh-window-list {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px;
+}
+.mesh-window-item { display: flex; align-items: stretch; gap: 6px; }
+/* The same two-line button the findings and the impact list use, for the same
+   reason: the name is what a reader scans for, so it gets the first line to itself
+   and what the node costs goes underneath rather than competing for the width. */
+.mesh-window-who {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px;
+  text-align: left; padding: 5px 8px; font: inherit; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); border-left-width: 3px; border-radius: 6px;
+  background: var(--surface); color: var(--text);
+}
+.mesh-window-who:hover { border-color: var(--accent); }
+.mesh-window-who.mesh-sev-critical { border-left-color: var(--danger); }
+.mesh-window-who.mesh-sev-attention { border-left-color: var(--mesh-attention); }
+.mesh-window-name {
+  font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* What this member costs on its own, and whether the rest of the window already
+   takes it down. Said in words rather than by fading the row: it is still in the
+   window and still going down — it just costs nothing extra — and a greyed row
+   would read as "not counted". */
+.mesh-window-cost { font-size: 11px; color: var(--muted); }
+.mesh-window-drop {
+  flex: none; width: 22px; height: 22px; line-height: 1; padding: 0; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--muted); font: inherit; font-size: 13px;
+}
+.mesh-window-drop:hover { border-color: var(--danger); color: var(--text); }
+.mesh-window-close {
+  align-self: flex-start; padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--bg); color: var(--text);
+}
+.mesh-window-close:hover { border-color: var(--accent); }
+.mesh-window-list :focus-visible, .mesh-window-close:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
 /* A filtered node on its own answers "does this exist" and nothing else, so the
    filter keeps one hop of neighbourhood around every match. Those are context rather
    than results, and are drawn as such: a search that presented things which do not
@@ -4057,6 +4106,13 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
 .mesh-node:focus-visible .mesh-body { stroke: var(--accent); stroke-width: 3; }
 .mesh-in-impact .mesh-body { stroke-width: 3; }
 line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
+/* The nodes the question is *about*, as against the ones that come with them. With
+   one selected the distinction is idle — the answer is obviously about the node you
+   clicked. With a maintenance window of three it is the whole picture: a lit blob
+   that does not say which of its nodes are the ones going down cannot be checked
+   against the set the reader assembled. A second ring outside the outline rather
+   than a colour, so it survives beside a severity that already owns the outline. */
+.mesh-picked .mesh-halo { stroke-width: 2; opacity: 1; }
 /* Dimmed rather than hidden: the rest of the landscape stays visible as context,
    so an impact set reads as a part of the whole rather than as the whole. */
 /* Outside the impact set. It was 0.22, which on white is nearly gone: the answer
