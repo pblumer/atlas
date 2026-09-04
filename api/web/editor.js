@@ -8338,8 +8338,8 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       // is a point read on the server, and anything else is a variable search scoped
       // to this version. It sits above the list so it is the first thing reached
       // when the list is a page out of hundreds of thousands.
-      const searchRow = `<form class="vp-search" title="Find an instance of this version by key or by variable content">
-          <input type="text" class="vp-search-q" value="${esc(searchDraft)}" placeholder="Instance key, or name=value…" aria-label="Find an instance" spellcheck="false" autocomplete="off"/>
+      const searchRow = `<form class="vp-search" title="Find an instance of this version by key, or by a variable's value. A variable the model declares searchable is matched exactly and found by index; any other is matched as a substring by reading through the version's instances. A trailing * asks for a prefix.">
+          <input type="text" class="vp-search-q" value="${esc(searchDraft)}" placeholder="Instance key, or name=value (name* for a prefix)…" aria-label="Find an instance" spellcheck="false" autocomplete="off"/>
           <button class="btn neutral sm" type="submit" title="Search this version's instances">Find</button>
           ${searchQuery ? '<button class="btn ghost sm" type="button" data-search-clear title="Clear the search and go back to the newest instances">Clear</button>' : ""}
         </form>${searchError ? `<p class="muted vp-search-err">${esc(searchError)}</p>` : ""}`;

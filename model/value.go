@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/binary"
 	"sort"
+	"strings"
 )
 
 // Value is the typed payload of a record. Each implementation owns a fixed
@@ -419,9 +420,57 @@ type VariableValue struct {
 	// existed. Stamped at command time and frozen into the event, never recomputed on
 	// replay (I6). Append-compatible: an old record ends after Text and decodes to 0.
 	ProducerKey uint64
+	// Indexed says this write belongs in the variable value index: its process
+	// declared the name searchable (atlas:searchable) and the write is at the
+	// instance's root scope.
+	//
+	// It is decided at command time and frozen into the event, never recomputed on
+	// replay (I6) — and it has to be, because applyToState holds the record and
+	// nothing else: it cannot ask a compiled process whether a name is searchable.
+	// Append-compatible: a record written before the index existed ends after the
+	// producer key and decodes to false, which is honest — such a write is not in the
+	// index.
+	Indexed bool
 }
 
 func (*VariableValue) ValueType() ValueType { return VTVariable }
+
+// MaxIndexedValueBytes bounds what the variable value index stores per entry. The
+// index exists to find an instance by a business value — an identity, an order
+// number, a case reference — and those are short. The bound is what keeps one
+// pathological write from dominating the index, and it is checked rather than
+// truncated: a truncated key would answer an exact-match query with a wrong row.
+const MaxIndexedValueBytes = 256
+
+// IndexText is the value's canonical text for the variable value index, and whether
+// it can be indexed at all.
+//
+// The index is an ordered key-value index, so it answers equality and prefix over a
+// byte string and nothing else. That admits the scalars and excludes the rest: a
+// structured value is not something anyone searches for by its exact encoding, a NUL
+// byte would break the terminator the exact match relies on, and a value past
+// [MaxIndexedValueBytes] is refused rather than cut short.
+//
+// The search side calls this on the query's value, so a query and a write agree on
+// the bytes by construction rather than by two implementations happening to match.
+func (v *VariableValue) IndexText() (string, bool) {
+	var text string
+	switch v.Kind {
+	case VarString, VarNumber:
+		text = v.Text
+	case VarBool:
+		text = "false"
+		if v.Bool {
+			text = "true"
+		}
+	default:
+		return "", false // VarNull carries nothing to match; VarJSON is not sought by encoding
+	}
+	if len(text) > MaxIndexedValueBytes || strings.ContainsRune(text, 0) {
+		return "", false
+	}
+	return text, true
+}
 
 func (v *VariableValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ScopeKey)
@@ -433,7 +482,11 @@ func (v *VariableValue) encode(dst []byte) []byte {
 		dst = append(dst, 0)
 	}
 	dst = appendString(dst, v.Text)
-	return binary.LittleEndian.AppendUint64(dst, v.ProducerKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProducerKey)
+	if v.Indexed {
+		return append(dst, 1)
+	}
+	return append(dst, 0)
 }
 
 func (v *VariableValue) decode(src []byte) error {
@@ -463,6 +516,9 @@ func (v *VariableValue) decode(src []byte) error {
 	if len(tail) >= 8 {
 		v.ProducerKey = binary.LittleEndian.Uint64(tail)
 	}
+	// Indexed is appended after it, and reads false on a record written before the
+	// value index existed — such a write really is not in the index.
+	v.Indexed = len(tail) >= 9 && tail[8] != 0
 	return nil
 }
 

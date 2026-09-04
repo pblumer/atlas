@@ -290,6 +290,43 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A model can say what it wants to be found by.** [ADR-0241](docs/adr/0241-finding-an-instance.md)
+  made a version's instances a bounded page and an instance key a point read, and named
+  the layer it left out: the question an operator actually arrives with is a business
+  value — "where is MT-1998?" — and answering that still meant reading every instance of
+  the version and every one of its variables. Now a process declares what matters:
+
+  ```xml
+  <bpmn:process id="identitaet" atlas:searchable="identityId,item">
+  ```
+
+  For a declared variable, `identityId=MT-1998` is a **seek** into a value index rather
+  than a walk — its cost is the number of matches, whatever the engine holds — and a
+  trailing `*` asks for a prefix instead. It also means *exactly* that value rather than
+  a substring of it, which changes no answer anybody gets today: a declaration is the
+  only way into that path, and no model could carry one before now. An undeclared name
+  keeps the substring search it always had.
+  ([ADR-draft-searchable-variables](docs/adr/draft-searchable-variables.md))
+
+  **A process that declares nothing pays nothing** — one length check per variable
+  write, and no index entries. That is the whole reason it is a declaration and not a
+  default: indexing every value would double the variable write path and fill the index
+  with JSON blobs nobody searches for.
+
+  Two things building it moved, both recorded. `applyToState` holds the record and
+  nothing else — it cannot ask a compiled process whether a name is searchable — so the
+  decision is made at command time and frozen into the event, in the one place every
+  variable event passes through, the way the producer key already is (ADR-0219). And no
+  backfill is needed: `atlas:searchable` did not exist before this change, so every
+  definition that can declare it is deployed after it and carries the flag from its
+  first write.
+
+  What the index deliberately will not do: substring, free text, structured values, or
+  anything past 256 bytes. An ordered key-value store answers equality and prefix; a
+  truncated key would answer an exact query with a wrong row, and full text over cold
+  history belongs in the OpenSearch export (ADR-0114).
+
+
 - **Finding one instance among a few hundred thousand.** An operator's most common
   question is about a single instance — "where is MT-1998?", "what happened to the
   instance this ticket names?" — and Atlas answered every version of it by reading

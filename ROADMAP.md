@@ -817,10 +817,16 @@ What it takes to run this for real.
   `?before=` cursor (`X-Instances-Next-Cursor`, the task inbox's paging), the search
   gained `?process=`, and the live view's instance panel stops loading every instance
   of a version: one page per half, an honest "80 of 150", **Load more**, and a search
-  box beside the list. Remaining: the **variable value index** that would turn
-  `identityId=MT-1998` from a walk into a seek — declarative, resolved at deploy time
-  (I5), exact and prefix only — with substring and full text over cold history staying
-  in the OpenSearch export (ADR-0114) rather than becoming a second engine index.
+  box beside the list. The **variable value index** followed
+  ([ADR-draft-searchable-variables](docs/adr/draft-searchable-variables.md)): a process
+  declares `atlas:searchable="identityId,item"`, resolved at deploy time (I5), and for a
+  declared name `identityId=MT-1998` is a seek whose cost is the number of matches — a
+  trailing `*` asks for a prefix. A process that declares nothing pays one length check
+  per variable write and holds no entries. The decision to index a write is stamped onto
+  the event at command time, because `applyToState` cannot ask a compiled process
+  anything; no backfill is needed, since the attribute postdates every definition that
+  could lack it. Remaining, and deliberately so: substring and free text stay in the
+  OpenSearch export (ADR-0114) rather than becoming a second engine index.
 
 ## Milestone 5 — Scale-out 🔲
 

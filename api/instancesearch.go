@@ -30,6 +30,14 @@ type varQuery struct {
 	structured bool
 	name       string // lower-cased variable name; structured only
 	needle     string // lower-cased substring (value in structured, term in free-text)
+	// rawName and rawValue are the two halves as typed. The walk above is
+	// case-insensitive; the value index is a byte-ordered index, so its seek needs the
+	// case the operator wrote and the value the writer stored.
+	rawName  string
+	rawValue string
+	// prefix says the value ended in "*": ask the index for every value starting with
+	// rawValue rather than equal to it — the other question an ordered index answers.
+	prefix bool
 }
 
 // parseVarQuery interprets a raw ?q= value. ok is false for a blank query (the
@@ -43,10 +51,15 @@ func parseVarQuery(q string) (varQuery, bool) {
 	}
 	if i := strings.IndexByte(q, '='); i >= 0 {
 		if name := strings.TrimSpace(q[:i]); name != "" {
+			value := strings.TrimSpace(q[i+1:])
+			prefix := strings.HasSuffix(value, "*")
 			return varQuery{
 				structured: true,
 				name:       strings.ToLower(name),
-				needle:     strings.ToLower(strings.TrimSpace(q[i+1:])),
+				needle:     strings.ToLower(strings.TrimSuffix(value, "*")),
+				rawName:    name,
+				rawValue:   strings.TrimSuffix(value, "*"),
+				prefix:     prefix,
 			}, true
 		}
 	}
@@ -139,6 +152,16 @@ func lookupInstanceByKey(rv *state.ReadView, defs defIndex, key uint64) (instanc
 // walk — the expensive part, and the part whose cost grows with the store — run
 // off the loop without breaking the single-writer invariant (I3, ADR-0239).
 func searchInstances(rv *state.ReadView, defs defIndex, defKey uint64, raw string, pred varQuery) ([]instanceResp, error) {
+	// A declared name is answered by the value index: a seek to the instances holding
+	// that value, rather than a walk that reads every instance's variables. It is
+	// available only under a scope, because the declaration is per definition — the
+	// same reason the instance list's paged path is (ADR-0241).
+	if defKey != 0 && pred.structured {
+		if def, ok := defs[defKey]; ok && def.cp != nil && def.cp.IsSearchableVariable(pred.rawName) {
+			return searchByIndex(rv, defs, defKey, pred)
+		}
+	}
+
 	// A bare instance key is answered without scanning anything. It only wins when
 	// the key actually resolves — and, under a scope, when it resolves to *this*
 	// definition; an ordinary number falls through to the content search below.
@@ -207,6 +230,47 @@ func searchInstances(rv *state.ReadView, defs defIndex, defKey uint64, raw strin
 	out := append(active, done...)
 	if len(out) > maxInstanceSearchResults {
 		out = out[:maxInstanceSearchResults]
+	}
+	return out, nil
+}
+
+// searchByIndex answers a declared name from the variable value index. The rows it
+// builds carry only the variable that matched, exactly as the content walk's do, so
+// the two paths are indistinguishable to the caller apart from what they cost.
+//
+// A hit names an instance; the instance's own record says whether it is still running
+// and which definition it belongs to. The definition check is not redundant: the
+// index is keyed by name and value, not by definition, so another version declaring
+// the same name would land in the same range.
+func searchByIndex(rv *state.ReadView, defs defIndex, defKey uint64, pred varQuery) ([]instanceResp, error) {
+	out := []instanceResp{}
+	err := rv.InstancesByVariable(pred.rawName, pred.rawValue, pred.prefix, func(piKey uint64) error {
+		if len(out) >= maxInstanceSearchResults {
+			return errListTruncated
+		}
+		pi, ok, err := rv.ProcessInstance(piKey)
+		if err != nil || !ok {
+			// An entry whose instance is gone is skipped rather than reported: the two
+			// are written in one batch, so this is only reachable mid-purge.
+			return err
+		}
+		if pi.ProcessDefKey != defKey {
+			return nil
+		}
+		row := newInstanceRow(piKey, pi, defs)
+		if err := rv.VariablesOfScope(piKey, func(vv *model.VariableValue) error {
+			if vv.Name == pred.rawName {
+				row.Variables = append(row.Variables, toVariableView(vv))
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		out = append(out, row)
+		return nil
+	})
+	if err = unlessTruncated(err); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

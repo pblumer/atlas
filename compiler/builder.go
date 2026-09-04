@@ -487,6 +487,7 @@ type Builder struct {
 	versionTag         int32            // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64            // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64            // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
+	searchableVars     []string         // variable names the value index is maintained for, nil = none
 	isExecutable       bool             // bpmn:isExecutable; defaults true (set in NewBuilder)
 
 	// flowScope is the enclosing scope every node added now lands in: -1 for the
@@ -730,6 +731,12 @@ func (b *Builder) SetInstanceTtl(nanos int64) { b.instanceTtlNanos = nanos }
 // (the default) means the definition has no opinion: the server-wide max age applies, if
 // one is configured. The parser passes an already-validated positive duration.
 func (b *Builder) SetHistoryTtl(nanos int64) { b.historyTtlNanos = nanos }
+
+// SetSearchableVariables declares the variable names an instance of this process
+// can be found by. The engine maintains the variable value index for exactly these
+// names — see [CompiledProcess.IsSearchableVariable] — so a process that declares
+// none pays nothing for the feature.
+func (b *Builder) SetSearchableVariables(names []string) { b.searchableVars = names }
 
 // AddMessageStartEvent adds a message start event and returns its element id. It
 // is a process entry point like a none start event — at runtime it simply flows
@@ -2668,6 +2675,8 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		versionTag:         b.versionTag,
 		instanceTtlNanos:   b.instanceTtlNanos,
 		historyTtlNanos:    b.historyTtlNanos,
+		searchableVars:     b.searchableVars,
+		searchableSet:      searchableSet(b.searchableVars),
 		isExecutable:       b.isExecutable,
 		strings:            b.strings,
 	}, nil
