@@ -2,6 +2,9 @@ package openapimock
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -164,5 +167,29 @@ func TestNumberReadsEveryDecodersShape(t *testing.T) {
 				t.Errorf("number(%v) = %v %v, want %v %v", tc.value, got, ok, tc.want, tc.ok)
 			}
 		})
+	}
+}
+
+func TestATreeOfFilesIsBounded(t *testing.T) {
+	// The bound is a backstop against a generated or symlinked tree. It is exercised
+	// against a small limit rather than by writing ten thousand files: the constant's
+	// value is a judgement call, the refusal is the behaviour.
+	dir := t.TempDir()
+	for _, name := range []string{"a.yml", "b.yml"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("Thing: {type: string}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files := &documents{root: dir, byPath: map[string]map[string]any{}, limit: 1}
+	if _, err := files.load(filepath.Join(dir, "a.yml"), "a.yml#/Thing"); err != nil {
+		t.Fatalf("the first file: %v", err)
+	}
+	// The same file again is the copy in hand, not a second read against the bound.
+	if _, err := files.load(filepath.Join(dir, "a.yml"), "a.yml#/Thing"); err != nil {
+		t.Fatalf("the same file again: %v", err)
+	}
+	_, err := files.load(filepath.Join(dir, "b.yml"), "b.yml#/Thing")
+	if err == nil || !strings.Contains(err.Error(), "as far as this mock will follow") {
+		t.Errorf("err = %v, want the bound to refuse the second file", err)
 	}
 }

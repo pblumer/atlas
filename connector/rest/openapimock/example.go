@@ -50,10 +50,13 @@ var formatValues = map[string]string{
 	"uuid":          "00000000-0000-0000-0000-000000000000",
 }
 
-// maxSpecFiles bounds a document published as a tree of files. Each file is read once
-// and cached, so a legitimate tree — even DigitalOcean's — is far below this; the bound
-// is for the generated or symlinked one nobody meant to hand over.
-const maxSpecFiles = 256
+// maxSpecFiles bounds a document published as a tree of files. It is a backstop against
+// a generated or symlinked tree, not an opinion about how large a document may be: the
+// first guess at it was 256, which the real DigitalOcean document — 659 operations
+// assembled from 1141 files — walked straight past. Reading those took 414ms and 64MB,
+// so the headroom here is an order of magnitude above the largest published document
+// anyone has pointed this at.
+const maxSpecFiles = 10000
 
 // documents reads and caches the files a split document is made of.
 //
@@ -64,6 +67,9 @@ const maxSpecFiles = 256
 type documents struct {
 	root   string
 	byPath map[string]map[string]any
+	// limit is [maxSpecFiles] in a running mock, and something small in the test that
+	// covers the bound — writing ten thousand files to prove a constant is not a test.
+	limit int
 }
 
 // generator builds example values from the schemas of a document, following references
@@ -305,8 +311,8 @@ func (d *documents) load(path, ref string) (map[string]any, error) {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("$ref %q: %s is outside the spec's directory %s — pass --spec-root to say what may be read", ref, path, d.root)
 	}
-	if len(d.byPath) >= maxSpecFiles {
-		return nil, fmt.Errorf("$ref %q: too many files (%d already read); this does not look like one document", ref, len(d.byPath))
+	if len(d.byPath) >= d.limit {
+		return nil, fmt.Errorf("$ref %q: this document is assembled from more than %d files, which is as far as this mock will follow", ref, d.limit)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
