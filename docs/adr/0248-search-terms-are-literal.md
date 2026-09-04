@@ -1,4 +1,4 @@
-# ADR-DRAFT: A search term is literal, and widening is asked for
+# ADR-0248: A search term is literal, and widening is asked for
 
 - **Status:** Proposed
 - **Date:** 2026-09-04

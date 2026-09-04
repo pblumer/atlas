@@ -66,7 +66,7 @@ _Changed_ / _Removed_ for each version.
   matches one it equals, so `retail` becomes `*retail*`. The search hint, the handbook,
   the OpenAPI summary and the MCP tool description all state the rule, because changing
   what a query means in silence would be worse than the behaviour it replaces.
-  ([ADR-draft-search-terms-are-literal](docs/adr/draft-search-terms-are-literal.md))
+  ([ADR-0248](docs/adr/0248-search-terms-are-literal.md))
 
 - **A widened Properties column in the form editor gave its width to white space, not
   to the panel.** The Design tab's side columns are resizable — our own affordance on
@@ -369,7 +369,7 @@ _Changed_ / _Removed_ for each version.
   "no event log is exported", "the store declined" and "the store could not be reached"
   are about this server, and an operator told the first when the truth is one of the
   others stops looking for an instance that exists.
-  ([ADR-draft-instance-archive-search](docs/adr/draft-instance-archive-search.md))
+  ([ADR-0247](docs/adr/0247-instance-archive-search.md))
 
 - **A call activity's `+` is now the way into the process it calls.** A call activity is
   the one element on a diagram whose contents are somewhere else — a separate model,

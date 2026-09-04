@@ -1,4 +1,4 @@
-# ADR-DRAFT: An instance that is gone is still findable
+# ADR-0247: An instance that is gone is still findable
 
 - **Status:** Proposed
 - **Date:** 2026-09-04
