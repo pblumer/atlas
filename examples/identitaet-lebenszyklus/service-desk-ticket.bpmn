@@ -108,12 +108,18 @@
     <exclusiveGateway id="gw_join" name="erledigt"/>
 
     <scriptTask id="s_status" name="Neuen Produktzustand bestimmen">
-      <documentation>Ein Ersatzgerät ist bestellt, aber noch nicht in Betrieb — deshalb BESTELLT und nicht IN_BETRIEB. Der Zeitpunkt wird über eine Ausgabe-Zuordnung gesetzt, weil ein Script-Task nur eine resultVariable hat und die hier für den Status vergeben ist.</documentation>
+      <documentation>Ein Ersatzgerät ist bestellt, aber noch nicht in Betrieb — deshalb BESTELLT und nicht IN_BETRIEB.
+
+      Zwei Script-Tasks statt einem mit Ausgabe-Zuordnung, und das ist kein Schönheitsfehler: sobald eine Aktivität ein Output-Mapping trägt, schreibt Atlas ihre resultVariable in den aktivitätslokalen Scope und löscht ihn beim Abschluss wieder — es entkommt nur, was eine Ausgabe-Zuordnung ausdrücklich hochreicht (ADR-0068). Der erste Entwurf setzte serviceStatus als resultVariable und zeitpunkt als Ausgabe; der Zeitpunkt kam an, der Status wurde still verworfen, und das Produkt-Register bekam status: null.</documentation>
       <extensionElements>
         <zeebe:script expression="= if befund = &quot;Ersatzgerät bestellt&quot; then &quot;BESTELLT&quot; else &quot;IN_BETRIEB&quot;" resultVariable="serviceStatus"/>
-        <zeebe:ioMapping>
-          <zeebe:output source="= substring(string(now()), 1, 19)" target="zeitpunkt"/>
-        </zeebe:ioMapping>
+      </extensionElements>
+    </scriptTask>
+
+    <scriptTask id="s_zeit" name="Zeitpunkt setzen">
+      <documentation>Das Register führt je Service mit, seit wann er in diesem Zustand ist. Ohne diesen Schritt trüge der Eintrag noch den Zeitpunkt der Störungsmeldung.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= substring(string(now()), 1, 19)" resultVariable="zeitpunkt"/>
       </extensionElements>
     </scriptTask>
 
@@ -134,7 +140,8 @@
     <sequenceFlow id="tk8" sourceRef="ut_ersatz" targetRef="s_ersatz"/>
     <sequenceFlow id="tk9" sourceRef="s_ersatz" targetRef="gw_join"/>
     <sequenceFlow id="tk10" sourceRef="gw_join" targetRef="s_status"/>
-    <sequenceFlow id="tk11" sourceRef="s_status" targetRef="s_melden"/>
+    <sequenceFlow id="tk11" sourceRef="s_status" targetRef="s_zeit"/>
+    <sequenceFlow id="tk13" sourceRef="s_zeit" targetRef="s_melden"/>
     <sequenceFlow id="tk12" sourceRef="s_melden" targetRef="end"/>
   </process>
 
@@ -151,8 +158,9 @@
       <bpmndi:BPMNShape id="di_s_ersatz" bpmnElement="s_ersatz"><dc:Bounds x="640" y="300" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_gw_join" bpmnElement="gw_join" isMarkerVisible="true"><dc:Bounds x="800" y="175" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="795" y="232" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_s_status" bpmnElement="s_status"><dc:Bounds x="890" y="160" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_s_melden" bpmnElement="s_melden"><dc:Bounds x="1030" y="160" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="1180" y="182" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="1155" y="225" width="90" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_zeit" bpmnElement="s_zeit"><dc:Bounds x="1030" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_melden" bpmnElement="s_melden"><dc:Bounds x="1170" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="1320" y="182" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="1295" y="225" width="90" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="di_tk0" bpmnElement="tk0"><di:waypoint x="196" y="200"/><di:waypoint x="240" y="200"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_tk1" bpmnElement="tk1"><di:waypoint x="340" y="200"/><di:waypoint x="390" y="200"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_tk2" bpmnElement="tk2"><di:waypoint x="415" y="225"/><di:waypoint x="415" y="340"/><di:waypoint x="490" y="340"/><bpmndi:BPMNLabel><dc:Bounds x="420" y="318" width="50" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
@@ -165,7 +173,8 @@
       <bpmndi:BPMNEdge id="di_tk9" bpmnElement="tk9"><di:waypoint x="740" y="340"/><di:waypoint x="825" y="340"/><di:waypoint x="825" y="225"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_tk10" bpmnElement="tk10"><di:waypoint x="850" y="200"/><di:waypoint x="890" y="200"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_tk11" bpmnElement="tk11"><di:waypoint x="990" y="200"/><di:waypoint x="1030" y="200"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_tk12" bpmnElement="tk12"><di:waypoint x="1130" y="200"/><di:waypoint x="1180" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk13" bpmnElement="tk13"><di:waypoint x="1130" y="200"/><di:waypoint x="1170" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk12" bpmnElement="tk12"><di:waypoint x="1270" y="200"/><di:waypoint x="1320" y="200"/></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </definitions>
