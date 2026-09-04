@@ -118,6 +118,7 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama
 			CanView:       s.canViewArtifact(r, d.ProjectID, d.DeployedBy, projs),
 			State:         state, Reason: reason,
 			Incidents: tally.Count, Sites: tally.Sites,
+			Runtime: s.processRuntime(d.Key),
 		}
 		for _, ref := range d.cp.CallActivities() {
 			call := panorama.Call{ElementID: ref.ElementId, CalledProcessID: ref.CalledProcessId}
@@ -245,4 +246,34 @@ func workerUses(cp *compiler.CompiledProcess, byName map[string]connector) []pan
 		out = append(out, use)
 	}
 	return out
+}
+
+// processRuntime is one definition's instance tally for the Starmap (ADR-0083's
+// summary columns), or nil when the engine could not report it.
+//
+// Three point reads of counters the engine already maintains, not a scan: the whole
+// reason instance counts can be on every node of a four-hundred-node picture is that
+// asking costs O(1) per definition. Counting instances instead would be one scan
+// each, which is the mistake the parked-work tally is collected once to avoid.
+//
+// A read that fails returns nil rather than zero. "Nothing has ever run here" and
+// "the counter could not be read" are different facts, and a picture that showed the
+// second as the first would report a quiet estate on no evidence.
+func (s *Server) processRuntime(defKey uint64) *panorama.Runtime {
+	running, err := s.store.DefInstanceCount(defKey)
+	if err != nil {
+		return nil
+	}
+	finished, err := s.store.DefCompletedCount(defKey)
+	if err != nil {
+		return nil
+	}
+	// The timestamp is the one field allowed to be missing on its own: a definition
+	// nobody has ever started has no last activity, and that is an answer rather than
+	// a failure.
+	last, err := s.store.DefLastActivity(defKey)
+	if err != nil {
+		last = 0
+	}
+	return &panorama.Runtime{Running: running, Finished: finished, LastActivity: last}
 }

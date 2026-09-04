@@ -26,7 +26,9 @@
   server; amended 2026-09-04 — §6's impact question can be asked about several nodes
   at once, as the maintenance window it is, and states why the union is walked rather
   than the individual answers added; amended 2026-09-04 — the view is called Starmap
-  in the product, and this record keeps its own vocabulary)
+  in the product, and this record keeps its own vocabulary; amended 2026-09-04 — a
+  process node can carry the engine's instance tally, under four rules that keep an
+  unread counter from reading as an idle process)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -633,6 +635,39 @@ unaffected.
 > makes the whole window a floor — and §10's export carries the window in the stamp,
 > because in a file the rings on three nodes are the whole point and there is no panel
 > beside it to say so.
+
+> **Amendment (2026-09-04): a process node can carry how much is running on it.**
+> §4's observation says whether a process is in trouble. It does not say whether it
+> is doing anything, and "twelve instances are live in here" is the other half of
+> what somebody about to touch a node wants to know — particularly beside the
+> maintenance window, where the question is what taking it down would interrupt.
+>
+> The node therefore carries the engine's own tally: live now, finished ever, and
+> when it last did anything. Three point reads of counters ADR-0083 already
+> maintains, not a scan — which is the whole reason it can be on every node of a
+> four-hundred-node picture, and the same argument the parked-work tally makes for
+> being collected once.
+>
+> Four rules it is drawn under:
+>
+> - **It is asked for.** Off by default, behind a switch. A structural picture that
+>   always carried a second number under every name would be a status board with
+>   arrows, and this view's job is the shape of the estate.
+> - **The canvas shows only the counts there are.** A process with nothing running
+>   carries no number: on four hundred nodes, "0 running" four hundred times hides
+>   the eleven numbers somebody switched this on to find. The legend says so, because
+>   an absence that is not explained reads as "not measured".
+> - **The panel says the zero.** For the selected node the whole tally is stated,
+>   idle included — that is where "nothing is running here" is an answer rather than
+>   clutter.
+> - **A tally that could not be read is absent, not zero.** A definition nobody has
+>   started and a counter that failed to answer are different facts, and a picture
+>   that drew the second as the first would report a quiet estate on no evidence.
+>   The same rule §3 applies to restricted nodes, applied to a number.
+>
+> A collapsed application sums the tallies it stands for, as it already sums their
+> incidents; a restricted placeholder carries none, because how busy a resource is
+> is a fact about the resource and this reader may not see it.
 
 > **Amendment (2026-09-04): the view is called Starmap.**
 > Everything a reader sees now says Starmap — the nav, the page, the exported file's

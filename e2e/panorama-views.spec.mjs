@@ -171,3 +171,22 @@ test("removing a view is exact", async ({ page }) => {
   });
   expect(left).toEqual({ after: ["b"], unknown: ["a", "b"] });
 });
+
+// A saved view is the whole question somebody saved, and whether the picture was
+// carrying instance counts is part of it: the counts change what the nodes say and
+// how much room the layout reserves for them, so a view that reopened without them
+// would reopen a different picture.
+test("a view remembers whether it was showing instance counts", async ({ page }) => {
+  const on = await page.evaluate((world) => window.views.captureView({
+    name: "Busy", term: "", direction: "dependents", depth: "2",
+    instances: true, world, at: 1700000000000,
+  }), WORLD);
+  expect(on.instances).toBe(true);
+
+  // And a view saved before the counts existed carries false rather than undefined —
+  // off is the picture it was looking at, and the reader gets that picture back.
+  const before = await page.evaluate((world) => window.views.captureView({
+    name: "Old", term: "", direction: "dependents", depth: "2", world, at: 1700000000000,
+  }), WORLD);
+  expect(before.instances).toBe(false);
+});
