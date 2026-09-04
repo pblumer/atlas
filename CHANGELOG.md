@@ -337,6 +337,23 @@ _Changed_ / _Removed_ for each version.
   `e2e/call-activity-modeler.spec.mjs`, `e2e/call-activity-live.spec.mjs`,
   `e2e/call-activity-replay.spec.mjs`)
 
+- **The Tasks app follows a call activity too — down, not away.** The Process tab beside a
+  task shows what has already run and what is still ahead, and its call activities carry
+  the same `+` as everywhere else. It was the one surface the drill-down left out, for a
+  good reason and with the wrong conclusion: a hash change out of the Tasks app would tear
+  down the half-filled form in the pane next to it, and the Operations replay it would
+  land on is an operator's route the assignee may not hold.
+
+  So here the gesture **descends in place**: the panel re-renders on the child instance
+  the call activity started, a bar over the diagram says where you are and offers one way
+  back, and the variables listed underneath follow the descent — a called process is a
+  separate instance with separate variables. It costs no request the view was not already
+  making (the child's key is on the caller's own timeline) and no permission it did not
+  already have. A call activity the token has not reached says so rather than doing
+  nothing, and a task whose process calls nothing looks exactly as it did.
+  ([ADR-draft-tasks-call-activity-descent](docs/adr/draft-tasks-call-activity-descent.md),
+  `e2e/tasks-call-activity.spec.mjs`)
+
 - **A model can say what it wants to be found by.** [ADR-0241](docs/adr/0241-finding-an-instance.md)
   made a version's instances a bounded page and an instance key a point read, and named
   the layer it left out: the question an operator actually arrives with is a business
