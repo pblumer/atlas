@@ -2,6 +2,27 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-handbook-plays",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The handbook now plays: Atlas in two and a half minutes, then your own role",
+        "de": "Das Handbuch spielt jetzt: Atlas in zweieinhalb Minuten, danach Ihre eigene Rolle"
+      },
+      "summary": {
+        "en": "New in the handbook: short animated walk-throughs you press play on. The lead one takes two and a half minutes to show what Atlas is and what you can do with it — the diagram is the program, a case moving through it, a task reaching a person, an incident that loses nothing. After that there is one path per role, each under seventy seconds: claiming and completing a task, going from diagram to deploy, resolving an incident, granting roles and storing a credential. Nothing starts on its own, and the language toggle carries a running animation with it.",
+        "de": "Neu im Handbuch: kurze animierte Durchgänge, die man abspielt. Der erste zeigt in zweieinhalb Minuten, was Atlas ist und was sich damit machen lässt — das Diagramm ist das Programm, ein Fall wandert hindurch, eine Aufgabe erreicht einen Menschen, ein Incident verliert nichts. Danach folgt ein Pfad je Rolle, jeder unter siebzig Sekunden: eine Aufgabe übernehmen und abschliessen, vom Diagramm zum Deploy, einen Incident auflösen, Rollen vergeben und Zugangsdaten hinterlegen. Nichts startet von allein, und der Sprachumschalter nimmt eine laufende Animation mit."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Handbook"
+      ]
+    },
+    {
       "id": "an-element-s-documentation-is-markdown-now-and-the-people-wh",
       "version": "Unreleased",
       "date": null,
@@ -326,35 +347,6 @@
       "tags": [
         "Workers",
         "Decisions",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "scim-tasks-run-on-a-worker-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "User provisioning moved out of the engine",
-        "de": "User-Provisionierung ist aus der Engine ausgezogen"
-      },
-      "summary": {
-        "en": "Creating a user at an identity provider, looking one up, searching for one — until now Atlas did all of it from the process that runs the engine, so a slow provider held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the credential your task references is handed to that worker, exactly as it already is for REST and SOAP.",
-        "de": "Einen Benutzer beim Identity Provider anlegen, einen nachschlagen, nach einem suchen — bisher machte Atlas all das im Prozess, der die Engine ausführt, sodass ein langsamer Provider Arbeit aufhielt, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Das Credential, das Ihr Task referenziert, wird an diesen Worker übergeben — genau wie bei REST und SOAP schon."
-      },
-      "link": {
-        "label": "ADR-0233",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
-      },
-      "tags": [
-        "Workers",
         "Connectors"
       ],
       "try": {

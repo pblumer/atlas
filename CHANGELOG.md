@@ -14,6 +14,50 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The handbook plays.** Reading how to claim a task is not the same as being shown
+  where to press, and the gap costs the most for exactly the people who have the least
+  patience for a manual: somebody handed an Atlas login who wants to be useful this
+  morning. The handbook gains **training nuggets** — short animated click-throughs that
+  play in the page.
+
+  The lead one is the **Roundhouse Kick**: two and a half minutes that go from "what is
+  this" to "what could I do with it" — the diagram is the program, a deploy, a token
+  moving, a task reaching a person, a worker doing a step, a rule in a table, an
+  incident that loses nothing, the log every step is written to before it is visible,
+  the six apps, the Playground, the landscape, and a single binary with no database and
+  no broker behind all of it.
+
+  Then one path per role Atlas actually has ([ADR-0209](docs/adr/0209-roles-per-endpoint-group.md)),
+  each under seventy seconds, because the fastest way to be useful is to be shown your
+  own job and not everyone else's: `user` claims a task and completes it, `modeler` goes
+  from diagram to deploy through the Playground, `operator` finds an instance and
+  resolves an incident, `admin` grants roles deliberately and puts a credential in the
+  vault.
+
+  **The stages are drawn, not photographed.** A screenshot is a photograph of one build
+  at one window size: it ships as a binary, is unreadable in the other colour scheme,
+  needs a second copy per language, and goes stale in the one way nobody notices. These
+  stages are markup built from the page's own theme variables, so they follow the colour
+  scheme, scale to a phone, stay searchable, and carry both languages in one file
+  through the `data-l` mechanism the page already had — the language toggle moves a
+  running animation with it, with no code in the player for it at all. Nothing
+  autoplays, a nugget pauses when it scrolls out of view, and starting one stops the
+  one already running.
+
+  A scene points its cursor at an **element**, not at a coordinate, and this is the part
+  that earns its test. Percentages were the first attempt and they miss: the stage has
+  padding, the caption takes a variable slice of the bottom, and both move with the
+  width — so a number tuned at one size lands beside the button at another, and the
+  reader is taught to press empty space. Nothing throws and nothing logs; even a
+  screenshot of the right frame looks fine. `e2e/nuggets.spec.mjs` drives every scene
+  that aims a cursor and asserts the pointer's tip is inside the element the scene
+  names, alongside the catalogue matching the chapter in both directions and no scene
+  shipping one language twice. All three were written by confirming they fail — against
+  a selector pointing at nothing, a removed container, and a caption copied across
+  languages — rather than by observing that they pass.
+
+### Added
+
 - **An element's documentation is Markdown now, and the people who read it see it as
   such.** `<bpmn:documentation>` is the one field every element carries, and the Modeler
   has treated it as Markdown for as long as the Developer View has existed: it highlights
