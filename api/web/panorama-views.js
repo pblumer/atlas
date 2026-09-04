@@ -94,7 +94,7 @@ export function removeView(views, id) {
 // graph and the shape of the window, so a coordinate captured on one screen means
 // somewhere else on another — and a saved view that reopened on empty space would be
 // worse than no saved view. The pins go the same way, for the same reason.
-export function captureView({ name, term, direction, depth, notation, selected, picked, frameView, world, pinned, at, id }) {
+export function captureView({ name, term, direction, depth, notation, selected, picked, instances, trail, frameView, world, pinned, at, id }) {
   const width = Math.max(world?.width || 0, 1), height = Math.max(world?.height || 0, 1);
   const zoom = frameView ? Math.min(Math.max(frameView.w / width, 0), 1) : 1;
   const centre = frameView
@@ -119,6 +119,15 @@ export function captureView({ name, term, direction, depth, notation, selected, 
     // so that everything reading it, the frame anchor included, keeps meaning one
     // thing; a window carries its members here instead.
     picked: Array.isArray(picked) && picked.length > 1 ? [...picked] : null,
+    // Whether the picture was carrying running-instance counts. It changes what the
+    // nodes say and how much room the layout gives them, so a view that reopened
+    // without it would reopen a different picture.
+    instances: Boolean(instances),
+    // The path into the picture: every node gone into, in order. It is the narrowing
+    // a saved view is most likely to be *about* — somebody who followed a dependency
+    // four deep and saved it saved the walk, not the last node — and it was the one
+    // narrowing a view could not carry.
+    trail: Array.isArray(trail) && trail.length ? [...trail] : null,
     zoom,
     centre,
     pins: [...(pinned || [])].map(([nodeId, p]) => [nodeId, p.x / width, p.y / height]),

@@ -1512,18 +1512,22 @@ function onCallMarker(canvas, element, ev) {
 }
 
 // wireCallDrilldown gives one bpmn-js instance the drill-in gesture and the cue that
-// makes it findable: hovering a call activity rings its "+" and names what is behind
-// it, double-clicking that "+" opens it. `open(element, processId)` is the surface's
-// own idea of "in"; the process id it is handed is "" for a call activity that names
-// no callee, which a runtime surface can still answer (it knows the child instance)
-// and the Modeler answers by saying what is missing.
+// makes it findable: hovering a call activity rings its "+", putting the pointer on
+// that ring says what a double-click there does, and the double-click opens it.
+// `open(element, processId)` is the surface's own idea of "in"; the process id it is
+// handed is "" for a call activity that names no callee, which a runtime surface can
+// still answer (it knows the child instance) and the Modeler answers by saying what
+// is missing.
 //
-// The cue is not decoration. The replay's first drill-in was an invisible hotspot over
-// this very marker, and operators reported never discovering it (see
-// drawCallActivityLinks) — an affordance that appears only once the pointer is already
-// on it is one nobody finds. Ringing the marker for as long as the *shape* is hovered
-// is the smallest thing that still answers "is there a way in, and to where" before
-// the pointer is anywhere near the 14px target.
+// The cue is in two parts on purpose, and the split is where the first cut got it
+// wrong. The replay's original drill-in was an invisible hotspot over this marker and
+// operators never discovered it (see drawCallActivityLinks), so the marker is ringed
+// as soon as the *shape* is hovered: that is the whole "there is a way in here", and
+// it is silent. The sentence explaining the gesture is the intrusive part — it belongs
+// to the 14px target itself, not to the 100x80 shape around it, so it appears only
+// once the pointer is actually on the ring. It does not name the callee either: at
+// that point the reader is one double-click from seeing it, and the Modeler's panel
+// says it in full.
 //
 // Priority 1500 puts the handler above bpmn-js's own double-click (direct label
 // editing, priority 1000), so the marker never opens the rename box, and below the
@@ -1537,34 +1541,67 @@ function wireCallDrilldown(viewer, open) {
     overlays = viewer.get("overlays");
   } catch { return; } // viewer already torn down — nothing to wire
 
-  const cue = []; // overlay ids of the hover cue, so we remove only our own
+  const cue = [];   // overlay ids we own, so we remove only our own
+  let ringEl = null; // the ring's node, kept so the pointer can light it up
+  let tipId = null;  // the label's overlay id while the pointer is on the ring
+
+  const clearTip = () => {
+    if (tipId === null) return;
+    try { overlays.remove(tipId); } catch { /* gone */ }
+    const at = cue.indexOf(tipId);
+    if (at >= 0) cue.splice(at, 1);
+    tipId = null;
+  };
   const clearCue = () => {
+    tipId = null;
+    ringEl = null;
     for (const id of cue.splice(0)) { try { overlays.remove(id); } catch { /* gone */ } }
   };
-  const showCue = (element, pid) => {
+
+  // showRing marks the marker as the way in, for as long as the shape is hovered.
+  const showRing = (element) => {
+    if (ringEl) return; // already on this shape
     clearCue();
-    const target = pid ? `&ldquo;${esc(pid)}&rdquo;` : "the called process";
+    ringEl = document.createElement("span");
+    ringEl.className = "ca-drill-ring";
     try {
       cue.push(overlays.add(element.id, "atlas-call-drill", {
         // Anchored on the marker's own centre (the overlay's origin is the shape's
         // top-left, in diagram units), so the ring sits on the "+" at any zoom.
         position: { left: element.width / 2 - 0.5, top: element.height - CALL_MARKER.up + CALL_MARKER.size / 2 },
-        html: `<span class="ca-drill-ring"></span>`,
+        html: ringEl,
       }));
-      cue.push(overlays.add(element.id, "atlas-call-drill", {
-        position: { left: element.width / 2, top: element.height + 6 },
-        // The ring above scales with the diagram because it stands for the marker;
-        // this is a sentence, and a sentence rendered at 200% runs off the canvas it
-        // is explaining. Held near its own size, it stays a label at any zoom.
+    } catch { ringEl = null; /* shape without graphics (mid-import) — the gesture still works */ }
+  };
+
+  // showTip is the sentence, and it is shown only while the pointer is on the ring.
+  const showTip = (element) => {
+    if (tipId !== null) return;
+    try {
+      tipId = overlays.add(element.id, "atlas-call-drill", {
+        position: { left: element.width / 2, top: element.height + 4 },
+        // The ring scales with the diagram because it stands for the marker; this is
+        // words, and words rendered at 200% run off the canvas they are explaining.
+        // Held near their own size, they stay a label at any zoom.
         scale: { min: 0.8, max: 1 },
-        html: `<span class="ca-drill-tip">Double-click <b>&#43;</b> to open ${target}</span>`,
-      }));
-    } catch { /* shape without graphics (mid-import) — the gesture still works */ }
+        html: `<span class="ca-drill-tip">Double-click to open</span>`,
+      });
+      cue.push(tipId);
+    } catch { tipId = null; /* shape gone mid-hover */ }
   };
 
   eventBus.on("element.hover", (e) => {
     const bo = e.element && e.element.businessObject;
-    if (isCallActivity(bo)) showCue(e.element, calledProcessId(bo)); else clearCue();
+    if (isCallActivity(bo)) showRing(e.element); else clearCue();
+  });
+  // The pointer's position inside the shape decides the label: on the ring it explains
+  // the gesture, anywhere else it stays out of the reader's way.
+  eventBus.on("element.mousemove", (e) => {
+    const bo = e.element && e.element.businessObject;
+    if (!isCallActivity(bo) || !ringEl) return;
+    const on = onCallMarker(canvas, e.element, e.originalEvent);
+    ringEl.classList.toggle("on", on);
+    if (on) showTip(e.element); else clearTip();
   });
   eventBus.on("element.out", clearCue);
   eventBus.on("import.done", clearCue); // the diagram under the cue is gone

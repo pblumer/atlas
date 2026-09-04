@@ -54,7 +54,7 @@ test("a filtered or drilled export says which landscape it is", async ({ page })
     }),
   }));
 
-  expect(lines.whole[0].text).toContain("the whole landscape");
+  expect(lines.whole[0].text).toContain("the whole starmap");
   // "40 of 40" would read as a narrowing that did not happen.
   expect(lines.whole[1].text).toContain("40 node(s) drawn");
   expect(lines.whole[1].text).not.toContain("of 40");
@@ -81,7 +81,7 @@ test("what the picture is not showing is written into it", async ({ page }) => {
     ],
   }).map((l) => l.text).join("\n"));
 
-  expect(text).toContain("3 node(s) in this landscape are hidden by your access");
+  expect(text).toContain("3 node(s) in this starmap are hidden by your access");
   expect(text).toContain("collapsed to applications");
   expect(text).toContain("floor rather than a verdict");
   expect(text).toContain("Not watched here: Unreachable, Stale.");
@@ -206,6 +206,6 @@ test("the file name sorts by date", async ({ page }) => {
     svg: window.exporter.exportName("svg", new Date(2026, 8, 2, 16, 7)),
     png: window.exporter.exportName("png", new Date(2026, 8, 2, 9, 0)),
   }));
-  expect(names.svg).toBe("atlas-landscape-20260902-1607.svg");
-  expect(names.png).toBe("atlas-landscape-20260902-0900.png");
+  expect(names.svg).toBe("atlas-starmap-20260902-1607.svg");
+  expect(names.png).toBe("atlas-starmap-20260902-0900.png");
 });

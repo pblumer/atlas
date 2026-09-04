@@ -107,8 +107,10 @@ test("zoom keeps the point it is anchored on where it was", async ({ page }) => 
   expect(zoomed.w / zoomed.h).toBeCloseTo(base.w / base.h, 5);
 });
 
-// Zooming out past the content only restores the empty space the fit exists to
-// remove, so it is bounded; zooming in stops where a node fills the frame.
+// Bounded in both directions, but not tightly outward: a node can be dragged
+// anywhere, so past the fitted frame there is arrangement to find and pulling back to
+// look for it is how somebody finds it without giving their arrangement up to Fit.
+// Zooming in stops where a node fills the frame and there is nothing further to see.
 test("zoom is bounded in both directions", async ({ page }) => {
   const base = { x: 0, y: 0, w: 1000, h: 600 };
   const focus = { x: 500, y: 300 };
@@ -120,7 +122,10 @@ test("zoom is bounded in both directions", async ({ page }) => {
     },
     [base, focus],
   );
-  expect(out.w).toBeLessThanOrEqual(base.w * 1.61);
+  expect(out.w).toBeLessThanOrEqual(base.w * 4.01);
+  // Bounded, not unbounded: thirty steps of 1.3 is a factor of 2600, and the frame
+  // has to stop somewhere or the picture becomes a dot in a void.
+  expect(out.w).toBeCloseTo(base.w * 4, 3);
 
   const inward = await page.evaluate(
     ([b, f]) => {

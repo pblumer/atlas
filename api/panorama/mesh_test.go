@@ -575,3 +575,104 @@ func TestDeriveGraphHandlesHiddenAndMissingDecisions(t *testing.T) {
 		t.Errorf("restricted decision leaks its name in %s", body)
 	}
 }
+
+// TestProcessCarriesItsInstanceTally: how much is running is a fact about a process
+// definition, and the picture can only show it if the node carries it.
+func TestProcessCarriesItsInstanceTally(t *testing.T) {
+	busy := proc(1, "invoice", "Invoice", "a1")
+	busy.Runtime = &Runtime{Running: 12, Finished: 431, LastActivity: 1_700_000_000_000_000_000}
+	quiet := proc(2, "dunning", "Dunning", "a1")
+	quiet.Runtime = &Runtime{Running: 0, Finished: 0}
+	// A definition whose counters could not be read carries nothing at all: "nothing
+	// has ever run here" and "the counter did not answer" are different facts, and
+	// only one of them is a zero.
+	unknown := proc(3, "archive", "Archive", "a1")
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{busy, quiet, unknown},
+	}, Options{})
+
+	if rt := nodeByID(t, g, "process:1").Runtime; rt == nil || rt.Running != 12 || rt.Finished != 431 {
+		t.Errorf("a busy process reports %#v", rt)
+	}
+	// The zero survives: it is what says the process is idle rather than unmeasured.
+	if rt := nodeByID(t, g, "process:2").Runtime; rt == nil || rt.Running != 0 || rt.Finished != 0 {
+		t.Errorf("an idle process reports %#v", rt)
+	}
+	if rt := nodeByID(t, g, "process:3").Runtime; rt != nil {
+		t.Errorf("a process with no reading reports %#v rather than nothing", rt)
+	}
+	// And the tally is a process's own: nothing else on this landscape can have
+	// instances, so nothing else may claim a count.
+	if rt := nodeByID(t, g, "application:a1").Runtime; rt != nil {
+		t.Errorf("an uncollapsed application reports a tally of its own: %#v", rt)
+	}
+
+	// It survives the JSON the browser reads, zero included — omitempty on the count
+	// would publish an idle process as an unmeasured one.
+	raw, err := json.Marshal(nodeByID(t, g, "process:2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"running":0`) {
+		t.Errorf("an idle process serialises without its zero: %s", raw)
+	}
+}
+
+// TestCollapsedApplicationSumsItsInstanceTally: a collapsed application stands for
+// the processes behind it, so it reports what they add up to. Reporting one child's
+// number against the whole would understate it — the same rule the summed incident
+// count already follows.
+func TestCollapsedApplicationSumsItsInstanceTally(t *testing.T) {
+	one := proc(1, "invoice", "Invoice", "a1")
+	one.Runtime = &Runtime{Running: 3, Finished: 100, LastActivity: 500}
+	two := proc(2, "dunning", "Dunning", "a1")
+	two.Runtime = &Runtime{Running: 4, Finished: 7, LastActivity: 900}
+	three := proc(3, "archive", "Archive", "a1") // no reading at all
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{one, two, three},
+	}, Options{MaxNodes: 1})
+
+	if !g.Clustered {
+		t.Fatalf("the landscape did not collapse: %#v", g)
+	}
+	rt := nodeByID(t, g, "application:a1").Runtime
+	if rt == nil || rt.Running != 7 || rt.Finished != 107 {
+		t.Fatalf("a collapsed application reports %#v", rt)
+	}
+	// The latest of theirs rather than a sum: a timestamp is not a quantity, and the
+	// question is whether anything behind this node has moved lately.
+	if rt.LastActivity != 900 {
+		t.Errorf("last activity is %d, not the most recent child's", rt.LastActivity)
+	}
+}
+
+// A process this caller may not see becomes a placeholder, and a placeholder
+// discloses nothing — least of all how busy the thing behind it is.
+func TestRestrictedProcessDisclosesNoInstanceTally(t *testing.T) {
+	hidden := proc(2, "ledger", "Ledger", "a1")
+	hidden.CanView = false
+	hidden.Runtime = &Runtime{Running: 99, Finished: 5000}
+	caller := proc(1, "invoice", "Invoice", "a1", Call{ElementID: "c1", CalledProcessID: "ledger", TargetKey: 2})
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{caller, hidden},
+	}, Options{})
+
+	raw, err := json.Marshal(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "99") || strings.Contains(string(raw), "5000") {
+		t.Errorf("a hidden process's instance counts are in the payload: %s", raw)
+	}
+	for _, n := range g.Nodes {
+		if n.Kind == KindRestricted && n.Runtime != nil {
+			t.Errorf("a restricted placeholder carries %#v", n.Runtime)
+		}
+	}
+}

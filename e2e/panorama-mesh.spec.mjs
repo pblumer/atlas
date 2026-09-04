@@ -79,7 +79,7 @@ test("renders the derived landscape and drills into a process", async ({ page })
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   // Every node is drawn, and the two placeholder kinds are visually distinct from
   // real ones rather than merged into them.
@@ -108,7 +108,7 @@ test("renders the derived landscape and drills into a process", async ({ page })
 
 test("says in words that the picture is filtered", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   // The count is the point: a viewer must be able to tell a complete landscape
   // from one their access has cut down, without inferring it from an absence.
@@ -128,7 +128,7 @@ test("repeats the server's collapse instead of hiding it", async ({ page }) => {
     restricted: 0,
     clustered: true,
   });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await expect(page.locator(".mesh-note").first()).toContainText("size budget");
   await expect(page.locator(".mesh-canvas")).toContainText("42");
@@ -136,7 +136,7 @@ test("repeats the server's collapse instead of hiding it", async ({ page }) => {
 
 test("an empty landscape explains itself rather than showing a blank page", async ({ page }) => {
   installMock(page, { nodes: [], edges: [], restricted: 0, clustered: false });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await expect(page.locator(".card.empty")).toContainText("derived");
   await expect(page.locator(".card.empty")).toContainText("nothing to model first");
@@ -163,7 +163,7 @@ test("stays inside its size budget", async ({ page }) => {
 
   installMock(page, { nodes, edges, restricted: 0, clustered: false });
   const started = Date.now();
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible({ timeout: 30000 });
   await expect(page.locator(".mesh-node")).toHaveCount(400);
   // The ranking walks from every node, so it is inside this measurement rather than
@@ -177,24 +177,24 @@ test("stays inside its size budget", async ({ page }) => {
 // and it reports how much it hid: a filtered mesh looks exactly like a small one.
 test("filters the landscape and says how much it is hiding", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-node")).toHaveCount(7);
 
-  await page.getByLabel("Filter the landscape").fill("invoice");
+  await page.getByLabel("Filter the starmap").fill("invoice");
   // One match, and the header says so — separately from the context around it.
   await expect(page.locator(".mesh-node:not(.mesh-context)")).toHaveCount(1);
   await expect(page.locator("#mesh-count")).toContainText("1 of 7 node(s) match");
   await expect(page.locator(".mesh-canvas")).toContainText("Invoice");
 
   // Filtering by kind is the other half: "what does this instance talk to".
-  await page.getByLabel("Filter the landscape").fill("worker");
+  await page.getByLabel("Filter the starmap").fill("worker");
   await expect(page.locator(".mesh-worker:not(.mesh-context)")).toHaveCount(1);
   await expect(page.locator(".mesh-canvas")).toContainText("ops-mail");
 
-  await page.getByLabel("Filter the landscape").fill("nothing-matches-this");
+  await page.getByLabel("Filter the starmap").fill("nothing-matches-this");
   await expect(page.locator(".mesh-empty-filter")).toContainText("Nothing matches");
 
-  await page.getByLabel("Filter the landscape").fill("");
+  await page.getByLabel("Filter the starmap").fill("");
   await expect(page.locator(".mesh-node")).toHaveCount(7);
   await expect(page.locator("#mesh-count")).toContainText("7 node(s)");
 });
@@ -205,9 +205,9 @@ test("filters the landscape and says how much it is hiding", async ({ page }) =>
 // which of what is on screen is a result and which is only there to explain it.
 test("a filtered node keeps the things it is attached to", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
-  await page.getByLabel("Filter the landscape").fill("invoice");
+  await page.getByLabel("Filter the starmap").fill("invoice");
 
   // Invoice calls Dunning and a restricted node, uses the mail worker, and sits in
   // Billing. All of them are on screen; none of them matched "invoice".
@@ -248,7 +248,7 @@ test("an unresolved dependency names what kind of thing is missing", async ({ pa
     restricted: 0,
     clustered: false,
   });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await expect(page.locator(".mesh-unresolved title")).toContainText("worker");
   await expect(page.locator(".mesh-unresolved title")).toContainText("park");
@@ -258,7 +258,7 @@ test("an unresolved dependency names what kind of thing is missing", async ({ pa
 // case in panorama-impact.spec.mjs; these cover what the viewer actually gets.
 test("selecting a node shows its blast radius and dims the rest", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await expect(page.locator(".mesh-panel-empty")).toContainText("Nothing selected");
 
@@ -287,7 +287,7 @@ test("selecting a node shows its blast radius and dims the rest", async ({ page 
 // stopped at a permission boundary must not present its count as a total.
 test("an impact answer that hits a restricted node says it is a lower bound", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   // The controls are addressed by id rather than by label: a node's aria-label is a
   // descriptive sentence, and getByLabel matches by substring — "Show" collides with
@@ -303,13 +303,13 @@ test("an impact answer that hits a restricted node says it is a lower bound", as
 // node that is no longer on screen.
 test("filtering away the selection clears it", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await page.locator('[data-node-id="worker:c1"]').click();
   await expect(page.locator(".mesh-impact-count")).toBeVisible();
 
   // Nothing matching the worker, and it is not within a hop of what does.
-  await page.getByLabel("Filter the landscape").fill("dunning");
+  await page.getByLabel("Filter the starmap").fill("dunning");
   await expect(page.locator(".mesh-panel-empty")).toBeVisible();
 });
 
@@ -329,7 +329,7 @@ const overlaidGraph = {
 
 test("shows what is modeled, what is not, and what could not be compared", async ({ page }) => {
   installMock(page, overlaidGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   // Provenance is on the node itself, not only in the legend.
   await expect(page.locator('[data-node-id="application:a1"]')).toHaveClass(/mesh-prov-both/);
@@ -354,7 +354,7 @@ test("shows what is modeled, what is not, and what could not be compared", async
 // unmodeled" would be a claim about a comparison nobody made.
 test("says nothing about drift when no model was compared", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   const legend = page.locator(".mesh-legend");
   await expect(legend).toContainText("nothing on this");
@@ -401,7 +401,7 @@ const statusGraph = {
 
 test("marks severity on the node itself, not only in the legend", async ({ page }) => {
   installMock(page, statusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await expect(page.locator('[data-node-id="process:2"]')).toHaveClass(/mesh-sev-critical/);
   await expect(page.locator('[data-node-id="process:1"]')).toHaveClass(/mesh-sev-attention/);
@@ -423,7 +423,7 @@ test("marks severity on the node itself, not only in the legend", async ({ page 
 // somewhere, which is not something anybody can act on.
 test("an inherited severity names the descendant it came from", async ({ page }) => {
   installMock(page, statusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await expect(page.locator('[data-node-id="application:a1"] title')).toContainText("inherited from process:2");
 
@@ -439,7 +439,7 @@ test("an inherited severity names the descendant it came from", async ({ page })
 // is worse than no view at all.
 test("says which observation states it cannot produce", async ({ page }) => {
   installMock(page, statusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   const legend = page.locator(".mesh-legend");
   await expect(legend).toContainText("Not watched here");
@@ -451,7 +451,7 @@ test("says which observation states it cannot produce", async ({ page }) => {
 // gets from a few hundred nodes to the handful that are broken.
 test("filters the landscape by severity", async ({ page }) => {
   installMock(page, statusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await page.locator("#mesh-search").fill("critical");
   await expect(page.locator(".mesh-node:not(.mesh-context)")).toHaveCount(2);
@@ -463,7 +463,7 @@ test("filters the landscape by severity", async ({ page }) => {
 // could not zoom would be unreadable the moment the graph got interesting.
 test("opens fitted to the content and zooms from there", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   const canvas = page.locator(".mesh-canvas");
   const fitted = await canvas.getAttribute("viewBox");
@@ -518,12 +518,14 @@ test("opens fitted to the content and zooms from there", async ({ page }) => {
   expect(await canvas.getAttribute("viewBox")).toBe(fitted);
 });
 
-// Panning is gated on there being something off-screen. At the fitted frame the
-// whole landscape is already visible, so a drag there could only push it out of
-// view and hand back the empty space the fit exists to remove.
-test("pans once zoomed in, and is inert at the fitted frame", async ({ page }) => {
+// Panning at any magnification, the fitted frame included. It used to be refused
+// there — everything was on screen, so a drag could only push the picture into the
+// empty space the fit exists to remove — and that stopped being the whole truth when
+// a node became draggable anywhere: there is somewhere to pan *to*, and a canvas that
+// only moves when zoomed in is a canvas whose rules a reader has to discover.
+test("pans at any magnification, without also selecting", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   const canvas = page.locator(".mesh-canvas");
   const fitted = await canvas.getAttribute("viewBox");
@@ -539,6 +541,13 @@ test("pans once zoomed in, and is inert at the fitted frame", async ({ page }) =
   };
 
   await drag();
+  const pannedAtFit = await canvas.getAttribute("viewBox");
+  expect(pannedAtFit).not.toBe(fitted);
+  // A translation, not a rescale — the same rule as when zoomed in.
+  expect(pannedAtFit.split(" ").slice(2)).toEqual(fitted.split(" ").slice(2));
+  // And Fit is the way back, which is what makes an unbounded canvas navigable
+  // rather than a place to get lost in.
+  await page.locator("#mesh-zoom-fit").click();
   expect(await canvas.getAttribute("viewBox")).toBe(fitted);
 
   await page.locator("#mesh-zoom-in").click();
@@ -578,7 +587,7 @@ function meshOf(processes) {
 // node's accessible label, and hovering or zooming brings it back.
 test("a crowded landscape holds its names until they can be read", async ({ page }) => {
   installMock(page, meshOf(100));
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   // Every node wants its name; the canvas decides which are legible right now.
   await expect(page.locator('[data-node-id="process:0"]')).toHaveClass(/mesh-named/);
@@ -602,7 +611,7 @@ test("a crowded landscape holds its names until they can be read", async ({ page
 // canvas is told what magnification it is at and the stylesheet does the rest.
 test("zooming in brings the names out", async ({ page }) => {
   installMock(page, meshOf(100));
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   const canvas = page.locator(".mesh-canvas");
   await expect(canvas).not.toHaveClass(/mesh-names-all/);
@@ -621,7 +630,7 @@ test("zooming in brings the names out", async ({ page }) => {
 // already large enough to read and hiding any would be pure loss.
 test("a small landscape keeps every name on screen", async ({ page }) => {
   installMock(page, meshOf(4));
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await expect(page.locator(".mesh-node")).toHaveCount(5);
   await expect(page.locator(".mesh-canvas")).toHaveClass(/mesh-names-all/);
@@ -636,7 +645,7 @@ test("a small landscape keeps every name on screen", async ({ page }) => {
 // genuinely held back, or this asserts nothing.
 test("selecting or filtering brings a name back", async ({ page }) => {
   installMock(page, meshOf(100));
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).not.toHaveClass(/mesh-names-all/);
 
   await page.locator('[data-node-id="process:7"]').click();
@@ -663,7 +672,7 @@ const radiusOf = async (page, id) => Number(
 
 test("kinds are told apart by size, not only by colour", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   const application = await radiusOf(page, "application:a1");
   const process = await radiusOf(page, "process:1");
@@ -690,7 +699,7 @@ test("a well-connected node is drawn larger than a lonely one of its kind", asyn
       { from: "process:hub", to: `worker:w${i}`, kind: "uses" })),
     restricted: 0, clustered: false,
   });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   const hub = await radiusOf(page, "process:hub");
   const leaf = await radiusOf(page, "process:leaf");
@@ -702,7 +711,7 @@ test("a well-connected node is drawn larger than a lonely one of its kind", asyn
 // that makes the picture unreadable rather than merely tight.
 test("nodes do not overlap each other", async ({ page }) => {
   installMock(page, meshOf(30));
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   const overlaps = await page.evaluate(() => {
     const at = [...document.querySelectorAll(".mesh-node")].map((g) => {
@@ -729,7 +738,7 @@ test("nodes do not overlap each other", async ({ page }) => {
 // times while reading a landscape: what does *this* touch?
 test("pointing at a node shows what it is connected to", async ({ page }) => {
   installMock(page, graph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   const canvas = page.locator(".mesh-canvas");
   await expect(canvas).not.toHaveClass(/mesh-relating/);
 
@@ -790,7 +799,7 @@ test("pointing at a node shows what it is connected to", async ({ page }) => {
 test("no two nodes overlap, however many there are", async ({ page }) => {
   for (const size of [12, 60]) {
     installMock(page, meshOf(size));
-    await page.goto("/index.html#/panorama/landscape");
+    await page.goto("/index.html#/panorama/starmap");
     await page.locator(".mesh-node").first().waitFor();
 
     const worst = await page.evaluate(() => {
@@ -864,7 +873,7 @@ async function dragBy(page, id, dx, dy) {
 
 test("a node goes where it is dropped, and the graph settles around it", async ({ page }) => {
   installMock(page, meshOf(12));
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await page.locator(".mesh-node").first().waitFor();
 
   const others = await page.evaluate(() => Object.fromEntries(
@@ -919,7 +928,7 @@ test("a node goes where it is dropped, and the graph settles around it", async (
 // The reader loses the arrangement they were reading in order to move one node in it.
 test("a drag moves the neighbourhood, not the landscape", async ({ page }) => {
   installMock(page, meshOf(12));
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await page.locator(".mesh-node").first().waitFor();
 
   const positions = () => page.evaluate(() => Object.fromEntries(
@@ -948,7 +957,7 @@ test("a drag moves the neighbourhood, not the landscape", async ({ page }) => {
 
 test("what you placed by hand survives a repaint", async ({ page }) => {
   installMock(page, meshOf(12));
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await page.locator(".mesh-node").first().waitFor();
 
   await dragBy(page, "process:5", -110, 90);
@@ -972,7 +981,7 @@ test("what you placed by hand survives a repaint", async ({ page }) => {
 
 test("release puts everything back where the layout wants it", async ({ page }) => {
   installMock(page, meshOf(12));
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await page.locator(".mesh-node").first().waitFor();
 
   const release = page.locator("#mesh-release");
@@ -997,7 +1006,7 @@ test("release puts everything back where the layout wants it", async ({ page }) 
 // see.
 test("one node can be released without disturbing the arrangement", async ({ page }) => {
   installMock(page, meshOf(12));
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await page.locator(".mesh-node").first().waitFor();
 
   await dragBy(page, "process:2", 100, 40);
@@ -1027,7 +1036,7 @@ test("one node can be released without disturbing the arrangement", async ({ pag
 // is not one.
 test("a focused node can be moved with the arrow keys", async ({ page }) => {
   installMock(page, meshOf(12));
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await page.locator(".mesh-node").first().waitFor();
 
   const node = page.locator('[data-node-id="process:4"]');
@@ -1057,7 +1066,7 @@ test("a focused node can be moved with the arrow keys", async ({ page }) => {
 // it to do again.
 test("a saved view brings the whole setup back", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await page.locator(".mesh-node").first().waitFor();
   await expect(page.locator(".mesh-view-empty")).toBeVisible();
 
@@ -1097,7 +1106,7 @@ test("a saved view brings the whole setup back", async ({ page }) => {
 // screen.
 test("a view whose node is gone opens and says so", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await page.locator('[data-node-id="worker:c1"]').click();
   await page.fill("#mesh-view-name", "Mail worker");
@@ -1113,13 +1122,13 @@ test("a view whose node is gone opens and says so", async ({ page }) => {
   // It survived the reload — that is the whole point of saving it.
   await expect(page.locator(".mesh-view-open")).toHaveText("Mail worker");
   await page.locator(".mesh-view-open").click();
-  await expect(page.locator("#mesh-view-note")).toContainText("no longer in this landscape");
+  await expect(page.locator("#mesh-view-note")).toContainText("no longer in this starmap");
   await expect(page.locator(".mesh-panel-empty")).toBeVisible();
 });
 
 test("views can be renamed over and forgotten", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await page.locator(".mesh-node").first().waitFor();
 
   await page.fill("#mesh-search", "invoice");
@@ -1155,7 +1164,7 @@ test("views can be renamed over and forgotten", async ({ page }) => {
 // noticing.
 test("lists the findings beside the picture, worst first", async ({ page }) => {
   installMock(page, statusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   const findings = page.locator(".mesh-finding-go");
   await expect(findings).toHaveCount(3);
@@ -1185,7 +1194,7 @@ test("lists the findings beside the picture, worst first", async ({ page }) => {
 // Going *to* a finding is the whole reason the list is worth having.
 test("clicking a finding selects it and puts it on screen", async ({ page }) => {
   installMock(page, statusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).not.toHaveClass(/mesh-zoomed/);
 
   await page.locator('[data-finding="process:1"]').click();
@@ -1212,7 +1221,7 @@ test("clicking a finding selects it and puts it on screen", async ({ page }) => 
 // no status view.
 test("an empty findings list does not claim everything is fine", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await expect(page.locator(".mesh-finding-go")).toHaveCount(0);
   await expect(page.locator(".mesh-findings")).toContainText("not the same as everything being well");
@@ -1223,7 +1232,7 @@ test("an empty findings list does not claim everything is fine", async ({ page }
 // pointed at it, which is what a view somebody glances at needs.
 test("nodes with a finding beat, and the worse ones beat slower", async ({ page }) => {
   installMock(page, statusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toHaveClass(/mesh-beating/);
 
   const beat = (id) => page.locator(`[data-node-id="${id}"] .mesh-beat`).evaluate((el) => {
@@ -1262,7 +1271,7 @@ test("past its budget the beat stops rather than swamping the picture", async ({
     edges: [], restricted: 0, clustered: false,
   };
   installMock(page, many);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   // The rings are still there, and still marking the findings — they have simply
   // stopped competing for attention they no longer need to win.
@@ -1278,12 +1287,12 @@ test("past its budget the beat stops rather than swamping the picture", async ({
 // a claim about the three that are not there.
 test("a filtered findings list says it is filtered", async ({ page }) => {
   installMock(page, statusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-findings-head")).toContainText("3 node(s)");
   await expect(page.locator(".mesh-findings-head")).not.toContainText("filtered");
 
   await page.fill("#mesh-search", "dunning");
-  await expect(page.locator(".mesh-findings-head")).toContainText("in the filtered landscape");
+  await expect(page.locator(".mesh-findings-head")).toContainText("in the filtered starmap");
 });
 
 // Drilling into a node: the landscape reduced to it and what it touches.
@@ -1292,17 +1301,19 @@ test("a filtered findings list says it is filtered", async ({ page }) => {
 // came for and it is still sitting in four hundred circles of everything else.
 test("double-clicking a node goes into it", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-node")).toHaveCount(7);
-  await expect(page.locator("#mesh-drill-out")).toBeHidden();
+  await expect(page.locator("#mesh-drill-trail")).toBeHidden();
 
   await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
 
   // Invoice, and what it touches at the depth already on screen (2 hops): its
   // application, both processes, the restricted placeholder, the mail worker, and
   // the decision Dunning uses. Not the unresolved archive dependency's siblings.
-  await expect(page.locator("#mesh-drill-out")).toBeVisible();
-  await expect(page.locator("#mesh-drill-out")).toContainText("Inside Invoice");
+  await expect(page.locator("#mesh-drill-trail")).toBeVisible();
+  // Where you are, and the way back out — the whole starmap is the first station.
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Invoice");
+  await expect(page.locator('.mesh-crumb[data-crumb="-1"]')).toHaveText("All");
   await expect(page.locator('[data-node-id="process:1"]')).toHaveCount(1);
   await expect(page.locator('[data-node-id="worker:c1"]')).toHaveCount(1);
 
@@ -1320,7 +1331,7 @@ test("double-clicking a node goes into it", async ({ page }) => {
 // are the same gesture at two settings.
 test("the drilldown reaches as far as the depth says", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await page.selectOption("#mesh-depth", "1");
   await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
@@ -1337,21 +1348,21 @@ test("the drilldown reaches as far as the depth says", async ({ page }) => {
 // coming back must not mean finding the node again.
 test("leaving a drilldown restores the landscape with the node still marked", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await page.locator('[data-node-id="worker:c1"] .mesh-body').dblclick();
-  await expect(page.locator("#mesh-drill-out")).toBeVisible();
+  await expect(page.locator("#mesh-drill-trail")).toBeVisible();
 
-  await page.locator("#mesh-drill-out").click();
-  await expect(page.locator("#mesh-drill-out")).toBeHidden();
+  await page.locator('.mesh-crumb[data-crumb="-1"]').click();
+  await expect(page.locator("#mesh-drill-trail")).toBeHidden();
   await expect(page.locator(".mesh-node")).toHaveCount(7);
   await expect(page.locator(".mesh-panel-head")).toContainText("ops-mail");
 
   // Escape is the other way out, the one it is everywhere else.
   await page.locator('[data-node-id="process:2"] .mesh-body').dblclick();
-  await expect(page.locator("#mesh-drill-out")).toBeVisible();
+  await expect(page.locator("#mesh-drill-trail")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.locator("#mesh-drill-out")).toBeHidden();
+  await expect(page.locator("#mesh-drill-trail")).toBeHidden();
   await expect(page.locator(".mesh-node")).toHaveCount(7);
 });
 
@@ -1360,7 +1371,7 @@ test("leaving a drilldown restores the landscape with the node still marked", as
 // showing something nobody asked for and nobody can undo.
 test("a search leaves the drilldown rather than compounding with it", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await page.fill("#mesh-search", "invoice");
   await expect(page.locator("#mesh-count")).toContainText("match");
@@ -1373,7 +1384,7 @@ test("a search leaves the drilldown rather than compounding with it", async ({ p
 
   // And typing goes back to asking about the whole landscape.
   await page.fill("#mesh-search", "dunning");
-  await expect(page.locator("#mesh-drill-out")).toBeHidden();
+  await expect(page.locator("#mesh-drill-trail")).toBeHidden();
   await expect(page.locator("#mesh-count")).toContainText("match");
 });
 
@@ -1382,7 +1393,7 @@ test("a search leaves the drilldown rather than compounding with it", async ({ p
 // difference between a status view somebody glances at and one they act on.
 test("a finding says which task the work is parked on", async ({ page }) => {
   installMock(page, statusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   const finding = page.locator(".mesh-findings");
   await expect(finding).toContainText("charge-card");
@@ -1409,7 +1420,7 @@ test("a finding says which task the work is parked on", async ({ page }) => {
 // a process: an incident belongs to a token, and only a process has tokens.
 test("a finding with nowhere to point does not invent a place", async ({ page }) => {
   installMock(page, statusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await page.locator('[data-node-id="process:2"]').click();
   await expect(page.locator(".mesh-finding")).toContainText("This worker cannot serve work");
@@ -1424,7 +1435,7 @@ test("a finding with nowhere to point does not invent a place", async ({ page })
 // read as "less urgent", it reads as "not really a finding".
 test("an attention finding is drawn as one, not as a hint", async ({ page }) => {
   installMock(page, statusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   const badge = (id) => page.locator(`[data-node-id="${id}"] .mesh-badge-dot`)
     .evaluate((el) => {
@@ -1470,7 +1481,7 @@ test("an attention finding is drawn as one, not as a hint", async ({ page }) => 
 // size do not: a printout, a projector, and a reader who does not separate the hues.
 test("each kind is drawn with its own outline", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   const outline = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
     .evaluate((el) => el.tagName.toLowerCase());
@@ -1500,7 +1511,7 @@ test("each kind is drawn with its own outline", async ({ page }) => {
 // disagree with the picture it explains.
 test("the legend shows the shapes it is explaining", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await page.locator(".mesh-swatch").first().waitFor();
 
   const shapes = await page.evaluate(() => [...document.querySelectorAll(".mesh-swatch svg")]
@@ -1543,7 +1554,7 @@ const peeredGraph = {
 
 test("a peer that stopped answering is on the landscape", async ({ page }) => {
   installMock(page, peeredGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   // Its own outline, so it is told from everything else without reading a word.
   const outline = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
@@ -1585,7 +1596,7 @@ test("a peer that stopped answering is on the landscape", async ({ page }) => {
 // that would be a contract nobody could rely on again.
 test("a landscape with a peer stops claiming it cannot see", async ({ page }) => {
   installMock(page, peeredGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-legend")).toBeVisible();
   await expect(page.locator(".mesh-legend")).not.toContainText("Not watched here");
 
@@ -1619,7 +1630,7 @@ test("exports the landscape as a stamped, self-contained SVG", async ({ page }) 
       unavailable: [{ state: "stale", reason: "No deployment target is configured." }],
     },
   });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   // Zoomed in first, on purpose: a file cropped to the reader's window would drop
@@ -1632,7 +1643,7 @@ test("exports the landscape as a stamped, self-contained SVG", async ({ page }) 
     page.waitForEvent("download"),
     page.locator("#mesh-export-svg").click(),
   ]);
-  expect(download.suggestedFilename()).toMatch(/^atlas-landscape-\d{8}-\d{4}\.svg$/);
+  expect(download.suggestedFilename()).toMatch(/^atlas-starmap-\d{8}-\d{4}\.svg$/);
 
   const stream = await download.createReadStream();
   const svg = await new Promise((resolve, reject) => {
@@ -1654,7 +1665,7 @@ test("exports the landscape as a stamped, self-contained SVG", async ({ page }) 
   expect(canvasClasses).toContain("mesh-names-all");
 
   // The provenance §10 requires rendered into the artifact.
-  expect(svg).toContain("Atlas landscape — the whole landscape");
+  expect(svg).toContain("Atlas starmap — the whole starmap");
   expect(svg).toContain("Observed 20");
   expect(svg).toContain("Source ");
   expect(svg).toContain("7 node(s) drawn");
@@ -1674,7 +1685,7 @@ test("exports the landscape as a stamped, self-contained SVG", async ({ page }) 
 // a later reader can learn that is the file itself.
 test("an export of a filtered landscape says it is filtered", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   await page.locator("#mesh-search").fill("invoice");
@@ -1726,7 +1737,7 @@ const radiusGraph = {
 // twelve are already burning, and the panel now says which.
 test("the impact answer says how bad the radius is and names it", async ({ page }) => {
   installMock(page, radiusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
   await page.selectOption("#mesh-depth", "all");
   await page.locator('[data-node-id="worker:mail"]').click();
@@ -1754,7 +1765,7 @@ test("the impact answer says how bad the radius is and names it", async ({ page 
 // direct dependents are the ones whose owners get a call.
 test("the panel tells direct dependents from the ones further out", async ({ page }) => {
   installMock(page, radiusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
   await page.selectOption("#mesh-depth", "all");
   await page.locator('[data-node-id="decision:credit"]').click();
@@ -1770,7 +1781,7 @@ test("the panel tells direct dependents from the ones further out", async ({ pag
 // suspect the right node: which of these would hurt most.
 test("the landscape ranks its blast radii with nothing selected", async ({ page }) => {
   installMock(page, radiusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
   await page.selectOption("#mesh-depth", "all");
 
@@ -1805,7 +1816,7 @@ test("a landscape with no dependencies says there is nothing to rank", async ({ 
     restricted: 0, clustered: false,
     status: { ok: 2, attention: 0, critical: 0, unknown: 0, unavailable: [] },
   });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   const rank = page.locator(".mesh-rank");
@@ -1821,7 +1832,7 @@ test("a landscape with no dependencies says there is nothing to rank", async ({ 
 // corner of a mostly empty sheet, which is what "Fit" exists to prevent.
 test("Fit frames the arrangement, not the empty sheet around it", async ({ page }) => {
   installMock(page, meshOf(12));
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await page.locator(".mesh-node").first().waitFor();
 
   // Pin one node, which is all it takes for the layout to stop fitting.
@@ -1862,7 +1873,7 @@ test("Fit frames the arrangement, not the empty sheet around it", async ({ page 
 test("a node in the chrome's corner can still be picked up", async ({ page }) => {
   installMock(page);
   await page.setViewportSize({ width: 1280, height: 1000 });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await page.locator(".mesh-canvas").waitFor();
   await page.locator("#mesh-search").fill("invoice");
   await expect(page.locator("#mesh-count")).toContainText("match");
@@ -1905,7 +1916,7 @@ test("a node in the chrome's corner can still be picked up", async ({ page }) =>
 // otherwise become, which is a renderer toggle pretending to be a second notation.
 test("the landscape can be read in ArchiMate's vocabulary, loss and all", async ({ page }) => {
   installMock(page, radiusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   await page.selectOption("#mesh-notation", "archimate-3.2");
@@ -1947,7 +1958,7 @@ test("the landscape can be read in ArchiMate's vocabulary, loss and all", async 
 // projection is faithful to that rather than inventing shapes C4 does not have.
 test("C4 draws boxes and says which kind of box each one is", async ({ page }) => {
   installMock(page, radiusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
   await page.selectOption("#mesh-notation", "c4-projection");
 
@@ -1963,7 +1974,7 @@ test("C4 draws boxes and says which kind of box each one is", async ({ page }) =
 // a piece of architecture, so no notation should have a word for it.
 test("a kind the notation cannot express keeps its own shape", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   const shapeOf = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
@@ -1983,7 +1994,7 @@ test("a kind the notation cannot express keeps its own shape", async ({ page }) 
 // forbids, and the file is where nobody can ask.
 test("an exported projection says so, and says what it drops", async ({ page }) => {
   installMock(page, { ...radiusGraph, observedAt: 1_700_000_000 });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
   await page.selectOption("#mesh-notation", "c4-projection");
 
@@ -1998,7 +2009,7 @@ test("an exported projection says so, and says what it drops", async ({ page }) 
     stream.on("end", () => resolve(out));
   });
 
-  expect(svg).toContain("Atlas landscape · C4");
+  expect(svg).toContain("Atlas starmap · C4");
   expect(svg).toContain("Projected into C4 (projection) (mapping v1)");
   expect(svg).toContain("nothing here was modelled");
   expect(svg).toContain("External systems are absent");
@@ -2012,7 +2023,7 @@ test("an exported projection says so, and says what it drops", async ({ page }) 
 // the question: reopening a C4 landscape as an Atlas one answers a different one.
 test("a saved view remembers the notation it was read in", async ({ page }) => {
   installMock(page, radiusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   await page.selectOption("#mesh-notation", "archimate-3.2");
@@ -2038,24 +2049,24 @@ test("the landscape can be downloaded as an ArchiMate model", async ({ page }) =
   // it is the server's answer rather than the picture's.
   await page.route("**/api/v1/panorama/mesh/archimate", (route) => route.fulfill({
     contentType: "application/xml",
-    headers: { "content-disposition": 'attachment; filename="atlas-landscape-20260903.xml"' },
-    body: '<?xml version="1.0"?><model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" identifier="id-atlas-landscape"><name>Atlas landscape</name></model>',
+    headers: { "content-disposition": 'attachment; filename="atlas-starmap-20260903.xml"' },
+    body: '<?xml version="1.0"?><model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" identifier="id-atlas-starmap"><name>Atlas starmap</name></model>',
   }));
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   const [download] = await Promise.all([
     page.waitForEvent("download"),
     page.locator("#mesh-export-archimate").click(),
   ]);
-  expect(download.suggestedFilename()).toMatch(/^atlas-landscape.*\.xml$/);
+  expect(download.suggestedFilename()).toMatch(/^atlas-starmap.*\.xml$/);
 });
 
 // The picker offers what the server says it can draw. A vocabulary the browser
 // invented would be one the exported document knows nothing about.
 test("the notations on offer are the ones the server serves", async ({ page }) => {
   installMock(page, radiusGraph);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   const offered = await page.locator("#mesh-notation option").evaluateAll(
@@ -2073,7 +2084,7 @@ test("a landscape draws even when the notations cannot be read", async ({ page }
     if (path === "/api/v1/panorama/notations") return route.fulfill({ status: 500, json: { error: "no" } });
     return route.fulfill({ json: [] });
   });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
 
   await expect(page.locator(".mesh-canvas")).toBeVisible();
   await expect(page.locator(".mesh-node")).toHaveCount(graph.nodes.length);
@@ -2088,7 +2099,7 @@ test("a landscape draws even when the notations cannot be read", async ({ page }
 // once the landscape is larger than a screenful.
 test("the arrow goes into the selected node, and says when there is nowhere to go", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   const arrow = page.locator("#mesh-drill-in");
@@ -2103,8 +2114,8 @@ test("the arrow goes into the selected node, and says when there is nowhere to g
 
   // The same place the double-click goes: the node and what it touches, with the
   // chip that says where you are standing.
-  await expect(page.locator("#mesh-drill-out")).toBeVisible();
-  await expect(page.locator("#mesh-drill-out")).toContainText("Invoice");
+  await expect(page.locator("#mesh-drill-trail")).toBeVisible();
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Invoice");
   // A drilldown counts what is within the reach on screen rather than what matched a
   // term, and the count says so — which is the sentence that moved to its own line.
   await expect(page.locator("#mesh-count")).toContainText("hop(s)");
@@ -2120,7 +2131,7 @@ test("the arrow goes into the selected node, and says when there is nowhere to g
 test("the header is one row of controls, with the count on its own line", async ({ page }) => {
   installMock(page);
   await page.setViewportSize({ width: 1400, height: 900 });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   const count = page.locator(".mesh-subhead #mesh-count");
@@ -2153,7 +2164,7 @@ test("the header is one row of controls, with the count on its own line", async 
 // of finding out from what.
 test("the key says what each line style means, and only for the ones drawn", async ({ page }) => {
   installMock(page);
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   const rules = page.locator(".mesh-rules");
@@ -2225,7 +2236,7 @@ function estate(apps = 6, procsPer = 4) {
 test("the landscape gets the whole window rather than the reading column", async ({ page }) => {
   installMock(page, estate());
   await page.setViewportSize({ width: 1400, height: 900 });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   const canvas = await page.locator(".mesh-canvas").boundingBox();
@@ -2247,7 +2258,7 @@ test("the landscape gets the whole window rather than the reading column", async
 test("a landscape of forty nodes keeps room between them", async ({ page }) => {
   installMock(page, estate());
   await page.setViewportSize({ width: 1400, height: 900 });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
   await expect(page.locator(".mesh-node")).toHaveCount(42);
 
@@ -2284,7 +2295,7 @@ test("a landscape of forty nodes keeps room between them", async ({ page }) => {
 test("an exported landscape stays inside its own band", async ({ page }) => {
   installMock(page, estate());
   await page.setViewportSize({ width: 1600, height: 950 });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   const [download] = await Promise.all([
@@ -2335,7 +2346,7 @@ test("an exported landscape stays inside its own band", async ({ page }) => {
 test("the key sits under the picture, and the zoom controls stay on it", async ({ page }) => {
   installMock(page, estate());
   await page.setViewportSize({ width: 1600, height: 950 });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   const box = async (sel) => await page.locator(sel).boundingBox();
@@ -2385,7 +2396,7 @@ const windowMesh = {
 async function openWindow(page) {
   installMock(page, windowMesh);
   await page.setViewportSize({ width: 1400, height: 900 });
-  await page.goto("/index.html#/panorama/landscape");
+  await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
   await page.locator('[data-node-id="process:p1"] .mesh-body').click();
   await page.locator('[data-node-id="process:p2"] .mesh-body').click({ modifiers: ["Control"] });
@@ -2457,4 +2468,215 @@ test("an exported window says which nodes it is about", async ({ page }) => {
   expect(svg).toContain("going down");
   // The rings survive into the file: they are what the sentence is about.
   expect(svg.match(/mesh-picked/g)?.length).toBeGreaterThanOrEqual(2);
+});
+
+// The view is called Starmap. The name is what a reader looks for in the nav and on
+// the page, and it has to be the same word in both.
+test("the view is called Starmap, in the nav and on the page", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await expect(page.locator("#mesh-root h1")).toHaveText("Starmap");
+  await expect(page.locator("#topnav a.active")).toHaveText("Starmap");
+});
+
+// Renaming a view renames its URL, and every bookmark, saved link and pasted URL
+// from before the rename is still a link to it. Rewritten rather than served under
+// two names — the same thing the Workers page does with its pre-ADR-0203 spelling.
+test("the view's previous URL still lands on it", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  // On the new URL, so a reader who bookmarks from here bookmarks the current name.
+  expect(new URL(page.url()).hash).toBe("#/panorama/starmap");
+  await expect(page.locator("#mesh-root h1")).toHaveText("Starmap");
+});
+
+// How much is running, on the picture (ADR-0083's summary columns, on the Starmap).
+// Off by default and asked for by name: it is a second number under every name, and
+// a structural picture that always carried it would be a status board with arrows.
+const runningMesh = {
+  nodes: [
+    { id: "application:a1", kind: "application", name: "Billing", provenance: "derived" },
+    { id: "process:1", kind: "process", name: "Invoice", provenance: "derived", application: "application:a1", processId: "invoice", version: 1, runtime: { running: 12, finished: 431, lastActivity: 0 } },
+    { id: "process:2", kind: "process", name: "Dunning", provenance: "derived", application: "application:a1", processId: "dunning", version: 1, runtime: { running: 0, finished: 7 } },
+    { id: "worker:c1", kind: "worker", name: "ops-mail", provenance: "derived", workerType: "mail" },
+  ],
+  edges: [
+    { from: "application:a1", to: "process:1", kind: "contains" },
+    { from: "application:a1", to: "process:2", kind: "contains" },
+    { from: "process:1", to: "worker:c1", kind: "uses" },
+  ],
+  restricted: 0,
+  clustered: false,
+};
+
+test("the count on the canvas is asked for, and only where there is one", async ({ page }) => {
+  installMock(page, runningMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  // Off by default: the structural picture is what this view is for.
+  await expect(page.locator(".mesh-runs")).toHaveCount(0);
+
+  await page.getByLabel("Instances").check();
+  // On the busy process, and on nothing else. An idle one carries no number — on a
+  // landscape of four hundred, "0 running" four hundred times hides the eleven
+  // numbers somebody turned this on to find.
+  await expect(page.locator(".mesh-runs")).toHaveCount(1);
+  await expect(page.locator('[data-node-id="process:1"] .mesh-runs')).toHaveText("12 running");
+  // And the legend says what the absence means, so it is not read as "not measured".
+  await expect(page.locator(".mesh-legend")).toContainText("carries no number");
+
+  await page.getByLabel("Instances").uncheck();
+  await expect(page.locator(".mesh-runs")).toHaveCount(0);
+});
+
+// The panel states the tally for whichever node is selected, whether or not the
+// canvas is carrying counts — including the zero the canvas has no room to give.
+test("the panel says what a process is running, the zero included", async ({ page }) => {
+  // The timestamp is minted here rather than where the fixture is declared: "4 min
+  // ago" is measured against the clock at render time, and a value fixed at module
+  // load drifts into "9 min ago" behind a long suite — which is a flake in the test
+  // rather than a fault in the view.
+  installMock(page, {
+    ...runningMesh,
+    nodes: runningMesh.nodes.map((n) => n.id !== "process:1" ? n
+      : { ...n, runtime: { ...n.runtime, lastActivity: Date.now() * 1e6 - 240e9 } }),
+  });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator('[data-node-id="process:1"] .mesh-body').click();
+  const panel = page.locator(".mesh-panel .mesh-runtime");
+  await expect(panel).toContainText("12 running");
+  await expect(panel).toContainText("431 finished");
+  await expect(panel).toContainText("last activity 4 min ago");
+
+  await page.locator('[data-node-id="process:2"] .mesh-body').click();
+  const idle = page.locator(".mesh-panel .mesh-runtime");
+  await expect(idle).toContainText("0 running");
+  await expect(idle).toContainText("7 finished");
+  // A lifetime total with no timestamp is a definition this build has no activity
+  // clock for. It says nothing about when, rather than "never started" — which
+  // beside seven finished instances is a contradiction the reader has to resolve.
+  await expect(idle).not.toContainText("never started");
+
+  // A worker has no instances at all — not zero of them — so it says nothing.
+  await page.locator('[data-node-id="worker:c1"] .mesh-body').click();
+  await expect(page.locator(".mesh-panel .mesh-runtime")).toHaveCount(0);
+});
+
+// The canvas has no edges. A node goes where the hand puts it — the world is a budget
+// for the layout to settle in, not a fence around the arrangement — and the fit
+// follows, so nothing dragged out of sight is lost.
+test("a node can be dragged past the edge of the world, and Fit brings it back", async ({ page }) => {
+  installMock(page);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const node = page.locator('[data-node-id="process:1"]');
+  const before = await node.evaluate((g) => g.getAttribute("transform"));
+
+  // Straight up and well past the top: the direction the clamp used to refuse.
+  const box = await node.boundingBox();
+  const canvas = await page.locator(".mesh-canvas").boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, canvas.y - 260, { steps: 10 });
+  await page.mouse.up();
+
+  const after = await node.evaluate((g) => g.getAttribute("transform"));
+  expect(after).not.toBe(before);
+  // Above the world's own top edge, which is where the clamp used to stop it.
+  const y = Number(after.match(/-?[\d.]+/g)[1]);
+  expect(y).toBeLessThan(0);
+
+  // And it is still findable: Fit frames the arrangement as it now is, so the node
+  // that was dragged out of the frame is inside the next one.
+  await page.locator("#mesh-zoom-fit").click();
+  const view = (await page.locator(".mesh-canvas").getAttribute("viewBox")).split(" ").map(Number);
+  expect(y).toBeGreaterThan(view[1]);
+  expect(y).toBeLessThan(view[1] + view[3]);
+});
+
+// Going into a node is repeatable: each one becomes the new centre, and the path is
+// kept so a reader can follow a dependency as far as it goes and still get back to
+// where they were two nodes ago.
+test("going into a node is repeatable, and the path is the way back", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator('[data-node-id="application:a1"] .mesh-body').dblclick();
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Billing");
+
+  // From inside Billing, into one of its processes: the picture recentres and the
+  // station is appended rather than replacing the one before it.
+  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Invoice");
+  await expect(page.locator("#mesh-drill-trail .mesh-crumb")).toHaveText(["All", "Billing", "Invoice"]);
+
+  // And on, from there. The depth is what bounds each picture; the trail is history.
+  await page.locator('[data-node-id="worker:c1"] .mesh-body').dblclick();
+  await expect(page.locator("#mesh-drill-trail .mesh-crumb"))
+    .toHaveText(["All", "Billing", "Invoice", "ops-mail"]);
+
+  // Escape steps back one station rather than throwing the walk away.
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Invoice");
+
+  // And any earlier station is one press away — following four deep and wanting the
+  // second one back is the ordinary case, not the exotic one.
+  await page.locator('.mesh-crumb[data-crumb="0"]').click();
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Billing");
+  await expect(page.locator("#mesh-drill-trail .mesh-crumb")).toHaveText(["All", "Billing"]);
+
+  await page.locator('.mesh-crumb[data-crumb="-1"]').click();
+  await expect(page.locator("#mesh-drill-trail")).toBeHidden();
+  await expect(page.locator(".mesh-node")).toHaveCount(7);
+});
+
+// A path that visited a node already on it truncates back to that node rather than
+// listing it twice: a trail that can contain the same station at two depths is a
+// trail nobody can read, and "back to where I was" would then be ambiguous.
+test("stepping into a node already on the path returns to it", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator('[data-node-id="application:a1"] .mesh-body').dblclick();
+  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+  await expect(page.locator("#mesh-drill-trail .mesh-crumb")).toHaveText(["All", "Billing", "Invoice"]);
+
+  await page.locator('[data-node-id="application:a1"] .mesh-body').dblclick();
+  await expect(page.locator("#mesh-drill-trail .mesh-crumb")).toHaveText(["All", "Billing"]);
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Billing");
+});
+
+// An exported picture cropped to one node, with no account of how that node was
+// arrived at, is a narrowing the reader cannot check (ADR-0211 §10).
+test("an export of a path says which way it came", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator('[data-node-id="application:a1"] .mesh-body').dblclick();
+  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#mesh-export-svg").click(),
+  ]);
+  const stream = await download.createReadStream();
+  const svg = await new Promise((resolve, reject) => {
+    let out = "";
+    stream.on("data", (chunk) => (out += chunk));
+    stream.on("end", () => resolve(out));
+    stream.on("error", reject);
+  });
+  expect(svg).toContain("drilled into Invoice");
+  expect(svg).toContain("via Billing");
 });
