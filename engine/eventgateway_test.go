@@ -1,10 +1,14 @@
 package engine_test
 
 import (
+	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/wal"
 )
 
 // eventGatewayProcess builds the request/timeout pattern: Start → event gateway "wait" that
@@ -228,5 +232,90 @@ func TestEventGatewayRecovers(t *testing.T) {
 	v := elementVisits(t, h2.store, cp.Key)
 	if v[replyEnd] != 1 || v[timeoutEnd] != 0 {
 		t.Errorf("visits reply=%d timeout=%d, want 1 and 0 (message won after recovery)", v[replyEnd], v[timeoutEnd])
+	}
+}
+
+// elementTerminations reads a definition's element-termination history into a map of
+// element index → tokens cancelled on it (ADR-draft-overlay-cancelled-tokens).
+func elementTerminations(t *testing.T, s *state.Store, defKey uint64) map[int32]int64 {
+	t.Helper()
+	out := map[int32]int64{}
+	if err := s.ElementTerminationHistory(defKey, 0, func(elementId int32, count int64) error {
+		out[elementId] += count
+		return nil
+	}); err != nil {
+		t.Fatalf("ElementTerminationHistory: %v", err)
+	}
+	return out
+}
+
+// TestEventGatewayTerminationsRecover pins the counter that tells a race's winner from
+// its loser. Both armed catches are *visited* — that is what makes the visit heatmap
+// alone unreadable on an event gateway, since every decided race leaves the identical
+// count on every branch — but only the loser is terminated. Replaying the log into an
+// empty store must rebuild the same split: the termination is derived from the
+// committed event alone, never re-decided (invariant I4).
+func TestEventGatewayTerminationsRecover(t *testing.T) {
+	dir := t.TempDir()
+	cp, replyEnd, timeoutEnd := eventGatewayProcess(t, 93)
+	clk := &fixedClock{t: 1_000}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clk)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 1: %v", err)
+	}
+	p1.PublishMessage("reply", "")
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 2: %v", err)
+	}
+
+	// The element indices the builder assigned: the catches are the gateway's targets,
+	// each the source of its branch's end event.
+	reply, timeout := int32(2), int32(3)
+	visits := elementVisits(t, h1.store, cp.Key)
+	if visits[reply] != 1 || visits[timeout] != 1 {
+		t.Fatalf("visits reply=%d timeout=%d, want 1 each — both branches were armed",
+			visits[reply], visits[timeout])
+	}
+	live := elementTerminations(t, h1.store, cp.Key)
+	if live[reply] != 0 || live[timeout] != 1 {
+		t.Fatalf("terminations reply=%d timeout=%d, want 0 and 1 (the timer branch lost)",
+			live[reply], live[timeout])
+	}
+	if live[replyEnd] != 0 || live[timeoutEnd] != 0 {
+		t.Errorf("an end event was terminated: %v", live)
+	}
+	h1.close(t)
+
+	// Replay the whole log into a fresh, empty store: the split must come back identical.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clk)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+	if replayed := elementTerminations(t, store2, cp.Key); !reflect.DeepEqual(replayed, live) {
+		t.Fatalf("replayed terminations = %v, want %v", replayed, live)
 	}
 }

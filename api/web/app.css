@@ -1120,8 +1120,16 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   stroke: var(--muted) !important; stroke-width: 2px !important;
   stroke-dasharray: 4 3 !important;
 }
-/* Each element carries up to two counts side by side: gray (tokens that have
-   passed through) on the left, green (tokens live here now) on the right. */
+/* A catch event armed by an event-based gateway: waiting, but not the place the wait
+   is counted — the race is one wait however many branches it has, and it is counted
+   once, on the gateway. Green like a live element because it is live, dashed because
+   the token here is a branch of a race and not a token that got this far on its own. */
+.djs-element.atlas-armed .djs-visual > :nth-child(1) {
+  stroke: var(--ok) !important; stroke-width: 2.5px !important;
+  stroke-dasharray: 5 4 !important;
+}
+/* Each element carries up to three counts side by side, reading past → present: gray
+   (completed here and moved on), amber (cancelled here), green (live here now). */
 .token-badges { display: inline-flex; gap: 3px; align-items: center; pointer-events: none; }
 .token-badge {
   background: var(--ok); color: #fff; border-radius: 999px;
@@ -1129,8 +1137,20 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   font: 700 12px/20px system-ui, sans-serif; text-align: center;
   box-shadow: 0 1px 4px rgba(0,0,0,0.35); pointer-events: none;
 }
-/* History badge: a token that has flowed through but is no longer here. */
+/* History badge: a token that completed here and flowed on. */
 .token-badge.history { background: var(--muted); }
+/* Cancelled badge: a token that arrived and was then terminated — a losing branch of an
+   event-based gateway, an activity a boundary event interrupted, a scope torn down. Amber,
+   not the incident red: nothing here is broken or waiting for an operator. */
+.token-badge.cancelled { background: var(--warn); }
+/* Armed badge: this branch of a deferred choice is waiting. Deliberately a word and not a
+   number — the number belongs to the gateway, and repeating it per branch is what made
+   two armed branches look like two events that had arrived equally often. */
+.token-badge.armed {
+  background: transparent; color: var(--ok);
+  border: 1px dashed var(--ok); box-shadow: none;
+  font-weight: 600; font-size: 11px; line-height: 18px;
+}
 /* An element whose token is parked behind an incident (ADR-0061) is drawn red over
    its live-token green, and carries a badge with the reason. Without it a stuck task
    is pixel-identical to one that is legitimately waiting, which is exactly how a

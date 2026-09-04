@@ -199,8 +199,15 @@ type runtimeElement struct {
 	ElementID string `json:"elementId"`
 	Type      string `json:"type"`
 	Tokens    int    `json:"tokens"`    // tokens sitting here now (live — drawn green)
-	Visits    int    `json:"visits"`    // tokens that have ever passed through (history — drawn gray)
+	Visits    int    `json:"visits"`    // tokens that have ever arrived here (history: completed + cancelled + live)
 	Incidents int    `json:"incidents"` // of those live tokens, how many are parked behind an incident (drawn red)
+	// Terminated is how many of the visits left cancelled rather than completed — a
+	// losing event-gateway branch, a scope torn down, an activity a boundary event
+	// interrupted. The gray "passed through" badge is visits − tokens − terminated, so
+	// a diagram can say which branch of a deferred choice actually won: both branches
+	// are armed and both are visited, and only this number differs
+	// (ADR-draft-overlay-cancelled-tokens).
+	Terminated int `json:"terminated"`
 }
 
 // runtimeIncident is one unresolved incident on the overlay: which element instance is
@@ -1282,33 +1289,54 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// scan runs one store read, keeping the first error so the reads after it
+		// become no-ops rather than masking it — the same short-circuit the nested
+		// form had, flat enough to append a counter to.
+		scan := func(fn func() error) {
+			if scanErr == nil {
+				scanErr = fn()
+			}
+		}
+
 		if instanceFilter == 0 {
 			// Aggregate over the whole definition: read the maintained per-element
 			// and per-definition counters (ADR-0080). This is O(elements), never a
 			// scan over every instance, so the view stays responsive — and the run
-			// loop unblocked — at hundreds of thousands of instances. The reads nest
-			// so a failure short-circuits to the single error check below.
-			if scanErr = s.store.ElementLiveTokens(key, func(elementId int32, count int64) error {
-				if count == 0 {
+			// loop unblocked — at hundreds of thousands of instances.
+			scan(func() error {
+				return s.store.ElementLiveTokens(key, func(elementId int32, count int64) error {
+					if count == 0 {
+						return nil
+					}
+					if e := get(elementId); e != nil {
+						e.Tokens += int(count)
+						resp.Tokens += int(count)
+					}
 					return nil
-				}
-				if e := get(elementId); e != nil {
-					e.Tokens += int(count)
-					resp.Tokens += int(count)
-				}
-				return nil
-			}); scanErr == nil {
-				if scanErr = s.store.ElementVisitTotals(key, func(elementId int32, count int64) error {
+				})
+			})
+			scan(func() error {
+				return s.store.ElementVisitTotals(key, func(elementId int32, count int64) error {
 					if e := get(elementId); e != nil {
 						e.Visits += int(count)
 					}
 					return nil
-				}); scanErr == nil {
-					if resp.Instances, scanErr = s.store.DefInstanceCount(key); scanErr == nil {
-						scanErr = s.collectDefIncidents(key, addIncident, &resp)
+				})
+			})
+			scan(func() error {
+				return s.store.ElementTerminationTotals(key, func(elementId int32, count int64) error {
+					if e := get(elementId); e != nil {
+						e.Terminated += int(count)
 					}
-				}
-			}
+					return nil
+				})
+			})
+			scan(func() error {
+				n, err := s.store.DefInstanceCount(key)
+				resp.Instances = n
+				return err
+			})
+			scan(func() error { return s.collectDefIncidents(key, addIncident, &resp) })
 		} else {
 			// Isolating one instance on the diagram (a deliberate single-instance
 			// action, not the default view). The elByProc index lists exactly this
@@ -1316,49 +1344,63 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			// holds rather than every token in the engine — the follow-up ADR-0080
 			// left open. The definition check stays: an instance key from another
 			// definition must draw nothing on this diagram.
-			if scanErr = s.store.ElementInstancesOfProcess(instanceFilter, func(elKey uint64) error {
-				v, ok, err := s.store.GetElementInstance(elKey)
-				if err != nil || !ok {
-					return err
-				}
-				if v.ProcessDefKey != key {
-					return nil
-				}
-				if e := get(v.ElementId); e != nil {
-					e.Tokens++
-					resp.Tokens++
-				}
-				// One point lookup per token this instance holds: an element instance is
-				// where an incident hangs (ADR-0061), so the walk that draws the tokens
-				// also finds every reason one of them is not moving.
-				if len(resp.Incidents) < maxRuntimeIncidents {
-					inc, err := s.store.GetIncident(elKey)
-					if err != nil {
+			scan(func() error {
+				return s.store.ElementInstancesOfProcess(instanceFilter, func(elKey uint64) error {
+					v, ok, err := s.store.GetElementInstance(elKey)
+					if err != nil || !ok {
 						return err
 					}
-					if inc != nil && addIncident(elKey, inc) {
-						resp.IncidentsTruncated = true
+					if v.ProcessDefKey != key {
+						return nil
 					}
-				}
-				return nil
-			}); scanErr == nil {
-				if scanErr = s.store.ElementVisitHistory(key, instanceFilter, func(elementId int32, count int64) error {
+					if e := get(v.ElementId); e != nil {
+						e.Tokens++
+						resp.Tokens++
+					}
+					// One point lookup per token this instance holds: an element instance is
+					// where an incident hangs (ADR-0061), so the walk that draws the tokens
+					// also finds every reason one of them is not moving.
+					if len(resp.Incidents) < maxRuntimeIncidents {
+						inc, err := s.store.GetIncident(elKey)
+						if err != nil {
+							return err
+						}
+						if inc != nil && addIncident(elKey, inc) {
+							resp.IncidentsTruncated = true
+						}
+					}
+					return nil
+				})
+			})
+			scan(func() error {
+				return s.store.ElementVisitHistory(key, instanceFilter, func(elementId int32, count int64) error {
 					if e := get(elementId); e != nil {
 						e.Visits += int(count)
 					}
 					return nil
-				}); scanErr == nil {
-					// Filtered to one instance: ask for that instance, do not walk
-					// the family looking for it (ADR-0080's rule, applied to the one
-					// scan its own view had left).
-					pi, ok, err := s.store.ActiveProcessInstance(instanceFilter)
-					if err != nil {
-						scanErr = err
-					} else if ok && pi.ProcessDefKey == key {
-						resp.Instances++
+				})
+			})
+			scan(func() error {
+				return s.store.ElementTerminationHistory(key, instanceFilter, func(elementId int32, count int64) error {
+					if e := get(elementId); e != nil {
+						e.Terminated += int(count)
 					}
+					return nil
+				})
+			})
+			scan(func() error {
+				// Filtered to one instance: ask for that instance, do not walk
+				// the family looking for it (ADR-0080's rule, applied to the one
+				// scan its own view had left).
+				pi, ok, err := s.store.ActiveProcessInstance(instanceFilter)
+				if err != nil {
+					return err
 				}
-			}
+				if ok && pi.ProcessDefKey == key {
+					resp.Instances++
+				}
+				return nil
+			})
 		}
 		if scanErr != nil {
 			return
@@ -1456,6 +1498,17 @@ func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Reque
 				return s.store.ElementVisitHistory(pd.Key, 0, func(elementId int32, count int64) error {
 					if e := get(elementId); e != nil {
 						e.Visits += int(count)
+					}
+					return nil
+				})
+			})
+			scan(func() error {
+				// The cancelled half of the same history, from the same per-instance
+				// family, so a pool's merged counts stay consistent with each other
+				// (ADR-draft-overlay-cancelled-tokens).
+				return s.store.ElementTerminationHistory(pd.Key, 0, func(elementId int32, count int64) error {
+					if e := get(elementId); e != nil {
+						e.Terminated += int(count)
 					}
 					return nil
 				})

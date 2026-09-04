@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
@@ -357,5 +358,107 @@ func TestProcessRuntimeReportsFinishedCount(t *testing.T) {
 	}
 	if filtered.Finished != 1 {
 		t.Errorf("filtered runtime finished = %d, want 1", filtered.Finished)
+	}
+}
+
+// eventGatewayBPMN races a message catch against a timer catch behind an event-based
+// gateway (ADR-0110): both branches are armed at once, the first event wins, the other
+// is cancelled. It is the model the "passed through" count reads wrong without a
+// termination counter of its own.
+const eventGatewayBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <message id="Msg_go" name="go"/>
+  <process id="race" isExecutable="true">
+    <startEvent id="start"/>
+    <eventBasedGateway id="gw"/>
+    <intermediateCatchEvent id="reply"><messageEventDefinition messageRef="Msg_go"/></intermediateCatchEvent>
+    <intermediateCatchEvent id="timeout"><timerEventDefinition><timeDuration>PT30S</timeDuration></timerEventDefinition></intermediateCatchEvent>
+    <endEvent id="end_reply"/>
+    <endEvent id="end_timeout"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="gw"/>
+    <sequenceFlow id="f2" sourceRef="gw" targetRef="reply"/>
+    <sequenceFlow id="f3" sourceRef="gw" targetRef="timeout"/>
+    <sequenceFlow id="f4" sourceRef="reply" targetRef="end_reply"/>
+    <sequenceFlow id="f5" sourceRef="timeout" targetRef="end_timeout"/>
+  </process>
+</definitions>`
+
+// runtimeByElement reads the runtime overlay (optionally isolated to one instance) and
+// indexes its elements by BPMN id, which is how every assertion below reads it.
+func runtimeByElement(t *testing.T, ts *httptest.Server, query string) map[string]struct{ Tokens, Visits, Terminated int } {
+	t.Helper()
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/processes/1/runtime"+query, "", "")
+	if code != http.StatusOK {
+		t.Fatalf("runtime%s: %d %s", query, code, body)
+	}
+	var rt struct {
+		Elements []struct {
+			ElementID  string `json:"elementId"`
+			Tokens     int    `json:"tokens"`
+			Visits     int    `json:"visits"`
+			Terminated int    `json:"terminated"`
+		} `json:"elements"`
+	}
+	if err := json.Unmarshal(body, &rt); err != nil {
+		t.Fatalf("decode runtime: %v (%s)", err, body)
+	}
+	out := map[string]struct{ Tokens, Visits, Terminated int }{}
+	for _, e := range rt.Elements {
+		out[e.ElementID] = struct{ Tokens, Visits, Terminated int }{e.Tokens, e.Visits, e.Terminated}
+	}
+	return out
+}
+
+// TestRuntimeReportsCancelledTokens: the overlay must be able to say which branch of a
+// deferred choice actually won. Both catches are visited and both leave, so visits and
+// live tokens alone are identical on the two branches whatever happened; the winner and
+// the cancelled loser differ only in the termination count. Asserted on the aggregate
+// read and, because it is a separate code path, on the single-instance one too.
+func TestRuntimeReportsCancelledTokens(t *testing.T) {
+	ts := newTestServer(t)
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", eventGatewayBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, body)
+	}
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/processes/1/instances", "{}", "application/json"); code != http.StatusOK {
+		t.Fatalf("create instance: %d %s", code, body)
+	}
+	instance := onlyInstanceKey(t, ts)
+
+	// Armed: one token on each branch, nothing cancelled yet — the state in which the
+	// two identical green counts are one race, not two.
+	armed := runtimeByElement(t, ts, "")
+	for _, id := range []string{"reply", "timeout"} {
+		if got := armed[id]; got.Tokens != 1 || got.Visits != 1 || got.Terminated != 0 {
+			t.Fatalf("armed %s = %+v, want 1 token, 1 visit, 0 terminated", id, got)
+		}
+	}
+	if got := armed["gw"]; got.Tokens != 0 || got.Visits != 1 {
+		t.Fatalf("armed gw = %+v, want 0 tokens and 1 visit (it completes into the waits)", got)
+	}
+
+	// The message wins; the timer branch is cancelled.
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/messages", `{"name":"go"}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("publish: %d %s", code, body)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		query string
+	}{
+		{"aggregate", ""},
+		{"single instance", fmt.Sprintf("?instance=%d", instance)},
+	} {
+		got := runtimeByElement(t, ts, tc.query)
+		if e := got["reply"]; e.Visits != 1 || e.Terminated != 0 {
+			t.Errorf("%s: winning branch reply = %+v, want 1 visit and 0 terminated", tc.name, e)
+		}
+		if e := got["timeout"]; e.Visits != 1 || e.Terminated != 1 {
+			t.Errorf("%s: losing branch timeout = %+v, want 1 visit and 1 terminated", tc.name, e)
+		}
+		if e := got["end_reply"]; e.Visits != 1 || e.Terminated != 0 {
+			t.Errorf("%s: end_reply = %+v, want 1 visit and 0 terminated", tc.name, e)
+		}
+		if e := got["end_timeout"]; e.Visits != 0 || e.Terminated != 0 {
+			t.Errorf("%s: end_timeout = %+v, want an untouched branch", tc.name, e)
+		}
 	}
 }
