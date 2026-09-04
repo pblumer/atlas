@@ -215,6 +215,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/processes/{key}/xml", s.handleProcessXML, apiOp{
 			summary: "Fetch a deployed process's BPMN XML", tag: "Processes", role: roleAny,
 			resp: xmlBody("BPMN 2.0 XML")}},
+		{"PUT", "/api/v1/processes/{key}/diagram", s.handleUpdateProcessDiagram, apiOp{
+			summary: "Save a deployed definition's diagram without redeploying it — the submitted model's diagram interchange replaces the stored one and nothing else about the definition changes: same key, same version, same compiled process, same running instances. The submitted model must be the deployed one (409 if its semantic content differs); a collaboration's pools are all updated together. Layout is presentation, so the adjusted picture is what every view of that definition draws from then on, finished instances included.", tag: "Processes", role: RoleModeler,
+			req: xmlBody("BPMN 2.0 XML: the deployed model with its diagram adjusted"),
+			resp: jsonBody("The key, the definitions updated, and when", schemaObj(map[string]any{
+				"key": tInteger(), "updated": tArray(), "diagramUpdatedAt": tInteger(),
+			}))}},
 		{"DELETE", "/api/v1/processes/{key}", s.handleDeleteProcess, apiOp{
 			summary: "Delete a deployment (must have no running instances)", tag: "Processes", role: RoleModeler,
 			status: http.StatusNoContent}},

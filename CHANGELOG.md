@@ -35,6 +35,47 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A deployed diagram can be tidied up without redeploying it.** You only find out that
+  a picture is wrong once the process is running: a task's name disappears under a token
+  badge, a label lands on an edge, a row of shapes that read fine on the modelling canvas
+  is unreadable with incident markers on it. None of that is visible while authoring,
+  because none of those overlays are drawn until there are instances.
+
+  Until now the only answer was to redeploy, and redeploying is the wrong instrument for
+  it. It mints a version that differs from its predecessor in nothing the engine can see,
+  so the Deployments view fills up with "moved a label" and the versions that are real
+  changes stop being findable. It re-arms start timers, re-registers DMN models and
+  supersedes message and signal subscriptions — all correct, all unnecessary. And it does
+  not even fix the case you were looking at: **running instances keep the old picture**,
+  because they resolve their definition by key, until somebody migrates them — writing an
+  audit record and a timeline entry for a change that moved a box twenty pixels.
+
+  Open a deployment in the Modeler, move what needs moving, and pick **Save layout to
+  deployment** from the "…" menu. The definition keeps its key, its version, its compiled
+  process and its running instances; only the drawing changes, and it changes for every
+  view of that definition at once — including the instances already running, which is the
+  case a redeploy could not reach at all. A collaboration's pools are updated together, so
+  the halves of one picture cannot disagree about where they are.
+
+  Nothing but the picture *can* move, and that is a property of the mechanism rather than
+  a promise: the server keeps the stored model's bytes for everything outside the
+  `<BPMNDiagram>` block and takes only the diagram from what you send, so the model behind
+  the compiled process is bit-for-bit the one it already had — script bodies with
+  load-bearing indentation included. If the submitted model differs from the deployed one
+  in anything else, the save is refused with a message saying to deploy it instead, rather
+  than half-applied. Reformatting is forgiven: an editor round-trip renames prefixes,
+  reorders attributes and re-stamps the root, and none of that is a change to the process.
+
+  The adjustment is on the audit trail as `deployment.diagram_updated`, and the process
+  listing carries `diagramUpdatedAt` / `diagramUpdatedBy` — the stamp that says this
+  drawing is no longer the one that was deployed, and who to ask about it. The picture is
+  not a historical fact: what happened is in the event log, and a replay from March opened
+  after an adjustment shows the same steps with the same values, laid out better.
+
+  Also on the API as `PUT /api/v1/processes/{key}/diagram` and to an agent as
+  `atlas_save_process_diagram`
+  ([ADR-draft-adjust-a-deployed-diagram](docs/adr/draft-adjust-a-deployed-diagram.md)).
+
 - **The handbook plays.** Reading how to claim a task is not the same as being shown
   where to press, and the gap costs the most for exactly the people who have the least
   patience for a manual: somebody handed an Atlas login who wants to be useful this
@@ -159,6 +200,32 @@ _Changed_ / _Removed_ for each version.
   observing that they pass.
 
 ### Changed
+
+- **Runtime badges no longer sit on the names they are pointing at.** The Operations
+  views annotate a shape with badges — token counts, an incident marker, a link to a
+  waiting task, a decision to inspect — and each has its own corner, which is how an
+  operator learns to read them without reading them. The corners are unchanged. What was
+  wrong is that a corner meant *inside* the shape, and inside the shape is where the words
+  are.
+
+  Measured in a browser on an ordinary model, the old placement covered 69 of the 74
+  pixels of a line of a business rule task's name with the decision badge, and put the
+  token count on the captions of both the start event and the gateway. Two different
+  causes: a task's caption is drawn inside its box and a three-line name leaves about ten
+  pixels clear, which a 20px badge does not fit in; and an event's caption is not inside it
+  at all but centred underneath, four to five times wider than the circle — exactly where a
+  badge anchored to the bottom corner lands, because diagram-js's `bottom` and `right`
+  overlay keys position a badge's top-left corner rather than anchoring its far edge.
+
+  A badge now hangs outside the shape, on the side its caption is not: above and below for
+  a task, above only for an event, a gateway or a data object, whose name is drawn
+  underneath them. And it is the size of a count rather than of a sentence — a pill wide
+  enough for "⚠ 2 incidents" is 90px, which is most of a task and three times an event, so
+  two of them collide with each other wherever they are put. The incident marker, the task
+  link and the decision button are a glyph plus a count now; the words they used to spell
+  out are their tooltip and their accessible name, and the thing they name is listed in the
+  panel below the diagram either way
+  ([ADR-draft-runtime-badges-clear-of-labels](docs/adr/draft-runtime-badges-clear-of-labels.md)).
 
 - **A count on the diagram is grouped in thousands.** Reported from a running process:
   badges reading `25864`, `50002`, `23436`, `2428` around the shapes of one diagram.

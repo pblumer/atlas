@@ -38,6 +38,17 @@ type persistedDeployment struct {
 	// multi-model support carry it; loadDeployments reads it as a one-element list
 	// when DMNXMLs is absent. New deployments write DMNXMLs and leave this empty.
 	DMNXML string `json:"dmnXml,omitempty"`
+	// DiagramUpdatedAt / DiagramUpdatedBy stamp the last layout-only adjustment made
+	// to this deployment's diagram (ADR-draft-adjust-a-deployed-diagram): unix
+	// seconds, and the account that made it. Both absent on a deployment whose
+	// picture is still the one it was deployed with, which is why the omitempty
+	// matters — the common record is unchanged by this field existing.
+	//
+	// They are a stamp rather than a history: what the operator needs is "this is not
+	// the picture that was deployed, and here is who to ask". The audit line
+	// (deployment.diagram_updated) carries the rest.
+	DiagramUpdatedAt int64  `json:"diagramUpdatedAt,omitempty"`
+	DiagramUpdatedBy string `json:"diagramUpdatedBy,omitempty"`
 	// Inactive marks a definition an operator has deactivated: it stays deployed but
 	// does not auto-start new instances from its timer/message/signal start events
 	// (ADR-0119). Absent (false) in every record written before this field existed, so

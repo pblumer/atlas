@@ -22,9 +22,14 @@ test.describe("live view", () => {
     // The element the tokens are parked on is outlined and badged — the token markers
     // alone said nothing about the instances being blocked.
     await expect(page.locator('#canvas g[data-element-id="Task_pay"]')).toHaveClass(/atlas-incident/);
+    // The badge counts them; the word it used to spell out lives in its accessible
+    // name and its tooltip now, because a pill wide enough for the sentence covered
+    // the name of the task it was pointing at
+    // (ADR-draft-runtime-badges-clear-of-labels).
     const badge = page.locator(".incident-badge");
-    await expect(badge).toHaveText(/2 incidents/);
-    await expect(badge).toHaveAttribute("title", /payment gateway refused: 503/);
+    await expect(badge).toHaveText("⚠ 2");
+    await expect(badge).toHaveAttribute("aria-label", "2 incidents");
+    await expect(badge).toHaveAttribute("title", /2 incidents — payment gateway refused: 503/);
     // Only the stuck element: the start event ran cleanly.
     await expect(page.locator('#canvas g[data-element-id="Start_1"]')).not.toHaveClass(/atlas-incident/);
 
@@ -55,8 +60,10 @@ test.describe("live view", () => {
     // …and the view re-polled: one incident left, on the same element.
     await expect(page.locator("#var-panel .inc-row")).toHaveCount(1);
     await expect(page.locator("#incident-count")).toHaveText("1");
-    // A single incident on the element drops the count from the badge.
-    await expect(page.locator(".incident-badge")).toHaveText("⚠ incident");
+    // A single incident on the element drops the count from the badge: one is what a
+    // bare ⚠ already says.
+    await expect(page.locator(".incident-badge")).toHaveText("⚠");
+    await expect(page.locator(".incident-badge")).toHaveAttribute("aria-label", "1 incident");
     expect(page.__errors).toEqual([]);
   });
 
@@ -252,7 +259,8 @@ test.describe("instance replay", () => {
     await expect(page.locator('#history-list .ops-hrow[data-eik="1001"]')).toHaveClass(/inc/);
     await expect(page.locator('#history-list .ops-hrow[data-eik="1000"]')).not.toHaveClass(/inc/);
     // The element carries the same ⚠ badge the live view draws…
-    await expect(page.locator(".incident-badge")).toHaveText(/incident/);
+    await expect(page.locator(".incident-badge")).toHaveText("⚠");
+    await expect(page.locator(".incident-badge")).toHaveAttribute("aria-label", "1 incident");
     // …and keeps its incident outline wherever the playhead sits.
     await expect(page.locator('#canvas g[data-element-id="Task_pay"]')).toHaveClass(/atlas-incident/);
     await page.locator("#step-back").click();

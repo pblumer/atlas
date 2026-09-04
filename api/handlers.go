@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -36,6 +37,7 @@ import (
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 
@@ -107,6 +109,14 @@ type processResp struct {
 	// deployed and keeps its running instances, but does not self-start (ADR-0119).
 	// Always emitted so the UI can render the active/inactive control unambiguously.
 	Active bool `json:"active"`
+	// DiagramUpdatedAt / DiagramUpdatedBy stamp the last layout-only adjustment made
+	// to this definition's diagram (ADR-draft-adjust-a-deployed-diagram), absent when
+	// the picture is still the one it was deployed with. The UI says so where the
+	// diagram is shown: the drawing is no longer the deployed artefact, and a reader
+	// comparing it against a printed copy deserves to know that before they conclude
+	// somebody redeployed.
+	DiagramUpdatedAt int64  `json:"diagramUpdatedAt,omitempty"`
+	DiagramUpdatedBy string `json:"diagramUpdatedBy,omitempty"`
 }
 
 // collaborationParticipants reports how many <participant> pools a model's
@@ -991,6 +1001,8 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				Executable:       d.cp.IsExecutable(),
 				VersionTag:       d.cp.VersionTag(),
 				Active:           !d.inactive,
+				DiagramUpdatedAt: d.diagramUpdatedAt,
+				DiagramUpdatedBy: d.diagramUpdatedBy,
 			})
 		}
 	})
@@ -1018,6 +1030,157 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	_, _ = w.Write(layout.Ensure(raw))
+}
+
+// handleUpdateProcessDiagram replaces a deployed definition's diagram without
+// deploying anything (ADR-draft-adjust-a-deployed-diagram).
+//
+// A BPMN model's diagram interchange is presentation, not behaviour: the compiler
+// never reads it, and a CompiledProcess holds no coordinate. So a label that turns
+// out to sit under a runtime badge, a task in the wrong row, an edge routed
+// through a name — all of that is a picture problem, and answering it with a
+// redeploy mints a version that differs from its predecessor in nothing the engine
+// can see, leaves every running instance rendering the old picture until somebody
+// migrates it, and buries the versions that *are* real changes among the ones that
+// are not.
+//
+// This takes the submitted document's diagram and nothing else. The stored model's
+// bytes outside its <BPMNDiagram> come back untouched (layout.Transplant), so the
+// deployment keeps its key, its version, its CompiledProcess and its instances: no
+// recompile, no re-arm, no migration. A submitted document whose model differs is
+// refused with 409 rather than partially applied — the operator has edited more
+// than the picture, and saying so is the only honest answer.
+//
+// A collaboration deploys one document as several definitions (ADR-0023), so the
+// adjustment lands on all of them: the pools of one drawing must not disagree about
+// where they are. They are found the way poolSiblings finds them — an identical
+// body — narrowed to the deploy that produced this one, so an older version that
+// happens to carry the same bytes keeps the picture it was deployed with.
+func (s *Server) handleUpdateProcessDiagram(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	if len(body) == 0 {
+		httpapi.Error(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
+		return
+	}
+
+	// Read the stored document on the loop, transplant off it: parsing two models is
+	// pure CPU on a body that may be megabytes, and the loop is the one goroutine
+	// every command in flight is queued behind (I3).
+	var stored []byte
+	s.do(func() {
+		if d, ok := s.deployments[key]; ok {
+			stored = d.xml
+		}
+	})
+	if stored == nil {
+		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
+		return
+	}
+	merged, err := layout.Transplant(stored, body)
+	switch {
+	case errors.Is(err, layout.ErrDifferentModel):
+		httpapi.Error(w, http.StatusConflict,
+			"this diagram's model differs from the deployed one — only the layout can be saved to a deployment; deploy it as a new version to change the process itself")
+		return
+	case errors.Is(err, layout.ErrNoDiagram):
+		httpapi.Error(w, http.StatusBadRequest,
+			"the submitted model carries no diagram to save")
+		return
+	case err != nil:
+		httpapi.Error(w, http.StatusBadRequest, "read the submitted model: "+err.Error())
+		return
+	}
+
+	var (
+		found      bool
+		raced      bool
+		processID  string
+		updated    = []uint64{}
+		loadErr    error
+		persistErr error
+	)
+	at, by := time.Now().Unix(), principalID(r)
+	s.do(func() {
+		d, ok := s.deployments[key]
+		if !ok {
+			return
+		}
+		found, processID = true, d.ProcessID
+		// The transplant was computed against the document read a moment ago. If
+		// another writer has replaced it since, applying this would silently discard
+		// their change; the caller re-reads and re-saves instead.
+		if !bytes.Equal(d.xml, stored) {
+			raced = true
+			return
+		}
+		for _, k := range s.order {
+			sib := s.deployments[k]
+			// Identical body and the same deploy: the definitions this one drawing was
+			// deployed as. DeployedAt is stamped once per deploy call, so it separates
+			// two deploys of the same bytes — different versions, each keeping the
+			// picture it went out with.
+			if sib.DeployedAt != d.DeployedAt || !bytes.Equal(sib.xml, stored) {
+				continue
+			}
+			// Durable before visible (I2), per record: the display copy is swapped only
+			// after its own record is on disk, so a persist that fails halfway leaves
+			// the store and the registry agreeing on what happened.
+			rec, ok, err := s.deploys.load(sib.Key)
+			if err != nil {
+				loadErr = err
+				return
+			}
+			if !ok {
+				// The registry and the sidecar have diverged (should not happen). Skip a
+				// sibling rather than write a record this server invented; if it is the
+				// definition that was addressed, there is nothing to save onto and the
+				// answer is the same one a missing key gets.
+				if sib.Key == key {
+					found = false
+					return
+				}
+				continue
+			}
+			rec.XML = string(merged)
+			rec.DiagramUpdatedAt, rec.DiagramUpdatedBy = at, by
+			if err := s.deploys.Save(rec); err != nil {
+				persistErr = err
+				return
+			}
+			sib.xml = merged
+			sib.diagramUpdatedAt, sib.diagramUpdatedBy = at, by
+			updated = append(updated, sib.Key)
+		}
+	})
+	switch {
+	case !found:
+		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
+	case raced:
+		httpapi.Error(w, http.StatusConflict,
+			"this deployment's diagram changed while you were editing it — reopen it and save again")
+	case loadErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "read deployment: "+loadErr.Error())
+	case persistErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+	default:
+		audit(r, logging.DeploymentDiagramUpdated,
+			"a deployed definition's diagram was adjusted; the process itself is unchanged",
+			slog.Uint64("deploymentKey", key),
+			slog.String("processId", processID),
+			slog.Int("definitionsUpdated", len(updated)))
+		httpapi.JSON(w, http.StatusOK, map[string]any{
+			"key": key, "updated": updated, "diagramUpdatedAt": at,
+		})
+	}
 }
 
 // handleLayout regenerates a posted model's diagram layout: it discards whatever

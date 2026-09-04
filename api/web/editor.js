@@ -540,6 +540,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
             <button id="sim-toggle" type="button" aria-pressed="false" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough"><span class="mi-icon">&#9654;</span>Token simulation</button>
             <div class="sep"></div>
             <button id="autolayout" type="button" title="Re-flow the diagram into a clean left-to-right layout (F8)"><span class="mi-icon">&#8649;</span>Auto-layout</button>
+            <button id="savelayout" type="button" hidden title="Save this layout onto the deployed definition — the picture changes, the process does not: same key, same version, same running instances"><span class="mi-icon">&#128190;</span>Save layout to deployment</button>
             <button id="export" type="button" title="Download this diagram as BPMN XML"><span class="mi-icon">&#8595;</span>Export XML</button>
             <button id="docexport" type="button" title="Publish this process as a structured PDF — the diagram plus every element's documentation and notes — as a numbered version you can share (ADR-0143)"><span class="mi-icon">&#128196;</span>Documentation</button>
           </div>
@@ -697,7 +698,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     playground.setActive(activeTab(root) === "playground");
   });
   wireBarMenu(root);
-  const { saveDraft } = wireActions(root, modeler, api, toast, projectId, identity);
+  const { saveDraft } = wireActions(root, modeler, api, toast, projectId, identity, key);
   // A call activity's "+" is a door: double-clicking it (or the panel's Open button)
   // leaves this diagram for the one it calls, so the drill-down owns the save that
   // has to happen first — hence the saveDraft it is handed (ADR-0076).
@@ -7594,7 +7595,10 @@ function wireDeployJSONEditors(container) {
   }
 }
 
-function wireActions(root, modeler, api, toast, projectId, identity) {
+// deploymentKey is the definition this editor was opened on, or null for a draft
+// or a new diagram. Only the layout-save action needs it: it is the one thing here
+// that writes back to something already deployed.
+function wireActions(root, modeler, api, toast, projectId, identity, deploymentKey) {
   // Save persists the diagram as a draft (raw XML, no compile), keyed by process
   // id, so incomplete work survives and can be reopened from the Modeler home. A
   // projectId (set when the editor was opened from a project's "Create new") files
@@ -7698,6 +7702,45 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
     if (!layoutBtn.disabled) layoutBtn.click();
   };
   document.addEventListener("keydown", onLayoutKey, true);
+
+  // Save layout to deployment (ADR-draft-adjust-a-deployed-diagram): the diagram on
+  // screen replaces the one the deployed definition carries, and nothing else about
+  // that definition changes. It is the answer to the thing you only see in
+  // operations — a label under a token badge, a task in the wrong row — where the
+  // alternative is a redeploy that mints a version differing from its predecessor in
+  // nothing the engine can see, and leaves every running instance drawing the old
+  // picture until somebody migrates it.
+  //
+  // Only offered when a deployment is what is open: a draft has nothing to save onto,
+  // and the server would have no key to address. It lives in the menu rather than on
+  // the bar because the bar's buttons say what this editor does, not what happens to
+  // be loaded in it (ADR-0229) — and because this is the rare act, not the daily one.
+  //
+  // The server is the authority on whether the model still matches: it refuses a
+  // document whose semantic half differs, which is exactly the case where somebody
+  // opened a deployment meaning to nudge a label and edited the process instead. That
+  // refusal is reported as it comes back rather than pre-empted here, because a
+  // client-side guess about what counts as a semantic change is a guess that can be
+  // wrong in the permissive direction.
+  const layoutSaveBtn = root.querySelector("#savelayout");
+  layoutSaveBtn.hidden = deploymentKey == null;
+  layoutSaveBtn.addEventListener("click", async () => {
+    layoutSaveBtn.disabled = true;
+    try {
+      const { xml } = await modeler.saveXML({ format: true });
+      const saved = await api("PUT", `/api/v1/processes/${deploymentKey}/diagram`, xml, true);
+      const n = (saved && saved.updated && saved.updated.length) || 1;
+      toast(n > 1
+        ? `Layout saved to all ${n} pools of this deployment`
+        : "Layout saved to the deployment", "ok");
+    } catch (e) {
+      toast(e.status === 409
+        ? e.message
+        : "saving the layout failed: " + e.message, "err");
+    } finally {
+      layoutSaveBtn.disabled = false;
+    }
+  });
 
   root.querySelector("#export").addEventListener("click", async () => {
     try {
@@ -8188,6 +8231,61 @@ function eventGatewayRaces(registry) {
   return members;
 }
 
+// --- Where a runtime badge goes (ADR-draft-runtime-badges-clear-of-labels) ---
+//
+// The Operations views annotate a shape with up to four badges, and which corner a
+// badge takes is its identity: an operator learns "the red one is bottom-left" and
+// stops reading them. So the corners are fixed here rather than chosen per call,
+// and this is the only place that decides what a corner means geometrically.
+//
+// What changed is that a corner is now *outside* the shape. Badges used to sit in
+// the four inner corners, which put them on top of the one thing the diagram is
+// made of: the words. Measured on an ordinary model (e2e/badge-labels.spec.mjs), a
+// task caption of three lines leaves about ten pixels clear at the top of a 80px
+// box and a 20px badge does not fit in it — so the badge covered a line of the
+// name. An event is worse: its caption is not inside it at all but centred
+// underneath, five times wider than the 36px circle, exactly where a badge anchored
+// to the shape's bottom corner lands.
+//
+// Hence the rule, in one sentence: a badge sits outside the shape, on the side its
+// caption is not. For a task that is above and below; for an event, a gateway or a
+// data object — whose caption is a separate label element under the shape — every
+// badge goes above. The corners themselves never move.
+//
+// The one case this cannot resolve is a caption-below shape carrying both a top and
+// a bottom badge on the same side, which would fold onto each other. It does not
+// arise: the top corners belong to the decision badge and the open-task link, and
+// both are badges of an activity, whose caption is inside it.
+const BADGE_SIZE = 20;  // .token-badge / .incident-badge / .task-open / .decision-badge
+const BADGE_GAP = 4;    // clear air between the badge and the shape's border
+
+// badgeSpot returns the bpmn-js overlay position for one of a shape's badge
+// corners: "tl", "tr", "bl" or "br". element is the diagram element the badge
+// annotates — its own label is what decides which sides are free.
+//
+// Read the arithmetic against what diagram-js actually does with these four keys,
+// because it is not what their names suggest: all four place the badge's *top-left*
+// corner, and `right`/`bottom` simply measure that corner from the element's far
+// edge. So `{bottom: 4}` does not tuck a badge inside the bottom border — it puts
+// its top 4px above that border and lets the other 16px hang below, which is how a
+// badge nominally in the "bottom-right corner" came to be drawn under the shape, in
+// an event's caption. The offsets below are therefore derived from the edge each
+// badge is meant to end up beside.
+function badgeSpot(element, corner) {
+  // An external label (events, gateways, data objects) is a diagram element of its
+  // own, hanging under the shape. When one is rendered, the space below belongs to
+  // the caption and no badge may go there.
+  const captionBelow = !!(element && element.label && element.label.width);
+  const pos = corner[0] === "t" || captionBelow
+    // Above: the badge's bottom lands one gap over the top border.
+    ? { top: -(BADGE_SIZE + BADGE_GAP) }
+    // Below: its top lands one gap under the bottom border.
+    : { bottom: -BADGE_GAP };
+  if (corner[1] === "l") pos.left = -BADGE_GAP;             // left edge, one gap out
+  else pos.right = BADGE_SIZE - BADGE_GAP;                  // right edge, one gap out
+  return pos;
+}
+
 // tokenBadgesHTML renders an element's counts: how many tokens completed here and moved
 // on (gray), how many were cancelled here (amber), and how many are live here now
 // (green). A visit is recorded on activation, so visits already counts the live and the
@@ -8232,11 +8330,22 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // so the version picker can offer them. One /processes call feeds both.
   let procName = `definition ${key}`;
   let versions = []; // [{key, version, name}], newest first
+  // The stamp on a diagram somebody has adjusted since it was deployed
+  // (ADR-draft-adjust-a-deployed-diagram). It rides the listing this already fetches,
+  // and it belongs here rather than only on the audit trail: this view is where a
+  // reader would otherwise compare the picture against a printed copy and conclude
+  // that the process was redeployed.
+  let layoutNote = "";
   try {
     const procs = await api("GET", "/api/v1/processes");
     const here = procs.find((x) => x.key === key);
     if (here) {
       procName = here.name || here.processId;
+      if (here.diagramUpdatedAt) {
+        const when = new Date(here.diagramUpdatedAt * 1000).toLocaleString();
+        layoutNote = `<span class="muted live-layout-note" title="Only the drawing was changed — the process, its version and its instances are the deployed ones${
+          here.diagramUpdatedBy ? `, adjusted by ${esc(here.diagramUpdatedBy)}` : ""}">layout adjusted ${esc(when)}</span>`;
+      }
       docTitle(`${procName} · Operations`);
       versions = procs
         .filter((x) => x.processId === here.processId)
@@ -8254,7 +8363,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     <div class="editor live">
       <div class="editor-bar">
         <a class="btn neutral" href="#/operations">&larr; Instances</a>
-        <span class="crumbs" style="margin-left:8px">Live &middot; <b>${esc(procName)}</b></span>
+        <span class="crumbs" style="margin-left:8px">Live &middot; <b>${esc(procName)}</b>${layoutNote}</span>
         <label class="bar-select"><span>Version</span>
           <select id="version-sel">${versionOptions}</select></label>
         <label class="bar-select"><span>Instance</span>
@@ -8886,7 +8995,8 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // they show the flow distribution even once every instance has finished — a
     // gray trail with green where tokens are still alive.
     for (const e of rt.elements) {
-      if (!registry.get(e.elementId)) continue;
+      const shape = registry.get(e.elementId);
+      if (!shape) continue;
       // The gateway carries its race's tokens even though the engine parked them on the
       // branches; an armed branch is drawn armed, and its count is the gateway's to show.
       const race = races.get(e.elementId);
@@ -8903,10 +9013,17 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       if (elIncidents.length) {
         canvas.addMarker(e.elementId, "atlas-incident");
         marked.push([e.elementId, "atlas-incident"]);
-        const label = elIncidents.length === 1 ? "incident" : `${fmtCount(elIncidents.length)} incidents`;
+        // The word "incident" is not on the badge: the shape is already outlined red,
+        // the panel below lists the fault and the tooltip carries its message, so the
+        // pill's job is to point at *which* shape — and a pill wide enough to spell it
+        // out is a pill that lands on the name of the thing it is pointing at.
+        // The count is grouped like every other count on a diagram (numfmt.js).
+        const many = elIncidents.length > 1 ? ` ${fmtCount(elIncidents.length)}` : "";
+        const what = elIncidents.length === 1 ? "1 incident" : `${fmtCount(elIncidents.length)} incidents`;
         overlays.add(e.elementId, "incident", {
-          position: { bottom: 4, left: 4 },
-          html: `<div class="incident-badge" title="${esc(elIncidents[0].message || "")}">&#9888; ${label}</div>`,
+          position: badgeSpot(shape, "bl"),
+          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${
+            elIncidents[0].message ? ` — ${esc(elIncidents[0].message)}` : ""}">&#9888;${many}</div>`,
         });
       }
       // An armed branch shows no live count of its own: the tokens on it are the
@@ -8916,7 +9033,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       // Its gray and amber counts stay: how often this branch won and lost is exactly
       // what the diagram could not say before.
       overlays.add(e.elementId, "tokens", {
-        position: { bottom: 4, right: 4 },
+        position: badgeSpot(shape, "br"),
         html: tokenBadgesHTML(e, { tokens, green: armed ? "" : null }),
       });
       // A user-task element with a waiting job gets a clickable "Open" badge that
@@ -8925,17 +9042,20 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       const ets = tasksByElement.get(e.elementId);
       if (ets && ets.length) {
         const href = ets.length === 1 ? `#/tasks/t/${ets[0].key}` : "#/tasks";
-        const label = ets.length === 1 ? "Open task" : `${ets.length} tasks`;
+        const many = ets.length > 1 ? ` ${fmtCount(ets.length)}` : "";
+        const what = ets.length === 1
+          ? "Open the waiting user task's form"
+          : `Open the ${fmtCount(ets.length)} waiting user tasks`;
         overlays.add(e.elementId, "open-task", {
-          position: { top: 4, right: 4 },
-          html: `<a class="task-open" href="${href}" title="Open the waiting user task's form">&#128203; ${label}</a>`,
+          position: badgeSpot(shape, "tr"),
+          html: `<a class="task-open" href="${href}" aria-label="${esc(what)}" title="${esc(what)}">&#128203;${many}</a>`,
         });
       }
       // A decided business rule task offers a decision-inspection badge.
       if (decidedEls.has(e.elementId)) {
         overlays.add(e.elementId, "decision", {
-          position: { top: 4, left: 4 },
-          html: `<button class="decision-badge${focusEl === e.elementId ? " on" : ""}" data-el="${esc(e.elementId)}" title="Inspect this decision — inputs, outputs, and how it was decided">&#9878; decision</button>`,
+          position: badgeSpot(shape, "tl"),
+          html: `<button class="decision-badge${focusEl === e.elementId ? " on" : ""}" data-el="${esc(e.elementId)}" aria-label="Inspect this decision" title="Inspect this decision — inputs, outputs, and how it was decided">&#9878;</button>`,
         });
       }
     }
@@ -10040,7 +10160,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     }
     const ids = new Set([...Object.keys(visits), ...Object.keys(looping)]);
     for (const elId of ids) {
-      if (!registry.get(elId)) continue;
+      const shape = registry.get(elId);
+      if (!shape) continue;
       const isLoop = looping[elId] > 0;
       const count = isLoop ? (rounds[elId] || 0) : visits[elId];
       if (!isLoop && !count) continue;
@@ -10049,7 +10170,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           (looping[elId] > 1 ? ` · the activity was entered ${fmtCount(looping[elId])} times` : "")
         : `${fmtCount(count)} ${count === 1 ? "execution" : "executions"}`;
       try {
-        badges.push(overlays.add(elId, { position: { top: -12, right: 12 },
+        badges.push(overlays.add(elId, { position: badgeSpot(shape, "tr"),
           html: `<span class="ops-badge${isLoop ? " loop" : ""}" title="${esc(title)}">${
             isLoop ? `<span class="ops-badge-m" aria-hidden="true">\u21BB</span>` : ""}<span>${fmtCount(count)}</span></span>` }));
       } catch { /* element not in this diagram */ }
@@ -10100,13 +10221,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   function drawIncidentBadges() {
     for (const id of incBadgeIds.splice(0)) { try { overlays.remove(id); } catch { /* gone */ } }
     for (const elId of incidentElementIds()) {
-      if (!registry.get(elId)) continue;
+      const shape = registry.get(elId);
+      if (!shape) continue;
       const list = incidents.filter((i) => i.elementId === elId);
-      const label = list.length === 1 ? "incident" : `${fmtCount(list.length)} incidents`;
+      const many = list.length > 1 ? ` ${fmtCount(list.length)}` : "";
+      const what = list.length === 1 ? "1 incident" : `${fmtCount(list.length)} incidents`;
       try {
         incBadgeIds.push(overlays.add(elId, "atlas-incident", {
-          position: { bottom: 4, left: 4 },
-          html: `<div class="incident-badge" title="${esc(list[0].message || "")}">&#9888; ${label}</div>`,
+          position: badgeSpot(shape, "bl"),
+          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${
+            list[0].message ? ` — ${esc(list[0].message)}` : ""}">&#9888;${many}</div>`,
         }));
       } catch { /* element not in this diagram */ }
     }
@@ -10165,10 +10289,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     for (const s of steps) {
       if (!s.childInstanceKey || seen.has(s.elementId)) continue;
       seen.add(s.elementId);
-      if (!registry.get(s.elementId)) continue; // element not on this diagram
+      const shape = registry.get(s.elementId);
+      if (!shape) continue; // element not on this diagram
       try {
         caLinkIds.push(overlays.add(s.elementId, "atlas-callchild", {
-          position: { bottom: 3, right: 3 },
+          position: badgeSpot(shape, "br"),
           // Hold its size against the zoom: a control that shrinks with the canvas is
           // back to being invisible on a diagram wide enough to need scrolling, which
           // is exactly the diagram that has call activities on it.

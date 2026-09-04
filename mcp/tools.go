@@ -104,6 +104,43 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_save_process_diagram",
+			Description: "Save an adjusted diagram onto a deployed definition without redeploying it: " +
+				"the submitted model's layout replaces the stored one, and nothing else about the " +
+				"definition changes — same key, same version, same compiled process, same running " +
+				"instances. Read the model with atlas_get_process_xml, move shapes, labels or edges, " +
+				"and send the whole document back. Refused with a conflict if anything but the layout " +
+				"differs from the deployed model; use atlas_deploy for that. A collaboration's pools " +
+				"are all updated together, and the adjusted picture is what every view of that " +
+				"definition draws from then on, finished instances included.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key": map[string]any{
+						"type":        "integer",
+						"description": "The process definition key whose diagram to replace.",
+					},
+					"xml": map[string]any{
+						"type":        "string",
+						"description": "The full BPMN 2.0 XML document: the deployed model with its diagram adjusted.",
+					},
+				},
+				"required": []any{"key", "xml"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				xml, err := argString(args, "xml")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.put("/api/v1/processes/"+strconv.FormatUint(key, 10)+"/diagram",
+					"application/xml", []byte(xml)))
+			},
+		},
+		{
 			Name: "atlas_process_runtime",
 			Description: "Get live runtime state for one process definition: how many instances are " +
 				"active and how many tokens sit on each BPMN element right now.",

@@ -300,7 +300,8 @@ atlas/
 │   ├── runloop/       The single-writer boundary every service reaches state through
 │   ├── httpapi/       Response envelope, client IP, request principal
 │   ├── token/         Opaque share tokens: minting and shape guard
-│   ├── layout/        BPMN diagram auto-layout (ADR-0124/0127)
+│   ├── layout/        BPMN diagram auto-layout, and transplanting an adjusted
+│   │                  diagram onto a deployed model (ADR-0124/0127)
 │   ├── collab/        Live collaborative modeling sessions (ADR-0140)
 │   ├── vault/         Encrypted secret store (ADR-0069/0070)
 │   ├── sidecar/       Store[T]: the durable one-file-per-record store behind every design-time store

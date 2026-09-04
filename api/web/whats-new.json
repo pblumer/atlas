@@ -20,6 +20,49 @@
       }
     },
     {
+      "id": "a-deployed-diagram-can-be-tidied-up-without-redeploying-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Fix a deployed diagram without redeploying it",
+        "de": "Ein deploytes Diagramm korrigieren, ohne neu zu deployen"
+      },
+      "summary": {
+        "en": "You usually notice that a diagram is hard to read once it is running — a task's name under a token count, a label on an edge. Until now the only fix was to deploy it again, which made a new version for a change nobody can see, and left the instances already running with the old picture. Now you open the deployment in the Modeler, move what needs moving, and pick \"Save layout to deployment\" from the … menu. The definition keeps its version and its running instances; only the drawing changes, everywhere at once. If you changed anything but the layout, the save is refused and tells you to deploy instead.",
+        "de": "Dass ein Diagramm schwer zu lesen ist, merkt man meist erst im Betrieb — der Name einer Aufgabe unter einem Token-Zähler, ein Label auf einer Kante. Bisher half nur erneutes Deployen: eine neue Version für eine Änderung, die niemand sieht, und die bereits laufenden Instanzen behielten trotzdem das alte Bild. Jetzt öffnen Sie das Deployment im Modeler, schieben zurecht und wählen im …-Menü «Save layout to deployment». Die Definition behält ihre Version und ihre laufenden Instanzen; nur die Zeichnung ändert sich, überall gleichzeitig. Wer versehentlich mehr als das Layout ändert, bekommt die Speicherung verweigert und den Hinweis, stattdessen zu deployen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations and pick the deployed process whose diagram you want to fix.",
+          "Open that deployment in the Modeler.",
+          "Move the shapes, labels or edges that sit badly — change nothing else.",
+          "Open the … menu and choose \"Save layout to deployment\"."
+        ],
+        "de": [
+          "Operations öffnen und den deployten Prozess wählen, dessen Diagramm stört.",
+          "Dieses Deployment im Modeler öffnen.",
+          "Formen, Labels oder Kanten zurechtschieben — sonst nichts ändern.",
+          "Im …-Menü «Save layout to deployment» wählen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "the-handbook-plays",
       "version": "Unreleased",
       "date": null,
@@ -108,6 +151,34 @@
           "de": "Panorama öffnen"
         },
         "route": "#/panorama/starmap"
+      }
+    },
+    {
+      "id": "runtime-badges-no-longer-sit-on-the-names-they-are-pointing-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Runtime badges keep off the names",
+        "de": "Laufzeit-Badges bleiben von den Namen weg"
+      },
+      "summary": {
+        "en": "On a running diagram each shape can carry badges: how many tokens are on it, whether it is stuck, a link to a waiting task, a decision to inspect. They used to sit in the corners inside the shape, which is where the name is — on a task with a long name the decision badge covered a whole line of it, and on an event the token count landed on the caption underneath. They now hang just outside the shape, on the side the name is not, and they are the size of a count instead of spelling out a word. Each one kept its corner, so they still read the same way; hover for the wording.",
+        "de": "Auf einem laufenden Diagramm trägt jede Form Badges: wie viele Tokens auf ihr liegen, ob sie klemmt, ein Link zur wartenden Aufgabe, eine Entscheidung zum Nachsehen. Sie saßen bisher in den Ecken *innerhalb* der Form — also dort, wo der Name steht: Bei einer Aufgabe mit langem Namen verdeckte das Entscheidungs-Badge eine ganze Zeile, bei einem Ereignis landete der Token-Zähler auf der Beschriftung darunter. Jetzt hängen sie knapp außerhalb der Form, auf der Seite, auf der der Name nicht steht, und sie sind so groß wie eine Zahl statt so breit wie ein Wort. Die Ecke jedes Badges ist geblieben, sie lesen sich also unverändert; den Wortlaut zeigt der Tooltip."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
       }
     },
     {
@@ -303,42 +374,6 @@
       "summary": {
         "en": "The Type of a data object in the Modeler is the link the whole information model turns on — it is what lets two processes agree that their order is the same kind of thing, and what a write to a member of it is checked against.",
         "de": "The Type of a data object in the Modeler is the link the whole information model turns on — it is what lets two processes agree that their order is the same kind of thing, and what a write to a member of it is checked against."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-data-object-s-value-opens-as-formatted-json",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A data object's value opens as formatted JSON.",
-        "de": "A data object's value opens as formatted JSON."
-      },
-      "summary": {
-        "en": "In an instance's Data tab, a structured value showed as {3 fields} and the whole of it was reachable only as a tooltip — unreadable past a few lines, impossible to scroll, select or copy from, and absent altogether on a touch device.",
-        "de": "In an instance's Data tab, a structured value showed as {3 fields} and the whole of it was reachable only as a tooltip — unreadable past a few lines, impossible to scroll, select or copy from, and absent altogether on a touch device."
-      },
-      "link": {
-        "label": "ADR-0053",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0053-first-class-data-objects.md"
-      }
-    },
-    {
-      "id": "the-class-diagram-s-properties-panel-is-the-modeler-s-panel",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The class diagram's properties panel is the Modeler's panel.",
-        "de": "The class diagram's properties panel is the Modeler's panel."
-      },
-      "summary": {
-        "en": "Selecting a class, a data store or a relationship under Data › Information model now gives you the same panel the BPMN Modeler does: a header naming what is selected — its kind in small type, its own name in bold, a type chip beside it — and collapsible property groups below, each with a chevron and a filled dot when it carries content.",
-        "de": "Selecting a class, a data store or a relationship under Data › Information model now gives you the same panel the BPMN Modeler does: a header naming what is selected — its kind in small type, its own name in bold, a type chip beside it — and collapsible property groups below, each with a chevron and a filled dot when it carries content."
       },
       "link": {
         "label": "Changelog",
