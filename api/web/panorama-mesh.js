@@ -675,11 +675,13 @@ function layout(nodes, edges, { width, height, iterations = 220, pinned, from, m
     const pin = pinned?.get(n.id);
     const was = from?.get(n.id);
     if (pin) {
-      // Clamped, because the world is sized from the graph and the frame's shape:
-      // a resize can make it smaller than it was when the pin was placed, and a pin
-      // outside the world would put the node somewhere the fitted view never shows.
-      n.x = Math.min(Math.max(pin.x, 0), width);
-      n.y = Math.min(Math.max(pin.y, 0), height);
+      // Wherever it was put, world or no world. The clamp that used to be here was
+      // the same argument place() made — a pin outside the world is somewhere the
+      // fitted view never shows — and it stopped holding when the fit began framing
+      // the content: a pin beyond the edge is inside the next Fit, and a resize that
+      // shrinks the world no longer drags an arrangement back through it.
+      n.x = pin.x;
+      n.y = pin.y;
       n.held = true;
     } else if (anchored && was) {
       n.x = was.x; n.y = was.y;
@@ -842,10 +844,13 @@ export function fitView(box, frame, reserve = { width: 0, height: 0 }) {
 }
 
 // ZOOM_RANGE bounds how far the viewer can push the frame, as multiples of the
-// fitted one. Out is capped because zooming out past the content only adds the empty
-// space the fit exists to remove; in is capped where a node fills the frame and
-// there is nothing further to see.
-const ZOOM_RANGE = { min: 1 / 24, max: 1.6 };
+// fitted one. In is capped where a node fills the frame and there is nothing further
+// to see. Out was capped at 1.6 on the argument that zooming past the content only
+// adds the empty space the fit exists to remove — true when the content could not
+// leave the world, and no longer true now that a node can be dragged anywhere: past
+// the fitted frame there is arrangement to find, and pulling back to look for it is
+// how somebody finds it without giving up their arrangement to Fit.
+const ZOOM_RANGE = { min: 1 / 24, max: 4 };
 
 // zoomView returns the frame after zooming by `factor` about a point, in the same
 // user units as the frame itself. Zooming about the pointer rather than the centre
@@ -2538,13 +2543,22 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // wholesale by "Release", so it is never a state somebody is stuck in.
   let moving = null;
 
-  // place puts a node at a point and keeps it inside the world, because the world is
-  // what the fitted view shows: a node moved past its edge would be invisible at the
-  // very view somebody would use to go looking for it.
+  // place puts a node where the hand put it, anywhere.
+  //
+  // It used to clamp into the world, on the argument that the fitted view shows the
+  // world and a node outside it would be invisible at the view somebody would use to
+  // find it. That argument stopped being true when Fit started framing the *content*
+  // rather than the world: the fit follows whatever has been dragged, so a node moved
+  // past the old edge is still one press of Fit away. What the clamp actually did was
+  // refuse the gesture — a node against the top of the canvas simply stopped, which
+  // reads as the picture being broken rather than as a boundary being enforced.
+  //
+  // So the world is a budget for the *layout* to settle in, not a fence around the
+  // arrangement. Panning is unconditional for the same reason (see the pointerdown
+  // handler): once a node can be anywhere, the frame has to be able to go there.
   function place(node, x, y) {
-    const r = node.r ?? 12;
-    node.x = Math.min(Math.max(x, r), world.width - r);
-    node.y = Math.min(Math.max(y, r), world.height - r);
+    node.x = x;
+    node.y = y;
   }
 
   // pin records where a node has been put, and marks it as put there.
@@ -2643,10 +2657,12 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // node is one of them. The browser's own gesture is held off by the stylesheet
     // instead (the canvas takes no text selection) and by the move below.
     if (node && beginDrag(node.getAttribute("data-node-id"), event)) return;
-    // Panning is only meaningful once something is off-screen. At the fitted frame
-    // the whole landscape is already visible, so a drag there could only push it
-    // out of view and reintroduce the empty space the fit exists to remove.
-    if (!frameView || frameView.w >= baseView().w) return;
+    // Panning always, at any magnification. It used to be refused at the fitted
+    // frame — everything was on screen there, so a drag could only push the picture
+    // into the empty space the fit exists to remove. That is no longer the whole
+    // truth: a node can now be dragged anywhere (see place), so there is somewhere to
+    // pan *to*, and a canvas that only moves when zoomed in is a canvas whose rules
+    // a reader has to discover. Fit is the way back, and it is one button.
     const from = pointToFrame(event);
     if (!from) return;
     panning = { from, start: frameView || baseView(), id: event.pointerId };

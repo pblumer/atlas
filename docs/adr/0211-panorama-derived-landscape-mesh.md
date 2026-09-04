@@ -28,7 +28,9 @@
   than the individual answers added; amended 2026-09-04 — the view is called Starmap
   in the product, and this record keeps its own vocabulary; amended 2026-09-04 — a
   process node can carry the engine's instance tally, under four rules that keep an
-  unread counter from reading as an idle process)
+  unread counter from reading as an idle process; amended 2026-09-04 — the canvas has
+  no edges: the world is a budget for the layout rather than a fence around the
+  arrangement)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -635,6 +637,23 @@ unaffected.
 > makes the whole window a floor — and §10's export carries the window in the stamp,
 > because in a file the rings on three nodes are the whole point and there is no panel
 > beside it to say so.
+
+> **Amendment (2026-09-04): the canvas has no edges.**
+> A node dragged toward the top of the picture used to stop at the world's edge, and
+> a drag that stops reads as the view being broken rather than as a boundary being
+> enforced. The clamp was argued from the fit: the fitted view showed the *world*, so
+> a node outside it would be invisible at the very view somebody would use to go
+> looking for it. That argument died when Fit began framing the **content** — the fit
+> follows whatever has been arranged, so a node past the old edge is one press away.
+>
+> So the world is what it always was underneath: an area budget for the layout to
+> settle in, not a fence around the arrangement. A node goes where the hand puts it, a
+> pin is restored where it was put, panning works at every magnification rather than
+> only when something is off-screen, and the zoom-out bound moves from 1.6× to 4× so
+> the arrangement can be found by pulling back instead of only by giving it up to Fit.
+>
+> Bounded zoom stays, and is the one limit worth keeping: past a few multiples of the
+> fitted frame the picture is a dot in a void, which is not a view of anything.
 
 > **Amendment (2026-09-04): a process node can carry how much is running on it.**
 > §4's observation says whether a process is in trouble. It does not say whether it
