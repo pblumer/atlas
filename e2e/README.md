@@ -155,10 +155,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   task whose element carries none. Drives the real app shell against a mocked `/api/v1`.
 - **`ops-documentation.spec.mjs`** (ADR-0025 amended): element documentation in the
   **Operations instance replay** — the Details tab shows what the modeler wrote about the
-  selected element (paragraph breaks intact), the process's own when nothing is selected,
-  nothing at all for an undocumented element, and — for a branch this instance never took
-  — the element's identity plus its documentation instead of the old silent fallback to
-  the process panel. Reads it off the rendered model; no server call involved.
+  selected element (paragraph breaks intact, Markdown rendered as structure), the
+  process's own when nothing is selected, nothing at all for an undocumented element,
+  and — for a branch this instance never took — the element's identity plus its
+  documentation instead of the old silent fallback to the process panel. Reads it off the
+  rendered model; no server call involved.
 
 - **`pdf-writer.spec.mjs`** (ADR-0143): the dependency-free **PDF writer** behind the process
   documentation export (`api/web/pdf.js`). A PDF is only valid if its cross-reference table

@@ -641,7 +641,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .props .phead, .im-side .phead { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
 .props .ptype, .im-side .ptype { width: 26px; height: 26px; border: 1px solid var(--border-strong); border-radius: 5px; display: grid; place-items: center; font-size: 11px; color: var(--muted); }
 .props .psec, .im-side .psec { padding: 14px 16px; border-bottom: 1px solid var(--border); }
-.props .psec h3, .im-side .psec h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin: 0 0 10px; }
+.props .psec > h3, .im-side .psec > h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin: 0 0 10px; }
 .props .kv, .im-side .kv { font-size: 12px; color: var(--muted); }
 .props .kv b, .im-side .kv b { color: var(--text); font-weight: 600; }
 .problems { height: 30px; flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); background: var(--bg); cursor: pointer; user-select: none; }
@@ -1663,11 +1663,12 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ops-props dd { margin: 0; color: var(--text); word-break: break-word; }
 .ops-props dt.hint { grid-column: 1 / -1; color: var(--muted); font-style: italic; margin-top: 8px; }
 /* The element's documentation in the replay's Details tab (ADR-0025) — what the modeler
-   wrote about this step, below its properties. Prose, so it keeps the author's line
-   breaks and reads at a comfortable measure rather than in the property grid. */
+   wrote about this step, below its properties. Prose, so it reads at a comfortable
+   measure rather than in the property grid; its markup comes from the shared .md rules,
+   which keep the author's line breaks as breaks. */
 .ops-doc { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-.ops-doc h4 { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-.ops-doc p { margin: 0; font-size: 13px; line-height: 1.55; white-space: pre-wrap; max-width: 70ch; }
+.ops-doc > h4 { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.ops-doc .md { font-size: 13px; max-width: 70ch; }
 .ops-empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
 .ops-live { color: var(--accent); font-weight: 600; }
 
@@ -1982,11 +1983,13 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
 .md p { margin: 0 0 8px; }
+/* Relative sizes, not absolute: the same block is read in panels that set different body
+   sizes, and a heading has to stay one step above its own prose in each of them. */
 .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { margin: 14px 0 6px; line-height: 1.3; font-weight: 600; }
-.md h1 { font-size: 16px; }
-.md h2 { font-size: 15px; }
-.md h3 { font-size: 14px; }
-.md h4, .md h5, .md h6 { font-size: 13px; }
+.md h1 { font-size: 1.15em; }
+.md h2 { font-size: 1.08em; }
+.md h3 { font-size: 1.02em; }
+.md h4, .md h5, .md h6 { font-size: 1em; }
 .md ul, .md ol { margin: 0 0 8px; padding-left: 22px; }
 .md li { margin: 2px 0; }
 .md li > ul, .md li > ol { margin: 2px 0 0; }
@@ -1995,7 +1998,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   border-left: 2px solid var(--border-strong); color: var(--muted);
 }
 .md code {
-  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 0.92em/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px;
 }
 /* A code block scrolls rather than wrapping: an expression broken across lines by the

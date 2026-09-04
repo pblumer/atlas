@@ -20,6 +20,10 @@ import { migrateInstanceFlow } from "./migrationdialog.js";
 import { formFieldKeys, formFieldTypes, loadFormViewer, withLoadDeadline } from "./formviewer.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
+// Documentation prose is Markdown (ADR-draft-documentation-is-markdown). The replay
+// renders it with the same module the Tasks app uses, so the same text cannot mean two
+// things depending on which surface a reader is standing in front of.
+import { renderMarkdown } from "./markdown.js";
 import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
 import { attachPlayground } from "./playground.js";
 import { groupifyPanel, groupController } from "./pgroup.js";
@@ -10146,8 +10150,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     return el ? readDocumentation(el.businessObject) : "";
   };
   // docBlock renders that prose below the property list — a block, not a <dd>, because
-  // it is paragraphs rather than a value. Nothing at all when the element is undocumented.
-  const docBlock = (text) => (text ? `<div class="ops-doc"><h4>Documentation</h4><p>${esc(text)}</p></div>` : "");
+  // it is paragraphs rather than a value, and Markdown rather than one escaped string:
+  // an operator asking "what is this step for?" gets the modeler's own structure, and
+  // renderMarkdown escapes the source before parsing it so the prose can never script
+  // the console. Nothing at all when the element is undocumented.
+  const docBlock = (text) => (text
+    ? `<div class="ops-doc"><h4>Documentation</h4><div class="md">${renderMarkdown(text)}</div></div>`
+    : "");
 
   // manualBlock reports that this step was forced by a person rather than driven by the
   // engine (ADR-0159): who completed the parked job by hand, when, and the reason they
