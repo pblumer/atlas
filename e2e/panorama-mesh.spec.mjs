@@ -74,6 +74,18 @@ function installMock(page, mesh = graph) {
   });
 }
 
+// The depth control is a number field plus an "all" switch, so setting it is two
+// possible gestures rather than one option to pick. One helper, so every test says
+// what it wants rather than how the control is built.
+async function setDepth(page, hops) {
+  if (hops === "all") {
+    await page.locator("#mesh-depth-any").check();
+    return;
+  }
+  await page.locator("#mesh-depth-any").uncheck();
+  await page.locator("#mesh-depth").fill(String(hops));
+}
+
 test("renders the derived landscape and drills into a process", async ({ page }) => {
   installMock(page);
   const pageErrors = [];
@@ -274,7 +286,7 @@ test("selecting a node shows its blast radius and dims the rest", async ({ page 
   await expect(page.locator('[data-node-id="application:a1"]')).toHaveClass(/mesh-dimmed/);
 
   // Depth is the chosen depth: one hop stops at the direct dependent.
-  await page.locator("#mesh-depth").selectOption("1");
+  await setDepth(page, "1");
   await expect(page.locator(".mesh-impact-count")).toContainText("1");
   await expect(page.locator('[data-node-id="process:1"]')).toHaveClass(/mesh-dimmed/);
 
@@ -966,7 +978,7 @@ test("what you placed by hand survives a repaint", async ({ page }) => {
   // Anything that re-lays-out the graph. A depth change is the cheapest of them and
   // has nothing to do with where things sit, which is the point: an arrangement that
   // only survived until the next unrelated click would not be worth making.
-  await page.selectOption("#mesh-depth", "1");
+  await setDepth(page, "1");
   await expect(page.locator('[data-node-id="process:5"]')).toHaveClass(/mesh-pinned/);
   const after = await worldAt(page, "process:5");
   expect(Math.hypot(after.x - dropped.x, after.y - dropped.y)).toBeLessThan(1);
@@ -1333,13 +1345,13 @@ test("the drilldown reaches as far as the depth says", async ({ page }) => {
   installMock(page);
   await page.goto("/index.html#/panorama/starmap");
 
-  await page.selectOption("#mesh-depth", "1");
+  await setDepth(page, "1");
   await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
   const oneHop = await page.locator(".mesh-node").count();
   // Invoice's own neighbours only: the decision that only Dunning uses is two away.
   await expect(page.locator('[data-node-id="decision:credit"]')).toHaveCount(0);
 
-  await page.selectOption("#mesh-depth", "2");
+  await setDepth(page, "2");
   await expect(page.locator('[data-node-id="decision:credit"]')).toHaveCount(1);
   expect(await page.locator(".mesh-node").count()).toBeGreaterThan(oneHop);
 });
@@ -1739,7 +1751,7 @@ test("the impact answer says how bad the radius is and names it", async ({ page 
   installMock(page, radiusGraph);
   await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
-  await page.selectOption("#mesh-depth", "all");
+  await setDepth(page, "all");
   await page.locator('[data-node-id="worker:mail"]').click();
 
   const panel = page.locator(".mesh-panel");
@@ -1767,7 +1779,7 @@ test("the panel tells direct dependents from the ones further out", async ({ pag
   installMock(page, radiusGraph);
   await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
-  await page.selectOption("#mesh-depth", "all");
+  await setDepth(page, "all");
   await page.locator('[data-node-id="decision:credit"]').click();
 
   const panel = page.locator(".mesh-panel");
@@ -1783,7 +1795,7 @@ test("the landscape ranks its blast radii with nothing selected", async ({ page 
   installMock(page, radiusGraph);
   await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
-  await page.selectOption("#mesh-depth", "all");
+  await setDepth(page, "all");
 
   const rank = page.locator(".mesh-rank");
   await expect(rank.locator(".mesh-rank-head")).toContainText("Biggest blast radius");
@@ -2679,4 +2691,40 @@ test("an export of a path says which way it came", async ({ page }) => {
   });
   expect(svg).toContain("drilled into Invoice");
   expect(svg).toContain("via Billing");
+});
+
+// Depth is a number somebody types, or the whole graph. It was a three-option list —
+// 1 hop, 2 hops, all — which answers the question at exactly two depths and refuses
+// every other one: a reader asking "and one further?" had nothing to press.
+test("depth is a number to type, and 'all' for however far it goes", async ({ page }) => {
+  installMock(page, radiusGraph);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  // Three, which the old control could not be asked for.
+  await page.locator('[data-node-id="worker:mail"] .mesh-body').click();
+  await setDepth(page, "3");
+  await expect(page.locator(".mesh-impact-count")).toContainText("within 3 hop(s)");
+
+  // "all" makes the field inert rather than hiding it: the number the reader had is
+  // still there when they come back to it.
+  await page.locator("#mesh-depth-any").check();
+  await expect(page.locator("#mesh-depth")).toBeDisabled();
+  await expect(page.locator("#mesh-depth")).toHaveValue("3");
+  await expect(page.locator(".mesh-impact-count")).toContainText("within any hop(s)");
+
+  await page.locator("#mesh-depth-any").uncheck();
+  await expect(page.locator("#mesh-depth")).toBeEnabled();
+  await expect(page.locator(".mesh-impact-count")).toContainText("within 3 hop(s)");
+});
+
+// A field somebody is mid-edit in holds anything, and a walk of zero hops is a
+// picture of one node with nothing drawn around it — a broken answer rather than a
+// narrow one. So it is read through a floor, and put right when the field is left.
+test("a depth that is not a depth falls back to one hop", async ({ page }) => {
+  await page.goto("/panorama-impact-harness.html");
+  await expect(page.locator("#ready")).toHaveText("ready");
+  const read = await page.evaluate(() =>
+    ["", "0", "-4", "abc", "2.7", "500", "all"].map((v) => window.depthOf(v)));
+  expect(read).toEqual([1, 1, 1, 1, 2, 99, Infinity]);
 });
