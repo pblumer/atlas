@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/model"
@@ -57,20 +58,40 @@ func archiveScopeQuery(pred varQuery) ([]byte, error) {
 	})
 }
 
-// archiveScopeResponse is the subset of the reply this reads. The bucket key is held
-// as a json.Number rather than a uint64 or a float64: an instance key needs all 64
-// bits, JSON numbers decode through float64 when read into an any, and key_as_string
-// — the obvious alternative — is only emitted when the aggregation carries an
-// explicit format, which a plain terms aggregation over a long does not. A number
-// read from its literal text is exact and depends on nothing optional.
+// archiveScopeResponse is the subset of the reply this reads.
+//
+// The bucket key is held raw rather than as a uint64, a float64 or a json.Number.
+// An instance key needs all 64 bits, and JSON numbers decode through float64 when
+// read into an any, so two neighbouring keys past 2^53 would land on the same value.
+// key_as_string — the obvious alternative — is only emitted when the aggregation
+// carries an explicit format, which a plain terms aggregation over a long does not.
+// And json.Number refuses a JSON string outright, which matters because the shape of
+// a bucket key depends on how the cluster mapped the field: a long yields 7, a
+// keyword yields "7". Reading the literal bytes takes both and is exact for either.
 type archiveScopeResponse struct {
 	Aggregations struct {
 		Instances struct {
 			Buckets []struct {
-				Key json.Number `json:"key"`
+				Key json.RawMessage `json:"key"`
 			} `json:"buckets"`
 		} `json:"instances"`
 	} `json:"aggregations"`
+}
+
+// jsonKey reads an instance key from a raw JSON value, taking either a number or a
+// string. ok is false for anything that is not one — the fields these keys come from
+// are ordinary index fields that somebody else's tooling may also write into, and one
+// foreign document must not turn a good answer into an error.
+func jsonKey(raw json.RawMessage) (uint64, bool) {
+	text := strings.TrimSpace(string(raw))
+	if len(text) >= 2 && text[0] == '"' && text[len(text)-1] == '"' {
+		text = text[1 : len(text)-1]
+	}
+	key, err := strconv.ParseUint(text, 10, 64)
+	if err != nil || key == 0 {
+		return 0, false
+	}
+	return key, true
 }
 
 // parseArchiveScopes reads the instance keys out of the aggregation. A nil body is
@@ -87,13 +108,9 @@ func parseArchiveScopes(body []byte) ([]uint64, error) {
 	buckets := resp.Aggregations.Instances.Buckets
 	out := make([]uint64, 0, len(buckets))
 	for _, b := range buckets {
-		key, err := strconv.ParseUint(b.Key.String(), 10, 64)
-		if err != nil {
-			// A bucket key that is not an instance key is skipped rather than reported:
-			// the aggregation is over a field somebody else's tooling may also write.
-			continue
+		if key, ok := jsonKey(b.Key); ok {
+			out = append(out, key)
 		}
-		out = append(out, key)
 	}
 	return out, nil
 }
@@ -142,13 +159,13 @@ type archiveInstance struct {
 }
 
 // archiveHits is the subset of the hit list this reads. As with the bucket keys, the
-// record key is held as a json.Number so all 64 bits survive.
+// record key is held raw so all 64 bits survive and either JSON shape is accepted.
 type archiveHits struct {
 	Hits struct {
 		Hits []struct {
 			Source struct {
-				Key      json.Number `json:"key"`
-				Position uint64      `json:"position"`
+				Key      json.RawMessage `json:"key"`
+				Position uint64          `json:"position"`
 				Value    struct {
 					ProcessDefKey  uint64                     `json:"ProcessDefKey"`
 					State          model.ProcessInstanceState `json:"State"`
@@ -175,8 +192,8 @@ func parseArchiveInstances(body []byte) ([]archiveInstance, error) {
 	seen := map[uint64]int{}
 	out := []archiveInstance{}
 	for _, h := range resp.Hits.Hits {
-		key, err := strconv.ParseUint(h.Source.Key.String(), 10, 64)
-		if err != nil || key == 0 {
+		key, ok := jsonKey(h.Source.Key)
+		if !ok {
 			continue
 		}
 		src := h.Source.Value
@@ -186,8 +203,8 @@ func parseArchiveInstances(body []byte) ([]archiveInstance, error) {
 			createdAt: src.CreatedAt, completedAt: src.CompletedAt,
 			correlationKey: src.CorrelationKey,
 		}
-		at, ok := seen[key]
-		if !ok {
+		at, seenBefore := seen[key]
+		if !seenBefore {
 			seen[key] = len(out)
 			out = append(out, row)
 			continue

@@ -445,3 +445,88 @@ func TestArchiveIsAskedOnlyWhenTheLiveStoreCameUpEmpty(t *testing.T) {
 		}
 	}
 }
+
+// The query asks for newest-first, but a cluster is not obliged to honour a sort this
+// code did not verify. The fold compares log positions rather than trusting arrival
+// order, so the row that survives is the instance's last event either way.
+func TestParseArchiveInstancesFoldsByPositionNotArrivalOrder(t *testing.T) {
+	// The older event arrives first, which is the order the code must not depend on.
+	body := []byte(`{"hits":{"hits":[
+		{"_source":{"key":7,"position":10,"value":{"ProcessDefKey":42,"State":1,"CreatedAt":100}}},
+		{"_source":{"key":7,"position":90,"value":{"ProcessDefKey":42,"State":1,"CreatedAt":100,"CompletedAt":900}}}
+	]}}`)
+	got, err := parseArchiveInstances(body)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d rows for one instance, want 1", len(got))
+	}
+	if got[0].completedAt != 900 || got[0].state != model.PICompleted {
+		t.Errorf("row = %+v, want the state from position 90 — the later event", got[0])
+	}
+}
+
+// The aggregation is over a field somebody else's tooling may also write, and a hit's
+// key can be anything the index holds. A value that is not an instance key is skipped
+// rather than reported: one foreign document must not turn a good answer into an error.
+func TestArchiveParsersSkipWhatIsNotAnInstanceKey(t *testing.T) {
+	scopes, err := parseArchiveScopes([]byte(`{"aggregations":{"instances":{"buckets":[
+		{"key":"not-a-key","doc_count":1},{"key":7,"doc_count":1}
+	]}}}`))
+	if err != nil {
+		t.Fatalf("parse scopes: %v", err)
+	}
+	if len(scopes) != 1 || scopes[0] != 7 {
+		t.Errorf("scopes = %v, want only the one real key", scopes)
+	}
+
+	rows, err := parseArchiveInstances([]byte(`{"hits":{"hits":[
+		{"_source":{"key":0,"position":1,"value":{"ProcessDefKey":42}}},
+		{"_source":{"key":"nope","position":2,"value":{"ProcessDefKey":42}}},
+		{"_source":{"key":7,"position":3,"value":{"ProcessDefKey":42}}}
+	]}}`))
+	if err != nil {
+		t.Fatalf("parse hits: %v", err)
+	}
+	if len(rows) != 1 || rows[0].key != 7 {
+		t.Errorf("rows = %+v, want only the one real instance", rows)
+	}
+}
+
+// The second query can fail on its own, after the first succeeded. Reporting that as
+// an empty archive would claim the instances the aggregation just found do not exist.
+func TestSearchArchiveReportsAFailureOnTheSecondQuery(t *testing.T) {
+	found := []byte(`{"aggregations":{"instances":{"buckets":[{"key":7,"doc_count":1}]}}}`)
+
+	refused := archiveServer(t, &queueSearcher{
+		bodies: [][]byte{found, nil},
+		errs:   []error{nil, opensearch.ErrSearchRefused},
+	})
+	if got := refused.searchArchive(context.Background(), 0, varQuery{rawName: "x", pattern: "y", literal: "y", structured: true}); got.State != archiveRefused {
+		t.Errorf("state = %q, want refused", got.State)
+	}
+
+	unreadable := archiveServer(t, &queueSearcher{bodies: [][]byte{found, []byte(`{"hits":`)}})
+	if got := unreadable.searchArchive(context.Background(), 0, varQuery{rawName: "x", pattern: "y", literal: "y", structured: true}); got.State != archiveUnreachable {
+		t.Errorf("state = %q, want unreachable", got.State)
+	}
+}
+
+// The aggregation found instances but the hydration returned none — the definition
+// filter excluded every one of them. That is an empty answer, not an available one
+// with nothing in it, because "available" is what the panel reads as "these are the
+// rows".
+func TestSearchArchiveIsEmptyWhenHydrationMatchesNothing(t *testing.T) {
+	s := archiveServer(t, &queueSearcher{bodies: [][]byte{
+		[]byte(`{"aggregations":{"instances":{"buckets":[{"key":7,"doc_count":1}]}}}`),
+		[]byte(`{"hits":{"hits":[]}}`),
+	}})
+	got := s.searchArchive(context.Background(), 99, varQuery{rawName: "x", pattern: "y", literal: "y", structured: true})
+	if got.State != archiveEmpty {
+		t.Errorf("state = %q, want empty", got.State)
+	}
+	if len(got.Instances) != 0 {
+		t.Errorf("instances = %+v, want none", got.Instances)
+	}
+}
