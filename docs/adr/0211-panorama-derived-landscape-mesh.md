@@ -32,7 +32,8 @@
   no edges: the world is a budget for the layout rather than a fence around the
   arrangement; amended 2026-09-04 — a drilldown is a path through the estate rather
   than a single place, carried in the header, in a saved view and in the export's
-  scope)
+  scope; amended 2026-09-04 — §6's depth is a number somebody types beside an "all",
+  rather than a shortlist that answers at two distances)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -639,6 +640,24 @@ unaffected.
 > makes the whole window a floor — and §10's export carries the window in the stamp,
 > because in a file the rings on three nodes are the whole point and there is no panel
 > beside it to say so.
+
+> **Amendment (2026-09-04): depth is a number, not a shortlist.**
+> The depth control offered 1 hop, 2 hops and all — which answers the question at
+> exactly two distances and refuses every other one. "And one further?" is the
+> commonest follow-up a blast radius provokes, and there was nothing to press. It is
+> now what it always was: a distance somebody names, beside the one answer that is
+> not a distance.
+>
+> Two inputs and no more, because there are two kinds of answer. The field goes inert
+> under *all* rather than disappearing, so the number a reader had is still there when
+> they come back to it; it is read through a floor of one hop, because a walk of zero
+> is a picture of one node with nothing drawn around it — a broken answer rather than
+> a narrow one — and through a ceiling, because the walk is bounded by the graph long
+> before ninety-nine and a larger number is a typo rather than a question.
+>
+> The stored spelling does not change: "all", or a count as a string. Saved views, the
+> export stamp and the header count all carry it, and a view written last week has to
+> keep meaning what it meant.
 
 > **Amendment (2026-09-04): a drilldown is a path, not a flag.**
 > Going into a node was one step deep in practice: the state was a single id, so
