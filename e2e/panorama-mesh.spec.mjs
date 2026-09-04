@@ -1664,6 +1664,10 @@ test("exports the landscape as a stamped, self-contained SVG", async ({ page }) 
   expect(svg).toContain("hidden by your access");
   expect(svg).toContain("Not watched here");
   expect(svg).toContain("No deployment target is configured.");
+  // And what the two line styles mean. A file that travels has no legend beside it,
+  // so a reader opening it next quarter has nowhere else to find out.
+  expect(svg).toContain("Solid line");
+  expect(svg).toContain("Dashed line");
 });
 
 // A filtered export is a real landscape and not *the* landscape, and the only place
@@ -2141,4 +2145,175 @@ test("the header is one row of controls, with the count on its own line", async 
   // once the header filled up.
   const box = await page.locator(".mesh-search").boundingBox();
   expect(box.width).toBeGreaterThan(150);
+});
+
+// The two line styles on the canvas (ADR-0211 §4 — a channel that carries meaning
+// has to be named somewhere a reader can find it). Shape and colour were both in the
+// key; the dashes were not, so an edge could be seen to be different without any way
+// of finding out from what.
+test("the key says what each line style means, and only for the ones drawn", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const rules = page.locator(".mesh-rules");
+  await expect(rules).toContainText("Solid line");
+  await expect(rules).toContainText("depends on");
+  await expect(rules).toContainText("Dashed line");
+  await expect(rules).toContainText("belongs to");
+  // Drawn with the styles they are explaining, by the same values the canvas uses:
+  // a key whose dashed swatch is solid is worse than no key.
+  await expect(rules.locator("svg line")).toHaveCount(2);
+  const dashes = await rules.locator("svg line").evaluateAll(
+    (els) => els.map((el) => el.getAttribute("stroke-dasharray")));
+  expect(dashes).toEqual([null, "4 4"]);
+
+  // And only what is on screen. A landscape of applications alone has no containment
+  // and no dependency drawn between them, so neither is claimed.
+  await installMock(page, {
+    nodes: [
+      { id: "application:a1", kind: "application", name: "Billing", provenance: "derived" },
+      { id: "application:a2", kind: "application", name: "Ledger", provenance: "derived" },
+    ],
+    edges: [], restricted: 0, clustered: false,
+  });
+  await page.reload();
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await expect(page.locator(".mesh-rules")).toHaveCount(0);
+});
+
+// A landscape of a size somebody would actually open. The small fixture above says
+// what the view does; this one says whether it can be read.
+function estate(apps = 6, procsPer = 4) {
+  const nodes = [], edges = [];
+  for (let a = 0; a < apps; a++) {
+    const app = `application:a${a}`;
+    nodes.push({ id: app, kind: "application", name: `App ${a}`, provenance: "derived" });
+    for (let p = 0; p < procsPer; p++) {
+      const pid = `process:${a}-${p}`;
+      nodes.push({
+        id: pid, kind: "process", name: `Process ${a}-${p}`, provenance: "derived",
+        application: app, processId: `p${a}${p}`, version: 1,
+      });
+      edges.push({ from: app, to: pid, kind: "contains" });
+      if (p > 0) edges.push({ from: `process:${a}-${p - 1}`, to: pid, kind: "calls" });
+      if (p % 2 === 0) {
+        const w = `worker:w${a}-${p}`;
+        nodes.push({ id: w, kind: "worker", name: `worker-${a}-${p}`, provenance: "derived", workerType: "mail" });
+        edges.push({ from: pid, to: w, kind: "uses" });
+      }
+    }
+  }
+  return { nodes, edges, restricted: 0, clustered: false };
+}
+
+// The landscape is the one view where the centred reading column costs more than it
+// gives: everything on the canvas is sized by fitting a world into it, so width the
+// column withholds comes off every node, every name and every gap at once.
+test("the landscape gets the whole window rather than the reading column", async ({ page }) => {
+  installMock(page, estate());
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const canvas = await page.locator(".mesh-canvas").boundingBox();
+  // Wider than the whole content column used to be, never mind the canvas inside it.
+  expect(canvas.width).toBeGreaterThan(1000);
+
+  // And only here. Leaving the landscape puts the column back, or every other view
+  // in the app would have been widened by a Panorama change.
+  await page.goto("/index.html#/panorama/models");
+  await expect(page.locator("main")).toBeVisible();
+  const main = await page.locator("main").boundingBox();
+  expect(main.width).toBeLessThanOrEqual(1121);
+});
+
+// What "too close together" actually was, measured: how much clear space a node has
+// to its nearest neighbour, in the pixels a reader sees. The layout is seeded, so
+// this is one number rather than a distribution — the same graph settles the same way
+// on every load.
+test("a landscape of forty nodes keeps room between them", async ({ page }) => {
+  installMock(page, estate());
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await expect(page.locator(".mesh-node")).toHaveCount(42);
+
+  const gaps = await page.evaluate(() => {
+    const nodes = [...document.querySelectorAll(".mesh-node")].map((g) => {
+      const box = g.querySelector(".mesh-body").getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2, r: Math.max(box.width, box.height) / 2 };
+    });
+    // Edge to edge, not centre to centre: a hub is drawn larger than a leaf, and the
+    // space a reader sees is what is left between the outlines.
+    return nodes.map((a, i) => Math.min(...nodes
+      .filter((_, j) => j !== i)
+      .map((b) => Math.hypot(a.x - b.x, a.y - b.y) - a.r - b.r))).sort((p, q) => p - q);
+  });
+
+  // No node is crowded: the tightest pair in the picture still has more clear space
+  // between them than the larger of the two is wide.
+  expect(gaps[0]).toBeGreaterThan(30);
+  // And the picture as a whole is airy rather than merely non-overlapping. This is
+  // the number the change moved: 56px between the average nearest pair in the
+  // centred column, 72px now, with the nodes drawn the same size as before.
+  expect(gaps[Math.floor(gaps.length / 2)]).toBeGreaterThan(66);
+});
+
+// The fit places node *centres* inside a margin, so the margin has to cover what
+// hangs off a centre: the largest application's outline above it and its 26px name
+// below.
+//
+// On screen the frame is the content's own box padded by that margin, so an
+// under-reserved margin only makes the picture a little tight. An exported file
+// frames the world itself, edge to edge with no letterboxing, and its provenance
+// stamp begins a couple of dozen pixels under that edge — so there the shortfall
+// shows as a name touching the stamp and reading as part of it. Checked where it
+// shows, in the pixels the file is drawn at.
+test("an export keeps its names clear of the stamp under the picture", async ({ page }) => {
+  installMock(page, estate());
+  await page.setViewportSize({ width: 1600, height: 950 });
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#mesh-export-svg").click(),
+  ]);
+  const stream = await download.createReadStream();
+  const svg = await new Promise((resolve, reject) => {
+    let out = "";
+    stream.on("data", (chunk) => (out += chunk));
+    stream.on("end", () => resolve(out));
+    stream.on("error", reject);
+  });
+
+  // Rendered rather than reasoned about: text is laid out by the browser, and the
+  // question is where the glyphs land. Measured with getBBox in the canvas's own
+  // coordinates rather than with a client rect — a nested <svg> clips its children,
+  // so a client rect reports every overflowing node as sitting exactly on the edge.
+  const clearance = await page.evaluate((file) => {
+    const host = document.createElement("div");
+    host.innerHTML = file;
+    document.body.append(host);
+    const canvas = host.querySelector(".mesh-canvas");
+    const [, top, vw, height] = canvas.getAttribute("viewBox").split(/[\s,]+/).map(Number);
+    // World units to the pixels the file is drawn at, which is what a reader sees.
+    const px = Number(canvas.getAttribute("width")) / vw;
+    return Math.min(...[...canvas.querySelectorAll(".mesh-node")].map((g) => {
+      const [x, y] = (g.getAttribute("transform").match(/-?[\d.]+/g) || [0, 0]).map(Number);
+      // The outline and the name — what a reader sees. The halo and the hit target
+      // around every node are deliberately larger than the node and invisible.
+      const parts = [...g.querySelectorAll(".mesh-body, .mesh-label, .mesh-type")]
+        .map((el) => el.getBBox());
+      return Math.min(
+        y + Math.min(...parts.map((b) => b.y)) - top,
+        top + height - (y + Math.max(...parts.map((b) => b.y + b.height))),
+      ) * px;
+    }));
+  }, svg);
+
+  // The stamp's first line of text rises to within a few pixels of the picture's
+  // bottom edge, so a name ending flush against that edge is a name in the stamp.
+  expect(clearance).toBeGreaterThan(12);
 });
