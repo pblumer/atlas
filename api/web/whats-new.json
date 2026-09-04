@@ -2,6 +2,34 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-handbook-is-caught-up-with-the-product-six-apps-the-play",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The handbook now covers all six apps",
+        "de": "Das Handbuch deckt jetzt alle sechs Apps ab"
+      },
+      "summary": {
+        "en": "Two of the six apps in the grid menu were not in the handbook at all: Panorama, which shows the landscape of everything deployed and how it hangs together, and Data, where you say what an order actually is across all your processes. Both now have a chapter, in German and English. So does the Playground — the Modeler tab that runs your draft against two hundred cases on the real engine, without deploying anything — and the two Console screens for connecting an AI assistant and reading who shared what with whom. The help menu's On this page entry points at the right chapter from those screens now, instead of dropping you at the top of the handbook.",
+        "de": "Zwei der sechs Apps im Rastermenü kamen im Handbuch überhaupt nicht vor: Panorama, das die Landschaft alles Deployten und ihre Zusammenhänge zeigt, und Data, wo festgehalten wird, was ein Auftrag über alle Prozesse hinweg tatsächlich ist. Beide haben jetzt ein Kapitel, auf Deutsch und Englisch. Ebenso der Playground — der Modeler-Tab, der Ihren Entwurf mit zweihundert Fällen auf der echten Engine durchrechnet, ohne etwas zu deployen — und die zwei Console-Seiten für den Anschluss eines KI-Assistenten und dafür, wer was mit wem geteilt hat. Der Eintrag «Auf dieser Seite» im Hilfemenü führt von diesen Bildschirmen nun ins passende Kapitel, statt an den Anfang des Handbuchs."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Handbook"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Panorama",
+          "de": "Panorama öffnen"
+        },
+        "route": "#/panorama/landscape"
+      }
+    },
+    {
       "id": "a-search-term-found-more-than-it-was-asked-for",
       "version": "Unreleased",
       "date": null,
@@ -318,28 +346,6 @@
         },
         "route": "#/console/workers"
       }
-    },
-    {
-      "id": "a-non-interrupting-message-or-signal-boundary-event-now-fire",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A reminder attached to a task now fires every time, not just the first",
-        "de": "Eine Erinnerung an einer Aufgabe feuert jetzt jedes Mal, nicht nur beim ersten Mal"
-      },
-      "summary": {
-        "en": "A non-interrupting boundary event is how a model says remind me: it fires beside a running task and leaves the task running. On a timer that repeats it already fired on every occurrence — but on a message or a signal it fired once and then stopped listening, so the second message matched nothing at all: no incident, no log line, and no way for the sender to tell. It now stays armed for as long as its task runs, and every message takes the reminder branch again. A model that only ever expected to hear the first one will now hear them all; an interrupting event, or a condition on the reminder branch, is how you ask for exactly one.",
-        "de": "Ein nicht-unterbrechendes Boundary-Ereignis ist die Art, wie ein Modell «erinnere mich» sagt: Es feuert neben einer laufenden Aufgabe und lässt sie weiterlaufen. Bei einem wiederkehrenden Timer tat es das schon bisher bei jedem Mal — bei einer Nachricht oder einem Signal dagegen genau einmal, danach hörte es auf zuzuhören: Die zweite Nachricht traf auf nichts, ohne Incident, ohne Logzeile und ohne dass der Absender es hätte merken können. Es bleibt jetzt scharf, solange seine Aufgabe läuft, und jede Nachricht nimmt den Erinnerungszweig erneut. Ein Modell, das nur die erste erwartet hat, hört nun alle; wer genau eine will, nimmt ein unterbrechendes Ereignis oder eine Bedingung auf dem Erinnerungszweig."
-      },
-      "link": {
-        "label": "ADR-0236",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0236-repeating-non-interrupting-boundary-events.md"
-      },
-      "tags": [
-        "Operations",
-        "Modeler"
-      ]
     }
   ]
 }

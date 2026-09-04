@@ -12,6 +12,61 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The handbook is caught up with the product: six apps, the Playground, and the two
+  Console screens nobody had written up.** The shell has offered six apps for a while —
+  Console, Modeler, Tasks, Operations, **Panorama** and **Data** — and the welcome
+  chapter still opened with "the four apps". A missing chapter behaves differently from
+  a wrong sentence: nothing fails, nobody notices, and the app nobody reads about is the
+  app nobody discovers. The word "Panorama" appeared in the page zero times,
+  "Informationsmodell" zero times, "Playground" zero times.
+
+  Both apps now have a chapter of their own, in both languages, under a new **Landscape
+  & data** group in the table of contents:
+
+  - **Panorama** ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md),
+    [ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md)) leads with the
+    distinction the app turns on: the landscape is **derived** and the architecture
+    views are **drawn**. Which store each node comes from, what each edge is a fact
+    *about* rather than an assertion of, how to read size and why the layout is
+    reproducible — and the one thing about saved views a reader has to know before
+    relying on them: they live in that browser and are shared with nobody.
+  - **The information model** ([ADR-0230](docs/adr/0230-process-information-model.md),
+    [ADR-0232](docs/adr/0232-uml-model-import.md)) starts where BPMN stops, because that
+    is what makes the app make sense: a `dataObject` is scoped to one process
+    definition, `itemSubjectRef` points into a schema language BPMN deliberately leaves
+    open, and so "which processes touch the same order?" has no answer at all. Then the
+    business key as the fact that answers it, the three steps from a class to a resolved
+    deploy, and what an import does with what it cannot keep.
+
+  Three more gaps closed in chapters that already existed:
+
+  - **The Playground** ([ADR-0215](docs/adr/0215-modeler-playground.md)) is a section of
+    its own in *Test & simulate*, which until now offered a reader the token simulation
+    and a real deploy and nothing in between. It is positioned against the token
+    simulation by what that one deliberately does *not* do — no FEEL, no conditions, no
+    DMN, no data — and it says the two things that surprise people: editing the diagram
+    invalidates the run, and leaving the editor releases the sandbox, because a sandbox
+    is a live engine on the server.
+  - **AI access** ([ADR-0200](docs/adr/0200-mcp-oauth-resource-server.md)) answers the
+    operator's actual question — what the page hands you, and the two things it checks
+    first, one of which (the published origin behind a TLS proxy) is otherwise met as
+    "the connector just doesn't work". Its second half is for everybody: a person's own
+    approvals are theirs to withdraw.
+  - **The audit log** ([ADR-0184](docs/adr/0184-grant-audit-log.md)) gets its four
+    actions, who may read it, and the case that surprises — with authentication off
+    there is no actor, so nothing is recorded at all.
+
+  The **contextual help** knows about all of it: the "?" menu's *On this page* entry had
+  no rule for Panorama, Data, AI access or the audit log, so all four fell through to
+  "Welcome to Atlas" — help that lands a reader at the top of a page reads as help that
+  does not work. Two tests now hold the join the two files cannot see between them:
+  every anchor `handbookHelp()` hands out must be a section the handbook has, and every
+  app the shell offers must be a card in the welcome chapter. Both were written by
+  confirming they fail against a broken anchor and a wrong route, rather than by
+  observing that they pass.
+
 ### Changed
 
 - **Google Sheets runs on a worker, like everything else.** It shipped with an
@@ -32,6 +87,7 @@ _Changed_ / _Removed_ for each version.
   tautology. Google Sheets was the last one. It is now inverted: every managed Worker
   Type must be handed to its supervised worker, so the next kind added without that
   fails a test instead of a properties panel.
+
 
 ### Fixed
 
