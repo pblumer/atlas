@@ -34,12 +34,15 @@ test("with one instance in view, the + opens the child instance it started", asy
   await page.evaluate(() => window.__mountInstance());
   await expect(page.locator('[data-element-id="CallActivity_1"]')).toBeVisible();
 
-  // The cue names the callee before the pointer is anywhere near the 14px marker.
+  // Hovering the shape rings the marker — silently; the sentence belongs to the marker.
   const shape = await page.locator('[data-element-id="CallActivity_1"] .djs-hit').first().boundingBox();
   await page.mouse.move(shape.x + shape.width * 0.3, shape.y + shape.height * 0.3);
-  await expect(page.locator(".ca-drill-tip")).toContainText("identitaet-lebenszyklus");
+  await expect(page.locator(".ca-drill-ring")).toBeVisible();
+  await expect(page.locator(".ca-drill-tip")).toHaveCount(0);
 
   const at = await markerCenter(page, "CallActivity_1");
+  await page.mouse.move(at.x, at.y);
+  await expect(page.locator(".ca-drill-tip")).toHaveText("Double-click to open");
   await page.mouse.dblclick(at.x, at.y);
 
   const want = await page.evaluate(() => `#/operations/p/${window.__CHILD_DEF}/i/${window.__CHILD}`);

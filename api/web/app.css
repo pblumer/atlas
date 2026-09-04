@@ -1186,15 +1186,14 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ca-child-link { color: var(--accent, #2563eb); font-weight: 600; text-decoration: none; }
 .ca-child-link:hover { text-decoration: underline; }
 
-/* The drill-in cue on a call activity (ADR-0245): while the
-   shape is hovered, the "+" BPMN draws on it is ringed and what it opens is named,
-   because the gesture that opens it — a double-click on that marker — is otherwise
-   folklore. It is deliberately a hover cue rather than another badge: in the live view
-   all four corners of a shape already carry one (incident, token counts, open task,
-   decision), and the marker is the one place on a call activity that is about the
-   called process by construction.
-   Pointer-events off on both parts: the double-click is handled on the canvas, and a
-   div sitting over the marker would swallow it. */
+/* The drill-in cue on a call activity (ADR-0245), in two parts. The ring appears while
+   the *shape* is hovered: it says "there is a way in here" and says it silently, which
+   is what the invisible hotspot this replaced never managed. The label belongs to the
+   14px marker rather than the shape around it, so it appears only once the pointer is
+   on the ring — a sentence that follows every pass over a task is noise, and by then
+   the reader is one double-click from the callee's own name anyway.
+   Pointer-events off on both: the double-click is handled on the canvas, and a div
+   sitting over the marker would swallow it. */
 .djs-overlay-atlas-call-drill { pointer-events: none; transform-origin: 0 0; }
 .ca-drill-ring {
   display: block; width: 26px; height: 26px; margin: -13px 0 0 -13px; box-sizing: border-box;
@@ -1202,10 +1201,13 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
      what it encloses is exactly the area the double-click is accepted in. */
   border: 2px solid var(--accent); border-radius: 7px; background: transparent;
 }
+/* Under the pointer it reads as a button rather than an outline — with a halo around
+   it, never a fill: the "+" it frames is the thing being pointed at. */
+.ca-drill-ring.on { box-shadow: 0 0 0 4px var(--accent-soft); }
 .ca-drill-tip {
   display: block; width: max-content; transform: translateX(-50%); white-space: nowrap;
-  background: var(--accent); color: #fff; border-radius: 999px; padding: 2px 9px;
-  font: 600 11px/1.6 system-ui, sans-serif; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  background: var(--accent); color: #fff; border-radius: 999px; padding: 1px 7px;
+  font: 600 10.5px/1.5 system-ui, sans-serif; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 /* "Decision" badge on a business rule task that has been evaluated: opens the
    decision-inspection panel (inputs, outputs, and how it was decided; ADR-0064). */
