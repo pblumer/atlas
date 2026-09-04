@@ -3670,8 +3670,26 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 }
 .mesh-zoom button:hover { border-color: var(--border-strong); }
 .mesh-zoom button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.mesh-edge { stroke: var(--mesh-line); stroke-width: 1.6; }
-.mesh-edge-contains { stroke-dasharray: 4 4; opacity: 0.75; }
+/* Three derived kinds, three strokes (see EDGE_KEY in panorama-mesh.js, which names
+   them for the legend and draws its swatches with these same classes).
+
+     calls    — solid. One process invoking another is the plain case.
+     uses     — dashed. A process reaching a worker or a decision: still a dependency,
+                so it is read against `calls` rather than apart from it.
+     contains — fine dots, faded. Not a dependency at all but the structure the other
+                two hang on, so it recedes: nothing fails *along* a containment edge,
+                and the two kinds that carry a failure path should be the ones the eye
+                lands on.
+
+   non-scaling-stroke is what makes the three tellable apart at all. Everything else
+   on this canvas is drawn in world units and scaled by the viewBox, and the opening
+   view of a large landscape scales by about a half — which took the stroke to under
+   a pixel and shrank every dash with it, so two patterns converged into one pale
+   line and the difference only appeared once you had zoomed in. Widths and dashes
+   are now in the pixels a reader actually sees, at every magnification. */
+.mesh-edge { stroke: var(--mesh-line); stroke-width: 1.3; vector-effect: non-scaling-stroke; }
+.mesh-edge-uses { stroke-dasharray: 6 4; }
+.mesh-edge-contains { stroke-dasharray: 1 3; opacity: 0.7; stroke-linecap: round; }
 /* Labels (ADR-0211 §7's legibility half). A few hundred names on one canvas is a
    wall of text with circles behind it, so most names are revealed rather than
    painted: the element is always in the DOM — screen readers and the node's

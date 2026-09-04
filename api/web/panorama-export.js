@@ -344,8 +344,18 @@ export function standaloneSVG(source, {
   clone.setAttribute("viewBox", box.join(" "));
   clone.setAttribute("x", "0");
   clone.setAttribute("y", "0");
+  // As a style and not only as attributes, because the harvested stylesheet carries
+  // the rule that makes this element a panel in the page — `.mesh-canvas` is 100% of
+  // the surface it sits in — and a CSS property beats a presentation attribute. Left
+  // to that rule the picture is laid out against the whole file rather than against
+  // the band above the stamp, and its viewBox letterboxes inside the taller box: the
+  // landscape drops by half the difference, leaving a dead strip along the top and
+  // hanging the same distance over the bottom, where its lowest names are drawn
+  // across the provenance stamp. The attributes stay for readers that take them.
   clone.setAttribute("width", String(width));
   clone.setAttribute("height", String(picture));
+  clone.style.width = `${width}px`;
+  clone.style.height = `${picture}px`;
 
   const u = width / EXPORT_WIDTH;         // one number scales the stamp with the page
   const pad = Math.round(24 * u);
