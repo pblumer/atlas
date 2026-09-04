@@ -73,6 +73,24 @@
       }
     },
     {
+      "id": "opening-a-deployed-process-in-the-modeler-lost-the-applicati",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Opening a deployed process in the Modeler lost the application it belongs to, and with it the whole vocabulary behind a data object's Type.",
+        "de": "Opening a deployed process in the Modeler lost the application it belongs to, and with it the whole vocabulary behind a data object's Type."
+      },
+      "summary": {
+        "en": "A draft carries its application; a deployed version carries it too — the deploy records it — but the route that opens one (#/modeler/d/{key}) does not name it and nothing looked it up.",
+        "de": "A draft carries its application; a deployed version carries it too — the deploy records it — but the route that opens one (#/modeler/d/{key}) does not name it and nothing looked it up."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-widened-properties-column-in-the-form-editor-gave-its-widt",
       "version": "Unreleased",
       "date": null,
@@ -301,35 +319,6 @@
       "summary": {
         "en": "A SOAP call went out from the process that runs the engine, so a slow web service held up work that had nothing to do with it. Those calls run in a worker Atlas starts and supervises itself now. Nothing to configure: the credential your task references is handed to that worker, exactly as it already is for REST.",
         "de": "Ein SOAP-Aufruf ging bisher aus dem Prozess hinaus, der die Engine ausführt — ein langsamer Web-Service hielt also Arbeit auf, die nichts damit zu tun hatte. Diese Aufrufe laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Das Credential, das Ihr Task referenziert, wird an diesen Worker übergeben — genau wie bei REST schon."
-      },
-      "link": {
-        "label": "ADR-0233",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
-      },
-      "tags": [
-        "Workers",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "ldap-tasks-run-on-a-worker-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Directory tasks moved out of the engine",
-        "de": "Verzeichnis-Tasks sind aus der Engine ausgezogen"
-      },
-      "summary": {
-        "en": "Searching a directory, adding an entry, changing a password — until now Atlas did all three from the process that runs the engine, so a slow or unreachable directory held up work that had nothing to do with it. They run in a worker Atlas starts and supervises itself now. Nothing to configure: the bind passwords and client certificates your models reference are handed to that worker, and the pooled connections that make repeat binds cheap move along with them.",
-        "de": "Ein Verzeichnis durchsuchen, einen Eintrag anlegen, ein Passwort ändern — bisher machte Atlas alle drei im Prozess, der die Engine ausführt, sodass ein langsames oder nicht erreichbares Verzeichnis Arbeit aufhielt, die nichts damit zu tun hatte. Sie laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Die Bind-Passwörter und Client-Zertifikate, die Ihre Modelle referenzieren, werden an diesen Worker übergeben — und die gepoolten Verbindungen, die wiederholte Binds günstig machen, ziehen mit um."
       },
       "link": {
         "label": "ADR-0233",
