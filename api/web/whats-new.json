@@ -2,6 +2,34 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-handbook-is-caught-up-with-the-product-six-apps-the-play",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The handbook now covers all six apps",
+        "de": "Das Handbuch deckt jetzt alle sechs Apps ab"
+      },
+      "summary": {
+        "en": "Two of the six apps in the grid menu were not in the handbook at all: Panorama, which shows the landscape of everything deployed and how it hangs together, and Data, where you say what an order actually is across all your processes. Both now have a chapter, in German and English. So does the Playground — the Modeler tab that runs your draft against two hundred cases on the real engine, without deploying anything — and the two Console screens for connecting an AI assistant and reading who shared what with whom. The help menu's On this page entry points at the right chapter from those screens now, instead of dropping you at the top of the handbook.",
+        "de": "Zwei der sechs Apps im Rastermenü kamen im Handbuch überhaupt nicht vor: Panorama, das die Landschaft alles Deployten und ihre Zusammenhänge zeigt, und Data, wo festgehalten wird, was ein Auftrag über alle Prozesse hinweg tatsächlich ist. Beide haben jetzt ein Kapitel, auf Deutsch und Englisch. Ebenso der Playground — der Modeler-Tab, der Ihren Entwurf mit zweihundert Fällen auf der echten Engine durchrechnet, ohne etwas zu deployen — und die zwei Console-Seiten für den Anschluss eines KI-Assistenten und dafür, wer was mit wem geteilt hat. Der Eintrag «Auf dieser Seite» im Hilfemenü führt von diesen Bildschirmen nun ins passende Kapitel, statt an den Anfang des Handbuchs."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Handbook"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Panorama",
+          "de": "Panorama öffnen"
+        },
+        "route": "#/panorama/landscape"
+      }
+    },
+    {
       "id": "a-widened-properties-column-in-the-form-editor-gave-its-widt",
       "version": "Unreleased",
       "date": null,
@@ -263,35 +291,6 @@
       "summary": {
         "en": "Writing an event, reading a subject's history, folding its state — until now Atlas did all three from the process that runs the engine, so a slow event store held up work that had nothing to do with it. They run in a worker Atlas starts and supervises itself now. Nothing to configure: the store you set up in Connectors is handed to that worker, including a store you reach without a token.",
         "de": "Ein Event schreiben, die Historie eines Subjects lesen, seinen Zustand falten — bisher machte Atlas alle drei im Prozess, der die Engine ausführt, sodass ein langsamer Event-Store Arbeit aufhielt, die nichts damit zu tun hatte. Sie laufen jetzt in einem Worker, den Atlas selbst startet und überwacht. Zu konfigurieren ist nichts: Der Store, den Sie unter Connectors eingerichtet haben, wird an diesen Worker übergeben — auch einer, den Sie ohne Token erreichen."
-      },
-      "link": {
-        "label": "ADR-0233",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0233-in-process-connectors-refused.md"
-      },
-      "tags": [
-        "Workers",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "rest-and-ldif-tasks-no-longer-run-on-the-engine-s-own-loop",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "REST calls now run in a worker, not in the engine",
-        "de": "REST-Aufrufe laufen jetzt im Worker, nicht mehr in der Engine"
-      },
-      "summary": {
-        "en": "Until now Atlas made a REST task's HTTP call from its own process — the same process that runs the engine. A slow or hung host on the other end therefore held up work that had nothing to do with it. REST and LDIF tasks now run in a worker Atlas starts and supervises itself, so a call that hangs is one worker you can see and restart in the Workers view, not a number in a timeout. Nothing to configure: authenticated REST tasks keep working, because Atlas hands the worker exactly the secrets the deployed models use.",
-        "de": "Bisher hat Atlas den HTTP-Aufruf eines REST-Tasks im eigenen Prozess gemacht — in demselben, der die Engine ausführt. Ein langsamer oder hängender Host auf der Gegenseite hielt damit Arbeit auf, die nichts damit zu tun hatte. REST- und LDIF-Tasks laufen jetzt in einem Worker, den Atlas selbst startet und überwacht: Ein hängender Aufruf ist damit ein Worker, den Sie in der Workers-Ansicht sehen und neu starten können, und keine Zahl in einem Timeout. Zu konfigurieren ist nichts — authentifizierte REST-Tasks laufen weiter, weil Atlas dem Worker genau die Geheimnisse übergibt, die die deployten Modelle verwenden."
       },
       "link": {
         "label": "ADR-0233",

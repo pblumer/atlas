@@ -855,6 +855,17 @@ function handbookHelp(path) {
   if (path.startsWith("#/operations/decisions")) return H("dmn", "Learn DMN");
   if (path.startsWith("#/operations/call-activities")) return H("elemente", "BPMN elements");
   if (path.startsWith("#/operations")) return H("betrieb", "Operations & incidents");
+  // Panorama and Data each have a chapter of their own, and both are places a
+  // person arrives at without having read anything: the landscape because it is
+  // the one view that says something before you have modelled, the information
+  // model because a data object's Type field links straight into it.
+  if (path.startsWith("#/panorama")) return H("panorama", "Panorama: the landscape");
+  if (path.startsWith("#/data")) return H("infomodell", "The information model");
+  // The two Console screens whose chapter is not the Console's own: connecting an
+  // assistant and reading the grant history are both access control, and that is
+  // where the accounts chapter puts them.
+  if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
+  if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
   // Organization pointed at the worker chapter only because the worker cards used to
   // sit on it; with those on their own page it points there instead, and Organization
