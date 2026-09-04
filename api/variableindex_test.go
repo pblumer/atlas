@@ -183,3 +183,27 @@ func TestSearchByDeclaredVariableAfterTheValueChanges(t *testing.T) {
 		t.Errorf("the new value matched %d rows, want 1", len(got))
 	}
 }
+
+// The index path honours the same cap as the walk it replaced. A seek is cheap, but
+// a query whose prefix matches every instance of a busy definition would still hand
+// the operator a response the size of the definition, so the scan stops at the cap.
+func TestSearchByDeclaredVariableStopsAtTheCap(t *testing.T) {
+	ts := newTestServer(t)
+	vars := make([]string, 0, 205)
+	for i := range 205 {
+		vars = append(vars, fmt.Sprintf(`{"variables":{"item":"widget-%03d"}}`, i))
+	}
+	def := searchFixture(t, ts, searchableBPMN, vars...)
+
+	code, body := doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances/search?process=%d&q=%s", def, url.QueryEscape("item=widget-*")), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("search: status=%d body=%s", code, body)
+	}
+	var rows []searchRow
+	if err := json.Unmarshal(body, &rows); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if len(rows) != 200 {
+		t.Fatalf("prefix over 205 instances returned %d rows, want the cap of 200", len(rows))
+	}
+}

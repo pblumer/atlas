@@ -275,7 +275,7 @@ func searchByIndex(rv *state.ReadView, defs defIndex, defKey uint64, pred varQue
 	return out, nil
 }
 
-// handleSearchInstances finds process instances by key or by the content of their// handleSearchInstances finds process instances by key or by the content of their
+// handleSearchInstances finds process instances by key or by the content of their
 // variables — the operator "which instance had customerType=Business?" surface,
 // and the "I have this instance key, take me to it" one.
 //

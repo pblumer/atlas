@@ -263,3 +263,28 @@ func TestAWorkerThatCrashesIsStillRestarted(t *testing.T) {
 		return len(list) == 1 && list[0].Starts > 1 && list[0].State == "failed"
 	})
 }
+
+// A supervisor asked to start after the server has already quit spawns nothing. The
+// existing shutdown tests close quit while a child is running, so which iteration of
+// the supervise loop notices is a race — this one closes it first, which makes the
+// loop's own quit branch the only path there is.
+func TestSupervisorStartsNothingAfterQuit(t *testing.T) {
+	quit := make(chan struct{})
+	close(quit)
+	sup := newSupervisor(quit)
+	sup.exe = "sh"
+	sup.add(SuperviseSpec{ID: "mailer-1", Kinds: []string{"send-email"}}, []string{"-c", "echo up; sleep 30"}, nil)
+	sup.start()
+	sup.wait()
+
+	got := sup.list()
+	if len(got) != 1 {
+		t.Fatalf("list() = %d children, want 1", len(got))
+	}
+	if got[0].State != "stopped" || got[0].PID != 0 {
+		t.Errorf("child = state %q pid %d, want stopped with no pid", got[0].State, got[0].PID)
+	}
+	if got[0].Starts != 0 {
+		t.Errorf("starts = %d, want 0 — nothing should have been spawned", got[0].Starts)
+	}
+}
