@@ -156,6 +156,12 @@ type deployment struct {
 	// listing can report it without re-reading the sidecar. The processor holds the
 	// authoritative gate; this is the display copy, kept in sync on toggle and load.
 	inactive bool
+	// diagramUpdatedAt / diagramUpdatedBy mirror the persisted stamp of the last
+	// layout-only adjustment (ADR-draft-adjust-a-deployed-diagram), so the process
+	// listing can say the picture is no longer the deployed one without re-reading
+	// the sidecar. Zero and empty for a diagram nobody has adjusted.
+	diagramUpdatedAt int64
+	diagramUpdatedBy string
 }
 
 // Server hosts the engine behind an HTTP surface. Construct it with New, mount
@@ -2246,6 +2252,9 @@ func (s *Server) loadDeployments() error {
 			xml:        []byte(rec.XML),
 			cp:         cp,
 			inactive:   rec.Inactive,
+
+			diagramUpdatedAt: rec.DiagramUpdatedAt,
+			diagramUpdatedBy: rec.DiagramUpdatedBy,
 		}
 		s.order = append(s.order, rec.Key)
 		if rec.Version > s.versions[rec.ProcessID] {

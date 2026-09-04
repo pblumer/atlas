@@ -306,6 +306,15 @@ var (
 	// it will be refused with the author watching.
 	DeploymentReloadedWithProblems = newEvent("deployment.reloaded_with_problems")
 
+	// DeploymentDiagramUpdated reports a layout-only adjustment to a deployed
+	// definition's diagram (ADR-draft-adjust-a-deployed-diagram): the picture the
+	// Operations views draw changed while the process behind it did not. It is on
+	// the audit trail rather than merely in the record's stamp because the change
+	// is visible to everyone looking at that definition — running instances and
+	// finished ones alike — and "why does this diagram look different from last
+	// week" is exactly the question an audit line answers.
+	DeploymentDiagramUpdated = newEvent("deployment.diagram_updated")
+
 	ScriptWorkerEnabled      = newEvent("script_worker.enabled")
 	ScriptWorkerMissing      = newEvent("script_worker.binary_missing")
 	CallOverrideSkipped      = newEvent("call_override.skipped")

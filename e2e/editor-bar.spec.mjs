@@ -13,7 +13,10 @@
 // puts the editor into a *mode* can still be got out of from inside that mode.
 import { test, expect } from "@playwright/test";
 
-const MENU_IDS = ["sim-toggle", "autolayout", "export", "docexport"];
+// The menu in deployment mode. "savelayout" is the one entry that depends on what is
+// open rather than on what the editor can do (ADR-draft-adjust-a-deployed-diagram):
+// a deployment can have its picture adjusted in place, a draft has nothing to adjust.
+const MENU_IDS = ["sim-toggle", "autolayout", "savelayout", "export", "docexport"];
 
 test.beforeEach(async ({ page }) => {
   const errors = [];
@@ -64,6 +67,32 @@ test("the menu holds the rest, and every control kept the id its behaviour is wi
 
   for (const id of MENU_IDS) await expect(page.locator(`#bar-menu #${id}`)).toBeVisible();
   await expect(page.locator("#bar-menu button")).toHaveCount(MENU_IDS.length);
+});
+
+test("saving a layout is offered on a deployment and only on a deployment", async ({ page }) => {
+  await page.locator("#bar-more").click();
+  const save = page.locator("#bar-menu #savelayout");
+  await expect(save).toBeVisible();
+
+  // It writes the diagram on screen back to the definition it was opened on — a PUT
+  // to that key, not a deploy. The mock stands in for fetch, so the call it recorded
+  // is the evidence.
+  await page.evaluate(() => { window.__calls.length = 0; });
+  await save.click();
+  await expect.poll(() => page.evaluate(() =>
+    window.__calls.filter((c) => c.method === "PUT" && c.url === "/api/v1/processes/42/diagram").length
+  )).toBe(1);
+  await expect.poll(() => page.evaluate(() =>
+    window.__calls.filter((c) => c.url.includes("/deployments")).length
+  )).toBe(0);
+
+  // Remount as a new diagram: there is no deployment to save onto, so the entry is
+  // not offered at all.
+  await page.evaluate(() => window.__mountNew());
+  await expect(page.locator("#bar-more")).toBeVisible();
+  await page.locator("#bar-more").click();
+  await expect(page.locator("#bar-menu")).toBeVisible();
+  await expect(page.locator("#bar-menu #savelayout")).toBeHidden();
 });
 
 test("the menu closes on the trigger, on an outside click and on Escape", async ({ page }) => {

@@ -1,0 +1,15 @@
+{
+  "title": {
+    "en": "Runtime badges keep off the names",
+    "de": "Laufzeit-Badges bleiben von den Namen weg"
+  },
+  "summary": {
+    "en": "On a running diagram each shape can carry badges: how many tokens are on it, whether it is stuck, a link to a waiting task, a decision to inspect. They used to sit in the corners inside the shape, which is where the name is — on a task with a long name the decision badge covered a whole line of it, and on an event the token count landed on the caption underneath. They now hang just outside the shape, on the side the name is not, and they are the size of a count instead of spelling out a word. Each one kept its corner, so they still read the same way; hover for the wording.",
+    "de": "Auf einem laufenden Diagramm trägt jede Form Badges: wie viele Tokens auf ihr liegen, ob sie klemmt, ein Link zur wartenden Aufgabe, eine Entscheidung zum Nachsehen. Sie saßen bisher in den Ecken *innerhalb* der Form — also dort, wo der Name steht: Bei einer Aufgabe mit langem Namen verdeckte das Entscheidungs-Badge eine ganze Zeile, bei einem Ereignis landete der Token-Zähler auf der Beschriftung darunter. Jetzt hängen sie knapp außerhalb der Form, auf der Seite, auf der der Name nicht steht, und sie sind so groß wie eine Zahl statt so breit wie ein Wort. Die Ecke jedes Badges ist geblieben, sie lesen sich also unverändert; den Wortlaut zeigt der Tooltip."
+  },
+  "tags": ["Operations"],
+  "try": {
+    "label": { "en": "Open Operations", "de": "Operations öffnen" },
+    "route": "#/operations"
+  }
+}

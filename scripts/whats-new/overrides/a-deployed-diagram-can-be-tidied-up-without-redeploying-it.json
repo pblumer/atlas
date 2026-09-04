@@ -1,0 +1,29 @@
+{
+  "title": {
+    "en": "Fix a deployed diagram without redeploying it",
+    "de": "Ein deploytes Diagramm korrigieren, ohne neu zu deployen"
+  },
+  "summary": {
+    "en": "You usually notice that a diagram is hard to read once it is running — a task's name under a token count, a label on an edge. Until now the only fix was to deploy it again, which made a new version for a change nobody can see, and left the instances already running with the old picture. Now you open the deployment in the Modeler, move what needs moving, and pick \"Save layout to deployment\" from the … menu. The definition keeps its version and its running instances; only the drawing changes, everywhere at once. If you changed anything but the layout, the save is refused and tells you to deploy instead.",
+    "de": "Dass ein Diagramm schwer zu lesen ist, merkt man meist erst im Betrieb — der Name einer Aufgabe unter einem Token-Zähler, ein Label auf einer Kante. Bisher half nur erneutes Deployen: eine neue Version für eine Änderung, die niemand sieht, und die bereits laufenden Instanzen behielten trotzdem das alte Bild. Jetzt öffnen Sie das Deployment im Modeler, schieben zurecht und wählen im …-Menü «Save layout to deployment». Die Definition behält ihre Version und ihre laufenden Instanzen; nur die Zeichnung ändert sich, überall gleichzeitig. Wer versehentlich mehr als das Layout ändert, bekommt die Speicherung verweigert und den Hinweis, stattdessen zu deployen."
+  },
+  "tags": ["Modeler", "Operations"],
+  "tutorial": {
+    "en": [
+      "Open Operations and pick the deployed process whose diagram you want to fix.",
+      "Open that deployment in the Modeler.",
+      "Move the shapes, labels or edges that sit badly — change nothing else.",
+      "Open the … menu and choose \"Save layout to deployment\"."
+    ],
+    "de": [
+      "Operations öffnen und den deployten Prozess wählen, dessen Diagramm stört.",
+      "Dieses Deployment im Modeler öffnen.",
+      "Formen, Labels oder Kanten zurechtschieben — sonst nichts ändern.",
+      "Im …-Menü «Save layout to deployment» wählen."
+    ]
+  },
+  "try": {
+    "label": { "en": "Open Operations", "de": "Operations öffnen" },
+    "route": "#/operations"
+  }
+}

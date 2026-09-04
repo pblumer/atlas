@@ -66,6 +66,10 @@
       };
 
       window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });
+      // A new diagram: nothing is deployed, so there is nothing to save a layout onto.
+      // key null and draftId null keeps the live-collaboration SSE out of it, same as
+      // the deployment mount above.
+      window.__mountNew = () => mountEditor(view, { api, toast: noop, key: null });
       window.__ready = true;
     </script>
   </body>

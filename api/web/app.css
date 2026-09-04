@@ -1158,23 +1158,39 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .djs-element.atlas-incident .djs-visual > :nth-child(1) {
   stroke: var(--danger) !important; stroke-width: 3px !important;
 }
+/* The Live view's note that a deployed definition's drawing was adjusted after it was
+   deployed (ADR-draft-adjust-a-deployed-diagram). Quiet on purpose: it is a caveat about
+   the picture, not a state of the process. */
+.live-layout-note { margin-left: 8px; font-size: 11px; }
+
+/* The three annotation badges below are deliberately the size of the token count and
+   not of the word they used to spell out (ADR-draft-runtime-badges-clear-of-labels).
+   A pill wide enough for "⚠ 2 incidents" is 90px, and 90px is most of a task's width
+   or three times an event's: wherever it was anchored it came down on a caption. The
+   glyph identifies the badge, the count is the only text that varies, and the words
+   live in the tooltip, the aria-label and the panel that lists the thing. They widen
+   past a circle only when they carry a number. */
 .incident-badge {
-  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  white-space: nowrap;
   background: var(--danger); color: #fff; border-radius: 999px;
-  height: 20px; padding: 0 9px;
+  min-width: 20px; height: 20px; padding: 0 4px; box-sizing: border-box;
   font: 700 11px/20px system-ui, sans-serif;
   box-shadow: 0 1px 4px rgba(0,0,0,0.3); pointer-events: none;
 }
 /* "Open task" badge on a user-task element that has a waiting job: a one-click jump
    from the diagram to that task's form in the Tasks app. */
 .task-open {
-  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  white-space: nowrap;
   background: var(--accent, #2563eb); color: #fff; border-radius: 999px;
-  height: 20px; padding: 0 9px; text-decoration: none;
+  min-width: 20px; height: 20px; padding: 0 4px; box-sizing: border-box;
+  text-decoration: none;
   font: 700 11px/20px system-ui, sans-serif;
   box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer;
 }
 .task-open:hover { filter: brightness(1.08); }
+.task-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* Drill-down from a call activity's replay into the child instance it started
    (ADR-0076). On the diagram it is an invisible click hotspot sized over the "+"
    call-activity marker — the marker itself becomes the target, with no extra
@@ -1199,8 +1215,9 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    because the gesture that opens it — a double-click on that marker — is otherwise
    folklore. It is deliberately a hover cue rather than another badge: in the live view
    all four corners of a shape already carry one (incident, token counts, open task,
-   decision), and the marker is the one place on a call activity that is about the
-   called process by construction.
+   decision — hung outside the border rather than inside it,
+   ADR-draft-runtime-badges-clear-of-labels), and the marker is the one place on a
+   call activity that is about the called process by construction.
    Pointer-events off on both parts: the double-click is handled on the canvas, and a
    div sitting over the marker would swallow it. */
 .djs-overlay-atlas-call-drill { pointer-events: none; transform-origin: 0 0; }
@@ -1218,9 +1235,11 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 /* "Decision" badge on a business rule task that has been evaluated: opens the
    decision-inspection panel (inputs, outputs, and how it was decided; ADR-0064). */
 .decision-badge {
-  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  white-space: nowrap;
   background: #6b3fd4; color: #fff; border: none; border-radius: 999px;
-  height: 20px; padding: 0 9px; cursor: pointer;
+  min-width: 20px; height: 20px; padding: 0 4px; box-sizing: border-box;
+  cursor: pointer;
   font: 700 11px/20px system-ui, sans-serif;
   box-shadow: 0 1px 4px rgba(0,0,0,0.3);
 }
