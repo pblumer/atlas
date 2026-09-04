@@ -102,16 +102,16 @@
     </scriptTask>
 
     <scriptTask id="s_wuerfel" name="Würfel ziehen">
-      <documentation>Vier Würfe je Ereignis, aus verschiedenen Bit-Bereichen: r wählt die Identität aus dem Nummernkreis MT-10001..MT-59000, t die Ereignisart im Tagesbetrieb, b die Art im JML-Batch, s den Service aus dem Katalog.</documentation>
+      <documentation>Vier Würfe je Ereignis, aus verschiedenen Bit-Bereichen: r wählt die Identität aus dem Nummernkreis MT-10001..MT-59000, t die Ereignisart im Tagesbetrieb, b die Art im JML-Batch, s den Service aus dem Katalog, e die Störungsklasse. Die Bit-Bereiche überschneiden sich nicht.</documentation>
       <extensionElements>
-        <zeebe:script expression="= for w in h2 return {r: modulo(w.a, 49000), t: modulo(floor(w.b / 1024), 20), b: modulo(floor(w.b / 65536), 25), s: modulo(w.b, 8)}" resultVariable="wuerfel"/>
+        <zeebe:script expression="= for w in h2 return {r: modulo(w.a, 49000), t: modulo(floor(w.b / 1024), 20), b: modulo(floor(w.b / 65536), 25), s: modulo(w.b, 8), e: modulo(floor(w.b / 256), 20)}" resultVariable="wuerfel"/>
       </extensionElements>
     </scriptTask>
 
     <scriptTask id="s_plan" name="Bewegungen planen">
-      <documentation>Mischung im Tagesbetrieb: 25 % bestellt, 25 % in Betrieb, 15 % gekündigt, 10 % Störung, 10 % dekommissioniert, 15 % Stammdaten-Mutation. Im JML-Batch: 48 % Eintritt, 48 % Austritt, 4 % Löschfrist.</documentation>
+      <documentation>Mischung im Tagesbetrieb: 25 % bestellt, 25 % in Betrieb, 15 % gekündigt, 10 % Störung, 10 % dekommissioniert, 15 % Stammdaten-Mutation. Im JML-Batch: 48 % Eintritt, 48 % Austritt, 4 % Löschfrist. Jede zwanzigste Störung braucht ein Ersatzgerät und wird im Service Desk zur Beschaffungsaufgabe ohne Automatik.</documentation>
       <extensionElements>
-        <zeebe:script expression="= for w in wuerfel return {identityId: &quot;MT-&quot; + string(10001 + w.r), zeitpunkt: takt.ztp, bewegung: if menge.batch then (if w.b &lt; 12 then &quot;eintritt&quot; else if w.b &lt; 24 then &quot;austritt&quot; else &quot;loeschfrist&quot;) else (if w.t &lt; 17 then &quot;service&quot; else &quot;mutation&quot;), serviceId: string join(katalog[k = w.s].id, &quot;&quot;), serviceName: string join(katalog[k = w.s].name, &quot;&quot;), serviceStatus: if w.t &lt; 5 then &quot;BESTELLT&quot; else if w.t &lt; 10 then &quot;IN_BETRIEB&quot; else if w.t &lt; 13 then &quot;GEKUENDIGT&quot; else if w.t &lt; 15 then &quot;GESTOERT&quot; else &quot;DEKOMMISSIONIERT&quot;, neueOrgEinheit: string join(katalog[k = w.s].org, &quot;&quot;), neueFunktion: string join(katalog[k = w.s].fkt, &quot;&quot;)}" resultVariable="auftraege"/>
+        <zeebe:script expression="= for w in wuerfel return {identityId: &quot;MT-&quot; + string(10001 + w.r), zeitpunkt: takt.ztp, bewegung: if menge.batch then (if w.b &lt; 12 then &quot;eintritt&quot; else if w.b &lt; 24 then &quot;austritt&quot; else &quot;loeschfrist&quot;) else (if w.t &lt; 17 then &quot;service&quot; else &quot;mutation&quot;), serviceId: string join(katalog[k = w.s].id, &quot;&quot;), serviceName: string join(katalog[k = w.s].name, &quot;&quot;), serviceStatus: if w.t &lt; 5 then &quot;BESTELLT&quot; else if w.t &lt; 10 then &quot;IN_BETRIEB&quot; else if w.t &lt; 13 then &quot;GEKUENDIGT&quot; else if w.t &lt; 15 then &quot;GESTOERT&quot; else &quot;DEKOMMISSIONIERT&quot;, neueOrgEinheit: string join(katalog[k = w.s].org, &quot;&quot;), neueFunktion: string join(katalog[k = w.s].fkt, &quot;&quot;), stoerungsklasse: if w.e = 0 then &quot;ersatz&quot; else &quot;normal&quot;}" resultVariable="auftraege"/>
       </extensionElements>
     </scriptTask>
 
@@ -128,6 +128,7 @@
           <zeebe:input source="= item.zeitpunkt" target="zeitpunkt"/>
           <zeebe:input source="= item.neueOrgEinheit" target="neueOrgEinheit"/>
           <zeebe:input source="= item.neueFunktion" target="neueFunktion"/>
+          <zeebe:input source="= item.stoerungsklasse" target="stoerungsklasse"/>
         </zeebe:ioMapping>
       </extensionElements>
       <multiInstanceLoopCharacteristics>

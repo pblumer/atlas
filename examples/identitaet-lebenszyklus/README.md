@@ -191,6 +191,52 @@ Weil das eine reine Funktion der Uhrzeit bleibt, ist es replay-fest. Ein echter
 Zufallsgenerator wäre es nicht — `applyToState` läuft live *und* bei der
 Wiederherstellung (Invariante I4).
 
+## Störungen und der Service Desk
+
+[`service-desk-ticket.bpmn`](service-desk-ticket.bpmn) macht aus einer gemeldeten
+Störung eine Aufgabe für Menschen — und schliesst den Kreis zurück zur Identität.
+
+Ein Service-Ereignis mit `serviceStatus = GESTOERT` lässt den Dispatcher eine
+zweite Nachricht werfen: `stoerung-gemeldet`. Die trifft auf einen **Message-Start**
+und erzeugt eine Wurzelinstanz des Tickets.
+
+Warum Message-Start und keine Call-Activity: eine Call-Activity hielte den
+Aufrufer am Leben, bis jemand die Aufgabe erledigt. Der Aufrufer ist der
+Dispatcher, und der hängt in der Multi-Instance des Lastgenerators — ein einziges
+unbearbeitetes Ticket würde also den Takt blockieren und Generator-Instanzen
+aufstauen. Der Message-Start entkoppelt: der Dispatcher wirft und ist fertig.
+
+Der Start ist bewusst **nicht** singleton (ADR-0094): zwei Störungen derselben
+Person ergeben zwei Tickets. Der Korrelationsschlüssel dient dem Wiederfinden,
+nicht der Eindeutigkeit.
+
+Zwei Wege, mit Absicht verschieden:
+
+| | Aufgabe | Automatik | Ausgang | Anteil |
+|---|---|---|---|---|
+| normal | Störung analysieren | Boundary-Timer PT5M | Service wieder `IN_BETRIEB` | 95 % |
+| ersatz | Ersatzgerät beschaffen | **keine** | Service auf `BESTELLT` | 5 % |
+
+Der Timer im Normalfall ist der Demo-Ersatz für den 1st Level. In einem Test
+arbeitet niemand die Warteschlange ab, und ohne Abfluss wüchse sie unbegrenzt;
+mit ihm stellt sich ein Gleichgewicht ein — im Zeitraffer bei rund sieben
+Störungen je Minute etwa 35 offene Aufgaben. Wer von Hand abschliesst, kommt dem
+Timer zuvor und bricht ihn ab.
+
+Die Beschaffungsaufgabe hat absichtlich keinen Timer. Sie wartet wirklich auf
+einen Menschen und ist damit der sichtbare "hängt"-Stapel, den ein
+Operations-Blick braucht: er wächst langsam (rund 20 je Stunde) und geht nur weg,
+wenn jemand ihn anfasst.
+
+Beide Wege enden gleich: das Ticket wirft ein `service-ereignis` zurück an die
+Identität. Wer eine Aufgabe abschliesst, sieht unmittelbar, wie sich das
+Produkt-Register der betroffenen Person ändert.
+
+```
+atlas_list_tasks                      # die Warteschlange des Service Desk
+atlas_complete_task  key=<taskKey>    # eine Störung erledigen
+```
+
 ## Was der Test gezeigt hat
 
 | | |

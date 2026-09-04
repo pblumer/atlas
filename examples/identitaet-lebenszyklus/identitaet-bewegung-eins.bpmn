@@ -14,6 +14,12 @@
   v2: mutation und loeschfrist ergänzt. Damit deckt der Dispatcher alle fünf
   Nachrichten des Lebenszyklus ab und ein Lastgenerator kann eine Identität von
   ERFASST bis zum Terminate-Ende führen.
+
+  v3: ein Service-Ereignis mit Status GESTOERT meldet die Störung zusätzlich an
+  den Service Desk. Die zweite Nachricht startet über einen Message-Start eine
+  eigene Wurzelinstanz von service-desk-ticket — bewusst keine Call-Activity:
+  die würde diesen Dispatcher am Leben halten, bis jemand die Aufgabe erledigt,
+  und damit den Takt des Lastgenerators blockieren.
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
@@ -37,8 +43,11 @@
   <message id="Msg_b_service" name="service-ereignis">
     <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
   </message>
+  <message id="Msg_b_stoerung" name="stoerung-gemeldet">
+    <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
+  </message>
   <process id="identitaet-bewegung-eins" name="Identität bewegen (eine)" isExecutable="true">
-    <documentation>Wirft eine Nachricht an die Identität in identityId. Startvariablen: identityId, bewegung (eintritt|mutation|austritt|loeschfrist|service); für ein Service-Ereignis zusätzlich serviceId, serviceName, serviceStatus, zeitpunkt; für eine Mutation zusätzlich zeitpunkt, neueOrgEinheit, neueFunktion.</documentation>
+    <documentation>Wirft eine Nachricht an die Identität in identityId. Startvariablen: identityId, bewegung (eintritt|mutation|austritt|loeschfrist|service); für ein Service-Ereignis zusätzlich serviceId, serviceName, serviceStatus, zeitpunkt und bei serviceStatus GESTOERT optional stoerungsklasse (normal|ersatz); für eine Mutation zusätzlich zeitpunkt, neueOrgEinheit, neueFunktion.</documentation>
     <startEvent id="start" name="Start"/>
     <exclusiveGateway id="gw_art" name="welche Bewegung?" default="bf3"/>
     <sendTask id="s_eintritt" name="Eintritt melden" messageRef="Msg_b_eintritt"/>
@@ -46,6 +55,8 @@
     <sendTask id="s_austritt" name="Austritt melden" messageRef="Msg_b_austritt"/>
     <sendTask id="s_loeschfrist" name="Löschfrist melden" messageRef="Msg_b_loeschfrist"/>
     <sendTask id="s_service" name="Service-Ereignis melden" messageRef="Msg_b_service"/>
+    <exclusiveGateway id="gw_stoerung" name="Störung?" default="bf11"/>
+    <sendTask id="s_stoerung" name="Störung an Service Desk melden" messageRef="Msg_b_stoerung"/>
     <endEvent id="end" name="gemeldet"/>
     <sequenceFlow id="bf0" sourceRef="start" targetRef="gw_art"/>
     <sequenceFlow id="bf1" name="Eintritt" sourceRef="gw_art" targetRef="s_eintritt">
@@ -63,7 +74,12 @@
     <sequenceFlow id="bf3" name="Service" sourceRef="gw_art" targetRef="s_service"/>
     <sequenceFlow id="bf4" sourceRef="s_eintritt" targetRef="end"/>
     <sequenceFlow id="bf5" sourceRef="s_austritt" targetRef="end"/>
-    <sequenceFlow id="bf6" sourceRef="s_service" targetRef="end"/>
+    <sequenceFlow id="bf6" sourceRef="s_service" targetRef="gw_stoerung"/>
+    <sequenceFlow id="bf12" name="GESTOERT" sourceRef="gw_stoerung" targetRef="s_stoerung">
+      <conditionExpression xsi:type="tFormalExpression">= serviceStatus = "GESTOERT"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="bf11" sourceRef="gw_stoerung" targetRef="end"/>
+    <sequenceFlow id="bf13" sourceRef="s_stoerung" targetRef="end"/>
     <sequenceFlow id="bf9" sourceRef="s_mutation" targetRef="end"/>
     <sequenceFlow id="bf10" sourceRef="s_loeschfrist" targetRef="end"/>
   </process>
@@ -76,18 +92,23 @@
       <bpmndi:BPMNShape id="di_s_austritt" bpmnElement="s_austritt"><dc:Bounds x="420" y="320" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_s_loeschfrist" bpmnElement="s_loeschfrist"><dc:Bounds x="420" y="440" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_s_service" bpmnElement="s_service"><dc:Bounds x="420" y="560" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="640" y="342" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_stoerung" bpmnElement="gw_stoerung" isMarkerVisible="true"><dc:Bounds x="560" y="575" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="548" y="632" width="75" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_stoerung" bpmnElement="s_stoerung"><dc:Bounds x="670" y="670" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="830" y="342" width="36" height="36"/></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="di_bf0" bpmnElement="bf0"><di:waypoint x="196" y="360"/><di:waypoint x="260" y="360"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_bf1" bpmnElement="bf1"><di:waypoint x="285" y="335"/><di:waypoint x="285" y="120"/><di:waypoint x="420" y="120"/><bpmndi:BPMNLabel><dc:Bounds x="295" y="98" width="50" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_bf7" bpmnElement="bf7"><di:waypoint x="285" y="335"/><di:waypoint x="285" y="240"/><di:waypoint x="420" y="240"/><bpmndi:BPMNLabel><dc:Bounds x="295" y="218" width="55" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_bf2" bpmnElement="bf2"><di:waypoint x="310" y="360"/><di:waypoint x="420" y="360"/><bpmndi:BPMNLabel><dc:Bounds x="320" y="338" width="50" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_bf8" bpmnElement="bf8"><di:waypoint x="285" y="385"/><di:waypoint x="285" y="480"/><di:waypoint x="420" y="480"/><bpmndi:BPMNLabel><dc:Bounds x="295" y="458" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_bf3" bpmnElement="bf3"><di:waypoint x="285" y="385"/><di:waypoint x="285" y="600"/><di:waypoint x="420" y="600"/><bpmndi:BPMNLabel><dc:Bounds x="295" y="578" width="50" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_bf4" bpmnElement="bf4"><di:waypoint x="520" y="120"/><di:waypoint x="658" y="120"/><di:waypoint x="658" y="342"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_bf9" bpmnElement="bf9"><di:waypoint x="520" y="240"/><di:waypoint x="658" y="240"/><di:waypoint x="658" y="342"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_bf5" bpmnElement="bf5"><di:waypoint x="520" y="360"/><di:waypoint x="640" y="360"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_bf10" bpmnElement="bf10"><di:waypoint x="520" y="480"/><di:waypoint x="658" y="480"/><di:waypoint x="658" y="378"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_bf6" bpmnElement="bf6"><di:waypoint x="520" y="600"/><di:waypoint x="658" y="600"/><di:waypoint x="658" y="378"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf4" bpmnElement="bf4"><di:waypoint x="520" y="120"/><di:waypoint x="848" y="120"/><di:waypoint x="848" y="342"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf9" bpmnElement="bf9"><di:waypoint x="520" y="240"/><di:waypoint x="848" y="240"/><di:waypoint x="848" y="342"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf5" bpmnElement="bf5"><di:waypoint x="520" y="360"/><di:waypoint x="830" y="360"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf10" bpmnElement="bf10"><di:waypoint x="520" y="480"/><di:waypoint x="848" y="480"/><di:waypoint x="848" y="378"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf6" bpmnElement="bf6"><di:waypoint x="520" y="600"/><di:waypoint x="560" y="600"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf12" bpmnElement="bf12"><di:waypoint x="585" y="625"/><di:waypoint x="585" y="710"/><di:waypoint x="670" y="710"/><bpmndi:BPMNLabel><dc:Bounds x="592" y="688" width="65" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf11" bpmnElement="bf11"><di:waypoint x="610" y="600"/><di:waypoint x="848" y="600"/><di:waypoint x="848" y="378"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_bf13" bpmnElement="bf13"><di:waypoint x="770" y="710"/><di:waypoint x="848" y="710"/><di:waypoint x="848" y="378"/></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </definitions>

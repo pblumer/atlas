@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Service-Desk-Ticket zu einer gestörten Business-Leistung.
+
+  Warum ein eigener Prozess mit Message-Start und keine Call-Activity im
+  Dispatcher: eine Call-Activity würde den Aufrufer am Leben halten, bis jemand
+  die Aufgabe erledigt. Der Aufrufer ist hier der Bewegungs-Dispatcher, und der
+  hängt seinerseits in der Multi-Instance des Lastgenerators — ein einziges
+  unbearbeitetes Ticket würde also den Takt blockieren und die Generator-
+  Instanzen aufstauen. Ein Message-Start erzeugt stattdessen eine Wurzelinstanz:
+  der Dispatcher wirft die Nachricht und ist fertig, das Ticket lebt eigenständig
+  weiter.
+
+  Der Korrelationsschlüssel ist die identityId, aber der Start ist *nicht*
+  singleton (ADR-0094). Zwei Störungen derselben Person ergeben zwei Tickets —
+  richtig so; der Schlüssel dient dem Wiederfinden, nicht der Eindeutigkeit.
+
+  Der Kreis schliesst sich: ist das Ticket erledigt, wirft es ein
+  service-ereignis zurück an die Identität. Wer im Service Desk eine Aufgabe
+  abschliesst, sieht also unmittelbar, wie sich das Produkt-Register der
+  betroffenen Identität ändert — GESTOERT wird wieder IN_BETRIEB, oder
+  BESTELLT, wenn ein Ersatzgerät nötig war.
+
+  Zwei Wege, mit Absicht verschieden:
+
+    * normal (95 %) — Analyse-Aufgabe mit einem unterbrechenden Boundary-Timer
+      über PT5M. Der Timer ist der Demo-Ersatz für den 1st Level: in einem Test
+      arbeitet niemand die Warteschlange ab, und ohne Abfluss wüchse sie
+      unbegrenzt. Mit ihm stellt sich ein Gleichgewicht ein — bei rund sieben
+      Störungen je Minute im Zeitraffer etwa 35 offene Aufgaben. Wer von Hand
+      abschliesst, kommt dem Timer zuvor und bricht ihn ab.
+
+    * ersatz (5 %) — Beschaffungs-Aufgabe *ohne* Timer. Die wartet wirklich auf
+      einen Menschen. Das ist der "hängt"-Stapel, den ein Operations-Blick
+      braucht: er wächst langsam (rund 20 je Stunde) und geht nur weg, wenn
+      jemand ihn anfasst.
+
+  Startvariablen kommen als Nachrichten-Nutzlast aus dem Dispatcher (ADR-0035):
+  identityId, serviceId, serviceName, zeitpunkt, stoerungsklasse.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_service_desk_ticket" targetNamespace="http://atlas/identity">
+
+  <message id="Msg_stoerung" name="stoerung-gemeldet">
+    <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
+  </message>
+  <message id="Msg_sd_service" name="service-ereignis">
+    <extensionElements><zeebe:subscription correlationKey="= identityId"/></extensionElements>
+  </message>
+
+  <process id="service-desk-ticket" name="Service-Desk-Ticket (Störung)" isExecutable="true">
+    <documentation>Nimmt eine gemeldete Störung auf, legt sie dem Service Desk als Aufgabe vor und meldet das Ergebnis als service-ereignis an die betroffene Identität zurück.</documentation>
+
+    <startEvent id="start_stoerung" name="Störung gemeldet">
+      <messageEventDefinition messageRef="Msg_stoerung"/>
+    </startEvent>
+
+    <scriptTask id="s_ticket" name="Ticket eröffnen">
+      <documentation>Eine lesbare Ticketzeile, damit die Aufgabenliste ohne Klick etwas aussagt: Nummer, betroffene Leistung, betroffene Person. Die Nummer wird aus Personalnummer und Sekunde des Eingangs gebildet — für einen Test eindeutig genug.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= &quot;INC-&quot; + substring(identityId, 4) + &quot;-&quot; + string(now().minute * 60 + now().second) + &quot; · &quot; + serviceName + &quot; gestört · &quot; + identityId" resultVariable="betreff"/>
+      </extensionElements>
+    </scriptTask>
+
+    <exclusiveGateway id="gw_art" name="Ersatz nötig?" default="tk3"/>
+
+    <userTask id="ut_analyse" name="Störung analysieren">
+      <documentation>Die normale Service-Desk-Aufgabe. Der Boundary-Timer daneben schliesst sie nach fünf Minuten selbst ab — ohne diesen Abfluss wüchse die Warteschlange in einem Test ohne Bearbeiter unbegrenzt.</documentation>
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="service-desk"/>
+      </extensionElements>
+    </userTask>
+
+    <boundaryEvent id="b_auto" name="nach 5 min" attachedToRef="ut_analyse" cancelActivity="true">
+      <timerEventDefinition><timeDuration xsi:type="tFormalExpression">PT5M</timeDuration></timerEventDefinition>
+    </boundaryEvent>
+
+    <scriptTask id="s_manuell" name="Befund festhalten">
+      <extensionElements>
+        <zeebe:script expression="= &quot;durch Service Desk behoben&quot;" resultVariable="befund"/>
+      </extensionElements>
+    </scriptTask>
+
+    <scriptTask id="s_auto" name="Automatisch entstört">
+      <extensionElements>
+        <zeebe:script expression="= &quot;automatisch entstört (1st Level)&quot;" resultVariable="befund"/>
+      </extensionElements>
+    </scriptTask>
+
+    <userTask id="ut_ersatz" name="Ersatzgerät beschaffen">
+      <documentation>Kein Timer: diese Aufgabe wartet wirklich auf einen Menschen. Sie ist der sichtbare "hängt"-Stapel im Operations-Blick.</documentation>
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="service-desk"/>
+      </extensionElements>
+    </userTask>
+
+    <scriptTask id="s_ersatz" name="Beschaffung festhalten">
+      <extensionElements>
+        <zeebe:script expression="= &quot;Ersatzgerät bestellt&quot;" resultVariable="befund"/>
+      </extensionElements>
+    </scriptTask>
+
+    <exclusiveGateway id="gw_join" name="erledigt"/>
+
+    <scriptTask id="s_status" name="Neuen Produktzustand bestimmen">
+      <documentation>Ein Ersatzgerät ist bestellt, aber noch nicht in Betrieb — deshalb BESTELLT und nicht IN_BETRIEB. Der Zeitpunkt wird über eine Ausgabe-Zuordnung gesetzt, weil ein Script-Task nur eine resultVariable hat und die hier für den Status vergeben ist.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= if befund = &quot;Ersatzgerät bestellt&quot; then &quot;BESTELLT&quot; else &quot;IN_BETRIEB&quot;" resultVariable="serviceStatus"/>
+        <zeebe:ioMapping>
+          <zeebe:output source="= substring(string(now()), 1, 19)" target="zeitpunkt"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+    </scriptTask>
+
+    <sendTask id="s_melden" name="Ergebnis an Identität melden" messageRef="Msg_sd_service"/>
+
+    <endEvent id="end" name="Ticket geschlossen"/>
+
+    <sequenceFlow id="tk0" sourceRef="start_stoerung" targetRef="s_ticket"/>
+    <sequenceFlow id="tk1" sourceRef="s_ticket" targetRef="gw_art"/>
+    <sequenceFlow id="tk2" name="Ersatz" sourceRef="gw_art" targetRef="ut_ersatz">
+      <conditionExpression xsi:type="tFormalExpression">= stoerungsklasse = "ersatz"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="tk3" name="Analyse" sourceRef="gw_art" targetRef="ut_analyse"/>
+    <sequenceFlow id="tk4" sourceRef="ut_analyse" targetRef="s_manuell"/>
+    <sequenceFlow id="tk5" sourceRef="b_auto" targetRef="s_auto"/>
+    <sequenceFlow id="tk6" sourceRef="s_manuell" targetRef="gw_join"/>
+    <sequenceFlow id="tk7" sourceRef="s_auto" targetRef="gw_join"/>
+    <sequenceFlow id="tk8" sourceRef="ut_ersatz" targetRef="s_ersatz"/>
+    <sequenceFlow id="tk9" sourceRef="s_ersatz" targetRef="gw_join"/>
+    <sequenceFlow id="tk10" sourceRef="gw_join" targetRef="s_status"/>
+    <sequenceFlow id="tk11" sourceRef="s_status" targetRef="s_melden"/>
+    <sequenceFlow id="tk12" sourceRef="s_melden" targetRef="end"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="service-desk-ticket">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start_stoerung"><dc:Bounds x="160" y="182" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="138" y="225" width="82" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_ticket" bpmnElement="s_ticket"><dc:Bounds x="240" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_art" bpmnElement="gw_art" isMarkerVisible="true"><dc:Bounds x="390" y="175" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="378" y="138" width="75" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ut_analyse" bpmnElement="ut_analyse"><dc:Bounds x="490" y="40" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_b_auto" bpmnElement="b_auto"><dc:Bounds x="522" y="102" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="562" y="112" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_manuell" bpmnElement="s_manuell"><dc:Bounds x="640" y="40" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_auto" bpmnElement="s_auto"><dc:Bounds x="640" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ut_ersatz" bpmnElement="ut_ersatz"><dc:Bounds x="490" y="300" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_ersatz" bpmnElement="s_ersatz"><dc:Bounds x="640" y="300" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_join" bpmnElement="gw_join" isMarkerVisible="true"><dc:Bounds x="800" y="175" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="795" y="232" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_status" bpmnElement="s_status"><dc:Bounds x="890" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_melden" bpmnElement="s_melden"><dc:Bounds x="1030" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="1180" y="182" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="1155" y="225" width="90" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_tk0" bpmnElement="tk0"><di:waypoint x="196" y="200"/><di:waypoint x="240" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk1" bpmnElement="tk1"><di:waypoint x="340" y="200"/><di:waypoint x="390" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk2" bpmnElement="tk2"><di:waypoint x="415" y="225"/><di:waypoint x="415" y="340"/><di:waypoint x="490" y="340"/><bpmndi:BPMNLabel><dc:Bounds x="420" y="318" width="50" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk3" bpmnElement="tk3"><di:waypoint x="415" y="175"/><di:waypoint x="415" y="80"/><di:waypoint x="490" y="80"/><bpmndi:BPMNLabel><dc:Bounds x="420" y="58" width="50" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk4" bpmnElement="tk4"><di:waypoint x="590" y="80"/><di:waypoint x="640" y="80"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk5" bpmnElement="tk5"><di:waypoint x="540" y="138"/><di:waypoint x="540" y="200"/><di:waypoint x="640" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk6" bpmnElement="tk6"><di:waypoint x="740" y="80"/><di:waypoint x="825" y="80"/><di:waypoint x="825" y="175"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk7" bpmnElement="tk7"><di:waypoint x="740" y="200"/><di:waypoint x="800" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk8" bpmnElement="tk8"><di:waypoint x="590" y="340"/><di:waypoint x="640" y="340"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk9" bpmnElement="tk9"><di:waypoint x="740" y="340"/><di:waypoint x="825" y="340"/><di:waypoint x="825" y="225"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk10" bpmnElement="tk10"><di:waypoint x="850" y="200"/><di:waypoint x="890" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk11" bpmnElement="tk11"><di:waypoint x="990" y="200"/><di:waypoint x="1030" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk12" bpmnElement="tk12"><di:waypoint x="1130" y="200"/><di:waypoint x="1180" y="200"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
