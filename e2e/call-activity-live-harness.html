@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas call-activity live drill-down e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountLive against a mock `api`, with a
+         caller whose call activity has a running child instance (ADR-0076). Verifies
+         the drill-down: a double-click on the shape's "+" follows the call — to the
+         child instance while one instance is in view, and to the called process's own
+         live view under "All instances", where there is no single child to mean. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+      .djs-palette, .token-legend { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountLive } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000;
+      const ns = (ms) => ms * 1e6;
+
+      const CALLER_DEF = 7;   // the definition on screen
+      const CHILD_DEF = 8;    // the definition its call activity calls
+      const CALLER = 5001;    // the running caller instance
+      const CHILD = 6001;     // the child it started
+      window.__CALLER_DEF = CALLER_DEF;
+      window.__CHILD_DEF = CHILD_DEF;
+      window.__CALLER = CALLER;
+      window.__CHILD = CHILD;
+
+      const CALLER_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_caller" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="caller" name="Identitäten-Mengentest" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:callActivity id="CallActivity_1" name="Identitäten anlegen">
+      <bpmn:extensionElements>
+        <zeebe:calledElement processId="identitaet-lebenszyklus" propagateAllChildVariables="false"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:endEvent id="End_1" name="Alle Identitäten beendet"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="CallActivity_1"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="CallActivity_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="caller">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="CallActivity_1_di" bpmnElement="CallActivity_1"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="440" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="440" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      const PROCESSES = [
+        { key: CALLER_DEF, processId: "caller", name: "Identitäten-Mengentest", version: 1 },
+        { key: CHILD_DEF, processId: "identitaet-lebenszyklus", name: "Identität-Lebenszyklus", version: 3 },
+      ];
+
+      const instanceRow = {
+        key: CALLER, processDefKey: CALLER_DEF, state: "active", createdAt: ns(T),
+        variables: [{ name: "anzahl", value: "50", kind: "number" }],
+      };
+
+      // The caller's timeline is where the child link lives (ADR-0076): the drill-in
+      // reads it on the gesture rather than on every 1.5s poll.
+      const TIMELINE = {
+        [CALLER]: {
+          processDefKey: CALLER_DEF, processId: "caller", version: 1, state: "active",
+          steps: [
+            { elementId: "Start_1", type: "bpmn:StartEvent", elementInstanceKey: "1000", at: ns(T), position: 1 },
+            { elementId: "CallActivity_1", type: "bpmn:CallActivity", elementInstanceKey: "1001", at: ns(T + 10), position: 2, childInstanceKey: String(CHILD) },
+          ],
+          frames: [],
+        },
+        [CHILD]: { processDefKey: CHILD_DEF, processId: "identitaet-lebenszyklus", version: 3, state: "active", steps: [], frames: [] },
+      };
+
+      const api = async (method, url) => {
+        let m;
+        if (method !== "GET") return {};
+        if (url === "/api/v1/processes") return PROCESSES;
+        if (/\/processes\/\d+\/xml$/.test(url)) return CALLER_XML;
+        if ((m = url.match(/\/instances\/(\d+)\/timeline$/))) return TIMELINE[m[1]] || {};
+        if (url.startsWith("/api/v1/instances?")) return new URL(url, location.origin).searchParams.get("state") === "active" ? [instanceRow] : [];
+        if (url === "/api/v1/tasks") return [];
+        if (url.includes("/runtime")) {
+          return {
+            instances: 1, finished: 0, tokens: 1, incidents: [], incidentsTruncated: false,
+            elements: [
+              { elementId: "Start_1", type: "bpmn:StartEvent", tokens: 0, visits: 1, incidents: 0 },
+              { elementId: "CallActivity_1", type: "bpmn:CallActivity", tokens: 1, visits: 1, incidents: 0 },
+            ],
+          };
+        }
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        return {};
+      };
+
+      const apiRaw = async (method, url, body) => ({ data: await api(method, url, body), headers: new Headers() });
+
+      // Deep-linked on the running instance, and on the whole definition — the two
+      // readings of the same diagram, which drill into two different things.
+      window.__mountInstance = () => mountLive(view, { api, apiRaw, toast: noop, key: CALLER_DEF, instance: CALLER });
+      window.__mountAll = () => mountLive(view, { api, apiRaw, toast: noop, key: CALLER_DEF });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

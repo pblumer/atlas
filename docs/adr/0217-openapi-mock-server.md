@@ -172,10 +172,18 @@ deliberately, for the layout whose shared parts sit beside the document rather t
 below it. A URL is refused outright — this reads files, not the network — and the number
 of files is capped, for the generated or symlinked tree nobody meant to hand over.
 
+That cap was first set at 256, which is the kind of number that looks careful and is
+wrong: DigitalOcean's published document, the one this whole section exists for, is 659
+operations assembled from **1141** files. It loads in 414ms and 64MB, so the bound is
+now an order of magnitude above the largest document anyone has pointed this at, and it
+says what it is — a backstop, not an opinion about how large a document may be.
+
 Verified against published multi-file documents: the reference chains in
 `getkin/kin-openapi`'s fixtures, which climb out of a subdirectory, back into the entry
 document, and down into a third file, resolve to the same values that library resolves
-them to.
+them to — and DigitalOcean's own repository, whose 659 operations answer with their own
+example data (Sammy the Shark, real droplet ids, the API's actual not-found shape). The
+five responses it cannot serve are `text/event-stream`, which no static body can be.
 
 ## Pros and cons of the options
 

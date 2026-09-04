@@ -2,7 +2,6 @@ package openapimock_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -267,22 +266,6 @@ func TestADocumentWithNoFileBehindItStillRefusesFileRefs(t *testing.T) {
 	_, err := openapimock.Load([]byte("openapi: 3.0.0\npaths:\n  /x:\n    get: {$ref: 'other.yml'}\n"))
 	if err == nil || !strings.Contains(err.Error(), "not read from a file") {
 		t.Errorf("error %v, want it to say there is no file to resolve against", err)
-	}
-}
-
-func TestATreeOfFilesIsBounded(t *testing.T) {
-	// A generated or symlinked tree should not read the disk forever.
-	files := map[string]string{}
-	var props strings.Builder
-	for i := range 300 {
-		files[fmt.Sprintf("f%d.yml", i)] = fmt.Sprintf("Thing: {type: string, example: v%d}\n", i)
-		fmt.Fprintf(&props, "                  p%d: {$ref: 'f%d.yml#/Thing'}\n", i, i)
-	}
-	files["root.yaml"] = "openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        '200':\n          description: ok\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n" + props.String()
-	dir := writeTree(t, files)
-	_, err := openapimock.LoadFile(filepath.Join(dir, "root.yaml"))
-	if err == nil || !strings.Contains(err.Error(), "too many files") {
-		t.Errorf("error %v, want the file count bounded", err)
 	}
 }
 

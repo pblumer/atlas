@@ -181,6 +181,11 @@ let current; // active modeler/viewer, destroyed on remount
 let onLayoutKey; // document-level F8 handler for auto-layout, removed on remount
 let onBarMenuDismiss; // document-level click that closes the bar menu, removed on remount
 let onVarsKey; // document-level F4 handler for the Variables panel, removed on remount
+// The Modeler's delegated click for the Called-process panel's Open button. The view
+// root outlives a mount (app.js reuses one <main>), so this is held here and removed on
+// remount like the document-level handlers above — otherwise every visit to the editor
+// would leave another listener behind and one click would drill in twice.
+let onCalleeClick;
 let liveTimer; // active live-overlay poll, cleared on remount/leave
 let collab; // active live collaboration session (ADR-0140), closed on remount
 // generation is bumped by cleanup() on every navigation/remount. A mount captures
@@ -208,6 +213,7 @@ export function cleanup() {
   if (onLayoutKey) { document.removeEventListener("keydown", onLayoutKey, true); onLayoutKey = null; }
   if (onBarMenuDismiss) { document.removeEventListener("click", onBarMenuDismiss); onBarMenuDismiss = null; }
   if (onVarsKey) { document.removeEventListener("keydown", onVarsKey, true); onVarsKey = null; }
+  if (onCalleeClick) { onCalleeClick.root.removeEventListener("click", onCalleeClick.fn); onCalleeClick = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
@@ -684,7 +690,11 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     playground.setActive(activeTab(root) === "playground");
   });
   wireBarMenu(root);
-  wireActions(root, modeler, api, toast, projectId, identity);
+  const { saveDraft } = wireActions(root, modeler, api, toast, projectId, identity);
+  // A call activity's "+" is a door: double-clicking it (or the panel's Open button)
+  // leaves this diagram for the one it calls, so the drill-down owns the save that
+  // has to happen first — hence the saveDraft it is handed (ADR-0076).
+  wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft);
   wireEditorVars(root, modeler, api);
   wireProblems(root, modeler, api, projectId);
   wireResizer(root, modeler);
@@ -1424,6 +1434,178 @@ function makePoolProcessCaptions(modeler) {
   modeler.on("elements.changed", refresh);
   modeler.on("import.done", refresh);
   return refresh;
+}
+
+// --- Call-activity drill-down (ADR-0076, ADR-0245) ------
+//
+// A call activity is the one element on a diagram whose contents are somewhere else:
+// the process it calls is a separate model, deployed on its own, and at runtime a
+// separate instance. Every surface that draws one owes the reader a way *in*, and only
+// the instance replay had one — the badge on an element whose child instance is known.
+// In the Modeler and in the live view the "+" that BPMN puts on a call activity was
+// decoration: to see what the box calls you had to remember the process id, go back to
+// the process list and find it by hand, which is exactly the moment the model stops
+// being readable as one thing.
+//
+// So the marker is the door, everywhere it is drawn: double-click the "+" and the
+// called process opens (ADR-0245). The gesture is wired
+// identically on every surface (wireCallDrilldown) because it has to be learnable
+// once; what differs is only where "in" lands, which each surface supplies — the
+// Modeler opens the callee's model, the runtime views open what it is doing now.
+
+// CALL_MARKER mirrors the geometry bpmn-js draws that marker with (its BpmnRenderer's
+// SubProcessMarker): a 14x14 box centred on the shape's bottom edge, its top 20px
+// above it. PAD widens the gesture's target around it — 14px is a fine size for a
+// glyph and a poor one for something you have to hit twice.
+const CALL_MARKER = { size: 14, up: 20, pad: 6 };
+
+// isCallActivity is what the "+" marker means, and therefore what the gesture keys
+// off: bpmn-js draws that marker on every call activity, including one whose callee is
+// not named yet.
+const isCallActivity = (bo) => !!bo && bo.$type === "bpmn:CallActivity";
+
+// calledProcessId reads the process a call activity calls straight off the model on
+// the canvas — the same <zeebe:calledElement processId="..."> the Implement panel
+// edits. Every surface already holds the diagram, so each can answer "where does this
+// go" without asking the server. "" for a call activity whose target has not been
+// chosen yet: a runtime surface can still know its child instance, and the Modeler
+// says what is missing rather than nothing happening at all.
+function calledProcessId(bo) {
+  if (!isCallActivity(bo)) return "";
+  const ce = findExt(bo, "zeebe:CalledElement");
+  return ((ce && ce.processId) || "").trim();
+}
+
+// callMarkerBox is that marker's own rectangle, in diagram coordinates.
+function callMarkerBox(element) {
+  return {
+    x: element.x + element.width / 2 - CALL_MARKER.size / 2 - 0.5,
+    y: element.y + element.height - CALL_MARKER.up,
+    size: CALL_MARKER.size,
+  };
+}
+
+// onCallMarker reports whether a pointer event landed on the "+" rather than
+// somewhere else on the shape. That split is what lets the gesture live beside the
+// double-click the Modeler already has on an activity: the body renames it, the marker
+// opens what is behind it.
+//
+// It has to be answered by geometry. bpmn-js covers every shape with a .djs-hit rect,
+// so the event's target is that rect wherever the pointer was, and the marker beneath
+// it never sees a pointer event of its own. Mapping the event back through the canvas
+// viewbox asks the question in diagram coordinates instead, which also makes the
+// target scale with the zoom exactly like the marker it stands for.
+function onCallMarker(canvas, element, ev) {
+  if (!ev || typeof ev.clientX !== "number") return false;
+  let rect, vb;
+  try { rect = canvas.getContainer().getBoundingClientRect(); vb = canvas.viewbox(); }
+  catch { return false; } // canvas torn down mid-gesture
+  const x = vb.x + (ev.clientX - rect.left) / vb.scale;
+  const y = vb.y + (ev.clientY - rect.top) / vb.scale;
+  const m = callMarkerBox(element);
+  return x >= m.x - CALL_MARKER.pad && x <= m.x + m.size + CALL_MARKER.pad &&
+    y >= m.y - CALL_MARKER.pad && y <= m.y + m.size + CALL_MARKER.pad;
+}
+
+// wireCallDrilldown gives one bpmn-js instance the drill-in gesture and the cue that
+// makes it findable: hovering a call activity rings its "+" and names what is behind
+// it, double-clicking that "+" opens it. `open(element, processId)` is the surface's
+// own idea of "in"; the process id it is handed is "" for a call activity that names
+// no callee, which a runtime surface can still answer (it knows the child instance)
+// and the Modeler answers by saying what is missing.
+//
+// The cue is not decoration. The replay's first drill-in was an invisible hotspot over
+// this very marker, and operators reported never discovering it (see
+// drawCallActivityLinks) — an affordance that appears only once the pointer is already
+// on it is one nobody finds. Ringing the marker for as long as the *shape* is hovered
+// is the smallest thing that still answers "is there a way in, and to where" before
+// the pointer is anywhere near the 14px target.
+//
+// Priority 1500 puts the handler above bpmn-js's own double-click (direct label
+// editing, priority 1000), so the marker never opens the rename box, and below the
+// token simulation's blanket gesture block (2000, token-simulation.js), so a
+// walkthrough in progress still owns every gesture on the canvas.
+function wireCallDrilldown(viewer, open) {
+  let eventBus, canvas, overlays;
+  try {
+    eventBus = viewer.get("eventBus");
+    canvas = viewer.get("canvas");
+    overlays = viewer.get("overlays");
+  } catch { return; } // viewer already torn down — nothing to wire
+
+  const cue = []; // overlay ids of the hover cue, so we remove only our own
+  const clearCue = () => {
+    for (const id of cue.splice(0)) { try { overlays.remove(id); } catch { /* gone */ } }
+  };
+  const showCue = (element, pid) => {
+    clearCue();
+    const target = pid ? `&ldquo;${esc(pid)}&rdquo;` : "the called process";
+    try {
+      cue.push(overlays.add(element.id, "atlas-call-drill", {
+        // Anchored on the marker's own centre (the overlay's origin is the shape's
+        // top-left, in diagram units), so the ring sits on the "+" at any zoom.
+        position: { left: element.width / 2 - 0.5, top: element.height - CALL_MARKER.up + CALL_MARKER.size / 2 },
+        html: `<span class="ca-drill-ring"></span>`,
+      }));
+      cue.push(overlays.add(element.id, "atlas-call-drill", {
+        position: { left: element.width / 2, top: element.height + 6 },
+        // The ring above scales with the diagram because it stands for the marker;
+        // this is a sentence, and a sentence rendered at 200% runs off the canvas it
+        // is explaining. Held near its own size, it stays a label at any zoom.
+        scale: { min: 0.8, max: 1 },
+        html: `<span class="ca-drill-tip">Double-click <b>&#43;</b> to open ${target}</span>`,
+      }));
+    } catch { /* shape without graphics (mid-import) — the gesture still works */ }
+  };
+
+  eventBus.on("element.hover", (e) => {
+    const bo = e.element && e.element.businessObject;
+    if (isCallActivity(bo)) showCue(e.element, calledProcessId(bo)); else clearCue();
+  });
+  eventBus.on("element.out", clearCue);
+  eventBus.on("import.done", clearCue); // the diagram under the cue is gone
+
+  eventBus.on("element.dblclick", 1500, (e) => {
+    const bo = e.element && e.element.businessObject;
+    if (!isCallActivity(bo) || !onCallMarker(canvas, e.element, e.originalEvent)) return;
+    const pid = calledProcessId(bo);
+    clearCue();
+    Promise.resolve(open(e.element, pid)).catch(() => { /* the surface reports its own failures */ });
+    return false; // and never the label editor underneath
+  });
+}
+
+// deployedCallee resolves a called process id to the newest deployed definition that
+// carries it — how the engine itself resolves a `latest` binding, and the only thing
+// the runtime surfaces need to open the callee. Null when nothing on this server
+// deploys that id (a caller can legitimately be deployed before its callee, ADR-0076).
+async function deployedCallee(api, pid) {
+  if (!pid) return null; // a call activity that names no callee has nothing to resolve
+  let procs;
+  try { procs = await api("GET", "/api/v1/processes"); } catch { return null; }
+  return (procs || [])
+    .filter((p) => (p.processId || "") === pid)
+    .sort((a, b) => (b.version || 0) - (a.version || 0))[0] || null;
+}
+
+// childInstanceOf finds the instance a running caller started at one call activity,
+// and the definition that instance runs — the two things the live view's route needs
+// to land on the child *as it is running*. The link is on the caller's timeline, which
+// is one request rather than something the 1.5s runtime poll should carry: a drill-in
+// is a gesture, not a per-tick fact. The newest child wins, because a call activity
+// that has looped is asking about the round on screen now (ADR-0077/0133).
+async function childInstanceOf(api, instanceKey, elementId) {
+  let tl;
+  try { tl = await api("GET", `/api/v1/instances/${instanceKey}/timeline`); } catch { return null; }
+  const steps = (tl && tl.steps) || [];
+  let childKey = 0;
+  for (const s of steps) {
+    if (s.elementId === elementId && s.childInstanceKey) childKey = s.childInstanceKey;
+  }
+  if (!childKey) return null;
+  let child;
+  try { child = await api("GET", `/api/v1/instances/${childKey}/timeline`); } catch { child = null; }
+  return { key: childKey, defKey: (child && child.processDefKey) || 0 };
 }
 
 // variablesForCompletion returns the variables to offer in an element's expression
@@ -5843,7 +6025,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           <label class="field"><span>Process ID</span>
             <input type="text" id="f-call-processid" list="f-call-proc-list" autocomplete="off" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/>
             <datalist id="f-call-proc-list"></datalist></label>
-          <div class="field-actions"><button type="button" class="btn ghost small" id="f-call-newproc" title="Create a new process for this call activity to call">&#43; Create new process</button></div>
+          <div class="field-actions">
+            <button type="button" class="btn ghost small" id="f-call-open" title="Open the called process — its draft, or the newest deployed version. On the diagram, double-click the shape's ＋ (ADR-0076).">&#8627; Open called process</button>
+            <button type="button" class="btn ghost small" id="f-call-newproc" title="Create a new process for this call activity to call">&#43; Create new process</button>
+          </div>
           <label class="field"><span>Binding</span>
             <select id="f-call-binding">
               <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
@@ -7377,8 +7562,10 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
   // 409 rather than overwriting it (ADR-0222).
   const saveBtn = root.querySelector("#save");
 
-  // saveDraft persists the diagram once. `retried` guards the one recovery below, so a
-  // repeated 409 stops rather than looping.
+  // saveDraft persists the diagram once, and reports whether it did — a caller that is
+  // about to navigate away (the call-activity drill-down) must not leave on a save that
+  // failed. `retried` guards the one recovery below, so a repeated 409 stops rather
+  // than looping.
   async function saveDraft(retried) {
     saveBtn.disabled = true;
     try {
@@ -7399,7 +7586,7 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
         toast(`Renamed draft “${d.renamedFrom}” → “${d.processId}”`, "ok");
         identity.draftId = d.processId;
         location.hash = "#/modeler/draft/" + encodeURIComponent(d.processId);
-        return;
+        return true;
       }
       toast(`Saved draft “${d.name || d.processId}”`, "ok");
       if (identity.draftId !== d.processId) {
@@ -7410,6 +7597,7 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
         identity.fromDeployment = false;
         history.replaceState(null, "", "#/modeler/draft/" + encodeURIComponent(d.processId));
       }
+      return true;
     } catch (e) {
       // A 409 says another draft already holds this process id, and the save refused
       // rather than overwriting it (ADR-0222). Pulling a deployed
@@ -7421,11 +7609,11 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
       if (e.status === 409 && identity.fromDeployment && !retried && proc && proc.id) {
         if (window.confirm(`${e.message}\n\nThis diagram is the deployed “${proc.id}”. Overwrite that draft with it?`)) {
           identity.draftId = proc.id; // the retry is then a plain update of that draft
-          await saveDraft(true);
-          return;
+          return await saveDraft(true);
         }
       }
       toast("save failed: " + e.message, "err");
+      return false;
     } finally {
       saveBtn.disabled = false;
     }
@@ -7857,6 +8045,77 @@ function wireActions(root, modeler, api, toast, projectId, identity) {
 
   drun.addEventListener("click", () => doDeploy(true));
   donly.addEventListener("click", () => doDeploy(false));
+
+  // Saving is not only the Save button's: opening the process a call activity calls
+  // leaves this diagram, and the caller's unsaved edits have to be persisted first
+  // (wireCalleeNavigation). One save path, so the rename and collision handling above
+  // is not reimplemented beside it.
+  return { saveDraft };
+}
+
+// wireCalleeNavigation is the Modeler's end of the call-activity drill-down: both the
+// double-click on the shape's "+" and the "Open" button in the Called-process panel
+// land here and open the *model* of the process the call activity names — the draft
+// that holds it where there is one, since that is where the work is, and otherwise the
+// newest deployed version of it. Nothing at all when neither exists: the panel's
+// "Create new process" is the affordance for that, and silently scaffolding a process
+// out of a navigation gesture would be a surprising way to gain one.
+//
+// Leaving must not cost the caller's unsaved edits. A session that addresses a draft
+// saves it first — the same thing "Create new process" does before it navigates — and
+// one that does not (a deployed definition opened read-only, or a diagram never saved)
+// has nowhere to put them without inventing a draft, so it asks before discarding.
+function wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft) {
+  // keepEdits answers "may we leave now": true once this diagram's work is safe.
+  const keepEdits = async () => {
+    let dirty = false;
+    try { dirty = modeler.get("commandStack").canUndo(); } catch { /* no stack, nothing to lose */ }
+    if (!dirty) return true;
+    if (identity.draftId != null) return await saveDraft(false);
+    return window.confirm("This diagram has unsaved changes, and opening the called process discards them.\n\nContinue?");
+  };
+
+  const openCallee = async (pid) => {
+    pid = (pid || "").trim();
+    if (!pid) {
+      toast("This call activity does not name a called process yet — set its Process ID first.", "err");
+      return;
+    }
+    // Drafts first: a callee that is being authored is what the modeller means by
+    // "the called process", even when an older version of it is deployed.
+    const [drafts, deployed] = await Promise.all([
+      api("GET", "/api/v1/drafts").catch(() => []),
+      deployedCallee(api, pid),
+    ]);
+    const draft = (drafts || []).find((d) => (d.processId || "") === pid) || null;
+    if (!draft && !deployed) {
+      toast(`No process “${pid}” here yet — “＋ Create new process” scaffolds it.`, "err");
+      return;
+    }
+    if (!(await keepEdits())) return;
+    location.hash = draft
+      ? `#/modeler/draft/${encodeURIComponent(pid)}`
+      : `#/modeler/d/${deployed.key}`;
+  };
+
+  wireCallDrilldown(modeler, (_element, pid) => openCallee(pid));
+
+  // The panel's button is the same door for a pointer nowhere near the shape — and the
+  // one a keyboard reaches, which a double-click on a 14px marker never is. It lives in
+  // the properties panel, which is rebuilt on every selection, so it is wired by
+  // delegation on the view root rather than re-bound on each render; and it reads the
+  // id off the live field rather than the model, so an id just typed works before the
+  // field's change event has written it back. cleanup() takes it off again: the root
+  // outlives this mount (see onCalleeClick).
+  const onClick = (ev) => {
+    const btn = ev.target.closest("#f-call-open");
+    if (!btn || !root.contains(btn)) return;
+    ev.preventDefault();
+    const field = root.querySelector("#f-call-processid");
+    openCallee(field ? field.value : "");
+  };
+  root.addEventListener("click", onClick);
+  onCalleeClick = { root, fn: onClick };
 }
 
 // mountLive renders a deployed process read-only and overlays runtime state,
@@ -8813,6 +9072,35 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   varPanel.addEventListener("focusin", (e) => { const row = e.target.closest(".res-row.hoverable"); if (row) showDecPop(row); });
   varPanel.addEventListener("focusout", hideDecPop);
 
+  // Drilling into a call activity (ADR-0076): double-clicking the "+" on the shape
+  // follows the call. With one instance in view that means the child instance this one
+  // actually started — the running process, on its own live view, which is what an
+  // operator watching a token sit on a call activity is asking to see. With "All
+  // instances" selected, or before any child exists, there is no one child to mean, so
+  // it opens the called process's own live view instead: still the way in, one level
+  // less specific.
+  wireCallDrilldown(viewer, async (element, pid) => {
+    if (selected !== "all") {
+      const child = await childInstanceOf(api, selected, element.id);
+      // A child whose definition could not be read still has a replay, which shows the
+      // same instance; the live route needs the definition and the replay does not.
+      if (child) {
+        location.hash = child.defKey
+          ? `#/operations/p/${child.defKey}/i/${child.key}`
+          : `#/operations/i/${child.key}`;
+        return;
+      }
+    }
+    const dep = await deployedCallee(api, pid);
+    if (!dep) {
+      toast(pid
+        ? `The called process “${pid}” is not deployed on this server.`
+        : "This call activity does not name a called process.", "err");
+      return;
+    }
+    location.hash = `#/operations/p/${dep.key}`;
+  });
+
   // Inspecting a decision (ADR-0066): clicking a business rule task on the diagram
   // opens how its decision was made in the side panel (toggle off by clicking it
   // again); clicking any other element leaves the inspection. The ⚖ badge on a
@@ -9015,6 +9303,19 @@ export async function mountCollaboration(root, { api, toast, key }) {
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
   drawImplBadges(viewer); // static type icons; this view never clears overlays
+  // A pool's call activity drills in like everywhere else (ADR-0076). This view has no
+  // single instance to mean — it replays the exchange between pools, not one caller —
+  // so the "+" opens the called process's own live view.
+  wireCallDrilldown(viewer, async (_element, pid) => {
+    const dep = await deployedCallee(api, pid);
+    if (!dep) {
+      toast(pid
+        ? `The called process “${pid}” is not deployed on this server.`
+        : "This call activity does not name a called process.", "err");
+      return;
+    }
+    location.hash = `#/operations/p/${dep.key}`;
+  });
   const layer = canvas.getLayer("atlas-replay", 900); // message dots ride above the diagram
   const titleEl = root.querySelector("#collab-title");
   const instEl = root.querySelector("#inst-count");
@@ -10950,6 +11251,30 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (!el || el.waypoints || el === canvas.getRootElement()) { selectElement("", 0); return; }
     pause();
     selectElement(el.id, 0);
+  });
+
+  // Double-clicking a call activity's "+" drills into the child instance — the same
+  // place the badge and the Details panel's link go, reached by the gesture the marker
+  // itself suggests (ADR-0076). One child per element, the first: a multi-instance or
+  // looping call activity's later rounds are reached by selecting the round in the
+  // history, where the badge cannot follow either.
+  //
+  // A call activity that never started a child (it parked, or the replay is scrubbed
+  // before it ran) still has somewhere to go: the called process itself. Saying so and
+  // going there beats a dead gesture on the one element whose whole point is that its
+  // contents are elsewhere.
+  wireCallDrilldown(viewer, async (element, pid) => {
+    const s = stepsForElement(element.id).find((x) => x.childInstanceKey);
+    if (s) { location.hash = `#/operations/i/${s.childInstanceKey}`; return; }
+    const dep = await deployedCallee(api, pid);
+    if (!dep) {
+      toast(pid
+        ? `No child instance ran here, and “${pid}” is not deployed on this server.`
+        : "No child instance ran here, and this call activity names no called process.", "err");
+      return;
+    }
+    toast(`No child instance ran here — opening the called process “${pid}”.`, "ok");
+    location.hash = `#/operations/p/${dep.key}`;
   });
 
   // The Details panel's incident actions are HTML inside a tab body that re-renders,

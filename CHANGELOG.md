@@ -350,6 +350,32 @@ _Changed_ / _Removed_ for each version.
   others stops looking for an instance that exists.
   ([ADR-draft-instance-archive-search](docs/adr/draft-instance-archive-search.md))
 
+- **A call activity's `+` is now the way into the process it calls.** A call activity is
+  the one element on a diagram whose contents are somewhere else — a separate model,
+  deployed on its own, and at runtime a separate instance. BPMN says so with the `+` in
+  the bottom edge of the shape, and until now that marker pointed at nothing: in the
+  Modeler the called process id sat in the panel as text, and reaching the process it
+  named meant remembering the id, going back to the process list and finding it by hand.
+  The live view and the collaboration replay offered nothing at all; only the instance
+  replay had a way in, through its `↳` badge.
+
+  **Double-click the `+`** and the called process opens — the same gesture in the
+  Modeler, the live view, the instance replay and the collaboration replay. Hovering the
+  shape rings the marker and names what is behind it, so the gesture is visible before
+  the pointer is anywhere near it; the replay's badge and *Called process* link stay
+  exactly where they were. Where "in" lands is what each surface knows: the Modeler
+  opens the callee's **draft** where one holds that id and its newest deployed version
+  otherwise, the live view opens the **child instance** this caller started (or, under
+  *All instances*, the called process's own live view), and the replay opens the child's
+  replay — falling back to the called process, and saying so, for a call activity that
+  never started one. Leaving the Modeler saves the caller first when the session is
+  editing a draft, and asks before discarding when there is nowhere to put the edits.
+  The **Called process** panel also gained an *Open called process* button, which is the
+  same door for a keyboard.
+  ([ADR-0245](docs/adr/0245-call-activity-drilldown.md),
+  `e2e/call-activity-modeler.spec.mjs`, `e2e/call-activity-live.spec.mjs`,
+  `e2e/call-activity-replay.spec.mjs`)
+
 - **A model can say what it wants to be found by.** [ADR-0241](docs/adr/0241-finding-an-instance.md)
   made a version's instances a bounded page and an instance key a point read, and named
   the layer it left out: the question an operator actually arrives with is a business
@@ -1046,12 +1072,14 @@ _Changed_ / _Removed_ for each version.
   request body is recorded, never checked, and nothing is stateful.
 
   **A document published as a tree of files is read as one.** That is how most large
-  APIs ship — DigitalOcean's is a single entry file of references into a hundred others
+  APIs ship — DigitalOcean's is a single entry file of references into a thousand more
   — and each reference resolves against the directory of the file it is written in, so a
   path item two directories down reaches its schemas the way its author meant. What may
   be read is bounded on purpose: this mock serves what it reads and authenticates
   nobody, so references may not climb out of the document's own directory unless
-  `--spec-root` says they may, and a `$ref` to a URL is refused.
+  `--spec-root` says they may, and a `$ref` to a URL is refused. DigitalOcean's own
+  published document — 659 operations assembled from 1141 files — is served in under
+  half a second, with their example data in it.
 
   `GET /__mock/calls` is the journal of what a run actually did — method, path,
   operation, status, the `X-Request-ID` a job carries, and the body it sent — and

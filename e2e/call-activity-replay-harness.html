@@ -6,7 +6,10 @@
     <!-- Drives the *real* api/web/editor.js mountInstanceReplay against a mock `api`,
          with a caller timeline whose call-activity step carries a childInstanceKey
          (ADR-0076). Verifies the drill-down affordances: the clickable "child" badge
-         on the call activity and the "Called process" link in its Details panel. -->
+         on the call activity, the "Called process" link in its Details panel, and the
+         double-click on the shape's "+" — including on the second call activity, which
+         ran without ever starting a child and therefore falls back to the called
+         process itself. -->
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
@@ -31,22 +34,32 @@
       window.__CALLER = CALLER;
       window.__CHILD = CHILD;
 
-      // The caller: Start → CallActivity_1 → End, with hand-authored DI so it renders.
+      // The caller: Start → CallActivity_1 → CallActivity_2 → End, hand-authored DI.
       const CALLER_XML = `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_caller" targetNamespace="http://atlas/bpmn">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_caller" targetNamespace="http://atlas/bpmn">
   <bpmn:process id="caller" name="Test Call Activity" isExecutable="true">
     <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
-    <bpmn:callActivity id="CallActivity_1" name="CallActivity_1"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing></bpmn:callActivity>
-    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:callActivity id="CallActivity_1" name="CallActivity_1">
+      <bpmn:extensionElements><zeebe:calledElement processId="child"/></bpmn:extensionElements>
+      <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:callActivity id="CallActivity_2" name="Nie gestartet">
+      <bpmn:extensionElements><zeebe:calledElement processId="child"/></bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f2</bpmn:incoming></bpmn:endEvent>
     <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="CallActivity_1"/>
-    <bpmn:sequenceFlow id="f1" sourceRef="CallActivity_1" targetRef="End_1"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="CallActivity_1" targetRef="CallActivity_2"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="CallActivity_2" targetRef="End_1"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="caller">
     <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="CallActivity_1_di" bpmnElement="CallActivity_1"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="420" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="CallActivity_2_di" bpmnElement="CallActivity_2"><dc:Bounds x="420" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="580" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="520" y="138"/><di:waypoint x="580" y="138"/></bpmndi:BPMNEdge>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
@@ -65,11 +78,14 @@
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
-      // A step for each walked element; the call activity carries the child link.
+      // A step for each walked element. The first call activity carries the child
+      // link; the second ran without ever creating one (its callee was not deployed
+      // when the token arrived), which is the case the drill-down falls back on.
       const callerSteps = [
         step("Start_1", "bpmn:StartEvent", 0, 0),
         step("CallActivity_1", "bpmn:CallActivity", 1, CHILD),
-        step("End_1", "bpmn:EndEvent", 2, 0),
+        step("CallActivity_2", "bpmn:CallActivity", 2, 0),
+        step("End_1", "bpmn:EndEvent", 3, 0),
       ];
       function step(elementId, type, i, childInstanceKey) {
         const s = {
@@ -97,8 +113,13 @@
       };
       const XML = { callerdef: CALLER_XML, childdef: CHILD_XML };
 
+      // The child process, as it is deployed on this server: where a call activity
+      // that started no child of its own drills into instead.
+      const PROCESSES = [{ key: 55, processId: "child", name: "Call Activity Prozess", version: 1 }];
+
       const api = async (method, url) => {
         let m;
+        if (url === "/api/v1/processes") return PROCESSES;
         if ((m = url.match(/\/instances\/(\d+)\/timeline$/))) return TIMELINE[m[1]] || {};
         if ((m = url.match(/\/processes\/([\w-]+)\/xml$/))) return XML[m[1]] || "";
         if (url.includes("/runtime")) return { elements: [] };

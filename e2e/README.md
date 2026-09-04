@@ -98,16 +98,27 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   selection, then reports the file count and restart note on a (mocked) successful upload.
   Drives the real app shell against a mocked `/api/v1` (backup/restore hit the Go API, which
   the static harness doesn't run).
-- **`call-activity-replay.spec.mjs`** (ADR-0076): the **call-activity drill-down** in the
-  Operations instance replay — a call activity whose timeline step carries a `childInstanceKey`
-  turns its "+" marker into an invisible click hotspot (single click → the child's replay, same
-  window) and shows a "Called process" link in its Details panel; a plain element carries
-  neither. Drives the real `mountInstanceReplay` against a mock `api`.
-- **`call-activity-modeler.spec.mjs`** (ADR-0076): the **Process ID picker + create-new** in
-  the Modeler's call-activity Implement panel — selecting the call activity offers a datalist of
-  existing callees (deployed processes and drafts), and "＋ Create new process" saves the caller,
-  POSTs a starter draft keyed by the entered id, and navigates to it. Drives the real
-  `mountEditor` against a mock `api`.
+- **`call-activity-replay.spec.mjs`** (ADR-0076, ADR-0245): the
+  **call-activity drill-down** in the Operations instance replay — a call activity whose
+  timeline step carries a `childInstanceKey` carries an always-visible badge (click → the
+  child's replay, same window) and a "Called process" link in its Details panel, and a
+  **double-click on its "+" marker** goes to the same place; a call activity that started no
+  child falls back to the called process, and a double-click anywhere else on the shape
+  navigates nowhere. Drives the real `mountInstanceReplay` against a mock `api`.
+- **`call-activity-live.spec.mjs`** (ADR-0245): the same gesture in
+  the Operations **live** view, where what it means depends on what is in view — with one
+  instance selected the "+" opens the **child instance** this caller started (on its own live
+  view), under "All instances" the called process's live view. The hover cue names the callee
+  before the pointer is near the marker. Drives the real `mountLive` against a mock `api`.
+- **`call-activity-modeler.spec.mjs`** (ADR-0076, ADR-0245): the
+  **Process ID picker + create-new** in the Modeler's call-activity Implement panel — selecting
+  the call activity offers a datalist of existing callees (deployed processes and drafts), and
+  "＋ Create new process" saves the caller, POSTs a starter draft keyed by the entered id, and
+  navigates to it — plus the **drill-down**: the hover cue, the "+" double-click (the callee's
+  draft where one holds the id, else its newest deployed version), the panel's Open button, the
+  save-first / confirm-first guard on the caller's unsaved edits (and neither on an untouched
+  diagram), and the double-click on the shape *body* still being bpmn-js's rename. Drives the
+  real `mountEditor` against a mock `api`.
 - **`standard-loop-modeler.spec.mjs`** (ADR-0133): the **Loop section** in the Modeler's
   Implement panel — the panel reads the ↻ standard loop an imported activity carries,
   choosing a mode draws (or clears) the marker on the shape and exports the matching
