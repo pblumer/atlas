@@ -197,10 +197,11 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// Jira is provisioned for exactly Remedy's reason: its site URL and credential
 		// live in the worker store and the vault (ADR-0201), so a supervised worker
 		// holding neither could serve no Jira task at all.
-		connectorKindJira:     s.jiraWorkerEnv,
-		connectorKindPostgres: func() []string { return s.sqlWorkerEnvByName(connectorKindPostgres) },
-		connectorKindMariaDB:  func() []string { return s.sqlWorkerEnvByName(connectorKindMariaDB) },
-		connectorKindMSSQL:    func() []string { return s.sqlWorkerEnvByName(connectorKindMSSQL) },
+		connectorKindJira:         s.jiraWorkerEnv,
+		connectorKindGoogleSheets: s.googleSheetsWorkerEnv,
+		connectorKindPostgres:     func() []string { return s.sqlWorkerEnvByName(connectorKindPostgres) },
+		connectorKindMariaDB:      func() []string { return s.sqlWorkerEnvByName(connectorKindMariaDB) },
+		connectorKindMSSQL:        func() []string { return s.sqlWorkerEnvByName(connectorKindMSSQL) },
 	}
 }
 
@@ -741,6 +742,111 @@ func (s *Server) sharepointWorkerEnv() []string {
 		return nil
 	}
 	return append(env, sharepointConnectorsEnv+"="+strings.Join(names, ","))
+}
+
+// Environment a supervised Google Sheets worker reads its identities from — the same
+// names an operator sets by hand for an external worker (there is no private channel,
+// ADR-0157). googleSheetsEnvPrefix matches the worker's own constant of the same name;
+// TestSupervisedGoogleSheetsEnvUsesTheWorkersOwnNames holds the two together.
+const (
+	googleSheetsEnvPrefix     = "ATLAS_GOOGLESHEETS_"
+	googleSheetsConnectorsEnv = googleSheetsEnvPrefix + "CONNECTORS"
+)
+
+// googleSheetsWorkerEnv renders this server's Google identities as the environment a
+// supervised worker builds the identical clients from.
+//
+// It is sharepointWorkerEnv's story with a spreadsheet in place of a document library:
+// the credential lives in the vault behind each Worker's credentialsRef, which a
+// supervised worker can read no more than it can read the engine's memory — so
+// offloading Google Sheets without this would hand every task to a worker with no
+// identity to act as.
+//
+// The credential is handed over as the *whole bundle*, one opaque value, for
+// SharePoint's reason: the bundle has no public half worth splitting — the service
+// account's address sits in the same vault secret as its private key — and splitting
+// it would mean deciding the grant's shape a second time here, where getting it wrong
+// yields a worker that fails every job. googlesheets.NewProviderClient parses and
+// validates it on the far side, as it already does here.
+//
+// A worker an operator configured on the host is left untouched and kept in the
+// rendered list: the child inherits ATLAS_GOOGLESHEETS_<NAME>_* already, and dropping
+// its name would let a store instance silently take the whole list away from it.
+//
+// It reads the worker store and the vault, so it runs on the run-loop goroutine
+// (their owner, invariant I3), like buildGoogleSheetsClients does.
+func (s *Server) googleSheetsWorkerEnv() []string {
+	var (
+		env       []string
+		names     []string
+		fromStore bool // a store instance contributed a name; only then must CONNECTORS be rendered
+	)
+	seen := map[string]bool{}
+	addName := func(n string) {
+		if n = strings.TrimSpace(n); n != "" && !seen[n] {
+			seen[n] = true
+			names = append(names, n)
+		}
+	}
+	// Identities an operator set directly on the host: inherited by the child as they
+	// are, so nothing is rendered for them — they are only kept in the list below.
+	for _, name := range splitConnectorList(os.Getenv(googleSheetsConnectorsEnv)) {
+		addName(name)
+	}
+	s.do(func() {
+		recs, err := s.connectors.LoadAll()
+		if err != nil {
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the worker store for a supervised google sheets worker",
+				slog.String("error", err.Error()))
+			return
+		}
+		sort.Slice(recs, func(i, j int) bool { return recs[i].Name < recs[j].Name })
+		taken := map[string]string{}
+		for _, c := range recs {
+			if c.Kind != connectorKindGoogleSheets || !c.Enabled {
+				continue
+			}
+			envKey := connectorEnvKey(c.Name)
+			if envKey == "" {
+				continue
+			}
+			// Two names that fold to one variable would silently give one the other's
+			// credential — the mail/jira collision, left out for the same reason.
+			if first, dup := taken[envKey]; dup {
+				logging.Warn(logging.WorkerSupervisorFailed,
+					"two google sheets workers share one environment name; the second is not handed to the supervised worker",
+					slog.String("connector", c.Name), slog.String("collidesWith", first))
+				continue
+			}
+			bundle := strings.TrimSpace(s.resolveConnectorSecret(c.CredentialsRef))
+			// An identity whose bundle does not resolve — no secret set yet — is left
+			// out rather than handed over empty: the worker refuses at startup on a
+			// *named* identity it cannot build, which would take down every other kind
+			// it serves. Left out, it is simply not served, and the Console shows it as
+			// configured-not-working.
+			if bundle == "" {
+				continue
+			}
+			taken[envKey] = c.Name
+			key := googleSheetsEnvPrefix + envKey + "_"
+			// The endpoint is optional: blank means Google's own API bases, which is
+			// what buildGoogleSheetsClients passes too, so a record without one builds
+			// the same client on both sides.
+			if endpoint := strings.TrimSpace(c.Endpoint); endpoint != "" {
+				env = append(env, key+"ENDPOINT="+endpoint)
+			}
+			env = append(env, key+"CREDENTIALS="+bundle)
+			addName(c.Name)
+			fromStore = true
+		}
+	})
+	// Only a store identity needs CONNECTORS rendered: an operator who set it on the
+	// host has it inherited by the child already. When the store does contribute,
+	// render the union so a host-named identity is not lost to the override.
+	if !fromStore {
+		return nil
+	}
+	return append(env, googleSheetsConnectorsEnv+"="+strings.Join(names, ","))
 }
 
 // Environment a supervised Jira worker reads its sites from — the same names an

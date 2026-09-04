@@ -1,0 +1,4 @@
+{
+  "hidden": true,
+  "_why": "A correction to something that has not shipped: the Google Sheets entry in the same unreleased block already describes the finished state, and a reader has nothing to do about where the work runs. Showing both would say 'here is a feature' and 'here is a defect in that feature' side by side, about one thing nobody has used yet."
+}

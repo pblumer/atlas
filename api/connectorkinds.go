@@ -533,7 +533,7 @@ var offloadableKinds = map[string][]int32{
 //
 // With it the record's "owed a worker half" table is empty.
 func DefaultOffloadedKinds() []string {
-	return []string{"ad", connectorKindClio, "csv", connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "scim", "script", connectorKindSharePoint, "soap", connectorKindTemis, "webscrape"}
+	return []string{"ad", connectorKindClio, "csv", connectorKindGoogleSheets, connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "scim", "script", connectorKindSharePoint, "soap", connectorKindTemis, "webscrape"}
 }
 
 // DefaultSupervisedWorkerOnlyKinds are the worker-only Worker Types Atlas supervises

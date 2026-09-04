@@ -12,6 +12,27 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **Google Sheets runs on a worker, like everything else.** It shipped with an
+  in-engine handler and no supervised form, so the Modeler's properties panel showed it
+  as the one Worker Type reading IN-ENGINE while the twelve around it said otherwise —
+  and a fresh install called Google, with a service-account private key, from the
+  engine's run loop. ADR-0164 has one exception left and it is the FEEL script task;
+  this was not meant to be a second.
+
+  The engine now hands each configured Google identity to the worker it supervises
+  (`ATLAS_GOOGLESHEETS_*`, the whole credential bundle as one opaque value, the way
+  SharePoint and the SQL kinds do), the `worker` package serves the kind, and
+  `googlesheets` joins the default offload set. The in-engine form stays as the opt-in
+  `--in-process-connectors` fallback every managed kind keeps.
+
+  The guard that should have caught this was a canary asserting the *opposite* — that
+  some managed kind was still unprovisioned, so a related check could not become a
+  tautology. Google Sheets was the last one. It is now inverted: every managed Worker
+  Type must be handed to its supervised worker, so the next kind added without that
+  fails a test instead of a properties panel.
+
 ### Fixed
 
 - **A widened Properties column in the form editor gave its width to white space, not
