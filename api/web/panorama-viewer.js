@@ -2,6 +2,13 @@
 // untouched on the server; this module only projects its Diagram views into the
 // Atlas-owned diagram-js renderer vendored under vendor/archimate.
 
+// An element's documentation is prose, and prose in Atlas is Markdown
+// (ADR-draft-documentation-is-markdown). It is rendered with the shared module rather
+// than escaped into one paragraph, which also matters here in a way it does not
+// elsewhere: this text comes out of a foreign modelling tool, so it is exactly the kind
+// of string that must be inert. renderMarkdown escapes before it parses.
+import { renderMarkdown } from "./markdown.js";
+
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 
@@ -461,7 +468,8 @@ function propertiesHTML(item, resolution, canEdit, observations, drift, ctx, ctx
       ${relationship ? `<div class="panorama-kv"><span>Source</span><code>${esc(item.source)}</code></div>
         <div class="panorama-kv"><span>Target</span><code>${esc(item.target)}</code></div>` : ""}
     </section>
-    ${item.documentation ? `<section class="psec"><h3>Documentation</h3><p>${esc(item.documentation)}</p></section>` : ""}
+    ${item.documentation ? `<section class="psec"><h3>Documentation</h3>
+      <div class="md">${renderMarkdown(item.documentation)}</div></section>` : ""}
     ${bindingsHTML(item, resolution, canEdit)}
     ${liveHTML(item, observations)}
     ${driftHTML(drift, item)}

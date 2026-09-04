@@ -7,7 +7,14 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
   <name xml:lang="en">Order landscape</name>
   <elements>
     <element identifier="cap-orders" xsi:type="Capability"><name xml:lang="en">Fulfil orders</name></element>
-    <element identifier="app-orders" xsi:type="ApplicationComponent"><name xml:lang="en">Order Service</name></element>
+    <element identifier="app-orders" xsi:type="ApplicationComponent"><name xml:lang="en">Order Service</name>
+      <documentation xml:lang="en">Owns the **order lifecycle**.
+
+## Boundaries
+
+- takes orders from the shop
+- never prices them
+</documentation></element>
     <element identifier="svc-orders" xsi:type="ApplicationService"><name xml:lang="en">Order API</name></element>
     <element identifier="node-prod" xsi:type="Node"><name xml:lang="en">Production node</name></element>
   </elements>
@@ -323,4 +330,33 @@ test("a viewer is offered no authoring at all", async ({ page }) => {
   await expect(page.locator("[data-add-type]")).toHaveCount(0);
   await expect(page.locator("[data-connect]")).toHaveCount(0);
   await expect(page.locator(".panorama-properties")).not.toContainText("Connect");
+});
+
+// An element's documentation comes out of a foreign modelling tool and is shown to
+// whoever opens the landscape, so it is rendered by the shared Markdown module rather
+// than escaped into one paragraph (ADR-draft-documentation-is-markdown). The renderer's
+// own guarantees — including that this text cannot script the console — are covered in
+// markdown.spec.mjs; what is checked here is that the panel renders it and that the
+// section's label still reads as the app's, not the author's.
+test("an element's documentation is rendered as prose, not as markers", async ({ page }) => {
+  installMock(page);
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await page.locator('.djs-element[data-element-id="n-app"]').click();
+
+  const props = page.locator(".panorama-properties");
+  const doc = props.locator("section.psec", { has: page.locator(".md") });
+  await expect(doc.locator(".md strong")).toHaveText("order lifecycle");
+  await expect(doc.locator(".md ul li")).toHaveCount(2);
+  await expect(doc.locator(".md ul li").nth(1)).toHaveText("never prices them");
+
+  const label = await doc.locator("> h3").evaluate((el) => getComputedStyle(el).textTransform);
+  const heading = await doc.locator(".md h2").evaluate((el) => getComputedStyle(el).textTransform);
+  expect(label).toBe("uppercase");
+  expect(heading, "the author's heading is not the section's label").toBe("none");
+
+  expect(await doc.locator(".md").innerText()).not.toContain("**");
+  expect(pageErrors).toEqual([]);
 });

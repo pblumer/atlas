@@ -33,8 +33,10 @@
       window.__INSTANCE = INSTANCE;
 
       // Start_1 → Gateway_1 → Task_check → End_1 ran; Task_escalate is the branch this
-      // instance did not take, so its documentation is only reachable from the diagram.
-      // Gateway_1 carries none, to prove an undocumented element shows no block.
+      // instance did not take, so its documentation is only reachable from the diagram —
+      // and it is the one written as Markdown, so the panel is checked on both kinds of
+      // prose. Task_check is plain text from before Markdown; Gateway_1 carries none, to
+      // prove an undocumented element shows no block.
       const XML = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_doc" targetNamespace="http://atlas/bpmn">
   <bpmn:process id="dokumentiert" name="Dokumentierter Prozess" isExecutable="true">
@@ -53,7 +55,12 @@ Bei fehlenden Unterlagen ablehnen.</bpmn:documentation>
       <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:userTask id="Task_escalate" name="Eskalieren">
-      <bpmn:documentation>Nur bei unvollständigen Anträgen: an die Fachaufsicht abgeben.</bpmn:documentation>
+      <bpmn:documentation>Nur bei unvollständigen Anträgen: an die **Fachaufsicht** abgeben.
+
+## Was mitgeht
+
+- der Vorgang selbst
+- die Frist, gesetzt auf \`7 Tage\`</bpmn:documentation>
       <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f4</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:endEvent id="End_1" name="Fertig"><bpmn:incoming>f3</bpmn:incoming><bpmn:incoming>f4</bpmn:incoming></bpmn:endEvent>
