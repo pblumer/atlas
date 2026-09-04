@@ -258,7 +258,7 @@ ol.steps li { margin: 6px 0; }
 .field { display: block; margin: 10px 0; font-size: 13px; color: var(--muted); }
 /* A row of secondary actions under a field (e.g. the call-activity "create new
    process" button); nudged up so it reads as attached to the field above. */
-.field-actions { margin: -4px 0 10px; }
+.field-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 10px; }
 .field input[type="text"],
 .field input[type="email"],
 .field input[type="password"],
@@ -1173,6 +1173,28 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ca-child-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ca-child-link { color: var(--accent, #2563eb); font-weight: 600; text-decoration: none; }
 .ca-child-link:hover { text-decoration: underline; }
+
+/* The drill-in cue on a call activity (ADR-draft-call-activity-drilldown): while the
+   shape is hovered, the "+" BPMN draws on it is ringed and what it opens is named,
+   because the gesture that opens it — a double-click on that marker — is otherwise
+   folklore. It is deliberately a hover cue rather than another badge: in the live view
+   all four corners of a shape already carry one (incident, token counts, open task,
+   decision), and the marker is the one place on a call activity that is about the
+   called process by construction.
+   Pointer-events off on both parts: the double-click is handled on the canvas, and a
+   div sitting over the marker would swallow it. */
+.djs-overlay-atlas-call-drill { pointer-events: none; transform-origin: 0 0; }
+.ca-drill-ring {
+  display: block; width: 26px; height: 26px; margin: -13px 0 0 -13px; box-sizing: border-box;
+  /* No fill: the ring frames the "+" it is pointing at rather than covering it, and
+     what it encloses is exactly the area the double-click is accepted in. */
+  border: 2px solid var(--accent); border-radius: 7px; background: transparent;
+}
+.ca-drill-tip {
+  display: block; width: max-content; transform: translateX(-50%); white-space: nowrap;
+  background: var(--accent); color: #fff; border-radius: 999px; padding: 2px 9px;
+  font: 600 11px/1.6 system-ui, sans-serif; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
 /* "Decision" badge on a business rule task that has been evaluated: opens the
    decision-inspection panel (inputs, outputs, and how it was decided; ADR-0064). */
 .decision-badge {
