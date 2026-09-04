@@ -3666,6 +3666,18 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    the name's own reveal rule, so it appears when the name does. */
 .mesh-type { font-size: 11px; fill: var(--muted); pointer-events: none; }
 .mesh-application .mesh-type { font-size: 15px; }
+/* How much is running, under the name. Same size and same reveal as the type line —
+   it is an annotation on the node rather than a second label — and in the accent
+   rather than the muted grey, because unlike the type it is a number that changes. */
+.mesh-runs { font-size: 11px; fill: var(--accent); pointer-events: none; }
+.mesh-application .mesh-runs { font-size: 15px; }
+/* The instance-count switch, beside the notation picker: both change what the
+   picture draws rather than what it is about. */
+.mesh-instances {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  font-size: 13px; color: var(--text); white-space: nowrap; cursor: pointer;
+}
+.mesh-instances input { margin: 0; cursor: pointer; }
 /* What the projection drops. Collapsed by default and never absent: a projection
    that hides its loss is the failure §8's theme ban exists to prevent, and one that
    shouts it every time is one nobody reads twice. */
@@ -3918,6 +3930,12 @@ a:focus-visible .mesh-node .mesh-body { stroke: var(--accent); stroke-width: 3; 
   background: var(--bg); color: var(--text);
 }
 .mesh-unpin:hover { border-color: var(--accent); }
+/* The engine's tally for the selected process: live now, finished ever, last seen.
+   Wrapped rather than truncated — three short facts, and the one that gets cut is
+   the one somebody was reading. */
+.mesh-runtime { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; }
+.mesh-runtime b { font-size: 13px; }
+.mesh-runtime-now b { color: var(--accent); }
 /* The maintenance window's members. A row each rather than inline chips: every one
    carries what it costs on its own, which is the number that says which of them is
    driving the window — and that number has nowhere to go on a chip. */

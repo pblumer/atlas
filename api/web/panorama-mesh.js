@@ -1420,7 +1420,7 @@ function legendEntries(graph, notation) {
   return entries;
 }
 
-function legendHTML(graph, layoutMs, notation) {
+function legendHTML(graph, layoutMs, notation, instances = false) {
   const spoken = notationOf(notation?.id ?? notation);
   const swatch = (entry) => `<span class="mesh-swatch ${entry.tone}">
     <svg width="16" height="16" aria-hidden="true">${entry.mark}</svg>${esc(entry.label)}</span>`;
@@ -1439,6 +1439,14 @@ function legendHTML(graph, layoutMs, notation) {
   if (graph.clustered) {
     notes.push(`<p class="mesh-note">This starmap exceeded the size budget, so it is
       collapsed to applications. Each one states how many nodes it stands for.</p>`);
+  }
+  // What the count on the canvas does and does not say. A process with nothing
+  // running carries no number, and a reader who did not know that would read its
+  // absence as "not measured" — which is the one thing it does not mean.
+  if (instances) {
+    notes.push(`<p class="mesh-note">Running instances are drawn under the names that
+      have any. A process with none carries no number; select it to see the zero, and
+      what it has finished.</p>`);
   }
   // The comparison counts only mean something once a model has been overlaid; with
   // none, saying "0 unmodeled" would imply the landscape had been checked.
@@ -1506,7 +1514,7 @@ function legendHTML(graph, layoutMs, notation) {
   </div>`;
 }
 
-function renderGraph(graph, layoutMs, frame, { pinned, from, notation } = {}) {
+function renderGraph(graph, layoutMs, frame, { pinned, from, notation, instances = false } = {}) {
   const spoken = notationOf(notation?.id ?? notation);
   // A projected node carries a second line under its name, so the margin the layout
   // reserves has to carry it too — otherwise the type annotation is the one thing
@@ -1515,9 +1523,13 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation } = {}) {
   // longer than the thing it is typing — "[Application Component]" against
   // "Onboarding". Both directions have to grow, or the annotation is the one part of
   // the picture that ends up over the edge of it.
-  const margin = spoken.projection
-    ? { top: LABEL_MARGIN.top, right: LABEL_MARGIN.right + 44,
-        bottom: LABEL_MARGIN.bottom + 16, left: LABEL_MARGIN.left + 44 }
+  // Two things can hang a line under a node's name — the notation's word for it, and
+  // its running-instance count — and the margin has to carry however many are on.
+  const underlines = (spoken.projection ? 1 : 0) + (instances ? 1 : 0);
+  const margin = underlines
+    ? { top: LABEL_MARGIN.top, right: LABEL_MARGIN.right + (spoken.projection ? 44 : 0),
+        bottom: LABEL_MARGIN.bottom + 16 * underlines,
+        left: LABEL_MARGIN.left + (spoken.projection ? 44 : 0) }
     : LABEL_MARGIN;
   // Sized before anything else asks how big they are: connectivity decides the
   // radius, and the world budget, the separation pass and the circle all read it
@@ -1573,6 +1585,13 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation } = {}) {
     // ArchiMate's corner icon spelled out, and it is the only thing that makes a
     // canvas of identical boxes readable at all.
     const typed = typeIn(n.kind, spoken);
+    // How much is running here, when the reader has asked for it. Only where there
+    // is something to say: on a landscape of four hundred processes, "0 running"
+    // four hundred times is a wall of text that hides the eleven numbers somebody
+    // turned this on to find. The panel says the zero for whichever node is
+    // selected, and the legend says that the canvas does not.
+    const running = instances && n.runtime && n.runtime.running > 0 ? n.runtime.running : 0;
+    const runsAt = r + 28 + (typed ? 14 : 0);
     return `<g transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"
       class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")} mesh-sev-${esc(n.severity || "unknown")}${named ? " mesh-named" : ""}${context ? " mesh-context" : ""}${n.held ? " mesh-pinned" : ""}"
       data-node-id="${esc(n.id)}" data-severity="${esc(n.severity || "unknown")}"
@@ -1588,6 +1607,7 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation } = {}) {
       ${badge}
       <text class="mesh-label" text-anchor="middle" dy="${(r + 14).toFixed(1)}"><tspan class="mesh-label-ink">${label}</tspan></text>
       ${typed ? `<text class="mesh-type" text-anchor="middle" dy="${(r + 28).toFixed(1)}"><tspan class="mesh-label-ink">[${esc(typed.name)}]</tspan></text>` : ""}
+      ${running ? `<text class="mesh-runs" text-anchor="middle" dy="${runsAt.toFixed(1)}"><tspan class="mesh-label-ink">${running} running</tspan></text>` : ""}
       <title>${esc(nodeTitle(n, spoken))}</title></g>`;
   }).join("");
 
@@ -1698,6 +1718,48 @@ function findingsHTML(graph) {
           n.incidents ? ` · ${n.incidents} incident(s)` : ""}</span>
         ${n.reason ? `<span class="mesh-finding-why">${esc(n.reason)}</span>` : ""}
       </button>${sitesHTML(n)}</li>`).join("")}</ul>
+  </div>`;
+}
+
+// sinceText is how long ago something happened, in the coarsest unit that still
+// says it. A landscape is read at a glance and the question behind this number is
+// "did anything move lately", not "when exactly" — so minutes are rounded and
+// anything past a week stops pretending to be precise.
+function sinceText(nanos, now = Date.now()) {
+  if (!Number.isFinite(nanos) || nanos <= 0) return "";
+  const seconds = Math.max(0, Math.round((now - nanos / 1e6) / 1000));
+  if (seconds < 90) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 90) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 36) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
+}
+
+// runtimeHTML is what the engine has recorded about a process: how much is live,
+// how much has been, and whether anything has happened lately.
+//
+// It is stated for whichever node is selected whether or not the canvas is showing
+// counts, and the zero is stated: "nothing is running here" is an answer, and it is
+// the one the canvas deliberately does not have room to give four hundred times.
+//
+// Finished is a lifetime total rather than a rate, and says so — a number that only
+// ever grows is misread as throughput otherwise.
+function runtimeHTML(node) {
+  const rt = node?.runtime;
+  if (!rt) return "";
+  const last = sinceText(rt.lastActivity);
+  // "Never started" is claimed only where nothing has run *and* nothing has
+  // finished. A definition with a lifetime total and no timestamp is one this build
+  // has no activity clock for, and saying it was never started beside seven finished
+  // instances would be a contradiction the reader has to resolve. Then it says
+  // nothing, which is what it knows.
+  const never = !last && rt.running === 0 && rt.finished === 0;
+  return `<div class="mesh-runtime">
+    <span class="mesh-runtime-now"><b>${rt.running}</b> running</span>
+    <span class="muted"><b>${rt.finished}</b> finished, all time</span>
+    ${last ? `<span class="muted">last activity ${esc(last)}</span>` : ""}
+    ${never ? `<span class="muted">never started</span>` : ""}
   </div>`;
 }
 
@@ -1841,6 +1903,7 @@ function impactPanelHTML(node, result, direction, depth,
       <span class="muted">${esc(kindLabel)}</span>
     </div>
     ${finding}
+    ${runtimeHTML(node)}
     <div class="mesh-impact-count"><b>${others}</b> node(s) ${word}
       <span class="muted">within ${depth === Infinity ? "any" : depth} hop(s)</span></div>
     ${mix}
@@ -1982,6 +2045,13 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       <label class="mesh-notation" for="mesh-notation">Notation</label>
       <select id="mesh-notation" class="mesh-notation-pick">${notationsAvailable()
         .map((n) => `<option value="${esc(n.id)}">${esc(n.label)}</option>`).join("")}</select>
+      <!-- How much is running, on the picture rather than only in the panel. Off by
+           default and asked for by name: it is a second number on every node, and a
+           structural picture that always carried it would be a status board that
+           happens to have arrows. -->
+      <label class="mesh-instances" title="Show how many instances are running, on the processes that have any">
+        <input id="mesh-instances" type="checkbox"/> Instances
+      </label>
       <!-- Beside the picture's own controls rather than in the side column: what is
            exported is the picture, including whatever the search box and the
            drilldown have done to it. -->
@@ -2077,6 +2147,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const zoomOut = document.getElementById("mesh-zoom-out");
   const zoomFit = document.getElementById("mesh-zoom-fit");
   const release = document.getElementById("mesh-release");
+  const instancesToggle = document.getElementById("mesh-instances");
   const legendSlot = document.getElementById("mesh-legend-slot");
   const count = document.getElementById("mesh-count");
   const panel = document.getElementById("mesh-panel-slot");
@@ -2226,7 +2297,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // the picture on screen forward instead of settling a fresh one around the pins.
     const from = new Map(placed.map((n) => [n.id, { x: n.x, y: n.y }]));
     const spoken = notationOf(notationPick.value);
-    const painted = renderGraph(shown, 0, frame, { pinned, from, notation: spoken });
+    const painted = renderGraph(shown, 0, frame, {
+      pinned, from, notation: spoken, instances: instancesToggle.checked,
+    });
     const { ms, svg } = painted;
     world = painted.world;
     placed = painted.nodes;
@@ -2242,7 +2315,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     lit = null;
     refit();
     applyView();
-    legendSlot.innerHTML = legendHTML(shown, ms, spoken);
+    legendSlot.innerHTML = legendHTML(shown, ms, spoken, instancesToggle.checked);
     findingsSlot.innerHTML = findingsHTML(shown);
     paintRanking();
     // Matches and context counted apart. "5 of 101" over a picture where only one
@@ -2790,6 +2863,11 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // single selection is not a window, and its ring is explained by the fact that
       // somebody clicked it.
       window: windowStamp(),
+      // Whether the numbers under the names are in this file. Said in the stamp
+      // rather than left to be inferred: a reader who receives a picture with counts
+      // on some nodes and not others has no way to tell "nothing running" from "this
+      // export was taken with counts off".
+      instances: instancesToggle.checked,
       partial: Boolean(status.partial),
       unavailable: (status.unavailable || []).map((u) => ({
         ...u, label: STATE_TEXT[u.state] || u.state,
@@ -2841,6 +2919,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // every notation's shape is inscribed in the same reserved circle, so nothing moves
   // except the outlines.
   notationPick.addEventListener("change", paint);
+  // A repaint rather than a class toggle: the count is a line under every name, so
+  // switching it on changes how much room a node needs and therefore the layout that
+  // reserves it (see the margin in renderGraph).
+  instancesToggle.addEventListener("change", paint);
 
   exportModelBtn.addEventListener("click", () => {
     window.location.href = "/api/v1/panorama/mesh/archimate";
@@ -2892,6 +2974,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function viewSummary(v) {
     const parts = [];
     if (v.term) parts.push(`filter “${v.term}”`);
+    if (v.instances) parts.push("with instance counts");
     if (v.picked?.length) parts.push(`a window of ${v.picked.length} node(s)`);
     else if (v.selected) parts.push(`watching ${v.selected}`);
     if (v.zoom < 1) parts.push(`zoomed to ${Math.round(v.zoom * 100)}%`);
@@ -2914,6 +2997,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // A view saved before notations existed carries none, and the derived drawing is
     // what it was looking at.
     notationPick.value = notationOf(v.notation).id === v.notation ? v.notation : "atlas";
+    // A view saved before the counts existed carries none, and false is the picture
+    // it was looking at.
+    instancesToggle.checked = Boolean(v.instances);
     picked = [];
     pinned.clear();
     frameView = null;
@@ -2985,6 +3071,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       notation: notationPick.value,
       selected: only(),
       picked,
+      instances: instancesToggle.checked,
       frameView,
       world,
       pinned,

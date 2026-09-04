@@ -140,6 +140,10 @@ export function stampLines(meta = {}) {
         ? "are needed by them" : "depend on them"} within ${plan.hops} hop(s); ` +
       `one at a time they come to ${plan.sum}.` });
   }
+  if (meta.instances) {
+    lines.push({ text: `Running instances are drawn under the names that have any, as ` +
+      `observed above. A process with none carries no number.` });
+  }
   if (meta.restricted > 0) {
     lines.push({ text: `${meta.restricted} node(s) in this starmap are hidden by your ` +
       `access. Their dependencies are drawn, their identities are not — this picture is ` +

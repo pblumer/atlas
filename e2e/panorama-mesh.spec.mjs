@@ -2480,3 +2480,79 @@ test("the view's previous URL still lands on it", async ({ page }) => {
   expect(new URL(page.url()).hash).toBe("#/panorama/starmap");
   await expect(page.locator("#mesh-root h1")).toHaveText("Starmap");
 });
+
+// How much is running, on the picture (ADR-0083's summary columns, on the Starmap).
+// Off by default and asked for by name: it is a second number under every name, and
+// a structural picture that always carried it would be a status board with arrows.
+const runningMesh = {
+  nodes: [
+    { id: "application:a1", kind: "application", name: "Billing", provenance: "derived" },
+    { id: "process:1", kind: "process", name: "Invoice", provenance: "derived", application: "application:a1", processId: "invoice", version: 1, runtime: { running: 12, finished: 431, lastActivity: 0 } },
+    { id: "process:2", kind: "process", name: "Dunning", provenance: "derived", application: "application:a1", processId: "dunning", version: 1, runtime: { running: 0, finished: 7 } },
+    { id: "worker:c1", kind: "worker", name: "ops-mail", provenance: "derived", workerType: "mail" },
+  ],
+  edges: [
+    { from: "application:a1", to: "process:1", kind: "contains" },
+    { from: "application:a1", to: "process:2", kind: "contains" },
+    { from: "process:1", to: "worker:c1", kind: "uses" },
+  ],
+  restricted: 0,
+  clustered: false,
+};
+
+test("the count on the canvas is asked for, and only where there is one", async ({ page }) => {
+  installMock(page, runningMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  // Off by default: the structural picture is what this view is for.
+  await expect(page.locator(".mesh-runs")).toHaveCount(0);
+
+  await page.getByLabel("Instances").check();
+  // On the busy process, and on nothing else. An idle one carries no number — on a
+  // landscape of four hundred, "0 running" four hundred times hides the eleven
+  // numbers somebody turned this on to find.
+  await expect(page.locator(".mesh-runs")).toHaveCount(1);
+  await expect(page.locator('[data-node-id="process:1"] .mesh-runs')).toHaveText("12 running");
+  // And the legend says what the absence means, so it is not read as "not measured".
+  await expect(page.locator(".mesh-legend")).toContainText("carries no number");
+
+  await page.getByLabel("Instances").uncheck();
+  await expect(page.locator(".mesh-runs")).toHaveCount(0);
+});
+
+// The panel states the tally for whichever node is selected, whether or not the
+// canvas is carrying counts — including the zero the canvas has no room to give.
+test("the panel says what a process is running, the zero included", async ({ page }) => {
+  // The timestamp is minted here rather than where the fixture is declared: "4 min
+  // ago" is measured against the clock at render time, and a value fixed at module
+  // load drifts into "9 min ago" behind a long suite — which is a flake in the test
+  // rather than a fault in the view.
+  installMock(page, {
+    ...runningMesh,
+    nodes: runningMesh.nodes.map((n) => n.id !== "process:1" ? n
+      : { ...n, runtime: { ...n.runtime, lastActivity: Date.now() * 1e6 - 240e9 } }),
+  });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator('[data-node-id="process:1"] .mesh-body').click();
+  const panel = page.locator(".mesh-panel .mesh-runtime");
+  await expect(panel).toContainText("12 running");
+  await expect(panel).toContainText("431 finished");
+  await expect(panel).toContainText("last activity 4 min ago");
+
+  await page.locator('[data-node-id="process:2"] .mesh-body').click();
+  const idle = page.locator(".mesh-panel .mesh-runtime");
+  await expect(idle).toContainText("0 running");
+  await expect(idle).toContainText("7 finished");
+  // A lifetime total with no timestamp is a definition this build has no activity
+  // clock for. It says nothing about when, rather than "never started" — which
+  // beside seven finished instances is a contradiction the reader has to resolve.
+  await expect(idle).not.toContainText("never started");
+
+  // A worker has no instances at all — not zero of them — so it says nothing.
+  await page.locator('[data-node-id="worker:c1"] .mesh-body').click();
+  await expect(page.locator(".mesh-panel .mesh-runtime")).toHaveCount(0);
+});
