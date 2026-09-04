@@ -8129,7 +8129,7 @@ function wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft) {
 // A catch is only folded into its gateway's group when the gateway is its *sole* way in;
 // one reachable from somewhere else as well carries tokens that are not part of the race,
 // and keeps its own count. Returns each gateway's armed branches
-// (ADR-draft-overlay-cancelled-tokens).
+// (ADR-0249).
 function eventGatewayRaces(registry) {
   const members = new Map(); // gateway id → [armed catch id]
   for (const el of registry.getAll()) {
@@ -8154,7 +8154,7 @@ function eventGatewayRaces(registry) {
 // Cancelled is its own number rather than more gray because "a token got here" and "a
 // token got through" are different facts, and merging them makes a deferred choice
 // unreadable: both branches of an event gateway are visited and both leave, so the gray
-// counts are identical whichever event actually won (ADR-draft-overlay-cancelled-tokens).
+// counts are identical whichever event actually won (ADR-0249).
 //
 // `tokens` overrides the live count (a gateway shows its race's, which the engine parks
 // on the branches) and `green` replaces the green badge outright (an armed branch says
@@ -8816,7 +8816,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     }
     // A deferred choice is one wait, so it is drawn once: the race count moves onto its
     // event-based gateway, and its armed branches are marked armed instead of each
-    // repeating the same number (ADR-0110, ADR-draft-overlay-cancelled-tokens). The
+    // repeating the same number (ADR-0110, ADR-0249). The
     // count is the smallest of the armed branches, so a branch that also carries tokens
     // from elsewhere cannot inflate it.
     const byId = new Map((rt.elements || []).map((e) => [e.elementId, e]));

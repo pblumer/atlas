@@ -404,7 +404,7 @@ func (q queries) ElementVisitTotals(procDefKey uint64, fn func(elementId int32, 
 // ElementTerminationTotals calls fn with each of a definition's elements and how many
 // tokens left it cancelled rather than completed — the counterpart of
 // ElementVisitTotals, read the same way in O(elements) from a maintained counter
-// (ADR-0080, ADR-draft-overlay-cancelled-tokens). An element nothing was ever cancelled
+// (ADR-0080, ADR-0249). An element nothing was ever cancelled
 // on is absent, so a caller that folds this over the visit totals leaves it at zero.
 func (q queries) ElementTerminationTotals(procDefKey uint64, fn func(elementId int32, count int64) error) error {
 	return q.scanPrefix(runtimeCountPrefix(cfElementTerminationAgg, procDefKey), func(k, raw []byte) error {

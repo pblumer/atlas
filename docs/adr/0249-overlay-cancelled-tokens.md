@@ -1,4 +1,4 @@
-# ADR-DRAFT: Cancelled tokens on the runtime overlay, and a deferred choice drawn once
+# ADR-0249: Cancelled tokens on the runtime overlay, and a deferred choice drawn once
 
 - **Status:** Accepted
 - **Date:** 2026-09-04

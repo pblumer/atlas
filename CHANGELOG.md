@@ -119,7 +119,7 @@ _Changed_ / _Removed_ for each version.
 
   **No backfill:** terminations were never recorded before, so the amber count starts at
   zero on an existing store and gray keeps its old meaning for the history already
-  written. ([ADR-draft-overlay-cancelled-tokens](docs/adr/draft-overlay-cancelled-tokens.md))
+  written. ([ADR-0249](docs/adr/0249-overlay-cancelled-tokens.md))
 
 - **A data object can be pointed at a class you can see.** The **Type** of a data object
   in the Modeler is the link the whole information model turns on — it is what lets two

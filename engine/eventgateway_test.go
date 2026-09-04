@@ -236,7 +236,7 @@ func TestEventGatewayRecovers(t *testing.T) {
 }
 
 // elementTerminations reads a definition's element-termination history into a map of
-// element index → tokens cancelled on it (ADR-draft-overlay-cancelled-tokens).
+// element index → tokens cancelled on it (ADR-0249).
 func elementTerminations(t *testing.T, s *state.Store, defKey uint64) map[int32]int64 {
 	t.Helper()
 	out := map[int32]int64{}

@@ -425,7 +425,7 @@ const raceCollabBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/2010052
 // draws carries the cancelled half of the history too, or the same deferred choice that
 // is readable on a single process becomes unreadable the moment it is drawn in a pool —
 // both branches visited once, and nothing saying which event actually came
-// (ADR-draft-overlay-cancelled-tokens).
+// (ADR-0249).
 func TestCollaborationRuntimeReportsCancelledTokens(t *testing.T) {
 	ts := newTestServer(t)
 

@@ -171,7 +171,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				// did not go on. Without it "passed through" is visits minus live
 				// tokens, which counts a cancelled loser exactly like a winner — and
 				// on an event-based gateway that is half of every decided race
-				// (ADR-draft-overlay-cancelled-tokens). Derived from the event payload
+				// (ADR-0249). Derived from the event payload
 				// alone, like the visit beside it, so replay rebuilds it (I4).
 				if err := tx.RecordElementTermination(v.element.ProcessDefKey, v.element.ProcessInstanceKey, v.element.ElementId); err != nil {
 					return err

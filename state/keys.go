@@ -124,7 +124,7 @@ func keyElementVisitAgg(procDefKey uint64, elementId int32) []byte {
 // the tokens that left the element cancelled rather than completed. Kept apart from the
 // visit aggregate because "arrived here" and "was cancelled here" are different facts,
 // and an event-based gateway's branches only differ in the second
-// (ADR-draft-overlay-cancelled-tokens). Incremented on termination, never decremented.
+// (ADR-0249). Incremented on termination, never decremented.
 func keyElementTerminationAgg(procDefKey uint64, elementId int32) []byte {
 	return appendBE32(runtimeCountPrefix(cfElementTerminationAgg, procDefKey), uint32(elementId))
 }

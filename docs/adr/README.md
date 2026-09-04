@@ -302,6 +302,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0246](0246-tasks-call-activity-descent.md) | The Tasks app descends into a called process instead of navigating to it | Accepted |
 | [0247](0247-instance-archive-search.md) | An instance that is gone is still findable | Proposed |
 | [0248](0248-search-terms-are-literal.md) | A search term is literal, and widening is asked for | Proposed |
+| [0249](0249-overlay-cancelled-tokens.md) | Cancelled tokens on the runtime overlay, and a deferred choice drawn once | Accepted |
 
 ## Status values
 

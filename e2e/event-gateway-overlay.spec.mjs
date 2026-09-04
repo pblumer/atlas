@@ -1,5 +1,5 @@
 // End-to-end coverage for how the live overlay draws a deferred choice and a cancelled
-// token (ADR-0110, ADR-draft-overlay-cancelled-tokens). Both are about the same failure:
+// token (ADR-0110, ADR-0249). Both are about the same failure:
 // a number on the diagram that an operator reads as one thing while it means another.
 //
 // An event-based gateway arms every branch at once, so the engine parks a token on each

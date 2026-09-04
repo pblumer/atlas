@@ -1028,7 +1028,7 @@ func (t *Tx) IncElementVisitAgg(procDefKey uint64, elementId int32) error {
 // IncElementTerminationAgg bumps a definition-element cumulative-termination count
 // when a token leaves the element cancelled instead of completed. Never decremented —
 // it is the retained historical half of the heatmap that says a token got here and
-// then did *not* go on (ADR-draft-overlay-cancelled-tokens).
+// then did *not* go on (ADR-0249).
 func (t *Tx) IncElementTerminationAgg(procDefKey uint64, elementId int32) error {
 	return t.mergeCounter(keyElementTerminationAgg(procDefKey, elementId), 1)
 }

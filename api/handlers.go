@@ -206,7 +206,7 @@ type runtimeElement struct {
 	// interrupted. The gray "passed through" badge is visits − tokens − terminated, so
 	// a diagram can say which branch of a deferred choice actually won: both branches
 	// are armed and both are visited, and only this number differs
-	// (ADR-draft-overlay-cancelled-tokens).
+	// (ADR-0249).
 	Terminated int `json:"terminated"`
 }
 
@@ -1510,7 +1510,7 @@ func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Reque
 			scan(func() error {
 				// The cancelled half of the same history, from the same per-instance
 				// family, so a pool's merged counts stay consistent with each other
-				// (ADR-draft-overlay-cancelled-tokens).
+				// (ADR-0249).
 				return s.store.ElementTerminationHistory(pd.Key, 0, func(elementId int32, count int64) error {
 					if e := get(elementId); e != nil {
 						e.Terminated += int(count)

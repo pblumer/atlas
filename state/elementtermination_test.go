@@ -16,7 +16,7 @@ import (
 // wrong: every decided race leaves one winner and one cancelled loser, so both branches
 // show the identical count whatever actually happened. These tests pin the second
 // counter that tells them apart, per instance and per definition
-// (ADR-draft-overlay-cancelled-tokens).
+// (ADR-0249).
 
 // TestElementTerminationHistory mirrors TestElementVisitHistory: terminations
 // accumulate per (definition, instance, element), aggregate across a definition's
