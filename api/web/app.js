@@ -984,6 +984,12 @@ function setChrome(appId, route) {
   // The Tasks inbox is a wide three-pane layout, so it drops the centered
   // max-width the default content column uses while keeping normal padding.
   document.body.classList.toggle("tasks-mode", appId === "tasks");
+  // The landscape is a picture of a whole estate, and its legibility is a function
+  // of the pixels it gets: the world is fitted to the canvas, so every pixel of
+  // width the column withholds comes back off every node and every gap between
+  // them. It drops the centred column for the same reason the Tasks inbox does,
+  // and keeps the padding.
+  document.body.classList.toggle("landscape-mode", route === "#/panorama/landscape");
 }
 
 // ---------- What's New ----------

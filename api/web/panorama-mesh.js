@@ -383,17 +383,24 @@ const NODE_ROOM = 34;
 // WORLD_FILL is how much of the world the nodes' own cells take up.
 //
 // It is what decides between a pile and a void, and it was tuned by measuring
-// rather than by taste. At 0.09 a hundred nodes settle with 189 units between the
-// closest pair — far more air than reading needs, and enough that the whole
-// landscape is too small on screen to carry any names at all. At 0.28 the same
-// graph keeps 87 units between its closest pair, which is still more than two node
-// diameters of clear space, and the world has shrunk enough that a forty-node
-// landscape shows every name at the opening view and a hundred-node one shows its
-// applications.
+// rather than by taste. The thing to hold on to is that it trades air against
+// magnification and nothing else: the opening view fits the whole world into the
+// canvas, so a roomier world is shown at a smaller scale, and the nodes and their
+// names give up exactly what the gaps between them gain. Far in either direction
+// costs the picture — at 0.09 a hundred nodes settle with far more space than
+// reading needs and the landscape is too small on screen to carry any names at all;
+// well above 0.3 the names are large and sit on each other.
 //
-// That is the reason for this number rather than a rounder one: it is where the
-// space stops being empty and starts being the thing that makes names readable.
-const WORLD_FILL = 0.28;
+// 0.22 rather than the 0.28 it was, because the landscape dropped the centred
+// content column (see .landscape-mode in app.css) and the width that freed had to
+// be spent on one or the other. Measured on the 42-node fixture the e2e suite uses,
+// at a 1400px window: in the old column, nodes 6.4-14.8px in the radius with 56px
+// between the average nearest pair. Widened at 0.28 they are 7.7-18.0px with 62px —
+// the same picture, magnified. Widened at 0.22 they are 6.5-15.2px, the size they
+// already were, with 72px. So the reclaimed width goes into the space between
+// things rather than into making them bigger, which is what a landscape that is
+// hard to take in at a glance actually needs.
+const WORLD_FILL = 0.22;
 
 // radiusOf is the radius a node is actually drawn at. renderGraph sizes every node
 // once, from its connectivity, and everything downstream — the world budget, the
@@ -684,12 +691,23 @@ function layout(nodes, edges, { width, height, iterations = 220, pinned, from, m
 
 // LABEL_MARGIN is the room a node needs around its own centre. It is asymmetric
 // because a node's label is: the text hangs below the circle (dy = r + 14) and is
-// centred, so the bottom and the sides carry more than the top does.
+// centred, so the bottom carries more than the top does.
 //
-// It is smaller than the widest label because a name is painted only once the zoom
-// makes it readable (see labelTier), and reserving room for text that is not on
-// screen is how the picture ends up smaller than the space it was given.
-const LABEL_MARGIN = { top: 26, right: 46, bottom: 42, left: 46 };
+// The vertical figures are the largest node's own arithmetic rather than a guess.
+// fitToFrame places *centres* inside this margin, so anything the margin does not
+// cover leaves the frame: the biggest application is drawn at r = 42 (KIND.r 30 plus
+// its full growth), and its name — 26px, baseline at r + 14 — reaches about 62 below
+// that centre. At the 26 and 42 these were, a node on the top edge could put 16 units
+// of its own outline outside the frame, and the bottom edge left so little to spare
+// that an exported landscape came down to within five pixels of the provenance stamp
+// beneath it, where the last row of names and the first line of the stamp read as
+// one. 46 and 68 are those two numbers with a little room over.
+//
+// The sides stay under the widest name on purpose. A long name is centred, so
+// covering it would mean reserving half a label on both edges — the picture would
+// shrink by more than the overhang costs, and a name overhanging into empty canvas
+// is legible where a smaller picture is not.
+const LABEL_MARGIN = { top: 46, right: 46, bottom: 68, left: 46 };
 
 // fitToFrame maps the settled graph onto the frame so it fills it, leaving only the
 // margin a label needs. The scale is uniform: stretching the axes independently
@@ -1234,6 +1252,35 @@ function legendEntries(graph, notation) {
       };
     });
 
+  // The two line types — the half of the picture the shapes above do not explain.
+  // Every swatch so far names a *thing*; every line on the canvas is a claim about
+  // how the estate hangs together, drawn in two styles that nothing on the page
+  // named until now. A reader could see that some edges were dashed and had no way
+  // to find out what the dashes meant.
+  //
+  // Solid carries two derived facts rather than one, and the label says so. `calls`
+  // and `uses` are separate edges in the mesh and separate relationships in the
+  // ArchiMate export, but this canvas draws them alike — and a key splitting them
+  // into two identical swatches would be describing a distinction that is not on
+  // screen, which is the way a legend stops being trustworthy.
+  const edgeKinds = new Set((graph.edges || []).map((e) => e.kind));
+  const rule = (dashed) => `<line x1="1" y1="8" x2="15" y2="8" stroke="var(--mesh-line)"
+    stroke-width="1.6"${dashed ? ' stroke-dasharray="4 4" opacity="0.75"' : ""}/>`;
+  if (edgeKinds.has("calls") || edgeKinds.has("uses")) {
+    entries.push({
+      group: "edge", tone: "",
+      label: "Solid line — depends on: a process calls another, or uses a worker or decision",
+      mark: rule(false),
+    });
+  }
+  if (edgeKinds.has("contains")) {
+    entries.push({
+      group: "edge", tone: "",
+      label: "Dashed line — belongs to: an application and the processes it holds",
+      mark: rule(true),
+    });
+  }
+
   const severityPresent = new Set(graph.nodes.map((n) => n.severity).filter(Boolean));
   for (const key of ["critical", "attention", "ok", "unknown"]) {
     if (!severityPresent.has(key)) continue;
@@ -1279,6 +1326,9 @@ function legendHTML(graph, layoutMs, notation) {
     <svg width="16" height="16" aria-hidden="true">${entry.mark}</svg>${esc(entry.label)}</span>`;
   const entries = legendEntries(graph, spoken);
   const swatches = entries.filter((e) => e.group === "kind").map(swatch).join("");
+  // On a row of its own under the shapes: the labels are sentences rather than
+  // words, and threaded in among the kinds they would push the shapes off the line.
+  const rules = entries.filter((e) => e.group === "edge").map(swatch).join("");
 
   const notes = [];
   if (graph.restricted > 0) {
@@ -1343,6 +1393,7 @@ function legendHTML(graph, layoutMs, notation) {
   return `<div class="mesh-legend">
     ${projection}
     <div class="mesh-swatches">${swatches}</div>
+    ${rules ? `<div class="mesh-swatches mesh-rules">${rules}</div>` : ""}
     ${severity ? `<div class="mesh-swatches">${severity}</div>` : ""}
     ${provenance ? `<div class="mesh-swatches">${provenance}</div>` : ""}
     <div class="mesh-meta">${compared
