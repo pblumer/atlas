@@ -4840,7 +4840,7 @@ async function viewInstances() {
       <button class="btn" type="submit" title="Find instances whose process variables match">Search variables</button>
       <button class="btn ghost" type="button" id="var-clear" hidden title="Clear the variable search and its results">Clear</button>
     </form>
-    <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">A bare instance key is looked up directly — one read, whatever the instance count. Otherwise: contains <code>=</code> → structured <code>name=value</code> (name exact, value substring), else free text across variable names and values. A variable the model declares <code>atlas:searchable</code> is found by index instead — matched exactly, or as a prefix with a trailing <code>*</code> — when the search is narrowed to one version.</p>
+    <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">A bare instance key is looked up directly — one read, whatever the instance count. Otherwise: contains <code>=</code> → structured <code>name=value</code> (name exact), else the term is matched against variable names and values. A term is matched <b>whole</b>: <code>kdnr=MT-100</code> finds <code>MT-100</code> and not <code>MT-10001</code>. Widen it yourself with <code>*</code> for any run of characters and <code>?</code> for exactly one — <code>*MT-1*</code> for anything containing <code>MT-1</code> — and write <code>\\*</code> or <code>\\?</code> to search for those characters themselves. A variable the model declares <code>atlas:searchable</code> is found by index when the search is narrowed to one version.</p>
     <div id="var-panel" hidden></div>
     <div id="ops-inc-note"></div>
     <div class="card" id="proc-card" style="padding:0">

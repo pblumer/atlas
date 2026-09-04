@@ -24,10 +24,11 @@ import (
 // an aggregation means, or which measures matter — that belongs to the caller,
 // which is what keeps this package free of the API's vocabulary.
 
-// maxSearchBytes bounds a search response. A query this package sends is an
-// aggregation with no documents requested, so a correct answer is small; a large
-// body means a cluster answering something other than what was asked, and reading
-// it into memory to discover that is the failure mode this prevents.
+// maxSearchBytes bounds a search response. A caller here asks either for an
+// aggregation with no documents, or for a bounded page of documents with an explicit
+// field list, so a correct answer is small; a large body means a cluster answering
+// something other than what was asked, and reading it into memory to discover that is
+// the failure mode this prevents.
 const maxSearchBytes = 1 << 20
 
 // ErrSearchRefused is returned when the cluster answered and declined: it is
@@ -47,9 +48,10 @@ type Searcher interface {
 
 // Search implements [Searcher] against a real cluster.
 //
-// It sends no `_source` and requests no hits — every caller here wants an
-// aggregation — so what comes back is bounded by the aggregation's own shape
-// rather than by the size of the index.
+// The query body is passed through verbatim: what comes back is bounded by the shape
+// the caller asked for — an aggregation, or a page of hits with a `size` and an
+// explicit `_source` — rather than by the size of the index. A caller that asks for
+// unbounded hits gets the response bound above as an error, not a large answer.
 func (c *HTTPClient) Search(ctx context.Context, index string, query []byte) ([]byte, error) {
 	if index == "" {
 		index = DefaultIndex

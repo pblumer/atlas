@@ -57,25 +57,41 @@ func TestSearchInstancesByVariable(t *testing.T) {
 		return rows
 	}
 
-	// Free-text over values, case-insensitive substring.
+	// Free-text over values, case-insensitive and whole: a term matches a value it
+	// equals, not one it merely occurs in.
 	if rows := do("business"); len(rows) != 1 || rows[0].Variables[0].Value != "Business" {
 		t.Errorf("free-text 'business' = %+v, want 1 row matching customerType=Business", rows)
 	}
-	// Free-text over variable names.
-	if rows := do("lastname"); len(rows) != 1 {
-		t.Errorf("free-text 'lastname' matched %d rows, want 1", len(rows))
+	// Free-text over variable names, same rule.
+	if rows := do("lastName"); len(rows) != 1 {
+		t.Errorf("free-text 'lastName' matched %d rows, want 1", len(rows))
 	}
-	// Free-text inside a JSON variable's canonical value.
-	if rows := do("retail"); len(rows) != 1 {
-		t.Errorf("free-text 'retail' (JSON value) matched %d rows, want 1", len(rows))
+	// A term that is only part of a value does not match. This is the guarantee: an
+	// operator who asked for "busin" did not ask for "Business", and a list holding
+	// rows they did not ask for is one they cannot read.
+	if rows := do("busin"); len(rows) != 0 {
+		t.Errorf("free-text 'busin' matched %d rows, want 0 — a term is not a substring", len(rows))
 	}
-	// Structured name=value: exact name, substring value.
-	if rows := do("customerType=Cons"); len(rows) != 1 || rows[0].Variables[0].Value != "Consumer" {
-		t.Errorf("structured 'customerType=Cons' = %+v, want the Consumer instance", rows)
+	// Widening is available, but only by asking for it.
+	if rows := do("busin*"); len(rows) != 1 {
+		t.Errorf("free-text 'busin*' matched %d rows, want 1", len(rows))
 	}
-	// Structured matches every instance that has the named variable with the value.
-	if rows := do("customerType=e"); len(rows) != 2 {
-		t.Errorf("structured 'customerType=e' matched %d rows, want 2 (Business + Consumer)", len(rows))
+	// Inside a JSON variable's canonical value, reached the same explicit way.
+	if rows := do("*retail*"); len(rows) != 1 {
+		t.Errorf("free-text '*retail*' (JSON value) matched %d rows, want 1", len(rows))
+	}
+	// Structured name=value: exact name, and a value that is matched whole.
+	if rows := do("customerType=Consumer"); len(rows) != 1 || rows[0].Variables[0].Value != "Consumer" {
+		t.Errorf("structured 'customerType=Consumer' = %+v, want the Consumer instance", rows)
+	}
+	// The report that started this: a prefix of a value is not the value. "kdnr=MT-100"
+	// must not answer with MT-10001, and here "Cons" must not answer with "Consumer".
+	if rows := do("customerType=Cons"); len(rows) != 0 {
+		t.Errorf("structured 'customerType=Cons' matched %d rows, want 0", len(rows))
+	}
+	// Structured matches every instance whose named variable fits the pattern.
+	if rows := do("customerType=*e*"); len(rows) != 2 {
+		t.Errorf("structured 'customerType=*e*' matched %d rows, want 2 (Business + Consumer)", len(rows))
 	}
 	// Structured name is exact: a substring of the name must not match.
 	if rows := do("customer=Business"); len(rows) != 0 {

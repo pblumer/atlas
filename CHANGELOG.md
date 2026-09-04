@@ -35,6 +35,39 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A search term found more than it was asked for.** Reported from use:
+  `kdnr=MT-100` also returned MT-10001. The instance search widened every term into a
+  substring match, so an operator who named one customer got a list holding another one
+  beside it, with nothing on either row to tell them apart — and no way to ask about
+  only the one they meant.
+
+  It was not even consistent with itself. The value index
+  ([ADR-0244](docs/adr/0244-searchable-variables.md)) answers a
+  declared name exactly, so the same query matched exactly when the model carried
+  `atlas:searchable` for that name and matched as a substring when it did not. Whether
+  a name is declared is a property of the model: invisible from the search box,
+  changeable by a redeployment, and it had come to decide what a query means.
+
+  A term is now matched **whole**, and widening is something you ask for, in the two
+  shapes everyone knows from shells and file pickers: `*` for any run of characters,
+  `?` for exactly one, and a backslash to escape either, so a value that really contains
+  a star is still reachable. One rule for declared and undeclared names, for
+  `name=value` and free text, for the live index, the instance walk and the archive.
+  Under the index a pattern splits into its literal head and the rest: no wildcard is
+  the exact seek that already existed, and a wildcard seeks to a neighbourhood and
+  matches the full pattern before reporting anything — without that, `MT-1?` would
+  answer with every `MT-1` value the index holds.
+
+  The same predicate filters **bulk termination**, so an implicit widening there
+  selected instances the operator had not named. That is the version of this bug that
+  does not merely confuse.
+
+  This is a behaviour change: free text that used to match a value it occurred in now
+  matches one it equals, so `retail` becomes `*retail*`. The search hint, the handbook,
+  the OpenAPI summary and the MCP tool description all state the rule, because changing
+  what a query means in silence would be worse than the behaviour it replaces.
+  ([ADR-draft-search-terms-are-literal](docs/adr/draft-search-terms-are-literal.md))
+
 - **A widened Properties column in the form editor gave its width to white space, not
   to the panel.** The Design tab's side columns are resizable — our own affordance on
   top of the vendored form-js Playground ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)) —
@@ -310,6 +343,33 @@ _Changed_ / _Removed_ for each version.
   integration back on the run loop.
 
 ### Added
+
+- **An instance that is gone is still findable.** History retention hard-deletes a
+  finished instance once the exporter has it ([ADR-0115](docs/adr/0115-history-retention-hard-delete.md)) —
+  that was the whole bargain of [ADR-0114](docs/adr/0114-opensearch-event-exporter.md):
+  delete the data corpses, but keep them searchable somewhere first. Somewhere turned
+  out to be nowhere an operator could reach. The search asked this server's own store,
+  the store no longer had the instance, and the answer came back empty, which reads
+  exactly like "this never existed".
+
+  The search now falls back to the exported log. It asks two questions rather than one,
+  because the export is a stream of events and not a table of instances: first which
+  instances held a matching variable — a terms aggregation over the scope key, so a
+  value written five times is one answer and the response stays small — then what those
+  instances were, as a bounded page of hits with an explicit field list.
+
+  A row that comes back this way is marked **archived**, and that is the point rather
+  than a detail. The instance does not exist here: it cannot be opened, replayed or
+  terminated, and what the row reports is what the log recorded, not what is true now.
+  So the panel offers no Replay and no task link beside it, the picker says the word
+  too, and the row carries no element instance count — the archive knows of no live
+  tokens, and a zero meaning "none recorded" must not be dressed up as a measurement.
+
+  An empty result now distinguishes its causes. "Nothing matched" is about the data;
+  "no event log is exported", "the store declined" and "the store could not be reached"
+  are about this server, and an operator told the first when the truth is one of the
+  others stops looking for an instance that exists.
+  ([ADR-draft-instance-archive-search](docs/adr/draft-instance-archive-search.md))
 
 - **A call activity's `+` is now the way into the process it calls.** A call activity is
   the one element on a diagram whose contents are somewhere else — a separate model,
