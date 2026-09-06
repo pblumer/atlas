@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -271,5 +272,163 @@ func TestAgentModelErrorFailsTheJob(t *testing.T) {
 	}
 	if n, _ := store.ActiveProcessInstanceCount(); n != 1 {
 		t.Error("the instance did not stay parked on the failed round")
+	}
+}
+
+// TestResolveCarriesTheToolbox is the outbound half of ADR-0254:
+// a round resolves into values a worker can act on with nothing of the engine left in it —
+// the goal from the container's own documentation, the tools with their documentation and
+// declared parameters, and the round number.
+func TestResolveCarriesTheToolbox(t *testing.T) {
+	dir := t.TempDir()
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	defer func() { _ = store.Close(); _ = log.Close() }()
+
+	cp := compile(t)
+	p := engine.New(1, log, store, &clock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	// The container is parked on its round job; resolve exactly that.
+	var round uint64
+	if err := store.ActivatableJobs(compiler.AgentJobTypeIndex, func(k uint64) error {
+		round = k
+		return nil
+	}); err != nil {
+		t.Fatalf("ActivatableJobs: %v", err)
+	}
+	jv, ok, err := store.GetJob(round)
+	if err != nil || !ok {
+		t.Fatalf("GetJob: ok=%v err=%v", ok, err)
+	}
+	ei, ok, err := store.GetElementInstance(jv.ElementInstanceKey)
+	if err != nil || !ok {
+		t.Fatalf("GetElementInstance: ok=%v err=%v", ok, err)
+	}
+
+	req, err := agent.Resolve(store, cp, ei, jv.ElementInstanceKey)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if req.Goal != "Ermittle die aktuell gültigen Zinssätze je Laufzeit." {
+		t.Errorf("goal = %q, want the container's own documentation", req.Goal)
+	}
+	if len(req.Tools) != 2 {
+		t.Fatalf("tools = %d, want both contained activities", len(req.Tools))
+	}
+	if req.Round != 1 || len(req.Results) != 0 {
+		t.Errorf("round = %d with %d results, want round 1 and nothing collected", req.Round, len(req.Results))
+	}
+	var scrape agent.Tool
+	for _, tool := range req.Tools {
+		if tool.Name == "zinsen_holen" {
+			scrape = tool
+		}
+	}
+	if scrape.Description == "" || len(scrape.Params) != 1 || scrape.Params[0].Name != "url" {
+		t.Errorf("tool = %+v, want its documentation and declared parameter", scrape)
+	}
+}
+
+// TestResolveRefusesWhatIsNotAnAgentRound: a job that should never have been resolved
+// here is an error, not an empty round — an empty round is a thing an agent could
+// legitimately be given, and this is not that.
+func TestResolveRefusesWhatIsNotAnAgentRound(t *testing.T) {
+	cp := compile(t)
+	ei := &model.ElementInstanceValue{
+		ProcessDefKey: cp.Key,
+		ElementId:     elementIdOf(t, cp, "zinsen_holen"),
+	}
+	if _, err := agent.Resolve(nil, cp, ei, 1); err == nil {
+		t.Error("Resolve on a service task succeeded, want an error")
+	}
+}
+
+// TestPayloadRoundTrips: the field names a leased round travels under live in one place,
+// so the engine writing them and a worker reading them cannot drift apart. The JSON pass
+// is what a real lease does to them.
+func TestPayloadRoundTrips(t *testing.T) {
+	original := agent.Request{
+		Goal:    "Ermittle die Zinssätze.",
+		Context: map[string]string{"bank": "Migros Bank"},
+		Round:   2,
+		Results: []string{"1.33 %"},
+		Tools: []agent.Tool{{
+			Name:        "zinsen_holen",
+			Description: "Liest die Zinstabelle.",
+			Params:      []agent.Param{{Name: "url", Type: "string", Description: "Die Seite", Required: true}},
+		}},
+	}
+
+	// Straight across, as the in-process path hands it over.
+	back, err := agent.RequestFromPayload(agent.ResolveJobPayload(original))
+	if err != nil {
+		t.Fatalf("RequestFromPayload: %v", err)
+	}
+	if back.Goal != original.Goal || back.Round != 2 || len(back.Results) != 1 {
+		t.Errorf("round-tripped = %+v, want the original's goal, round and results", back)
+	}
+
+	// And over JSON, as a leased round really travels.
+	encoded, err := json.Marshal(agent.ResolveJobPayload(original))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	overWire, err := agent.RequestFromPayload(fields)
+	if err != nil {
+		t.Fatalf("RequestFromPayload (over JSON): %v", err)
+	}
+	if overWire.Goal != original.Goal || overWire.Round != 2 {
+		t.Errorf("over JSON = %+v, want the goal and round intact", overWire)
+	}
+	if got := overWire.Context["bank"]; got != "Migros Bank" {
+		t.Errorf("context = %v, want the bank", overWire.Context)
+	}
+	if len(overWire.Results) != 1 || overWire.Results[0] != "1.33 %" {
+		t.Errorf("results = %v, want what the earlier call returned", overWire.Results)
+	}
+	if len(overWire.Tools) != 1 {
+		t.Fatalf("tools = %v, want one", overWire.Tools)
+	}
+	tool := overWire.Tools[0]
+	if tool.Name != "zinsen_holen" || tool.Description != "Liest die Zinstabelle." {
+		t.Errorf("tool = %+v, want its name and documentation", tool)
+	}
+	if len(tool.Params) != 1 || tool.Params[0].Name != "url" || !tool.Params[0].Required {
+		t.Errorf("params = %+v, want the declared required url", tool.Params)
+	}
+}
+
+// TestPayloadWithoutToolsIsRefused: a round with no tools would offer a model nothing to
+// call, and a worker acting on it would ask for a decision it cannot make. Better to fail
+// the round than to have the agent answer into the void.
+func TestPayloadWithoutToolsIsRefused(t *testing.T) {
+	for name, fields := range map[string]map[string]any{
+		"no tools":  {"goal": "g", "round": 1},
+		"no round":  {"goal": "g", "tools": []agent.Tool{{Name: "t"}}},
+		"bad tools": {"goal": "g", "round": 1, "tools": 42},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := agent.RequestFromPayload(fields); err == nil {
+				t.Errorf("RequestFromPayload(%v) succeeded, want an error", fields)
+			}
+		})
 	}
 }

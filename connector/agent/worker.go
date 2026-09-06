@@ -6,7 +6,6 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/job"
-	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -44,17 +43,12 @@ func Handler(store state.Reader, lookup ProcessLookup, m Model) job.CompletingHa
 		if cp == nil {
 			return job.Completion{}, fmt.Errorf("agent: no compiled process for def %d", ei.ProcessDefKey)
 		}
-		tools, err := Toolbox(cp, ei.ElementId)
+		// The same resolution a leased round gets, so what a round *is* is decided
+		// in one place whether it is decided here or on a worker (ADR-0254).
+		req, err := Resolve(store, cp, ei, j.ElementInstanceKey)
 		if err != nil {
 			return job.Completion{}, err
 		}
-
-		req := Request{
-			Goal:    cp.ElementDocumentation(ei.ElementId),
-			Tools:   tools,
-			Results: collectedResults(store, j.ElementInstanceKey),
-		}
-		req.Round = len(req.Results) + 1
 
 		decision, err := m.Decide(context.Background(), req)
 		if err != nil {
@@ -66,18 +60,4 @@ func Handler(store state.Reader, lookup ProcessLookup, m Model) job.CompletingHa
 		}
 		return job.Completion{ToolCalls: decision.ToolCalls, Outputs: decision.Outputs}, nil
 	}
-}
-
-// collectedResults reads what this container's earlier tool calls returned, as the model
-// needs to see them. Absent (no result collection configured, or the first round) it is
-// empty, which is the honest answer: nothing has been called yet.
-func collectedResults(store state.Reader, containerKey uint64) []string {
-	var out []string
-	_ = state.VisibleVariables(store, containerKey, func(v *model.VariableValue) error {
-		if v.Name == resultsVariable && v.Text != "" {
-			out = append(out, v.Text)
-		}
-		return nil
-	})
-	return out
 }
