@@ -1,4 +1,4 @@
-# ADR-DRAFT: An agent round on a worker — the toolbox travels out, the tool calls travel back
+# ADR-0254: An agent round on a worker — the toolbox travels out, the tool calls travel back
 
 - **Status:** Proposed
 - **Date:** 2026-09-06

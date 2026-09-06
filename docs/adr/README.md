@@ -307,6 +307,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0251](0251-adjust-a-deployed-diagram.md) | Adjusting a deployed definition's diagram without redeploying it | Proposed |
 | [0252](0252-runtime-badges-clear-of-labels.md) | Runtime badges hang outside the shape, clear of its caption | Proposed |
 | [0253](0253-agent-tool-calls-drive-adhoc-activation.md) | Agent tool calls drive ad-hoc activation — the toolbox is the model | Proposed |
+| [0254](0254-agent-rounds-on-a-worker.md) | An agent round on a worker — the toolbox travels out, the tool calls travel back | Proposed |
 
 ## Status values
 
