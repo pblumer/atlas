@@ -179,3 +179,65 @@ func TestEditingAnAgentRecordIsHeldToTheSameRules(t *testing.T) {
 		t.Errorf("normalizeConnectorUpdate = %q, want the completed record accepted", msg)
 	}
 }
+
+// Two names that fold to one environment variable: the second is left out rather than
+// silently given the first one's key. It is the mail/AD collision, and it matters more
+// here than a dropped model would — a container naming the second would reach the first
+// one's endpoint on the first one's credential, and nothing in the run would say so.
+func TestTwoAgentModelsThatFoldToOneVariableDoNotShareAKey(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	if _, err := srv.vault.Set("first", "sk-first"); err != nil {
+		t.Fatalf("vault.Set: %v", err)
+	}
+	if _, err := srv.vault.Set("second", "sk-second"); err != nil {
+		t.Fatalf("vault.Set: %v", err)
+	}
+	// "gpt-pb" and "gpt_pb" both fold to GPT_PB.
+	_ = srv.connectors.Save(connector{
+		ID: "1", Name: "gpt-pb", Kind: connectorKindAgent, Enabled: true, CreatedAt: 1,
+		CredentialsRef: "first", Model: "a",
+	})
+	_ = srv.connectors.Save(connector{
+		ID: "2", Name: "gpt_pb", Kind: connectorKindAgent, Enabled: true, CreatedAt: 2,
+		CredentialsRef: "second", Model: "b",
+	})
+
+	env := envOf(t, srv.agentWorkerEnv())
+	// Whichever won, it kept its own key and its own model — the loser contributed
+	// neither, and is not named as configured.
+	key, model := env["ATLAS_AGENT_GPT_PB_API_KEY"], env["ATLAS_AGENT_GPT_PB_MODEL"]
+	if (key == "sk-first") != (model == "a") {
+		t.Errorf("key=%q model=%q: one model's key was handed over under another's configuration", key, model)
+	}
+	if names := env["ATLAS_AGENT_CONNECTORS"]; strings.Contains(names, ",") {
+		t.Errorf("ATLAS_AGENT_CONNECTORS = %q, want only the model that was actually handed over", names)
+	}
+}
+
+// A model an operator set on the host and one they added in the Console are both served.
+// The child inherits the host's variables as they are, so only the store's are rendered —
+// but the name list is the union, or rendering it would drop the hand-configured one.
+func TestAHostConfiguredAgentModelSurvivesAStoreRender(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	if _, err := srv.vault.Set("k", "sk"); err != nil {
+		t.Fatalf("vault.Set: %v", err)
+	}
+	t.Setenv("ATLAS_AGENT_CONNECTORS", "by_hand")
+	_ = srv.connectors.Save(connector{
+		ID: "1", Name: "in_console", Kind: connectorKindAgent, Enabled: true, CreatedAt: 1,
+		CredentialsRef: "k", Model: "claude-opus-5",
+	})
+
+	env := envOf(t, srv.agentWorkerEnv())
+	names := strings.Split(env["ATLAS_AGENT_CONNECTORS"], ",")
+	if len(names) != 2 || names[0] != "by_hand" || names[1] != "in_console" {
+		t.Errorf("ATLAS_AGENT_CONNECTORS = %q, want both the host's model and the store's", env["ATLAS_AGENT_CONNECTORS"])
+	}
+	// Nothing is rendered for the host's own model: the child already inherits it, and
+	// re-rendering it here would be this process guessing at what it holds.
+	for k := range env {
+		if strings.HasPrefix(k, "ATLAS_AGENT_BY_HAND_") {
+			t.Errorf("environment carries %q, want the host's model inherited rather than re-rendered", k)
+		}
+	}
+}
