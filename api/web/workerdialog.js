@@ -38,6 +38,13 @@ export function workerCreateBody(form) {
     credentialsRef: get("credentialsRef"),
   };
   if (body.kind === "mail") body.provider = get("provider") || "smtp";
+  // An agent's provider is its wire format, and its model is the one piece of a
+  // Worker's configuration that is neither endpoint nor credential
+  // (ADR-draft-agent-models-are-console-workers).
+  if (body.kind === "agent") {
+    body.provider = get("provider") || "messages";
+    body.model = get("model");
+  }
   // A connection string is a SQL worker's whole configuration and belongs to no
   // other kind, so the gate is the kind — not whether the field happens to hold
   // something. Asking only "is it non-empty" is what let a DSN typed for a kind picked
@@ -91,6 +98,12 @@ export function workerShape(kind, provider) {
   // it with, neither derivable from the other. It is the newest kind to stop carrying
   // its directory in the model (ADR-0206).
   const ad = kind === "ad";
+  // An agent model is temis's shape — an endpoint to reach and a key to reach it with —
+  // plus the two things only an agent has: which wire format that endpoint speaks, and
+  // which model to ask (ADR-0253/ADR-0254). The endpoint is optional here, unlike
+  // temis's: each protocol has a public default, and an operator names one only for a
+  // gateway, a proxy or a self-hosted deployment.
+  const agent = kind === "agent";
   // The three SQL products. Their whole configuration is one secret — a connection
   // string has no public half — so there is no endpoint to author: what the Console
   // shows is a redacted label the server derived from the string itself.
@@ -109,7 +122,14 @@ export function workerShape(kind, provider) {
     // authenticates; a SQL worker dials its connection string. The rest have no
     // check yet, and the server says so by name rather than silently doing nothing.
     test: mail || sql,
-    provider: mail,
+    provider: mail || agent,
+    // The provider select's options follow the kind: mail picks a transport, an agent
+    // picks a wire format. One list per kind, so the form cannot offer SMTP to an agent.
+    providerOptions: agent ? AGENT_PROTOCOLS : (mail ? PROVIDERS : []),
+    // An agent names the model it asks. It is the setting an operator changes most
+    // often — cost against capability — which is why it is a record field and not a
+    // vault bundle entry they would have to open a secret store to read.
+    model: agent,
     endpoint: !bundle && !preview,
     // A mail worker always has a sender: it is the default From address, and the
     // preview transport frames the message exactly as it would be sent, so it needs
@@ -118,12 +138,22 @@ export function workerShape(kind, provider) {
     // A SQL worker is created by pasting the connection string, which the server
     // seals into the vault and replaces with a reference — so the reference is one of
     // two ways in, not the only one, and the form must not insist on it.
+    // An agent's key is required *unless* an endpoint is named — a self-hosted endpoint
+    // may legitimately need none — so the form asks for it without insisting, and the
+    // server refuses a record with neither.
     credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad ? "required" : "optional")),
-    endpointPlaceholder: mail
+    modelPlaceholder: provider === "chat-completions" ? "gpt-4o" : "claude-opus-5",
+    endpointPlaceholder: agent
+      ? (provider === "chat-completions"
+        ? "https://api.openai.com/v1/chat/completions (optional)"
+        : "https://api.anthropic.com/v1/messages (optional)")
+      : mail
       ? "smtp.office365.com:587"
       : (ad ? "ldaps://dc.example.com:636"
         : (remedy ? "https://helix.example.com:8008" : (jira ? "https://acme.atlassian.net" : "https://temis.internal"))),
-    credRefLabel: ad
+    credRefLabel: agent
+      ? "API key reference (a vault key holding the key)"
+      : ad
       ? "Credential reference (vault {bindDN, password})"
       : googlesheets
       ? "Credential reference (vault Google auth bundle)"
@@ -134,7 +164,9 @@ export function workerShape(kind, provider) {
       : (sql ? "\u2026 or a credential reference (a vault key already holding the DSN)"
         : (entra ? "Credential reference (vault {tenantId, clientId, clientSecret})"
           : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)"))),
-    credRefPlaceholder: ad
+    credRefPlaceholder: agent
+      ? "anthropic_api_key (a vault key holding the key)"
+      : ad
       ? "ad_prod_bind (vault {bindDN, password})"
       : googlesheets
       ? "google_sheets_auth (vault JSON bundle)"
@@ -145,7 +177,9 @@ export function workerShape(kind, provider) {
       : (sql ? kind + "_hr_dsn (a vault key holding the whole connection string)"
         : (entra ? "entra_blumer (vault {tenantId, clientId, clientSecret})"
           : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token")))),
-    hint: googlesheets
+    hint: agent
+      ? "The model an <b>agent-driven ad-hoc subprocess</b> asks which of its tools to run next. Its <b>API key</b> is a vault key named here \u2014 never a value \u2014 and the endpoint is optional: each wire format has a public default, so name one only for a gateway, a proxy or a self-hosted deployment. A round is one model call, minutes long and able to hang, so Atlas never runs it itself: it supervises a worker for this kind and picks the model up as soon as you save, with no restart. <b>Messages</b> is Anthropic's format (also OpenRouter's <code>/api/v1/messages</code>); <b>Chat Completions</b> is OpenAI's, and anything calling itself OpenAI-compatible \u2014 that one has no default model, so name it."
+      : googlesheets
       ? "The credential reference names a JSON auth bundle in the vault \u2014 never a secret value. A <b>service account</b> is the normal shape: <code>{\"method\": \"serviceAccount\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\"}</code>, copied out of the JSON key file Google hands out. A service account owns nothing by itself: <b>share each spreadsheet or folder with its address</b>, exactly as you would with a colleague, or it will read a 403 where you see a document."
       : ad
       ? "The directory's <b>LDAP URL</b> and a vault bundle holding the service account: <code>{\"bindDN\": \"cn=svc-atlas,ou=Dienstkonten,dc=example,dc=com\", \"password\": \"\u2026\"}</code>. Use <b>ldaps://</b> unless you enable StartTLS \u2014 Active Directory refuses to set a password over an unencrypted channel, so an <code>ldap://</code> directory works for everything except the one thing a joiner needs. A model names this worker and says nothing else about the directory."
@@ -160,6 +194,13 @@ export function workerShape(kind, provider) {
           : "Host and port of the submission server. Without a port, 587 is assumed (465 for <code>smtps://</code>)."))),
   };
 }
+
+// AGENT_PROTOCOLS are the wire formats an agent model endpoint speaks. They are the
+// worker's own names (ATLAS_AGENT_<NAME>_PROTOCOL), not a second vocabulary.
+const AGENT_PROTOCOLS = [
+  ["messages", "Messages (Anthropic)"],
+  ["chat-completions", "Chat Completions (OpenAI-compatible)"],
+];
 
 const PROVIDERS = [
   ["smtp", "SMTP"],
@@ -213,11 +254,10 @@ function askWorker({ api, worker, intro, extraLabel }) {
           <p class="muted" style="margin:0 0 10px">The name is what every model references, so it is fixed here — changing it would leave those tasks looking for a worker that no longer exists. Everything else takes effect at once; a parked task retries against the new configuration.</p>
           <div class="conn-fields">
             <label class="field"><span>Kind</span><input value="${esc(c.kind || "")}" disabled/></label>
-            <label class="field conn-f-provider"><span>Provider</span><select id="conn-provider">
-              ${PROVIDERS.map(([v, l]) => `<option value="${v}"${(c.provider || "smtp") === v ? " selected" : ""}>${l}</option>`).join("")}
-            </select></label>
+            <label class="field conn-f-provider"><span class="conn-provider-label">Provider</span><select id="conn-provider"></select></label>
             <label class="field conn-f-endpoint" style="flex:1 1 220px"><span class="conn-endpoint-label">Endpoint</span><input id="conn-endpoint" value="${esc(c.endpoint || "")}"/></label>
             <label class="field conn-f-sender" style="flex:1 1 200px"><span>Sender</span><input id="conn-sender" value="${esc(c.sender || "")}" placeholder="bot@example.com"/></label>
+            <label class="field conn-f-model" style="flex:1 1 200px"><span>Model</span><input id="conn-model" value="${esc(c.model || "")}"/></label>
             <label class="field conn-f-credref" style="flex:1 1 200px"><span class="conn-credref-label">Token reference</span><input id="conn-credref" value="${esc(c.credentialsRef || "")}"/></label>
           </div>
           <label class="conn-enabled"><input type="checkbox" id="conn-enabled"${c.enabled ? " checked" : ""}/> <span>Enabled — a disabled worker is skipped, and its tasks park</span></label>
@@ -236,15 +276,29 @@ function askWorker({ api, worker, intro, extraLabel }) {
     const providerSel = ov.querySelector("#conn-provider");
     const endpointIn = ov.querySelector("#conn-endpoint");
     const senderIn = ov.querySelector("#conn-sender");
+    const modelIn = ov.querySelector("#conn-model");
     const credRefIn = ov.querySelector("#conn-credref");
     const enabledIn = ov.querySelector("#conn-enabled");
     const testOut = ov.querySelector(".conn-test-result");
 
-    const shape = () => workerShape(c.kind, c.kind === "mail" ? providerSel.value : c.provider);
+    // The kind's shape as stored, read once: it says whether this kind has a provider
+    // select at all, and with which options.
+    const sh0 = workerShape(c.kind, c.provider);
+    // The live shape follows that select for the kinds that have one — mail's transport
+    // and an agent's wire format both decide which other fields are needed.
+    const shape = () => workerShape(c.kind, sh0.provider ? providerSel.value : c.provider);
+    // Options first: the select is empty in the markup so one list per kind can fill it,
+    // rather than the form offering SMTP to an agent.
+    providerSel.innerHTML = sh0.providerOptions
+      .map(([v, l]) => `<option value="${v}"${(c.provider || sh0.providerOptions[0]?.[0]) === v ? " selected" : ""}>${esc(l)}</option>`)
+      .join("");
     const sync = () => {
       const sh = shape();
       const show = (sel, on) => { const el = ov.querySelector(sel); if (el) el.style.display = on ? "" : "none"; };
       show(".conn-f-provider", sh.provider);
+      show(".conn-f-model", sh.model);
+      ov.querySelector(".conn-provider-label").textContent = sh0.model ? "Wire format" : "Provider";
+      if (modelIn) modelIn.placeholder = sh.modelPlaceholder || "";
       show(".conn-f-endpoint", sh.endpoint);
       show(".conn-f-sender", sh.sender);
       show(".conn-f-credref", sh.credRef !== "none");
@@ -300,6 +354,10 @@ function askWorker({ api, worker, intro, extraLabel }) {
         patch.provider = providerSel.value;
         patch.sender = senderIn.value.trim();
       }
+      if (sh.model) {
+        patch.provider = providerSel.value;
+        patch.model = modelIn.value.trim();
+      }
       close({ patch, extra });
     };
     document.addEventListener("keydown", onKey);
@@ -308,7 +366,9 @@ function askWorker({ api, worker, intro, extraLabel }) {
     const extraBtn = ov.querySelector("[data-conn-extra]");
     if (extraBtn) extraBtn.addEventListener("click", () => submit(true));
     ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
-    (c.kind === "mail" ? providerSel : endpointIn).focus();
+    // Focus what this kind is most often opened to change: an agent's model, a mail
+    // worker's transport, everything else its endpoint.
+    (sh0.model ? modelIn : (c.kind === "mail" ? providerSel : endpointIn)).focus();
   });
 }
 

@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas agent Worker console e2e harness</title>
+    <!-- Drives the *real* api/web/workerdialog.js against a stub api, to verify what the
+         Console makes of an agent model (ADR-draft-agent-models-are-console-workers).
+
+         Two halves, because they are two code paths over one description: the add form
+         (workerCreateBody, over the same DOM the real form builds) and the edit dialog
+         (editWorkerFlow, whose PATCH body is captured rather than sent). Both read
+         workerShape, which is the single description of which fields a kind uses — so
+         what these pin is that the description reaches both. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <form id="f">
+      <select name="kind">
+        <option value="temis">temis</option>
+        <option value="mail">mail</option>
+        <option value="agent">agent</option>
+      </select>
+      <input name="name" />
+      <input name="endpoint" />
+      <input name="sender" />
+      <input name="credentialsRef" />
+      <input name="model" />
+      <select name="provider">
+        <option value="smtp">smtp</option>
+        <option value="messages">messages</option>
+        <option value="chat-completions">chat-completions</option>
+      </select>
+    </form>
+    <script type="module">
+      import { workerCreateBody, workerShape, editWorkerFlow } from "/workerdialog.js";
+
+      const form = document.getElementById("f");
+      window.set = (values) => {
+        for (const [k, v] of Object.entries(values)) {
+          const el = form.elements[k];
+          if (el) el.value = v;
+        }
+      };
+      window.build = () => workerCreateBody(form);
+      window.shape = (kind, provider) => workerShape(kind, provider);
+
+      // The dialog, with the PATCH captured instead of sent: what the Console would
+      // have asked the server to store is the thing worth asserting.
+      window.__patch = null;
+      window.edit = (worker) => {
+        window.__patch = null;
+        return editWorkerFlow({
+          worker,
+          toast: () => {},
+          api: async (method, url, body) => {
+            if (method === "PATCH") { window.__patch = body; return {}; }
+            return {};
+          },
+        });
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

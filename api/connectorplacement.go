@@ -67,13 +67,17 @@ const (
 // operator can move work nothing here reports — silence being the exact thing this
 // replaced.
 var authoredKindJobTypes = map[string][]int32{
-	"rest":                    {compiler.RestJobTypeIndex},
-	"scim":                    {compiler.ScimJobTypeIndex},
-	"ldap":                    {compiler.LdapJobTypeIndex},
-	"soap":                    {compiler.SoapJobTypeIndex},
-	"ad":                      {compiler.AdJobTypeIndex},
-	"ldif":                    {compiler.LdifJobTypeIndex},
-	"entra":                   {compiler.EntraJobTypeIndex},
+	"rest":  {compiler.RestJobTypeIndex},
+	"scim":  {compiler.ScimJobTypeIndex},
+	"ldap":  {compiler.LdapJobTypeIndex},
+	"soap":  {compiler.SoapJobTypeIndex},
+	"ad":    {compiler.AdJobTypeIndex},
+	"ldif":  {compiler.LdifJobTypeIndex},
+	"entra": {compiler.EntraJobTypeIndex},
+	// The round job an agent-driven ad-hoc subprocess parks on (ADR-0253). Authored on
+	// the container itself rather than on a task, but it is a Worker Type an operator
+	// configures and the Console places like any other.
+	connectorKindAgent:        {compiler.AgentJobTypeIndex},
 	connectorKindClio:         {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
 	connectorKindMail:         {compiler.MailJobTypeIndex},
 	"csv":                     {compiler.CsvImportJobTypeIndex},

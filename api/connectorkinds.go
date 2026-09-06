@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
@@ -86,6 +87,10 @@ type createConnectorParams struct {
 	// key with credentialsRef instead still works and is what an operator who already
 	// keeps their DSNs in the vault does. Never echoed back.
 	ConnectionString string `json:"connectionString"`
+	// Model is which model an agent Worker asks
+	// (ADR-draft-agent-models-are-console-workers). Not a secret, so it travels as
+	// itself and is echoed back — it is the setting an operator changes most often.
+	Model string `json:"model"`
 }
 
 // managedConnectorKinds is the ordered registry of managed worker kinds. Order is
@@ -337,6 +342,23 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		validateCreate: validateADConnector,
 		jobTypes:       []int32{compiler.AdJobTypeIndex},
 	},
+	{
+		// An agent-driven ad-hoc subprocess asks a model which of its tools to run next
+		// (ADR-0253). The record holds the endpoint, the wire format and the model
+		// name; the API key is a vault key behind credentialsRef
+		// (ADR-draft-agent-models-are-console-workers).
+		//
+		// Worker-only, and of every kind that is, this one least optionally: a round is
+		// one model call, minutes long and able to hang, which is the clearest case
+		// ADR-0164 has. So there is no registry, no rebuild and no in-process handler —
+		// the record exists so an operator can add a model in the Console and the
+		// supervised agent worker be provisioned from it (agentWorkerEnv), and so a
+		// deploy catches a typo in the name a model refers to.
+		name:           connectorKindAgent,
+		workerOnly:     true,
+		validateCreate: validateAgentConnector,
+		jobTypes:       []int32{compiler.AgentJobTypeIndex},
+	},
 }, sqlManagedConnectorKinds()...)
 
 // sqlManagedConnectorKinds are the three SQL products (ADR-0173, ADR-0188). Each is
@@ -544,7 +566,7 @@ func DefaultOffloadedKinds() []string {
 // flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
 // deployment change.
 func DefaultSupervisedWorkerOnlyKinds() []string {
-	return []string{connectorKindEntra, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	return []string{connectorKindAgent, connectorKindEntra, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -718,6 +740,44 @@ func validateSharePointConnector(p *createConnectorParams) string {
 // credentialsRef names — never in the record, and never in a model (ADR-0172). An
 // optional endpoint overrides the Graph base for a national cloud; the mail-only
 // fields do not apply.
+// Agent protocol names, the wire format a model endpoint speaks. They are the worker's
+// own names (ATLAS_AGENT_<NAME>_PROTOCOL), not a second vocabulary
+// (ADR-draft-agent-models-are-console-workers).
+const (
+	agentProtocolMessages        = "messages"
+	agentProtocolChatCompletions = "chat-completions"
+)
+
+// validateAgentConnector checks an agent Worker's record. Its three rules are the
+// worker's own (ADR-0254), stated once more where the operator is looking — a record the
+// Console accepts and the worker then refuses at startup would move that discovery to a
+// log nobody is reading.
+func validateAgentConnector(p *createConnectorParams) string {
+	p.Sender = "" // an agent has no sender; Provider carries its wire format instead
+	if p.Provider == "" {
+		p.Provider = agentProtocolMessages
+	}
+	if p.Provider != agentProtocolMessages && p.Provider != agentProtocolChatCompletions {
+		return "an agent worker speaks " + strconv.Quote(agentProtocolMessages) + " or " +
+			strconv.Quote(agentProtocolChatCompletions) + "; " + strconv.Quote(p.Provider) + " is neither"
+	}
+	// A key unless an endpoint is named, and the asymmetry is the worker's: pointing at
+	// a provider's public endpoint with no credential is certainly a misconfiguration,
+	// while a self-hosted or in-cluster one may legitimately be open.
+	if p.CredentialsRef == "" && p.Endpoint == "" {
+		return "an agent worker requires a credentialsRef naming the vault key that holds its API key, " +
+			"or an endpoint, if that endpoint needs none"
+	}
+	// The Chat-Completions adapter has no default model on purpose: which model an
+	// account may use is not something Atlas can know, and a guess would surface as a
+	// 404 on the first round of a running process rather than here.
+	if p.Provider == agentProtocolChatCompletions && p.Model == "" {
+		return "an agent worker speaking " + strconv.Quote(agentProtocolChatCompletions) +
+			" must name its model; there is no default"
+	}
+	return ""
+}
+
 func validateEntraConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.CredentialsRef == "" {
@@ -740,7 +800,18 @@ func validateEntraConnector(p *createConnectorParams) string {
 // worker rather than refused — the shape an operator uses to park a worker they
 // are in the middle of moving.
 func normalizeConnectorUpdate(rec *connector) string {
-	if rec.Kind != connectorKindMail {
+	// The kinds whose *edited* record has to satisfy what a create would have demanded.
+	// Mail because switching a provider changes which fields are required; agent for
+	// the same reason — changing the protocol to chat-completions makes the model
+	// required, and accepting that edit would leave a Worker the supervised child
+	// refuses at startup (ADR-draft-agent-models-are-console-workers).
+	var validate func(*createConnectorParams) string
+	switch rec.Kind {
+	case connectorKindMail:
+		validate = validateMailConnector
+	case connectorKindAgent:
+		validate = validateAgentConnector
+	default:
 		return ""
 	}
 	p := createConnectorParams{
@@ -750,12 +821,13 @@ func normalizeConnectorUpdate(rec *connector) string {
 		CredentialsRef: strings.TrimSpace(rec.CredentialsRef),
 		Provider:       strings.TrimSpace(rec.Provider),
 		Sender:         strings.TrimSpace(rec.Sender),
+		Model:          strings.TrimSpace(rec.Model),
 	}
-	if msg := validateMailConnector(&p); msg != "" {
+	if msg := validate(&p); msg != "" {
 		return msg
 	}
 	rec.Endpoint, rec.CredentialsRef = p.Endpoint, p.CredentialsRef
-	rec.Provider, rec.Sender = p.Provider, p.Sender
+	rec.Provider, rec.Sender, rec.Model = p.Provider, p.Sender, p.Model
 	return ""
 }
 

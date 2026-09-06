@@ -149,6 +149,11 @@ func mailProviderOf(c connector) string {
 func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 	return map[string]func() []string{
 		connectorKindMail: s.mailWorkerEnv,
+		// An agent model is temis's shape — an endpoint in the record, one plain secret
+		// in the vault — plus the two things only an agent has: its wire format and its
+		// model name. Provisioned for temis's reason, and worker-only for the clearest
+		// reason ADR-0164 has (ADR-draft-agent-models-are-console-workers).
+		connectorKindAgent: s.agentWorkerEnv,
 		// AD is not a managed kind — no worker record, no store entry — but its
 		// bind-password *reference* can resolve out of the vault, which a supervised
 		// worker cannot read either. So it is provisioned for the same reason mail
@@ -1510,4 +1515,98 @@ func boolEnv(on bool) string {
 		return "1"
 	}
 	return "0"
+}
+
+const (
+	agentEnvPrefix     = "ATLAS_AGENT_"
+	agentConnectorsEnv = agentEnvPrefix + "CONNECTORS"
+)
+
+// agentWorkerEnv renders the models a supervised agent worker needs
+// (ADR-draft-agent-models-are-console-workers). It is temisWorkerEnv's shape — an
+// endpoint from the record and one plain secret from the vault — with the two things an
+// agent has that a decision service does not: which wire format the endpoint speaks, and
+// which model to ask.
+//
+// The variables are the worker's own (ATLAS_AGENT_<NAME>_*), the same ones an operator
+// sets by hand for an external worker. There is no private channel between Atlas and its
+// own child (ADR-0157): a variable only the supervised path used would be the one nobody
+// tests.
+func (s *Server) agentWorkerEnv() []string {
+	var (
+		env       []string
+		names     []string
+		fromStore bool
+	)
+	seen := map[string]bool{}
+	addName := func(n string) {
+		if n = strings.TrimSpace(n); n != "" && !seen[n] {
+			seen[n] = true
+			names = append(names, n)
+		}
+	}
+	// Models an operator set directly on the host: inherited by the child as they are,
+	// so nothing is rendered for them — they are only kept in the list below so a
+	// store-based render does not drop them.
+	for _, name := range splitConnectorList(os.Getenv(agentConnectorsEnv)) {
+		addName(name)
+	}
+	s.do(func() {
+		recs, err := s.connectors.LoadAll()
+		if err != nil {
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the worker store for a supervised agent worker",
+				slog.String("error", err.Error()))
+			return
+		}
+		sort.Slice(recs, func(i, j int) bool { return recs[i].Name < recs[j].Name })
+		taken := map[string]string{}
+		for _, c := range recs {
+			if c.Kind != connectorKindAgent || !c.Enabled {
+				continue
+			}
+			envKey := connectorEnvKey(c.Name)
+			if envKey == "" {
+				continue
+			}
+			// Two names that fold to one variable would silently give one the other's
+			// key — the mail/AD collision, left out for the same reason.
+			if first, dup := taken[envKey]; dup {
+				logging.Warn(logging.WorkerSupervisorFailed,
+					"two agent models share one environment name; the second is not handed to the supervised worker",
+					slog.String("connector", c.Name), slog.String("collidesWith", first))
+				continue
+			}
+			endpoint := strings.TrimSpace(c.Endpoint)
+			apiKey := strings.TrimSpace(s.resolveConnectorSecret(c.CredentialsRef))
+			// The worker's own rule, applied before the handover rather than after:
+			// with neither a key nor an endpoint there is nothing to reach, so the
+			// model is left out and the worker starts without it — the Console then
+			// shows it as configured-not-working instead of a token failing mid-run.
+			if apiKey == "" && endpoint == "" {
+				continue
+			}
+			taken[envKey] = c.Name
+			key := agentEnvPrefix + envKey + "_"
+			if endpoint != "" {
+				env = append(env, key+"ENDPOINT="+endpoint)
+			}
+			if apiKey != "" {
+				env = append(env, key+"API_KEY="+apiKey)
+			}
+			if model := strings.TrimSpace(c.Model); model != "" {
+				env = append(env, key+"MODEL="+model)
+			}
+			// Only the non-default protocol is rendered, so a Messages model's
+			// environment is as short as a hand-written one would be.
+			if p := strings.TrimSpace(c.Provider); p != "" && p != agentProtocolMessages {
+				env = append(env, key+"PROTOCOL="+p)
+			}
+			addName(c.Name)
+			fromStore = true
+		}
+	})
+	if !fromStore {
+		return nil
+	}
+	return append(env, agentConnectorsEnv+"="+strings.Join(names, ","))
 }
