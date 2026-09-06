@@ -313,3 +313,23 @@ func TestMessagesAdapterTakesABearerTokenAndCanDropThinking(t *testing.T) {
 		t.Errorf("thinking = %q, want the field omitted so an endpoint without it does not refuse the round", got)
 	}
 }
+
+// Arguments that are a string carrying something that is not JSON. A model can produce
+// this — a truncated call, a half-written object — and the round must fail rather than
+// activate the named activity with nothing in its scope. An activity that ran without
+// the arguments it declared is worse than one that did not run: the agent would see a
+// result and believe the step was done properly.
+func TestChatCompletionsFailsOnArgumentsThatAreNotJSON(t *testing.T) {
+	srv, _, _ := chatEndpoint(t, http.StatusOK, `{"choices":[{"finish_reason":"tool_calls","message":{
+		"tool_calls":[{"id":"c1","type":"function","function":{
+			"name":"zinsen_holen","arguments":"{\"url\": \"https://bank.exa"}}]}}]}`)
+	m := &agent.ChatCompletionsModel{Endpoint: srv.URL, APIKey: "sk", Model: "gpt-4o", Client: srv.Client()}
+
+	_, err := m.Decide(context.Background(), chatRound())
+	if err == nil {
+		t.Fatal("a truncated argument object was accepted; the tool would run with an empty scope")
+	}
+	if !strings.Contains(err.Error(), "zinsen_holen") {
+		t.Errorf("err = %v, want it to name the call that could not be read", err)
+	}
+}
