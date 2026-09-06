@@ -711,6 +711,21 @@ func (b *Builder) AddAdHocSubProcess(d AdHocDetail) int32 {
 	return b.addNode(TypeAdHocSubProcess, detail)
 }
 
+// SetAdHocResultCollection names where an agent-driven ad-hoc's tool results accumulate
+// (ADR-0253): collection is the variable on the container's scope each finished tool appends
+// to, and element the FEEL expression evaluated over that tool's own scope to produce the
+// entry. It exists because the name is an *interned* index inside the detail, which only a
+// builder can mint — the same reason SetMultiInstance takes its output collection by name.
+// An empty collection clears it.
+func (b *Builder) SetAdHocResultCollection(nodeID int32, collection string, element *expr.Compiled) {
+	if !b.validNode(nodeID) || b.nodes[nodeID].Type != TypeAdHocSubProcess {
+		return
+	}
+	d := &b.adHocs[b.nodes[nodeID].Detail]
+	d.ResultCollection = b.intern(collection)
+	d.ResultElement = element
+}
+
 // PushScope opens scope id: every node added until the matching PopScope carries id
 // as its FlowScope. Scopes nest, so the outer scope is saved and restored.
 func (b *Builder) PushScope(id int32) {

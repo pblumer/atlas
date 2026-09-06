@@ -92,6 +92,20 @@ func checkAdHocCompletion(c *ProcessingContext, scopeKey uint64) {
 	}
 	cp := c.process(scope.ProcessDefKey)
 	d := cp.AdHoc(cp.Node(scope.ElementId).Detail)
+	if d.AgentDriven {
+		// An agent-driven container's fate is decided in one place only — the drain
+		// funnel, where startNextAgentRound weighs another round against the completion
+		// condition (ADR-0253). Completing it here as well would complete it twice: unlike
+		// a plain ad-hoc, this checkpoint's drain is not a no-op, because the round that
+		// just ended may have had a single tool in it. What is left here is the other half
+		// of the condition's job — cutting a round short while its other tools still run,
+		// whose cancellation then drains the scope into that one funnel.
+		if d.CompletionCondition != nil && c.ActiveChildren(scopeKey) != 0 &&
+			adHocConditionHolds(c, d.CompletionCondition, scopeKey) {
+			terminateScope(c, scope.ProcessInstanceKey, scopeKey)
+		}
+		return
+	}
 	if d.CompletionCondition == nil {
 		return // no predicate: the ad-hoc completes when its scope drains
 	}
@@ -251,4 +265,59 @@ func activateAgentTool(c *ProcessingContext, containerKey uint64, container *mod
 		arg.ScopeKey = k
 		c.AppendVariableEvent(model.IntentVariableCreated, arg)
 	}
+}
+
+// startNextAgentRound is the round boundary of an agent-driven ad-hoc (ADR-0253). It runs
+// when the container's scope has drained — every tool the last round asked for has finished
+// — and reports whether it took the container over. True means another round was asked for
+// and the caller must not complete the container.
+//
+// The model's own bound wins first: a completion condition that holds ends the loop here,
+// which is also what keeps checkAdHocCompletion's early exit working — it drives the same
+// completeScope, and re-evaluating the condition is what stops this from undoing it.
+func startNextAgentRound(c *ProcessingContext, scope uint64, ei *model.ElementInstanceValue) bool {
+	if ei.BpmnElementType != uint8(compiler.TypeAdHocSubProcess) {
+		return false
+	}
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.AdHoc(cp.Node(ei.ElementId).Detail)
+	if !d.AgentDriven {
+		return false
+	}
+	if d.CompletionCondition != nil && adHocConditionHolds(c, d.CompletionCondition, scope) {
+		return false // the model said how far this goes, and it has gone that far
+	}
+	createAgentRoundJob(c, scope, ei)
+	return true
+}
+
+// collectAgentToolResult appends one finished tool's result to its container's result
+// collection (ADR-0253) — the multi-instance outputCollection/outputElement pair applied to
+// a round rather than an iteration. It is evaluated over the tool's own scope, so the
+// expression reads what that tool produced, and appended rather than indexed because a
+// round's calls are not known in advance the way a loop's iterations are.
+//
+// The collection lives on the container's scope, which is where the next round's job reads
+// it from and where the agent sees what its earlier calls returned.
+func collectAgentToolResult(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	scope := c.GetElementInstance(ei.FlowScopeKey)
+	if scope == nil || scope.BpmnElementType != uint8(compiler.TypeAdHocSubProcess) {
+		return
+	}
+	cp := c.process(scope.ProcessDefKey)
+	d := cp.AdHoc(cp.Node(scope.ElementId).Detail)
+	if !d.AgentDriven || d.ResultCollection < 0 {
+		return
+	}
+	val := expr.Null
+	if d.ResultElement != nil {
+		// An expression that cannot be evaluated contributes null rather than nothing: the
+		// agent is told the call produced no usable result, which it can act on, instead of
+		// silently seeing one fewer entry than calls it made.
+		if v, err := d.ResultElement.Eval(bindInputsChain(c, d.ResultElement.Inputs(), key)); err == nil {
+			val = v
+		}
+	}
+	name := cp.Intern(d.ResultCollection)
+	writeList(c, ei.FlowScopeKey, name, append(readList(c, ei.FlowScopeKey, name), val))
 }

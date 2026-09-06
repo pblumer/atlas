@@ -1,13 +1,17 @@
 package engine_test
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/expr"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/wal"
 )
 
 // agentAdHoc builds: start → adhoc{zinsen_holen, historie_lesen} → end, where the ad-hoc is
@@ -236,5 +240,247 @@ func TestAgentAsksForAnUnknownToolRaisesAnIncident(t *testing.T) {
 	}
 	if v := elementVisits(t, h.store, cp.Key)[end]; v != 0 {
 		t.Error("the container completed despite the incident")
+	}
+}
+
+// agentAdHocWithResults is agentAdHoc plus a result collection: each finished tool appends
+// the value of resultElement to toolCallResults on the container's scope, which is where the
+// next round's job — and the agent behind it — reads what earlier calls returned.
+func agentAdHocWithResults(t *testing.T, key uint64, id string, cond *expr.Compiled) (cp *compiler.CompiledProcess, adhoc, a, end int32) {
+	t.Helper()
+	bl := compiler.NewBuilder(key, id, 1)
+	start := bl.AddStartEvent()
+	adhoc = bl.AddAdHocSubProcess(compiler.AdHocDetail{
+		CancelRemaining:     true,
+		AgentDriven:         true,
+		AgentWorker:         -1,
+		CompletionCondition: cond,
+		ResultCollection:    -1,
+	})
+	bl.SetAdHocResultCollection(adhoc, "toolCallResults", mustCompile(t, "toolCallId"))
+	end = bl.AddEndEvent()
+	bl.Connect(start, adhoc)
+	bl.Connect(adhoc, end)
+	bl.PushScope(adhoc)
+	a = bl.AddServiceTask("ta", 3)
+	bl.PopScope()
+	bl.SetElementBpmnId(adhoc, "adhoc")
+	bl.SetElementBpmnId(a, "zinsen_holen")
+	cp, err := bl.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp, adhoc, a, end
+}
+
+// TestAgentRoundEndsWhereTheScopeDrains is the loop: the tools of a round finish, the
+// container's scope drains, and that is the moment the agent is asked again — a *new* round
+// job, not the container's completion. Round two ends the run by naming no tool.
+func TestAgentRoundEndsWhereTheScopeDrains(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	cp, _, a, end := agentAdHocWithResults(t, 306, "agent-rounds", nil)
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	// Round one: the agent calls one tool.
+	p.CompleteJobWithToolCalls(singleActivatableJob(t, h.store, compiler.AgentJobTypeIndex),
+		[]engine.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (round 1): %v", err)
+	}
+	// Working that tool drains the round — and must produce the *next* round's job rather
+	// than completing the container.
+	p.CompleteJob(singleActivatableJob(t, h.store, jobTypeOf(t, cp, a)))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (tool done): %v", err)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[end]; v != 0 {
+		t.Fatal("the container completed when its round drained, instead of asking for the next")
+	}
+	round2 := singleActivatableJob(t, h.store, compiler.AgentJobTypeIndex)
+
+	// Round two: no tool calls ends the loop.
+	p.CompleteJob(round2)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (round 2): %v", err)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[end]; v != 1 {
+		t.Errorf("end visits = %d, want 1 once the agent stops calling tools", v)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Errorf("after the run: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}
+
+// TestAgentToolResultsAccumulate: each finished tool appends to the container's collection,
+// in the order the tools finished, and the list survives into the next round — which is what
+// makes a round able to build on the one before it.
+func TestAgentToolResultsAccumulate(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	cp, adhoc, a, _ := agentAdHocWithResults(t, 307, "agent-results", nil)
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	_ = adhoc
+
+	p.CompleteJobWithToolCalls(singleActivatableJob(t, h.store, compiler.AgentJobTypeIndex),
+		[]engine.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}, {Tool: "zinsen_holen", CallId: "call-2"}})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (round 1): %v", err)
+	}
+	// Work both tools; each appends its toolCallId to the collection.
+	for i := 0; i < 2; i++ {
+		var keys []uint64
+		if err := h.store.ActivatableJobs(jobTypeOf(t, cp, a), func(k uint64) error {
+			keys = append(keys, k)
+			return nil
+		}); err != nil {
+			t.Fatalf("ActivatableJobs: %v", err)
+		}
+		if len(keys) == 0 {
+			t.Fatalf("tool job %d of 2 is missing", i+1)
+		}
+		p.CompleteJob(keys[0])
+		if err := p.RunUntilIdle(); err != nil {
+			t.Fatalf("RunUntilIdle (tool %d): %v", i+1, err)
+		}
+	}
+
+	// The container is parked on the next round; its scope carries what the calls returned.
+	job, ok, err := h.store.GetJob(singleActivatableJob(t, h.store, compiler.AgentJobTypeIndex))
+	if err != nil || !ok {
+		t.Fatalf("GetJob: ok=%v err=%v", ok, err)
+	}
+	vars := toolScopeVariables(t, h.store, job.ElementInstanceKey)
+	got := vars["toolCallResults"].Text
+	if !strings.Contains(got, "call-1") || !strings.Contains(got, "call-2") {
+		t.Errorf("toolCallResults = %q, want both calls' results", got)
+	}
+}
+
+// TestAgentLoopIsBoundedByTheCompletionCondition: an agent that never stops calling tools is
+// stopped by the model instead. The completion condition is evaluated where the round would
+// otherwise begin again, so it is the model's own ceiling on a run — no engine-side counter.
+func TestAgentLoopIsBoundedByTheCompletionCondition(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	cp, _, a, end := agentAdHocWithResults(t, 308, "agent-bounded", mustCompile(t, "count(toolCallResults) >= 1"))
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	p.CompleteJobWithToolCalls(singleActivatableJob(t, h.store, compiler.AgentJobTypeIndex),
+		[]engine.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (round 1): %v", err)
+	}
+	p.CompleteJob(singleActivatableJob(t, h.store, jobTypeOf(t, cp, a)))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (tool done): %v", err)
+	}
+
+	if v := elementVisits(t, h.store, cp.Key)[end]; v != 1 {
+		t.Errorf("end visits = %d, want 1 — the completion condition ends the loop", v)
+	}
+	if !jobGone(t, h.store, compiler.AgentJobTypeIndex) {
+		t.Error("a further round was asked for even though the completion condition held")
+	}
+}
+
+// TestAgentRoundRecoversMidRound is the determinism contract of ADR-0253 in one test: an
+// instance parked mid-round — the agent's choice made, its tool still working — is replayed
+// into an empty store and continues from the tool's completion. Nothing re-asks the model:
+// what the agent chose is frozen in the activation events, so recovery re-applies the same
+// choice rather than making a new one (I4/I6).
+func TestAgentRoundRecoversMidRound(t *testing.T) {
+	dir := t.TempDir()
+	cp, _, a, end := agentAdHocWithResults(t, 309, "agent-recovery", nil)
+	toolJobType := jobTypeOf(t, cp, a)
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, &manualClock{})
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	// The agent chooses a tool, and we stop the world while that tool is still working.
+	p1.CompleteJobWithToolCalls(singleActivatableJob(t, h1.store, compiler.AgentJobTypeIndex),
+		[]engine.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}})
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (round 1): %v", err)
+	}
+	if pi, ei := counts(t, h1.store); pi != 1 || ei != 2 {
+		t.Fatalf("parked mid-round: process=%d element=%d, want 1 and 2 (container + its tool)", pi, ei)
+	}
+	h1.close(t)
+
+	// Replay into a fresh, empty store.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() { _ = store2.Close(); _ = log2.Close() }()
+	p2 := engine.New(1, log2, store2, &manualClock{})
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+
+	if pi, ei := counts(t, store2); pi != 1 || ei != 2 {
+		t.Fatalf("after replay: process=%d element=%d, want 1 and 2 (the agent's choice rebuilt)", pi, ei)
+	}
+	// The round's own job is done: replay must not manufacture a second one, or the model
+	// would be asked twice for a choice it already made.
+	if !jobGone(t, store2, compiler.AgentJobTypeIndex) {
+		t.Error("replay left a round job outstanding — the agent would be asked again")
+	}
+	if jobGone(t, store2, toolJobType) {
+		t.Fatal("the chosen tool's job did not survive replay")
+	}
+
+	// And the recovered instance carries on: the tool finishes, the round drains, the next
+	// round is asked for, and an empty answer ends the run.
+	p2.CompleteJob(singleActivatableJob(t, store2, toolJobType))
+	if err := p2.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (tool done): %v", err)
+	}
+	p2.CompleteJob(singleActivatableJob(t, store2, compiler.AgentJobTypeIndex))
+	if err := p2.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (round 2): %v", err)
+	}
+	if v := elementVisits(t, store2, cp.Key)[end]; v != 1 {
+		t.Errorf("end visits after recovery = %d, want 1", v)
 	}
 }
