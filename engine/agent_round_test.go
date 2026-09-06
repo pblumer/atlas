@@ -484,3 +484,64 @@ func TestAgentRoundRecoversMidRound(t *testing.T) {
 		t.Errorf("end visits after recovery = %d, want 1", v)
 	}
 }
+
+// TestAgentFinalAnswerOutlivesTheContainer settles the question the loop raises: the result
+// collection lives on the container's scope and is dropped with it, so does the agent's
+// *final* answer vanish too? It does not. A round job is a job like any other, so its
+// completion outputs follow ioResultScope (ADR-0068) — with no output mapping on the
+// container they land in the process scope, where the step after the ad-hoc reads them.
+func TestAgentFinalAnswerOutlivesTheContainer(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	// start → adhoc{zinsen_holen} → weiterverarbeiten → end. The task after the container
+	// is what makes the question answerable: it is still live when the agent is gone.
+	bl := compiler.NewBuilder(311, "agent-answer", 1)
+	begin := bl.AddStartEvent()
+	adhoc := bl.AddAdHocSubProcess(compiler.AdHocDetail{
+		CancelRemaining: true, AgentDriven: true, AgentWorker: -1, ResultCollection: -1,
+	})
+	after := bl.AddServiceTask("weiter", 3)
+	end := bl.AddEndEvent()
+	bl.Connect(begin, adhoc)
+	bl.Connect(adhoc, after)
+	bl.Connect(after, end)
+	bl.PushScope(adhoc)
+	tool := bl.AddServiceTask("ta", 3)
+	bl.PopScope()
+	bl.SetElementBpmnId(adhoc, "adhoc")
+	bl.SetElementBpmnId(tool, "zinsen_holen")
+	cp, err := bl.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	// The agent answers straight away: no tool calls, one result variable.
+	p.CompleteJobWithToolCalls(singleActivatableJob(t, h.store, compiler.AgentJobTypeIndex), nil,
+		model.VariableValue{Name: "befund", Kind: model.VarString, Text: "1.33 %"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	// The container is gone and the step after it is running — with the answer in reach.
+	nextJob := singleActivatableJob(t, h.store, cp.ServiceTask(cp.Node(after).Detail).JobType)
+	job, ok, err := h.store.GetJob(nextJob)
+	if err != nil || !ok {
+		t.Fatalf("GetJob: ok=%v err=%v", ok, err)
+	}
+	vars := toolScopeVariables(t, h.store, job.ElementInstanceKey)
+	if got := vars["befund"].Text; got != "1.33 %" {
+		t.Errorf("befund seen by the step after the ad-hoc = %q, want the agent's answer", got)
+	}
+	_ = end
+}
