@@ -17,6 +17,7 @@ import (
 	"github.com/pblumer/atlas/api/layout"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
+	"github.com/pblumer/atlas/connector/agent"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/entra"
@@ -5387,6 +5388,22 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "script", Fields: map[string]any{
 			"source": j.Source, "input": j.Input, "resultVariable": j.Result,
 		}}
+	}
+	// An agent-driven ad-hoc subprocess is its own node type as well, and its round job
+	// resolves for the same reason a script task does: the toolbox lives in the compiled
+	// process — element ids, the modeler's documentation, the declared parameters — and
+	// what the earlier rounds' calls returned lives in the container's scope. Neither is
+	// anything a worker has; what it has is the model endpoint and the credential behind
+	// it, and neither of those travels (ADR-draft-agent-rounds-on-a-worker).
+	//
+	// A plain ad-hoc parks no job on its container at all, so a job here is an agent
+	// round by construction — and Resolve says so itself rather than trusting that.
+	if node.Type == compiler.TypeAdHocSubProcess {
+		r, err := agent.Resolve(s.store, cp, ei, jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "agent", Fields: agent.ResolveJobPayload(r)}
 	}
 	// A *central* business rule task resolves too, so the gate admits both node types
 	// and the switch below decides. A *local* decision is a business rule task as
