@@ -2330,6 +2330,141 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <b>No password is ever in the model</b>, in an event or in the log – a task names the worker and nothing
         more.</p>
 
+      <h4 data-l="de">Einen Worker einrichten – was je Typ ins Vault gehört</h4><h4 data-l="en">Configuring a worker – what goes into the vault per type</h4>
+      <p data-l="de">Der Dialog unter <a href="/#/console/workers">Console → Workers</a> zeigt die erwartete Form als
+        Platzhaltertext an – aber erst, wenn du schon darin stehst. Hier steht sie vorher, damit das Geheimnis fertig
+        ist, bevor du den Worker anlegst. Reihenfolge: <b>zuerst</b> das Secret unter
+        <a href="/#/console/secrets">Console → Secrets</a>, <b>dann</b> den Worker, der es beim Namen nennt.</p>
+      <p data-l="en">The dialog under <a href="/#/console/workers">Console → Workers</a> shows the expected shape as
+        placeholder text – but only once you are already in it. Here it is beforehand, so the secret is ready before
+        you create the worker. The order: <b>first</b> the secret under
+        <a href="/#/console/secrets">Console → Secrets</a>, <b>then</b> the worker that names it.</p>
+      <table>
+        <thead><tr>
+          <th data-l="de">Worker-Typ</th><th data-l="en">Worker type</th>
+          <th data-l="de">Endpoint</th><th data-l="en">Endpoint</th>
+          <th data-l="de">Was im Vault liegt</th><th data-l="en">What sits in the vault</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><b>Mail</b></td>
+            <td data-l="de"><code>smtp.example.com:587</code> bei SMTP; bei Gmail/Graph keiner</td>
+            <td data-l="en"><code>smtp.example.com:587</code> for SMTP; none for Gmail/Graph</td>
+            <td data-l="de">SMTP: Benutzer und Passwort im Dialog. Gmail/Microsoft&nbsp;Graph: ein JSON-Auth-Bundle. <b>Vorschau</b>: gar nichts – der Weg, einen Mail-Task ohne Mailserver auszuprobieren.</td>
+            <td data-l="en">SMTP: user and password in the dialog. Gmail/Microsoft&nbsp;Graph: a JSON auth bundle. <b>Preview</b>: nothing at all – the way to try a mail task with no mail server.</td></tr>
+          <tr><td><b>Active&nbsp;Directory</b></td>
+            <td><code>ldaps://dc.example.com:636</code></td>
+            <td><code>{"bindDN": "cn=svc-atlas,ou=Dienstkonten,dc=example,dc=com", "password": "…"}</code></td></tr>
+          <tr><td><b>Microsoft&nbsp;Entra&nbsp;ID</b></td>
+            <td data-l="de">keiner</td><td data-l="en">none</td>
+            <td><code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code></td></tr>
+          <tr><td><b>SharePoint</b></td>
+            <td data-l="de">keiner</td><td data-l="en">none</td>
+            <td><code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code></td></tr>
+          <tr><td><b>Google&nbsp;Sheets</b></td>
+            <td data-l="de">keiner – Googles Adressen sind für alle dieselben</td>
+            <td data-l="en">none – Google's addresses are the same for everyone</td>
+            <td><code>{"method": "serviceAccount", "clientEmail": "…@….iam.gserviceaccount.com", "privateKey": "-----BEGIN PRIVATE KEY-----\n…"}</code></td></tr>
+          <tr><td><b>Jira</b></td>
+            <td><code>https://acme.atlassian.net</code></td>
+            <td><code>{"email": "…", "apiToken": "…"}</code> <span data-l="de">oder</span><span data-l="en">or</span> <code>{"token": "…"}</code></td></tr>
+          <tr><td><b>BMC&nbsp;Remedy</b></td>
+            <td><code>https://helix.example.com:8008</code></td>
+            <td><code>{"username": "…", "password": "…"}</code></td></tr>
+          <tr><td><b data-l="de">SQL-Datenbanken</b><b data-l="en">SQL databases</b></td>
+            <td data-l="de">keiner</td><td data-l="en">none</td>
+            <td data-l="de">Die <b>ganze Verbindungszeichenfolge</b> ist das Geheimnis – sie hat keine öffentliche Hälfte. Du fügst sie im Dialog ein, Atlas versiegelt sie im Vault und behält nur eine Referenz; zeigen kann die Konsole sie danach nicht mehr.</td>
+            <td data-l="en">The <b>whole connection string</b> is the credential – it has no public half. You paste it into the dialog, Atlas seals it into the vault and keeps only a reference; the Console can never show it back.</td></tr>
+          <tr><td><b>temis</b> / <b>clio</b></td>
+            <td><code>https://temis.example.com</code></td>
+            <td data-l="de">Eine Token-Referenz, optional – ein offener Dienst im eigenen Netz braucht keine.</td>
+            <td data-l="en">A token reference, optional – an open service on your own network needs none.</td></tr>
+        </tbody>
+      </table>
+      <p data-l="de">Was in der Tabelle steht, ist immer der <i>Inhalt des Secrets</i>. Im Worker selbst steht nur
+        dessen <b>Name</b>. Deshalb wechselst du ein abgelaufenes Passwort, indem du den Vault-Schlüssel
+        überschreibst – der Worker und jedes Modell, das ihn nennt, bleiben unangetastet.</p>
+      <p data-l="en">What the table shows is always the <i>content of the secret</i>. The worker itself holds only its
+        <b>name</b>. So you rotate an expired password by overwriting the vault key – the worker, and every model that
+        names it, stay untouched.</p>
+
+      <h4 data-l="de">Durchgespielt: ein Google-Sheets-Worker</h4><h4 data-l="en">Worked through: a Google Sheets worker</h4>
+      <p data-l="de">Google ist der Typ mit den meisten Schritten ausserhalb von Atlas, deshalb einmal ganz:</p>
+      <p data-l="en">Google is the type with the most steps outside Atlas, so here it is in full:</p>
+      <ol>
+        <li data-l="de">In der <b>Google Cloud Console</b> ein Projekt wählen und unter <i>APIs &amp; Dienste</i> die
+          <b>Google Sheets API</b> <i>und</i> die <b>Google Drive API</b> aktivieren. Drive ist nicht optional: Eine
+          Tabelle anzulegen, sie in einen Ordner zu legen und sie zu löschen sind Drive-Operationen.</li>
+        <li data-l="en">In the <b>Google Cloud Console</b> pick a project and, under <i>APIs &amp; Services</i>, enable
+          the <b>Google Sheets API</b> <i>and</i> the <b>Google Drive API</b>. Drive is not optional: creating a
+          spreadsheet, putting it in a folder and deleting it are Drive operations.</li>
+        <li data-l="de"><i>IAM &amp; Verwaltung → Dienstkonten → Dienstkonto erstellen</i>. Die Schritte
+          „Berechtigungen“ und „Hauptkonten mit Zugriff“ <b>überspringen</b> – eine Projektrolle bringt für Sheets
+          nichts, der Zugriff auf ein Dokument kommt ausschliesslich aus der Freigabe. Beim fertigen Konto
+          <i>Schlüssel → Schlüssel hinzufügen → JSON</i>. Die Datei lädt sofort herunter; den privaten Teil speichert
+          Google nicht, ein zweites Anzeigen gibt es nicht.</li>
+        <li data-l="en"><i>IAM &amp; Admin → Service accounts → Create service account</i>. <b>Skip</b> the
+          "Permissions" and "Principals with access" steps – a project role does nothing for Sheets, access to a
+          document comes only from sharing. On the finished account, <i>Keys → Add key → Create new key → JSON</i>.
+          The file downloads at once; Google does not keep the private half, and there is no second viewing.</li>
+        <li data-l="de">Unter <a href="/#/console/secrets">Console → Secrets</a> ein Secret anlegen, z.&nbsp;B.
+          <code>google_sheets_auth</code>. <code>clientEmail</code> und <code>privateKey</code> sind wörtlich
+          <code>client_email</code> und <code>private_key</code> aus der Schlüsseldatei, nur in camelCase; die
+          <code>\n</code> im Schlüssel bleiben zwei Zeichen und werden nicht zu echten Zeilenumbrüchen.
+          <code>method</code> dagegen ist Atlas' eigenes Feld – Google kennt es nicht: Es wählt den OAuth-Grant und
+          hat deshalb kein Gegenstück in der Datei.</li>
+        <li data-l="en">Under <a href="/#/console/secrets">Console → Secrets</a> create a secret, e.g.
+          <code>google_sheets_auth</code>. <code>clientEmail</code> and <code>privateKey</code> are literally
+          <code>client_email</code> and <code>private_key</code> from the key file, only camel-cased; the
+          <code>\n</code> inside the key stay two characters and must not become real line breaks.
+          <code>method</code>, by contrast, is Atlas's own field – Google does not know it: it selects the OAuth
+          grant, so it has no counterpart in the file.</li>
+        <li data-l="de">Unter <a href="/#/console/workers">Console → Workers</a> → <b>New worker</b> → Typ
+          <b>Google Sheets</b>, ein Name (den ein Task später nennt), Credential reference
+          <code>google_sheets_auth</code>, kein Endpoint. Speichern genügt – Atlas startet den beaufsichtigten Worker
+          mit der neuen Umgebung selbst neu, ohne Serverneustart und ohne Startparameter.</li>
+        <li data-l="en">Under <a href="/#/console/workers">Console → Workers</a> → <b>New worker</b> → type
+          <b>Google Sheets</b>, a name (which a task will state later), credential reference
+          <code>google_sheets_auth</code>, no endpoint. Saving is enough – Atlas restarts the supervised worker with
+          the new environment by itself, with no server restart and no start parameter.</li>
+        <li data-l="de"><b>Freigeben.</b> Ein Dienstkonto besitzt von sich aus nichts. Es hat eine eigene
+          E-Mail-Adresse und sieht genau die Dateien, die mit dieser Adresse geteilt sind – teile jede Tabelle bzw.
+          jeden Ordner mit ihr, als <b>Bearbeiter</b>, sonst antwortet der Worker mit <code>403</code> auf ein
+          Dokument, das du vor dir offen hast.</li>
+        <li data-l="en"><b>Share.</b> A service account owns nothing by itself. It has an email address of its own and
+          sees exactly the files shared with that address – share every spreadsheet or folder with it, as
+          <b>editor</b>, or the worker answers <code>403</code> on a document you have open in front of you.</li>
+      </ol>
+
+      <div class="note">
+        <span class="lbl" data-l="de">Google Workspace: warum <i>Tabelle anlegen</i> als Einziges scheitert</span><span class="lbl" data-l="en">Google Workspace: why <i>create a spreadsheet</i> is the one thing that fails</span>
+        <p data-l="de" style="margin:.3em 0 0">Gehört das Cloud-Projekt zu einer <b>Workspace-Organisation</b>, hat ein
+          Dienstkonto dort keinen eigenen Drive-Speicher. Lesen, schreiben und anhängen auf geteilten Tabellen laufen
+          normal; nur <code>create-spreadsheet</code> wird abgelehnt, weil es keinen Ort gäbe, an dem die neue Datei
+          läge. Die Meldung dazu ist wenig hilfreich: <code>403 The caller does not have permission</code> – dieselbe,
+          die eine fehlende Freigabe erzeugt. Auseinanderhalten kannst du beides daran, dass eine <i>geteilte</i>
+          Tabelle sich lesen und schreiben lässt. In einem Projekt ohne Organisation funktioniert dasselbe Dienstkonto
+          übrigens sofort, was die widersprüchlichen Anleitungen im Netz erklärt.</p>
+        <p data-l="de" style="margin:.5em 0 0">Zwei Auswege: Entweder legt ein Mensch die Tabellen an und teilt sie –
+          dann sind sieben der acht Operationen nutzbar und nur das Anlegen nicht. Oder du richtest <b>domänenweite
+          Delegierung</b> ein (Admin-Konsole → <i>Sicherheit → API-Steuerung → Domänenweite Delegierung</i>, die
+          OAuth-2-Client-ID des Dienstkontos mit den Scopes <code>spreadsheets</code> und <code>drive</code>) und
+          ergänzt im Secret <code>"subject": "person@deine-domain"</code>. Dann handelt das Dienstkonto <i>als</i>
+          dieser Mensch, und angelegte Tabellen landen in dessen Drive.</p>
+        <p data-l="en" style="margin:.3em 0 0">If the cloud project belongs to a <b>Workspace organization</b>, a
+          service account has no Drive storage of its own there. Reading, writing and appending on shared spreadsheets
+          work normally; only <code>create-spreadsheet</code> is refused, because there would be no place for the new
+          file to live. The message is unhelpful: <code>403 The caller does not have permission</code> – the same one a
+          missing share produces. You can tell the two apart by whether a <i>shared</i> spreadsheet can be read and
+          written. In a project with no organization the same service account works immediately, which is what makes
+          the guides on the web contradict each other.</p>
+        <p data-l="en" style="margin:.5em 0 0">Two ways out: either a person creates the spreadsheets and shares them –
+          then seven of the eight operations are usable and only creating is not. Or you set up <b>domain-wide
+          delegation</b> (Admin console → <i>Security → API controls → Domain-wide delegation</i>, the service
+          account's OAuth 2 client ID with the <code>spreadsheets</code> and <code>drive</code> scopes) and add
+          <code>"subject": "person@your-domain"</code> to the secret. The service account then acts <i>as</i> that
+          person, and spreadsheets it creates land in their Drive.</p>
+      </div>
+
       <div class="note">
         <span class="lbl" data-l="de">Warum im XML noch <code>connector</code> steht</span><span class="lbl" data-l="en">Why the XML still says <code>connector</code></span>
         <p data-l="de" style="margin:.3em 0 0">Die Begriffe sind neu, die Verträge nicht. Ein Task nennt seinen Worker
