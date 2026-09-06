@@ -65,6 +65,25 @@ func TestAWorkerOnlyKindIsSupervisedWithoutBeingOffloaded(t *testing.T) {
 	}
 }
 
+// TestTheAgentKindIsSupervisedWithoutBeingOffloaded is entra's case with a sharper
+// edge (ADR-0254). Entra has no in-process handler because the engine holds no tenant
+// credential; the agent kind has none because ADR-0164 forbids it — a round is one
+// model call, minutes long and able to hang, and putting it on the core loop is the
+// thing that record exists to prevent. So supervising it must never quietly add it to
+// the offload list, which would be the engine claiming it had been running it.
+func TestTheAgentKindIsSupervisedWithoutBeingOffloaded(t *testing.T) {
+	specs, offload, err := superviseConnectorSpecs([]string{"agent"}, nil)
+	if err != nil {
+		t.Fatalf("superviseConnectorSpecs: %v", err)
+	}
+	if len(specs) != 1 || specs[0].ID != "agent" {
+		t.Fatalf("specs = %v, want a worker for agent", specIDs(specs))
+	}
+	if len(offload) != 0 {
+		t.Fatalf("offload = %v, want none: an agent round has never run in the engine", offload)
+	}
+}
+
 // TestAKindAlreadySupervisedIsNotStartedTwice keeps the flag idempotent against the
 // defaults. Two workers leasing one kind is not an error the operator would see —
 // it is two processes racing for the same jobs.

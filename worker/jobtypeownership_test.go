@@ -29,6 +29,7 @@ import (
 // saying which job types are its own.
 var connectorJobTypes = map[string][]string{
 	"ad":           {compiler.AdJobType},
+	"agent":        {compiler.AgentJobType},
 	"clio":         {compiler.ClioWriteJobType, compiler.ClioQueryJobType, compiler.ClioReadJobType},
 	"csv":          {compiler.CsvImportJobType},
 	"entra":        {compiler.EntraJobType},
@@ -62,6 +63,11 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 			"ATLAS_AD_PROD_URL":      "ldaps://dc.example.com:636",
 			"ATLAS_AD_PROD_BIND_DN":  "cn=svc,dc=example,dc=com",
 			"ATLAS_AD_PROD_PASSWORD": "pw",
+		}
+	case "agent":
+		return map[string]string{
+			"ATLAS_AGENT_CONNECTORS":           "anthropic_pb",
+			"ATLAS_AGENT_ANTHROPIC_PB_API_KEY": "sk-test",
 		}
 	case "clio":
 		return map[string]string{
