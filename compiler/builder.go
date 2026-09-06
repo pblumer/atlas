@@ -547,6 +547,17 @@ func (b *Builder) SetAgentParams(m map[string][]agentParamSpec) { b.agentParams 
 // document order. Every fault here is a deploy error: a tool whose schema is wrong is one
 // the model will call wrongly, and a call built on a broken promise fails at run time in a
 // place much harder to read than a deploy message.
+// bpmnIdOf is the node's source BPMN id, or "" when it has none. A model compiled from
+// XML always has one; a process built straight through the Builder API (every engine test,
+// and any embedder) may not, and indexing the intern table with the -1 that means "unset"
+// would panic. "" is the honest answer, and every caller reads it as "no declaration".
+func (b *Builder) bpmnIdOf(nodeID int32) string {
+	if !b.validNode(nodeID) || b.elementIds[nodeID] < 0 {
+		return ""
+	}
+	return b.strings[b.elementIds[nodeID]]
+}
+
 func (b *Builder) compileAgentParams(ownerBpmnID string) ([]AgentParam, error) {
 	specs := b.agentParams[ownerBpmnID]
 	if len(specs) == 0 {
@@ -2583,7 +2594,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		if !d.AgentDriven {
 			continue
 		}
-		container := b.strings[b.elementIds[n.ElementId]]
+		container := b.bpmnIdOf(n.ElementId)
 		entries := scopeStarts[n.ScopeStartStart : n.ScopeStartStart+n.ScopeStartCount]
 		if len(entries) == 0 {
 			return nil, fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q has no entry activity, "+
@@ -2592,7 +2603,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		}
 		tools := make([]AgentTool, 0, len(entries))
 		for _, e := range entries {
-			params, err := b.compileAgentParams(b.strings[b.elementIds[e]])
+			params, err := b.compileAgentParams(b.bpmnIdOf(e))
 			if err != nil {
 				return nil, err
 			}
