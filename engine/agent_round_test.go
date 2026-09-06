@@ -114,7 +114,7 @@ func TestAgentRoundActivatesOnlyTheChosenTool(t *testing.T) {
 	p, cp, a, b, end := startAgentAdHoc(t, h, 301, "agent-one-tool")
 	round := singleActivatableJob(t, h.store, compiler.AgentJobTypeIndex)
 
-	p.CompleteJobWithToolCalls(round, []engine.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}})
+	p.CompleteJobWithToolCalls(round, []model.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}})
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestAgentRoundRepeatsATool(t *testing.T) {
 	p, _, _, _, _ := startAgentAdHoc(t, h, 302, "agent-repeat")
 	round := singleActivatableJob(t, h.store, compiler.AgentJobTypeIndex)
 
-	p.CompleteJobWithToolCalls(round, []engine.ToolCall{
+	p.CompleteJobWithToolCalls(round, []model.ToolCall{
 		{Tool: "zinsen_holen", CallId: "call-1"},
 		{Tool: "zinsen_holen", CallId: "call-2"},
 	})
@@ -166,7 +166,7 @@ func TestAgentRoundBindsArgumentsInTheToolsScope(t *testing.T) {
 	p, cp, a, _, _ := startAgentAdHoc(t, h, 303, "agent-args")
 	round := singleActivatableJob(t, h.store, compiler.AgentJobTypeIndex)
 
-	p.CompleteJobWithToolCalls(round, []engine.ToolCall{{
+	p.CompleteJobWithToolCalls(round, []model.ToolCall{{
 		Tool:   "zinsen_holen",
 		CallId: "call-1",
 		Arguments: []model.VariableValue{
@@ -224,7 +224,7 @@ func TestAgentAsksForAnUnknownToolRaisesAnIncident(t *testing.T) {
 	p, cp, _, _, end := startAgentAdHoc(t, h, 305, "agent-unknown-tool")
 	round := singleActivatableJob(t, h.store, compiler.AgentJobTypeIndex)
 
-	p.CompleteJobWithToolCalls(round, []engine.ToolCall{{Tool: "sap_buchen", CallId: "call-1"}})
+	p.CompleteJobWithToolCalls(round, []model.ToolCall{{Tool: "sap_buchen", CallId: "call-1"}})
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle: %v", err)
 	}
@@ -293,7 +293,7 @@ func TestAgentRoundEndsWhereTheScopeDrains(t *testing.T) {
 
 	// Round one: the agent calls one tool.
 	p.CompleteJobWithToolCalls(singleActivatableJob(t, h.store, compiler.AgentJobTypeIndex),
-		[]engine.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}})
+		[]model.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}})
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle (round 1): %v", err)
 	}
@@ -341,7 +341,7 @@ func TestAgentToolResultsAccumulate(t *testing.T) {
 	_ = adhoc
 
 	p.CompleteJobWithToolCalls(singleActivatableJob(t, h.store, compiler.AgentJobTypeIndex),
-		[]engine.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}, {Tool: "zinsen_holen", CallId: "call-2"}})
+		[]model.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}, {Tool: "zinsen_holen", CallId: "call-2"}})
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle (round 1): %v", err)
 	}
@@ -394,7 +394,7 @@ func TestAgentLoopIsBoundedByTheCompletionCondition(t *testing.T) {
 	}
 
 	p.CompleteJobWithToolCalls(singleActivatableJob(t, h.store, compiler.AgentJobTypeIndex),
-		[]engine.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}})
+		[]model.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}})
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle (round 1): %v", err)
 	}
@@ -433,7 +433,7 @@ func TestAgentRoundRecoversMidRound(t *testing.T) {
 	}
 	// The agent chooses a tool, and we stop the world while that tool is still working.
 	p1.CompleteJobWithToolCalls(singleActivatableJob(t, h1.store, compiler.AgentJobTypeIndex),
-		[]engine.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}})
+		[]model.ToolCall{{Tool: "zinsen_holen", CallId: "call-1"}})
 	if err := p1.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle (round 1): %v", err)
 	}

@@ -1274,3 +1274,19 @@ func newValue(vt ValueType) Value {
 		return nil
 	}
 }
+
+// ToolCall is one tool an agent chose for the next round of an agent-driven ad-hoc
+// subprocess (ADR-0253): the BPMN id of the contained activity to activate, and the
+// arguments it supplies for that activity's declared parameters.
+//
+// Unlike everything else in this file it is **not a persisted record** — it has no
+// ValueType and no codec. It rides on a job-completion command and on the Completion a
+// worker hands back, and what becomes durable is the activation the engine derives from
+// it: a replay re-activates exactly the same activities without asking the model again
+// (invariant I6). It lives here rather than in engine because the job protocol carries it
+// too, and job must not depend on the engine's implementation.
+type ToolCall struct {
+	Tool      string          // the tool activity's BPMN id, as the model was told it
+	CallId    string          // the model's own id for this call, carried into the activation
+	Arguments []VariableValue // written into the activated activity's own scope
+}

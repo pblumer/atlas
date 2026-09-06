@@ -46,6 +46,12 @@ type OutputHandler func(Job) ([]model.VariableValue, error)
 type Completion struct {
 	Outputs  []model.VariableValue
 	Decision *model.DecisionEvaluationValue
+	// ToolCalls are the tools an agent chose for the next round of an agent-driven
+	// ad-hoc subprocess (ADR-0253). Empty for every other worker — and for an agent
+	// worker it is how "the run is finished" is said: a completion naming no tool ends
+	// the loop and completes the container, which is why the zero value is an ending
+	// rather than an error.
+	ToolCalls []model.ToolCall
 }
 
 // CompletingHandler does a job's work and returns its full Completion — outputs
@@ -62,6 +68,7 @@ type Engine interface {
 	RunUntilIdle() error
 	CompleteJob(jobKey uint64, outputs ...model.VariableValue)
 	CompleteJobWithDecision(jobKey uint64, decision *model.DecisionEvaluationValue, outputs ...model.VariableValue)
+	CompleteJobWithToolCalls(jobKey uint64, toolCalls []model.ToolCall, outputs ...model.VariableValue)
 	FailJob(jobKey uint64, retries int32, message string, backoff int64)
 }
 
@@ -255,6 +262,14 @@ func (r *Runner) Submit(outcomes []Outcome) {
 	for _, o := range outcomes {
 		if o.Err != nil {
 			r.engine.FailJob(o.Job.Key, o.Job.Retries-1, o.Err.Error(), 0)
+			continue
+		}
+		if len(o.Completion.ToolCalls) > 0 {
+			// An agent's round: the completion carries what to run next, not what the
+			// job produced (ADR-0253). A completion naming no tool is not this case —
+			// it is the agent finishing, and the ordinary path below completes the
+			// container for it.
+			r.engine.CompleteJobWithToolCalls(o.Job.Key, o.Completion.ToolCalls, o.Completion.Outputs...)
 			continue
 		}
 		r.engine.CompleteJobWithDecision(o.Job.Key, o.Completion.Decision, o.Completion.Outputs...)

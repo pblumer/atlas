@@ -444,7 +444,7 @@ func (p *Processor) CompleteJobWithDecision(jobKey uint64, decision *model.Decis
 // is the agent reporting it is done: the container then completes through the ordinary
 // path, exactly as CompleteJob would drive it. Any other job type ignores the calls, so
 // this is only meaningful on a container's round job.
-func (p *Processor) CompleteJobWithToolCalls(jobKey uint64, toolCalls []ToolCall, outputs ...model.VariableValue) {
+func (p *Processor) CompleteJobWithToolCalls(jobKey uint64, toolCalls []model.ToolCall, outputs ...model.VariableValue) {
 	p.queue = append(p.queue, Command{
 		Key:       jobKey,
 		ValueType: model.VTJob,
