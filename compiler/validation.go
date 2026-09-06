@@ -51,6 +51,12 @@ const (
 	RuleBoundaryIncomingFlow   = "boundary.incoming-flow"
 	RuleBoundaryInvalidHost    = "boundary.invalid-host"
 	RuleFlowCrossScope         = "flow.cross-scope"
+	// RuleAgentTool marks a tool of an agent-driven ad-hoc that gives the model nothing to
+	// go on: an entry activity with no <bpmn:documentation>, so the model is told the tool
+	// exists and not what it is for (ADR-draft-agent-tool-calls-drive-adhoc-activation). A
+	// warning, not an error: the tool still runs, and a model that guesses well enough is
+	// not an unrunnable model — but it is one nobody can predict.
+	RuleAgentTool = "agent.tool"
 	// RuleErrorUnhandled marks an error end event with no statically matching enclosing
 	// error boundary or error event subprocess in the same process (ADR-0089). A warning,
 	// not an error: the catch may live at a call-activity caller one process cannot see,
@@ -157,6 +163,39 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkLoopCounterMappings(cp)...)
 	ps = append(ps, checkDottedTargets(cp)...)
 	ps = append(ps, checkVariableShadowsDataObject(cp)...)
+	ps = append(ps, checkAgentTools(cp)...)
+	return ps
+}
+
+// checkAgentTools warns about a tool the model cannot use well. A tool's description is
+// the activity's own <bpmn:documentation> (ADR-0025), which is what a model reads to decide
+// whether to call it; without one it sees a bare element id. The check is deliberately only
+// a warning: an undescribed tool runs exactly as well as a described one, it is just chosen
+// worse (ADR-draft-agent-tool-calls-drive-adhoc-activation).
+func checkAgentTools(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for id := range cp.nodes {
+		if cp.nodes[id].Type != TypeAdHocSubProcess {
+			continue
+		}
+		d := cp.AdHoc(cp.nodes[id].Detail)
+		if !d.AgentDriven {
+			continue
+		}
+		for _, tool := range d.Tools {
+			if strings.TrimSpace(cp.ElementDocumentation(tool.Element)) != "" {
+				continue
+			}
+			ps = append(ps, Problem{
+				Element:  cp.ElementBpmnId(tool.Element),
+				Severity: SeverityWarning,
+				Rule:     RuleAgentTool,
+				Message: fmt.Sprintf("%s is a tool of the agent-driven ad-hoc subprocess %q but has no documentation — "+
+					"the agent is told the tool exists and not what it is for; describe when to use it, when not to, and what it returns",
+					describeNode(cp, tool.Element), cp.ElementBpmnId(int32(id))),
+			})
+		}
+	}
 	return ps
 }
 
@@ -192,7 +231,7 @@ func HasErrors(ps []Problem) bool {
 // Problem, not an error — but the signature keeps an error so a future source
 // that does I/O can report a read failure distinctly from a modeling one.
 func ValidateModel(r io.Reader) ([]Problem, error) {
-	defs, docs, err := decodeDefinitions(r)
+	defs, docs, agentParams, err := decodeDefinitions(r)
 	if err != nil {
 		return []Problem{{Severity: SeverityError, Rule: RuleParse, Message: err.Error()}}, nil
 	}
@@ -212,7 +251,7 @@ func ValidateModel(r io.Reader) ([]Problem, error) {
 		// The key is irrelevant to a dry run — the compiled process is inspected and
 		// discarded, never registered — so a per-pool ordinal keeps it deterministic
 		// without touching the server's key counter.
-		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs)
+		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs, agentParams)
 		executable++
 		if cerr != nil {
 			// A graph-level failure carries its element-anchored Problems; hand them

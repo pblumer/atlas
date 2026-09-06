@@ -1076,9 +1076,49 @@ type ConditionalDetail struct {
 // still-running contained activities are cancelled. Ordering is always the BPMN default,
 // parallel — every entry activity is activated at once; a model asking for sequential ordering
 // is refused at deploy until that driver lands, so no flag is carried for it.
+//
+// An **agent-driven** ad-hoc (ADR-draft-agent-tool-calls-drive-adhoc-activation) inverts the
+// entry rule: entering it activates nothing and creates one job on the container, and the model
+// behind that job picks which contained activity to run. AgentDriven marks it; AgentWorker names
+// the configured agent Worker the job resolves against (ADR-0203); ResultCollection /
+// ResultElement are where a tool call's result is appended, the multi-instance pair exactly
+// (ADR-0077); Tools is the deploy-time index of what the model may choose from. The prompt and
+// the run's limits ride the agent Worker's own configuration (ADR-0117) and are not carried here.
+//
+// Tools is a slice rather than a span of a shared array like the entry index: it is read once
+// per round, when the container's job is built, and never per token — off the hot path (I1).
 type AdHocDetail struct {
 	CompletionCondition *expr.Compiled
 	CancelRemaining     bool
+
+	AgentDriven      bool
+	AgentWorker      int32 // interned agent Worker name → index, -1 when not agent-driven
+	ResultCollection int32 // interned variable name a tool result is appended to, -1 if none
+	ResultElement    *expr.Compiled
+	Tools            []AgentTool
+}
+
+// AgentTool is one contained entry activity offered to the model as a tool
+// (ADR-draft-agent-tool-calls-drive-adhoc-activation). It carries no name or description of its
+// own on purpose: the tool's name is the element's BPMN id (CompiledProcess.ElementBpmnId) and
+// its description is the element's own <bpmn:documentation> (ElementDocumentation, ADR-0025) —
+// the sentence a modeler wrote for the next human is the one the model reads, and a second copy
+// could only drift from it.
+type AgentTool struct {
+	Element int32 // the contained node's element id
+	Params  []AgentParam
+}
+
+// AgentParam is one <atlas:agentParam> declared on a tool activity: a value the model must
+// supply when it calls that tool. It is <atlas:startVariable>'s shape (ADR-0028) one level down
+// — a typed, named, optionally described input — declared at deploy so a tool's schema is
+// compiled rather than recovered from expressions at run time (I5). All string fields are
+// interned indices; Description is -1 when none was given.
+type AgentParam struct {
+	Name        int32
+	Type        int32
+	Description int32
+	Required    bool
 }
 
 // CompiledDataObject is one BPMN data object declared by a process: a typed,
