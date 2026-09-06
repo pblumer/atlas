@@ -728,6 +728,13 @@ func handleJobCompleted(c *ProcessingContext) {
 	}
 
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
+		// An agent-driven ad-hoc's round job is not a step that finishes its element: it
+		// decides the next one. When it comes back naming tools, the container activates
+		// them and stays Activated; only a completion naming none falls through to the
+		// ordinary Completing below (ADR-0253).
+		if driveAgentRound(c, job.ElementInstanceKey, ei) {
+			return
+		}
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)
 	}
 }

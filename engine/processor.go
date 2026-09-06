@@ -439,6 +439,21 @@ func (p *Processor) CompleteJobWithDecision(jobKey uint64, decision *model.Decis
 	})
 }
 
+// CompleteJobWithToolCalls completes an agent-driven ad-hoc subprocess's round job
+// (ADR-0253), carrying the tools the model chose to run next. An empty or nil toolCalls
+// is the agent reporting it is done: the container then completes through the ordinary
+// path, exactly as CompleteJob would drive it. Any other job type ignores the calls, so
+// this is only meaningful on a container's round job.
+func (p *Processor) CompleteJobWithToolCalls(jobKey uint64, toolCalls []ToolCall, outputs ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		Key:       jobKey,
+		ValueType: model.VTJob,
+		Intent:    model.IntentJobCompleted,
+		StartVars: outputs,
+		ToolCalls: toolCalls,
+	})
+}
+
 // SetVariables enqueues an external, operator-initiated write of variables onto a
 // running instance's scope (ADR-0095): each variable is created if its name is new
 // in the target scope or overwritten if it already exists. piKey is the process

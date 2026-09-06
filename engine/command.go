@@ -49,6 +49,14 @@ type Command struct {
 	// so — like StartVars, on the same non-hot-path completion intent — it never
 	// touches the token-movement fast path.
 	Decision *model.DecisionEvaluationValue
+	// ToolCalls carries the tools an agent chose for the next round of an agent-driven
+	// ad-hoc subprocess (ADR-0253), riding on that container's job-completion command the
+	// way Decision rides on a business rule task's. It is engine control data, not process
+	// data: putting it in StartVars would leak it into FEEL, the variable timeline and
+	// every downstream expression. Empty for every other command — and an empty list on
+	// an agent container's completion is the agent saying it is done, which is why the
+	// zero value is the ending, not an error.
+	ToolCalls []ToolCall
 	// Actor identifies who submitted an external variable-modify command (ADR-0098):
 	// the acting principal's username, frozen into the audit event the modify emits so
 	// the "who changed it" trail is durable and replayable. Empty for every other
