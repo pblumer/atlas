@@ -156,6 +156,15 @@ optional `subject` to impersonate a Workspace user through domain-wide delegatio
 Google's: `spreadsheets` and `drive` (or `drive.file`, which is enough when the
 service account creates everything it touches).
 
+A service account under a **Google Workspace organization** has no Drive storage of its
+own, so it cannot create a file at all: everything but `create-spreadsheet` works on
+shared documents, and that one operation needs the `subject` above — the account then
+acts as a real user and the file lands in *their* Drive. The refusal reads
+`403 The caller does not have permission`, which is also what a missing share produces,
+so the two are told apart by whether a shared spreadsheet can be read. Outside an
+organization the same credential creates files immediately, which is why this is worth
+recording rather than leaving to whoever hits it next.
+
 The JWT-bearer service-account grant lived in `connector/mail` as the one grant the
 shared `connector/oauth2` package deliberately did not carry — "the one such case", as
 its own doc comment put it. This record makes it the second, so it **moves into
