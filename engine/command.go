@@ -56,7 +56,7 @@ type Command struct {
 	// every downstream expression. Empty for every other command — and an empty list on
 	// an agent container's completion is the agent saying it is done, which is why the
 	// zero value is the ending, not an error.
-	ToolCalls []ToolCall
+	ToolCalls []model.ToolCall
 	// Actor identifies who submitted an external variable-modify command (ADR-0098):
 	// the acting principal's username, frozen into the audit event the modify emits so
 	// the "who changed it" trail is durable and replayable. Empty for every other

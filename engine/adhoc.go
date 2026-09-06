@@ -139,17 +139,6 @@ func adHocConditionHolds(c *ProcessingContext, cond *expr.Compiled, scopeKey uin
 
 // --- Agent-driven rounds (ADR-0253) ---
 
-// ToolCall is one tool the model chose for the next round: the BPMN id of the contained
-// activity to activate and the arguments it supplies for that activity's declared
-// parameters. It rides on the container job's completion command and is never persisted —
-// what becomes durable is the activation the engine derives from it, so a replay
-// re-activates exactly the same activities without asking the model again (I6).
-type ToolCall struct {
-	Tool      string                // the tool activity's BPMN id, as the model was told it
-	CallId    string                // the model's own id for this call, carried into the activation
-	Arguments []model.VariableValue // written into the activated activity's own scope
-}
-
 // agentRoundRetries is how many attempts a round's job gets before its failure becomes an
 // incident. A round is one model call: worth retrying a rate limit or a dropped connection,
 // not worth retrying forever.
@@ -242,7 +231,7 @@ func agentToolNames(cp *compiler.CompiledProcess, d *compiler.AdHocDetail) strin
 // iteration binds its loopCounter and item: the scope key is known before the element
 // exists, and the variable events land in it.
 func activateAgentTool(c *ProcessingContext, containerKey uint64, container *model.ElementInstanceValue,
-	cp *compiler.CompiledProcess, tool compiler.AgentTool, call ToolCall) {
+	cp *compiler.CompiledProcess, tool compiler.AgentTool, call model.ToolCall) {
 	node := cp.Node(tool.Element)
 	k := c.NewKey()
 	c.AppendElementCommand(k, model.IntentActivating, model.ElementInstanceValue{
