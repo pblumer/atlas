@@ -2,11 +2,14 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/agent"
+	"github.com/pblumer/atlas/model"
 )
 
 // ADR-0254 phase 3: the agent Worker Type registers here and nowhere else.
@@ -277,5 +280,129 @@ func TestAnUnresolvedRoundSaysSo(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "resolved") {
 		t.Errorf("err = %v, want it to say the round arrived unresolved", err)
+	}
+}
+
+// What a decided round actually reports back. The routing tests above stop at "the
+// right model was asked"; this is the other half — a Decision becoming the [Outcome]
+// the completion carries, which is the only thing the engine ever sees of a round.
+func TestADecidedRoundIsReportedAsToolCallsAndVariables(t *testing.T) {
+	asked := new(string)
+	models := map[string]agent.Model{"m": scriptedModel{name: "m", asked: asked, answer: agent.Decision{
+		ToolCalls: []model.ToolCall{{
+			Tool:   "zinsen_holen",
+			CallId: "call_1",
+			Arguments: []model.VariableValue{
+				{Name: "url", Kind: model.VarString, Text: "https://bank.example"},
+				{Name: "maxRows", Kind: model.VarNumber, Text: "25"},
+				{Name: "nurAktuelle", Kind: model.VarBool, Bool: true},
+			},
+		}},
+	}}}
+	j := Job{Connector: &ConnectorPayload{Kind: "agent", Fields: map[string]any{
+		"connector": "m", "goal": "g", "round": 1, "tools": []any{map[string]any{"name": "t"}},
+	}}}
+
+	out, err := RunAgentRound(context.Background(), j, models)
+	if err != nil {
+		t.Fatalf("RunAgentRound: %v", err)
+	}
+	if len(out.ToolCalls) != 1 {
+		t.Fatalf("tool calls = %+v, want the one the model chose", out.ToolCalls)
+	}
+	call := out.ToolCalls[0]
+	if call.Tool != "zinsen_holen" || call.CallId != "call_1" {
+		t.Errorf("call = %+v, want the tool's element id and the model's own call id", call)
+	}
+	// Typed, not stringified. The engine turns these back into variables in the
+	// activated activity's scope, and a number that arrived as text would be compared
+	// as text by every FEEL expression that reads it (ADR-0037).
+	if got := call.Arguments["url"]; got != "https://bank.example" {
+		t.Errorf("url = %#v, want the string the model supplied", got)
+	}
+	if got, ok := call.Arguments["maxRows"].(json.Number); !ok || got.String() != "25" {
+		t.Errorf("maxRows = %#v (%T), want a JSON number", call.Arguments["maxRows"], call.Arguments["maxRows"])
+	}
+	if got, ok := call.Arguments["nurAktuelle"].(bool); !ok || !got {
+		t.Errorf("nurAktuelle = %#v, want true as a boolean", call.Arguments["nurAktuelle"])
+	}
+	if len(out.Variables) != 0 {
+		t.Errorf("variables = %v, want none: a round that called a tool has not answered yet", out.Variables)
+	}
+}
+
+// And the ending: no calls, an answer. It completes with variables like any other job,
+// which is what lets the container finish through the ordinary path.
+func TestAnAnsweringRoundIsReportedAsVariables(t *testing.T) {
+	asked := new(string)
+	models := map[string]agent.Model{"m": scriptedModel{name: "m", asked: asked, answer: agent.Decision{
+		Outputs: []model.VariableValue{{Name: "agentAnswer", Kind: model.VarString, Text: "1.13 %"}},
+	}}}
+	j := Job{Connector: &ConnectorPayload{Kind: "agent", Fields: map[string]any{
+		"connector": "m", "goal": "g", "round": 2, "tools": []any{map[string]any{"name": "t"}},
+	}}}
+
+	out, err := RunAgentRound(context.Background(), j, models)
+	if err != nil {
+		t.Fatalf("RunAgentRound: %v", err)
+	}
+	if len(out.ToolCalls) != 0 {
+		t.Errorf("tool calls = %+v, want none: reporting no calls is how an agent finishes", out.ToolCalls)
+	}
+	if got := out.Variables["agentAnswer"]; got != "1.13 %" {
+		t.Errorf("agentAnswer = %#v, want the model's own conclusion", got)
+	}
+}
+
+// A model that cannot be reached fails the round rather than completing it emptily.
+// The distinction is the whole of it: an empty completion is how an agent says it is
+// done, so swallowing the error would end the run as if the work had finished.
+func TestAModelThatFailsFailsTheRound(t *testing.T) {
+	models := map[string]agent.Model{"m": failingModel{}}
+	j := Job{Connector: &ConnectorPayload{Kind: "agent", Fields: map[string]any{
+		"connector": "m", "goal": "g", "round": 1, "tools": []any{map[string]any{"name": "t"}},
+	}}}
+
+	if _, err := RunAgentRound(context.Background(), j, models); err == nil {
+		t.Fatal("a model that refused produced a successful round; the run would look finished")
+	}
+}
+
+// A payload the worker cannot read is refused before any model is asked. Paying for a
+// model call on a round that was never going to be usable is the waste this avoids.
+func TestARoundThatCannotBeReadIsRefusedBeforeAskingAModel(t *testing.T) {
+	var asked string
+	models := map[string]agent.Model{"m": scriptedModel{name: "m", asked: &asked}}
+	j := Job{Connector: &ConnectorPayload{Kind: "agent", Fields: map[string]any{
+		"connector": "m", "goal": "g", // no round, no tools
+	}}}
+
+	if _, err := RunAgentRound(context.Background(), j, models); err == nil {
+		t.Fatal("an unreadable round succeeded")
+	}
+	if asked != "" {
+		t.Errorf("asked %q, want no model asked for a round that could not be read", asked)
+	}
+}
+
+type failingModel struct{}
+
+func (failingModel) Decide(_ context.Context, _ agent.Request) (agent.Decision, error) {
+	return agent.Decision{}, errRefused
+}
+
+var errRefused = errors.New("model endpoint returned 401")
+
+// A worker with no models at all cannot decide a round, and says so. It is a state the
+// registration prevents — an agent worker holding nothing reports itself unconfigured
+// and never leases — so reaching it means a caller built the handler its own way, and a
+// nil-map panic would be a poor way to find that out.
+func TestAWorkerWithNoModelsSaysSoRatherThanPanicking(t *testing.T) {
+	j := Job{Connector: &ConnectorPayload{Kind: "agent", Fields: map[string]any{
+		"connector": "m", "goal": "g", "round": 1, "tools": []any{map[string]any{"name": "t"}},
+	}}}
+	_, err := RunAgentRound(context.Background(), j, nil)
+	if err == nil || !strings.Contains(err.Error(), "no model") {
+		t.Errorf("err = %v, want it to say this worker holds no model", err)
 	}
 }
