@@ -86,6 +86,14 @@ func (f ExecFunc) Run(ctx context.Context, j Job) (map[string]any, error) { retu
 type Outcome struct {
 	Variables map[string]any
 	Decision  *DecisionReport
+	// ToolCalls is a worker's account of what an agent chose to run next
+	// (ADR-0253/ADR-0254). It is the second thing in the sentence above: a round's
+	// answer is usually not variables at all, it is a choice of activities, and a
+	// worker deciding the round is the only one who knows what the model said.
+	//
+	// Empty is an answer, not an omission — the agent saying the run is finished —
+	// so a round that ends completes with variables like any other job.
+	ToolCalls []ToolCallReport
 }
 
 // DecisionReport is a worker's account of a decision it evaluated: which decision, the
@@ -99,6 +107,22 @@ type DecisionReport struct {
 	Inputs     map[string]any `json:"inputs,omitempty"`
 	Outputs    map[string]any `json:"outputs,omitempty"`
 	Trace      string         `json:"trace,omitempty"`
+}
+
+// ToolCallReport is a worker's account of one tool an agent chose for the next round:
+// which of the container's tools to run, the model's own id for the call, and the
+// arguments it supplied for that tool's declared parameters.
+//
+// Like a [DecisionReport] it is an account, not a record — and the difference matters
+// more here, because a tool call does not describe work that happened, it *causes* work
+// to happen. So the engine reads which container this is from the leased job, and
+// resolves Tool against that container's compiled tool index before anything is
+// activated. A worker cannot name an activity the model does not carry and have it run;
+// naming one it does not carry raises the incident ADR-0253 already defines.
+type ToolCallReport struct {
+	Tool      string         `json:"tool"`
+	CallId    string         `json:"callId,omitempty"`
+	Arguments map[string]any `json:"arguments,omitempty"`
 }
 
 // CompletingExec is the widest exec shape: work that completes with more than
@@ -327,6 +351,12 @@ func (w *Worker) complete(ctx context.Context, j Job, out Outcome) error {
 	// as the durable record an operator reads (ADR-0066).
 	if out.Decision != nil {
 		body["decision"] = out.Decision
+	}
+	// Only an agent round has these, and the engine ignores them on any other job type.
+	// Sending nothing is the ending: an agent that reports no calls has said it is
+	// done, which is the same meaning an empty list has in the engine (ADR-0254).
+	if len(out.ToolCalls) > 0 {
+		body["toolCalls"] = out.ToolCalls
 	}
 	return w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/complete", body, nil)
 }
