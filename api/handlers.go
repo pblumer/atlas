@@ -4251,6 +4251,82 @@ func isBusinessRuleJobType(jobType int32) bool {
 	return jobType == compiler.DMNJobTypeIndex || jobType == compiler.TemisDecisionJobTypeIndex
 }
 
+// toolCallReport is a worker's account of one tool an agent chose for the next round,
+// as it arrives on a completion body (ADR-0254). It is [worker.ToolCallReport] spelled
+// out on the receiving side, the way the decision report above is.
+type toolCallReport struct {
+	Tool      string         `json:"tool"`
+	CallId    string         `json:"callId"`
+	Arguments map[string]any `json:"arguments"`
+}
+
+// parseToolCallReports reads {"toolCalls": [...]} out of a completion body.
+//
+// It is a second pass over the same bytes for the same reason parseStartVariables is
+// one: the arguments become variables, and a number that went through the ordinary
+// unmarshal would already have lost its exact textual form to float64. FEEL's decimal
+// semantics (ADR-0037) are decided here, not later.
+//
+// A body without the field yields nothing, which is what every other kind's worker
+// sends.
+func parseToolCallReports(body []byte) ([]toolCallReport, error) {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return nil, nil
+	}
+	var payload struct {
+		ToolCalls []toolCallReport `json:"toolCalls"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	if err := dec.Decode(&payload); err != nil {
+		return nil, fmt.Errorf("invalid JSON body: %v", err)
+	}
+	return payload.ToolCalls, nil
+}
+
+// toolCallsFromReport turns a worker's account of what an agent chose next into the
+// tool calls the completion command carries, or nil when there is nothing to fold.
+//
+// Three of its rules are decisionFromReport's, verbatim, because they are rules about
+// what a worker is believed about rather than about decisions:
+//
+//   - Which container this is comes from the leased job, never from the report. There
+//     is nothing to stamp here — the engine reads the container off the job key when it
+//     folds — which is the point: the report has no way to name a different one.
+//   - A report on a job that is not an agent round is dropped, not refused. The
+//     completion is still valid and the variables still land; refusing would turn a
+//     worker sending a field the engine does not want into a failed job.
+//   - An empty report folds nothing. For an agent that is not a missing answer, it is
+//     the answer: no calls means the run is finished, and the container completes
+//     through the ordinary path.
+//
+// The fourth is this record's own, and it is why nothing below resolves a name:
+// **arguments are believed, names are checked.** A tool call does not describe work
+// that happened, it causes work to happen — so the name goes to driveAgentRound as the
+// model said it, and *that* is where it is resolved against the container's compiled
+// tool index (ADR-0253). A name the container does not offer raises an incident naming
+// what is on offer, exactly as it does in process. Dropping an unknown name here
+// instead would be worse than the incident: the agent would believe it took a step
+// that never happened.
+func toolCallsFromReport(jv *model.JobValue, reps []toolCallReport) ([]model.ToolCall, error) {
+	if len(reps) == 0 || jv.JobType != compiler.AgentJobTypeIndex {
+		return nil, nil
+	}
+	out := make([]model.ToolCall, 0, len(reps))
+	for _, rep := range reps {
+		args, err := startVarsFromMap(rep.Arguments)
+		if err != nil {
+			return nil, fmt.Errorf("tool call %q: %v", rep.Tool, err)
+		}
+		out = append(out, model.ToolCall{
+			Tool:      strings.TrimSpace(rep.Tool),
+			CallId:    strings.TrimSpace(rep.CallId),
+			Arguments: args,
+		})
+	}
+	return out, nil
+}
+
 func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
@@ -4266,6 +4342,14 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	vars, err := parseStartVariables(body)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// An agent round's answer rides here beside the variables (ADR-0254). Read before
+	// the run loop like the variables are, because turning arguments into variables is
+	// a parse and a parse that fails is a 400, not a job that dies inside the loop.
+	toolCalls, err := parseToolCallReports(body)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -4292,6 +4376,12 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			Outputs    map[string]any `json:"outputs"`
 			Trace      string         `json:"trace"`
 		} `json:"decision"`
+		// ToolCalls is the second such field, and the last one this route grew: an
+		// agent round's choice of what to run next (ADR-0254). It is read out of the
+		// body by parseToolCallReports above rather than from here — the arguments
+		// become variables and need the number-preserving decode — so this declaration
+		// exists to keep the accepted shape of a completion stated in one place.
+		ToolCalls []toolCallReport `json:"toolCalls"`
 	}
 	if len(bytes.TrimSpace(body)) > 0 {
 		if err := json.Unmarshal(body, &payload); err != nil {
@@ -4328,6 +4418,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	var (
 		found     bool
 		notHolder bool
+		badReport error
 		runErr    error
 	)
 	s.do(func() {
@@ -4346,9 +4437,24 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			// never carries one: an operator overriding a step is recorded as an
 			// intervention (ADR-0159), and letting that path write an evaluation
 			// record would put a decision nobody made into the audit trail.
-			if decision := s.decisionFromReport(jv, payload.Decision); decision != nil {
+			decision := s.decisionFromReport(jv, payload.Decision)
+			// A tool-call report is accepted under the same two conditions, and
+			// on a job that *is* an agent round. A completion by hand never
+			// carries one either: an operator forcing a round would be choosing
+			// the agent's next step for it, and the audit trail would record an
+			// intervention while the instance recorded an agent's decision.
+			calls, callErr := toolCallsFromReport(jv, toolCalls)
+			switch {
+			case callErr != nil:
+				badReport = callErr
+				return
+			case decision != nil:
 				s.proc.CompleteJobWithDecision(key, decision, vars...)
-			} else {
+			case len(calls) > 0:
+				s.proc.CompleteJobWithToolCalls(key, calls, vars...)
+			default:
+				// No calls is the agent's ending, and the ordinary completion is
+				// exactly what it means: the container drains and finishes.
 				s.proc.CompleteJob(key, vars...)
 			}
 			if name, ok := s.jobTypes.Name(jv.JobType); ok {
@@ -4371,6 +4477,8 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "complete job: "+runErr.Error())
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case badReport != nil:
+		httpapi.Error(w, http.StatusBadRequest, badReport.Error())
 	case notHolder:
 		httpapi.Error(w, http.StatusConflict,
 			"worker "+strconv.Quote(worker)+" does not hold this job's current lease; it may have elapsed and been taken by another worker. Lease it again, or complete it as an operator with a reason")
