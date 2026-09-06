@@ -275,7 +275,7 @@ func TestAgentModelErrorFailsTheJob(t *testing.T) {
 	}
 }
 
-// TestResolveCarriesTheToolbox is the outbound half of ADR-draft-agent-rounds-on-a-worker:
+// TestResolveCarriesTheToolbox is the outbound half of ADR-0254:
 // a round resolves into values a worker can act on with nothing of the engine left in it —
 // the goal from the container's own documentation, the tools with their documentation and
 // declared parameters, and the round number.

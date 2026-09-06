@@ -5394,7 +5394,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	// process — element ids, the modeler's documentation, the declared parameters — and
 	// what the earlier rounds' calls returned lives in the container's scope. Neither is
 	// anything a worker has; what it has is the model endpoint and the credential behind
-	// it, and neither of those travels (ADR-draft-agent-rounds-on-a-worker).
+	// it, and neither of those travels (ADR-0254).
 	//
 	// A plain ad-hoc parks no job on its container at all, so a job here is an agent
 	// round by construction — and Resolve says so itself rather than trusting that.

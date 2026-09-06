@@ -43,9 +43,8 @@ func Handler(store state.Reader, lookup ProcessLookup, m Model) job.CompletingHa
 		if cp == nil {
 			return job.Completion{}, fmt.Errorf("agent: no compiled process for def %d", ei.ProcessDefKey)
 		}
-		// The same resolution a leased round gets, so what a round *is* is decided in
-		// one place whether it is decided here or on a worker
-		// (ADR-draft-agent-rounds-on-a-worker).
+		// The same resolution a leased round gets, so what a round *is* is decided
+		// in one place whether it is decided here or on a worker (ADR-0254).
 		req, err := Resolve(store, cp, ei, j.ElementInstanceKey)
 		if err != nil {
 			return job.Completion{}, err

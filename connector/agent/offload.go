@@ -9,7 +9,7 @@ import (
 )
 
 // Resolve turns a parked agent round into everything the decision needs, with nothing
-// of the engine left in it (ADR-draft-agent-rounds-on-a-worker).
+// of the engine left in it (ADR-0254).
 //
 // It is the division ADR-0168 draws, applied to a round. The toolbox lives in the
 // compiled process — element ids, the modeler's <bpmn:documentation>, the declared
