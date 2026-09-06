@@ -1,4 +1,4 @@
-# ADR-DRAFT: Agent tool calls drive ad-hoc activation — the toolbox is the model
+# ADR-0253: Agent tool calls drive ad-hoc activation — the toolbox is the model
 
 - **Status:** Proposed
 - **Date:** 2026-09-06
