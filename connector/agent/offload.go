@@ -8,6 +8,19 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
+// Round is a resolved round as it travels to a worker: what the model is asked, and
+// which of the worker's configured models to ask.
+//
+// The name is *routing*, not content — it never reaches a model — which is why it sits
+// beside the [Request] rather than in it. It is the `connector` of
+// <atlas:agentConnector>, the same way a business rule task names its decision service,
+// and it is what lets one worker hold an Anthropic endpoint and an OpenAI one and send
+// each container to the model it was modelled against.
+type Round struct {
+	Request
+	Connector string
+}
+
 // Resolve turns a parked agent round into everything the decision needs, with nothing
 // of the engine left in it (ADR-0254).
 //
@@ -17,30 +30,35 @@ import (
 // scope. Neither is anything a worker has. What the worker has is the model endpoint
 // and the credential behind it, and neither of those travels.
 //
-// It returns a [Request] rather than a type of its own: a resolved round *is* the
-// request put to the model, and a second struct with the same five fields would only
-// give the two a way to drift apart.
+// The [Request] it carries is the whole of what the model is put — a resolved round
+// *is* the request, and a second struct with the same five fields would only give the
+// two a way to drift apart.
 //
 // Both halves call it. The in-process handler resolves and decides in one go; a worker
 // leasing the round gets the same values as its job payload — so what a round means is
 // decided here, once, rather than twice in step.
 func Resolve(store state.Reader, cp *compiler.CompiledProcess, ei *model.ElementInstanceValue,
-	elementInstanceKey uint64) (Request, error) {
+	elementInstanceKey uint64) (Round, error) {
 	tools, err := Toolbox(cp, ei.ElementId)
 	if err != nil {
 		// Not an agent-driven container: an error rather than an empty round, because
 		// an empty round is a thing an agent could legitimately be given, and this is
 		// not that — it is a job that should never have been resolved here.
-		return Request{}, err
+		return Round{}, err
 	}
+	node := cp.Node(ei.ElementId)
+	d := cp.AdHoc(node.Detail)
 	results := collectedResults(store, elementInstanceKey)
-	return Request{
-		// The container's own documentation is what this agent is for. The modeler
-		// writes it for the next human; it is the same sentence the model reads.
-		Goal:    cp.ElementDocumentation(ei.ElementId),
-		Tools:   tools,
-		Results: results,
-		Round:   len(results) + 1,
+	return Round{
+		Request: Request{
+			// The container's own documentation is what this agent is for. The modeler
+			// writes it for the next human; it is the same sentence the model reads.
+			Goal:    cp.ElementDocumentation(ei.ElementId),
+			Tools:   tools,
+			Results: results,
+			Round:   len(results) + 1,
+		},
+		Connector: cp.Intern(d.AgentWorker),
 	}, nil
 }
 
@@ -61,43 +79,45 @@ func collectedResults(store state.Reader, containerKey uint64) []string {
 
 // ResolveJobPayload is the resolved round as the flat map a leased job's payload carries.
 // It exists so the API's lease path states the field names once, beside every other
-// kind's arm, rather than reaching into Request's shape.
-func ResolveJobPayload(r Request) map[string]any {
+// kind's arm, rather than reaching into Round's shape.
+func ResolveJobPayload(r Round) map[string]any {
 	return map[string]any{
-		"goal":    r.Goal,
-		"context": r.Context,
-		"tools":   r.Tools,
-		"results": r.Results,
-		"round":   r.Round,
+		"connector": r.Connector,
+		"goal":      r.Goal,
+		"context":   r.Context,
+		"tools":     r.Tools,
+		"results":   r.Results,
+		"round":     r.Round,
 	}
 }
 
-// RequestFromPayload rebuilds a round from what travelled, for a worker that leased it
+// RoundFromPayload rebuilds a round from what travelled, for a worker that leased it
 // rather than one running in the engine. It is the mirror of ResolveJobPayload and the
 // reason the payload's field names live in one file: a worker and the engine cannot
 // disagree about them without this function failing loudly in a test.
-func RequestFromPayload(fields map[string]any) (Request, error) {
-	req := Request{}
+func RoundFromPayload(fields map[string]any) (Round, error) {
+	r := Round{}
+	r.Connector, _ = fields["connector"].(string)
 	if v, ok := fields["goal"].(string); ok {
-		req.Goal = v
+		r.Goal = v
 	}
 	switch v := fields["round"].(type) {
 	case int:
-		req.Round = v
+		r.Round = v
 	case float64: // a round that came back over JSON
-		req.Round = int(v)
+		r.Round = int(v)
 	}
-	if req.Round < 1 {
-		return Request{}, fmt.Errorf("agent: payload names no round")
+	if r.Round < 1 {
+		return Round{}, fmt.Errorf("agent: payload names no round")
 	}
-	req.Context = stringMap(fields["context"])
-	req.Results = stringSlice(fields["results"])
+	r.Context = stringMap(fields["context"])
+	r.Results = stringSlice(fields["results"])
 	tools, err := toolsFromPayload(fields["tools"])
 	if err != nil {
-		return Request{}, err
+		return Round{}, err
 	}
-	req.Tools = tools
-	return req, nil
+	r.Tools = tools
+	return r, nil
 }
 
 func stringMap(v any) map[string]string {

@@ -361,22 +361,25 @@ func TestResolveRefusesWhatIsNotAnAgentRound(t *testing.T) {
 // so the engine writing them and a worker reading them cannot drift apart. The JSON pass
 // is what a real lease does to them.
 func TestPayloadRoundTrips(t *testing.T) {
-	original := agent.Request{
-		Goal:    "Ermittle die Zinssätze.",
-		Context: map[string]string{"bank": "Migros Bank"},
-		Round:   2,
-		Results: []string{"1.33 %"},
-		Tools: []agent.Tool{{
-			Name:        "zinsen_holen",
-			Description: "Liest die Zinstabelle.",
-			Params:      []agent.Param{{Name: "url", Type: "string", Description: "Die Seite", Required: true}},
-		}},
+	original := agent.Round{
+		Connector: "anthropic_pb",
+		Request: agent.Request{
+			Goal:    "Ermittle die Zinssätze.",
+			Context: map[string]string{"bank": "Migros Bank"},
+			Round:   2,
+			Results: []string{"1.33 %"},
+			Tools: []agent.Tool{{
+				Name:        "zinsen_holen",
+				Description: "Liest die Zinstabelle.",
+				Params:      []agent.Param{{Name: "url", Type: "string", Description: "Die Seite", Required: true}},
+			}},
+		},
 	}
 
 	// Straight across, as the in-process path hands it over.
-	back, err := agent.RequestFromPayload(agent.ResolveJobPayload(original))
+	back, err := agent.RoundFromPayload(agent.ResolveJobPayload(original))
 	if err != nil {
-		t.Fatalf("RequestFromPayload: %v", err)
+		t.Fatalf("RoundFromPayload: %v", err)
 	}
 	if back.Goal != original.Goal || back.Round != 2 || len(back.Results) != 1 {
 		t.Errorf("round-tripped = %+v, want the original's goal, round and results", back)
@@ -391,12 +394,17 @@ func TestPayloadRoundTrips(t *testing.T) {
 	if err := json.Unmarshal(encoded, &fields); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	overWire, err := agent.RequestFromPayload(fields)
+	overWire, err := agent.RoundFromPayload(fields)
 	if err != nil {
-		t.Fatalf("RequestFromPayload (over JSON): %v", err)
+		t.Fatalf("RoundFromPayload (over JSON): %v", err)
 	}
 	if overWire.Goal != original.Goal || overWire.Round != 2 {
 		t.Errorf("over JSON = %+v, want the goal and round intact", overWire)
+	}
+	// The routing name travels with the round: a worker holding two models has no
+	// other way to know which one this container was modelled against.
+	if overWire.Connector != "anthropic_pb" {
+		t.Errorf("connector = %q, want the name <atlas:agentConnector> carries", overWire.Connector)
 	}
 	if got := overWire.Context["bank"]; got != "Migros Bank" {
 		t.Errorf("context = %v, want the bank", overWire.Context)
@@ -426,8 +434,8 @@ func TestPayloadWithoutToolsIsRefused(t *testing.T) {
 		"bad tools": {"goal": "g", "round": 1, "tools": 42},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := agent.RequestFromPayload(fields); err == nil {
-				t.Errorf("RequestFromPayload(%v) succeeded, want an error", fields)
+			if _, err := agent.RoundFromPayload(fields); err == nil {
+				t.Errorf("RoundFromPayload(%v) succeeded, want an error", fields)
 			}
 		})
 	}

@@ -45,12 +45,14 @@ func Handler(store state.Reader, lookup ProcessLookup, m Model) job.CompletingHa
 		}
 		// The same resolution a leased round gets, so what a round *is* is decided
 		// in one place whether it is decided here or on a worker (ADR-0254).
-		req, err := Resolve(store, cp, ei, j.ElementInstanceKey)
+		round, err := Resolve(store, cp, ei, j.ElementInstanceKey)
 		if err != nil {
 			return job.Completion{}, err
 		}
 
-		decision, err := m.Decide(context.Background(), req)
+		// In process there is one model and it was handed in, so round.Connector is
+		// nothing to route by here. It matters on a worker, which may hold several.
+		decision, err := m.Decide(context.Background(), round.Request)
 		if err != nil {
 			// A model that cannot be reached is a job failure like any other: retried
 			// while retries remain, then an incident (ADR-0061). It is deliberately not

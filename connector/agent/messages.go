@@ -1,11 +1,9 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -33,6 +31,8 @@ const (
 	// DefaultAnswerVariable is where the agent's final answer lands when the Worker
 	// names no other variable.
 	DefaultAnswerVariable = "agentAnswer"
+	// ThinkingOff omits the thinking setting from the request. See [HTTPModel.Thinking].
+	ThinkingOff = "off"
 )
 
 // HTTPModel satisfies [Model] against a Messages-API endpoint. Endpoint and APIKey come
@@ -46,6 +46,17 @@ type HTTPModel struct {
 	AnswerVariable string        // "" uses DefaultAnswerVariable
 	Timeout        time.Duration // 0 uses 2 minutes
 	Client         *http.Client  // nil uses a client with Timeout
+	// Auth is how the credential is presented: "" or [AuthAPIKey] for Anthropic's own
+	// x-api-key header, [AuthBearer] for Authorization: Bearer. It exists because the
+	// Messages format and the credential scheme are separate choices — a gateway can
+	// speak this wire format and still want a bearer token, which is exactly what
+	// OpenRouter's Messages-compatible endpoint does.
+	Auth string
+	// Thinking is the extended-thinking setting sent with every round: "" keeps the
+	// adaptive default, [ThinkingOff] omits the field entirely. Omitting it is what an
+	// endpoint that speaks the Messages format without implementing this extension
+	// needs — a request it refuses outright is worse than a round without it.
+	Thinking string
 }
 
 // systemPrompt is what every round tells the model about the shape of its work. It is
@@ -63,43 +74,17 @@ Answer only when the goal is met or you cannot get further with the tools you ha
 // costs the model's own train of thought between rounds and buys a loop that is durable,
 // replayable and interruptible at every step, which is the trade ADR-0253 makes.
 func (m *HTTPModel) Decide(ctx context.Context, req Request) (Decision, error) {
-	body, err := json.Marshal(m.request(req))
-	if err != nil {
-		return Decision{}, fmt.Errorf("encode request: %w", err)
-	}
 	endpoint := m.Endpoint
 	if endpoint == "" {
 		endpoint = DefaultEndpoint
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	payload, err := postJSON(ctx, m.Client, m.Timeout, endpoint, func(h http.Header) error {
+		// Pinned rather than tracked, for the reason apiVersion gives.
+		h.Set("anthropic-version", apiVersion)
+		return applyAuth(h, m.Auth, m.APIKey)
+	}, m.request(req))
 	if err != nil {
 		return Decision{}, err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-api-key", m.APIKey)
-	httpReq.Header.Set("anthropic-version", apiVersion)
-
-	client := m.Client
-	if client == nil {
-		timeout := m.Timeout
-		if timeout == 0 {
-			timeout = 2 * time.Minute
-		}
-		client = &http.Client{Timeout: timeout}
-	}
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return Decision{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	payload, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		return Decision{}, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		// The status is carried into the message because it decides what an operator
-		// does about the incident: 401 is a credential, 429 is capacity, 400 is us.
-		return Decision{}, fmt.Errorf("model endpoint returned %d: %s", resp.StatusCode, snippet(payload))
 	}
 	return m.decode(payload)
 }
@@ -146,8 +131,20 @@ func (m *HTTPModel) request(req Request) messagesRequest {
 		Tools:     toolSchemas(req.Tools),
 		Messages:  []messagesTurn{{Role: "user", Content: roundPrompt(req)}},
 		// Adaptive thinking lets the model spend more where a round is hard and less
-		// where it is not, which is the shape of agent work.
-		Thinking: &thinkingSetting{Type: "adaptive"},
+		// where it is not, which is the shape of agent work. Off is for an endpoint
+		// that does not implement it.
+		Thinking: m.thinking(),
+	}
+}
+
+func (m *HTTPModel) thinking() *thinkingSetting {
+	switch m.Thinking {
+	case ThinkingOff:
+		return nil
+	case "":
+		return &thinkingSetting{Type: "adaptive"}
+	default:
+		return &thinkingSetting{Type: m.Thinking}
 	}
 }
 
@@ -250,17 +247,7 @@ func (m *HTTPModel) decode(payload []byte) (Decision, error) {
 		// model thinking out loud on its way there, and the process has no use for it.
 		return Decision{ToolCalls: calls}, nil
 	}
-	name := m.AnswerVariable
-	if name == "" {
-		name = DefaultAnswerVariable
-	}
-	answer := strings.TrimSpace(text.String())
-	if answer == "" {
-		// No tools and no words: the run would end silently and leave the process with
-		// nothing. Failing the round says so, and the retry costs one more call.
-		return Decision{}, fmt.Errorf("the model answered with neither a tool call nor text (stop_reason %q)", resp.StopReason)
-	}
-	return Decision{Outputs: []model.VariableValue{{Name: name, Kind: model.VarString, Text: answer}}}, nil
+	return answerDecision(m.AnswerVariable, text.String(), resp.StopReason)
 }
 
 // arguments turns a tool call's JSON input object into the variables the activated
@@ -299,14 +286,4 @@ func variableOf(name string, raw json.RawMessage) model.VariableValue {
 	default:
 		return model.VariableValue{Name: name, Kind: model.VarJSON, Text: string(raw)}
 	}
-}
-
-// snippet keeps an error message readable when an endpoint answers with a page.
-func snippet(b []byte) string {
-	const max = 400
-	s := strings.TrimSpace(string(b))
-	if len(s) > max {
-		return s[:max] + "…"
-	}
-	return s
 }

@@ -142,6 +142,31 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.ScimJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return runScim(ctx, j, client, secret)
 			})
+		case "agent":
+			// The one kind with no in-process form at all. Every other arm here moves
+			// work off the loop that Atlas *could* run itself; this one was never
+			// allowed on it — a round is one model call, minutes long and able to hang,
+			// which is the clearest case ADR-0164 has. So ADR-0254 registers it here
+			// and nowhere else, and ADR-0164 holds without an exception.
+			//
+			// Like temis it completes with more than variables: a round's answer is a
+			// choice of activities, which is why CompletingExecFunc is the shape.
+			models, names, err := agentModelsFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if models == nil {
+				// Told to serve agents, holding no model to ask. Not an error, for
+				// mail's and temis's reason: this worker very likely serves other
+				// kinds, and an agent container simply waits for a worker that can
+				// decide it rather than being leased and failed.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.AgentJobType] = CompletingExecFunc(func(ctx context.Context, j Job) (Outcome, error) {
+				return RunAgentRound(ctx, j, models)
+			})
 		case "temis":
 			// The one kind whose handler completes with more than variables: a central
 			// decision's evaluation is retained as a durable record (ADR-0066), so the
@@ -426,7 +451,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "clio", "csv", "entra", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "scim", "script", "sharepoint", "soap", "temis", "webscrape"}
+	return []string{"ad", "agent", "clio", "csv", "entra", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "scim", "script", "sharepoint", "soap", "temis", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.
