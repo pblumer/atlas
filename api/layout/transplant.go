@@ -70,7 +70,11 @@ func Transplant(stored, incoming []byte) ([]byte, error) {
 		return nil, fmt.Errorf("read the submitted model: %w", err)
 	}
 	if storedDigest != incomingDigest {
-		return nil, ErrDifferentModel
+		// Name what differs. A refusal that only says "the model differs" leaves the
+		// caller to diff two documents by eye, which is exactly the position somebody
+		// is in when they believe they changed nothing — and they are sometimes right,
+		// because an editor round-trip is not a byte-for-byte round-trip.
+		return nil, fmt.Errorf("%w (first difference: %s)", ErrDifferentModel, describeDifference(stored, incoming))
 	}
 	di := diagramOf(incoming)
 	if di == "" {
@@ -150,14 +154,156 @@ func semanticDigest(src []byte) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// step is one token of the canonical walk, kept in a form a human can be pointed at.
+type step struct {
+	key   string // what the digest compares
+	label string // how to name it in a refusal
+}
+
+// canonicalSteps is semanticDigest's walk, retained rather than hashed, so the two
+// streams can be lined up and the first divergence named. Only the refusal path
+// calls it — the digest itself stays a single pass that keeps nothing.
+func canonicalSteps(src []byte) ([]step, error) {
+	dec := xml.NewDecoder(bytes.NewReader(stripDiagram(src)))
+	var out []step
+	var open []string // enclosing elements, as labels
+	depth := 0
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			label := t.Name.Local
+			for _, a := range t.Attr {
+				if a.Name.Space == "" && a.Name.Local == "id" {
+					label += ` id="` + a.Value + `"`
+					break
+				}
+			}
+			key := "<" + t.Name.Space + "|" + t.Name.Local
+			if depth > 0 {
+				key += " " + canonicalAttrs(t.Attr)
+			}
+			out = append(out, step{key: key, label: "<" + label + ">"})
+			open = append(open, label)
+			depth++
+		case xml.EndElement:
+			depth--
+			if len(open) > 0 {
+				open = open[:len(open)-1]
+			}
+			out = append(out, step{key: ">" + t.Name.Space + "|" + t.Name.Local, label: "the end of <" + t.Name.Local + ">"})
+		case xml.CharData:
+			if s := strings.TrimSpace(string(t)); s != "" {
+				where := "text"
+				if len(open) > 0 {
+					where = "the text in <" + open[len(open)-1] + ">"
+				}
+				out = append(out, step{key: "=" + s, label: where})
+			}
+		}
+	}
+	return out, nil
+}
+
+// describeDifference names the first place two documents' semantic halves diverge,
+// for a refusal message. Best-effort by construction: it runs only once the digests
+// have already disagreed, so "somewhere" is still a true answer when the streams
+// cannot be lined up.
+func describeDifference(stored, incoming []byte) string {
+	a, err := canonicalSteps(stored)
+	if err != nil {
+		return "the stored model could not be walked"
+	}
+	b, err := canonicalSteps(incoming)
+	if err != nil {
+		return "the submitted model could not be walked"
+	}
+	for i := 0; i < len(a) && i < len(b); i++ {
+		if a[i].key == b[i].key {
+			continue
+		}
+		if a[i].label == b[i].label {
+			// Same element, different content: an attribute changed.
+			return a[i].label + " differs"
+		}
+		return "at " + a[i].label + ", where the submitted model has " + b[i].label
+	}
+	switch {
+	case len(a) > len(b):
+		return "the submitted model stops at " + b[len(b)-1].label + " and the deployed one continues"
+	case len(b) > len(a):
+		return "the submitted model continues past " + a[len(a)-1].label
+	}
+	return "somewhere the two documents disagree"
+}
+
+// bpmnDefaults are the BPMN attributes the schema gives a default value, keyed by
+// name. Writing one at its default and leaving it out are the same statement, so
+// the digest has to read them as the same statement too.
+//
+// This is not a nicety: bpmn-js omits exactly these when their value equals the
+// default, so a model that spells `cancelActivity="true"` out — which the BPMN
+// examples do, and which every interrupting boundary event in a hand-written model
+// carries — comes back from the editor without it. Compared literally, that reads as
+// a changed model and the layout save is refused, on a document nobody edited. It is
+// the failure this table exists to stop.
+//
+// The list is the set the bundled moddle declares a default for (every property
+// object carrying `default` and `isAttr`), which is precisely the set an editor may
+// drop. Each name has one default across every type that declares it, so keying by
+// name alone is unambiguous.
+//
+// It applies to unprefixed attributes only — the BPMN ones. An extension attribute
+// (zeebe:, atlas:) that happens to share a name is a different attribute with
+// different rules, and the walk keys those by namespace, so they never reach here.
+//
+// The seven Atlas reads are checked against the compiler rather than assumed:
+// cancelActivity, isInterrupting and cancelRemainingInstances are read as
+// `!= "false"` (scope_compile.go), triggeredByEvent, isSequential and testBefore as
+// `== "true"` (parse.go, scope_compile.go), and isCollection as a bool attribute
+// whose absence is false. All seven agree with the schema. The rest the compiler does
+// not read at all, so normalising them can change nothing it sees.
+var bpmnDefaults = map[string]string{
+	"cancelActivity":           "true",
+	"cancelRemainingInstances": "true",
+	"isInterrupting":           "true",
+	"isUnlimited":              "true",
+	"instantiate":              "false",
+	"isCollection":             "false",
+	"isForCompensation":        "false",
+	"isReference":              "false",
+	"isSequential":             "false",
+	"mustUnderstand":           "false",
+	"testBefore":               "false",
+	"triggeredByEvent":         "false",
+	"completionQuantity":       "1",
+	"startQuantity":            "1",
+	"maximum":                  "1",
+	"minimum":                  "0",
+	"expressionLanguage":       "http://www.w3.org/1999/XPath",
+	"typeLanguage":             "http://www.w3.org/2001/XMLSchema",
+	"textFormat":               "text/plain",
+}
+
 // canonicalAttrs renders an element's attributes in a fixed order, dropping the
-// namespace declarations. A prefix rename is a spelling change: encoding/xml has
-// already resolved every name to its namespace URI by the time we see it, so the
-// declarations themselves carry no meaning the walk has not already recorded.
+// namespace declarations and any attribute sitting on its schema default. A prefix
+// rename is a spelling change: encoding/xml has already resolved every name to its
+// namespace URI by the time we see it, so the declarations themselves carry no
+// meaning the walk has not already recorded — and an attribute at its default says
+// what its absence says.
 func canonicalAttrs(attrs []xml.Attr) string {
 	kept := make([]string, 0, len(attrs))
 	for _, a := range attrs {
 		if a.Name.Local == "xmlns" || a.Name.Space == "xmlns" {
+			continue
+		}
+		if a.Name.Space == "" && bpmnDefaults[a.Name.Local] == a.Value {
 			continue
 		}
 		kept = append(kept, a.Name.Space+"|"+a.Name.Local+"="+a.Value)
