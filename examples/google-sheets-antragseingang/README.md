@@ -39,8 +39,12 @@ Die Zeilenumbrüche im Schlüssel bleiben als `\n` stehen — genau so steht es 
 der Schlüsseldatei. `tokenUrl` und `scope` füllt Atlas selbst aus. Wer als
 Workspace-Benutzer handeln will (domänenweite Delegierung), ergänzt `"subject"`.
 
-Für ein privates Google-Konto ohne Cloud-Projekt geht auch
+Wer als der eigene Google-Benutzer handeln will statt als Dienstkonto, nimmt
 `{"method": "refreshToken", "clientId": …, "clientSecret": …, "refreshToken": …}`.
+Ein Cloud-Projekt braucht es dafür trotzdem: `clientId` und `clientSecret` stammen
+aus einem OAuth-Client, und den gibt es nur dort. Was entfällt, ist das Dienstkonto —
+und mit ihm das Teilen, denn der Token gehört einem Menschen, der seine Dateien
+ohnehin sieht.
 
 ### 3. Worker anlegen
 
@@ -55,9 +59,29 @@ sieht genau die Dateien, die mit dieser Adresse geteilt sind. Wer das übergeht,
 ein Dokument vor sich, das der Worker mit `403` beantwortet.
 
 - Für den Verbindungstest ist nichts zu teilen: er legt die Tabelle selbst an und
-  besitzt sie damit.
+  besitzt sie damit — ausser in einer Workspace-Organisation, siehe unten.
 - Für den Antragseingang die Antragstabelle (bzw. den Ordner) mit der Adresse des
   Dienstkontos teilen, als **Bearbeiter** — der Prozess schreibt zurück.
+
+### Google Workspace: `create-spreadsheet` braucht mehr
+
+Gehört das Cloud-Projekt zu einer **Workspace-Organisation**, hat ein Dienstkonto dort
+keinen eigenen Drive-Speicher. Lesen, Schreiben und Anhängen auf geteilten Tabellen
+laufen normal; nur `create-spreadsheet` wird abgelehnt, weil es keinen Ort gäbe, an dem
+die neue Datei läge — und damit auch der erste Task des Verbindungstests. Die Meldung
+hilft nicht weiter: `403 The caller does not have permission`, dieselbe, die eine
+fehlende Freigabe erzeugt. Auseinanderhalten lässt sich beides daran, dass eine
+*geteilte* Tabelle sich lesen und beschreiben lässt.
+
+Zwei Auswege: Entweder legt ein Mensch die Tabellen an und teilt sie — dann sind sieben
+der acht Operationen nutzbar und nur das Anlegen nicht. Oder es wird **domänenweite
+Delegierung** eingerichtet (Admin-Konsole → *Sicherheit → API-Steuerung → Domänenweite
+Delegierung*, die OAuth-2-Client-ID des Dienstkontos mit den Scopes `spreadsheets` und
+`drive`) und im Secret `"subject": "person@deine-domain"` ergänzt; dann handelt das
+Dienstkonto *als* dieser Mensch und angelegte Tabellen landen in dessen Drive.
+
+In einem Projekt ohne Organisation funktioniert dasselbe Dienstkonto sofort — was
+erklärt, warum die Anleitungen im Netz sich in diesem Punkt widersprechen.
 
 ## Verbindungstest
 
