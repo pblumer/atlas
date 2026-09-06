@@ -528,7 +528,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 
 // agentParamSpec is one <atlas:agentParam> as authored, before it is validated and
 // interned into an AgentParam. It is a plain data struct so the builder never handles the
-// parse layer's XML types (ADR-draft-agent-tool-calls-drive-adhoc-activation).
+// parse layer's XML types (ADR-0253).
 type agentParamSpec struct {
 	Name, Type, Description string
 	Required                bool
@@ -2573,7 +2573,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 	// grouping above, because a tool *is* an entry activity: reading the same slice rather
 	// than recomputing the predicate is what keeps the set the model may choose from and
 	// the set the runtime can activate from ever drifting apart
-	// (ADR-draft-agent-tool-calls-drive-adhoc-activation).
+	// (ADR-0253).
 	for i := range b.nodes {
 		n := &b.nodes[i]
 		if n.Type != TypeAdHocSubProcess {

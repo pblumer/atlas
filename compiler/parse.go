@@ -379,7 +379,7 @@ func elementDocumentation(data []byte) map[string]string {
 
 // elementAgentParams indexes each element's <atlas:agentParam> declarations by the id of the
 // element that carries them, in document order — the tool-parameter half of an agent-driven
-// ad-hoc (ADR-draft-agent-tool-calls-drive-adhoc-activation). Like elementDocumentation it is a
+// ad-hoc (ADR-0253). Like elementDocumentation it is a
 // token walk rather than a field on each of the ~8 activity structs a tool may be: any activity
 // Atlas can run is a tool if it sits at the root of an agent-driven container, so wiring the
 // declaration per element type would be eight places to forget it.
@@ -587,7 +587,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	b.SetDocumentation(docs[proc.Id]) // the process's own prose; "" interns to -1 (ADR-0025)
 	// The tool-parameter declarations, translated out of the parse layer's types so the
 	// builder never sees an XML struct. Build reads them when it binds an agent-driven
-	// ad-hoc's tool index (ADR-draft-agent-tool-calls-drive-adhoc-activation).
+	// ad-hoc's tool index (ADR-0253).
 	if len(agentParams) > 0 {
 		specs := make(map[string][]agentParamSpec, len(agentParams))
 		for owner, ps := range agentParams {
@@ -1656,14 +1656,14 @@ type xmlAdHocSubProcess struct {
 	CompletionCondition      string `xml:"completionCondition"`
 	// Agent, when present, makes this ad-hoc agent-driven: entering it activates nothing
 	// and creates one job on the container, whose model picks which contained activity to
-	// run (ADR-draft-agent-tool-calls-drive-adhoc-activation). The pointer is nil when the
+	// run (ADR-0253). The pointer is nil when the
 	// <atlas:agentConnector> extension is absent, which is ADR-0138's ad-hoc unchanged.
 	Agent *xmlAgentConnector `xml:"extensionElements>agentConnector"`
 	xmlFlowContent
 }
 
 // An agent-driven ad-hoc's configuration, carried on the container as an
-// <atlas:agentConnector> extension (ADR-draft-agent-tool-calls-drive-adhoc-activation).
+// <atlas:agentConnector> extension (ADR-0253).
 // connector names the configured agent Worker (ADR-0203); the credential it resolves lives in
 // the vault, never in the model (ADR-0041/0069). resultCollection and resultElement are where a
 // tool call's result is appended — the multi-instance outputCollection/outputElement pair

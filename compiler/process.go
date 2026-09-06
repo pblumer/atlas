@@ -1077,7 +1077,7 @@ type ConditionalDetail struct {
 // parallel — every entry activity is activated at once; a model asking for sequential ordering
 // is refused at deploy until that driver lands, so no flag is carried for it.
 //
-// An **agent-driven** ad-hoc (ADR-draft-agent-tool-calls-drive-adhoc-activation) inverts the
+// An **agent-driven** ad-hoc (ADR-0253) inverts the
 // entry rule: entering it activates nothing and creates one job on the container, and the model
 // behind that job picks which contained activity to run. AgentDriven marks it; AgentWorker names
 // the configured agent Worker the job resolves against (ADR-0203); ResultCollection /
@@ -1099,7 +1099,7 @@ type AdHocDetail struct {
 }
 
 // AgentTool is one contained entry activity offered to the model as a tool
-// (ADR-draft-agent-tool-calls-drive-adhoc-activation). It carries no name or description of its
+// (ADR-0253). It carries no name or description of its
 // own on purpose: the tool's name is the element's BPMN id (CompiledProcess.ElementBpmnId) and
 // its description is the element's own <bpmn:documentation> (ElementDocumentation, ADR-0025) —
 // the sentence a modeler wrote for the next human is the one the model reads, and a second copy

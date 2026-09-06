@@ -39,7 +39,7 @@ var connectorExtRe = regexp.MustCompile(`xml:"extensionElements>([a-zA-Z]+Connec
 // to be in the moddle — the round-trip rule has no exceptions.
 var nonServiceTaskConnectors = map[string]string{
 	"temisConnector": "a business rule task's central-DMN binding, configured in the decision panel rather than the service-task worker picker (ADR-0050)",
-	"agentConnector": "an agent-driven ad-hoc subprocess's configuration — it sits on the container, not on a service task, so the service-task worker picker is the wrong panel for it (ADR-draft-agent-tool-calls-drive-adhoc-activation)",
+	"agentConnector": "an agent-driven ad-hoc subprocess's configuration — it sits on the container, not on a service task, so the service-task worker picker is the wrong panel for it (ADR-0253)",
 }
 
 // compilerConnectorTags returns the worker extension tags the compiler parses.

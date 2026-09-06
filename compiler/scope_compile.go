@@ -54,7 +54,7 @@ type registrar struct {
 	docs map[string]string
 	// agentParams is the model-wide element-id → <atlas:agentParam> index, read when an
 	// agent-driven ad-hoc builds its tool index and ignored everywhere else
-	// (ADR-draft-agent-tool-calls-drive-adhoc-activation).
+	// (ADR-0253).
 	agentParams map[string][]xmlAgentParam
 	err         error
 }
@@ -586,7 +586,7 @@ func registerScope(
 		}
 		// An <atlas:agentConnector> makes the container agent-driven: entry activates
 		// nothing and the model behind the container's job picks what runs
-		// (ADR-draft-agent-tool-calls-drive-adhoc-activation). The tool index itself is
+		// (ADR-0253). The tool index itself is
 		// bound after the graph is built, where the entry activities are known.
 		if ag := ah.Agent; ag != nil {
 			worker := strings.TrimSpace(ag.Connector)

@@ -53,7 +53,7 @@ const (
 	RuleFlowCrossScope         = "flow.cross-scope"
 	// RuleAgentTool marks a tool of an agent-driven ad-hoc that gives the model nothing to
 	// go on: an entry activity with no <bpmn:documentation>, so the model is told the tool
-	// exists and not what it is for (ADR-draft-agent-tool-calls-drive-adhoc-activation). A
+	// exists and not what it is for (ADR-0253). A
 	// warning, not an error: the tool still runs, and a model that guesses well enough is
 	// not an unrunnable model — but it is one nobody can predict.
 	RuleAgentTool = "agent.tool"
@@ -171,7 +171,7 @@ func Validate(cp *CompiledProcess) []Problem {
 // the activity's own <bpmn:documentation> (ADR-0025), which is what a model reads to decide
 // whether to call it; without one it sees a bare element id. The check is deliberately only
 // a warning: an undescribed tool runs exactly as well as a described one, it is just chosen
-// worse (ADR-draft-agent-tool-calls-drive-adhoc-activation).
+// worse (ADR-0253).
 func checkAgentTools(cp *CompiledProcess) []Problem {
 	var ps []Problem
 	for id := range cp.nodes {

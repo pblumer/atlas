@@ -49,7 +49,7 @@ const twoToolAdHoc = `<adHocSubProcess id="adhoc">
 // on an ad-hoc marks the container agent-driven, its worker and result-collection
 // configuration interns, and every entry activity becomes a tool. The entry index is
 // unchanged — the tools *are* the entry activities, which is what keeps the runtime's
-// activation loop the one that already exists (ADR-draft-agent-tool-calls-drive-adhoc-activation).
+// activation loop the one that already exists (ADR-0253).
 func TestAgentDrivenAdHocCompiles(t *testing.T) {
 	cp, err := Parse(1, 1, strings.NewReader(agentAdHoc(twoToolAdHoc)))
 	if err != nil {
