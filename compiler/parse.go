@@ -181,14 +181,14 @@ func connectorAuth(taskID, kind, authType, username, apiKeyName, secret string) 
 // (<zeebe:taskDefinition type="..." retries="..."/>), the de-facto standard for
 // executable BPMN.
 func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
-	defs, docs, err := decodeDefinitions(r)
+	defs, docs, agentParams, err := decodeDefinitions(r)
 	if err != nil {
 		return nil, err
 	}
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs)
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs, agentParams)
 }
 
 // Deployable is one executable process compiled from a model, plus the display
@@ -210,7 +210,7 @@ type Deployable struct {
 // so a caller assigning keys sequentially advances its counter by len(result). It
 // errors only if the model has no executable process at all.
 func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) {
-	defs, docs, err := decodeDefinitions(r)
+	defs, docs, agentParams, err := decodeDefinitions(r)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		if len(proc.StartEvents) == 0 {
 			continue // black-box pool: nothing to run
 		}
-		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs)
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs, agentParams)
 		if err != nil {
 			return nil, err
 		}
@@ -279,7 +279,7 @@ func ReloadNamed(key uint64, version int32, r io.Reader, processId string) (*Com
 // the deploy-time validation gate applies: it does on the deploy path, and it does
 // not on the reload path, where the definition was gated once already.
 func parseNamed(key uint64, version int32, r io.Reader, processId string, gated bool) (*CompiledProcess, []Problem, error) {
-	defs, docs, err := decodeDefinitions(r)
+	defs, docs, agentParams, err := decodeDefinitions(r)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -287,7 +287,7 @@ func parseNamed(key uint64, version int32, r io.Reader, processId string, gated 
 		if proc.Id != processId {
 			continue
 		}
-		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs)
+		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs, agentParams)
 		if err == nil {
 			return cp, nil, nil
 		}
@@ -308,20 +308,21 @@ func parseNamed(key uint64, version int32, r io.Reader, processId string, gated 
 // one in a foreign namespace belongs to whatever extension declared it.
 const nsBPMN = "http://www.omg.org/spec/BPMN/20100524/MODEL"
 
-// decodeDefinitions parses a model into the typed structs *and* indexes every element's
-// documentation by id (elementDocumentation). The model is read into memory first
-// because those are two passes over the same bytes; deploy-time only, and every caller
-// already holds the whole model in memory anyway.
-func decodeDefinitions(r io.Reader) (xmlDefinitions, map[string]string, error) {
+// decodeDefinitions parses a model into the typed structs *and* indexes, by element id, the two
+// properties any element may carry that no per-type field covers: its <bpmn:documentation>
+// (elementDocumentation) and its <atlas:agentParam> declarations (elementAgentParams). The model
+// is read into memory first because those are further passes over the same bytes; deploy-time
+// only, and every caller already holds the whole model in memory anyway.
+func decodeDefinitions(r io.Reader) (xmlDefinitions, map[string]string, map[string][]xmlAgentParam, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return xmlDefinitions{}, nil, fmt.Errorf("compiler: read BPMN: %w", err)
+		return xmlDefinitions{}, nil, nil, fmt.Errorf("compiler: read BPMN: %w", err)
 	}
 	var defs xmlDefinitions
 	if err := xml.Unmarshal(data, &defs); err != nil {
-		return xmlDefinitions{}, nil, fmt.Errorf("compiler: parse BPMN: %w", err)
+		return xmlDefinitions{}, nil, nil, fmt.Errorf("compiler: parse BPMN: %w", err)
 	}
-	return defs, elementDocumentation(data), nil
+	return defs, elementDocumentation(data), elementAgentParams(data), nil
 }
 
 // elementDocumentation indexes each element's <bpmn:documentation> text by the id of the
@@ -365,6 +366,51 @@ func elementDocumentation(data []byte) map[string]string {
 					text = prev + "\n\n" + text
 				}
 				docs[owner] = text
+				continue
+			}
+			owners = append(owners, attrValue(t, "id"))
+		case xml.EndElement:
+			if len(owners) > 0 {
+				owners = owners[:len(owners)-1]
+			}
+		}
+	}
+}
+
+// elementAgentParams indexes each element's <atlas:agentParam> declarations by the id of the
+// element that carries them, in document order — the tool-parameter half of an agent-driven
+// ad-hoc (ADR-0253). Like elementDocumentation it is a
+// token walk rather than a field on each of the ~8 activity structs a tool may be: any activity
+// Atlas can run is a tool if it sits at the root of an agent-driven container, so wiring the
+// declaration per element type would be eight places to forget it.
+//
+// The owner is the nearest enclosing element that declares an id: <extensionElements> never
+// does, so the walk climbs past it to the activity itself. Best-effort for the same reason the
+// documentation walk is: the strict decode has already rejected malformed XML.
+func elementAgentParams(data []byte) map[string][]xmlAgentParam {
+	params := map[string][]xmlAgentParam{}
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	var owners []string // the id of each open element ("" when it declares none)
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return params
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "agentParam" {
+				var p xmlAgentParam
+				if err := dec.DecodeElement(&p, &t); err != nil {
+					return params
+				}
+				// DecodeElement consumed this element whole, including its end tag, so
+				// it never enters the owner stack.
+				for i := len(owners) - 1; i >= 0; i-- {
+					if owners[i] != "" {
+						params[owners[i]] = append(params[owners[i]], p)
+						break
+					}
+				}
 				continue
 			}
 			owners = append(owners, attrValue(t, "id"))
@@ -536,9 +582,26 @@ func buildEscalationResolver(defs xmlDefinitions) func(ownerId, escalationRef st
 // resolveError (shared across a collaboration's processes). docs is the model-wide
 // element-id → <bpmn:documentation> index (elementDocumentation), likewise shared: it is
 // keyed by BPMN element id, and this process only ever looks up its own.
-func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), resolveItemType func(string) string, resolveDataStore func(ref, ownName string) string, docs map[string]string) (*CompiledProcess, error) {
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), resolveItemType func(string) string, resolveDataStore func(ref, ownName string) string, docs map[string]string, agentParams map[string][]xmlAgentParam) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
 	b.SetDocumentation(docs[proc.Id]) // the process's own prose; "" interns to -1 (ADR-0025)
+	// The tool-parameter declarations, translated out of the parse layer's types so the
+	// builder never sees an XML struct. Build reads them when it binds an agent-driven
+	// ad-hoc's tool index (ADR-0253).
+	if len(agentParams) > 0 {
+		specs := make(map[string][]agentParamSpec, len(agentParams))
+		for owner, ps := range agentParams {
+			for _, prm := range ps {
+				specs[owner] = append(specs[owner], agentParamSpec{
+					Name:        prm.Name,
+					Type:        prm.Type,
+					Description: prm.Description,
+					Required:    strings.TrimSpace(prm.Required) == "true",
+				})
+			}
+		}
+		b.SetAgentParams(specs)
+	}
 	// isExecutable defaults to true when the attribute is absent (BPMN convention;
 	// Atlas has always run every deployed process), so an existing model without it
 	// keeps working. Only an explicit "false" marks a process non-executable.
@@ -595,7 +658,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		b.SetSearchableVariables(names)
 	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
-	reg := &registrar{b: b, ids: ids, docs: docs}
+	reg := &registrar{b: b, ids: ids, docs: docs, agentParams: agentParams}
 
 	// Fold <transaction> subprocesses into SubProcesses (marked IsTransaction) before any
 	// scope walk, so a transaction is registered, wired, and validated as the subprocess it
@@ -1591,7 +1654,34 @@ type xmlAdHocSubProcess struct {
 	Ordering                 string `xml:"ordering,attr"`
 	CancelRemainingInstances string `xml:"cancelRemainingInstances,attr"`
 	CompletionCondition      string `xml:"completionCondition"`
+	// Agent, when present, makes this ad-hoc agent-driven: entering it activates nothing
+	// and creates one job on the container, whose model picks which contained activity to
+	// run (ADR-0253). The pointer is nil when the
+	// <atlas:agentConnector> extension is absent, which is ADR-0138's ad-hoc unchanged.
+	Agent *xmlAgentConnector `xml:"extensionElements>agentConnector"`
 	xmlFlowContent
+}
+
+// An agent-driven ad-hoc's configuration, carried on the container as an
+// <atlas:agentConnector> extension (ADR-0253).
+// connector names the configured agent Worker (ADR-0203); the credential it resolves lives in
+// the vault, never in the model (ADR-0041/0069). resultCollection and resultElement are where a
+// tool call's result is appended — the multi-instance outputCollection/outputElement pair
+// (ADR-0077) — with resultElement a FEEL expression over the finished activity's scope.
+type xmlAgentConnector struct {
+	Connector        string `xml:"connector,attr"`
+	ResultCollection string `xml:"resultCollection,attr"`
+	ResultElement    string `xml:"resultElement,attr"`
+}
+
+// One <atlas:agentParam> on a contained activity: a value the model must supply when it calls
+// that activity as a tool. type is one of agentParamTypes; required is opt-in, because a tool
+// the model cannot call without filling every field is a tool it will avoid.
+type xmlAgentParam struct {
+	Name        string `xml:"name,attr"`
+	Type        string `xml:"type,attr"`
+	Description string `xml:"description,attr"`
+	Required    string `xml:"required,attr"`
 }
 
 // foldTransactions merges each scope's <transaction> subprocesses into its SubProcesses

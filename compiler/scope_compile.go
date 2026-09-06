@@ -52,7 +52,11 @@ type registrar struct {
 	// docs is the model-wide element-id → <bpmn:documentation> index, so a node's prose
 	// is recorded with its id in one place rather than at each element kind (ADR-0025).
 	docs map[string]string
-	err  error
+	// agentParams is the model-wide element-id → <atlas:agentParam> index, read when an
+	// agent-driven ad-hoc builds its tool index and ignored everywhere else
+	// (ADR-0253).
+	agentParams map[string][]xmlAgentParam
+	err         error
 }
 
 // node registers nodeID under its BPMN id.
@@ -576,7 +580,40 @@ func registerScope(
 		d := AdHocDetail{
 			// BPMN defaults: cancel the remaining activities when the completion condition
 			// holds, and run the entry activities in parallel.
-			CancelRemaining: ah.CancelRemainingInstances != "false",
+			CancelRemaining:  ah.CancelRemainingInstances != "false",
+			AgentWorker:      -1,
+			ResultCollection: -1,
+		}
+		// An <atlas:agentConnector> makes the container agent-driven: entry activates
+		// nothing and the model behind the container's job picks what runs
+		// (ADR-0253). The tool index itself is
+		// bound after the graph is built, where the entry activities are known.
+		if ag := ah.Agent; ag != nil {
+			worker := strings.TrimSpace(ag.Connector)
+			if worker == "" {
+				return fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q names no connector "+
+					"(<atlas:agentConnector connector=\"…\"> must name a configured agent Worker; "+
+					"its credential is resolved from the vault, never carried in the model)", ah.Id)
+			}
+			if ah.CancelRemainingInstances == "false" {
+				// The round boundary is the scope drain: "let the rest finish" has no
+				// meaning when the next round has not been asked for yet.
+				return fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q sets cancelRemainingInstances=\"false\", "+
+					"which an agent-driven container can't honour — its round ends when the activated "+
+					"tools drain, and that is when the next round is asked for", ah.Id)
+			}
+			d.AgentDriven = true
+			d.AgentWorker = b.intern(worker)
+			if rc := strings.TrimSpace(ag.ResultCollection); rc != "" {
+				d.ResultCollection = b.intern(rc)
+			}
+			if re := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ag.ResultElement), "=")); re != "" {
+				ce, err := expr.CompileAuto(re)
+				if err != nil {
+					return fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q resultElement: %w", ah.Id, err)
+				}
+				d.ResultElement = ce
+			}
 		}
 		if cond := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ah.CompletionCondition), "=")); cond != "" {
 			ce, err := expr.CompileAuto(cond)

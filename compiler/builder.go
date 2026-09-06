@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/pblumer/atlas/expr"
 )
@@ -474,21 +475,22 @@ type Builder struct {
 	timerStarts        []TimerStartDetail
 	dataObjects        []CompiledDataObject
 	dataStores         []CompiledDataStore
-	dataOutAssocs      []pendingDataOut // data-output associations, grouped by node in Build
-	dataInAssocs       []pendingDataIn  // data-input associations, grouped by node in Build
-	ioInputs           []pendingIO      // zeebe:ioMapping inputs, grouped by node in Build
-	ioOutputs          []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
-	elementIds         []int32          // interned source BPMN id per node, -1 if unset
-	elementDocs        []int32          // interned <bpmn:documentation> per node, -1 if undocumented (ADR-0025)
-	repairForms        []int32          // interned repair form id per node, -1 if none (ADR-0169)
-	lanes              []LaneDetail     // organizational lanes (ADR-0121)
-	documentation      int32            // interned <bpmn:documentation> of the process itself, -1 if none
-	startFormId        int32            // interned start-form id (ADR-0028), -1 if the process has none
-	versionTag         int32            // interned atlas:versionTag revision label, -1 if none
-	instanceTtlNanos   int64            // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
-	historyTtlNanos    int64            // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
-	searchableVars     []string         // variable names the value index is maintained for, nil = none
-	isExecutable       bool             // bpmn:isExecutable; defaults true (set in NewBuilder)
+	dataOutAssocs      []pendingDataOut            // data-output associations, grouped by node in Build
+	dataInAssocs       []pendingDataIn             // data-input associations, grouped by node in Build
+	ioInputs           []pendingIO                 // zeebe:ioMapping inputs, grouped by node in Build
+	ioOutputs          []pendingIO                 // zeebe:ioMapping outputs, grouped by node in Build
+	elementIds         []int32                     // interned source BPMN id per node, -1 if unset
+	agentParams        map[string][]agentParamSpec // element id → declared tool parameters
+	elementDocs        []int32                     // interned <bpmn:documentation> per node, -1 if undocumented (ADR-0025)
+	repairForms        []int32                     // interned repair form id per node, -1 if none (ADR-0169)
+	lanes              []LaneDetail                // organizational lanes (ADR-0121)
+	documentation      int32                       // interned <bpmn:documentation> of the process itself, -1 if none
+	startFormId        int32                       // interned start-form id (ADR-0028), -1 if the process has none
+	versionTag         int32                       // interned atlas:versionTag revision label, -1 if none
+	instanceTtlNanos   int64                       // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
+	historyTtlNanos    int64                       // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
+	searchableVars     []string                    // variable names the value index is maintained for, nil = none
+	isExecutable       bool                        // bpmn:isExecutable; defaults true (set in NewBuilder)
 
 	// flowScope is the enclosing scope every node added now lands in: -1 for the
 	// process root, or a subprocess node's ElementId while its children are being
@@ -522,6 +524,69 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 		b.intern(name)
 	}
 	return b
+}
+
+// agentParamSpec is one <atlas:agentParam> as authored, before it is validated and
+// interned into an AgentParam. It is a plain data struct so the builder never handles the
+// parse layer's XML types (ADR-0253).
+type agentParamSpec struct {
+	Name, Type, Description string
+	Required                bool
+}
+
+// agentParamTypes is the closed set a tool parameter may declare. It is closed on purpose:
+// the type is a promise made to the model about what it may put in the field, and an
+// unknown one would be a promise nothing checks.
+var agentParamTypes = []string{"string", "number", "boolean", "object", "array"}
+
+// SetAgentParams records the model-wide element-id → <atlas:agentParam> index, read when
+// Build binds an agent-driven ad-hoc's tool index and ignored otherwise.
+func (b *Builder) SetAgentParams(m map[string][]agentParamSpec) { b.agentParams = m }
+
+// compileAgentParams validates and interns one tool activity's declared parameters, in
+// document order. Every fault here is a deploy error: a tool whose schema is wrong is one
+// the model will call wrongly, and a call built on a broken promise fails at run time in a
+// place much harder to read than a deploy message.
+// bpmnIdOf is the node's source BPMN id, or "" when it has none. A model compiled from
+// XML always has one; a process built straight through the Builder API (every engine test,
+// and any embedder) may not, and indexing the intern table with the -1 that means "unset"
+// would panic. "" is the honest answer, and every caller reads it as "no declaration".
+func (b *Builder) bpmnIdOf(nodeID int32) string {
+	if !b.validNode(nodeID) || b.elementIds[nodeID] < 0 {
+		return ""
+	}
+	return b.strings[b.elementIds[nodeID]]
+}
+
+func (b *Builder) compileAgentParams(ownerBpmnID string) ([]AgentParam, error) {
+	specs := b.agentParams[ownerBpmnID]
+	if len(specs) == 0 {
+		return nil, nil
+	}
+	out := make([]AgentParam, 0, len(specs))
+	seen := make(map[string]bool, len(specs))
+	for _, sp := range specs {
+		name := strings.TrimSpace(sp.Name)
+		if name == "" {
+			return nil, fmt.Errorf("compiler: tool %q declares an agentParam without a name — "+
+				"a tool's parameter is named for the model that has to fill it", ownerBpmnID)
+		}
+		if seen[name] {
+			return nil, fmt.Errorf("compiler: tool %q declares the parameter %q twice", ownerBpmnID, name)
+		}
+		seen[name] = true
+		typ := strings.TrimSpace(sp.Type)
+		if !slices.Contains(agentParamTypes, typ) {
+			return nil, fmt.Errorf("compiler: tool %q parameter %q has type %q, which is not one of %s",
+				ownerBpmnID, name, typ, strings.Join(agentParamTypes, ", "))
+		}
+		p := AgentParam{Name: b.intern(name), Type: b.intern(typ), Description: -1, Required: sp.Required}
+		if d := strings.TrimSpace(sp.Description); d != "" {
+			p.Description = b.intern(d)
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }
 
 func (b *Builder) intern(s string) int32 {
@@ -2513,6 +2578,38 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 			}
 		}
 		n.ScopeStartCount = int32(len(scopeStarts)) - n.ScopeStartStart
+	}
+
+	// Bind each agent-driven ad-hoc's tool index. It runs here, right after the entry
+	// grouping above, because a tool *is* an entry activity: reading the same slice rather
+	// than recomputing the predicate is what keeps the set the model may choose from and
+	// the set the runtime can activate from ever drifting apart
+	// (ADR-0253).
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		if n.Type != TypeAdHocSubProcess {
+			continue
+		}
+		d := &b.adHocs[n.Detail]
+		if !d.AgentDriven {
+			continue
+		}
+		container := b.bpmnIdOf(n.ElementId)
+		entries := scopeStarts[n.ScopeStartStart : n.ScopeStartStart+n.ScopeStartCount]
+		if len(entries) == 0 {
+			return nil, fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q has no entry activity, "+
+				"so its agent has no tool to call — give it at least one contained activity nothing "+
+				"sequences into, or model a tool-less agent as a service task (ADR-0117) instead", container)
+		}
+		tools := make([]AgentTool, 0, len(entries))
+		for _, e := range entries {
+			params, err := b.compileAgentParams(b.bpmnIdOf(e))
+			if err != nil {
+				return nil, err
+			}
+			tools = append(tools, AgentTool{Element: e, Params: params})
+		}
+		d.Tools = tools
 	}
 
 	// Group event-subprocess handler nodes by their parent scope, mirroring the nested-
