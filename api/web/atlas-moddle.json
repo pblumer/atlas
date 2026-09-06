@@ -466,6 +466,26 @@
       ]
     },
     {
+      "name": "AgentConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:AdHocSubProcess"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "resultCollection", "type": "String", "isAttr": true },
+        { "name": "resultElement", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "AgentParam",
+      "superClass": ["Element"],
+      "properties": [
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "type", "type": "String", "isAttr": true },
+        { "name": "description", "type": "String", "isAttr": true },
+        { "name": "required", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "ProcessMeta",
       "extends": ["bpmn:Process"],
       "properties": [
