@@ -644,6 +644,11 @@ const WORKER_TYPES = [
     refs: "ADR-0166 \u00b7 ADR-0181", status: "active", statusLabel: "configured below",
   },
   {
+    id: "agent", name: "AI agent model", kind: "AI",
+    desc: "The model an \u003cb\u003eagent-driven ad-hoc subprocess\u003c/b\u003e asks which of its tools to run next. What an agent may reach is the diagram: the contained activities no sequence flow leads to are its tools, named by their element ids, described by the modeller\u0027s own documentation. A round is one job and a tool call one activity, so the loop is durable and replayable \u2014 and it never runs in the engine, because one model call can take minutes and hang. Two wire formats: Messages (Anthropic, and OpenRouter\u0027s Messages-compatible endpoint) and Chat Completions (OpenAI, and anything OpenAI-compatible). Configure each model below: its API key lives in the vault and never enters a model. Worker-only, and Atlas supervises the worker for it.",
+    refs: "ADR-0117 \u00b7 ADR-0253 \u00b7 ADR-0254", status: "active", statusLabel: "configured below",
+  },
+  {
     id: "entra", name: "Entra ID", kind: "Cloud directory",
     desc: "Creates, licenses, disables, lists or delta-syncs accounts and groups in a Microsoft Entra ID tenant via the Graph API \u2014 on a worker, off the processor loop. A Graph collection arrives page by page and the worker follows the pages itself, so a list operation writes a whole list into a result variable rather than a continuation token. Configure each tenant below: its {tenantId, clientId, clientSecret} bundle lives in the vault and never enters a model. Worker-only, so the tenant credential never reaches the engine.",
     refs: "ADR-0172", status: "active", statusLabel: "configured below",
@@ -3724,11 +3729,12 @@ function wireWorkerManagement(workers) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
-        <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option><option value="preview">Preview (in-app outbox)</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
+        <label class="field model-field" style="margin:0;flex:1 1 180px"><span>Model</span><input name="model"/></label>
         <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit" title="Add this configured worker">Add worker</button>
@@ -3756,9 +3762,28 @@ function wireWorkerManagement(workers) {
       // and authenticate with a vault bundle; SMTP, temis, clio and remedy dial an
       // endpoint; preview dials nothing at all, which is the whole point of it
       // (ADR-0150), so a field left standing there would read as if it were used.
+      // The provider select's options are the kind's, not mail's: it picks a transport
+      // for mail and a wire format for an agent, and one list per kind is what stops the
+      // form offering SMTP to an agent (ADR-draft-agent-models-are-console-workers).
+      const fillProviders = () => {
+        const opts = workerShape(kindSel.value, "").providerOptions || [];
+        const keep = providerSel.value;
+        providerSel.innerHTML = opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
+        if (opts.some(([v]) => v === keep)) providerSel.value = keep;
+      };
       const sync = () => {
         const sh = workerShape(kindSel.value, providerSel.value);
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = sh.mail ? "" : "none"; });
+        form.querySelector(".provider-field").style.display = sh.provider ? "" : "none";
+        form.querySelector(".provider-label").textContent = sh.model ? "Wire format" : "Provider";
+        const modelField = form.querySelector(".model-field");
+        modelField.style.display = sh.model ? "" : "none";
+        const modelIn = modelField.querySelector("input");
+        modelIn.placeholder = sh.modelPlaceholder || "";
+        // Hidden is not enough: a display:none input is still submitted, so a model
+        // typed for a kind picked earlier would ride along into the next create.
+        if (!sh.model) modelIn.value = "";
+        modelIn.disabled = !sh.model;
         // The connection string is a SQL worker's whole configuration, so it is the
         // one field that appears for those kinds and for no other. It is not marked
         // required: an operator who already keeps the DSN in the vault names its key in
@@ -3803,8 +3828,9 @@ function wireWorkerManagement(workers) {
         hintEl.innerHTML = sh.hint;
         hintEl.style.display = sh.hint ? "" : "none";
       };
-      kindSel.addEventListener("change", sync);
+      kindSel.addEventListener("change", () => { fillProviders(); sync(); });
       providerSel.addEventListener("change", sync);
+      fillProviders();
       sync();
       // Check what is typed, before it is stored — the moment a wrong host or a dead
       // credential is cheapest to fix, and the one where somebody is actually looking.

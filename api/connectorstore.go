@@ -57,6 +57,14 @@ const (
 	// the record and nothing else about the directory. Worker-only like Entra: the
 	// engine never binds, so the service account never enters it.
 	connectorKindAD = "ad"
+
+	// connectorKindAgent is an agent model an agent-driven ad-hoc subprocess asks
+	// (ADR-0253/ADR-0254, ADR-draft-agent-models-are-console-workers). A record holds
+	// the endpoint, the wire format in Provider, the model name in Model, and a
+	// credentialsRef naming the vault key holding the API key. Worker-only for the
+	// clearest reason ADR-0164 has: a round is one model call, minutes long and able to
+	// hang, so it never runs in the engine process.
+	connectorKindAgent = "agent"
 )
 
 // configuredWorker is an operator-managed Worker (ADR-0203): an instance of a
@@ -85,6 +93,20 @@ type configuredWorker struct {
 	// (client secret, refresh token, or service-account key), never a value (I6).
 	Provider string `json:"provider,omitempty"`
 	Sender   string `json:"sender,omitempty"`
+
+	// Model is which model an agent Worker asks (Kind == connectorKindAgent,
+	// ADR-draft-agent-models-are-console-workers). It is the first piece of a Worker's
+	// configuration that is neither an endpoint nor a credential nor derivable from
+	// either, and it is deliberately here rather than in the vault bundle behind
+	// CredentialsRef: it is not a secret, and it is the single most-changed setting an
+	// agent has — an operator weighing cost against capability changes the model, and
+	// must be able to see what it is set to without opening a secret store.
+	//
+	// Empty for every other kind, and empty on an agent record written before this,
+	// which reads as "the protocol's default" — exactly what an unconfigured Messages
+	// Worker already means. The Chat-Completions adapter has no default and says so at
+	// startup, which is why validateAgentConnector insists on one for that protocol.
+	Model string `json:"model,omitempty"`
 
 	// Ownership and sharing (ADR-0205, measure M11). The three fields are ADR-0071's
 	// for a project, reused verbatim rather than reinvented, so a group grant
