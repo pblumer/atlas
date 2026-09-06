@@ -152,7 +152,7 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// An agent model is temis's shape — an endpoint in the record, one plain secret
 		// in the vault — plus the two things only an agent has: its wire format and its
 		// model name. Provisioned for temis's reason, and worker-only for the clearest
-		// reason ADR-0164 has (ADR-draft-agent-models-are-console-workers).
+		// reason ADR-0164 has (ADR-0255).
 		connectorKindAgent: s.agentWorkerEnv,
 		// AD is not a managed kind — no worker record, no store entry — but its
 		// bind-password *reference* can resolve out of the vault, which a supervised
@@ -1523,7 +1523,7 @@ const (
 )
 
 // agentWorkerEnv renders the models a supervised agent worker needs
-// (ADR-draft-agent-models-are-console-workers). It is temisWorkerEnv's shape — an
+// (ADR-0255). It is temisWorkerEnv's shape — an
 // endpoint from the record and one plain secret from the vault — with the two things an
 // agent has that a decision service does not: which wire format the endpoint speaks, and
 // which model to ask.

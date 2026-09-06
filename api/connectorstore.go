@@ -59,7 +59,7 @@ const (
 	connectorKindAD = "ad"
 
 	// connectorKindAgent is an agent model an agent-driven ad-hoc subprocess asks
-	// (ADR-0253/ADR-0254, ADR-draft-agent-models-are-console-workers). A record holds
+	// (ADR-0253/ADR-0254, ADR-0255). A record holds
 	// the endpoint, the wire format in Provider, the model name in Model, and a
 	// credentialsRef naming the vault key holding the API key. Worker-only for the
 	// clearest reason ADR-0164 has: a round is one model call, minutes long and able to
@@ -95,7 +95,7 @@ type configuredWorker struct {
 	Sender   string `json:"sender,omitempty"`
 
 	// Model is which model an agent Worker asks (Kind == connectorKindAgent,
-	// ADR-draft-agent-models-are-console-workers). It is the first piece of a Worker's
+	// ADR-0255). It is the first piece of a Worker's
 	// configuration that is neither an endpoint nor a credential nor derivable from
 	// either, and it is deliberately here rather than in the vault bundle behind
 	// CredentialsRef: it is not a secret, and it is the single most-changed setting an

@@ -1,4 +1,4 @@
-# ADR-DRAFT: An agent model is a Console Worker — the one field that is not a secret
+# ADR-0255: An agent model is a Console Worker — the one field that is not a secret
 
 - **Status:** Proposed
 - **Date:** 2026-09-06

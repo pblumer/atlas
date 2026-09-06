@@ -40,7 +40,7 @@ export function workerCreateBody(form) {
   if (body.kind === "mail") body.provider = get("provider") || "smtp";
   // An agent's provider is its wire format, and its model is the one piece of a
   // Worker's configuration that is neither endpoint nor credential
-  // (ADR-draft-agent-models-are-console-workers).
+  // (ADR-0255).
   if (body.kind === "agent") {
     body.provider = get("provider") || "messages";
     body.model = get("model");

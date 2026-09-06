@@ -88,7 +88,7 @@ type createConnectorParams struct {
 	// keeps their DSNs in the vault does. Never echoed back.
 	ConnectionString string `json:"connectionString"`
 	// Model is which model an agent Worker asks
-	// (ADR-draft-agent-models-are-console-workers). Not a secret, so it travels as
+	// (ADR-0255). Not a secret, so it travels as
 	// itself and is echoed back — it is the setting an operator changes most often.
 	Model string `json:"model"`
 }
@@ -346,7 +346,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		// An agent-driven ad-hoc subprocess asks a model which of its tools to run next
 		// (ADR-0253). The record holds the endpoint, the wire format and the model
 		// name; the API key is a vault key behind credentialsRef
-		// (ADR-draft-agent-models-are-console-workers).
+		// (ADR-0255).
 		//
 		// Worker-only, and of every kind that is, this one least optionally: a round is
 		// one model call, minutes long and able to hang, which is the clearest case
@@ -742,7 +742,7 @@ func validateSharePointConnector(p *createConnectorParams) string {
 // fields do not apply.
 // Agent protocol names, the wire format a model endpoint speaks. They are the worker's
 // own names (ATLAS_AGENT_<NAME>_PROTOCOL), not a second vocabulary
-// (ADR-draft-agent-models-are-console-workers).
+// (ADR-0255).
 const (
 	agentProtocolMessages        = "messages"
 	agentProtocolChatCompletions = "chat-completions"
@@ -804,7 +804,7 @@ func normalizeConnectorUpdate(rec *connector) string {
 	// Mail because switching a provider changes which fields are required; agent for
 	// the same reason — changing the protocol to chat-completions makes the model
 	// required, and accepting that edit would leave a Worker the supervised child
-	// refuses at startup (ADR-draft-agent-models-are-console-workers).
+	// refuses at startup (ADR-0255).
 	var validate func(*createConnectorParams) string
 	switch rec.Kind {
 	case connectorKindMail:

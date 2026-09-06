@@ -6,7 +6,7 @@ import (
 )
 
 // What an agent model's record holds, and what a supervised agent worker is handed at
-// spawn (ADR-draft-agent-models-are-console-workers).
+// spawn (ADR-0255).
 //
 // The agent is the first Worker Type whose configuration has a part that is neither an
 // endpoint nor a credential nor derivable from either — the model name — and the record

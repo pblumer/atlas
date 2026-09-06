@@ -710,7 +710,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		Sender         *string `json:"sender"`
 		// Model is an agent Worker's model name — the setting an operator changes
 		// most often, and the reason this kind is a Console record at all
-		// (ADR-draft-agent-models-are-console-workers).
+		// (ADR-0255).
 		Model   *string `json:"model"`
 		Enabled *bool   `json:"enabled"`
 	}

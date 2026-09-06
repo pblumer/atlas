@@ -1,5 +1,5 @@
 // e2e for what the Console makes of an agent model
-// (api/web/workerdialog.js, ADR-draft-agent-models-are-console-workers).
+// (api/web/workerdialog.js, ADR-0255).
 //
 // An agent Worker is the first whose configuration has a part that is neither an
 // endpoint nor a credential nor derivable from either — the model name. It is a record

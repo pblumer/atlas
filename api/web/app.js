@@ -3764,7 +3764,7 @@ function wireWorkerManagement(workers) {
       // (ADR-0150), so a field left standing there would read as if it were used.
       // The provider select's options are the kind's, not mail's: it picks a transport
       // for mail and a wire format for an agent, and one list per kind is what stops the
-      // form offering SMTP to an agent (ADR-draft-agent-models-are-console-workers).
+      // form offering SMTP to an agent (ADR-0255).
       const fillProviders = () => {
         const opts = workerShape(kindSel.value, "").providerOptions || [];
         const keep = providerSel.value;
