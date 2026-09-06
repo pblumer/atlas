@@ -288,3 +288,35 @@ func TestUndocumentedToolWarns(t *testing.T) {
 		t.Errorf("message = %q, want it to name the missing documentation", found[0].Message)
 	}
 }
+
+// TestAgentAdHocBuiltThroughTheBuilderAPI is the regression for a panic this record's first
+// slice shipped with: binding the tool index read the intern table at b.elementIds[node]
+// directly, and that is -1 — "no BPMN id" — for a process built straight through the Builder
+// rather than compiled from XML. Every engine test builds one that way, and so may an
+// embedder, so Build must answer "" and carry on rather than index with -1.
+func TestAgentAdHocBuiltThroughTheBuilderAPI(t *testing.T) {
+	bl := NewBuilder(1, "p", 1)
+	start := bl.AddStartEvent()
+	adhoc := bl.AddAdHocSubProcess(AdHocDetail{
+		CancelRemaining: true, AgentDriven: true, AgentWorker: -1, ResultCollection: -1,
+	})
+	end := bl.AddEndEvent()
+	bl.Connect(start, adhoc)
+	bl.Connect(adhoc, end)
+	bl.PushScope(adhoc)
+	tool := bl.AddServiceTask("ta", 3)
+	bl.PopScope()
+	// Deliberately no SetElementBpmnId anywhere.
+
+	cp, err := bl.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	d := cp.AdHoc(cp.Node(adhoc).Detail)
+	if len(d.Tools) != 1 || d.Tools[0].Element != tool {
+		t.Fatalf("tools = %+v, want the one contained activity", d.Tools)
+	}
+	if len(d.Tools[0].Params) != 0 {
+		t.Errorf("params = %+v, want none: an id-less node can carry no declaration", d.Tools[0].Params)
+	}
+}

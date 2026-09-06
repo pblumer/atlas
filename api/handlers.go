@@ -1088,8 +1088,12 @@ func (s *Server) handleUpdateProcessDiagram(w http.ResponseWriter, r *http.Reque
 	merged, err := layout.Transplant(stored, body)
 	switch {
 	case errors.Is(err, layout.ErrDifferentModel):
+		// The detail the transplant worked out rides along: a caller who believes they
+		// changed nothing needs to be pointed at the element, not left to diff two
+		// documents by eye.
 		httpapi.Error(w, http.StatusConflict,
-			"this diagram's model differs from the deployed one — only the layout can be saved to a deployment; deploy it as a new version to change the process itself")
+			"this diagram's model differs from the deployed one — only the layout can be saved to a deployment; deploy it as a new version to change the process itself. "+
+				strings.TrimPrefix(err.Error(), layout.ErrDifferentModel.Error()+" "))
 		return
 	case errors.Is(err, layout.ErrNoDiagram):
 		httpapi.Error(w, http.StatusBadRequest,

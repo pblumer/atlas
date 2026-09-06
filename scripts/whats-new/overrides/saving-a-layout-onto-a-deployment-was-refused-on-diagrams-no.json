@@ -1,0 +1,15 @@
+{
+  "title": {
+    "en": "Saving a layout no longer fails on diagrams you did not change",
+    "de": "Layout speichern scheitert nicht mehr an Diagrammen, die Sie nicht geändert haben"
+  },
+  "summary": {
+    "en": "\"Save layout to deployment\" refused some diagrams with \"the model differs\" even when nothing about the process had been touched. The editor writes certain BPMN attributes back in shorter form — leaving out ones that already have their standard value — and the check read that as a changed process. It now reads short and long form as what they are: the same thing. Models with an interrupting boundary event, an event subprocess or a multi-instance activity were the ones affected. A refusal now also names the element that actually differs, instead of only saying that something does.",
+    "de": "«Save layout to deployment» wies manche Diagramme mit «the model differs» ab, obwohl am Prozess nichts angefasst worden war. Der Editor schreibt bestimmte BPMN-Attribute verkürzt zurück — er lässt jene weg, die ohnehin auf ihrem Standardwert stehen — und die Prüfung las das als geänderten Prozess. Sie liest Kurz- und Langform jetzt als das, was sie sind: dasselbe. Betroffen waren Modelle mit unterbrechendem Boundary-Event, Ereignis-Subprozess oder Mehrfachausführung. Und eine Ablehnung nennt jetzt das Element, das tatsächlich abweicht, statt nur zu sagen, dass etwas abweicht."
+  },
+  "tags": ["Modeler", "Operations"],
+  "try": {
+    "label": { "en": "Open Operations", "de": "Operations öffnen" },
+    "route": "#/operations"
+  }
+}

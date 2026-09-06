@@ -1,6 +1,7 @@
 # ADR-0251: Adjusting a deployed definition's diagram without redeploying it
 
-- **Status:** Proposed
+- **Status:** Proposed (amended 2026-09-06 — the digest reads an attribute at its
+  schema default as absent, and a refusal names the element that differs)
 - **Date:** 2026-09-04
 - **Deciders:** Atlas maintainers
 
@@ -95,7 +96,8 @@ Two guards sit on top of the mechanism:
 - **The submitted model must be the deployed one.** A canonical digest of everything
   outside the diagram — namespaces resolved, attributes sorted, whitespace between
   elements ignored, the root element's own metadata attributes skipped because they are
-  not transplanted either — must match. A layout is only meaningful against the shapes it
+  not transplanted either, and an attribute sitting on its schema default read as
+  absent (see the amendment below) — must match. A layout is only meaningful against the shapes it
   was drawn for, and grafting one process's diagram onto another's model would render as
   a blank or half-drawn canvas. A mismatch is a 409 that says to deploy instead.
 - **The diagram must be a diagram.** A body whose `<BPMNDiagram>` carries no shape or
@@ -161,6 +163,49 @@ the stream an operator already ships and alerts on.
   deploys of byte-identical XML within one second — where both would be adjusted, and
   both would end up with the same picture they already shared. If deployments ever gain a
   first-class deploy id, that is the field to key this on.
+
+## Amendment, 2026-09-06: an attribute at its default is an absent attribute
+
+The first real use of this feature was refused, on a document nobody had edited. The
+diagnosis is worth keeping because the shape of it will recur.
+
+`bpmn-js` omits an attribute whose value equals the default its schema declares. A
+deployed model carrying `cancelActivity="true"` on an interrupting boundary event —
+which the BPMN examples write, and which every model copied from one carries — comes
+back from the editor without it. The digest compared the *serialised* attributes and
+duly reported a changed model. It was right about the bytes and wrong about the
+question, which was never "are these documents equal" but "is this picture of this
+model".
+
+Writing an attribute at its default and leaving it out are the same statement in the
+schema, and Atlas's compiler already reads them as the same statement: `cancelActivity`,
+`isInterrupting` and `cancelRemainingInstances` are read as `!= "false"`,
+`triggeredByEvent`, `isSequential` and `testBefore` as `== "true"`, and `isCollection`
+as a bool attribute whose absence is false. So the digest now drops any attribute
+sitting on its declared default, from a table of the nineteen the bundled moddle
+declares one for — which is precisely the set an editor may drop.
+
+Two boundaries on that, both tested:
+
+- **Only unprefixed attributes.** The defaults belong to BPMN's own vocabulary. An
+  extension attribute (`zeebe:`, `atlas:`) that happens to share a name is a different
+  attribute with different rules, and the walk keys those by namespace.
+- **Only the default value.** `cancelActivity="false"` is a boundary event that does not
+  interrupt, and switching one to it — or omitting it from a model that had it — is a
+  change to how the process runs. It is still refused, one character away from the case
+  above.
+
+The wider lesson the original record understated: "reformatting is forgiven" is not only
+about whitespace and prefixes. A serialiser round-trip normalises *semantics-preserving*
+detail too, and every such normalisation the digest does not know about is a refusal on
+correct input — the one failure mode that makes the feature useless, because the operator
+can do nothing about it. Element order is the remaining candidate; nothing has been seen
+to reorder yet, and the digest stays order-sensitive until something does.
+
+The same incident showed the refusal itself was too thin. "The model differs" left the
+caller to diff two documents by eye, which is exactly the position somebody is in when
+they believe they changed nothing — and they are sometimes right. A refusal now names the
+first place the two walks diverge, by element and id.
 
 ## Pros and cons of the options
 
