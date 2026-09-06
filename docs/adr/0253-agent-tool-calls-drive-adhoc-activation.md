@@ -1,6 +1,6 @@
 # ADR-0253: Agent tool calls drive ad-hoc activation — the toolbox is the model
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-06
 - **Deciders:** Atlas engine team
 

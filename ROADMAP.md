@@ -567,6 +567,24 @@ Making processes wait, react, and time out.
   we're done." Authored in the Modeler (completion condition + cancel-remaining). **Sequential
   ordering is refused at deploy** rather than silently run as parallel — a documented follow-up,
   since a "which entries have started" cursor needs durable state.
+- ✅ **Agent-driven ad-hoc subprocesses** ([ADR-0253](docs/adr/0253-agent-tool-calls-drive-adhoc-activation.md),
+  [ADR-0254](docs/adr/0254-agent-rounds-on-a-worker.md)): the same container with a second entry
+  semantics. With an `<atlas:agentConnector>` on it, entry activates **nothing** — each round, a model
+  is offered the container's entry activities as its **tools** and either calls some of them or answers
+  and finishes. A tool's name is its element id, its description the modeller's own
+  `<bpmn:documentation>`, its parameters `<atlas:agentParam>`: **what an agent may reach is the
+  diagram**, versioned and reviewable like any other model change, which is the whole argument for
+  putting an agent here rather than behind a service task. A round is one **job**, a tool call one
+  **activity**, and the round boundary the scope **drain** — so the loop is durable, replayable and
+  interruptible at every step, with **no new command and no new recovery path**; a replay
+  re-activates what the agent chose without asking the model again. It runs **only on a worker**
+  (ADR-0164 — a round is one model call, minutes long and able to hang), reached over the worker
+  protocol that already existed: one more `Resolve` outbound, one more report inbound. Two provider
+  wire formats ship (Anthropic Messages, OpenAI Chat Completions, so also OpenRouter and anything
+  OpenAI-compatible) with **no provider SDK in the binary** (ADR-0117) — a third is a file, not a
+  dependency. Authored in the Modeler (the mode switch, the Worker and result collection, and a
+  parameter editor per tool), and an undocumented tool is warned about at deploy and where it is
+  written.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
