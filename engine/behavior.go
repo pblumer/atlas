@@ -555,6 +555,10 @@ func handleElementCompleting(c *ProcessingContext) {
 	if ei.MultiInstance == miBody {
 		promoteMultiInstanceOutput(c, c.cmd.Key, ei)
 	}
+	// A tool of an agent-driven ad-hoc contributes its result to the container's
+	// collection while its own scope is still readable — before OnCompleting drops it
+	// (ADR-0253).
+	collectAgentToolResult(c, c.cmd.Key, ei)
 	c.p.behavior(ei.BpmnElementType).OnCompleting(c, c.cmd.Key, ei)
 	if c.process(ei.ProcessDefKey).Node(ei.ElementId).BoundaryCount > 0 {
 		disarmBoundaryEvents(c, c.cmd.Key, ei.ProcessInstanceKey)
@@ -728,6 +732,13 @@ func handleJobCompleted(c *ProcessingContext) {
 	}
 
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
+		// An agent-driven ad-hoc's round job is not a step that finishes its element: it
+		// decides the next one. When it comes back naming tools, the container activates
+		// them and stays Activated; only a completion naming none falls through to the
+		// ordinary Completing below (ADR-0253).
+		if driveAgentRound(c, job.ElementInstanceKey, ei) {
+			return
+		}
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)
 	}
 }
@@ -1371,6 +1382,14 @@ func completeScope(c *ProcessingContext, scope uint64) {
 		return
 	}
 	if ei := c.GetElementInstance(scope); ei != nil {
+		// An agent-driven ad-hoc's drained scope is the end of a *round*, not of the
+		// container: every tool the agent asked for has run, so it is asked what comes
+		// next instead of being completed (ADR-0253). This is the one funnel every drain
+		// path goes through, which is why the round boundary lives here rather than in
+		// each of them.
+		if startNextAgentRound(c, scope, ei) {
+			return
+		}
 		// A subprocess scope: disarm its event-subprocess triggers (they are uncounted, so
 		// the scope drained with them still armed), then drive its container to Completing.
 		disarmEventSubprocesses(c, ei.ProcessInstanceKey, scope)

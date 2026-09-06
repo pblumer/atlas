@@ -366,6 +366,17 @@ const GoogleSheetsJobType = "io.atlas.googlesheets"
 // process, the same way the Jira worker uses JiraJobTypeIndex.
 const GoogleSheetsJobTypeIndex int32 = 26
 
+// AgentJobType is the reserved job type an agent-driven ad-hoc subprocess creates on
+// the container itself, once per round (ADR-0253). It is not a service-task worker
+// like the ones above: the job does not do the round's work, it *decides* it — the
+// Worker Instance behind it calls the model and completes the job with either the
+// tools to run next or a final answer, and the engine turns that into activations.
+const AgentJobType = "io.atlas.ai.agent"
+
+// AgentJobTypeIndex is the interned index AgentJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it twenty-eighth, so it is always 27.
+const AgentJobTypeIndex int32 = 27
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -400,6 +411,7 @@ var reservedJobTypes = []string{
 	LdifJobType,          // 24
 	JiraJobType,          // 25
 	GoogleSheetsJobType,  // 26
+	AgentJobType,         // 27
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -697,6 +709,21 @@ func (b *Builder) AddAdHocSubProcess(d AdHocDetail) int32 {
 	detail := int32(len(b.adHocs))
 	b.adHocs = append(b.adHocs, d)
 	return b.addNode(TypeAdHocSubProcess, detail)
+}
+
+// SetAdHocResultCollection names where an agent-driven ad-hoc's tool results accumulate
+// (ADR-0253): collection is the variable on the container's scope each finished tool appends
+// to, and element the FEEL expression evaluated over that tool's own scope to produce the
+// entry. It exists because the name is an *interned* index inside the detail, which only a
+// builder can mint — the same reason SetMultiInstance takes its output collection by name.
+// An empty collection clears it.
+func (b *Builder) SetAdHocResultCollection(nodeID int32, collection string, element *expr.Compiled) {
+	if !b.validNode(nodeID) || b.nodes[nodeID].Type != TypeAdHocSubProcess {
+		return
+	}
+	d := &b.adHocs[b.nodes[nodeID].Detail]
+	d.ResultCollection = b.intern(collection)
+	d.ResultElement = element
 }
 
 // PushScope opens scope id: every node added until the matching PopScope carries id
