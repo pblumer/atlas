@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas agent modeler e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, to verify the
+         agent fields on an ad-hoc subprocess and the tool editor on its contained
+         activities (ADR-0253 phase 4, ADR-0254).
+
+         An ad-hoc subprocess has two entry semantics on one element — every unconnected
+         activity at once (ADR-0143), or an agent picking round by round — and the record
+         accepted that on the condition the Modeler makes which one is in force visible.
+         So the assertions are about the exported XML *and* about what the panel says: the
+         mode switch has to write <atlas:agentConnector> and the prose has to change with
+         it, or a reader cannot tell the two apart.
+
+         The model carries one of each on purpose: `agent` is agent-driven with a
+         documented tool, an undocumented tool and a chained inner activity that is not a
+         tool at all; `plain` is an ordinary ad-hoc, so the switch can be driven in both
+         directions from one file. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_agent" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="berater" name="Hypothekarberater" isExecutable="true">
+    <bpmn:startEvent id="Start_1"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:adHocSubProcess id="agent" name="Beraten">
+      <bpmn:documentation>Finde den guenstigsten Hypothekarzins.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:agentConnector connector="anthropic_pb" resultCollection="toolCallResults" resultElement="=toolCallResult"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
+      <bpmn:serviceTask id="zinsen_holen" name="Zinsen holen">
+        <bpmn:documentation>Liest die Zinstabelle einer Bank.</bpmn:documentation>
+        <bpmn:extensionElements>
+          <zeebe:taskDefinition type="rates"/>
+          <atlas:agentParam name="url" type="string" description="Die Zinsseite" required="true"/>
+        </bpmn:extensionElements>
+        <bpmn:outgoing>g0</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="pruefen" name="Pruefen">
+        <bpmn:extensionElements><zeebe:taskDefinition type="check"/></bpmn:extensionElements>
+        <bpmn:incoming>g0</bpmn:incoming>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="historie_lesen" name="Historie lesen">
+        <bpmn:extensionElements><zeebe:taskDefinition type="history"/></bpmn:extensionElements>
+      </bpmn:serviceTask>
+      <bpmn:sequenceFlow id="g0" sourceRef="zinsen_holen" targetRef="pruefen"/>
+    </bpmn:adHocSubProcess>
+    <bpmn:adHocSubProcess id="plain" name="Freie Bearbeitung">
+      <bpmn:serviceTask id="frei" name="Frei">
+        <bpmn:extensionElements><zeebe:taskDefinition type="free"/></bpmn:extensionElements>
+      </bpmn:serviceTask>
+    </bpmn:adHocSubProcess>
+    <bpmn:endEvent id="End_1"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="agent"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="agent" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="berater">
+    <bpmndi:BPMNShape id="Start_1_s" bpmnElement="Start_1"><dc:Bounds x="120" y="200" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="agent_s" bpmnElement="agent" isExpanded="true"><dc:Bounds x="220" y="100" width="440" height="240"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="zinsen_holen_s" bpmnElement="zinsen_holen"><dc:Bounds x="260" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="pruefen_s" bpmnElement="pruefen"><dc:Bounds x="420" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="historie_lesen_s" bpmnElement="historie_lesen"><dc:Bounds x="260" y="240" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="plain_s" bpmnElement="plain" isExpanded="true"><dc:Bounds x="220" y="380" width="280" height="160"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="frei_s" bpmnElement="frei"><dc:Bounds x="260" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_s" bpmnElement="End_1"><dc:Bounds x="720" y="200" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_e" bpmnElement="f0"><di:waypoint x="156" y="218"/><di:waypoint x="220" y="218"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_e" bpmnElement="f1"><di:waypoint x="660" y="218"/><di:waypoint x="720" y="218"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="g0_e" bpmnElement="g0"><di:waypoint x="360" y="180"/><di:waypoint x="420" y="180"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // Two agent Workers are configured, so the Worker field's suggestions are a real
+      // list and the "none configured" note stays away.
+      const api = async (method, url) => {
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/configured-workers$/.test(url)) return [
+          { name: "anthropic_pb", kind: "agent", enabled: true },
+          { name: "openai_pb", kind: "agent", enabled: true },
+          { name: "rules", kind: "temis", enabled: true },
+        ];
+        if (method === "GET" && /\/processes$/.test(url)) return [];
+        if (method === "GET" && /\/drafts$/.test(url)) return [];
+        if (method === "GET" && /\/decisions/.test(url)) return [];
+        if (method === "GET" && /\/forms/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });
+      window.__select = (id) =>
+        window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get(id));
+      // The exported XML is what the deploy sends, so the tests assert against it.
+      window.__xml = async () => (await window.__atlasModeler.saveXML({ format: true })).xml;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

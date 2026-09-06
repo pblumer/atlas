@@ -1,6 +1,6 @@
 # ADR-0254: An agent round on a worker — the toolbox travels out, the tool calls travel back
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-06
 - **Deciders:** Atlas engine team
 

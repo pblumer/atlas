@@ -4278,6 +4278,152 @@ function saveIOMappings(modeler, element, inRows, outRows) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
+// --- Agent-driven ad-hoc subprocesses (ADR-0253/ADR-0254) --------------------
+//
+// An ad-hoc subprocess has two entry semantics, and which one is in force is the
+// presence of <atlas:agentConnector>: without it every unconnected activity starts at
+// once (ADR-0143); with it none of them does, and an agent picks what runs next, round
+// by round. The record accepted that second semantics on the same element and named the
+// consequence — "a model reader must know which one is in force, and the Modeler has to
+// make that visible" — which is what the section below is for.
+//
+// Nothing here invents vocabulary. A tool's name is its element id, its description is
+// its own <bpmn:documentation>, and its parameters are <atlas:agentParam>. The panel
+// only says so, so that an author writing documentation knows they are writing the
+// thing the model reads.
+
+// agentConnectorOf returns an ad-hoc subprocess's <atlas:agentConnector>, or null when
+// it is a plain one.
+function agentConnectorOf(bo) {
+  return bo && bo.$type === "bpmn:AdHocSubProcess" ? findExt(bo, "atlas:AgentConnector") : null;
+}
+
+// agentContainerOf returns the agent-driven ad-hoc subprocess an activity sits directly
+// inside, or null. Directly: a tool is a child of the container, and an activity nested
+// in an inner subprocess belongs to that scope instead.
+function agentContainerOf(bo) {
+  const parent = bo && bo.$parent;
+  return parent && agentConnectorOf(parent) ? parent : null;
+}
+
+// isAgentTool reports whether an activity is one of its container's tools. The tools are
+// the *entry* activities — the ones no sequence flow leads to — because that is exactly
+// the set the compiler indexes and the runtime can activate (ADR-0253). An activity a
+// flow reaches is a later step of whichever tool starts that chain, not a tool the model
+// may call, so it carries no parameters of its own.
+function isAgentTool(bo) {
+  if (!agentContainerOf(bo)) return false;
+  return ((bo.incoming || []).length === 0);
+}
+
+// agentParamsOf reads an activity's declared <atlas:agentParam> children.
+function agentParamsOf(bo) {
+  const ext = bo && bo.extensionElements;
+  return ((ext && ext.values) || []).filter((v) => v.$type === "atlas:AgentParam");
+}
+
+const AGENT_PARAM_TYPES = ["string", "number", "boolean", "object", "array"];
+
+function agentParamCardHTML(i, p) {
+  const type = AGENT_PARAM_TYPES.includes((p && p.type) || "") ? p.type : "string";
+  const required = String((p && p.required) || "") === "true";
+  return `<div class="io-map" data-agent-param data-i="${i}">
+    <div class="io-map-head">
+      <span class="io-map-chevron" aria-hidden="true">▾</span>
+      <span class="io-map-title">${esc((p && p.name) || "parameter")}</span>
+      <button type="button" class="io-map-del" title="Delete parameter" aria-label="Delete parameter">${ioTrashIcon}</button>
+    </div>
+    <div class="io-map-body">
+      <label class="field"><span>Name</span>
+        <input type="text" class="ap-name" value="${esc((p && p.name) || "")}" placeholder="url"
+          title="The variable this argument is written into, in the activity's own scope"/></label>
+      <label class="field"><span>Type</span>
+        <select class="ap-type">
+          ${AGENT_PARAM_TYPES.map((t) => `<option value="${t}" ${type === t ? "selected" : ""}>${t}</option>`).join("")}
+        </select></label>
+      <label class="field"><span>Description</span>
+        <textarea class="ap-desc" rows="2" placeholder="Vollständige https-URL der Zinsseite">${esc((p && p.description) || "")}</textarea></label>
+      <label class="field checkbox"><input type="checkbox" class="ap-required" ${required ? "checked" : ""}/> <span>Required</span></label>
+    </div>
+  </div>`;
+}
+
+// agentParamsHTML renders a tool's parameter declarations as one collapsible group, the
+// same shape the I/O mapping groups use — so the add button, the count badge and the
+// collapse memory all behave the way an author already knows.
+function agentParamsHTML(bo) {
+  const params = agentParamsOf(bo);
+  const cards = params.map((p, i) => agentParamCardHTML(i, p)).join("");
+  return `<div class="io-group" data-agent-param-group="1" data-group="Parameters" data-standalone-group="1">
+    <div class="io-group-head">
+      <span class="io-group-title">Parameters</span>
+      <button type="button" class="io-group-add" title="Add parameter" aria-label="Add parameter">＋</button>
+      <span class="io-group-count" title="Parameters">${params.length}</span>
+      <span class="io-group-chevron" aria-hidden="true">▾</span>
+    </div>
+    <div class="io-group-body">
+      <div class="io-map-list" id="agent-params">${cards}</div>
+      <p class="muted io-group-hint">What the agent has to supply when it calls this tool. Each one is written into this
+        activity's <b>own scope</b> under its name, so the activity reads it like any other variable. Describe each
+        parameter: the description is what stops the model guessing a value.</p>
+    </div>
+  </div>`;
+}
+
+// agentToolHTML is the section a contained activity of an agent-driven ad-hoc gets:
+// what it is to the agent, and what the agent has to supply to call it. It returns
+// nothing anywhere else, so the call sites are unconditional.
+//
+// An activity a sequence flow reaches gets the section too, saying the opposite — that
+// it is *not* a tool. Silence there would read as "this element has nothing to do with
+// the agent", which is the misreading worth spending a paragraph on: it is a later step
+// of whichever tool starts its chain, and the model never names it.
+function agentToolHTML(bo) {
+  const container = agentContainerOf(bo);
+  if (!container) return "";
+  if (!isAgentTool(bo)) {
+    return `<h3>Agent tool</h3>
+      <p class="muted" style="font-size:12px">A sequence flow leads to this activity, so it is a later step of whichever
+        tool starts that chain — not a tool the agent can call. Only the activities no flow leads to are offered to the
+        model. Disconnect it to make it one.</p>`;
+  }
+  const documented = readDocumentation(bo).trim() !== "";
+  return `<h3>Agent tool</h3>
+    <p class="muted" style="font-size:12px">The agent driving <b>${esc(container.id || "this subprocess")}</b> may call
+      this activity. It is offered under its own id — <code>${esc(bo.id || "")}</code> — and its <b>Documentation</b>
+      (General) is what the model reads to decide whether this is the tool for the job. Write when to use it, when not
+      to, and what it returns.</p>
+    ${documented ? "" : `<div class="warn-note">This tool has no documentation, so the agent is told that it exists and
+      not what it is for — it will call it on the strength of its id alone. Deploy warns about this
+      (<code>agent.tool</code>); it does not refuse it.</div>`}
+    ${agentParamsHTML(bo)}`;
+}
+
+// saveAgentParams rebuilds an activity's <atlas:agentParam> declarations from the panel
+// rows. A row with no name is dropped, and `required` is written only when true — so a
+// tool that declares nothing carries no extension element at all and the XML stays as
+// clean as a plain activity's.
+function saveAgentParams(modeler, element, rows) {
+  const moddle = modeler.get("moddle");
+  const modeling = modeler.get("modeling");
+  const bo = element.businessObject;
+  let ext = bo.extensionElements;
+  if (!ext) {
+    ext = moddle.create("bpmn:ExtensionElements", { values: [] });
+    ext.$parent = bo;
+  }
+  const kept = rows.filter((r) => (r.name || "").trim() !== "").map((r) => {
+    const props = { name: r.name.trim(), type: r.type };
+    if ((r.description || "").trim() !== "") props.description = r.description.trim();
+    if (r.required) props.required = "true";
+    return moddle.create("atlas:AgentParam", props);
+  });
+  const others = (ext.values || []).filter((v) => v.$type !== "atlas:AgentParam");
+  kept.forEach((p) => (p.$parent = ext));
+  ext.values = [...others, ...kept];
+  modeling.updateProperties(element, { extensionElements: ext });
+}
+
 // loopMode reports which loop marker an activity carries — the value of the Mode
 // select and, one to one, the marker bpmn-js draws on the shape: "none" (no marker),
 // "loop" (bpmn:StandardLoopCharacteristics, the ↻ icon, ADR-0133), or "parallel" /
@@ -6010,6 +6156,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <p class="muted" style="font-size:12px">An ISO-8601 duration measured from when the task appears
               (e.g. <b>P2D</b> = 2 days, <b>PT4H</b> = 4 hours). Leave blank for no due date. Priority 0–100; higher sorts first.</p>`;
         }
+        // What this activity is to the agent, when it sits in an agent-driven ad-hoc
+        // (ADR-0253). Empty everywhere else.
+        html += agentToolHTML(bo);
         // Generic zeebe:ioMapping input/output editor for job-backed activities
         // (ADR-0068). A business rule task's ioMapping inputs are decision inputs
         // with their own editor above, so it is excluded here.
@@ -6033,6 +6182,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // subprocess scope on entry (its inner elements see it, up the chain); output
         // mappings promote selected values to the enclosing scope on completion.
         html += `<p class="muted" style="font-size:12px">Pass variables in and out of this subprocess. <b>Input mappings</b> create variables its inner elements see (its local scope); <b>output mappings</b> promote selected values back to the enclosing scope when it completes.</p>`;
+        html += agentToolHTML(bo); // a subprocess can be an agent's tool too (ADR-0253)
         html += ioMappingsHTML(bo);
         html += multiInstanceHTML(bo); // ADR-0077: run this subprocess once per collection element
       } else if (bo.$type === "bpmn:AdHocSubProcess") {
@@ -6042,9 +6192,36 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // re-evaluated after each contained activity completes, and whether a holding
         // condition cancels the still-running activities. Ordering is parallel — every entry
         // activity starts at once; sequential is refused at deploy, so it is not offered.
+        //
+        // …unless an agent drives it (ADR-0253), in which case entry activates *nothing*
+        // and a model picks what runs next, round by round. That is a second entry
+        // semantics on one element, so the first thing this panel does is say which one is
+        // in force — the trade-off the record accepted and asked the Modeler to carry.
         const cancelRemaining = bo.cancelRemainingInstances !== false;
+        const ac = agentConnectorOf(bo);
         html += `<h3>Ad-hoc subprocess</h3>
-          <p class="muted" style="font-size:12px">Its contained activities are <b>not</b> connected by sequence flows: every activity with no incoming flow starts <b>at once</b> when the subprocess is entered, and runs independently. Use it for flexible, case-management work. With no completion condition below, it finishes when all of them are done.</p>`;
+          <label class="field"><span>What starts its activities${ac ? placementBadgeHTML("agent") : ""}</span>
+            <select id="f-adhocmode">
+              <option value="all" ${ac ? "" : "selected"}>All at once — every unconnected activity starts on entry</option>
+              <option value="agent" ${ac ? "selected" : ""}>An agent decides — it picks which to run, round by round</option>
+            </select></label>`;
+        if (!ac) {
+          html += `<p class="muted" style="font-size:12px">Its contained activities are <b>not</b> connected by sequence flows: every activity with no incoming flow starts <b>at once</b> when the subprocess is entered, and runs independently. Use it for flexible, case-management work. With no completion condition below, it finishes when all of them are done.</p>`;
+        } else {
+          html += `<p class="muted" style="font-size:12px">Entry starts <b>nothing</b>. Each round, the agent is offered the contained activities that no sequence flow leads to — those are its <b>tools</b> — and it either calls some of them or answers and finishes. What it may reach is this diagram and nothing else, which is what makes an agent's reach reviewable.</p>
+            <h3>Agent</h3>
+            <label class="field"><span>Worker</span>
+              <input type="text" id="f-agent-connector" list="dl-agent-connector" autocomplete="off" value="${esc(ac.connector || "")}" placeholder="anthropic_pb"/>
+              <datalist id="dl-agent-connector"></datalist></label>
+            <p class="muted" id="nt-agent-connector" style="font-size:12px"></p>
+            <p class="muted" style="font-size:12px">The Worker holding the model endpoint and its credential — neither travels in the model (<b>General → Documentation</b> on this subprocess is the agent's <b>goal</b>: the sentence the model reads to know what it is here for).</p>
+            <h3>Tool results</h3>
+            <label class="field"><span>Collect results into</span>
+              <input type="text" id="f-agent-resultcoll" value="${esc(ac.resultCollection || "")}" placeholder="toolCallResults"/></label>
+            <label class="field"><span>What to collect (FEEL)</span>
+              <textarea id="f-agent-resultelem" rows="1" spellcheck="false" placeholder="toolCallResult">${esc((ac.resultElement || "").replace(/^=\s*/, ""))}</textarea></label>
+            <p class="muted" style="font-size:12px">After each tool call finishes, this expression is evaluated in that activity's scope and appended to the collection. The next round is given what came back — it is the agent's memory of its own run, and the reason a round can build on the one before it. Leave both empty and the agent sees nothing of what its calls returned.</p>`;
+        }
         html += `<h3>Completion condition (FEEL)</h3>
           <label class="field"><span>Expression</span>
             <textarea id="f-adhoccond" rows="2" placeholder="approvals >= 2">${esc((bo.completionCondition && bo.completionCondition.body || "").replace(/^=\s*/, ""))}</textarea></label>
@@ -6084,6 +6261,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           <label class="field checkbox"><input type="checkbox" id="f-call-prop-parent" ${propParent ? "checked" : ""}/> <span>Pass all caller variables in</span></label>
           <label class="field checkbox"><input type="checkbox" id="f-call-prop-child" ${propChild ? "checked" : ""}/> <span>Return all child variables out</span></label>
           <p class="muted" style="font-size:12px">With a box <b>unchecked</b>, only the matching mappings below cross that direction — the child sees only what you map in, or the caller gets back only what you map out (isolation).</p>`;
+        html += agentToolHTML(bo); // a call activity can be an agent's tool too (ADR-0253)
         html += ioMappingsHTML(bo);
         html += multiInstanceHTML(bo); // ADR-0077: call the process once per collection element
       } else if (isDefaultFlow) {
@@ -6910,7 +7088,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // collapsible list group per direction, each mapping a collapsible card. Cards
     // save on blur; the add button appends an auto-named card and the trash button
     // removes one. Both groups share one save that re-collects both lists.
-    const ioGroups = [...body.querySelectorAll(".io-group")];
+    // Only the I/O mapping groups: the selector is [data-kind] because an agent tool's
+    // Parameters group borrows the same .io-group / .io-map markup for its look, and
+    // wiring it here would hand cards with no .io-target to the mapping handlers
+    // (ADR-0253). A group's data-kind is what makes it one of *these* two.
+    const ioGroups = [...body.querySelectorAll(".io-group[data-kind]")];
     if (ioGroups.length) {
       const ioInWrap = body.querySelector("#io-inputs");
       const ioOutWrap = body.querySelector("#io-outputs");
@@ -7402,6 +7584,112 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       }));
     }
 
+    // Which entry semantics an ad-hoc subprocess has is the presence of
+    // <atlas:agentConnector> (ADR-0253), the same way a business rule task's evaluation
+    // mode is the presence of <atlas:temisConnector>. Flipping it re-renders, so the
+    // agent fields appear or go.
+    const fadhocmode = body.querySelector("#f-adhocmode");
+    if (fadhocmode) {
+      fadhocmode.addEventListener("change", () => {
+        savePreservingPanel(() => {
+          if (fadhocmode.value === "agent") {
+            const name = (body.querySelector("#f-agent-connector")?.value || "").trim();
+            upsertExt(modeler, element, "atlas:AgentConnector", { connector: name });
+            // An agent-driven container's round ends when its activated tools drain, so
+            // "let them finish" has nothing to mean and the compiler refuses it. Clearing
+            // it here keeps a model that was switched over deployable, rather than
+            // failing at deploy over a setting the panel had already stopped offering.
+            try { modeling.updateProperties(element, { cancelRemainingInstances: undefined }); } catch { /* stale */ }
+            // Open the Agent section on the re-render. Every group but General starts
+            // collapsed, and the Worker it holds is the one field an agent-driven
+            // container cannot deploy without — hiding it behind a click, right after
+            // the author asked for an agent, would be the panel withholding the thing
+            // they just came for.
+            groupCtl.onToggle("Agent", false);
+          } else {
+            removeExt(modeler, element, "atlas:AgentConnector");
+          }
+        });
+        show(element);
+      });
+    }
+    // The agent's three fields are written together, so editing one never drops the
+    // others. resultElement is stored '=' prefixed like every other FEEL attribute.
+    const fagentconn = body.querySelector("#f-agent-connector");
+    if (fagentconn) {
+      const fagentcoll = body.querySelector("#f-agent-resultcoll");
+      const fagentelem = body.querySelector("#f-agent-resultelem");
+      const saveAgent = () => savePreservingPanel(() => {
+        const elem = (fagentelem.value || "").trim();
+        upsertExt(modeler, element, "atlas:AgentConnector", {
+          connector: (fagentconn.value || "").trim(),
+          resultCollection: (fagentcoll.value || "").trim() || undefined,
+          resultElement: elem === "" ? undefined : (elem.startsWith("=") ? elem : "= " + elem),
+        });
+      });
+      fagentconn.addEventListener("change", saveAgent);
+      fagentcoll.addEventListener("change", saveAgent);
+      fagentelem.addEventListener("change", saveAgent);
+      fillWorkerDatalist(api, body.querySelector("#dl-agent-connector"),
+        body.querySelector("#nt-agent-connector"), "agent");
+    }
+
+    // A tool's declared parameters (ADR-0253). The group behaves like an I/O mapping
+    // group — add, delete, collapse — because it is the same shape and an author has
+    // already learned it.
+    const apGroup = body.querySelector("[data-agent-param-group]");
+    if (apGroup) {
+      const apList = apGroup.querySelector("#agent-params");
+      const readParams = () => [...apList.querySelectorAll("[data-agent-param]")].map((card) => ({
+        name: card.querySelector(".ap-name").value,
+        type: card.querySelector(".ap-type").value,
+        description: card.querySelector(".ap-desc").value,
+        required: card.querySelector(".ap-required").checked,
+      }));
+      const saveParams = () => savePreservingPanel(() => saveAgentParams(modeler, element, readParams()));
+      const count = () => {
+        const c = apGroup.querySelector(".io-group-count");
+        if (c) c.textContent = String(apList.querySelectorAll("[data-agent-param]").length);
+      };
+      const wireParam = (card) => {
+        const name = card.querySelector(".ap-name");
+        const title = card.querySelector(".io-map-title");
+        card.querySelector(".io-map-head").addEventListener("click", (e) => {
+          if (e.target.closest(".io-map-del")) return;
+          card.classList.toggle("collapsed");
+        });
+        name.addEventListener("input", () => { title.textContent = name.value.trim() || "parameter"; });
+        for (const sel of [".ap-name", ".ap-type", ".ap-desc", ".ap-required"]) {
+          card.querySelector(sel).addEventListener("change", saveParams);
+        }
+        card.querySelector(".io-map-del").addEventListener("click", (e) => {
+          e.stopPropagation();
+          card.remove();
+          count();
+          saveParams();
+        });
+      };
+      [...apList.querySelectorAll("[data-agent-param]")].forEach(wireParam);
+      apGroup.classList.toggle("collapsed", groupCtl.isCollapsed(apGroup.dataset.group || ""));
+      apGroup.querySelector(".io-group-head").addEventListener("click", (e) => {
+        if (e.target.closest(".io-group-add")) return;
+        groupCtl.onToggle((apGroup.dataset.group || "").trim(), apGroup.classList.toggle("collapsed"));
+      });
+      apGroup.querySelector(".io-group-add").addEventListener("click", (e) => {
+        e.stopPropagation();
+        apGroup.classList.remove("collapsed");
+        groupCtl.onToggle((apGroup.dataset.group || "").trim(), false);
+        const tmp = document.createElement("div");
+        tmp.innerHTML = agentParamCardHTML(apList.querySelectorAll("[data-agent-param]").length, { type: "string" });
+        const card = tmp.firstElementChild;
+        apList.appendChild(card);
+        wireParam(card);
+        count();
+        const name = card.querySelector(".ap-name");
+        name.focus();
+      });
+    }
+
     // An ad-hoc subprocess's completion condition lives on the container as a
     // <completionCondition> FormalExpression, and cancelRemainingInstances is a plain
     // attribute (ADR-0143). Clearing the condition removes it, so the subprocess finishes
@@ -7442,6 +7730,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       enhanceFeel(body, "#f-cond", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-condition", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-adhoccond", feelVars, validate, evaluate);
+      enhanceFeel(body, "#f-agent-resultelem", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-corrkey", feelVars, validate, evaluate);
       enhanceScript(body, modeler, api, feelVars);
       // Value-or-expression fields carry a Camunda-style fx toggle: switch them to
