@@ -177,6 +177,19 @@ func TestUpdateProcessDiagramRefusesAModelEdit(t *testing.T) {
 	if !strings.Contains(string(body), "deploy") {
 		t.Errorf("the refusal does not say what to do instead: %s", body)
 	}
+	// And it names what differs. Told only "the model differs", a caller who believes
+	// they changed nothing is left to diff two documents by eye (ADR-0251, amended).
+	// Decoded rather than matched raw: the message carries angle brackets, which the
+	// envelope escapes, and a reader sees the decoded string.
+	var refusal struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &refusal); err != nil {
+		t.Fatalf("decode refusal: %v (%s)", err, body)
+	}
+	if !strings.Contains(refusal.Error, `<serviceTask id="task">`) {
+		t.Errorf("the refusal does not name the element that differs: %s", refusal.Error)
+	}
 	// Nothing landed — not even the layout half of the submitted document.
 	if got := processXML(t, ts, "1"); strings.Contains(got, `y="420"`) || strings.Contains(got, "Zahlung neu") {
 		t.Errorf("a refused save left something behind:\n%s", got)
@@ -309,5 +322,70 @@ func TestUpdateProcessDiagramSidecarMissing(t *testing.T) {
 	}
 	if code, body := doReq(t, s.ts, http.MethodPut, "/api/v1/processes/1/diagram", moved(diagramBPMN), "application/xml"); code != http.StatusNotFound {
 		t.Fatalf("missing-record save status=%d body=%s, want 404", code, body)
+	}
+}
+
+// interruptingBPMN carries an interrupting boundary event with cancelActivity spelled
+// out, the way the BPMN examples write it — and the way the model this went wrong on
+// in production was written.
+const interruptingBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_i" targetNamespace="http://atlas/bpmn">
+  <process id="stoerung" isExecutable="true">
+    <startEvent id="start"/>
+    <userTask id="analyse" name="Störung analysieren"/>
+    <boundaryEvent id="timeout" name="nach 5 min" attachedToRef="analyse" cancelActivity="true">
+      <timerEventDefinition><timeDuration xsi:type="tFormalExpression">PT5M</timeDuration></timerEventDefinition>
+    </boundaryEvent>
+    <endEvent id="done"/>
+    <endEvent id="expired"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="analyse"/>
+    <sequenceFlow id="f2" sourceRef="analyse" targetRef="done"/>
+    <sequenceFlow id="f3" sourceRef="timeout" targetRef="expired"/>
+  </process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="stoerung">
+    <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="150" y="100" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="analyse_di" bpmnElement="analyse"><dc:Bounds x="240" y="78" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="timeout_di" bpmnElement="timeout"><dc:Bounds x="272" y="140" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="done_di" bpmnElement="done"><dc:Bounds x="400" y="100" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="expired_di" bpmnElement="expired"><dc:Bounds x="400" y="220" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="186" y="118"/><di:waypoint x="240" y="118"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="340" y="118"/><di:waypoint x="400" y="118"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="290" y="176"/><di:waypoint x="290" y="238"/><di:waypoint x="400" y="238"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</definitions>`
+
+// TestUpdateProcessDiagramAcceptsAnEditorRoundTrip is the production failure, end to
+// end: the deployed model spells cancelActivity="true" out, the editor writes it back
+// without it because it is the schema default, and the layout save must land. It was
+// refused before — on a document nobody had edited, which is the one refusal an
+// operator can do nothing about (ADR-0251, amended).
+func TestUpdateProcessDiagramAcceptsAnEditorRoundTrip(t *testing.T) {
+	ts := newTestServer(t)
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", interruptingBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	// What bpmn-js hands back: the attribute omitted, and a shape moved.
+	asEditorWroteIt := strings.Replace(interruptingBPMN, ` cancelActivity="true"`, "", 1)
+	asEditorWroteIt = strings.Replace(asEditorWroteIt, `x="240" y="78"`, `x="240" y="420"`, 1)
+	if asEditorWroteIt == interruptingBPMN {
+		t.Fatal("the fixture no longer carries what this test is about")
+	}
+	code, body := doReq(t, ts, http.MethodPut, "/api/v1/processes/1/diagram", asEditorWroteIt, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("save diagram status=%d body=%s, want 200", code, body)
+	}
+	if got := processXML(t, ts, "1"); !strings.Contains(got, `x="240" y="420"`) {
+		t.Errorf("the adjusted layout did not land:\n%s", got)
+	}
+	// The stored model keeps its own bytes, attribute included: the transplant takes
+	// the picture and nothing else, so the deployed definition is untouched.
+	if got := processXML(t, ts, "1"); !strings.Contains(got, `cancelActivity="true"`) {
+		t.Errorf("the stored model lost an attribute the transplant never carries:\n%s", got)
+	}
+	// Switching the boundary event to non-interrupting is a real change, one character
+	// away, and stays refused.
+	nonInterrupting := strings.Replace(interruptingBPMN, `cancelActivity="true"`, `cancelActivity="false"`, 1)
+	if code, body := doReq(t, ts, http.MethodPut, "/api/v1/processes/1/diagram", nonInterrupting, "application/xml"); code != http.StatusConflict {
+		t.Errorf("non-interrupting boundary event status=%d body=%s, want 409", code, body)
 	}
 }

@@ -14,6 +14,33 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Saving a layout onto a deployment was refused on diagrams nobody had edited.** The
+  first real use of "Save layout to deployment" hit the guard that is supposed to catch a
+  changed *process*, on a document whose process had not changed at all.
+
+  bpmn-js leaves out an attribute whose value equals the default its schema declares. A
+  deployed model carrying `cancelActivity="true"` on an interrupting boundary event —
+  which the BPMN examples write, and which every model copied from one carries — comes
+  back from the editor without it. The check compared the serialised attributes, saw one
+  missing, and refused. It was right about the bytes and wrong about the question, which
+  was never "are these two documents equal" but "is this picture of this model". Any
+  model with an interrupting boundary event, an event subprocess or a multi-instance
+  activity spelled out that way was affected, and there was nothing the operator could do
+  about it.
+
+  Writing an attribute at its default and leaving it out are the same statement in the
+  schema, and Atlas's compiler already reads them as the same statement. So the check now
+  reads them that way too, for the nineteen attributes BPMN gives a default. Two things
+  deliberately unchanged: it applies to BPMN's own attributes only — a `zeebe:` or
+  `atlas:` attribute that happens to share a name is a different attribute — and only to
+  the default value, so switching a boundary event to `cancelActivity="false"` is still
+  the real change it is, and still refused.
+
+  The refusal also says *what* differs now, by element and id, instead of only that
+  something does. That is the sentence somebody needs most in exactly this situation:
+  when they are sure they changed nothing, and are right
+  ([ADR-0251](docs/adr/0251-adjust-a-deployed-diagram.md), amended).
+
 - **The edges in the landscape nugget missed the nodes they connect.** The scene that
   shows Panorama drew its edges as divs rotated by an angle computed from percentage
   coordinates — and x is a share of the container's width while y is a share of its

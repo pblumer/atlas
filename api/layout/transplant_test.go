@@ -297,3 +297,109 @@ func TestTransplantTwoDiagramsBothMove(t *testing.T) {
 		t.Errorf("expected 2 diagrams in the result, found %d", n)
 	}
 }
+
+// boundaryModel is the shape of the model this went wrong on in production: an
+// interrupting boundary event that spells cancelActivity out. The BPMN examples write
+// it, and so does every model an author copied one from.
+const boundaryModel = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="defs_b" targetNamespace="http://atlas/bpmn">
+  <process id="p" isExecutable="true">
+    <userTask id="ut" name="Störung analysieren"/>
+    <boundaryEvent id="b" name="nach 5 min" attachedToRef="ut" cancelActivity="true">
+      <timerEventDefinition><timeDuration xsi:type="tFormalExpression">PT5M</timeDuration></timerEventDefinition>
+    </boundaryEvent>
+    <subProcess id="sub" triggeredByEvent="false"><startEvent id="es" isInterrupting="true"/></subProcess>
+  </process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="p">
+    <bpmndi:BPMNShape id="ut_di" bpmnElement="ut"><dc:Bounds x="240" y="78" width="100" height="80"/></bpmndi:BPMNShape>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</definitions>`
+
+// TestTransplantForgivesAnOmittedSchemaDefault is the case that broke in production
+// on the first real use of the feature.
+//
+// bpmn-js omits an attribute whose value equals its schema default, so a model
+// carrying cancelActivity="true" comes back from the editor without it. Compared
+// literally that reads as a changed model, and the layout save was refused on a
+// document nobody had edited — the one failure mode that makes the feature useless,
+// because it fires on correct input and there is nothing the operator can do about it.
+//
+// Writing the attribute and leaving it out are the same statement in the schema, and
+// the compiler reads them the same way (`cancelActivity != "false"` is interrupting,
+// scope_compile.go), so the digest has to agree.
+func TestTransplantForgivesAnOmittedSchemaDefault(t *testing.T) {
+	for name, drop := range map[string]string{
+		"cancelActivity":   ` cancelActivity="true"`,
+		"triggeredByEvent": ` triggeredByEvent="false"`,
+		"isInterrupting":   ` isInterrupting="true"`,
+	} {
+		asEditorWroteIt := strings.Replace(boundaryModel, drop, "", 1)
+		if asEditorWroteIt == boundaryModel {
+			t.Fatalf("%s: the fixture does not carry %q", name, drop)
+		}
+		same, err := SameModel([]byte(boundaryModel), []byte(asEditorWroteIt))
+		if err != nil {
+			t.Fatalf("%s: SameModel: %v", name, err)
+		}
+		if !same {
+			t.Errorf("%s at its default reads as a different model when omitted", name)
+		}
+		if _, err := Transplant([]byte(boundaryModel), []byte(asEditorWroteIt)); err != nil {
+			t.Errorf("%s: Transplant refused a document an editor produced unedited: %v", name, err)
+		}
+	}
+}
+
+// TestTransplantStillRefusesANonDefaultValue: forgiving the default must not forgive
+// the value that differs from it. A boundary event switched to non-interrupting is a
+// real change to how the process behaves, and it is one character away from the case
+// above.
+func TestTransplantStillRefusesANonDefaultValue(t *testing.T) {
+	nonInterrupting := strings.Replace(boundaryModel, `cancelActivity="true"`, `cancelActivity="false"`, 1)
+	if _, err := Transplant([]byte(boundaryModel), []byte(nonInterrupting)); !errors.Is(err, ErrDifferentModel) {
+		t.Fatalf("switching a boundary event to non-interrupting: got %v, want ErrDifferentModel", err)
+	}
+	// And dropping it entirely from a model that had "false" is a change in the other
+	// direction, which must be refused too.
+	hadFalse := strings.Replace(boundaryModel, `cancelActivity="true"`, `cancelActivity="false"`, 1)
+	omitted := strings.Replace(hadFalse, ` cancelActivity="false"`, "", 1)
+	if _, err := Transplant([]byte(hadFalse), []byte(omitted)); !errors.Is(err, ErrDifferentModel) {
+		t.Fatalf("omitting a non-default value: got %v, want ErrDifferentModel", err)
+	}
+}
+
+// TestTransplantOnlyNormalisesBPMNAttributes: the defaults belong to BPMN's own
+// attributes. An extension attribute that happens to share a name is a different
+// attribute with its own rules, and dropping it is a real change.
+func TestTransplantOnlyNormalisesBPMNAttributes(t *testing.T) {
+	withExt := strings.Replace(storedModel,
+		`<bpmn:scriptTask id="calc" name="Betrag prüfen">`,
+		`<bpmn:scriptTask id="calc" name="Betrag prüfen" zeebe:isSequential="false">`, 1)
+	dropped := strings.Replace(withExt, ` zeebe:isSequential="false"`, "", 1)
+	if _, err := Transplant([]byte(withExt), []byte(dropped)); !errors.Is(err, ErrDifferentModel) {
+		t.Fatalf("dropping a namespaced attribute that shares a BPMN name: got %v, want ErrDifferentModel", err)
+	}
+}
+
+// TestDifferenceIsNamed: a refusal that only says "the model differs" leaves the
+// caller to diff two documents by eye. It has to point at the element — which is what
+// somebody needs most when they are sure they changed nothing.
+func TestDifferenceIsNamed(t *testing.T) {
+	renamed := strings.Replace(movedDiagram, `name="Betrag prüfen"`, `name="Betrag geprüft"`, 1)
+	_, err := Transplant([]byte(storedModel), []byte(renamed))
+	if err == nil {
+		t.Fatal("expected a refusal")
+	}
+	if !strings.Contains(err.Error(), `scriptTask id="calc"`) {
+		t.Errorf("the refusal does not name the element that differs: %v", err)
+	}
+
+	added := strings.Replace(movedDiagram, "</process>", `<task id="extra" name="Zusatz"/></process>`, 1)
+	_, err = Transplant([]byte(storedModel), []byte(added))
+	if err == nil {
+		t.Fatal("expected a refusal")
+	}
+	if !strings.Contains(err.Error(), "extra") && !strings.Contains(err.Error(), "continues") {
+		t.Errorf("the refusal does not locate the added element: %v", err)
+	}
+}
