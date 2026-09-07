@@ -2912,3 +2912,63 @@ test("the severity outline and the heartbeat keep their weight on a large starma
   expect(drawn.bodyPx).toBeCloseTo(3.5, 2);
   expect(drawn.beatPx).toBeCloseTo(2.5, 2);
 });
+
+// The shape the graph settles into, against the shape it is being fitted to.
+//
+// The fit scales both axes by one factor — stretching them independently would fill
+// the frame by misreporting distance — so whatever shape the settle lands on is the
+// shape that gets framed, and the difference from the canvas's own shape is left over
+// as a band of empty canvas along one edge. The centring pull is anisotropic to stop
+// that happening, and it was applying the frame's aspect ratio to each axis in
+// opposite directions, which is that ratio *squared* between them. Measured on a
+// 36-node estate at 1400x900: the graph settled at 2.8:1 against a canvas of 1.7:1,
+// filled 93% of the width and 55% of the height, and crowded the nodes into that half
+// while a third of the canvas stayed blank.
+//
+// So the pull is aimed rather than assumed — the shape it reaches depends on the
+// graph as much as on the frame — and the remaining steps run under the correction.
+test("the graph settles into the shape of its canvas, not into a band across it", async ({ page }) => {
+  // An estate shaped like a real one, which is mostly *not* joined up: a derived
+  // starmap of thirty-six nodes carries seventeen edges, so most of it floats free
+  // and is placed by the repulsion and the centring pull alone. That is the case the
+  // pull's shape decides on its own, with no springs to argue with it — and it is
+  // the common case, because an estate is not a graph somebody drew.
+  const estate = { nodes: [{ id: "application:a1", kind: "application", name: "Atlas System", provenance: "derived" }], edges: [], restricted: 0, clustered: false };
+  for (let i = 1; i <= 29; i++) {
+    estate.nodes.push({ id: `process:${i}`, kind: "process", name: `Process number ${i}`, provenance: "derived", processId: `p${i}`, version: 1 });
+  }
+  for (const i of [1, 2, 3]) estate.edges.push({ from: "application:a1", to: `process:${i}`, kind: "contains" });
+  estate.edges.push({ from: "process:4", to: "process:5", kind: "calls" });
+  for (let u = 1; u <= 6; u++) {
+    estate.nodes.push({ id: `unresolved:svc-${u}`, kind: "unresolved", name: `svc-${u}`, provenance: "derived" });
+    for (let k = 0; k < 2; k++) {
+      estate.edges.push({ from: `process:${u * 3 + k}`, to: `unresolved:svc-${u}`, kind: "uses" });
+    }
+  }
+  installMock(page, estate);
+
+  for (const [w, h] of [[1400, 900], [1000, 700]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.goto("/index.html#/panorama/starmap");
+    await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+    await page.waitForTimeout(300);
+    const fill = await page.evaluate(() => {
+      const s = document.querySelector(".mesh-surface").getBoundingClientRect();
+      const [, , vw] = document.querySelector(".mesh-canvas").getAttribute("viewBox").split(" ").map(Number);
+      const scale = s.width / vw;
+      const at = [...document.querySelectorAll(".mesh-node")].map((g) => {
+        const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform"));
+        return { x: +m[1], y: +m[2] };
+      });
+      const xs = at.map((a) => a.x), ys = at.map((a) => a.y);
+      return {
+        x: (Math.max(...xs) - Math.min(...xs)) * scale / s.width,
+        y: (Math.max(...ys) - Math.min(...ys)) * scale / s.height,
+      };
+    });
+    // Both axes, not "whichever ran out first". A picture that reaches the sides and
+    // stops halfway down the canvas is the one this is about.
+    expect(fill.x, `width at ${w}x${h}`).toBeGreaterThan(0.65);
+    expect(fill.y, `height at ${w}x${h}`).toBeGreaterThan(0.65);
+  }
+});

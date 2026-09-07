@@ -716,7 +716,39 @@ function layout(nodes, edges, { width, height, iterations = 220, pinned, from, m
   // Every node's own footprint, so the separation pass knows what "touching" means
   // for this pair rather than assuming one radius for all of them.
   const radii = nodes.map(radiusOf);
-  settle(nodes, linksAmong(nodes, edges), radii, force, iterations);
+  const links = linksAmong(nodes, edges);
+  // Settled in two stretches, with a look at the result in between.
+  //
+  // The centring pull is anisotropic so the graph takes the shape of the space it
+  // has to live in (see forcesFor), and the fit that follows scales both axes by one
+  // factor — so whatever shape the settle lands on is the shape that gets framed,
+  // and any difference from the canvas's own shape is left over as a band of empty
+  // canvas along one edge. Measured on a 36-node estate: the settle came out at 2.8:1
+  // whatever the canvas was, so at 1400x900 it filled 93% of the width and 55% of the
+  // height, and the nodes were crowded into that half with eight of their names
+  // overlapping. Nothing was wrong with the framing; the picture was simply not the
+  // shape of the frame it was being fitted into.
+  //
+  // The pull is what decides that shape, and it cannot be set in advance: the shape
+  // it produces depends on the graph as well — how much of it is one hub's spokes,
+  // how long the chains are. So it is aimed rather than assumed. Most of the run
+  // settles the graph, then the shape it reached is measured against the shape it is
+  // for, and the rest of the run is spent under a pull corrected by the difference.
+  // The correction is free — the loop was going to run those steps anyway — and it is
+  // bounded, because a graph that genuinely wants to be a line (a chain of twelve
+  // processes) must not be crushed into a square to fill a frame.
+  const aimed = Math.max(1, Math.round(iterations * 0.6));
+  settle(nodes, links, radii, force, aimed);
+  if (nodes.length > 2) {
+    const box = contentBox(nodes, 0);
+    const has = box.width / Math.max(box.height, 1);
+    const wants = Math.max(width, 1) / Math.max(height, 1);
+    const off = Math.min(Math.max(has / wants, 0.4), 2.5);
+    const correction = Math.sqrt(off);
+    force.pullX *= correction;
+    force.pullY /= correction;
+  }
+  settle(nodes, links, radii, force, iterations - aimed);
   if (!anchored) fitToFrame(nodes, width, height, margin);
   // And once more where the circles are actually drawn. The fit scales positions
   // and leaves radii alone, so whatever the settle guaranteed is only true again
