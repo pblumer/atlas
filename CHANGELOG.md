@@ -14,6 +14,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Every shipped model now carries its own diagram.** Four of them did not:
+  `order-fulfillment`, `galsync`, `entra-create-account` and `pruefe-datensaetze` shipped
+  with no `<bpmndi:BPMNDiagram>`, and Atlas generated one on deploy. That is enough to run
+  a model and not enough to read one — which stopped being a detail the moment the
+  handbook began rendering every example on its card, because a generated layout is what
+  the reader then sees first.
+
+  They are laid out by hand now, to the conventions in `AGENTS.md`: one straight main
+  axis, every branch in a lane of its own, orthogonal waypoints that go around boxes
+  rather than through them, and every gateway exit labelled with its answer — which meant
+  naming six branches in `galsync` and two in `pruefe-datensaetze` that had no name at
+  all, so a reader could not tell which way "deleted?" went. The two subprocesses are
+  drawn expanded, because the branching inside them is the example; collapsed, all that is
+  left is a box that explains nothing.
+
+  Each was checked as a rendered picture and not only as a deploy, which is the only way
+  the two rounds of label collisions in `order-fulfillment` were ever going to surface: a
+  gateway label centred over its own branch line reads fine, the same label lying across a
+  task box does not.
+
 - **Three mechanisms the engine has always had now have an example.** Signal, escalation
   and compensation were demonstrated by no scenario in `examples/` — only as isolated
   patterns in the conformance gallery and the recipe chapter, which show *that* they work

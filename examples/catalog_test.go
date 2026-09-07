@@ -278,9 +278,12 @@ type catalogProcess struct {
 	Name      string `json:"name"`
 	File      string `json:"file"`
 	// Layout is true for a model that ships without BPMN-DI: the page has to ask
-	// POST /api/v1/layout for coordinates before it can render it. Four of the
-	// older models are in that state; a model authored since then carries its own
-	// diagram (AGENTS.md, "Authoring BPMN models").
+	// POST /api/v1/layout for coordinates before it can render it. Every shipped
+	// model now carries its own diagram (AGENTS.md, "Authoring BPMN models"), so
+	// this is false throughout — it stays because the fallback is what keeps a
+	// newly added model renderable on its card before somebody lays it out, and
+	// because a generated layout is runnable rather than readable, which is worth
+	// being able to tell apart.
 	Layout bool   `json:"layout,omitempty"`
 	XML    string `json:"xml"`
 }

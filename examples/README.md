@@ -131,10 +131,13 @@ The model follows the naming and structure guidance from the Camunda
   outgoing flows directly.
 - A single blank start event; explicit, differently-named end states.
 
-> No `<bpmndi:BPMNDiagram>` (visual layout) is checked in, matching the
-> convention of the other sample model in this repo. Atlas **auto-generates**
-> diagram layout on deploy, so `atlas_get_process_xml` (or the bpmn.io viewer at
-> `http://localhost:8080/`) returns a fully rendered diagram anyway.
+> The model ships **hand-authored `<bpmndi:BPMNDiagram>`** (it did not, until the
+> handbook started rendering every example on its card): one straight main axis,
+> the express bypass and the two parallel and three inclusive branches each in a
+> lane of their own, and every gateway exit labelled with its answer. Atlas can
+> auto-generate a layout on deploy, and does for a model without one — but a
+> generated layout is runnable rather than readable, which is not the standard for
+> a model whose whole job is to be read (see `AGENTS.md`, "Authoring BPMN models").
 
 ---
 

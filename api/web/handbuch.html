@@ -2635,11 +2635,15 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <li data-l="en"><b>Turn scripts into real work.</b> Replace <i>Reserve stock</i> with a service task
               carrying your worker type. The token then parks there until the worker answers – and that is exactly
               the difference between a simulation and production.</li>
-            <li data-l="de"><b>Das Modell bringt kein Layout mit</b>: Atlas erzeugt es beim Deploy. Wenn du es
-              weiterverwendest, ordne es einmal im Modeler und speichere es zurück – ein generiertes Layout ist
-              lesbar, aber nicht schön.</li>
-            <li data-l="en"><b>The model ships without a layout</b>: Atlas generates one on deploy. If you build on
-              it, arrange it once in the Modeler and save it back – a generated layout is readable, not pretty.</li>
+            <li data-l="de"><b>Das Diagramm ist Teil des Modells.</b> Bis vor Kurzem brachte dieses Beispiel kein
+              Layout mit und Atlas erzeugte beim Deploy eines – lauffähig, aber nicht lesbar. Jetzt liegen die
+              Koordinaten in der Datei: gerade Hauptachse, jeder Zweig in einer eigenen Lane, jeder Gateway-Ausgang
+              beschriftet. Wenn du das Modell umbaust, halte diese Ordnung – ein Diagramm, das man erklären muss,
+              ist nicht fertig.</li>
+            <li data-l="en"><b>The diagram is part of the model.</b> Until recently this example shipped without a
+              layout and Atlas generated one on deploy – runnable, but not readable. The coordinates are in the file
+              now: one straight main axis, every branch in a lane of its own, every gateway exit labelled. If you
+              rebuild the model, keep that order – a diagram that has to be explained is not finished.</li>
           </ul>
         </details>
       </div>
@@ -4003,10 +4007,14 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <li data-l="en"><b>The cookie is the entire state.</b> Lose it and the next run reads everything – which
               on a large directory is the difference between seconds and hours. Store it deliberately and treat losing
               it as a case, not an accident.</li>
-            <li data-l="de"><b>Das Modell bringt kein Layout mit</b> – Atlas erzeugt es beim Deploy. Ordne es einmal
-              im Modeler, bevor du es jemandem zeigst.</li>
-            <li data-l="en"><b>The model ships without a layout</b> – Atlas generates one on deploy. Arrange it once
-              in the Modeler before showing it to anyone.</li>
+            <li data-l="de"><b>Der Teilprozess ist aufgeklappt gezeichnet</b>, und das ist Absicht: Die
+              Verzweigung darin – gelöscht? vorhanden? – <i>ist</i> das Beispiel. Zugeklappt bliebe ein Kästchen
+              übrig, das nichts erklärt. Die beiden Rückwege zur Änderungsabfrage laufen darum in eigenen Bahnen
+              oberhalb und unterhalb des Ganzen, statt quer durch die Kästen.</li>
+            <li data-l="en"><b>The subprocess is drawn expanded</b>, and deliberately so: the branching inside it –
+              deleted? already there? – <i>is</i> the example. Collapsed, all that is left is a box that explains
+              nothing. Which is why the two loops back to the change query run in lanes of their own above and below
+              the whole diagram, rather than across the boxes.</li>
           </ul>
         </details>
       </div>
