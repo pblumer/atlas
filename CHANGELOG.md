@@ -12,6 +12,44 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **Forms written by the AI Worker.** The form editor has a **✨ Generate** button.
+  Describe what the form should ask for — in your own words, in your own language —
+  and, if you like, point it at the process the form belongs to and the step it is
+  for. What comes back is a form-js schema, open in the editor and **not saved**: you
+  read it, change what you want, and press Save yourself, exactly as with a form you
+  laid out by hand. Generating again over an open form is a refinement rather than a
+  fresh start, so "add a field for the period" adds one instead of replacing the other
+  twelve.
+
+  The half you do not have to type is the process. Naming one lets the generator read
+  the model's own words — the process documentation, each step's documentation, the
+  conditions on its sequence flows, and the variable names its mappings and data
+  objects already use — out of the **draft you are working on** (or the deployed
+  version when there is no draft). So the keys it writes are the names the process
+  already calls those things by, and a form for a step that is five minutes old sees
+  that step. Nothing about a running instance is read: no case data ever goes to a
+  model this way.
+
+  It asks **the AI Worker an operator already configured** for the runtime
+  ([ADR-0255](docs/adr/0255-agent-models-are-console-workers.md)) — one endpoint, one
+  credential in the vault, one place to change the model, and no key in the browser.
+  With several configured you choose which one writes the form; with one there is
+  nothing to choose. Where none is configured the button is simply absent, rather
+  than being a button that only ever fails.
+
+  What a model sends back is checked before you ever see it: the form keeps the id
+  the editor was holding (so a generated form cannot quietly unbind the user task
+  that binds it), every input gets a usable, unique key, the document is bounded, and
+  a component a task form cannot render is refused by name rather than dropped — a
+  form quietly missing the field you asked for would be worse than one that says it
+  could not be written. An answer that is not a form comes back as a sentence in the
+  dialog, with your brief still in it, so you can rephrase or simply try again.
+
+  See [ADR-draft-ai-form-generation](docs/adr/draft-ai-form-generation.md) for why
+  this runs where it does, and why it is authoring rather than a service task.
+
 ### Changed
 
 - **The training nuggets show the real Atlas, not a drawing of it.** The stages

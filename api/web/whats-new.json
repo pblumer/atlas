@@ -2,6 +2,53 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "forms-written-by-the-ai-worker",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Let the AI Worker write the form",
+        "de": "Der KI-Worker schreibt das Formular"
+      },
+      "summary": {
+        "en": "A blank form is the slow part of a form. Fourteen fields, a technical name for each one that has to match what the process calls that piece of data, a label, a hint, a rule about what is required — and you have already written most of that down twice: once in the process documentation, once in the mappings that name its variables. The form editor now has a Generate button. Describe what the form should ask for, in your own words and your own language, and — this is the part worth doing — point it at the process the form belongs to and the step it is for. It then reads the model's own words: what the process is for, what each step says about itself, what its gateways decide on, and the names it already uses for its data. So the fields come back named the way the process names them, and the form for a step you added five minutes ago knows about that step, because it reads the draft you are working on and not only what is deployed. Nothing is saved. What comes back opens in the editor unsaved, under the id the form already had, and you read it, change what you want and press Save yourself — exactly as with a form you laid out by hand. Ask again over an open form and it changes that one instead of starting over, so \"add a field for the period\" adds a field rather than replacing the other twelve. It uses the AI Worker your operator already set up for processes: one address, one key in the vault, one place to change which model answers. Your browser never sees the key, no case data from a running instance is ever sent, and where no AI Worker is configured the button is simply not there. If a model sends back something that is not a form, you get the reason in the dialog with your description still in it, ready to try again.",
+        "de": "Das leere Formular ist der langsame Teil eines Formulars. Vierzehn Felder, für jedes ein technischer Name, der zu dem passen muss, wie der Prozess diese Angabe nennt, dazu Beschriftung, Hinweis und die Frage, was Pflicht ist — und das meiste davon hat man schon zweimal aufgeschrieben: in der Prozessdokumentation und in den Mappings, die die Variablen benennen. Der Formular-Editor hat jetzt einen Generieren-Knopf. Beschreiben Sie in eigenen Worten und in Ihrer Sprache, wonach das Formular fragen soll, und — das lohnt sich — zeigen Sie ihm den Prozess, zu dem es gehört, und den Schritt, für den es ist. Dann liest er die eigenen Worte des Modells: wofür der Prozess da ist, was jeder Schritt über sich sagt, worüber seine Gateways entscheiden und welche Namen er für seine Daten schon verwendet. Die Felder kommen also so benannt zurück, wie der Prozess sie benennt — und das Formular für einen Schritt, den Sie vor fünf Minuten eingefügt haben, kennt diesen Schritt, weil der Entwurf gelesen wird, an dem Sie arbeiten, und nicht nur das, was deployt ist. Gespeichert wird nichts. Das Ergebnis öffnet sich ungespeichert im Editor, unter der ID, die das Formular schon hatte; Sie lesen es, ändern, was Sie wollen, und drücken selbst auf Speichern — genau wie bei einem Formular, das Sie von Hand gebaut haben. Fragen Sie über ein offenes Formular erneut, wird dieses geändert statt neu begonnen: «ein Feld für den Zeitraum ergänzen» ergänzt eines, statt die anderen zwölf zu ersetzen. Verwendet wird der KI-Worker, den Ihr Betrieb ohnehin für Prozesse eingerichtet hat: eine Adresse, ein Schlüssel im Tresor, eine Stelle, an der man das Modell wechselt. Ihr Browser sieht den Schlüssel nie, es werden keine Falldaten aus laufenden Instanzen gesendet, und wo kein KI-Worker eingerichtet ist, gibt es den Knopf schlicht nicht. Schickt ein Modell etwas zurück, das kein Formular ist, steht der Grund im Dialog — mit Ihrer Beschreibung noch darin, bereit für den nächsten Versuch."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Forms",
+        "AI"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Modeler → Forms and create a form, or open one you already have.",
+          "Press ✨ Generate in the bar at the top.",
+          "Write what the form should ask for. One or two sentences is enough.",
+          "Pick the process it belongs to, and the step — leave the step on \"Start form\" if the form starts the process.",
+          "Press Generate, read what comes back on the canvas, change what you want, and Save.",
+          "No button? An administrator adds an AI Worker under Console → Workers first."
+        ],
+        "de": [
+          "Modeler → Formulare öffnen und ein Formular anlegen — oder ein vorhandenes öffnen.",
+          "Oben in der Leiste auf ✨ Generate drücken.",
+          "Aufschreiben, wonach das Formular fragen soll. Ein, zwei Sätze genügen.",
+          "Den zugehörigen Prozess wählen und den Schritt — bei «Start form» belassen, wenn das Formular den Prozess startet.",
+          "Generieren, das Ergebnis auf der Fläche lesen, anpassen, speichern.",
+          "Kein Knopf? Dann legt zuerst eine Administratorin unter Console → Workers einen KI-Worker an."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Forms",
+          "de": "Formulare öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "the-training-nuggets-show-the-real-atlas-not-a-drawing-of-it",
       "version": "Unreleased",
       "date": null,
@@ -327,34 +374,6 @@
           "de": "Panorama öffnen"
         },
         "route": "#/panorama/starmap"
-      }
-    },
-    {
-      "id": "runtime-badges-no-longer-sit-on-the-names-they-are-pointing-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Runtime badges keep off the names",
-        "de": "Laufzeit-Badges bleiben von den Namen weg"
-      },
-      "summary": {
-        "en": "On a running diagram each shape can carry badges: how many tokens are on it, whether it is stuck, a link to a waiting task, a decision to inspect. They used to sit in the corners inside the shape, which is where the name is — on a task with a long name the decision badge covered a whole line of it, and on an event the token count landed on the caption underneath. They now hang just outside the shape, on the side the name is not, and they are the size of a count instead of spelling out a word. Each one kept its corner, so they still read the same way; hover for the wording.",
-        "de": "Auf einem laufenden Diagramm trägt jede Form Badges: wie viele Tokens auf ihr liegen, ob sie klemmt, ein Link zur wartenden Aufgabe, eine Entscheidung zum Nachsehen. Sie saßen bisher in den Ecken *innerhalb* der Form — also dort, wo der Name steht: Bei einer Aufgabe mit langem Namen verdeckte das Entscheidungs-Badge eine ganze Zeile, bei einem Ereignis landete der Token-Zähler auf der Beschriftung darunter. Jetzt hängen sie knapp außerhalb der Form, auf der Seite, auf der der Name nicht steht, und sie sind so groß wie eine Zahl statt so breit wie ein Wort. Die Ecke jedes Badges ist geblieben, sie lesen sich also unverändert; den Wortlaut zeigt der Tooltip."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]

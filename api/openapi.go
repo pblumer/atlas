@@ -454,6 +454,26 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/forms/{id}", s.handleDeleteForm, apiOp{
 			summary: "Delete a form definition", tag: "Forms", role: RoleModeler, resp: jsonBody("Deleted id", tObject())}},
 
+		// Writing a form from a description, and from the process it belongs to
+		// (ADR-draft-ai-form-generation). Design-time authoring: it asks the agent
+		// Worker an operator already configured (ADR-0255) and stores nothing — what
+		// comes back is a proposal the author reads in the editor and saves through
+		// the ordinary save path above, or does not.
+		// The capability probe sits a segment deeper than the generation itself, so
+		// that neither route can shadow GET /api/v1/forms/{id}: a form whose author
+		// named it "generate" is unlikely and would otherwise be unreadable.
+		{"GET", "/api/v1/forms/generate/workers", s.formGen.HandleCapability, apiOp{
+			summary: "Report whether an AI Worker is configured to generate forms, and which ones may be named — what the editor asks before it offers the affordance at all",
+			tag:     "Forms", role: RoleModeler, resp: jsonBody("Generation capability", tObject())}},
+		{"POST", "/api/v1/forms/generate", s.formGen.HandleGenerate, apiOp{
+			summary: "Generate a form-js schema from a description and, when a process is named, from that process's own documentation, steps and variable names. Nothing is stored: the schema is returned for the author to review and save",
+			tag:     "Forms", role: RoleModeler,
+			req: jsonBody("Generation request", schemaObj(map[string]any{
+				"description": tString(), "worker": tString(), "model": tString(),
+				"processId": tString(), "elementId": tString(), "formId": tString(), "schema": tObject(),
+			})),
+			resp: jsonBody("Generated form", tObject())}},
+
 		// Panorama architecture models (ADR-0189) are application-owned Open Group
 		// ArchiMate Model Exchange documents. Metadata and XML travel separately so a
 		// listing never hauls every landscape document through the browser.

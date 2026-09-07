@@ -356,3 +356,20 @@ func TestChatCompletionsFramesAOneShotAsAQuestion(t *testing.T) {
 		t.Errorf("user turn = %q, want the author's question verbatim", got.Messages[1].Content)
 	}
 }
+
+// Which prompt to send is shared code; putting it in the system *turn* is this format's
+// own, so a caller's own prompt has to be shown reaching it here too
+// (ADR-draft-ai-form-generation).
+func TestChatCompletionsCarriesAStatedSystemPrompt(t *testing.T) {
+	srv, seen, _ := chatEndpoint(t, http.StatusOK,
+		`{"choices":[{"finish_reason":"stop","message":{"content":"{}"}}]}`)
+	m := &agent.ChatCompletionsModel{Endpoint: srv.URL, APIKey: "k", Model: "gpt-4o", Client: srv.Client()}
+
+	const own = "You design forms. Answer with one JSON document and nothing else."
+	if _, err := m.Decide(context.Background(), agent.Request{Goal: "Ein Urlaubsantrag", System: own, Round: 1}); err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if got := (*seen)[0].Messages[0]; got.Role != "system" || got.Content != own {
+		t.Errorf("system turn = %+v, want the caller's own prompt verbatim", got)
+	}
+}

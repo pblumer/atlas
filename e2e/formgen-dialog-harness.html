@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas form generation e2e harness</title>
+    <!-- Drives the real api/web/formgen-dialog.js against a stubbed API, because the
+         thing under test is the dialog and not the model: which fields it asks for,
+         what it puts in the request body, that a failure is shown where the brief that
+         caused it is still on screen, and that nothing is resolved until a generation
+         actually succeeded. The page scaffolding is the test's own — app.js boots the
+         whole console on import and cannot be loaded here. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="card" style="padding: 18px; max-width: 720px">
+      <button class="btn" id="open">Generate (one Worker)</button>
+      <button class="btn" id="open-many">Generate (two Workers)</button>
+      <button class="btn" id="open-fails">Generate (the model refuses)</button>
+      <pre id="result">—</pre>
+      <pre id="sent">—</pre>
+    </div>
+    <script type="module">
+      import { openFormGenerator, generationWorkers } from "/formgen-dialog.js";
+
+      const DRAFTS = [
+        { processId: "urlaubsantrag", name: "Urlaubsantrag" },
+        { processId: "onboarding", name: "Onboarding" },
+      ];
+      const PROCESSES = [
+        { key: 12, processId: "reisekosten", name: "Reisekosten" },
+        // Also a draft: the picker must list it once, not twice.
+        { key: 13, processId: "urlaubsantrag", name: "Urlaubsantrag" },
+      ];
+      const DRAFT_XML = `<?xml version="1.0"?>
+        <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">
+          <bpmn:process id="urlaubsantrag" name="Urlaubsantrag">
+            <bpmn:startEvent id="Start_1" name="Antrag gestellt" />
+            <bpmn:userTask id="Task_Pruefen" name="Antrag prüfen" />
+            <bpmn:userTask id="Task_Melden" name="Abwesenheit melden" />
+          </bpmn:process>
+        </bpmn:definitions>`;
+
+      const sent = document.getElementById("sent");
+      const result = document.getElementById("result");
+      const show = (r) => { result.textContent = r ? JSON.stringify(r) : "cancelled"; };
+
+      // fakeApi answers the four calls the dialog makes. `mode` decides what the
+      // generation itself does, which is the only part that varies between buttons.
+      function fakeApi(mode) {
+        return async (method, path, body) => {
+          if (method === "GET" && path === "/api/v1/forms/generate/workers") {
+            return { available: true, workers: [{ name: "haus", model: "claude-opus-5" }] };
+          }
+          if (method === "GET" && path === "/api/v1/drafts") return DRAFTS;
+          if (method === "GET" && path === "/api/v1/processes") return PROCESSES;
+          if (method === "GET" && path.endsWith("/xml")) return DRAFT_XML;
+          if (method === "POST" && path === "/api/v1/forms/generate") {
+            sent.textContent = JSON.stringify(body);
+            // A little latency, so the "Generating…" state is a real state and not a
+            // frame nobody could observe.
+            await new Promise((r) => setTimeout(r, 60));
+            if (mode === "fails") {
+              const err = new Error("the model did not answer with a form: there is no JSON object in what it wrote");
+              err.status = 422;
+              throw err;
+            }
+            return {
+              schema: { type: "default", id: body.formId, components: [{ type: "textfield", key: "grund", label: "Grund" }] },
+              worker: body.worker || "haus",
+              model: "claude-opus-5",
+            };
+          }
+          throw new Error("unexpected call: " + method + " " + path);
+        };
+      }
+
+      const OPEN = {
+        open: { workers: [{ name: "haus", model: "claude-opus-5" }], mode: "ok" },
+        "open-many": {
+          workers: [{ name: "haus", model: "claude-opus-5" }, { name: "lokal", model: "qwen3" }],
+          mode: "ok",
+        },
+        "open-fails": { workers: [{ name: "haus", model: "claude-opus-5" }], mode: "fails" },
+      };
+      for (const [id, cfg] of Object.entries(OPEN)) {
+        document.getElementById(id).addEventListener("click", async () => {
+          sent.textContent = "—";
+          show(await openFormGenerator({
+            api: fakeApi(cfg.mode),
+            workers: cfg.workers,
+            formId: "urlaub-pruefen",
+            schema: { type: "default", components: [{ type: "textfield", key: "alt", label: "Alt" }] },
+          }));
+        });
+      }
+
+      // The capability probe decides whether the button exists at all, so it is
+      // exercised here too — including the case a server too old to know the route
+      // answers with.
+      window.__workers = await generationWorkers(fakeApi("ok"));
+      window.__noWorkers = await generationWorkers(async () => { throw new Error("404"); });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

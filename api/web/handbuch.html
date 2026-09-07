@@ -2153,6 +2153,35 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         the instance is created) or at a <b>user task</b> (in the Tasks inbox). The Modeler has a form editor;
         submitted fields become process variables.</p>
 
+      <h4 data-l="de">Ein Formular schreiben lassen</h4><h4 data-l="en">Letting the AI Worker write one</h4>
+      <p data-l="de">Ist ein <b>KI-Worker</b> eingerichtet (Console &rsaquo; Workers, Typ <code>agent</code>), hat der
+        Formular-Editor oben einen Knopf <b>✨ Generate</b>. Man beschreibt in eigenen Worten, wonach das Formular
+        fragen soll, und zeigt ihm — das ist der lohnende Teil — den <b>Prozess</b>, zu dem es gehört, und den
+        <b>Schritt</b>, für den es ist. Gelesen werden dann die eigenen Worte des Modells: die Prozessdokumentation,
+        die <code>&lt;bpmn:documentation&gt;</code> jedes Schritts, die Bedingungen an den Sequenzflüssen und die
+        Variablennamen aus Mappings und Datenobjekten — aus dem <b>Entwurf</b>, an dem du gerade arbeitest, sonst aus
+        der deployten Version. Deshalb heissen die Felder hinterher so, wie der Prozess sie ohnehin nennt. Wer bei
+        offenem Formular erneut generiert, <i>ändert</i> es, statt neu zu beginnen.</p>
+      <p data-l="en">With an <b>AI Worker</b> configured (Console &rsaquo; Workers, kind <code>agent</code>), the form
+        editor's bar carries a <b>✨ Generate</b> button. Describe in your own words what the form should ask for and
+        — this is the part worth doing — point it at the <b>process</b> the form belongs to and the <b>step</b> it is
+        for. It then reads the model's own words: the process documentation, each step's
+        <code>&lt;bpmn:documentation&gt;</code>, the conditions on its sequence flows, and the variable names its
+        mappings and data objects use — out of the <b>draft</b> you are working on, or the deployed version when
+        there is none. So the fields come back named the way the process already names them. Generating again over an
+        open form <i>changes</i> it rather than starting over.</p>
+      <p data-l="de"><b>Nichts wird gespeichert.</b> Das Ergebnis liegt ungespeichert im Editor, unter der ID, die das
+        Formular schon hatte — du liest es, änderst es und speicherst selbst, wie bei einem von Hand gebauten
+        Formular. Gefragt wird derselbe KI-Worker, der auch im laufenden Prozess antwortet: eine Adresse, ein
+        Schlüssel im Tresor, eine Stelle für den Modellwechsel. Der Browser sieht den Schlüssel nie, und
+        <b>keine Falldaten aus laufenden Instanzen</b> gehen dabei an ein Modell — gelesen wird das Modell des
+        Prozesses, nicht sein Betrieb.</p>
+      <p data-l="en"><b>Nothing is saved.</b> The result sits unsaved in the editor under the id the form already had:
+        you read it, change it and save it yourself, as with a form you laid out by hand. The Worker asked is the same
+        one that answers inside a running process — one address, one key in the vault, one place to change the model.
+        The browser never sees the key, and <b>no case data from running instances</b> goes to a model this way: what
+        is read is the process's model, not its operation.</p>
+
       <h3 data-l="de">Worker – Atlas mit der Aussenwelt verbinden</h3><h3 data-l="en">Workers – wiring Atlas to the outside</h3>
       <p data-l="de">Ein <b>Service-Task</b> erledigt die Arbeit nicht selbst. Er erzeugt ein <b>Job</b>-Arbeitspaket,
         Atlas schreibt es dauerhaft weg – und erst danach darf ein <b>Worker</b> es holen und das Fremdsystem
