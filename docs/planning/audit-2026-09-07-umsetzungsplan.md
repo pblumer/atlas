@@ -336,6 +336,26 @@ kopiert — sonst den Start mit einer klaren Wiederherstellungsanweisung
 verweigern. Aus einem fehlenden Präfix nie einen erfolgreichen Genesis-Replay
 ableiten. ADR-0131 verlangt das bereits; hier wird der Vertrag eingelöst.
 
+> **Zu F05, nach der Umsetzung.** Zwei Dinge fand nicht der Entwurf, sondern
+> der Vollständigkeitstest — in beide Richtungen:
+>
+> *Nicht alles entsteht beim Boot.* `checkpoints`, `dmn-models` und `exporter`
+> gibt es erst, wenn das Feature dahinter benutzt wird. Das ist jetzt als
+> `onDemand` ausgewiesen, statt den Test aufzuweichen.
+>
+> *Nicht alles wird gleich gesichert.* Der Checkpoint-Ordner wandert
+> **absichtlich** nicht als ganzer Baum ins Archiv, sondern nur der neueste
+> verifizierte. Ihn in den generischen Walk zu nehmen brach zwei bestehende
+> Tests — zu Recht. Das ist jetzt als `ownMechanism` modelliert: klassifiziert,
+> gesichert, nicht durchlaufen.
+>
+> *Bewusst nicht mitgemacht:* der **portable** Design-Time-Export bleibt
+> unverändert bei denselben dreizehn Verzeichnissen. `process-docs`,
+> `information-models` und `playground-scenarios` gehören dort vermutlich hin,
+> aber den Export als Nebenwirkung einer Snapshot-Korrektur zu verbreitern wäre
+> eine Änderung, die niemand verlangt hat. Die Registry macht daraus eine
+> sichtbare Frage statt einer unsichtbaren Auslassung.
+
 **F05 — Store-Registry.** Der systemische Teil und das wertvollste Stück des
 ganzen Plans. Eine zentrale Registry, in der sich jeder persistente Store mit
 Verzeichnis, **Backupklasse** (Design-Time / Credential / Secret / Runtime /

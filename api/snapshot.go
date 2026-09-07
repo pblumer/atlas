@@ -48,25 +48,16 @@ import (
 // below. Exactly one checkpoint rides along — the archive should not carry every kept
 // snapshot of the same store.
 
-// fullBackupDirs is the whole-instance snapshot's directory set: the WAL first (so
-// the design-time and secret dirs captured after it are a superset of whatever the
-// WAL cut references — a deployment's sidecar is written before the WAL record that
-// starts an instance on it), then the design-time allowlist, then the credential
-// dirs — user accounts and peer deploy tokens (ADR-0129).
+// What a whole-instance snapshot carries is derived from the store registry
+// (storeregistry.go): everything that cannot be rebuilt from the rest. That is the
+// difference from the design-time backup, which carries only what an author would
+// move between installations.
 //
-// Deploy tokens ride in the snapshot but deliberately *not* in the design-time
-// backup (ADR-0107): a backup is a portable file meant to carry your models, and a
-// peer's credential is not part of your models. A snapshot, by contrast, exists to
-// reconstitute this exact engine elsewhere, which includes who may publish to it.
-var fullBackupDirs = func() []string {
-	dirs := []string{"wal"}
-	dirs = append(dirs, backupDirs...)
-	return append(dirs, "users", "deploy-tokens")
-}()
-
-// fullBackupFiles are the top-level files (not directories) in the snapshot. The
-// vault key is a single file at the data-dir root.
-var fullBackupFiles = []string{"vault.key"}
+// The distinction it now enforces used to be the bug. Deploy tokens rode in the
+// snapshot but not in the design-time backup, for a good reason (ADR-0107/0129);
+// the vault *key* rode in it while the encrypted secrets it opens did not, for no
+// reason at all — nobody had decided, because nothing made them
+// (ADR-draft-store-registry).
 
 // newestVerifiedCheckpoint returns the archive-relative directory of the newest
 // checkpoint under dataDir that passes full verification — manifest *and* state files —
@@ -141,12 +132,12 @@ func writeFullBackup(tw *tar.Writer, fsys fs.FS, checkpointDir string) error {
 			return err
 		}
 	}
-	for _, name := range fullBackupDirs {
+	for _, name := range fullBackupDirs() {
 		if err := walkDirInto(tw, fsys, name); err != nil {
 			return err
 		}
 	}
-	for _, name := range fullBackupFiles {
+	for _, name := range fullBackupFiles() {
 		if err := writeFileInto(tw, fsys, name); err != nil {
 			return err
 		}
@@ -311,12 +302,12 @@ func allowedFullEntry(top string) bool {
 	if top == checkpoint.DirBase {
 		return true // the recovery checkpoint that covers a compacted prefix (ADR-0131)
 	}
-	for _, d := range fullBackupDirs {
+	for _, d := range fullBackupDirs() {
 		if d == top {
 			return true
 		}
 	}
-	for _, f := range fullBackupFiles {
+	for _, f := range fullBackupFiles() {
 		if f == top {
 			return true
 		}
