@@ -1927,7 +1927,7 @@ function owningProcessId(bo) {
 }
 
 // newFormHref is the "Create a new form" link, carrying where it was pressed from
-// (ADR-draft-ai-form-generation). Pressing it on a step is the author saying what the
+// (ADR-0260). Pressing it on a step is the author saying what the
 // form is for, and the form editor's generator opens on exactly that: the process and
 // the step for a user task, the process alone for a start event — which is the
 // start-form case, where the form is for starting the process rather than for a step

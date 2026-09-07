@@ -58,7 +58,7 @@ type Request struct {
 	//
 	// It exists because both of those prompts open by saying the model is one step
 	// inside a running business process, and that is not true of every caller any
-	// more. Design-time form generation (ADR-draft-ai-form-generation) asks this same
+	// more. Design-time form generation (ADR-0260) asks this same
 	// [Model], through this same adapter, from an authoring screen where there is no
 	// instance, no token and no variable to answer into — and a model told it is
 	// inside a process it is not inside answers as if it were. Overriding the sentence

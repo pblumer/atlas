@@ -585,7 +585,7 @@ Making processes wait, react, and time out.
   dependency. Authored in the Modeler (the mode switch, the Worker and result collection, and a
   parameter editor per tool), and an undocumented tool is warned about at deploy and where it is
   written.
-- ✅ **Forms written by the AI Worker** ([ADR-draft-ai-form-generation](docs/adr/draft-ai-form-generation.md)):
+- ✅ **Forms written by the AI Worker** ([ADR-0260](docs/adr/0260-ai-form-generation.md)):
   the same Worker an operator configured for the runtime also writes forms at **design time**.
   **"Create a new form" on a user task or a start event carries that step into the editor**, which
   opens with the generator already on it — pressing that link was the author saying what the form is
@@ -1511,7 +1511,7 @@ dataset of up to 50 000 cases":
   models into a reviewable draft — no LLM or provider SDK in the binary, every
   result passes the compiler + Problems gate before deploy.
 - ✅ The **seam** this needs is delivered, for forms first
-  ([ADR-draft-ai-form-generation](docs/adr/draft-ai-form-generation.md)): a design-time
+  ([ADR-0260](docs/adr/0260-ai-form-generation.md)): a design-time
   authoring call to the agent Worker an operator already configured (ADR-0255), whose
   result is an unsaved draft. The copilot is the same shape with a diagram where the
   form is — and ADR-0032's "a user-configured agent endpoint" is now answered by the

@@ -1,5 +1,5 @@
 // The "Create a new form" links in the Modeler's Implement panel carry where they were
-// pressed from (api/web/editor.js, ADR-draft-ai-form-generation).
+// pressed from (api/web/editor.js, ADR-0260).
 //
 // Pressing one on a user task is the author saying what the form is for, and until the
 // link carried that, the form editor could not know: it opened blank, the author laid

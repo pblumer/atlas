@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/connector/agent"
 )
 
-// What the form generator is allowed to reach (ADR-draft-ai-form-generation).
+// What the form generator is allowed to reach (ADR-0260).
 //
 // The generation service itself holds no state and no store — see its package comment.
 // These three closures are the whole of its access to this server, and each of them is

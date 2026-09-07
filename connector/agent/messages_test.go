@@ -320,7 +320,7 @@ func TestARoundPutsWhatTheProcessKnowsToTheModel(t *testing.T) {
 // A caller that is not a running process says so itself. Both standing system prompts
 // open by telling the model it is "one step inside a running business process", which is
 // true of every caller this package had until design-time form generation
-// (ADR-draft-ai-form-generation) — and a model told it is inside a process it is not
+// (ADR-0260) — and a model told it is inside a process it is not
 // inside answers as if it were, asking for the case it is working on. Request.System
 // replaces that sentence and nothing else about the call.
 func TestAStatedSystemPromptReplacesTheStandingOne(t *testing.T) {

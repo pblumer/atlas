@@ -2975,7 +2975,7 @@ tr[hidden] { display: none; }
    it reads as part of the form. The canvas already carries one for the page. */
 .startform-host .fjs-powered-by { display: none; }
 
-/* "Generate this form" (ADR-draft-ai-form-generation). A brief, the process it belongs
+/* "Generate this form" (ADR-0260). A brief, the process it belongs
    to, and one button. Wider than a confirm dialog because the brief is prose: a
    three-line box invites three words, and three words is not a brief. */
 .fg-modal { width: min(560px, 100%); }

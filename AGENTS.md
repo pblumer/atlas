@@ -96,7 +96,7 @@ api/        HTTP API, web UI, command submission and queries
               BPMN data object's itemSubjectRef a type to resolve against
               (ADR-0230)
   formgen/    Writing a form from a description and from the process it belongs to
-              (ADR-draft-ai-form-generation) — design-time authoring against the agent
+              (ADR-0260) — design-time authoring against the agent
               Worker an operator configured; it owns no state, so it holds no run loop
 mcp/        MCP server over the HTTP API (ADR-0016)
 metrics/    Prometheus metrics (ADR-0142)

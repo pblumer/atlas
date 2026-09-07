@@ -1,4 +1,4 @@
-# ADR-DRAFT: A form is generated at design time, by the Worker an operator already configured
+# ADR-0260: A form is generated at design time, by the Worker an operator already configured
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

@@ -247,7 +247,7 @@ type Server struct {
 	// loop it was given (ADR-0143/0147).
 	processDocs *processdoc.Service
 	// formGen writes a form from a description and from the process it belongs to
-	// (ADR-draft-ai-form-generation). It is the one area service that holds no run
+	// (ADR-0260). It is the one area service that holds no run
 	// loop, because it owns no state: it stores nothing, and the three closures in
 	// formgeneration.go are its whole reach into this server.
 	formGen *formgen.Service

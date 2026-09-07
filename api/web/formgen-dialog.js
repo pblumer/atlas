@@ -1,5 +1,5 @@
 // "Write this form for me" — the dialog behind the form editor's Generate button
-// (ADR-draft-ai-form-generation).
+// (ADR-0260).
 //
 // The blank form is the expensive part of a form. Somebody who knows exactly what the
 // process needs still has to place fourteen components, key each one, and remember which

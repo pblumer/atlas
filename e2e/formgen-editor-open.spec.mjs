@@ -1,5 +1,5 @@
 // Arriving in the form editor from a step in the Modeler
-// (api/web/form-editor.js, ADR-draft-ai-form-generation).
+// (api/web/form-editor.js, ADR-0260).
 //
 // Pressing "Create a new form" on a user task is the author saying what the form is
 // for. What used to happen next was a blank canvas and no memory of that: the editor

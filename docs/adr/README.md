@@ -313,6 +313,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0257](0257-what-an-agent-may-read.md) | What an agent may read is authored, the way its reach already is | Proposed |
 | [0258](0258-discord-worker.md) | Discord as a Worker Type — a process speaks in the channel the team already reads | Proposed |
 | [0259](0259-data-object-lifecycle.md) | The data object lifecycle — what the BPMN data state resolves against | Proposed |
+| [0260](0260-ai-form-generation.md) | A form is generated at design time, by the Worker an operator already configured | Proposed |
 
 ## Status values
 

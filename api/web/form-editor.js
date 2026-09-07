@@ -81,7 +81,7 @@ export function cleanup() {
 // generateFor is {processId, elementId} when the editor was reached by pressing
 // "Create a new form" on a step in the Modeler. It says what the form is for, so the
 // generator opens on it straight away instead of asking the author to say again what
-// their click already said (ADR-draft-ai-form-generation).
+// their click already said (ADR-0260).
 export async function mountFormEditor(root, { api, toast, formId, projectId, generateFor }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
@@ -595,7 +595,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
 
   // ---- Generate ------------------------------------------------------------
   // Writing the form from a description and from the process it belongs to
-  // (ADR-draft-ai-form-generation). The button appears only where an operator has
+  // (ADR-0260). The button appears only where an operator has
   // configured an AI Worker: an affordance whose only possible outcome is "not
   // configured" teaches an author that the feature does not work.
   //

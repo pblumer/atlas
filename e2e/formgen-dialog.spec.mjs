@@ -1,5 +1,5 @@
 // End-to-end coverage for "Generate this form" (api/web/formgen-dialog.js,
-// ADR-draft-ai-form-generation).
+// ADR-0260).
 //
 // The dialog is where the two halves of the feature meet: what the author types, and
 // what the process already says about itself. The server's half is tested in

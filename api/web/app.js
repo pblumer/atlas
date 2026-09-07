@@ -8077,7 +8077,7 @@ async function viewEditorDraft(id) {
 // generateFor, when given, is the {processId, elementId} the "Create a new form" link
 // on a step carried here: the editor opens its generator on that step rather than
 // asking the author to say again what pressing that link already said
-// (ADR-draft-ai-form-generation).
+// (ADR-0260).
 async function viewFormEditor(formId, projectId, generateFor) {
   const gen = navGen;
   const mod = await import("./form-editor.js");

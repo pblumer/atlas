@@ -56,7 +56,7 @@ _Changed_ / _Removed_ for each version.
   could not be written. An answer that is not a form comes back as a sentence in the
   dialog, with your brief still in it, so you can rephrase or simply try again.
 
-  See [ADR-draft-ai-form-generation](docs/adr/draft-ai-form-generation.md) for why
+  See [ADR-0260](docs/adr/0260-ai-form-generation.md) for why
   this runs where it does, and why it is authoring rather than a service task.
 - **The training nuggets play full screen, for showing one to a room.** A nugget sat in
   the flow of the handbook at reading size, which is right for reading and wrong for the

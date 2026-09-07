@@ -359,7 +359,7 @@ func TestChatCompletionsFramesAOneShotAsAQuestion(t *testing.T) {
 
 // Which prompt to send is shared code; putting it in the system *turn* is this format's
 // own, so a caller's own prompt has to be shown reaching it here too
-// (ADR-draft-ai-form-generation).
+// (ADR-0260).
 func TestChatCompletionsCarriesAStatedSystemPrompt(t *testing.T) {
 	srv, seen, _ := chatEndpoint(t, http.StatusOK,
 		`{"choices":[{"finish_reason":"stop","message":{"content":"{}"}}]}`)

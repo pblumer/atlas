@@ -12,7 +12,7 @@ import (
 	"github.com/pblumer/atlas/connector/agent"
 )
 
-// Server wiring for form generation (ADR-draft-ai-form-generation). The area's own
+// Server wiring for form generation (ADR-0260). The area's own
 // behaviour — the prompt, the outline, the gate on what came back, every status — is
 // tested against the service directly in api/formgen, which is what carving it out buys
 // (ADR-0147). What a service test cannot show is that the three closures this server

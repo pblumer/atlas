@@ -152,7 +152,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/workers/{id}/jobs":    "operator diagnostics about a worker process, not an agent action",
 	"GET /api/v1/workers/{id}/history": "the same diagnostics, read from the operator's own clio; an agent with access to that clio queries it there",
 
-	// Generating a form from a description (ADR-draft-ai-form-generation). This is
+	// Generating a form from a description (ADR-0260). This is
 	// the one route that is deliberately *not* for an agent, and the reason is that
 	// an agent is already on the other side of it: the caller here is a language
 	// model, and asking Atlas to ask its own configured model to write a form-js

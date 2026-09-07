@@ -1,5 +1,5 @@
 // Package formgen generates a form from a description and from the process it belongs
-// to (ADR-draft-ai-form-generation).
+// to (ADR-0260).
 //
 // It is design-time authoring and nothing else. There is no instance, no token, no job
 // and no event: an author describes the form they want — in prose, or by naming the

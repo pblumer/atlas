@@ -455,7 +455,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Delete a form definition", tag: "Forms", role: RoleModeler, resp: jsonBody("Deleted id", tObject())}},
 
 		// Writing a form from a description, and from the process it belongs to
-		// (ADR-draft-ai-form-generation). Design-time authoring: it asks the agent
+		// (ADR-0260). Design-time authoring: it asks the agent
 		// Worker an operator already configured (ADR-0255) and stores nothing — what
 		// comes back is a proposal the author reads in the editor and saves through
 		// the ordinary save path above, or does not.
