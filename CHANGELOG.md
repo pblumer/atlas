@@ -12,6 +12,38 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The nugget screenshots are output now, not artifacts somebody once made.** Their
+  pictures are captures of the running product, which buys recognition and costs
+  staleness: a shot of a UI that has since moved still renders, and a ring drawn on a
+  button that moved still looks deliberate. Nothing throws, and the reader is the one who
+  finds out.
+
+  `make nuggets` re-takes the set. It builds the current tree, runs it on a throwaway data
+  directory with auth off, seeds it with this repo's own `order-to-cash` example — five
+  instances with baskets on both sides of the gateway, plus a built-in process whose user
+  task carries a real form — takes every shot, writes them as WebP, rewrites the
+  `#nug-data` block, then stops the server and deletes the data. Chromium encodes the
+  WebP, so the script adds no image dependency.
+
+  **Coordinates are never typed.** `scripts/nuggets/scenes.mjs` is the source and it names
+  targets rather than places: a scene says *highlight the Deploy button*, and the capture
+  reads that button's bounding box out of the live page. A button that moves is
+  re-measured; a target that disappears fails the capture loudly instead of leaving a ring
+  on empty space. This was not theoretical — between two runs the `order-to-cash` row moved
+  from a quarter down the process list to three quarters down, because the list sorts by
+  last activity, and the highlight followed it both times without anybody touching a number.
+
+  `e2e/nuggets.spec.mjs` holds the source and the generated block together: same nuggets in
+  the same order, same scenes, same captions, a measured rectangle wherever the source asks
+  for one and none where it does not. Written by confirming it fails against a changed
+  `scenes.mjs` that was never re-captured, a rectangle hand-edited into the block, and a
+  scene naming an image no shot produces.
+
+  What no test can catch, and the README says so plainly: a caption that no longer
+  describes its picture. That failure has already happened once in this chapter. Read them.
+
 ### Changed
 
 - **The training nuggets show the real Atlas, not a drawing of it.** The stages

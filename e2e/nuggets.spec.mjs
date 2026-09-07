@@ -151,3 +151,45 @@ test("the chapter and its nuggets read in both languages", async ({ page }) => {
     await expect(rh.locator(`.nug-cap [data-l="${lang}"]`).first()).toBeVisible();
   }
 });
+
+// The #nug-data block is generated from scripts/nuggets/scenes.mjs by
+// scripts/nuggets/capture.mjs, which also takes the screenshots — the two are
+// one artifact in two files. Editing the block by hand, or changing scenes.mjs
+// without re-running the capture, splits them: the page then plays scenes the
+// source no longer describes, and the next capture silently reverts whatever
+// was hand-edited. This holds everything the source owns; the coordinates it
+// does not, because those are measured from the live UI at capture time.
+test("the generated data block still matches scripts/nuggets/scenes.mjs", async () => {
+  const src = await import("../scripts/nuggets/scenes.mjs");
+  const built = catalogue().nuggets;
+
+  expect(built.map((n) => n.id)).toEqual(src.NUGGETS.map((n) => n.id));
+  const shots = new Set(src.SHOTS.map((s) => s.id));
+
+  for (const [i, want] of src.NUGGETS.entries()) {
+    const got = built[i];
+    expect(got.title, want.id).toEqual(want.title);
+    expect(got.lead, want.id).toEqual(want.lead);
+    expect(got.scenes.length, `${want.id}: scene count`).toBe(want.scenes.length);
+
+    for (const [k, ws] of want.scenes.entries()) {
+      const gs = got.scenes[k];
+      const where = `${want.id}#${k}`;
+      expect(gs.t, where).toBe(ws.t);
+      expect(gs.img, where).toBe(ws.img);
+      expect(gs.cap, where).toEqual(ws.cap);
+      expect(shots.has(ws.img), `${where}: ${ws.img} is in no SHOT`).toBe(true);
+      // A focus in the source has to have produced a measured rectangle, and a
+      // scene with no focus must not have gained one.
+      if (ws.focus) {
+        expect(gs.focus, `${where}: focus "${ws.focus}" was never measured`).toBeTruthy();
+        const shot = src.SHOTS.find((s) => s.id === ws.img);
+        expect(Object.keys(shot.targets || {}), `${where}: ${ws.img} declares no target "${ws.focus}"`)
+          .toContain(ws.focus);
+      } else {
+        expect(gs.focus, `${where} has a highlight the source does not ask for`).toBeUndefined();
+      }
+      expect(!!gs.tap, where).toBe(!!ws.tap);
+    }
+  }
+});
