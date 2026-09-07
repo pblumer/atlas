@@ -35,4 +35,4 @@ Do not edit uml-canvas.js by hand. To rebuild:
     api/web/vendor/uml/diagram-js.css
 
 SHA-256 uml-canvas.js:
-e3b7fb90fc57cccf2bfa48b6d6d58a09a9289f92697dff9c0c4ff3bf0cb9f7a7
+e232236733d88bcbabb05b7bb38a575984bbcbdedf976dca5f4fbb5f3dacc5f7

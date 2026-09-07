@@ -1,0 +1,23 @@
+{
+  "tags": ["Data", "UML"],
+  "summary": {
+    "en": "Tidying a class diagram meant dragging one box at a time. There is now a control beside zoom and undo that lets you draw a box around several classes and move them together — holding Shift while you drag does the same without it, and Escape puts the drag back to moving the sheet. The panel lists what you are holding, and each line takes you back to editing that one on its own.",
+    "de": "Ein Klassendiagramm aufzuräumen hiess bisher: eine Box nach der anderen ziehen. Neben Zoom und Rückgängig gibt es jetzt eine Schaltfläche, mit der sich ein Rahmen um mehrere Klassen ziehen lässt — sie bewegen sich dann gemeinsam. Mit gedrückter Umschalttaste geht es auch ohne die Schaltfläche, Escape gibt die Geste wieder ans Verschieben der Fläche zurück. Das Panel zeigt, was gerade ausgewählt ist, und über jede Zeile kommt man zurück zum Bearbeiten des einzelnen Elements."
+  },
+  "tutorial": {
+    "en": [
+      "Open Data › Information model and pick a model with several classes on it.",
+      "Click the ⬚ control at the top right of the canvas — it lights up while the next drag draws a box.",
+      "Press on empty sheet and drag a box around the classes you want; everything fully inside it is taken hold of.",
+      "Drag any one of them by its header and they all move together. Undo puts them all back.",
+      "To edit one of them on its own, click its line in the panel on the right."
+    ],
+    "de": [
+      "Unter Daten › Informationsmodell ein Modell mit mehreren Klassen öffnen.",
+      "Oben rechts auf der Zeichenfläche die Schaltfläche ⬚ anklicken — sie leuchtet, solange die nächste Ziehbewegung einen Rahmen zieht.",
+      "Auf freier Fläche drücken und einen Rahmen um die gewünschten Klassen ziehen; alles, was vollständig darin liegt, wird ausgewählt.",
+      "Eine beliebige davon an ihrem Kopf ziehen — alle bewegen sich mit. Rückgängig setzt alle zurück.",
+      "Um eine einzelne zu bearbeiten, im Panel rechts auf ihre Zeile klicken."
+    ]
+  }
+}

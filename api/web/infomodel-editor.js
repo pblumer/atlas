@@ -69,7 +69,11 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   const state = {
     model: doc,
     validation: doc.validation || { valid: true, findings: [] },
-    selected: null,      // {kind: "class"|"association", id}
+    selected: null,      // {kind: "class"|"association", id} — the one the panel edits
+    // What the canvas has hold of, when that is more than one thing. A marquee
+    // selects several at once; the panel still edits one of them, so the two are
+    // separate fields rather than one that has to mean both.
+    multi: [],
     connecting: null,    // {kind, fromId} while a relationship is being drawn
     dirty: false,
     schemaFor: "",       // class whose JSON Schema projection is open
@@ -112,10 +116,16 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             <button type="button" class="icon-btn" data-tool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
             <button type="button" class="icon-btn" data-tool="fit" title="Fit the whole diagram in the window" aria-label="Fit diagram">⊡</button>
             <span class="im-tool-sep" aria-hidden="true"></span>
+            <button type="button" class="icon-btn" data-tool="marquee" aria-pressed="false"
+              title="Select several at once: draw a box around them. Shift and drag does the same without this button, and Escape puts the drag back to panning."
+              aria-label="Select several">⬚</button>
+            <span class="im-tool-sep" aria-hidden="true"></span>
             <button type="button" class="icon-btn" data-tool="undo" title="Undo the last move on the canvas (Ctrl/⌘ + Z)" aria-label="Undo" disabled>↺</button>
             <button type="button" class="icon-btn" data-tool="redo" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled>↻</button>
           </div>
         </div>
+        <div class="props-resizer im-resizer" id="im-resizer"
+          title="Drag to widen the panel — double-click to reset"></div>
         <div class="im-side" id="im-side"></div>
       </div>
       <div class="im-problems" id="im-problems"></div>
@@ -126,6 +136,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   const sideEl = root.querySelector("#im-side");
   const problemsEl = root.querySelector("#im-problems");
   const saveBtn = root.querySelector("#im-save");
+  const marqueeBtn = root.querySelector('[data-tool="marquee"]');
   const undoBtn = root.querySelector('[data-tool="undo"]');
   const redoBtn = root.querySelector('[data-tool="redo"]');
   const dirtyEl = root.querySelector("#im-dirty");
@@ -150,8 +161,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // (ADR-0237).
   const canvas = new AtlasUml.ClassCanvas(canvasEl, {
     subset,
-    onSelection: (bo) => onCanvasSelection(bo),
+    onSelection: (bo, all) => onCanvasSelection(bo, all),
     onChange: () => { absorbMoves(); syncHistoryButtons(); },
+    onTool: (tool) => showMarquee(tool === "marquee"),
   });
 
   // Zoom and pan have been the canvas's own since it moved onto diagram-js
@@ -166,6 +178,22 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   root.querySelector('[data-tool="zoom-in"]').addEventListener("click", () => canvas.zoom(1.2));
   root.querySelector('[data-tool="zoom-out"]').addEventListener("click", () => canvas.zoom(1 / 1.2));
   root.querySelector('[data-tool="fit"]').addEventListener("click", () => canvas.fit());
+
+  // Selecting several at once. The gesture itself is diagram-js's lasso; what was
+  // missing is that it had no way in. A plain drag on empty sheet pans — it has to,
+  // or a diagram larger than its window could not be moved — so drawing a box has to
+  // be asked for, either by this button or by holding Shift, exactly as in the
+  // process modeler.
+  //
+  // The button arms it and nothing more. Whether the mode is still on is the canvas's
+  // to say and this only follows, because the mode ends without the button being
+  // touched: the box being drawn spends it, and Escape takes it back.
+  marqueeBtn.addEventListener("click", (e) => canvas.marquee(e));
+  function showMarquee(on) {
+    marqueeBtn.classList.toggle("active", on);
+    marqueeBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    canvasEl.classList.toggle("marquee", on);
+  }
 
   // Undo and redo were the other half of the record's promise, and they were reachable
   // from nowhere: the canvas has kept a command stack since the port, and nothing on
@@ -253,9 +281,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     state.schemaFor = "";
     state.connecting = null;
     if (result.storeId) {
-      state.selected = { kind: "store", id: result.storeId };
+      selectOne({ kind: "store", id: result.storeId });
     } else {
-      state.selected = { kind: "class", id: result.classId };
+      selectOne({ kind: "class", id: result.classId });
       // Set before the render, and claim the class the filter belongs to, so the
       // panel does not drop it as a filter typed for somebody else.
       filteredFor = result.classId;
@@ -319,7 +347,12 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       // than text in it: diagram-js fits the viewport to the content, so a sentence
       // drawn on the sheet would be zoomed to fill it.
       emptyEl.hidden = (state.model.classes || []).length > 0;
-      canvas.select(state.selected ? state.selected.id : null);
+      // Several selected go back as several. Reconciling rebuilds every relationship,
+      // so the elements the canvas had are gone by now and the selection has to be
+      // put back by id — and putting back only the first would quietly undo a marquee
+      // on the next keystroke anywhere in the panel.
+      if (state.multi.length > 1) canvas.select(state.multi.map((m) => m.id));
+      else canvas.select(state.selected ? state.selected.id : null);
     } finally {
       applyingSelection = false;
     }
@@ -418,6 +451,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
 
   function renderSide() {
     if (state.schemaFor) return renderSchema();
+    if (state.multi.length > 1) return renderManySelected();
     if (!state.selected) return renderNothingSelected();
     if (state.selected.kind === "store") {
       const st = storeById(state.selected.id);
@@ -429,6 +463,30 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     }
     const a = state.model.associations.find((x) => x.id === state.selected.id);
     return a ? renderAssociationPanel(a) : renderNothingSelected();
+  }
+
+  // Several selected at once. The panel edits one element at a time — a name, a type,
+  // a multiplicity all belong to exactly one thing — so it says what is held instead
+  // of pretending to edit all of it, and each line is the way back to editing one.
+  function renderManySelected() {
+    const label = (sel) => {
+      if (sel.kind === "store") return (storeById(sel.id) || {}).name || "unnamed";
+      if (sel.kind === "class") return (classById(sel.id) || {}).name || "unnamed";
+      const a = state.model.associations.find((x) => x.id === sel.id);
+      return a ? (a.name || (kindOf(a.kind) || {}).label || "relationship") : "relationship";
+    };
+    paint(`
+      ${pheadHTML("⬚", "Selection", `${state.multi.length} elements`)}
+      <div class="psec">
+        <h3>General</h3>
+        <p class="muted">Drag any one of them to move them all. Pick a line below to edit
+          that one on its own.</p>
+        <div class="im-many">
+          ${state.multi.map((sel, i) =>
+            `<button type="button" class="im-many-row" data-many="${i}">
+               <span class="kv">${esc(sel.kind)}</span> ${esc(label(sel))}</button>`).join("")}
+        </div>
+      </div>`);
   }
 
   function renderNothingSelected() {
@@ -522,7 +580,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       <tr data-attr="${i}" data-member="${esc(`${a.name} ${a.type}`.toLowerCase())}">
         <td class="im-grip" title="Drag to reorder — the order is the order the class box reads in"
             aria-label="Reorder">⠿</td>
-        <td><input class="im-in" data-f="name" value="${esc(a.name)}" placeholder="name"/></td>
+        <td><input class="im-in" data-f="name" value="${esc(a.name)}" placeholder="name"
+              title="${esc(a.name)}"/></td>
         <td><select class="im-in" data-f="type">
           ${subset.primitives.map((p) => `<option value="${esc(p.type)}"${p.type === a.type ? " selected" : ""}>${esc(p.label)}</option>`).join("")}
           <optgroup label="Classes in this model">
@@ -784,6 +843,13 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           if (a[target.dataset.f] === target.value) return;
           a[target.dataset.f] = target.value;
         }
+        // This row is not repainted — that is what keeps the caret in the field being
+        // typed in — so the two things a repaint would have refreshed are refreshed
+        // here: the tooltip that makes a name readable when the column cannot show all
+        // of it, and what the filter matches this row against.
+        const nameInput = row.querySelector('[data-f="name"]');
+        if (nameInput) nameInput.title = a.name;
+        row.dataset.member = `${a.name} ${a.type}`.toLowerCase();
         markDirty(); syncCanvas();
         return;
       }
@@ -820,6 +886,15 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   }
 
   function onSideClick(e) {
+    // A line in the "several selected" list narrows the selection to that one, which
+    // is also what puts it back on the canvas — the round trip is the same one a
+    // click on the drawing takes.
+    const many = e.target.closest("[data-many]");
+    if (many && sideEl.contains(many)) {
+      const sel = state.multi[Number(many.dataset.many)];
+      if (sel) { selectOne(sel); render(); }
+      return;
+    }
     const btn = e.target.closest("[data-act]");
     if (!btn || !sideEl.contains(btn)) return;
     const act = btn.dataset.act;
@@ -829,7 +904,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     if (store && act === "del-store") {
       if (!window.confirm(`Delete the data store ${store.name}? The processes that name it will say so.`)) return;
       state.model.stores = state.model.stores.filter((s) => s.id !== store.id);
-      state.selected = null;
+      selectOne(null);
       markDirty(); render();
       return;
     }
@@ -858,7 +933,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         state.model.classes = state.model.classes.filter((x) => x.id !== c.id);
         state.model.associations = state.model.associations.filter(
           (x) => x.from.classId !== c.id && x.to.classId !== c.id);
-        state.selected = null;
+        selectOne(null);
         markDirty(); render();
       } else if (act === "schema") {
         state.schemaFor = c.name;
@@ -871,7 +946,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     if (!a) return;
     if (act === "del-assoc") {
       state.model.associations = state.model.associations.filter((x) => x.id !== a.id);
-      state.selected = null;
+      selectOne(null);
       markDirty(); render();
     } else if (act === "flip") {
       const tmp = a.from; a.from = a.to; a.to = tmp;
@@ -1050,7 +1125,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         x: spot.x, y: spot.y + 240,
       };
       state.model.stores.push(st);
-      state.selected = { kind: "store", id: st.id };
+      selectOne({ kind: "store", id: st.id });
       state.connecting = null;
       markDirty(); render();
       return;
@@ -1068,7 +1143,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       // selection and association ends both address a class by id.
       c.id = `new-${Math.random().toString(36).slice(2, 10)}`;
       state.model.classes.push(c);
-      state.selected = { kind: "class", id: c.id };
+      selectOne({ kind: "class", id: c.id });
       state.connecting = null;
       markDirty(); render();
       return;
@@ -1086,14 +1161,27 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // tell the canvas back and start again.
   let applyingSelection = false;
 
-  function onCanvasSelection(bo) {
+  function onCanvasSelection(bo, all = []) {
     if (applyingSelection) return;
     if (state.connecting) { connectStep(bo); return; }
     state.selected = bo && bo.element && bo.element !== "store-link"
       ? { kind: bo.element, id: bo.id }
       : null;
+    // The store's line to the class it holds is drawn, not authored, so it is not
+    // one of the things a box can take hold of — it comes and goes with its store.
+    state.multi = all
+      .filter((one) => one && one.element && one.element !== "store-link")
+      .map((one) => ({ kind: one.element, id: one.id }));
     state.schemaFor = "";
     render();
+  }
+
+  // Every other way of selecting means exactly one thing — a click in the panel, a
+  // search hit, a problem in the list — and says so by going through here. Only the
+  // canvas ever reports more than one.
+  function selectOne(sel) {
+    state.selected = sel;
+    state.multi = [];
   }
 
   // connectStep is the two-click draw. The first click names the end it starts from,
@@ -1124,7 +1212,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       to: { classId: to.id, role: "", multiplicity: kind === "generalization" ? "" : "0..*" },
     };
     state.model.associations.push(a);
-    state.selected = { kind: "association", id: a.id };
+    selectOne({ kind: "association", id: a.id });
     state.connecting = null;
     markDirty(); render();
   }
@@ -1149,7 +1237,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // A shape the author dragged is written back into the document, so the arrangement
   // is saved with the model — a diagram somebody laid out is one they can read again.
   // The canvas reports what actually moved, so a box dragged away and back reports
-  // nothing and no revision is spent on it.
+  // nothing and no revision is spent on it. A box moved with several others reports
+  // every one of them, which is what makes a marquee's drag one change and not four.
   function absorbMoves() {
     const moves = canvas.moved();
     if (!moves.length) return;
@@ -1165,9 +1254,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   problemsEl.addEventListener("click", (e) => {
     const p = e.target.closest(".im-problem");
     if (!p) return;
-    if (p.dataset.class) state.selected = { kind: "class", id: p.dataset.class };
-    else if (p.dataset.store) state.selected = { kind: "store", id: p.dataset.store };
-    else if (p.dataset.assoc) state.selected = { kind: "association", id: p.dataset.assoc };
+    if (p.dataset.class) selectOne({ kind: "class", id: p.dataset.class });
+    else if (p.dataset.store) selectOne({ kind: "store", id: p.dataset.store });
+    else if (p.dataset.assoc) selectOne({ kind: "association", id: p.dataset.assoc });
     state.schemaFor = "";
     render();
   });
@@ -1196,7 +1285,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       dirtyEl.hidden = true;
       root.querySelector("#im-rev").textContent = `r${saved.revision}`;
       // Selection is by id, and every local handle has just been replaced.
-      if (state.selected && local(state.selected.id)) state.selected = null;
+      if (state.selected && local(state.selected.id)) selectOne(null);
+      state.multi = state.multi.filter((m) => !local(m.id));
       toast("Saved", "ok");
       render();
     } catch (e) {
@@ -1219,6 +1309,60 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       toast(e.message, "err");
     }
   }
+
+  // ---- how wide the panel is -----------------------------------------------
+  //
+  // 340px is enough for a class with six attributes and not for one with a hundred,
+  // where the name is the column that loses the argument — and no amount of column
+  // arithmetic makes room that the panel does not have. So the panel is draggable,
+  // with the divider the Modeler's panel uses and remembered the same way: a person
+  // moves between the two surfaces in one session, and a divider that behaved
+  // differently on each would be worse than none.
+  //
+  // The canvas is told after every change, because a viewport that is not told keeps
+  // the width it was built with and draws into space that is no longer there.
+  (function wirePanelWidth() {
+    const resizer = root.querySelector("#im-resizer");
+    const KEY = "atlas.imPanelWidth";
+    const DEFAULT_WIDTH = 340;
+    const clamp = (w) => Math.max(280, Math.min(900, w));
+    const setWidth = (w) => {
+      sideEl.style.width = clamp(w) + "px";
+      // The same two nudges the Modeler's divider gives its canvas. The class canvas
+      // exposes no resized() of its own yet — the drawing keeps working without one,
+      // it simply does not re-centre — so the call is optional and the window event
+      // is what the library hears today.
+      canvas.resized?.();
+      window.dispatchEvent(new Event("resize"));
+    };
+
+    const saved = parseInt(localStorage.getItem(KEY) || "", 10);
+    if (saved) setWidth(saved);
+
+    let startX = 0;
+    let startW = 0;
+    const onMove = (e) => setWidth(startW - (e.clientX - startX));
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      resizer.classList.remove("dragging");
+      document.body.style.userSelect = "";
+      localStorage.setItem(KEY, String(parseInt(sideEl.style.width, 10) || DEFAULT_WIDTH));
+    };
+    resizer.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      startX = e.clientX;
+      startW = sideEl.getBoundingClientRect().width;
+      resizer.classList.add("dragging");
+      document.body.style.userSelect = "none";
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    });
+    resizer.addEventListener("dblclick", () => {
+      setWidth(DEFAULT_WIDTH);
+      localStorage.setItem(KEY, String(DEFAULT_WIDTH));
+    });
+  })();
 
   saveBtn.addEventListener("click", save);
   // Typing in a field owns its own undo — taking Ctrl+Z away from a half-typed class

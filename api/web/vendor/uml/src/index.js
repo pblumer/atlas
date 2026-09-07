@@ -337,10 +337,26 @@ export class ClassCanvas {
     this.graphics = this.diagram.get("graphicsFactory");
 
     const eventBus = this.diagram.get("eventBus");
+    // The whole selection, not the first of it. A marquee selects several at once,
+    // and a host told only about the first puts that one back on the canvas as *the*
+    // selection — which takes the other three off again before anything can be done
+    // with them. So both are reported: the one the panel edits, and all of them.
     eventBus.on("selection.changed", (e) => {
-      options.onSelection?.((e.newSelection && e.newSelection[0])?.businessObject || null);
+      const all = (e.newSelection || []).map((el) => el.businessObject).filter(Boolean);
+      options.onSelection?.(all[0] || null, all);
     });
     if (this.editable) {
+      // Whether the next drag draws a box, so the host's button can say so. Reported
+      // rather than returned because the host is not what ends it: the gesture is
+      // spent once the box is drawn, and Escape takes it back, and a button left lit
+      // through either would promise a drag that is back to panning.
+      //
+      // Read from the drag itself rather than from diagram-js's tool manager, which
+      // is built for a palette and is wrong at both ends here: it lets go of the tool
+      // the moment the box starts being drawn, and it is never told at all when
+      // Escape cancels an armed drag that had not begun.
+      eventBus.on(["lasso.selection.init", "lasso.init"], () => options.onTool?.("marquee"));
+      eventBus.on(["lasso.selection.cleanup", "lasso.cleanup"], () => options.onTool?.(null));
       this.commandStack = this.diagram.get("commandStack");
       // One event for "the picture changed", whatever changed it — a drag, an undo,
       // a redo. The host does not need to know which.
@@ -521,7 +537,31 @@ export class ClassCanvas {
   // has to be visible on the drawing, not only in the panel. Connections are rebuilt
   // on every reconcile, so this is also what puts the selection back on the new one.
   select(id) {
-    this.selection.select(this.shapes.get(id) || this.connections.get(id) || null);
+    if (Array.isArray(id)) {
+      this.selection.select(id.map((one) => this.element(one)).filter(Boolean));
+      return;
+    }
+    this.selection.select(this.element(id) || null);
+  }
+
+  element(id) { return this.shapes.get(id) || this.connections.get(id) || null; }
+
+  // The marquee: a box drawn round several classes to take hold of them together.
+  //
+  // It is a mode you enter rather than a drag you just do, and that is not a
+  // shortcoming — it is the only thing a plain drag on empty sheet can mean once
+  // panning exists. Panning claims every left-drag, because a diagram bigger than its
+  // window has to be movable, so the marquee asks for the gesture first. That is what
+  // the process modeler beside it does with the same tool, and Shift and drag reaches
+  // it there and here without the button.
+  //
+  // Arming it is all this does. Ending it belongs to diagram-js — the box being drawn
+  // ends it, and so does Escape — and there is no way to make a second press of the
+  // button mean "never mind": the press itself is what diagram-js takes as the start
+  // of the gesture, so by the time a click could be read the mode is already spent.
+  marquee(event) {
+    if (!this.editable) return;
+    this.diagram.get("lassoTool").activateSelection(event);
   }
 
   fit() { this.canvas.zoom("fit-viewport", "auto"); }
