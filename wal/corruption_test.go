@@ -286,3 +286,71 @@ func TestEveryKindOfDamageInASealedSegmentIsReported(t *testing.T) {
 // segmentHeaderBytes is the size of the version-2 segment preamble, spelled out
 // here so a test can reach past it without importing the package's internals.
 const segmentHeaderBytes = 16
+
+// TestEveryEntryPointRefusesAnUntrustworthyListing: the segment list is what every
+// reader starts from, and when it cannot be trusted none of them may quietly read
+// a subset of it.
+//
+// A .wal file whose name is not a sequence number cannot be placed in segment
+// order — and order is the log. A reader that skipped it, or guessed, would
+// replay a different log than the one on disk and have no way to say so. The
+// listing therefore fails, and the failure has to reach every door into the log
+// rather than only the one that happens to be tested.
+func TestEveryEntryPointRefusesAnUntrustworthyListing(t *testing.T) {
+	newLog := func(t *testing.T) *wal.Log {
+		t.Helper()
+		dir := t.TempDir()
+		l, err := wal.Open(wal.Options{Dir: dir})
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		t.Cleanup(func() { _ = l.Close() })
+		if err := l.Append([]byte("real")); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+		if err := l.Sync(); err != nil {
+			t.Fatalf("Sync: %v", err)
+		}
+		// Sorts after the real segment, and is not a sequence number.
+		if err := os.WriteFile(filepath.Join(dir, "zzz-stray.wal"), []byte("junk"), 0o644); err != nil {
+			t.Fatalf("write stray: %v", err)
+		}
+		return l
+	}
+
+	pos := func(data []byte) (uint64, error) { return uint64(len(data)), nil }
+
+	for _, tc := range []struct {
+		name string
+		call func(l *wal.Log) error
+	}{
+		{"Replay", func(l *wal.Log) error {
+			return l.Replay(func([]byte) error { return nil })
+		}},
+		{"ReplayFrom", func(l *wal.Log) error {
+			return l.ReplayFrom(1, pos, func([]byte) error { return nil })
+		}},
+		{"ReplayForRecovery", func(l *wal.Log) error {
+			_, err := l.ReplayForRecovery(0, pos, func([]byte) error { return nil })
+			return err
+		}},
+		{"ReplayForRecovery past a prefix", func(l *wal.Log) error {
+			_, err := l.ReplayForRecovery(1, pos, func([]byte) error { return nil })
+			return err
+		}},
+		{"EarliestPosition", func(l *wal.Log) error {
+			_, _, err := l.EarliestPosition(pos)
+			return err
+		}},
+		{"Compact", func(l *wal.Log) error {
+			_, err := l.Compact(1, pos)
+			return err
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.call(newLog(t)); err == nil {
+				t.Fatalf("%s read a segment listing it could not order, without saying so", tc.name)
+			}
+		})
+	}
+}

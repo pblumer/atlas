@@ -1,6 +1,7 @@
 package wal_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -236,3 +237,101 @@ func TestReplayForRecoverySkipsACoveredPrefix(t *testing.T) {
 		t.Fatalf("continuation = %q, want the newest one", cont)
 	}
 }
+
+// TestEarliestPositionSaysWhereTheLogBegins. That a log can say where it *starts*
+// is the fact recovery turns on: after compaction it no longer starts at genesis,
+// and a replay of what remains looks exactly like a replay of everything unless
+// somebody asks.
+func TestEarliestPositionSaysWhereTheLogBegins(t *testing.T) {
+	t.Run("a whole log begins at its first record", func(t *testing.T) {
+		dir := t.TempDir()
+		l := openRolling(t, dir)
+		writePositions(t, l, 5, 6, 7)
+		pos, ok, err := l.EarliestPosition(payloadPos)
+		if err != nil {
+			t.Fatalf("EarliestPosition: %v", err)
+		}
+		if !ok || pos != 5 {
+			t.Fatalf("earliest = %d (ok=%v), want 5", pos, ok)
+		}
+	})
+
+	t.Run("after compaction it begins at what survived", func(t *testing.T) {
+		dir := t.TempDir()
+		l := openRolling(t, dir)
+		writePositions(t, l, 1, 2, 3, 4, 5)
+		removed, err := l.Compact(3, payloadPos)
+		if err != nil {
+			t.Fatalf("Compact: %v", err)
+		}
+		if removed == 0 {
+			t.Fatal("fixture compacted nothing; it proves nothing about a moved start")
+		}
+		pos, ok, err := l.EarliestPosition(payloadPos)
+		if err != nil {
+			t.Fatalf("EarliestPosition: %v", err)
+		}
+		if !ok || pos <= 3 {
+			t.Fatalf("earliest = %d (ok=%v) after compacting past 3; the deleted prefix is still being reported as present", pos, ok)
+		}
+	})
+
+	t.Run("a log with no records has no beginning to report", func(t *testing.T) {
+		dir := t.TempDir()
+		l, err := wal.Open(wal.Options{Dir: dir})
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		defer l.Close()
+		pos, ok, err := l.EarliestPosition(payloadPos)
+		if err != nil {
+			t.Fatalf("EarliestPosition: %v", err)
+		}
+		if ok {
+			t.Fatalf("an empty log reported a start at %d; there is nothing there to start at", pos)
+		}
+	})
+
+	t.Run("a segment holding only its header is skipped", func(t *testing.T) {
+		dir := t.TempDir()
+		l := openRolling(t, dir)
+		// A roll leaves the previous segment sealed and the new one empty until the
+		// next Sync, so the oldest file can carry no record at all.
+		writePositions(t, l, 9)
+		if err := l.Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+		l2, err := wal.Open(wal.Options{Dir: dir, MaxSegmentSize: 1})
+		if err != nil {
+			t.Fatalf("reopen: %v", err)
+		}
+		defer l2.Close()
+		writePositions(t, l2, 10)
+		pos, ok, err := l2.EarliestPosition(payloadPos)
+		if err != nil {
+			t.Fatalf("EarliestPosition: %v", err)
+		}
+		if !ok || pos != 9 {
+			t.Fatalf("earliest = %d (ok=%v), want 9 — an empty segment says nothing about position and must be stepped over", pos, ok)
+		}
+	})
+
+	t.Run("a propagated read error is not a missing beginning", func(t *testing.T) {
+		dir := t.TempDir()
+		l := openRolling(t, dir)
+		writePositions(t, l, 1)
+		// A position decoder that fails stands in for an unreadable record: the answer
+		// must be the error, never a confident "this log has no start".
+		_, ok, err := l.EarliestPosition(func([]byte) (uint64, error) {
+			return 0, errBadPosition
+		})
+		if err == nil {
+			t.Fatal("a failing position decoder was reported as an empty log")
+		}
+		if ok {
+			t.Fatal("reported a beginning alongside an error")
+		}
+	})
+}
+
+var errBadPosition = errors.New("test: cannot decode this position")
