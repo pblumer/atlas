@@ -179,6 +179,27 @@
       ]
     },
     {
+      "id": "the-handbook-blamed-itself-for-a-diagram-the-reader-was-simp",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A missing diagram in the handbook now says why it is missing",
+        "de": "Ein fehlendes Diagramm im Handbuch sagt jetzt, warum es fehlt"
+      },
+      "summary": {
+        "en": "The recipes in the handbook keep their models free of drawing coordinates so the XML on the card stays readable, and let the server work the picture out instead. That service asks for the modeler role, while the handbook is open to everyone — so a reader who had not signed in saw no diagram on any of the 28 cards, under a note claiming Atlas could not lay the pattern out yet. It could; it was the request that was turned away. The note now tells the three cases apart: sign in, with a link that takes you there; a session that does not hold the modeler role; and a real limit of the layout, which is the only one of the three that is about the model at all.",
+        "de": "Die Rezepte im Handbuch halten ihre Modelle frei von Zeichenkoordinaten, damit das XML auf der Karte lesbar bleibt, und lassen das Bild stattdessen vom Server rechnen. Dieser Dienst verlangt die Rolle modeler, das Handbuch steht aber allen offen — wer nicht angemeldet war, sah deshalb auf keiner der 28 Karten ein Diagramm, unter einem Hinweis, Atlas könne das Muster noch nicht layouten. Konnte es sehr wohl; abgewiesen wurde die Anfrage. Der Hinweis unterscheidet jetzt die drei Fälle: anmelden, mit einem Link dorthin; eine Sitzung ohne die Rolle modeler; und eine echte Grenze des Layouts — als einziger der drei Fälle einer, bei dem es um das Modell geht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Handbook"
+      ]
+    },
+    {
       "id": "the-replay-drew-a-deferred-choice-as-several-tokens-and-park",
       "version": "Unreleased",
       "date": null,
@@ -317,35 +338,6 @@
           "Zurück im Diagramm: Das grüne Badge sinkt um genau das, was Sie abgeschlossen haben — bei jeder Warteschlangenlänge, nicht erst unter 500."
         ]
       },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "saving-a-layout-onto-a-deployment-was-refused-on-diagrams-no",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Saving a layout no longer fails on diagrams you did not change",
-        "de": "Layout speichern scheitert nicht mehr an Diagrammen, die Sie nicht geändert haben"
-      },
-      "summary": {
-        "en": "\"Save layout to deployment\" refused some diagrams with \"the model differs\" even when nothing about the process had been touched. The editor writes certain BPMN attributes back in shorter form — leaving out ones that already have their standard value — and the check read that as a changed process. It now reads short and long form as what they are: the same thing. Models with an interrupting boundary event, an event subprocess or a multi-instance activity were the ones affected. A refusal now also names the element that actually differs, instead of only saying that something does.",
-        "de": "«Save layout to deployment» wies manche Diagramme mit «the model differs» ab, obwohl am Prozess nichts angefasst worden war. Der Editor schreibt bestimmte BPMN-Attribute verkürzt zurück — er lässt jene weg, die ohnehin auf ihrem Standardwert stehen — und die Prüfung las das als geänderten Prozess. Sie liest Kurz- und Langform jetzt als das, was sie sind: dasselbe. Betroffen waren Modelle mit unterbrechendem Boundary-Event, Ereignis-Subprozess oder Mehrfachausführung. Und eine Ablehnung nennt jetzt das Element, das tatsächlich abweicht, statt nur zu sagen, dass etwas abweicht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Operations"
-      ],
       "try": {
         "label": {
           "en": "Open Operations",
