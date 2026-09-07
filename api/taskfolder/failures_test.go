@@ -22,45 +22,59 @@ func corrupt(t *testing.T, store *Store) {
 	}
 }
 
-// TestReadErrorsAreReported covers every route that reads the store: an
+// TestReadErrorsAreReported covers the two routes that read the whole store: an
 // unreadable record is an error the caller is told about, not an empty answer
 // that reads as "you have no folders".
 func TestReadErrorsAreReported(t *testing.T) {
 	svc, store := newService(t)
-	kept := create(t, svc, kundenRule, "usr_me")
+	create(t, svc, kundenRule, "usr_me")
 	corrupt(t, store)
 
-	cases := map[string]struct {
-		h      http.HandlerFunc
-		method string
-		body   string
-		vals   map[string]string
+	// A slice, not a map: subtests that share a service must run in a stated
+	// order, and `for name := range map` does not have one. The first version of
+	// this test was a map whose delete case sometimes ran before its update case,
+	// which then 404'd on a folder that was already gone — green locally, red in
+	// CI, and about the test rather than about the code.
+	cases := []struct {
+		name string
+		h    http.HandlerFunc
 	}{
-		"list":   {svc.HandleList, http.MethodGet, "", nil},
-		"counts": {svc.HandleCounts, http.MethodGet, "", nil},
-		"update": {svc.HandleUpdate, http.MethodPut, kundenRule, map[string]string{"id": kept.ID}},
-		"delete": {svc.HandleDelete, http.MethodDelete, "", map[string]string{"id": kept.ID}},
+		{"list", svc.HandleList},
+		{"counts", svc.HandleCounts},
 	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			rec := do(t, tc.h, as(tc.method, tc.body, "usr_me"), tc.vals)
-			if name == "update" || name == "delete" {
-				// These read one record by id, which still succeeds — the corrupt file
-				// is a different one. They are here to prove that: a neighbouring bad
-				// record must not break the folder somebody is actually working on.
-				if rec.Code != http.StatusOK {
-					t.Errorf("%s = %d, want 200 despite an unrelated corrupt record (%s)", name, rec.Code, rec.Body)
-				}
-				return
-			}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := do(t, tc.h, as(http.MethodGet, "", "usr_me"), nil)
 			if rec.Code != http.StatusInternalServerError {
-				t.Errorf("%s = %d, want 500 (%s)", name, rec.Code, rec.Body)
+				t.Errorf("%s = %d, want 500 (%s)", tc.name, rec.Code, rec.Body)
 			}
 		})
 	}
 
 	if _, _, err := svc.Visible(User{ID: "usr_me"}); err == nil {
 		t.Error("Visible swallowed a store read error")
+	}
+}
+
+// TestOneBadRecordDoesNotBreakItsNeighbours is the other half: the routes that
+// address a folder by id read that one file, so a corrupt record beside it is
+// none of their business. Each case gets its own folder, so neither can decide
+// what the other finds.
+func TestOneBadRecordDoesNotBreakItsNeighbours(t *testing.T) {
+	svc, store := newService(t)
+	forUpdate := create(t, svc, kundenRule, "usr_me")
+	forDelete := create(t, svc, kundenRule, "usr_me")
+	corrupt(t, store)
+
+	rec := do(t, svc.HandleUpdate, as(http.MethodPut, kundenRule, "usr_me"),
+		map[string]string{"id": forUpdate.ID})
+	if rec.Code != http.StatusOK {
+		t.Errorf("update = %d, want 200 despite an unrelated corrupt record (%s)", rec.Code, rec.Body)
+	}
+	rec = do(t, svc.HandleDelete, as(http.MethodDelete, "", "usr_me"),
+		map[string]string{"id": forDelete.ID})
+	if rec.Code != http.StatusOK {
+		t.Errorf("delete = %d, want 200 despite an unrelated corrupt record (%s)", rec.Code, rec.Body)
 	}
 }
 
