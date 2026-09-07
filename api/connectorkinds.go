@@ -8,6 +8,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/mail"
@@ -313,6 +314,37 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes: []int32{compiler.GoogleSheetsJobTypeIndex},
 	},
 	{
+		// A Discord task performs one chat operation against a Worker an operator
+		// configured (ADR-draft-discord-worker) and writes what Discord returned into
+		// the task's result variable (HandleWithOutput) — for the operations that
+		// answer with something. The bot token lives in the Worker store as a reference
+		// and is resolved from the vault at build time (ADR-0041), so a model carries
+		// neither an address nor a token.
+		name:           connectorKindDiscord,
+		validateCreate: validateDiscordConnector,
+		newRegistry:    func(s *Server) { s.discordRegistry = discord.NewRegistry() },
+		registerHandlers: func(s *Server, store *state.Store) {
+			s.jobRunner.HandleWithOutput(compiler.DiscordJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+				return discord.Handler(rd, s.processLookup, s.discordRegistry)
+			})
+		},
+		rebuild: func(s *Server) error {
+			clients, problems, err := s.buildDiscordClients()
+			if err != nil {
+				return err
+			}
+			s.discordRegistry.ReplaceWith(clients, problems)
+			return nil
+		},
+		problem: func(s *Server, name string) (string, bool) {
+			if s.discordRegistry == nil {
+				return "", false
+			}
+			return s.discordRegistry.Problem(name)
+		},
+		jobTypes: []int32{compiler.DiscordJobTypeIndex},
+	},
+	{
 		// A Microsoft Entra ID task manages the cloud directory over Graph
 		// (ADR-0172). It is worker-only: the engine builds no client and holds no tenant
 		// credential — the store entry exists only so an operator can add a tenant in the
@@ -451,6 +483,7 @@ var offloadableKinds = map[string][]int32{
 	connectorKindRemedy:       {compiler.RemedyJobTypeIndex},
 	connectorKindJira:         {compiler.JiraJobTypeIndex},
 	connectorKindGoogleSheets: {compiler.GoogleSheetsJobTypeIndex},
+	connectorKindDiscord:      {compiler.DiscordJobTypeIndex},
 	"csv":                     {compiler.CsvImportJobTypeIndex},
 	"ldif":                    {compiler.LdifJobTypeIndex},
 	"rest":                    {compiler.RestJobTypeIndex},
@@ -560,7 +593,7 @@ var offloadableKinds = map[string][]int32{
 //
 // With it the record's "owed a worker half" table is empty.
 func DefaultOffloadedKinds() []string {
-	return []string{"ad", connectorKindClio, "csv", connectorKindGoogleSheets, connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "scim", "script", connectorKindSharePoint, "soap", connectorKindTemis, "webscrape"}
+	return []string{"ad", connectorKindClio, "csv", connectorKindDiscord, connectorKindGoogleSheets, connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "scim", "script", connectorKindSharePoint, "soap", connectorKindTemis, "webscrape"}
 }
 
 // DefaultSupervisedWorkerOnlyKinds are the worker-only Worker Types Atlas supervises
@@ -725,6 +758,19 @@ func validateGoogleSheetsConnector(p *createConnectorParams) string {
 		return "a Google Sheets Worker requires a credentialsRef naming a vault bundle: " +
 			"{method:\"serviceAccount\", clientEmail, privateKey} for a service account, " +
 			"or {method:\"refreshToken\", clientId, clientSecret, refreshToken} for a consumer account"
+	}
+	return ""
+}
+
+// validateDiscordConnector validates a Discord Worker an operator is adding. Like
+// Google Sheets it needs no endpoint: Discord's API base is the same for everyone, and
+// the endpoint field stays an override for an operator behind a proxy. What it does
+// need is the credentialsRef, because for this Worker Type the credential *is* the
+// whole configuration (ADR-draft-discord-worker). Provider/Sender are mail-only.
+func validateDiscordConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender = "", ""
+	if p.CredentialsRef == "" {
+		return "a Discord Worker requires a credentialsRef naming a vault bundle: {botToken}"
 	}
 	return ""
 }

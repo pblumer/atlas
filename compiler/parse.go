@@ -2212,6 +2212,10 @@ type xmlServiceTask struct {
 	// GoogleSheets, when present, marks this service task a Google Sheets task: one
 	// spreadsheet operation against a Worker an operator configured.
 	GoogleSheets *xmlGoogleSheetsConnector `xml:"extensionElements>googleSheetsConnector"`
+	// Discord, when present, marks this service task a Discord task
+	// (ADR-draft-discord-worker): one chat operation — send, edit, delete, read, list
+	// or open a thread — against a Worker an operator configured.
+	Discord *xmlDiscordConnector `xml:"extensionElements>discordConnector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
 	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
@@ -2727,6 +2731,39 @@ type xmlJiraConnector struct {
 	MaxResults     string      `xml:"maxResults,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"jiraField"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// A Discord task's parameters, carried on a service task as an
+// <atlas:discordConnector connector="..." operation="..." .../> extension element
+// (ADR-draft-discord-worker). The connector attribute names the configured Discord
+// Worker (whose bot token lives on the server, never in the model) and operation is the
+// chat operation the task performs. Element and attribute keep the pre-ADR-0203
+// spelling their siblings carry, because both are authored in deployed models.
+//
+// Which of the remaining attributes apply is decided by the operation, and only by it:
+// channel addresses the channel every operation acts in — a thread is itself a channel,
+// so replying in one is a send-message naming the thread's id; messageId addresses one
+// message (edit, delete and get, and optionally create-thread, where naming a message
+// hangs the thread under it rather than starting a standalone one); content is a
+// message body; name is a new thread's title; after and maxResults page a list forward
+// from a message id it has already seen. discordField children set any further
+// request-body property — embeds, allowedMentions, components — by name. Every value is
+// literal or, with a leading '=', a FEEL expression evaluated over the variables the
+// task sees at call time (the fx toggle, ADR-0067).
+type xmlDiscordConnector struct {
+	Connector      string      `xml:"connector,attr"`
+	Operation      string      `xml:"operation,attr"`
+	Channel        string      `xml:"channel,attr"`
+	MessageID      string      `xml:"messageId,attr"`
+	Content        string      `xml:"content,attr"`
+	Name           string      `xml:"name,attr"`
+	After          string      `xml:"after,attr"`
+	MaxResults     string      `xml:"maxResults,attr"`
+	ResultVariable string      `xml:"resultVariable,attr"`
+	Fields         []xmlHTTPKV `xml:"discordField"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
