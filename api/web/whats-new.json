@@ -324,24 +324,24 @@
       ]
     },
     {
-      "id": "every-instance-start-scanned-the-whole-runtime-on-the-single",
+      "id": "the-handbook-blamed-itself-for-a-diagram-the-reader-was-simp",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "A busy server no longer slows itself down",
-        "de": "Ein ausgelasteter Server bremst sich nicht mehr selbst aus"
+        "en": "A missing diagram in the handbook now says why it is missing",
+        "de": "Ein fehlendes Diagramm im Handbuch sagt jetzt, warum es fehlt"
       },
       "summary": {
-        "en": "Starting an instance, publishing a message, cancelling or terminating a batch and uploading a CSV all report the runtime counts back to you — and working those counts out meant walking every running instance and every token. On a large installation that was a quarter of a million records per operation, done by the one component that also executes your processes. So the more work the system was given, the harder it braked itself, until the interface stopped responding altogether. The numbers are unchanged; they are simply no longer worked out in the one place where everybody else has to wait for them.",
-        "de": "Beim Starten einer Instanz, beim Senden einer Nachricht, beim Abbrechen oder Beenden mehrerer Instanzen und beim CSV-Upload werden Ihnen die Laufzeitzahlen zurückgemeldet — und um diese Zahlen zu ermitteln, wurde jede laufende Instanz und jedes Token durchgezählt. Auf einer grossen Installation war das eine Viertelmillion Datensätze pro Vorgang, erledigt von derselben Komponente, die auch Ihre Prozesse ausführt. Je mehr zu tun war, desto stärker bremste sich das System selbst aus — bis die Oberfläche ganz stehen blieb. Die Zahlen sind dieselben; sie werden nur nicht mehr an der einen Stelle ermittelt, an der alle anderen darauf warten müssen."
+        "en": "The recipes in the handbook keep their models free of drawing coordinates so the XML on the card stays readable, and let the server work the picture out instead. That service asks for the modeler role, while the handbook is open to everyone — so a reader who had not signed in saw no diagram on any of the 28 cards, under a note claiming Atlas could not lay the pattern out yet. It could; it was the request that was turned away. The note now tells the three cases apart: sign in, with a link that takes you there; a session that does not hold the modeler role; and a real limit of the layout, which is the only one of the three that is about the model at all.",
+        "de": "Die Rezepte im Handbuch halten ihre Modelle frei von Zeichenkoordinaten, damit das XML auf der Karte lesbar bleibt, und lassen das Bild stattdessen vom Server rechnen. Dieser Dienst verlangt die Rolle modeler, das Handbuch steht aber allen offen — wer nicht angemeldet war, sah deshalb auf keiner der 28 Karten ein Diagramm, unter einem Hinweis, Atlas könne das Muster noch nicht layouten. Konnte es sehr wohl; abgewiesen wurde die Anfrage. Der Hinweis unterscheidet jetzt die drei Fälle: anmelden, mit einem Link dorthin; eine Sitzung ohne die Rolle modeler; und eine echte Grenze des Layouts — als einziger der drei Fälle einer, bei dem es um das Modell geht."
       },
       "link": {
-        "label": "ADR-0080",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0080-runtime-aggregate-counters.md"
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Operations"
+        "Handbook"
       ]
     }
   ]
