@@ -282,11 +282,13 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var (
-		groupIDs []string
-		grpErr   error
-	)
-	s.do(func() { groupIDs, grpErr = s.groups.idsForUser(u.ID) })
+	// Off the run loop, like the password login's (ADR-0265):
+	// a callback that has already proven who somebody is must not then wait for the
+	// engine. A membership change racing it still reaches the session (ADR-0185).
+	//
+	// The account resolution above stays on the loop, and has to: it may *create*
+	// the account, and that check-then-write is only atomic inside one loop turn.
+	groupIDs, grpErr := s.groups.idsForUser(u.ID)
 	if grpErr != nil {
 		s.oidcRefuse(w, r, "read groups", grpErr)
 		return

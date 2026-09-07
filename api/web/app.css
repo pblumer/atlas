@@ -773,13 +773,13 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    canvas, and ADR-0237 asks the second to look like the first — which a copied block
    stops doing the day either copy is touched. The group ignores the pointer so a drag
    that starts beside a button still pans the sheet underneath. */
-.panorama-tools, .im-tools {
+.panorama-tools, .im-tools, .og-tools {
   position: absolute; right: 12px; top: 12px; z-index: 8; display: flex; flex-direction: column;
   padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
   box-shadow: 0 2px 8px rgba(0,0,0,.08); pointer-events: none;
 }
-.panorama-tools > *, .im-tools > * { pointer-events: auto; }
-.panorama-tools .icon-btn, .im-tools .icon-btn { width: 30px; height: 28px; border-radius: 4px; font-weight: 700; }
+.panorama-tools > *, .im-tools > *, .og-tools > * { pointer-events: auto; }
+.panorama-tools .icon-btn, .im-tools .icon-btn, .og-tools .icon-btn { width: 30px; height: 28px; border-radius: 4px; font-weight: 700; }
 .im-tool-sep { height: 1px; margin: 3px 2px; background: var(--border); }
 /* An armed tool is a mode, and a mode has to be visible or it is a trap: the button
    stays lit for exactly as long as the next drag draws a box instead of panning. */
@@ -5306,8 +5306,17 @@ button.im-problem:hover { background: var(--accent-soft); }
 .do-views button:hover { color: var(--accent); border-color: var(--accent); }
 .do-views button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
-.og-scroll { overflow: auto; }
-.og-svg { display: block; }
+/* The object diagram's stage. The drawing is diagram-js (ADR-0237), which fits its
+   viewport to the box it is given — where the SVG this replaced carried its own
+   computed width and height and simply grew. So the stage states a size, and the
+   diagram fits itself into it; the notes below stay outside it, because they are
+   prose about the picture rather than part of it. */
+.og-stage {
+  position: relative; height: min(58vh, 620px); min-height: 320px;
+  border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+}
+.og-canvas { position: absolute; inset: 0; }
+.og-canvas .djs-container { background: var(--bg); }
 .og-node .og-box { fill: var(--canvas-fill); stroke: var(--border); stroke-width: 1; }
 .og-node .og-sep { stroke: var(--border); }
 /* A root object is a thing the instance carries; a nested one exists only inside

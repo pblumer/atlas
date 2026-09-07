@@ -102,12 +102,14 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusTooManyRequests, "too many login attempts; try again shortly")
 		return
 	}
-	var (
-		u       User
-		ok      bool
-		lookErr error
-	)
-	s.do(func() { u, ok, lookErr = s.users.byUsername(username) })
+	// Read off the run loop, deliberately. Accounts are a durable sidecar, not
+	// engine state — they never flow through the WAL or the processor (ADR-0044) —
+	// so this lookup has no reason to queue behind whatever the engine is doing,
+	// and one hard reason not to: a busy processor must never be able to lock
+	// people out of the instance they are trying to sign in and fix
+	// (ADR-0265). Verifying the password already ran off
+	// the loop; it was only the cheap half that waited.
+	u, ok, lookErr := s.users.byUsername(username)
 	if lookErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "login: "+lookErr.Error())
 		return
@@ -124,11 +126,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	// Snapshot the user's group ids into the session (ADR-0180),
 	// alongside roles, so scope group grants resolve without a store read.
-	var (
-		groupIDs []string
-		grpErr   error
-	)
-	s.do(func() { groupIDs, grpErr = s.groups.idsForUser(u.ID) })
+	//
+	// Off the loop for the same reason as the lookup above. A membership change
+	// racing this read is not lost: the group handlers push one into the sessions
+	// that are already open (ADR-0185), so the snapshot converges either way.
+	groupIDs, grpErr := s.groups.idsForUser(u.ID)
 	if grpErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "login: "+grpErr.Error())
 		return

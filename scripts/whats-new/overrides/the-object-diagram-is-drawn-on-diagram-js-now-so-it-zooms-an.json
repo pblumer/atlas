@@ -1,0 +1,21 @@
+{
+  "title": {
+    "en": "The object diagram zooms, pans and fits",
+    "de": "Das Objektdiagramm lässt sich zoomen, verschieben und einpassen"
+  },
+  "summary": {
+    "en": "The Data tab of an instance replay draws the objects it is carrying and the lines between them. Until now that picture could only be scrolled: a diagram wider than the panel ran off the edge, and there was no way to make it fit. It is drawn on the same canvas as the class diagram and the architecture views now, so it zooms with the wheel, pans with a drag, and carries the same three controls in the same corner. The zoom you set survives — the picture no longer jumps back when you click an element or when a running instance refreshes itself.",
+    "de": "Die Registerkarte «Daten» einer Instanz-Wiedergabe zeichnet die Objekte, die sie mit sich führt, und die Linien dazwischen. Bisher liess sich dieses Bild nur scrollen: Ein Diagramm, das breiter war als die Fläche, lief über den Rand hinaus, und es gab keine Möglichkeit, es einzupassen. Gezeichnet wird es jetzt auf derselben Zeichenfläche wie das Klassendiagramm und die Architekturansichten — also zoomen mit dem Mausrad, verschieben mit der Maus, und dieselben drei Bedienelemente in derselben Ecke. Der eingestellte Zoom bleibt erhalten: Das Bild springt nicht mehr zurück, wenn Sie ein Element anklicken oder eine laufende Instanz sich aktualisiert."
+  },
+  "tags": [
+    "Operations",
+    "Data"
+  ],
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

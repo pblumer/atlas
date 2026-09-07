@@ -20,8 +20,18 @@ import (
 // encode the key into a safe filename, write atomically, read back, ignore files
 // that are not ours, delete idempotently.
 //
-// Like the stores it replaces, a Store does no locking of its own: it is owned by
-// the server's run-loop goroutine, the single writer of design-time state.
+// Like the stores it replaces, a Store does no locking of its own, and it needs
+// none: it keeps no mutable memory, so every method is a syscall against the
+// directory. Writing is still the run-loop goroutine's alone — it is the single
+// writer of design-time state, and a check-then-write ("is this username taken?")
+// is atomic only because both halves happen inside one loop turn.
+//
+// Reading is not confined to the loop. A record is replaced by an atomic rename
+// (see [WriteJSON]), so a concurrent reader sees the whole old record or the whole
+// new one and never a torn one, and a temp file is not named like a record so a
+// listing never picks one up. A caller that must not wait for the engine may
+// therefore read directly — which is what keeps signing in independent of how busy
+// the processor is (ADR-0265).
 type Store[T any] struct {
 	dir  string
 	name string
@@ -146,7 +156,9 @@ func (s *Store[T]) Delete(key string) error {
 
 // LoadAll reads every record in the store, in the order set by [Order]. Files
 // that are not this store's records — a stray temp file, a sibling artifact, a
-// subdirectory — are skipped rather than failing the listing.
+// subdirectory — are skipped rather than failing the listing, and so is a record
+// deleted between the listing and its read, which is what a reader running off
+// the run loop can meet.
 func (s *Store[T]) LoadAll() ([]T, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
@@ -163,6 +175,16 @@ func (s *Store[T]) LoadAll() ([]T, error) {
 		}
 		data, err := os.ReadFile(filepath.Join(s.dir, name))
 		if err != nil {
+			// The record went away between the directory listing and this read.
+			// A reader on the loop was shielded from that by being the writer too;
+			// one running off it is not, and neither is any reader when a separate
+			// process touches the same directory. The honest answer is the one Get
+			// already gives for a record that is not there: gone is a normal state,
+			// not an error. Failing the whole listing instead would let one
+			// concurrent delete refuse an unrelated login.
+			if os.IsNotExist(err) {
+				continue
+			}
 			return nil, fmt.Errorf("%s: read %s: %w", s.name, name, err)
 		}
 		var rec T

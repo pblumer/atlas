@@ -318,6 +318,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0262](0262-discord-inbound-watch.md) | Discord as an inbound event source — a channel is a log, and a snowflake is its sequence | Proposed |
 | [0263](0263-form-runtime-brand-theming.md) | The brand palette reaches the form runtime | Proposed |
 | [0264](0264-row-watch-mark-per-watch.md) | A row watch's idempotency mark is its own, and the cursor is why that needs no migration | Proposed |
+| [0265](0265-login-off-the-run-loop.md) | Signing in does not wait for the run loop | Proposed |
+| [0266](0266-stats-and-incidents-off-the-loop.md) | The runtime counts leave the run loop, and take the write paths with them | Proposed |
 
 ## Status values
 

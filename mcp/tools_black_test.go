@@ -22,8 +22,10 @@ func callTool(id int, name string, args map[string]any) string {
 	return string(b)
 }
 
-// TestNoArgToolHandlers exercises every no-argument tool handler (info,
-// list_processes, list_instances, stats) so defaultTools is fully covered.
+// TestNoArgToolHandlers exercises every tool handler that answers with no arguments
+// (info, list_processes, list_instances, stats) so defaultTools is fully covered.
+// list_instances takes optional narrowing arguments but must still answer without
+// them — its page envelope is what says the listing is complete.
 func TestNoArgToolHandlers(t *testing.T) {
 	ts := newAtlas(t)
 	cases := []struct {
@@ -32,7 +34,7 @@ func TestNoArgToolHandlers(t *testing.T) {
 	}{
 		{"atlas_info", `"product":"Atlas"`},
 		{"atlas_list_processes", "["},
-		{"atlas_list_instances", "["},
+		{"atlas_list_instances", `"truncated":false`},
 		{"atlas_stats", `"activeProcessInstances"`},
 	}
 	for _, tc := range cases {
@@ -91,20 +93,10 @@ func TestCancelAndDeleteViaTools(t *testing.T) {
 	}
 
 	// Find the live instance key.
-	resps = run(t, ts, callTool(4, "atlas_list_instances", map[string]any{}))
-	listText, isErr := toolText(t, result(t, resps[0]))
-	if isErr {
-		t.Fatal("list_instances failed")
-	}
-	var instances []struct {
-		Key uint64 `json:"key"`
-	}
-	if err := json.Unmarshal([]byte(listText), &instances); err != nil || len(instances) == 0 {
-		t.Fatalf("parse instances: err=%v, list=%q", err, listText)
-	}
+	instanceKey := firstInstanceKey(t, ts, 4, map[string]any{})
 
 	// Cancel it → terminated.
-	resps = run(t, ts, callTool(5, "atlas_cancel_instance", map[string]any{"key": instances[0].Key}))
+	resps = run(t, ts, callTool(5, "atlas_cancel_instance", map[string]any{"key": instanceKey}))
 	text, isErr = toolText(t, result(t, resps[0]))
 	if isErr || !strings.Contains(text, `"state":"terminated"`) {
 		t.Fatalf("cancel_instance = (%q, isErr=%v), want terminated", text, isErr)
@@ -139,18 +131,7 @@ func TestCreateInstanceForwardsStartVariables(t *testing.T) {
 	}
 
 	// Find the running instance's key, then read its variables back over the API.
-	listText, isErr := toolText(t, result(t, run(t, ts, callTool(3, "atlas_list_instances", map[string]any{}))[0]))
-	if isErr {
-		t.Fatal("list_instances failed")
-	}
-	var instances []struct {
-		Key uint64 `json:"key"`
-	}
-	if err := json.Unmarshal([]byte(listText), &instances); err != nil || len(instances) == 0 {
-		t.Fatalf("parse instances: err=%v, list=%q", err, listText)
-	}
-
-	resp, err := http.Get(fmt.Sprintf("%s/api/v1/instances/%d/variables", ts.URL, instances[0].Key))
+	resp, err := http.Get(fmt.Sprintf("%s/api/v1/instances/%d/variables", ts.URL, firstInstanceKey(t, ts, 3, map[string]any{})))
 	if err != nil {
 		t.Fatalf("get variables: %v", err)
 	}

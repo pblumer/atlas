@@ -293,6 +293,35 @@
       }
     },
     {
+      "id": "the-object-diagram-is-drawn-on-diagram-js-now-so-it-zooms-an",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The object diagram zooms, pans and fits",
+        "de": "Das Objektdiagramm lässt sich zoomen, verschieben und einpassen"
+      },
+      "summary": {
+        "en": "The Data tab of an instance replay draws the objects it is carrying and the lines between them. Until now that picture could only be scrolled: a diagram wider than the panel ran off the edge, and there was no way to make it fit. It is drawn on the same canvas as the class diagram and the architecture views now, so it zooms with the wheel, pans with a drag, and carries the same three controls in the same corner. The zoom you set survives — the picture no longer jumps back when you click an element or when a running instance refreshes itself.",
+        "de": "Die Registerkarte «Daten» einer Instanz-Wiedergabe zeichnet die Objekte, die sie mit sich führt, und die Linien dazwischen. Bisher liess sich dieses Bild nur scrollen: Ein Diagramm, das breiter war als die Fläche, lief über den Rand hinaus, und es gab keine Möglichkeit, es einzupassen. Gezeichnet wird es jetzt auf derselben Zeichenfläche wie das Klassendiagramm und die Architekturansichten — also zoomen mit dem Mausrad, verschieben mit der Maus, und dieselben drei Bedienelemente in derselben Ecke. Der eingestellte Zoom bleibt erhalten: Das Bild springt nicht mehr zurück, wenn Sie ein Element anklicken oder eine laufende Instanz sich aktualisiert."
+      },
+      "link": {
+        "label": "ADR-0237",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0237-class-canvas-on-diagram-js.md"
+      },
+      "tags": [
+        "Operations",
+        "Data"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "the-training-nuggets-show-the-real-atlas-not-a-drawing-of-it",
       "version": "Unreleased",
       "date": null,
@@ -348,27 +377,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "three-mechanisms-the-engine-has-always-had-now-have-an-examp",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Signal, escalation and compensation now have examples",
-        "de": "Signal, Eskalation und Kompensation haben jetzt Beispiele"
-      },
-      "summary": {
-        "en": "Three things the engine has always been able to do had no scenario showing what they are for. Now they do, each written for a small business or a private person and each running with no worker, no credential and no network. Chasing an unpaid invoice shows escalation beside a message on the same subprocess — the message interrupts because the dunning run is then moot, the escalation does not because the owner should still be asked. A price change that reaches every open quote shows a signal: a message hits exactly one case, a signal hits all of them and does not know how many. And a trip whose payment is declined shows compensation, taking the hotel and the flight back in reverse order. A fourth, organising a move, is simply Atlas doing a private person's Saturday.",
-        "de": "Drei Dinge, die die Engine seit jeher kann, hatten kein Szenario, das zeigt wofür. Jetzt haben sie eines — je für einen Kleinbetrieb oder eine Privatperson geschrieben, und alle laufen ohne Worker, ohne Zugangsdaten und ohne Netz. Das Mahnen einer offenen Rechnung zeigt die Eskalation neben einer Nachricht am selben Teilprozess: Die Nachricht unterbricht, weil der Mahnlauf dann gegenstandslos ist, die Eskalation nicht, weil der Inhaber trotzdem gefragt werden soll. Eine Preisänderung, die jede offene Offerte erreicht, zeigt das Signal: Eine Nachricht trifft genau einen Fall, ein Signal trifft alle und weiss nicht, wie viele. Und eine Reise, deren Zahlung abgelehnt wird, zeigt die Kompensation, die Hotel und Flug in umgekehrter Reihenfolge zurücknimmt. Ein viertes, ein Umzug, ist schlicht Atlas am Samstag einer Privatperson."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Examples"
-      ]
     }
   ]
 }

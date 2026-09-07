@@ -12,6 +12,21 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **`atlas_list_instances` (MCP) returns a page, not a bare array.** It answered with
+  a plain JSON array, which cannot say it is a *page* — and the endpoint behind it caps
+  at 1000 rows and flags the cut in a header the body does not carry. An agent handed
+  the array alone read the first page of three hundred thousand instances as though it
+  were the whole population, and acted on it.
+
+  It now answers with `{items, truncated, nextCursor}` — the envelope
+  `atlas_list_tasks` already used — and takes a `before` cursor to resume. The two list
+  tools are one protocol now: hand `nextCursor` back as `before`, never parse it. A
+  `truncated` page without a `nextCursor` means there is more but this listing has no
+  position to resume from; narrowing it (`process` plus a single `state`) is what gets
+  you one. **Breaking** for anything that parsed the array directly — read `items`.
+
 ### Added
 
 - **Task folders: the Tasks app's sidebar folders are now saved filters somebody builds
@@ -281,6 +296,50 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The object diagram is drawn on diagram-js now, so it zooms and pans.** The
+  instance's objects and the lines between them were built here as SVG strings, with a
+  layout of their own, and the cost showed up as things a reader expects and does not
+  find: a diagram bigger than the panel could only be scrolled, nothing could be
+  clicked, and there was no way to make it fit. That is word for word the complaint
+  [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md) made about the *class*
+  canvas a fortnight ago, one altitude down — the look was downstream of the
+  substrate — and it is the follow-up
+  [ADR-0259](docs/adr/0259-data-object-lifecycle.md) named.
+
+  So the drawing moved onto the same shared bundle the class canvas and Panorama
+  already use, as `AtlasCanvas.uml.ObjectCanvas`, and the diagram gained zoom, pan,
+  selection and the same three controls — the same icons, the same step, the same
+  corner — that the two canvases beside it carry. Zooming a diagram is the same act
+  on all three surfaces, and a near-miss between them is worse than any one of the
+  choices on its own.
+
+  **Nothing about the notation changed, deliberately.** An object still reads as its
+  label underlined, its state in brackets, its members as `name = value` with the
+  business key marked and an absent member saying so; a containment still carries the
+  composition diamond and a key-resolved reference is still dashed and bare, because
+  those are different claims. The three e2e tests that state all of that were left
+  exactly as they were and still pass — which is the evidence the port changed the
+  substrate and not the picture. One detail did have to be put back deliberately:
+  diagram-js draws in insertion order, so the lines came out *over* the boxes where
+  they had always passed behind them. They are inserted ahead of the shapes now, in
+  their own order, and both halves of that have a test.
+
+  Two things are new rather than moved. The canvas **survives a re-render**: selecting
+  an element re-renders the whole inspector, and a live instance does it again on
+  every poll that brings new frames, so rebuilding the drawing each time would have
+  thrown away the zoom and the pan the reader had just set — the two things the port
+  exists to give them. And the diagram is **read-only on purpose**: the graph is
+  derived by the server, so there is no document to write back to and a box dragged
+  here would be put back by the next refresh. Move, resize and connect are absent
+  rather than refused, because a canvas that offers a gesture it silently discards is
+  worse than one that does not offer it.
+
+  Where a box *sits* is still decided in the browser, and that is not an oversight:
+  the server owns what relates to what because that is model semantics, and layout is
+  drawing. It just lives beside the renderer that uses it now instead of in a
+  twelve-thousand-line view file. The bundle grew 4,476 bytes for the whole notation
+  — one copy of diagram-js is the expensive part, and it was already paid for.
+
 - **The training nuggets show the real Atlas, not a drawing of it.** The stages
   shipped as markup built from the handbook's own theme tokens, and the reasoning
   for that was sound as far as it went: no binary weight, both colour schemes, both
@@ -421,6 +480,62 @@ _Changed_ / _Removed_ for each version.
   self-service pair is now `eonb-start`/`eonb-freigabe`.
 
 ### Fixed
+
+- **Every instance start scanned the whole runtime on the single writer.** `/stats` looks
+  like an aggregate and is not one: all three of its counts walk a whole column family,
+  so on a server holding 50.000 instances and 200.000 tokens a single call was a
+  quarter-million-key scan. ADR-0080 introduced maintained counters, but for the
+  per-definition sums the Prometheus path uses — the counts behind `/stats` are the
+  authoritative scans it is explicitly contrasted with.
+
+  The endpoint was not the main caller. Seven of the eight callers are **write paths**
+  that report the counts back in their response — starting an instance, publishing a
+  message, cancelling or terminating a batch, a CSV upload — and each took a run-loop
+  turn of its own purely for that read-back. So every instance start paid a full
+  population scan on the single writer, and a load generator kept the engine executing
+  one per write, indefinitely. That is what made the API unreachable; the parked test
+  instances were not the load, they were the size that made each read-back expensive.
+
+  `readStats` now takes a `state.ReadView` instead of the live store, which moves the
+  counting off the run loop and makes it impossible to spell the on-loop version: a
+  caller must obtain a view. All eight sites go through one helper, so the write paths
+  were fixed by the same change as the endpoint. `GET /api/v1/incidents` was the same
+  defect in its milder form — two rows to return and its whole walk, its per-instance
+  lookups and its deployment-map reads inside the loop — and now runs off it too. Both
+  reads are snapshots, so a page can no longer mix an instance counted before a write
+  with a token counted after it. Both also answer 503 while the server is shutting down
+  rather than a 200 that cannot be told apart from a true empty answer: the old code
+  reported `{"activeProcessInstances":0,…}`, which reads as "the engine is empty". The
+  reasoning is in [the record on the runtime counts](docs/adr/0266-stats-and-incidents-off-the-loop.md).
+
+  `/stats` is no faster for its own caller — it still walks the population. It simply no
+  longer walks it for everybody else.
+
+- **Signing in waited for the engine, so a busy server locked everybody out.** On a
+  server carrying ~50.000 parked process instances, with load generators still starting
+  and finishing more, `POST /api/v1/auth/login` stopped answering while
+  `GET /api/v1/info` answered instantly. Nothing was down and nothing was slow: the
+  login was *queued*. Both of its lookups were dispatched onto the single-writer run
+  loop ([ADR-0002](docs/adr/0002-single-writer-partition-model.md)), which executes one
+  closure at a time in arrival order, so authentication was only ever as available as
+  the processor was idle — and an operator signs in precisely in order to deal with a
+  processor that is not.
+
+  Neither lookup reads engine state. Accounts and groups are durable sidecar records
+  ([ADR-0044](docs/adr/0044-user-management-and-authentication-boundary.md)) that never
+  travel through the WAL or the processor; they sat on the loop by convention. They now
+  read directly off it, so a login costs zero loop turns and answers at the speed of the
+  filesystem regardless of engine load — matching the rest of the session path, which
+  never needed the loop either ([ADR-0180](docs/adr/0180-groups-as-members.md),
+  [ADR-0185](docs/adr/0185-live-group-membership.md)). Writes are untouched: the run loop
+  remains the single writer of design-time state, and the OIDC callback's account
+  resolution deliberately stays on it, because that path may *create* the account it is
+  resolving and the check-then-write is atomic only inside one turn. A listing that meets
+  a record deleted from under it now skips that record instead of failing outright, which
+  is what an off-loop reader can legitimately see. The reasoning is in
+  [the record on signing in off the run loop](docs/adr/0265-login-off-the-run-loop.md).
+
+  What the login was queued *behind* is the entry below.
 
 - **The replay drew a deferred choice as several tokens, and parked one on the gateway
   that was not there.** The live diagram stopped drawing an event-based gateway's race

@@ -599,3 +599,303 @@ export class ClassCanvas {
   }
   destroy() { this.diagram.destroy(); }
 }
+
+// ---------------------------------------------------------------------------
+// The object diagram: the run-time twin of the class diagram above.
+//
+// UML draws types and instances as two diagrams, and that split is the reason UML
+// was the right notation for Atlas at all — it falls on the design-time/run-time
+// line the engine already has (ADR-0230 §4). The class canvas above draws what an
+// order *is*; this one draws the three orders an instance is actually carrying.
+//
+// It arrives here later than the class canvas because it was written earlier, by
+// hand: `renderObjectDiagram` built SVG strings with its own layout and had no
+// zoom, no pan and no selection. That is word for word the complaint ADR-0237 made
+// about the class canvas, one altitude down, and the answer is the same one — the
+// look was downstream of the substrate.
+//
+// Two things stay different from the canvas above, and both follow from the graph
+// being *derived*:
+//
+//   - **It is read-only.** There is no document to write back to. The server derives
+//     the picture from the instance's data objects because the rules for what
+//     relates to what are model semantics (ADR-0230 §4), so a box moved here would
+//     be moved back by the next refresh. Move, resize, connect and undo are
+//     therefore absent rather than refused: a canvas that offers a gesture it
+//     silently discards is worse than one that does not offer it.
+//   - **Layout is the canvas's own.** The server sends no geometry and should not:
+//     where a box sits is drawing, not semantics. The arrangement below — roots
+//     across, their parts beneath them — is carried over from the hand-rolled
+//     renderer, because it is the shape a person reads an object diagram in and it
+//     needs no force simulation to arrive at.
+//
+// Selection is kept, though nothing edits what is selected: in a diagram of a dozen
+// objects, clicking a box to outline it is how a reader follows one of its lines.
+
+const OBJ_W = 210;
+const OBJ_HEAD_H = 34;
+const OBJ_ROW_H = 18;
+const OBJ_GAP_X = 60;
+const OBJ_GAP_Y = 40;
+
+// An object box is as tall as its members make it — the same rule the class box
+// follows, so the two diagrams read as one notation rather than two.
+export function objectHeight(node) {
+  return OBJ_HEAD_H + Math.max(1, (node.attributes || []).length) * OBJ_ROW_H + 10;
+}
+
+// objectVisual draws one object: its reading, a rule, then its members as
+// `name = value`. The classes are the ones the stylesheet already carries, because
+// the appearance of this diagram was never the thing that was wrong with it.
+function objectVisual(parent, shape) {
+  const bo = shape.businessObject || {};
+  const g = svg("g", {
+    class: `og-node${bo.nested ? " nested" : ""}${bo.unset ? " unset" : ""}`,
+    "data-name": bo.name || "", "data-id": bo.id || "",
+  }, parent);
+
+  svg("rect", { width: shape.width, height: shape.height, rx: 6, class: "og-box" }, g);
+  svg("line", { x1: 0, y1: OBJ_HEAD_H, x2: shape.width, y2: OBJ_HEAD_H, class: "og-sep" }, g);
+  // The label is `order : Order`, underlined by the stylesheet — UML's own way of
+  // saying "this is an instance, not a type", and the one mark that tells the two
+  // diagrams apart at a glance.
+  text(g, bo.label || "", { x: 10, y: 15, class: "og-label" });
+  if (bo.state) {
+    text(g, `[${bo.state}]`,
+      { x: shape.width - 10, y: 15, class: "og-state", "text-anchor": "end" });
+  }
+
+  const rows = bo.attributes || [];
+  if (!rows.length) {
+    // An object whose class is unknown, or whose value is not a structure, has no
+    // member list to show — so it shows what it holds, and an unset one says so
+    // rather than rendering as an empty box.
+    const line = svg("text", { x: 10, y: OBJ_HEAD_H + 13, class: "og-attr" }, g);
+    const only = svg("tspan", { class: bo.unset ? "og-absent" : "og-val" }, line);
+    only.textContent = bo.unset ? "unset" : (bo.value || "");
+    return g;
+  }
+  rows.forEach((a, i) => {
+    const line = svg("text", { x: 10, y: OBJ_HEAD_H + i * OBJ_ROW_H + 13, class: "og-attr" }, g);
+    const span = (content, cls) => {
+      const t = svg("tspan", { class: cls }, line);
+      t.textContent = content;
+    };
+    // The key is marked because it is what makes this object *this* order, and what
+    // another object's reference has to match to become a line.
+    span(`${a.key ? "⚿ " : ""}${a.name}`, `og-attr-name${a.key ? " key" : ""}`);
+    span(" = ", "og-eq");
+    // "this object does not carry that member" and "it carries it, empty" are
+    // different facts about a datum, and the first is usually the one worth noticing.
+    span(a.absent ? "not set" : a.value, a.absent ? "og-absent" : "og-val");
+  });
+  return g;
+}
+
+// The composition diamond, and only it. The two kinds of line are different claims:
+// a containment is a part read out of its whole's value, and carries the diamond; a
+// reference is an inference from two values agreeing on a business key, and is drawn
+// dashed and bare. Marking both would say the graph knows more than it does.
+function ensureObjectMarker(canvas) {
+  const defs = canvas._svg.querySelector("defs") || svg("defs", {}, canvas._svg);
+  if (!defs.querySelector("#og-diamond")) {
+    const marker = svg("marker", {
+      id: "og-diamond", markerWidth: 18, markerHeight: 12, refX: 16, refY: 6,
+      orient: "auto-start-reverse", markerUnits: "userSpaceOnUse",
+    }, defs);
+    svg("path", { d: "M0,6 L8,1 L16,6 L8,11 Z", class: "og-mark" }, marker);
+  }
+}
+
+function ObjectRenderer(eventBus, canvas) {
+  BaseRenderer.call(this, eventBus, 1500);
+  this.canvas = canvas;
+}
+inherits(ObjectRenderer, BaseRenderer);
+ObjectRenderer.$inject = ["eventBus", "canvas"];
+
+ObjectRenderer.prototype.canRender = (element) => /^uml:object/.test(element.type || "");
+ObjectRenderer.prototype.drawShape = (parent, shape) => objectVisual(parent, shape);
+
+ObjectRenderer.prototype.drawConnection = function(parent, connection) {
+  const bo = connection.businessObject || {};
+  const wp = connection.waypoints;
+  const g = svg("g", { class: "og-line-group", "data-id": bo.id || "" }, parent);
+  const line = svg("polyline", {
+    points: wp.map((p) => `${p.x},${p.y}`).join(" "),
+    class: `og-line ${bo.kind || "association"}`,
+  }, g);
+  // setAttribute, not tiny-svg's attr: attr routes every name that is also a CSS
+  // property — fill, marker-start — into the inline style instead, which draws the
+  // same but leaves no attribute for a reader (or a test) to see. Which end carries
+  // the diamond is what the notation *means*, so it stays an attribute.
+  line.setAttribute("fill", "none");
+  if (bo.kind === "composition") {
+    ensureObjectMarker(this.canvas);
+    line.setAttribute("marker-start", "url(#og-diamond)");
+  }
+  if (bo.label) {
+    // A containment drops out of the bottom, so its label rides beside the vertical
+    // leg; a reference runs across, so its label sits above the middle of it.
+    const at = wp.length > 2
+      ? { x: wp[0].x + 8, y: (wp[0].y + wp[1].y) / 2 }
+      : { x: (wp[0].x + wp[1].x) / 2, y: (wp[0].y + wp[1].y) / 2 - 6 };
+    text(g, bo.label, { x: at.x, y: at.y, class: "og-line-label" });
+  }
+  return g;
+};
+
+ObjectRenderer.prototype.getShapePath = function(shape) {
+  return `M${shape.x},${shape.y} l${shape.width},0 l0,${shape.height} l-${shape.width},0 z`;
+};
+
+const ObjectRendererModule = {
+  __init__: ["objectRenderer"],
+  objectRenderer: ["type", ObjectRenderer],
+};
+
+const OBJECT_VIEW_MODULES = [
+  ObjectRendererModule, SelectionModule, MoveCanvasModule, ZoomScrollModule, OutlineModule,
+];
+
+// layoutObjects places every node: roots across, their parts beneath them.
+//
+// Containment is what nests, so it is what the arrangement follows — a part hangs
+// under the whole whose value it came out of. Anything the walk does not reach (a
+// cycle of containment the server's guard capped) still gets a place afterwards, so
+// no object silently vanishes from a picture of the data.
+export function layoutObjects(graph) {
+  const nodes = graph.nodes || [];
+  const children = {};
+  for (const l of graph.links || []) {
+    if (l.via === "containment") (children[l.from] = children[l.from] || []).push(l.to);
+  }
+  const nested = new Set(Object.values(children).flat());
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const pos = new Map();
+  let x = 20;
+
+  const place = (node, left, top) => {
+    const h = objectHeight(node);
+    pos.set(node.id, { x: left, y: top, w: OBJ_W, h, node });
+    let bottom = top + h;
+    for (const childId of children[node.id] || []) {
+      const child = byId.get(childId);
+      if (!child || pos.has(childId)) continue;
+      bottom = place(child, left + 40, bottom + OBJ_GAP_Y);
+    }
+    return bottom;
+  };
+  for (const root of nodes.filter((n) => !nested.has(n.id))) {
+    place(root, x, 20);
+    x += OBJ_W + OBJ_GAP_X + 40;
+  }
+  for (const n of nodes) {
+    if (pos.has(n.id)) continue;
+    place(n, x, 20);
+    x += OBJ_W + OBJ_GAP_X;
+  }
+  return pos;
+}
+
+// waypointsFor gives a link its shape. A containment drops out of the bottom of the
+// whole, which is where the eye expects a part to hang; a reference leaves one box's
+// side and enters the other's.
+function waypointsFor(link, a, b) {
+  if (link.via === "containment") {
+    const x1 = a.x + 20;
+    const y2 = b.y + b.h / 2;
+    return [{ x: x1, y: a.y + a.h }, { x: x1, y: y2 }, { x: b.x, y: y2 }];
+  }
+  return [
+    { x: a.x + a.w, y: a.y + a.h / 2 },
+    { x: b.x + (b.x < a.x ? b.w : 0), y: b.y + b.h / 2 },
+  ];
+}
+
+export class ObjectCanvas {
+  constructor(container) {
+    this.diagram = new Diagram({ canvas: { container }, modules: OBJECT_VIEW_MODULES });
+    this.canvas = this.diagram.get("canvas");
+    this.factory = this.diagram.get("elementFactory");
+    this.shapes = new Map();
+    this.connections = new Map();
+  }
+
+  // render draws one derived graph. There is no reconcile half here, and that is the
+  // difference the edit contract makes: the class canvas re-renders on every
+  // keystroke in its properties panel, so a redraw there would take the viewport and
+  // the undo stack with it. This graph changes only when the instance's data objects
+  // do — the host drops it and re-derives it — so a draw is the whole story.
+  render(graph) {
+    // Both maps are emptied onto the canvas before the new root, not just reset here.
+    // diagram-js's element registry is per diagram and not per root, so anything left
+    // in it makes the next render fail with "element already exists" — and a
+    // connection left behind is the easier of the two to forget, because removing the
+    // root looks like it should have taken it.
+    for (const conn of this.connections.values()) this.canvas.removeConnection(conn);
+    for (const shape of this.shapes.values()) this.canvas.removeShape(shape);
+    this.shapes = new Map();
+    this.connections = new Map();
+    if (this.root) this.canvas.removeRootElement(this.root);
+    this.root = this.factory.createRoot({ id: "root-objects" });
+    this.canvas.setRootElement(this.root);
+
+    const pos = layoutObjects(graph);
+    for (const [id, p] of pos) {
+      const shape = this.factory.createShape({
+        id, type: "uml:object", x: p.x, y: p.y, width: p.w, height: p.h,
+        businessObject: p.node,
+      });
+      this.canvas.addShape(shape, this.root);
+      this.shapes.set(id, shape);
+    }
+    let drawn = 0;
+    for (const [i, l] of (graph.links || []).entries()) {
+      const a = pos.get(l.from);
+      const b = pos.get(l.to);
+      if (!a || !b) continue;
+      // The index puts connections *behind* the boxes and keeps them in their own
+      // order. diagram-js draws in insertion order within one layer and the shapes
+      // are already in, so a line added plainly would cross over a box it passes
+      // rather than under it — the SVG this replaces drew every line before every
+      // box for exactly that reason. Inserting each at its own index rather than all
+      // at 0 is the second half of it: all at 0 puts them behind the boxes but
+      // reverses them among themselves, which is visible in the order their labels
+      // come out.
+      const id = `link-${i}`;
+      const conn = this.factory.createConnection({
+        id, type: "uml:objectlink",
+        source: this.shapes.get(l.from), target: this.shapes.get(l.to),
+        waypoints: waypointsFor(l, a, b), businessObject: l,
+      });
+      this.canvas.addConnection(conn, this.root, drawn++);
+      this.connections.set(id, conn);
+    }
+    // Fitting waits a frame, so the canvas can be gone by the time it runs: a reader
+    // who switches back to the list within that frame takes the diagram down first,
+    // and fitting a destroyed diagram throws where nothing is left to catch it.
+    requestAnimationFrame(() => { if (!this.destroyed) this.fit(); });
+  }
+
+  // The same fit as the class canvas: diagram-js shrinks to fit but never magnifies,
+  // which leaves a three-object diagram as a small picture in the middle of a wide
+  // screen. See ClassCanvas.fit above for the whole argument; the constants are
+  // shared so the two surfaces zoom alike.
+  fit() {
+    this.canvas.zoom("fit-viewport", "auto");
+    const box = this.canvas.viewbox();
+    if (!box.inner.width || !box.inner.height) return;
+    const room = Math.min(box.outer.width / box.inner.width, box.outer.height / box.inner.height);
+    const wanted = Math.min(room * FIT_MARGIN, MAX_FIT);
+    if (wanted > this.canvas.zoom()) this.canvas.zoom(wanted, "auto");
+  }
+  zoom(delta) {
+    const now = this.canvas.zoom();
+    this.canvas.zoom(Math.max(0.2, Math.min(4, now * delta)), "auto");
+  }
+  destroy() {
+    this.destroyed = true;
+    this.diagram.destroy();
+  }
+}
