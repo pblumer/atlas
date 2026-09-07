@@ -574,3 +574,76 @@ test("typing in the search does not reach the canvas's keyboard", async ({ page 
   expect(Math.abs(after.y - before.y)).toBeLessThan(0.5);
   expect(page.__errors).toEqual([]);
 });
+
+// Undo and redo were the other half of ADR-0237's promise, reachable from nowhere:
+// the canvas has kept a command stack since the port, and nothing asked it for
+// anything. What they undo is what the canvas does — moving something — which is why
+// the control says "the last move" and not "the last change".
+test.describe("undo and redo on the canvas", () => {
+  const undo = (page) => page.locator('#im-canvas [data-tool="undo"]');
+  const redo = (page) => page.locator('#im-canvas [data-tool="redo"]');
+
+  // A drag on the sheet, through diagram-js's own hit layer.
+  async function dragOrder(page, dx, dy) {
+    const target = box(page, "Order");
+    const at = await target.boundingBox();
+    await page.mouse.move(at.x + at.width / 2, at.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(at.x + at.width / 2 + dx, at.y + 10 + dy, { steps: 8 });
+    await page.mouse.up();
+  }
+
+  test("a mis-drag is undone, and the undo is redone", async ({ page }) => {
+    // Nothing has happened yet, so there is nothing to undo.
+    await expect(undo(page)).toBeDisabled();
+    await expect(redo(page)).toBeDisabled();
+
+    const before = await box(page, "Order").boundingBox();
+    await dragOrder(page, 90, 60);
+    const moved = await box(page, "Order").boundingBox();
+    expect(moved.x).toBeGreaterThan(before.x + 40);
+    await expect(undo(page)).toBeEnabled();
+
+    await undo(page).click();
+    const back = await box(page, "Order").boundingBox();
+    expect(Math.abs(back.x - before.x)).toBeLessThan(2);
+    await expect(redo(page)).toBeEnabled();
+
+    await redo(page).click();
+    expect((await box(page, "Order").boundingBox()).x).toBeGreaterThan(before.x + 40);
+    expect(page.__errors).toEqual([]);
+  });
+
+  // The undone position has to reach the document, or Save would write the geometry
+  // the reader just took back.
+  test("what was undone is what gets saved", async ({ page }) => {
+    const before = await box(page, "Order").boundingBox();
+    await dragOrder(page, 100, 0);
+    await undo(page).click();
+    await page.locator("#im-save").click();
+    await expect.poll(() => page.evaluate(() => window.__saved !== null)).toBe(true);
+
+    const saved = await page.evaluate(() => window.__saved.classes.find((c) => c.name === "Order"));
+    expect(saved.x).toBe(340); // the model's own position, not the dragged one
+    expect(before).toBeTruthy();
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("Ctrl+Z undoes on the sheet, and leaves a field being typed in alone", async ({ page }) => {
+    await dragOrder(page, 90, 0);
+    const moved = (await box(page, "Order").boundingBox()).x;
+    await page.keyboard.press("Control+z");
+    expect((await box(page, "Order").boundingBox()).x).toBeLessThan(moved - 40);
+
+    // With the caret in a field, Ctrl+Z belongs to that field: the box stays put.
+    // Clicked on its header rather than its middle, where a relationship's hit line
+    // crosses the box and would take the click.
+    await box(page, "Order").click({ position: { x: 30, y: 12 } });
+    await dragOrder(page, 90, 0);
+    const again = (await box(page, "Order").boundingBox()).x;
+    await page.locator("#im-c-name").click();
+    await page.keyboard.press("Control+z");
+    expect((await box(page, "Order").boundingBox()).x).toBeCloseTo(again, 0);
+    expect(page.__errors).toEqual([]);
+  });
+});

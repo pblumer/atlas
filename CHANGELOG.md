@@ -14,7 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
-- **The class canvas could not be zoomed, and a large model could not be searched.**
+- **The class canvas could not be zoomed, searched, or undone.**
   Two complaints from the same place: Data › Information model, on a model bigger
   than the window.
 
@@ -37,6 +37,14 @@ _Changed_ / _Removed_ for each version.
   that was searched for. Answering "where is `placedOn`" by selecting a class with
   forty attributes and leaving the reader to scroll would hide the answer it just
   gave.
+
+  **And undo came with the same key.** The canvas has kept a command stack since the
+  port and nothing ever asked it for anything: no button, no binding, so a mis-drag
+  was repaired by dragging back. It is now ↺ and ↻ beside the zoom controls, and
+  Ctrl/⌘ + Z — except while the caret is in a field, where Ctrl+Z belongs to what is
+  being typed. What it undoes is what the canvas does, which is moving something; a
+  renamed class or a retyped attribute is the panel editing the document and is not
+  on that stack, so the control says *the last move* rather than the last change.
 
   The panel's filter is there on its own too, above the attributes and the literals,
   matching name and type. It hides rows rather than removing them, so every row keeps

@@ -111,6 +111,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             <button type="button" class="icon-btn" data-tool="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
             <button type="button" class="icon-btn" data-tool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
             <button type="button" class="icon-btn" data-tool="fit" title="Fit the whole diagram in the window" aria-label="Fit diagram">⊡</button>
+            <span class="im-tool-sep" aria-hidden="true"></span>
+            <button type="button" class="icon-btn" data-tool="undo" title="Undo the last move on the canvas (Ctrl/⌘ + Z)" aria-label="Undo" disabled>↺</button>
+            <button type="button" class="icon-btn" data-tool="redo" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled>↻</button>
           </div>
         </div>
         <div class="im-side" id="im-side"></div>
@@ -123,6 +126,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   const sideEl = root.querySelector("#im-side");
   const problemsEl = root.querySelector("#im-problems");
   const saveBtn = root.querySelector("#im-save");
+  const undoBtn = root.querySelector('[data-tool="undo"]');
+  const redoBtn = root.querySelector('[data-tool="redo"]');
   const dirtyEl = root.querySelector("#im-dirty");
 
   // ---- palette -------------------------------------------------------------
@@ -146,7 +151,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   const canvas = new AtlasUml.ClassCanvas(canvasEl, {
     subset,
     onSelection: (bo) => onCanvasSelection(bo),
-    onChange: () => absorbMoves(),
+    onChange: () => { absorbMoves(); syncHistoryButtons(); },
   });
 
   // Zoom and pan have been the canvas's own since it moved onto diagram-js
@@ -161,6 +166,22 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   root.querySelector('[data-tool="zoom-in"]').addEventListener("click", () => canvas.zoom(1.2));
   root.querySelector('[data-tool="zoom-out"]').addEventListener("click", () => canvas.zoom(1 / 1.2));
   root.querySelector('[data-tool="fit"]').addEventListener("click", () => canvas.fit());
+
+  // Undo and redo were the other half of the record's promise, and they were reachable
+  // from nowhere: the canvas has kept a command stack since the port, and nothing on
+  // screen or on the keyboard ever asked it for anything.
+  //
+  // What they undo is what the canvas does, which here is moving something. Everything
+  // else — a renamed class, a retyped attribute, a deleted one — is the panel editing
+  // the document directly, and it is not on this stack. So the button says "the last
+  // move" rather than "the last change": a control that claims more than it does is
+  // worse than one that claims less.
+  undoBtn.addEventListener("click", () => { canvas.undo(); syncHistoryButtons(); });
+  redoBtn.addEventListener("click", () => { canvas.redo(); syncHistoryButtons(); });
+  function syncHistoryButtons() {
+    undoBtn.disabled = !canvas.canUndo();
+    redoBtn.disabled = !canvas.canRedo();
+  }
 
   // ---- the search ----------------------------------------------------------
   //
@@ -1200,10 +1221,19 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   }
 
   saveBtn.addEventListener("click", save);
+  // Typing in a field owns its own undo — taking Ctrl+Z away from a half-typed class
+  // name to move a box back would be the worst kind of surprise.
+  const typing = (el) => Boolean(el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" ||
+    el.tagName === "SELECT" || el.isContentEditable));
   const onKey = (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
       e.preventDefault();
       if (state.dirty) save();
+    }
+    if ((e.ctrlKey || e.metaKey) && !typing(document.activeElement)) {
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) { e.preventDefault(); canvas.undo(); syncHistoryButtons(); }
+      else if ((key === "z" && e.shiftKey) || key === "y") { e.preventDefault(); canvas.redo(); syncHistoryButtons(); }
     }
     if (e.key === "Escape" && state.connecting) { state.connecting = null; render(); }
   };

@@ -2,13 +2,13 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
-      "id": "the-class-canvas-could-not-be-zoomed-and-a-large-model-could",
+      "id": "the-class-canvas-could-not-be-zoomed-searched-or-undone",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "The class canvas could not be zoomed, and a large model could not be searched.",
-        "de": "The class canvas could not be zoomed, and a large model could not be searched."
+        "en": "The class canvas could not be zoomed, searched, or undone.",
+        "de": "The class canvas could not be zoomed, searched, or undone."
       },
       "summary": {
         "en": "Two complaints from the same place: Data › Information model, on a model bigger than the window.",
