@@ -1169,7 +1169,7 @@ function wireVarsPanel(root, viewer) {
   const panel = root.querySelector("#var-panel");
   const resizer = root.querySelector("#var-resizer");
   const toggle = root.querySelector("#vars-toggle");
-  if (!editor || !panel) return;
+  if (!editor || !panel) return { reveal() {} };
   const WKEY = "atlas.varsWidth";
   const CKEY = "atlas.varsCollapsed";
   const clamp = (w) => Math.max(240, Math.min(900, w));
@@ -1228,6 +1228,18 @@ function wireVarsPanel(root, viewer) {
       nudge();
     });
   }
+
+  // reveal opens the panel if the operator had it collapsed, and remembers that as
+  // their choice — the same thing the toggle does. It is for an action whose whole
+  // answer is in this panel (clicking a diagram element to filter the instance list):
+  // without it that click outlines a shape and appears to do nothing else.
+  return {
+    reveal() {
+      if (!editor.classList.contains("vars-collapsed")) return;
+      try { localStorage.setItem(CKEY, "0"); } catch { /* not storable; open it anyway */ }
+      applyCollapsed(false);
+    },
+  };
 }
 
 // wireBarMenu opens and closes the editor bar's overflow menu. The Console has a
@@ -5492,6 +5504,25 @@ function isCollaborationRoot(modeler) {
   } catch { return false; }
 }
 
+// NOT_A_TOKEN_HOLDER matches the diagram elements the engine can never park a token
+// on: the containers a process is drawn in, and the data and annotations drawn beside
+// it. Everything else that is a shape — every task, event, gateway, subprocess and
+// call activity — is a flow node, and stating the exclusion is both shorter and
+// stabler than listing the twenty-odd BPMN types that are.
+const NOT_A_TOKEN_HOLDER =
+  /:(Collaboration|Process|Participant|Lane|LaneSet|TextAnnotation|Group|DataObjectReference|DataStoreReference|DataInput|DataOutput)$/;
+
+// tokenBearing reports whether a diagram element is one a token can sit on — which
+// is what makes it a thing an operator can ask "who is here?" about. A connection is
+// not one (it carries a token between elements, it never holds one), and neither is
+// a label: a click on a label means the shape it belongs to, which the caller
+// resolves through labelTarget before asking.
+function tokenBearing(el) {
+  const bo = el && el.businessObject;
+  if (!bo || el.waypoints) return false;
+  return !NOT_A_TOKEN_HOLDER.test(bo.$type || "");
+}
+
 // The scalar types a declared start variable can take, matching what the server
 // accepts (parseStartVariables) and what the typed Deploy form coerces to.
 const START_VAR_TYPES = ["string", "number", "boolean", "json"];
@@ -9000,6 +9031,17 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   let activePages = 1, finishedPages = 1;
   let moreActive = false, moreFinished = false;
   let finishedCount = 0;    // finished instances of this version, for the honest total
+  // elementFilter is the diagram element the listing is narrowed to: clicking a task
+  // asks "which instances are sitting here?", and the panel answers with those and
+  // nothing else (ADR-draft-instances-on-an-element). "" is the whole version, which
+  // is what clicking the process — the canvas around the shapes, or a collaboration's
+  // pool — goes back to. It is a listing filter and not a second selection: the
+  // diagram keeps showing the version's aggregate tokens, because the question the
+  // filter answers is about the instance list beside it.
+  let elementFilter = "";
+  // The variables panel's collapse control, wired further down. A filter's whole
+  // answer is in that panel, so setting one opens it.
+  let varsPanelCtl = null;
   let searchQuery = "";     // the active instance search; "" means the plain listing
   let searchDraft = "";     // what is currently typed, kept across the 1.5s poll's rebuilds
   let searchError = "";     // what the last search failed with, shown in the panel
@@ -9034,7 +9076,8 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // anything the first page does not show.
   async function loadHalf(state, cursor) {
     const q = `/api/v1/instances?process=${encodeURIComponent(key)}&state=${state}&limit=${PANEL_PAGE}` +
-      (cursor ? `&before=${encodeURIComponent(cursor)}` : "");
+      (cursor ? `&before=${encodeURIComponent(cursor)}` : "") +
+      (elementFilter ? `&element=${encodeURIComponent(elementFilter)}` : "");
     const { data, headers } = await apiRaw("GET", q);
     return {
       rows: (data || []).filter((r) => r.processDefKey === key),
@@ -9054,14 +9097,19 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // signature: otherwise the picker would keep the "80 of 80" it was first built
     // with while the panel beside it says "80 of 150".
     const total = Math.max(runningCount + finishedCount, instances.length);
-    const sig = instances.map((r) => `${r.key}:${r.state}`).join(",") + `|${searchQuery}|${total}`;
+    const sig = instances.map((r) => `${r.key}:${r.state}`).join(",") + `|${searchQuery}|${elementFilter}|${total}`;
     if (sig === instSig) return;
     instSig = sig;
     // Drop a selection that no longer exists (e.g. its definition was deleted).
     if (selected !== "all" && !instances.some((r) => String(r.key) === selected)) selected = "all";
+    // A filtered listing does not say "of 300000": the total is the version's, and
+    // what is listed is the instances on one element — two different populations, and
+    // putting them in one label is how a filter reads as a truncated page.
     const label = searchQuery
       ? `Search results (${instances.length})`
-      : `All instances (${listedAll() ? instances.length : `${instances.length} of ${total}`})`;
+      : elementFilter
+        ? `At ${elementLabel(elementFilter)} (${listedAll() ? instances.length : `${instances.length}+`})`
+        : `All instances (${listedAll() ? instances.length : `${instances.length} of ${total}`})`;
     instSel.innerHTML =
       `<option value="all"${selected === "all" ? " selected" : ""}>${esc(label)}</option>` +
       instances.map((r) =>
@@ -9094,14 +9142,64 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (searchQuery) return; // a search owns the list until it is cleared
     let active, done;
     try {
+      // A token exists only in a running instance, so a filtered listing has no
+      // finished half to read — asking for one would be a request per poll whose
+      // answer is always empty.
       [active, done] = await Promise.all([
         loadPages("active", activePages),
-        loadPages("finished", finishedPages),
+        elementFilter ? Promise.resolve({ rows: [], more: false }) : loadPages("finished", finishedPages),
       ]);
     } catch { return; } // transient; the picker just keeps its current options
     moreActive = active.more;
     moreFinished = done.more;
     applyInstances(active.rows.concat(done.rows));
+  }
+
+  // elementLabel names a diagram element the way the operator sees it: its label if
+  // it has one, otherwise its BPMN id — which is all an unlabelled gateway has.
+  function elementLabel(id) {
+    const el = registry.get(id);
+    const bo = el && el.businessObject;
+    return (bo && (bo.name || bo.id)) || id;
+  }
+
+  // setElementFilter narrows the listing to the instances sitting on one element, or
+  // — with "" — puts the whole version back. Clicking the same element again clears
+  // it, so the shape that switched the filter on is also what switches it off.
+  //
+  // Setting one puts a search away — the two are different questions of the server,
+  // and a panel showing one while labelled the other is worse than either. *Leaving*
+  // one does not: a click on the canvas is how a filter is left, and a stray click
+  // must not also throw away a query nobody asked about. It also goes back to the
+  // whole-version listing, because a filter on a single selected instance would be a
+  // list of one that is either that instance or empty.
+  function setElementFilter(id) {
+    const next = id && id !== elementFilter ? id : "";
+    if (next === elementFilter) return false;
+    elementFilter = next;
+    if (next) { searchQuery = searchDraft = ""; searchError = ""; archiveState = ""; }
+    selected = "all";
+    activePages = finishedPages = 1;
+    moreActive = moreFinished = false;
+    instSig = "";
+    instances = [];
+    // A selection was made against the previous list, so it does not survive a change
+    // of what the list is. Whole-version scope least of all: it means "every running
+    // instance of this version", which under a filter is emphatically not what is on
+    // screen.
+    selectMode = false;
+    scopeAllActive = false;
+    picked.clear();
+    if (elementFilter && varsPanelCtl) varsPanelCtl.reveal();
+    return true;
+  }
+
+  // applyFilterChange switches the filter and re-reads at once, so the panel answers
+  // on the click rather than up to 1.5 seconds later on the next tick. Nothing is
+  // rendered in between: the previous rows stay on screen for the one round trip and
+  // are then replaced whole, rather than blinking through an empty list.
+  async function applyFilterChange(id) {
+    if (setElementFilter(id)) await poll();
   }
 
   // loadMore deepens whichever half still has more, then re-reads. It goes through
@@ -9129,6 +9227,9 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // in the engine.
   async function runInstanceSearch(raw) {
     const q = (raw || "").trim();
+    // The search asks the server a different question than the element filter does,
+    // so running one puts the other away rather than pretending they compose.
+    if (q) elementFilter = "";
     searchQuery = q;
     searchDraft = q;
     searchError = "";
@@ -9325,7 +9426,9 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         : (listedAll() ? `${instances.length}` : `${instances.length} of ${total}`);
       const title = searchQuery
         ? `Variables · search “${esc(searchQuery)}” (${shown})`
-        : `Variables · all instances (${shown})`;
+        : elementFilter
+          ? `Variables · at ${esc(elementLabel(elementFilter))} (${listedAll() ? instances.length : `${instances.length}+`})`
+          : `Variables · all instances (${shown})`;
       const head = !activeInsts.length
         ? `<div class="vp-head"><span class="vp-title">${title}</span></div>`
         : `<div class="vp-head">
@@ -9333,13 +9436,26 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
             <span class="vp-actions">${selectMode
               ? (() => {
                   const n = scopeAllActive ? allActive : picked.size;
+                  // "All active" is the whole version, which is a different set from
+                  // the one a filtered panel is showing — so under a filter the only
+                  // scope offered is the ticks, which are what is actually on screen.
                   return `<button class="btn danger sm" data-term-go ${n ? "" : "disabled"} title="Terminate the selected instances">Terminate${n ? ` ${n}` : ""}</button>
-                 <button class="btn neutral sm${scopeAllActive ? " on" : ""}" data-term-all title="Select every running instance of this version">All active (${allActive})</button>
+                 ${elementFilter ? "" : `<button class="btn neutral sm${scopeAllActive ? " on" : ""}" data-term-all title="Select every running instance of this version">All active (${allActive})</button>`}
                  <button class="btn neutral sm" data-term-off title="Leave selection mode">Done</button>`;
                 })()
               : `<button class="btn neutral sm" data-term-on title="Select running instances to terminate in bulk">&#9745; Select</button>`}
             </span>
           </div>`;
+      // What the listing is narrowed to, and the way back out of it. The diagram
+      // outlines the element as well, but the panel is where the rows are, and a
+      // filter you cannot see is a filter you think is an empty process.
+      const filterRow = elementFilter
+        ? `<div class="vp-filter" title="Only instances whose token is sitting on this element right now. Click the process background — or this chip's × — to list every instance again.">
+             <span class="vp-filter-k">on</span>
+             <b>${esc(elementLabel(elementFilter))}</b>
+             <button class="btn ghost sm" type="button" data-filter-clear title="Show every instance of this version again">&times;</button>
+           </div>`
+        : "";
       // The search row is what makes this panel usable at scale: a bare instance key
       // is a point read on the server, and anything else is a variable search scoped
       // to this version. It sits above the list so it is the first thing reached
@@ -9369,10 +9485,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       const emptyNote = searchQuery
         ? `<p class="muted" style="margin:0">No instance of this version matches “${esc(searchQuery)}”.</p>` +
           (archiveNote ? `<p class="muted vp-archive-note" style="margin:6px 0 0">${esc(archiveNote)}</p>` : "")
-        : `<p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`;
+        : elementFilter
+          // An empty filtered list is a fact about right now, not about the process:
+          // tokens have very likely been through here, and the diagram's gray count
+          // beside the shape is saying so. Say which of the two this is.
+          ? `<p class="muted" style="margin:0">No instance is sitting on ${esc(elementLabel(elementFilter))} right now.</p>`
+          : `<p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`;
       html = !instances.length
-        ? `<div class="vp-head"><span class="vp-title">Variables</span></div>${searchRow}${emptyNote}`
-        : `${head}${searchRow}
+        ? `<div class="vp-head"><span class="vp-title">${elementFilter ? title : "Variables"}</span></div>${filterRow}${searchRow}${emptyNote}`
+        : `${head}${filterRow}${searchRow}
         <div class="vp-insts${selectMode ? " picking" : ""}">${instances.map((r) => {
           const ts = tasksFor(r.key);
           const active = r.state === "active";
@@ -9464,6 +9585,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     drawImplBadges(viewer); // type icons are static; overlays.clear() reaped them
     for (const [id, marker] of marked) canvas.removeMarker(id, marker);
     marked = [];
+    // The element the listing is filtered to is outlined on the diagram, so the chip
+    // in the panel and the shape that was clicked are visibly one thing. It is drawn
+    // outside the runtime loop below because an element nothing has ever reached has
+    // no runtime row — and "nobody is here" is an answer the filter must be able to
+    // show without the shape losing its outline.
+    if (elementFilter && registry.get(elementFilter)) {
+      canvas.addMarker(elementFilter, "atlas-filtered");
+      marked.push([elementFilter, "atlas-filtered"]);
+    }
     // The tasks in scope: a single instance's own, or (for "All instances") every
     // waiting task of this version. Grouped by element so a user-task element in
     // the diagram can be linked straight to its form.
@@ -9709,6 +9839,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (t.closest("[data-term-go]")) { await runTerminate(); return; }
     if (t.closest("[data-load-more]")) { await loadMore(); return; }
     if (t.closest("[data-search-clear]")) { await runInstanceSearch(""); return; }
+    if (t.closest("[data-filter-clear]")) { await applyFilterChange(""); return; }
   });
 
   // What is typed is mirrored into searchDraft, because the 1.5s poll rebuilds this
@@ -9822,7 +9953,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   root.querySelector("#refresh").addEventListener("click", poll);
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
   bindVarCopy(varPanel, toast);
-  wireVarsPanel(root, viewer);
+  varsPanelCtl = wireVarsPanel(root, viewer);
 
   // Decision panel: hovering (or focusing) a result row backed by a decision table
   // reveals that table, matched rule highlighted, in a shared viewport popover — the
@@ -9886,19 +10017,35 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     location.hash = `#/operations/p/${dep.key}`;
   });
 
-  // Inspecting a decision (ADR-0066): clicking a business rule task on the diagram
-  // opens how its decision was made in the side panel (toggle off by clicking it
-  // again); clicking any other element leaves the inspection. The ⚖ badge on a
-  // decided task is the discoverable affordance for the same thing.
-  viewer.on("element.click", ({ element }) => {
-    if (element && element.businessObject && element.businessObject.$type === "bpmn:BusinessRuleTask") {
-      focusEl = focusEl === element.id ? null : element.id;
-      renderVariables();
-      poll();
-    } else if (focusEl) {
-      focusEl = null;
-      renderVariables();
-    }
+  // Clicking the diagram is how an operator asks the instance list a question
+  // (ADR-draft-instances-on-an-element). A flow node means "which instances are
+  // sitting here?" and narrows the panel to them; clicking it again, or clicking
+  // anything that is not one — the canvas around the shapes, a collaboration's pool
+  // or lane, a sequence flow — means "all of them" and puts the whole version back.
+  //
+  // That takes over the click a business rule task used to answer with its decision
+  // (ADR-0066). The ⚖ badge on a decided task keeps that: it is the affordance that
+  // says a decision is there to inspect, it is on exactly the tasks that have one,
+  // and unlike the bare click it does not have to be guessed at.
+  viewer.on("element.click", ({ element, originalEvent }) => {
+    const el = (element && element.labelTarget) || element;
+    // A click on a call activity's "+" is the first half of the drill-in gesture
+    // (ADR-0245), not a question about the list. Filtering on it would also break
+    // the drill-in it starts, since following the call needs the single instance a
+    // filter puts away.
+    if (isCallActivity(el && el.businessObject) && onCallMarker(canvas, el, originalEvent)) return;
+    const leavingDecision = focusEl !== null;
+    focusEl = null;
+    if (setElementFilter(tokenBearing(el) ? el.id : "")) poll();
+    else if (leavingDecision) renderVariables();
+  });
+  // A click that lands on no shape at all is the same instruction — "the process,
+  // not an element of it" — and bpmn-js does not always report one as an
+  // element.click, so the canvas carries it. Anything inside a shape's hit area or
+  // one of the diagram's own overlay badges is already somebody else's click.
+  canvasBox.addEventListener("click", (ev) => {
+    if (ev.target.closest(".djs-element, .djs-overlay")) return;
+    applyFilterChange("");
   });
   // The ⚖ badge (a diagram overlay) and the panel's "← Variables" button are HTML,
   // so they're wired by delegation on the view root.

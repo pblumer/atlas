@@ -51,6 +51,7 @@ const (
 	cfVariableIndex          columnFamily = 0x26 // varIdx:<name>:<value>:0x00:<piKey> → nil
 	cfElementTermination     columnFamily = 0x27 // elTerm:<procDefKey>:<piKey>:<elementId> → int64 count
 	cfElementTerminationAgg  columnFamily = 0x28 // elTermAgg:<procDefKey>:<elementId> → int64 cumulative terminations (merge)
+	cfInstanceByElement      columnFamily = 0x29 // piByEl:<procDefKey>:<elementId>:<piKey>:<elKey> → nil
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -185,6 +186,31 @@ func keyIncident(elKey uint64) []byte {
 
 func elByProcPrefix(procKey uint64) []byte {
 	return appendBE64([]byte{byte(cfElByProc)}, procKey)
+}
+
+// instanceByElementPrefix is the "which instances hold a token on this element"
+// index slice: one element of one definition, across every instance of it.
+func instanceByElementPrefix(procDefKey uint64, elementId int32) []byte {
+	return appendBE32(appendBE64([]byte{byte(cfInstanceByElement)}, procDefKey), uint32(elementId))
+}
+
+// keyInstanceByElement keys one live element instance under the (definition,
+// element) its token sits on. The instance key comes before the element-instance
+// key so that walking the range backwards yields instances newest first and every
+// token of one instance is adjacent — a loop or a multi-instance activity can hold
+// several tokens on the same element, and a reader wants the instance once.
+//
+// The entry has no value: the four numbers in the key are the whole fact, and the
+// instance's own record holds everything a reader goes on to show.
+func keyInstanceByElement(procDefKey uint64, elementId int32, piKey, elKey uint64) []byte {
+	return appendBE64(appendBE64(instanceByElementPrefix(procDefKey, elementId), piKey), elKey)
+}
+
+// instanceFromElementIndexKey extracts the process instance key from a piByEl
+// entry, whose trailing component is the element instance rather than the
+// instance [trailingKey] would read.
+func instanceFromElementIndexKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[len(k)-16 : len(k)-8])
 }
 
 func keyJob(key uint64) []byte {

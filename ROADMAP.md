@@ -864,6 +864,19 @@ What it takes to run this for real.
   anything; no backfill is needed, since the attribute postdates every definition that
   could lack it. Remaining, and deliberately so: substring and free text stay in the
   OpenSearch export (ADR-0114) rather than becoming a second engine index.
+  The **third way in is the diagram itself**
+  ([ADR-draft-instances-on-an-element](docs/adr/draft-instances-on-an-element.md)): a
+  live view badged "25 205 here now" beside a page of fifty was a dead end — the count
+  said how many were waiting and nothing said *which*. Clicking an element in
+  Operations now filters the instance list to the instances whose token is sitting on
+  it, clicking another switches, and clicking the process (or a collaboration's pool)
+  lists them all again. It is answered from a fourth column family,
+  `piByEl:<procDefKey>:<elementId>:<piKey>:<elKey>`, written and dropped by the same
+  two calls that move the ADR-0080 live-token counter — so the number on the shape and
+  the rows in the panel are two readings of one fact — and backfilled once at open like
+  its predecessors. `GET /api/v1/instances` gained `?element=`, scoped to `?process=`
+  and live-only, since a finished instance holds no token. The click it takes over is
+  the decision inspection's (ADR-0066), which keeps the ⚖ badge it already had.
 
 ## Milestone 5 — Scale-out 🔲
 
