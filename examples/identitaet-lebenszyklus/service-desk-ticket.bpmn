@@ -23,17 +23,28 @@
 
   Zwei Wege, mit Absicht verschieden:
 
-    * normal (95 %) — Analyse-Aufgabe mit einem unterbrechenden Boundary-Timer
+    * analyse (20 %) — Analyse-Aufgabe mit einem unterbrechenden Boundary-Timer
       über PT5M. Der Timer ist der Demo-Ersatz für den 1st Level: in einem Test
       arbeitet niemand die Warteschlange ab, und ohne Abfluss wüchse sie
       unbegrenzt. Mit ihm stellt sich ein Gleichgewicht ein — bei rund sieben
       Störungen je Minute im Zeitraffer etwa 35 offene Aufgaben. Wer von Hand
       abschliesst, kommt dem Timer zuvor und bricht ihn ab.
 
-    * ersatz (5 %) — Beschaffungs-Aufgabe *ohne* Timer. Die wartet wirklich auf
+    * ersatz (1 %) — Beschaffungs-Aufgabe *ohne* Timer. Die wartet wirklich auf
       einen Menschen. Das ist der "hängt"-Stapel, den ein Operations-Blick
-      braucht: er wächst langsam (rund 20 je Stunde) und geht nur weg, wenn
-      jemand ihn anfasst.
+      braucht — jetzt aber in einer Menge, die man ansehen statt abarbeiten
+      muss: rund zweieinhalb je Stunde.
+
+    * auto (79 %) — gar keine Aufgabe. Zwei Minuten Standzeit, dann ist die
+      Störung weg. So verhält sich ein 1st Level mit Selbstheilung und
+      Self-Service, und so bleibt die Störung im Produkt-Register auch
+      sichtbar, statt im selben Sekundenbruchteil zu entstehen und zu
+      verschwinden.
+
+  Der erste Entwurf legte *jede* Störung einem Menschen vor. In 69 Stunden
+  Dauerlauf waren das 30.665 Tickets, davon 1.412 Beschaffungsaufgaben ohne
+  Timer — alle von Hand geschlossen. Das ist keine Operations-Ansicht mehr,
+  das ist Akkordarbeit.
 
   Startvariablen kommen als Nachrichten-Nutzlast aus dem Dispatcher (ADR-0035):
   identityId, serviceId, serviceName, zeitpunkt, stoerungsklasse.
@@ -67,7 +78,18 @@
       </extensionElements>
     </scriptTask>
 
-    <exclusiveGateway id="gw_art" name="Ersatz nötig?" default="tk3"/>
+    <exclusiveGateway id="gw_art" name="Wie wird entstört?" default="tk14"/>
+
+    <intermediateCatchEvent id="t_selbstheilung" name="2 min Standzeit">
+      <timerEventDefinition><timeDuration xsi:type="tFormalExpression">PT2M</timeDuration></timerEventDefinition>
+    </intermediateCatchEvent>
+
+    <scriptTask id="s_selbstheilung" name="Selbstheilung">
+      <documentation>Der überwiegende Teil der Störungen läuft hier durch und sieht nie einen Menschen. Die zwei Minuten Standzeit sind kein Zufall: ohne sie entstünde und verschwände die Störung im selben Augenblick und wäre im Produkt-Register nie zu sehen.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= &quot;vom 1st Level automatisch behoben&quot;" resultVariable="befund"/>
+      </extensionElements>
+    </scriptTask>
 
     <userTask id="ut_analyse" name="Störung analysieren">
       <documentation>Die normale Service-Desk-Aufgabe. Der Boundary-Timer daneben schliesst sie nach fünf Minuten selbst ab — ohne diesen Abfluss wüchse die Warteschlange in einem Test ohne Bearbeiter unbegrenzt.</documentation>
@@ -132,7 +154,12 @@
     <sequenceFlow id="tk2" name="Ersatz" sourceRef="gw_art" targetRef="ut_ersatz">
       <conditionExpression xsi:type="tFormalExpression">= stoerungsklasse = "ersatz"</conditionExpression>
     </sequenceFlow>
-    <sequenceFlow id="tk3" name="Analyse" sourceRef="gw_art" targetRef="ut_analyse"/>
+    <sequenceFlow id="tk3" name="Analyse" sourceRef="gw_art" targetRef="ut_analyse">
+      <conditionExpression xsi:type="tFormalExpression">= stoerungsklasse = "analyse"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="tk14" name="Selbstheilung" sourceRef="gw_art" targetRef="t_selbstheilung"/>
+    <sequenceFlow id="tk15" sourceRef="t_selbstheilung" targetRef="s_selbstheilung"/>
+    <sequenceFlow id="tk16" sourceRef="s_selbstheilung" targetRef="gw_join"/>
     <sequenceFlow id="tk4" sourceRef="ut_analyse" targetRef="s_manuell"/>
     <sequenceFlow id="tk5" sourceRef="b_auto" targetRef="s_auto"/>
     <sequenceFlow id="tk6" sourceRef="s_manuell" targetRef="gw_join"/>
@@ -150,6 +177,8 @@
       <bpmndi:BPMNShape id="di_start" bpmnElement="start_stoerung"><dc:Bounds x="160" y="182" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="138" y="225" width="82" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_s_ticket" bpmnElement="s_ticket"><dc:Bounds x="240" y="160" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_gw_art" bpmnElement="gw_art" isMarkerVisible="true"><dc:Bounds x="390" y="175" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="378" y="138" width="75" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_t_selbst" bpmnElement="t_selbstheilung"><dc:Bounds x="507" y="442" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="487" y="485" width="80" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_s_selbst" bpmnElement="s_selbstheilung"><dc:Bounds x="640" y="420" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_ut_analyse" bpmnElement="ut_analyse"><dc:Bounds x="490" y="40" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_b_auto" bpmnElement="b_auto"><dc:Bounds x="522" y="102" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="562" y="112" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_s_manuell" bpmnElement="s_manuell"><dc:Bounds x="640" y="40" width="100" height="80"/></bpmndi:BPMNShape>
@@ -171,6 +200,9 @@
       <bpmndi:BPMNEdge id="di_tk7" bpmnElement="tk7"><di:waypoint x="740" y="200"/><di:waypoint x="800" y="200"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_tk8" bpmnElement="tk8"><di:waypoint x="590" y="340"/><di:waypoint x="640" y="340"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_tk9" bpmnElement="tk9"><di:waypoint x="740" y="340"/><di:waypoint x="825" y="340"/><di:waypoint x="825" y="225"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk14" bpmnElement="tk14"><di:waypoint x="415" y="225"/><di:waypoint x="415" y="460"/><di:waypoint x="507" y="460"/><bpmndi:BPMNLabel><dc:Bounds x="420" y="438" width="80" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk15" bpmnElement="tk15"><di:waypoint x="543" y="460"/><di:waypoint x="640" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tk16" bpmnElement="tk16"><di:waypoint x="740" y="460"/><di:waypoint x="825" y="460"/><di:waypoint x="825" y="225"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_tk10" bpmnElement="tk10"><di:waypoint x="850" y="200"/><di:waypoint x="890" y="200"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_tk11" bpmnElement="tk11"><di:waypoint x="990" y="200"/><di:waypoint x="1030" y="200"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_tk13" bpmnElement="tk13"><di:waypoint x="1130" y="200"/><di:waypoint x="1170" y="200"/></bpmndi:BPMNEdge>
