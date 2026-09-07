@@ -1,0 +1,4 @@
+{
+  "hidden": true,
+  "_why": "An MCP tool's JSON response shape. It matters to whoever wired an agent to Atlas, and to nobody reading the Console's What's New — the CHANGELOG is where they will look for it."
+}

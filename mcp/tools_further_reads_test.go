@@ -132,18 +132,7 @@ func TestInstanceDataObjectsViaTool(t *testing.T) {
 	if _, isErr := toolText(t, result(t, run(t, atlas, callTool(2, "atlas_create_instance", map[string]any{"key": 1}))[0])); isErr {
 		t.Fatal("create_instance failed")
 	}
-	listText, isErr := toolText(t, result(t, run(t, atlas, callTool(3, "atlas_list_instances", map[string]any{}))[0]))
-	if isErr {
-		t.Fatal("list_instances failed")
-	}
-	var instances []struct {
-		Key uint64 `json:"key"`
-	}
-	if err := json.Unmarshal([]byte(listText), &instances); err != nil || len(instances) == 0 {
-		t.Fatalf("parse instances: err=%v list=%q", err, listText)
-	}
-
-	text, isErr := toolText(t, result(t, run(t, atlas, callTool(4, "atlas_instance_data_objects", map[string]any{"key": instances[0].Key}))[0]))
+	text, isErr := toolText(t, result(t, run(t, atlas, callTool(4, "atlas_instance_data_objects", map[string]any{"key": firstInstanceKey(t, atlas, 3, map[string]any{})}))[0]))
 	if isErr {
 		t.Fatalf("instance_data_objects = (%q, isErr=%v)", text, isErr)
 	}

@@ -94,14 +94,7 @@ func TestDeployedAndInstanceDecisionsViaTool(t *testing.T) {
 
 	// Start an instance and find its key.
 	callOne(t, atlas, "atlas_create_instance", map[string]any{"key": dep.Definitions[0].Key})
-	var instances []struct {
-		Key   uint64 `json:"key"`
-		State string `json:"state"`
-	}
-	if err := json.Unmarshal([]byte(callOne(t, atlas, "atlas_list_instances", map[string]any{})), &instances); err != nil || len(instances) == 0 {
-		t.Fatalf("list_instances: err=%v, want an instance", err)
-	}
-	instanceKey := instances[0].Key
+	instanceKey := firstInstanceKey(t, atlas, 1, map[string]any{})
 
 	// Complete the upload task; the in-process pipeline evaluates RowValid per row.
 	upload := tasksWithName(t, callOne(t, atlas, "atlas_list_tasks", map[string]any{}), "CSV hochladen")

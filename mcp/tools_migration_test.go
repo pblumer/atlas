@@ -51,20 +51,7 @@ func deployVersion(t *testing.T, atlas *httptest.Server, id int, xml string) uin
 // runningInstanceOf returns the key of a running instance of defKey, via the tools.
 func runningInstanceOf(t *testing.T, atlas *httptest.Server, id int, defKey uint64) uint64 {
 	t.Helper()
-	text, isErr := toolText(t, result(t, run(t, atlas, callTool(id, "atlas_list_instances", map[string]any{"process": defKey}))[0]))
-	if isErr {
-		t.Fatalf("list_instances: %s", text)
-	}
-	var rows []struct {
-		Key uint64 `json:"key"`
-	}
-	if err := json.Unmarshal([]byte(text), &rows); err != nil {
-		t.Fatalf("decode instances %q: %v", text, err)
-	}
-	if len(rows) == 0 {
-		t.Fatalf("no running instance of definition %d", defKey)
-	}
-	return rows[0].Key
+	return firstInstanceKey(t, atlas, id, map[string]any{"process": defKey})
 }
 
 // TestMigrationToolsPlanThenMigrate drives the operator loop an agent would run: ask
