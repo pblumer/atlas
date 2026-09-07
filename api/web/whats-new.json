@@ -30,6 +30,94 @@
       }
     },
     {
+      "id": "your-brand-colour-reaches-the-forms",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Your brand colour now reaches the forms themselves",
+        "de": "Ihre Markenfarbe erreicht jetzt auch die Formulare"
+      },
+      "summary": {
+        "en": "Setting your organisation's colour used to tint everything around a form and stop at its edge: the form itself came from the form renderer's own stylesheet and stayed the stock blue, in a different typeface, on borders a shade off the ones beside it. It no longer does. A user task, an incident's repair form, the preview in the form editor and the public start form behind a share link are all painted from your palette, in the same typeface, on the same borders as the rest of Atlas.",
+        "de": "Bisher färbte Ihre Organisationsfarbe alles rund um ein Formular und hörte an dessen Rand auf: Das Formular selbst kam aus dem Stylesheet des Formular-Renderers, blieb im Standardblau, in einer anderen Schrift und mit Rahmen in einem leicht abweichenden Ton. Das ist vorbei. Eine Benutzeraufgabe, das Reparaturformular eines Incidents, die Vorschau im Formular-Editor und das öffentliche Startformular hinter einem Freigabelink werden aus Ihrer Palette gezeichnet — in derselben Schrift und mit denselben Rahmen wie der Rest von Atlas."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Organization",
+        "Forms"
+      ],
+      "try": {
+        "label": {
+          "en": "Set your brand colour",
+          "de": "Markenfarbe setzen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
+      "id": "the-public-start-form-and-the-sign-in-consent-screen-carry-y",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The public start form and the consent screen carry your branding",
+        "de": "Öffentliches Startformular und Zustimmungsseite tragen Ihr Erscheinungsbild"
+      },
+      "summary": {
+        "en": "Both pages are shown before anyone has signed in, and both used to display the built-in Atlas mark and the default blue no matter what you had configured. They now ask the server for your colour and your logo like every other page. That matters most for the start form: it is the page your own customers open. If the settings are momentarily unreachable the page still appears, in the default colours — a form that is late is worse than a form that is unbranded.",
+        "de": "Beide Seiten werden vor jeder Anmeldung gezeigt, und beide zeigten bisher das eingebaute Atlas-Zeichen und das Standardblau, unabhängig von Ihrer Konfiguration. Sie holen Farbe und Logo jetzt wie jede andere Seite vom Server. Am wichtigsten ist das beim Startformular: Es ist die Seite, die Ihre eigenen Kundinnen und Kunden öffnen. Sind die Einstellungen kurzzeitig nicht erreichbar, erscheint die Seite trotzdem, in den Standardfarben — ein verspätetes Formular wäre schlimmer als ein ungebrandetes."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Organization",
+        "Forms",
+        "Security"
+      ],
+      "try": {
+        "label": {
+          "en": "Upload your logo",
+          "de": "Logo hochladen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
+      "id": "a-button-label-that-stays-readable-on-your-brand-colour",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A button label that stays readable on your brand colour",
+        "de": "Beschriftungen, die auf Ihrer Markenfarbe lesbar bleiben"
+      },
+      "summary": {
+        "en": "Text on a coloured button used to be white, fixed. White on a deep blue or a federal red is fine; white on a brand yellow or a pale mint is roughly 1.5:1, which nobody can read. Atlas now works out the label colour from the colour you chose — white or near-black, whichever the colour's own brightness makes legible — and applies it everywhere your colour is a background: primary buttons, count badges, active segments, and the submit button inside a form.",
+        "de": "Text auf einer farbigen Schaltfläche war bisher fest weiss. Weiss auf einem tiefen Blau oder einem Bundesrot ist gut lesbar; Weiss auf einem Markengelb oder einem hellen Mint ergibt rund 1.5:1 und ist für niemanden lesbar. Atlas leitet die Schriftfarbe jetzt aus der von Ihnen gewählten Farbe ab — Weiss oder ein sehr dunkles Grau, je nachdem, was auf dieser Helligkeit lesbar ist — und wendet sie überall dort an, wo Ihre Farbe als Fläche dient: primäre Schaltflächen, Zähler-Badges, aktive Segmente und die Absenden-Schaltfläche im Formular."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Organization",
+        "Console"
+      ],
+      "try": {
+        "label": {
+          "en": "Try a colour",
+          "de": "Farbe ausprobieren"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
       "id": "forms-written-by-the-ai-worker",
       "version": "Unreleased",
       "date": null,
@@ -270,87 +358,6 @@
           "Eine beliebige davon an ihrem Kopf ziehen — alle bewegen sich mit. Rückgängig setzt alle zurück.",
           "Um eine einzelne zu bearbeiten, im Panel rechts auf ihre Zeile klicken."
         ]
-      }
-    },
-    {
-      "id": "a-class-with-a-hundred-attributes-had-no-room-to-show-their-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A class with a hundred attributes had no room to show their names.",
-        "de": "A class with a hundred attributes had no room to show their names."
-      },
-      "summary": {
-        "en": "The panel was 340px wide and would not budge, and inside it the two selects — which carry every class name in the model as options — took what they liked, leaving the name column a stub that read allowedA… for forty members running.",
-        "de": "The panel was 340px wide and would not budge, and inside it the two selects — which carry every class name in the model as options — took what they liked, leaving the name column a stub that read allowedA… for forty members running."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-class-canvas-could-not-be-zoomed-searched-or-undone",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The class canvas could not be zoomed, searched, or undone.",
-        "de": "The class canvas could not be zoomed, searched, or undone."
-      },
-      "summary": {
-        "en": "Two complaints from the same place: Data › Information model, on a model bigger than the window.",
-        "de": "Two complaints from the same place: Data › Information model, on a model bigger than the window."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-waiting-task-badge-on-the-live-diagram-counted-its-own-p",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The waiting-task marker on the live diagram tells the truth again",
-        "de": "Die Marke für wartende Aufgaben im Live-Diagramm sagt wieder die Wahrheit"
-      },
-      "summary": {
-        "en": "A user task on the live diagram carries a 📋 link that takes you to the work waiting on it. On a busy process that link used to print a number, and the number was wrong: a task with 1 275 people's work parked on it said \"500\", and went on saying \"500\" however many of them were completed in the Tasks app. Nothing was stuck. 500 is simply as many tasks as one request for the inbox ever returns, and the link was counting what it had been handed — so it could not move until the queue fell below 500. Worse, the same limit applies across every process at once, so enough waiting tasks somewhere else made the link vanish from a task that plainly had people waiting on it. The link now takes both its facts — whether to show it, and whether it opens the form directly or the inbox — from the engine's own count of what is sitting on that element, which is exact however many there are. It no longer prints a number of its own: the green badge on the same shape is that number, it always was right, and it is the one that goes down as the queue is worked. Two more things in the same corner: isolating one instance now asks for that instance's tasks directly, so its form stays one click away even when hundreds of thousands of others are waiting; and completing a task in the Tasks app now refreshes the inbox properly, so the \"more exist\" note disappears once the backlog is gone and \"Load older\" keeps its place.",
-        "de": "Eine Benutzeraufgabe im Live-Diagramm trägt eine 📋-Verknüpfung, die zur wartenden Arbeit führt. Bei einem gut ausgelasteten Prozess stand auf dieser Verknüpfung eine Zahl, und die war falsch: Eine Aufgabe, auf der die Arbeit von 1 275 Personen lag, zeigte «500» — und zeigte weiterhin «500», wie viele davon in der Tasks-App auch abgeschlossen wurden. Es hing nichts. 500 ist schlicht die Zahl an Aufgaben, die eine Abfrage des Postkorbs höchstens zurückgibt, und die Verknüpfung zählte, was sie erhalten hatte — bewegen konnte sie sich also erst, wenn die Warteschlange unter 500 fällt. Schlimmer noch: Dieselbe Grenze gilt über alle Prozesse zusammen, genügend wartende Aufgaben anderswo liessen die Verknüpfung an einer Aufgabe, auf die sichtbar Leute warteten, ganz verschwinden. Beide Angaben — ob die Verknüpfung erscheint und ob sie direkt das Formular oder den Postkorb öffnet — stammen jetzt aus dem Zähler der Engine für das, was auf diesem Element liegt; der ist exakt, wie viele es auch sind. Eine eigene Zahl schreibt die Verknüpfung nicht mehr: Das grüne Badge am selben Element ist diese Zahl, war immer richtig, und ist die, die sinkt, während die Warteschlange abgearbeitet wird. Zwei weitere Dinge an derselben Stelle: Wird eine einzelne Instanz herausgegriffen, werden jetzt gezielt deren Aufgaben abgefragt — ihr Formular bleibt einen Klick entfernt, auch wenn Hunderttausende andere warten; und beim Abschliessen einer Aufgabe wird der Postkorb richtig neu geladen, sodass der Hinweis «weitere vorhanden» verschwindet, sobald der Rückstau weg ist, und «Ältere laden» seine Stelle behält."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Tasks"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations › Processes and pick a process whose user task has a queue of waiting work on it.",
-          "Open its live view. The user task carries a green badge — how many are waiting right now — and a 📋 link in its upper corner.",
-          "Hover the 📋: with one task waiting it says it opens that task's form, with several it says it opens the inbox. The count itself is the green badge.",
-          "Open the Tasks app in a second tab and complete a few of those tasks.",
-          "Back on the diagram, watch the green badge come down by what you completed — at any queue length, not only under 500."
-        ],
-        "de": [
-          "Öffnen Sie Operations › Processes und wählen Sie einen Prozess, dessen Benutzeraufgabe eine Warteschlange hat.",
-          "Öffnen Sie die Live-Ansicht. Die Benutzeraufgabe trägt ein grünes Badge — wie viele gerade warten — und oben in der Ecke eine 📋-Verknüpfung.",
-          "Fahren Sie über die 📋: Wartet eine einzige Aufgabe, öffnet sie deren Formular; warten mehrere, öffnet sie den Postkorb. Die Zahl selbst steht im grünen Badge.",
-          "Öffnen Sie die Tasks-App in einem zweiten Tab und schliessen Sie einige dieser Aufgaben ab.",
-          "Zurück im Diagramm: Das grüne Badge sinkt um genau das, was Sie abgeschlossen haben — bei jeder Warteschlangenlänge, nicht erst unter 500."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]
