@@ -34,18 +34,38 @@ export function withLoadDeadline(p, what, ms = FORM_LOAD_TIMEOUT_MS) {
   });
 }
 
-// loadFormViewer lazily imports the vendored form-js viewer and injects its stylesheet
+// ensureFormStyles injects the two stylesheets a rendered form needs, once each and
+// in this order: the vendored form-js stylesheet, then the Atlas bridge that maps
+// the brand palette onto the tokens form-js reads (form-theme.css). Order is not
+// decorative — the bridge's `:root .fjs-container` block deliberately outranks
+// form-js's own `.fjs-container` declarations, and appending it second keeps it
+// ahead on document order too, so neither half depends on the other's specificity
+// alone.
+//
+// It is exported because the form editor loads the viewer through its own lazy
+// path (form-editor.js) and must not end up with the renderer but not the theme —
+// a preview in stock bpmn.io blue beside a console in the org's colour is exactly
+// the drift this file exists to prevent.
+export function ensureFormStyles() {
+  ensureCss("form-js-css", "vendor/form-js/form-js.css");
+  ensureCss("form-theme-css", "form-theme.css");
+}
+
+function ensureCss(id, href) {
+  if (document.getElementById(id)) return;
+  const link = document.createElement("link");
+  link.id = id;
+  link.rel = "stylesheet";
+  link.href = href;
+  document.head.appendChild(link);
+}
+
+// loadFormViewer lazily imports the vendored form-js viewer and injects its stylesheets
 // once, the first time anything renders a form — so a user who never opens one never
 // pays for the 86 KB of CSS or the bundle.
 export function loadFormViewer() {
   if (!_formViewer) {
-    if (!document.getElementById("form-js-css")) {
-      const link = document.createElement("link");
-      link.id = "form-js-css";
-      link.rel = "stylesheet";
-      link.href = "vendor/form-js/form-js.css";
-      document.head.appendChild(link);
-    }
+    ensureFormStyles();
     // The memo is here to load the bundle once, not to make one bad fetch permanent: a
     // remembered failure would fail every later form in the tab, leaving a page reload
     // as the only way back. So a load that fails — or that runs out its deadline — is

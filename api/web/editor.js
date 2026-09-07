@@ -26,6 +26,10 @@ import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { renderMarkdown } from "./markdown.js";
 import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
 import { attachPlayground } from "./playground.js";
+// The object diagram is drawn on the shared diagram-js bundle, the same one the
+// class canvas and Panorama use (ADR-0237). Fetched on demand, so the replay's
+// other tabs do not pay for it.
+import { loadCanvasBundle } from "./canvas-bundle.js";
 import { groupifyPanel, groupController } from "./pgroup.js";
 // Counts on the runtime views are five and six digits on a busy server, so every
 // number a badge or a count pill prints goes through the same grouping (numfmt.js).
@@ -223,6 +227,7 @@ export function cleanup() {
   if (onCalleeClick) { onCalleeClick.root.removeEventListener("click", onCalleeClick.fn); onCalleeClick = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
+  destroyObjectCanvas();
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
 window.__atlasCleanup = cleanup;
@@ -231,6 +236,20 @@ window.__atlasCleanup = cleanup;
 // (null when no editor is open). Module-level, like `current`, because cleanup()
 // has to reach it from outside a mount.
 let playground = null;
+
+// objectCanvas is the replay Data tab's object diagram, for the same reason and in
+// the same way: it is a live diagram-js instance, so leaving the view has to take it
+// down rather than leave it bound to markup that is gone.
+// It is a record rather than the canvas alone — { canvas, el, graph } — because the
+// two facts beside it are what let a re-render tell "draw this again" from "you are
+// already showing exactly this", and they must not be able to go out of sync with
+// the instance they describe.
+let objectCanvas = null;
+function destroyObjectCanvas() {
+  if (!objectCanvas) return;
+  try { objectCanvas.canvas.destroy(); } catch { /* already gone */ }
+  objectCanvas = null;
+}
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -11533,11 +11552,14 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   }
 
   function renderDataObjects() {
+    if (dataObjects.length && dataView === "diagram") return renderObjectDiagram();
+    // Every other reading replaces this tab's body wholesale, so a canvas standing in
+    // it goes now rather than being left bound to markup that no longer exists.
+    destroyObjectCanvas();
     if (!dataObjects.length) {
       dataEl.innerHTML = `<p class="ops-empty">This process declares no data objects. Draw a data object on the diagram and give an activity a data association, and the data it carries — its value, its state, and where each value came from — appears here.</p>`;
       return;
     }
-    if (dataView === "diagram") return renderObjectDiagram();
     // Who wrote a value, rendered per entry rather than per instance, because the three
     // reasons an entry can name nobody are genuinely different and the trail's own shape
     // tells them apart. The first entry is the seeding at instance creation — no element
@@ -11602,11 +11624,20 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   //
   // The graph is *derived on the server* — nodes, lines, and what could not be
   // resolved — because the rules for what relates to what are model semantics, and a
-  // second copy of them here is a second place for them to be wrong. This function
-  // is a renderer: it lays boxes out and draws lines, and knows nothing about
-  // compositions or business keys beyond the labels it is handed.
+  // second copy of them here is a second place for them to be wrong. What this
+  // function owns is the frame: fetching that graph, saying what the picture could
+  // not show, and handing the drawing to the canvas.
+  //
+  // The drawing itself is diagram-js (ADR-0237). It used to be SVG strings built
+  // here, with a layout of their own, which is why this diagram had no zoom, no pan
+  // and no selection — word for word the complaint ADR-0237 made about the class
+  // canvas, one altitude down, and answered the same way: the look was downstream of
+  // the substrate. Where a box sits is still decided here rather than by the server,
+  // because that is drawing and not semantics; it just decides it inside the canvas
+  // module now, beside the renderer that uses it.
   async function renderObjectDiagram() {
     if (!objectGraph) {
+      destroyObjectCanvas();
       dataEl.innerHTML = dataHead() + `<p class="ops-empty">Deriving the object diagram…</p>`;
       try {
         objectGraph = await api("GET", `/api/v1/instances/${key}/object-graph`);
@@ -11618,89 +11649,20 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     }
     const g = objectGraph;
     if (!g.nodes || !g.nodes.length) {
+      destroyObjectCanvas();
       dataEl.innerHTML = dataHead() + `<p class="ops-empty">Nothing to draw yet — no data object carries a value.</p>`;
       return;
     }
-
-    // Roots across, their parts beneath them: the shape a person reads an object
-    // diagram in, and it needs no force simulation to arrive at.
-    const children = {};
-    for (const l of g.links || []) {
-      if (l.via === "containment") (children[l.from] = children[l.from] || []).push(l.to);
-    }
-    const nested = new Set(Object.values(children).flat());
-    const roots = g.nodes.filter((n) => !nested.has(n.id));
-    const W = 210, GAP_X = 60, GAP_Y = 40;
-    const pos = {};
-    let x = 20;
-    let maxBottom = 0;
-    const place = (node, left, top) => {
-      const h = 34 + Math.max(1, (node.attributes || []).length) * 18 + 10;
-      pos[node.id] = { x: left, y: top, w: W, h, node };
-      let bottom = top + h;
-      for (const childId of children[node.id] || []) {
-        const child = g.nodes.find((n) => n.id === childId);
-        if (!child || pos[childId]) continue;
-        bottom = place(child, left + 40, bottom + GAP_Y);
-      }
-      return bottom;
-    };
-    for (const r of roots) {
-      const bottom = place(r, x, 20);
-      maxBottom = Math.max(maxBottom, bottom);
-      x += W + GAP_X + 40;
-    }
-    // Anything the layout did not reach (a cycle of containment the server capped)
-    // still gets a place, so no object silently vanishes from a picture of the data.
-    for (const n of g.nodes) {
-      if (pos[n.id]) continue;
-      const bottom = place(n, x, 20);
-      maxBottom = Math.max(maxBottom, bottom);
-      x += W + GAP_X;
-    }
-
-    const width = Math.max(x + 20, 600);
-    const height = Math.max(maxBottom + 40, 260);
-    const box = (p) => {
-      const n = p.node;
-      const rows = (n.attributes || []).map((a, i) => {
-        const y = 34 + i * 18 + 13;
-        const val = a.absent
-          ? `<tspan class="og-absent">not set</tspan>`
-          : `<tspan class="og-val">${esc(a.value)}</tspan>`;
-        return `<text x="10" y="${y}" class="og-attr"><tspan class="og-attr-name${a.key ? " key" : ""}">${a.key ? "⚿ " : ""}${esc(a.name)}</tspan><tspan class="og-eq"> = </tspan>${val}</text>`;
-      }).join("");
-      const bare = !(n.attributes || []).length
-        ? `<text x="10" y="${34 + 13}" class="og-attr">${n.unset
-          ? `<tspan class="og-absent">unset</tspan>`
-          : `<tspan class="og-val">${esc(n.value || "")}</tspan>`}</text>`
-        : "";
-      const state = n.state ? `<text x="${W - 10}" y="15" class="og-state" text-anchor="end">[${esc(n.state)}]</text>` : "";
-      return `<g class="og-node${n.nested ? " nested" : ""}${n.unset ? " unset" : ""}" transform="translate(${p.x},${p.y})">
-        <rect width="${W}" height="${p.h}" rx="6" class="og-box"/>
-        <line x1="0" y1="34" x2="${W}" y2="34" class="og-sep"/>
-        <text x="10" y="15" class="og-label">${esc(n.label)}</text>
-        ${state}${rows}${bare}
-      </g>`;
-    };
-
-    // A line leaves the right edge of one box and enters the left edge of the other;
-    // a containment line drops out of the bottom, which is where the eye expects a
-    // part to hang.
-    const line = (l) => {
-      const a = pos[l.from], b = pos[l.to];
-      if (!a || !b) return "";
-      const down = l.via === "containment";
-      const x1 = down ? a.x + 20 : a.x + a.w;
-      const y1 = down ? a.y + a.h : a.y + a.h / 2;
-      const x2 = down ? b.x : b.x + (b.x < a.x ? b.w : 0);
-      const y2 = down ? b.y + b.h / 2 : b.y + b.h / 2;
-      const d = down ? `M${x1},${y1} L${x1},${y2} L${x2},${y2}` : `M${x1},${y1} L${x2},${y2}`;
-      const marker = l.kind === "composition" ? ` marker-start="url(#og-diamond)"` : "";
-      const mid = down ? { x: x1 + 8, y: (y1 + y2) / 2 } : { x: (x1 + x2) / 2, y: (y1 + y2) / 2 - 6 };
-      return `<path d="${d}" class="og-line ${esc(l.kind)}" fill="none"${marker}/>` +
-        (l.label ? `<text x="${mid.x}" y="${mid.y}" class="og-line-label">${esc(l.label)}</text>` : "");
-    };
+    // Already showing this graph: leave it alone. renderInspector() re-renders this
+    // tab whenever an element is selected, and again on every live poll that brings
+    // new frames — so on a running instance the diagram would be rebuilt on a timer,
+    // throwing away the zoom and the pan the reader had just set. Those are the two
+    // things this drawing moved onto diagram-js to gain, so keeping them across a
+    // re-render is the point rather than an optimization. The graph is *replaced*
+    // when the data objects actually change (refreshDataObjects drops it) and never
+    // mutated, so identity is the whole test.
+    if (objectCanvas && objectCanvas.graph === g && dataEl.contains(objectCanvas.el)) return;
+    destroyObjectCanvas();
 
     // What the picture could not show, said rather than left out. An unresolved
     // reference is not a fault — it is the edge of one instance: the object it names
@@ -11723,16 +11685,39 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     }
 
     dataEl.innerHTML = dataHead() + `
-      <div class="og-scroll">
-        <svg class="og-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-          <defs><marker id="og-diamond" markerWidth="18" markerHeight="12" refX="16" refY="6"
-              orient="auto-start-reverse" markerUnits="userSpaceOnUse">
-            <path d="M0,6 L8,1 L16,6 L8,11 Z" class="og-mark"/></marker></defs>
-          ${(g.links || []).map(line).join("")}
-          ${g.nodes.map((n) => box(pos[n.id])).join("")}
-        </svg>
+      <div class="og-stage">
+        <div class="og-canvas" id="og-canvas"></div>
+        <div class="og-tools">
+          <button type="button" class="icon-btn" data-tool="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+          <button type="button" class="icon-btn" data-tool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+          <button type="button" class="icon-btn" data-tool="fit" title="Fit diagram" aria-label="Fit diagram">⊡</button>
+        </div>
       </div>
       ${notes.length ? `<div class="og-notes">${notes.map((n) => `<p>${n}</p>`).join("")}</div>` : ""}`;
+
+    const el = dataEl.querySelector("#og-canvas");
+    let uml;
+    try {
+      uml = (await loadCanvasBundle()).uml;
+    } catch {
+      el.innerHTML = `<p class="ops-empty err">Could not load the diagram canvas.</p>`;
+      return;
+    }
+    // The bundle is a fetch, so this tab may have been re-rendered — or left — while
+    // it was in flight. Drawing into an element nothing shows any more would leave a
+    // live canvas nobody can reach and nothing tears down.
+    if (current !== viewer || !dataEl.contains(el)) return;
+    const canvas = new uml.ObjectCanvas(el);
+    objectCanvas = { canvas, el, graph: g };
+    canvas.render(g);
+
+    // The same three controls, with the same icons and the same step, as the class
+    // canvas and Panorama: zooming a diagram is the same act on all three surfaces,
+    // and a near-miss between them is worse than any one of the choices on its own.
+    const stage = el.parentElement;
+    stage.querySelector('[data-tool="zoom-in"]').addEventListener("click", () => objectCanvas?.canvas.zoom(1.2));
+    stage.querySelector('[data-tool="zoom-out"]').addEventListener("click", () => objectCanvas?.canvas.zoom(1 / 1.2));
+    stage.querySelector('[data-tool="fit"]').addEventListener("click", () => objectCanvas?.canvas.fit());
   }
 
   // The trail toggles are inside a body that re-renders, so they are wired by

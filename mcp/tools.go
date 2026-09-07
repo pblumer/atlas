@@ -208,11 +208,37 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
-			Name:        "atlas_list_instances",
-			Description: "List running process instances with their definition, version, token count, and state.",
-			InputSchema: noArgs(),
-			Handler: func(c *Client, _ map[string]any) (string, error) {
-				return asText(c.get("/api/v1/instances"))
+			Name: "atlas_list_instances",
+			Description: "List process instances with their definition, version, token count, state and variables. " +
+				"With no arguments: every instance in the engine, capped. 'process' narrows to one definition key and " +
+				"reads that version's own index, so the cost is the page rather than the store — and it is what makes " +
+				"'state' (active|finished|all) and cursor paging available. 'element' narrows further to the instances " +
+				"whose token is sitting on that BPMN element id right now — the \"who is stuck on this task?\" " +
+				"question, answered from the element's own index rather than by reading through the version; it needs " +
+				"'process' (an element id is only meaningful within the version defining it) and lists live instances " +
+				"only, since a finished instance holds no token. Returns {items, truncated, nextCursor} like " +
+				"atlas_list_tasks: hand nextCursor back as 'before' for the next, older page. A truncated page with " +
+				"no nextCursor means there is more but this listing has no position to resume from — narrow it with " +
+				"'process' and a single 'state' to get one. To reach one particular instance use " +
+				"atlas_search_instances, which answers a bare instance key with a point read.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"process": map[string]any{
+						"type":        "integer",
+						"description": "Optional process definition key (from atlas_list_processes): narrows to that version and reads its index.",
+					},
+					"element": stringProp("Optional BPMN element id (as written in the model, e.g. \"Eintritt_verbuchen\"): lists only the instances whose token is sitting on that element right now. Requires 'process'."),
+					"state":   stringProp("Optional half to list: \"active\", \"finished\" or \"all\" (the default). A single half is what a cursor can page."),
+					"limit": map[string]any{
+						"type":        "integer",
+						"description": "Optional maximum rows to return (default 1000, max 10000).",
+					},
+					"before": stringProp("Optional cursor: the nextCursor of a previous page, passed back verbatim, to fetch the next (older) page. Requires 'process' and a single 'state' — the two halves are ordered differently, so one cursor cannot address both."),
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return listInstancesPage(c, args)
 			},
 		},
 		{

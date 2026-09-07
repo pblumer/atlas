@@ -12,7 +12,97 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **`atlas_list_instances` (MCP) returns a page, not a bare array.** It answered with
+  a plain JSON array, which cannot say it is a *page* — and the endpoint behind it caps
+  at 1000 rows and flags the cut in a header the body does not carry. An agent handed
+  the array alone read the first page of three hundred thousand instances as though it
+  were the whole population, and acted on it.
+
+  It now answers with `{items, truncated, nextCursor}` — the envelope
+  `atlas_list_tasks` already used — and takes a `before` cursor to resume. The two list
+  tools are one protocol now: hand `nextCursor` back as `before`, never parse it. A
+  `truncated` page without a `nextCursor` means there is more but this listing has no
+  position to resume from; narrowing it (`process` plus a single `state`) is what gets
+  you one. **Breaking** for anything that parsed the array directly — read `items`.
+
 ### Added
+
+- **A deployed process can be filed under an application after the fact.**
+  `PATCH /api/v1/processes/{key}` with `{"projectId": "..."}` moves a deployed
+  definition into an application, or out of one (an empty id means Ungrouped).
+
+  A deployment carried its own application, stamped once when it was deployed — from
+  what the editor sent, or inherited from the matching draft at that moment, or
+  nothing. Afterwards there was no way to change it: moving the *draft* moved the
+  draft, so a process deployed through the API, or before its application existed,
+  stayed Ungrouped for good — on the Modeler home and on the Starmap as a process
+  belonging to nothing — with a redeploy, and a version bump, the only way out.
+
+  It is metadata and nothing else: the version, the model, the active flag and
+  everything running are untouched, and the engine never reads the filing at all. Two
+  things move that the caller does not name, because the alternative is an estate that
+  cannot be put back together: **every version** of the definition, since filing
+  belongs to the process rather than to one of its versions; and **the other pools of
+  a collaboration**, since they are one drawing, listed as one row, with no way to
+  address the others separately. Editor rights are needed at both ends, as moving a
+  draft already requires, and the platform-managed application refuses to be written
+  into (ADR-0122).
+
+- **Clicking an element in Operations lists the instances sitting on it.** A live view
+  badged "25 205 here now" beside a page of fifty instances was a dead end: the count
+  said how many were waiting and nothing said *which*. Finding them meant a variable
+  search for a value the operator would have to know already.
+
+  The diagram is the query now. Click an element and the panel lists exactly the
+  instances whose token is sitting on it; click another and it switches; click the
+  process — the canvas around the shapes, or a collaboration's pool — and every instance
+  is back. A chip names what the list is narrowed to and offers the way out, the diagram
+  outlines the element, and an empty result says *"no instance is sitting here right
+  now"* rather than the listing's *"no instances yet"* — with thousands of gray visits
+  beside it, those are different sentences.
+
+  It works for every element a token can rest on, not only user tasks, and it costs the
+  page you are shown. The obvious implementation — walk the version's live instances and
+  keep the ones holding a token there — is a scan that grows with the instance population,
+  on a view that re-reads its list every 1.5 seconds. So a new index
+  (`piByEl:<procDefKey>:<elementId>:<piKey>:<elKey>`) is written and dropped by exactly
+  the two calls that move the ADR-0080 live-token counter: the number badged on a shape
+  and the rows in the panel are two readings of one fact. Existing stores are seeded once
+  at open — a missing index here does not read low, it reads *empty*.
+
+  `GET /api/v1/instances` gained `?element=`, scoped to `?process=` and live-only (a
+  finished instance holds no token), and `atlas_list_instances` (MCP) gained `process`,
+  `element`, `state` and `limit`, so an agent can put the same question to the engine
+  instead of sieving a page it happened to get. The click it takes over is the decision
+  inspection's, which keeps the ⚖ badge that was already its affordance
+  ([ADR-0261](docs/adr/0261-instances-on-an-element.md)).
+
+- **Your brand colour reaches the forms.** Setting an organisation's accent under
+  *Settings → Appearance* used to tint the Console around a form and stop at its edge:
+  the form itself — its fields, labels, focus ring, buttons and typeface — came from
+  the form renderer's own stylesheet and stayed stock blue. It no longer does. A user
+  task, an incident's repair form, the preview in the form editor and the public start
+  form behind a share link are all painted from the same palette as everything else,
+  in the same typeface, on the same borders
+  ([ADR-0263](docs/adr/0263-form-runtime-brand-theming.md)).
+
+- **The public start form and the sign-in consent screen carry your branding.** Both
+  are shown before anyone has a session, and both used to display the built-in Atlas
+  mark and the default blue no matter what an admin had configured. They now ask the
+  server for the organisation's colour and logo like every other page — which matters
+  most for the start form, since that is the page an organisation's own customers
+  open. If the settings are momentarily unreachable the page still appears, in the
+  default colours: a form that is late is worse than a form that is unbranded.
+
+- **A button label that stays readable on your brand colour.** Text on an accent fill
+  used to be white, fixed. White on a deep blue or a federal red is fine; white on a
+  brand yellow or a pale mint is about 1.5:1, which nobody can read. Atlas now derives
+  the label colour from the accent you chose — white or near-black, whichever the
+  colour's own luminance makes legible — and applies it everywhere the accent is a
+  background: primary buttons, count badges, active segments, the submit button inside
+  a form.
 
 - **Forms written by the AI Worker.** The form editor has a **✨ Generate** button.
   Describe what the form should ask for — in your own words, in your own language —
@@ -151,6 +241,50 @@ _Changed_ / _Removed_ for each version.
   describes its picture. That failure has already happened once in this chapter. Read them.
 
 ### Changed
+
+- **The object diagram is drawn on diagram-js now, so it zooms and pans.** The
+  instance's objects and the lines between them were built here as SVG strings, with a
+  layout of their own, and the cost showed up as things a reader expects and does not
+  find: a diagram bigger than the panel could only be scrolled, nothing could be
+  clicked, and there was no way to make it fit. That is word for word the complaint
+  [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md) made about the *class*
+  canvas a fortnight ago, one altitude down — the look was downstream of the
+  substrate — and it is the follow-up
+  [ADR-0259](docs/adr/0259-data-object-lifecycle.md) named.
+
+  So the drawing moved onto the same shared bundle the class canvas and Panorama
+  already use, as `AtlasCanvas.uml.ObjectCanvas`, and the diagram gained zoom, pan,
+  selection and the same three controls — the same icons, the same step, the same
+  corner — that the two canvases beside it carry. Zooming a diagram is the same act
+  on all three surfaces, and a near-miss between them is worse than any one of the
+  choices on its own.
+
+  **Nothing about the notation changed, deliberately.** An object still reads as its
+  label underlined, its state in brackets, its members as `name = value` with the
+  business key marked and an absent member saying so; a containment still carries the
+  composition diamond and a key-resolved reference is still dashed and bare, because
+  those are different claims. The three e2e tests that state all of that were left
+  exactly as they were and still pass — which is the evidence the port changed the
+  substrate and not the picture. One detail did have to be put back deliberately:
+  diagram-js draws in insertion order, so the lines came out *over* the boxes where
+  they had always passed behind them. They are inserted ahead of the shapes now, in
+  their own order, and both halves of that have a test.
+
+  Two things are new rather than moved. The canvas **survives a re-render**: selecting
+  an element re-renders the whole inspector, and a live instance does it again on
+  every poll that brings new frames, so rebuilding the drawing each time would have
+  thrown away the zoom and the pan the reader had just set — the two things the port
+  exists to give them. And the diagram is **read-only on purpose**: the graph is
+  derived by the server, so there is no document to write back to and a box dragged
+  here would be put back by the next refresh. Move, resize and connect are absent
+  rather than refused, because a canvas that offers a gesture it silently discards is
+  worse than one that does not offer it.
+
+  Where a box *sits* is still decided in the browser, and that is not an oversight:
+  the server owns what relates to what because that is model semantics, and layout is
+  drawing. It just lives beside the renderer that uses it now instead of in a
+  twelve-thousand-line view file. The bundle grew 4,476 bytes for the whole notation
+  — one copy of diagram-js is the expensive part, and it was already paid for.
 
 - **The training nuggets show the real Atlas, not a drawing of it.** The stages
   shipped as markup built from the handbook's own theme tokens, and the reasoning
@@ -3035,6 +3169,41 @@ _Changed_ / _Removed_ for each version.
 
   **A search box** filters the mesh by name, kind or process id and reports how much
   it is hiding — a filtered landscape otherwise looks exactly like a small one.
+
+  **Nothing is left stranded at the edge of the picture.** Reported three times as
+  "single nodes far away from the rest", and the first two fixes missed it because
+  both were about framing and this was about the settle. The pull that centres the
+  graph is deliberately weakest along the wide axis, so the picture takes the shape of
+  the frame — and that was tuned for a node its edges are also holding. A node with
+  **no edge** has none: the pull is all that keeps it near the picture, against a
+  repulsion that falls off with distance, and the balance sat far outside everything
+  else. On a thirty-four-node estate with ten unattached processes, two of them ended
+  hard against the left and right edges with the rest squeezed into the middle. That
+  is not a rare shape — a process deployed through the API, or before its application
+  existed, belongs to no application and is drawn with no edge at all. The pull is now
+  twice as strong on a node with nothing attached to it, which is measured rather than
+  reasoned: higher packs the loose nodes into a lump of their own instead.
+
+  **A Drafts switch** adds the diagrams nobody has deployed. The picture's subject is
+  what this server *runs*, so a saved draft is absent from it by default — which
+  answers "is this deployed?" only if you already knew the process existed. Switch
+  drafts on and they appear beside the processes of the application that holds them,
+  in the process square so they read as the same kind of thing, with a lighter fill and
+  the dashed outline the placeholders already use: what is drawn is not running. The
+  fill is lighter rather than merely different — its first version was a warm tone of
+  exactly the same brightness as a deployed process, which on a projector or in print
+  left the dash doing all the work. They
+  claim nothing about running — no version, no instances, no status, and they can
+  never make an application look worse — and their only edge is the one that says
+  which application holds them, because a draft's call activities are a plan and
+  drawing them would put an intention on the canvas in the same ink as the facts.
+  A draft opens in the Modeler, where it exists, rather than in Operations, where it
+  does not. Off by default because an estate holds several drafts per deployed
+  process, and a landscape that collapsed to applications on account of undeployed
+  diagrams would be a worse picture than one that leaves them out; a saved view
+  remembers the switch, and an exported image says in its stamp that the drafts are
+  in it. Neither the ArchiMate nor the C4 export carries them, and each says so in
+  its declared loss: those documents describe a system that exists.
 
 - **Panorama opens ArchiMate diagrams.** An architecture model in the Panorama
   library now opens its Open Exchange Diagram views on a read-only `diagram-js`

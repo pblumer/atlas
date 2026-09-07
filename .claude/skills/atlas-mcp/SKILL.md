@@ -36,7 +36,7 @@ Bearer` header.
 | `atlas_process_runtime` | `key` | per-element token and visit counts |
 | `atlas_call_activities` | none | every call activity across deployed processes, with its called process id, binding, propagation, any per-server target override (redirect/pin/disable, ADR-0105), and how it currently resolves here |
 | `atlas_collaboration_runtime` | `key` | a collaboration's live pools, tokens, and message flows |
-| `atlas_list_instances` | none | bounded legacy instance list |
+| `atlas_list_instances` | `process?`, `element?`, `state?`, `limit?`, `before?` | a page of instances; `element` narrows to the ones whose token is sitting on that BPMN element right now (ADR-0261) |
 | `atlas_instances_summary` | none | per-definition active/completed counts |
 | `atlas_search_instances` | `q` | instances matching a variable query (`name=value` or free text) |
 | `atlas_instance_variables` | `key` | one instance's variables as a typed object |
@@ -107,9 +107,9 @@ Verify the render (Operations view or a preview), not just that the deploy
 succeeded. See `AGENTS.md` → "Authoring BPMN models" and
 `examples/onboarding/onboarding.bpmn` for a worked layout.
 
-## Task pagination
+## Paging a list
 
-`atlas_list_tasks` returns:
+`atlas_list_tasks` and `atlas_list_instances` answer with the same envelope:
 
 ```json
 {
@@ -119,12 +119,23 @@ succeeded. See `AGENTS.md` → "Authoring BPMN models" and
 }
 ```
 
-The global task list is newest-first. When `truncated` is true and
-`nextCursor` is present, pass that value as `before` to fetch the next older
-page. `limit` defaults to 500 and is capped by the HTTP API at 5000.
+Both lists are newest-first. When `truncated` is true and `nextCursor` is
+present, pass that value **back verbatim** as `before` to fetch the next older
+page. Do not parse it: a task cursor is a job key (a number), an instance
+cursor may be a `<completedAt>.<key>` pair (a string), and which you get is the
+server's business, not yours.
 
-`processInstance` restricts the lookup to one instance. A scoped lookup may be
-truncated but has no continuation cursor. Do not invent one.
+`truncated` without a `nextCursor` means there is more but this particular
+listing has no position to resume from. Narrow it instead of inventing a
+cursor: for tasks that means `processInstance`, for instances `process` plus a
+single `state` (the active and finished halves are ordered differently, so one
+cursor cannot address both).
+
+For tasks, `limit` defaults to 500 and is capped by the HTTP API at 5000; for
+instances, 1000 and 10000.
+
+To reach one *particular* instance, do not page at all — `atlas_search_instances`
+answers a bare instance key with a point read, whatever the population.
 
 ## Three things can be deleted, and they are not each other
 

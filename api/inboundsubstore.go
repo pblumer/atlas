@@ -83,6 +83,18 @@ type inboundSubscription struct {
 	// next window.
 	FolderID string `json:"folderId,omitempty"`
 
+	// ChannelID is a *Discord watch*: the channel whose messages are published
+	// (ADR-0262). A thread is itself a channel, so watching one
+	// is the same field with the thread's id.
+	//
+	// Unlike every source since clio, this one needs nothing else. A channel is a log:
+	// a message id is a snowflake, monotonic by construction and never moved by an
+	// edit, and `after` bounds that sequence exactly rather than querying an index that
+	// lags the write. So there is no cursor field to choose and no lag to tune — the
+	// mark is the watch's own scalar one, keyed on this channel so two watches never
+	// share it.
+	ChannelID string `json:"channelId,omitempty"`
+
 	// LastPolledAt is when this watch was last read, in unix seconds. It is what makes
 	// PollSeconds a cadence rather than a wish, and like LastEventID it is
 	// best-effort: losing it re-reads, which the marks make harmless.

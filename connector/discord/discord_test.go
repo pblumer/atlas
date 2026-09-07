@@ -552,6 +552,18 @@ func TestDiscordOpsMatchTheConnector(t *testing.T) {
 	}
 }
 
+// The compiler's authored-maxResults ceiling is this package's page cap. The two exist
+// separately because the dependency runs one way — connector/discord imports the
+// compiler — so a model refused at deploy and a call refused by Discord would otherwise
+// be able to disagree about the same number.
+func TestListPageCapMatchesTheCompilersCeiling(t *testing.T) {
+	const compilerCeiling = 100 // compiler.discordMaxResultsCeiling, unexported
+	if discord.MaxListPageSize != compilerCeiling {
+		t.Errorf("MaxListPageSize = %d, compiler ceiling = %d; a model could author a page Discord refuses",
+			discord.MaxListPageSize, compilerCeiling)
+	}
+}
+
 // ---------- the worker ----------
 
 // fakeReader is the slice of the state store the handler reads: one element instance

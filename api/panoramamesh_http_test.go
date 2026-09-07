@@ -362,3 +362,120 @@ func TestLandscapeDrawsItsPeersAndSaysWhatTheyAre(t *testing.T) {
 		}
 	}
 }
+
+// getMeshWithDrafts asks for the landscape with saved-but-undeployed diagrams on it.
+func getMeshWithDrafts(t *testing.T, ts *httptest.Server) meshGraph {
+	t.Helper()
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/panorama/mesh?drafts=1", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("GET mesh?drafts=1 status = %d, body = %s", code, body)
+	}
+	var g meshGraph
+	if err := json.Unmarshal(body, &g); err != nil {
+		t.Fatalf("decode mesh: %v (%s)", err, body)
+	}
+	return g
+}
+
+// meshKinds counts nodes per kind.
+func meshKinds(g meshGraph) map[string]int {
+	out := map[string]int{}
+	for _, n := range g.Nodes {
+		out[n.Kind]++
+	}
+	return out
+}
+
+// TestPanoramaMeshLeavesDraftsOutUnlessAsked is the default this feature costs
+// nothing by: an estate holds several drafts per deployed process, so a landscape
+// that always carried them would spend the size budget (ADR-0211 §7) on work the
+// engine has never been given. Asking is one query parameter; not asking is the
+// picture that was there before.
+func TestPanoramaMeshLeavesDraftsOutUnlessAsked(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, draftPath("-"), idBPMN("only-a-plan"), "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("save draft status = %d, body = %s", code, body)
+	}
+
+	if got := meshKinds(getMesh(t, ts))["draft"]; got != 0 {
+		t.Errorf("draft nodes on the default mesh = %d, want none", got)
+	}
+
+	g := getMeshWithDrafts(t, ts)
+	n := meshNodeByID(t, g, "draft:only-a-plan")
+	if n.Kind != "draft" || n.ProcessID != "only-a-plan" {
+		t.Errorf("draft node = %+v, want a draft keyed by its process id", n)
+	}
+	if n.Version != 0 {
+		t.Errorf("Version = %d — a draft has no deployed version", n.Version)
+	}
+}
+
+// TestPanoramaMeshOmitsADraftOfAnAlreadyDeployedProcess: once a diagram is deployed
+// it is on the picture as a process, and its draft is the editable copy of that same
+// work. Drawing both would put a twin beside every node and say nothing true about
+// either.
+func TestPanoramaMeshOmitsADraftOfAnAlreadyDeployedProcess(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, draftPath("-"), idBPMN("shipped"), "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("save draft status = %d, body = %s", code, body)
+	}
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/deployments", idBPMN("shipped"), "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status = %d, body = %s", code, body)
+	}
+
+	g := getMeshWithDrafts(t, ts)
+	if got := meshKinds(g)["draft"]; got != 0 {
+		t.Errorf("draft nodes = %d, want none — %q is deployed and already on the picture", got, "shipped")
+	}
+	if got := meshKinds(g)["process"]; got != 1 {
+		t.Errorf("process nodes = %d, want 1", got)
+	}
+}
+
+// TestPanoramaMeshDraftNeverCarriesARuntimeClaim guards the one way this node kind
+// could mislead. A draft has never run, so every field that reports running — state
+// worth colouring, incidents, an instance tally — has to be absent rather than zero,
+// and it must not be offered a deployment key it does not have.
+func TestPanoramaMeshDraftNeverCarriesARuntimeClaim(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, draftPath("-"), idBPMN("plan"), "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("save draft status = %d, body = %s", code, body)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/panorama/mesh?drafts=1", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", code, body)
+	}
+	var raw struct {
+		Nodes []map[string]any `json:"nodes"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	var node map[string]any
+	for _, n := range raw.Nodes {
+		if n["id"] == "draft:plan" {
+			node = n
+		}
+	}
+	if node == nil {
+		t.Fatalf("no draft node in %s", body)
+	}
+	if node["state"] != "unbound" || node["severity"] != "unknown" {
+		t.Errorf("state = %v severity = %v, want unbound and the neutral class", node["state"], node["severity"])
+	}
+	for _, field := range []string{"incidents", "sites", "runtime", "version"} {
+		if _, present := node[field]; present {
+			t.Errorf("draft node carries %q = %v — a plan reports nothing about running",
+				field, node[field])
+		}
+	}
+}

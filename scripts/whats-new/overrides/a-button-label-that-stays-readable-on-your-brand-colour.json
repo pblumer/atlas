@@ -1,0 +1,18 @@
+{
+  "tags": ["Organization", "Console"],
+  "title": {
+    "en": "A button label that stays readable on your brand colour",
+    "de": "Beschriftungen, die auf Ihrer Markenfarbe lesbar bleiben"
+  },
+  "summary": {
+    "en": "Text on a coloured button used to be white, fixed. White on a deep blue or a federal red is fine; white on a brand yellow or a pale mint is roughly 1.5:1, which nobody can read. Atlas now works out the label colour from the colour you chose — white or near-black, whichever the colour's own brightness makes legible — and applies it everywhere your colour is a background: primary buttons, count badges, active segments, and the submit button inside a form.",
+    "de": "Text auf einer farbigen Schaltfläche war bisher fest weiss. Weiss auf einem tiefen Blau oder einem Bundesrot ist gut lesbar; Weiss auf einem Markengelb oder einem hellen Mint ergibt rund 1.5:1 und ist für niemanden lesbar. Atlas leitet die Schriftfarbe jetzt aus der von Ihnen gewählten Farbe ab — Weiss oder ein sehr dunkles Grau, je nachdem, was auf dieser Helligkeit lesbar ist — und wendet sie überall dort an, wo Ihre Farbe als Fläche dient: primäre Schaltflächen, Zähler-Badges, aktive Segmente und die Absenden-Schaltfläche im Formular."
+  },
+  "try": {
+    "label": {
+      "en": "Try a colour",
+      "de": "Farbe ausprobieren"
+    },
+    "route": "#/console/org"
+  }
+}
