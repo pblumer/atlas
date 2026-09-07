@@ -2,6 +2,34 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-training-nuggets-show-the-real-atlas-not-a-drawing-of-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The training nuggets now show the real Atlas",
+        "de": "Die Schulungsnuggets zeigen jetzt das echte Atlas"
+      },
+      "summary": {
+        "en": "The animated walk-throughs in the handbook used to be drawings of the interface. A drawing has to guess, and this one guessed wrong where it mattered: it put the navigation down the side, where Atlas runs it across the top. Every scene is now a capture of the running product — the Modeler with a real model on the canvas, Operations showing five instances at once with their tokens and variables, the task inbox with its filters. So what you see while learning is what you find when you open the app. The process shown is a proper one too: the gateway really does branch, into an approval on one side and straight through on the other.",
+        "de": "Die animierten Durchgänge im Handbuch waren bisher Zeichnungen der Oberfläche. Eine Zeichnung muss raten, und diese riet dort falsch, wo es zählt: Sie setzte die Navigation an den linken Rand, während Atlas sie über die Breite führt. Jede Szene ist jetzt eine Aufnahme des laufenden Produkts — der Modeler mit einem echten Modell auf der Fläche, Operations mit fünf Instanzen samt Token und Variablen, der Aufgaben-Posteingang mit seinen Filtern. Was man beim Lernen sieht, findet man so in der App wieder. Auch der gezeigte Prozess stimmt jetzt: Das Gateway verzweigt wirklich, in eine Freigabe auf der einen und den direkten Weg auf der anderen Seite."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Handbook"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the handbook",
+          "de": "Handbuch öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "the-replay-drew-a-deferred-choice-as-several-tokens-and-park",
       "version": "Unreleased",
       "date": null,
@@ -327,34 +355,6 @@
           "de": "Panorama öffnen"
         },
         "route": "#/panorama/starmap"
-      }
-    },
-    {
-      "id": "runtime-badges-no-longer-sit-on-the-names-they-are-pointing-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Runtime badges keep off the names",
-        "de": "Laufzeit-Badges bleiben von den Namen weg"
-      },
-      "summary": {
-        "en": "On a running diagram each shape can carry badges: how many tokens are on it, whether it is stuck, a link to a waiting task, a decision to inspect. They used to sit in the corners inside the shape, which is where the name is — on a task with a long name the decision badge covered a whole line of it, and on an event the token count landed on the caption underneath. They now hang just outside the shape, on the side the name is not, and they are the size of a count instead of spelling out a word. Each one kept its corner, so they still read the same way; hover for the wording.",
-        "de": "Auf einem laufenden Diagramm trägt jede Form Badges: wie viele Tokens auf ihr liegen, ob sie klemmt, ein Link zur wartenden Aufgabe, eine Entscheidung zum Nachsehen. Sie saßen bisher in den Ecken *innerhalb* der Form — also dort, wo der Name steht: Bei einer Aufgabe mit langem Namen verdeckte das Entscheidungs-Badge eine ganze Zeile, bei einem Ereignis landete der Token-Zähler auf der Beschriftung darunter. Jetzt hängen sie knapp außerhalb der Form, auf der Seite, auf der der Name nicht steht, und sie sind so groß wie eine Zahl statt so breit wie ein Wort. Die Ecke jedes Badges ist geblieben, sie lesen sich also unverändert; den Wortlaut zeigt der Tooltip."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]

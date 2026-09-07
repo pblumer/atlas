@@ -16,45 +16,27 @@
 // and Save sends it back against the revision it read.
 
 import { groupifyPanel, groupController } from "./pgroup.js";
+import { loadCanvasBundle } from "./canvas-bundle.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // How wide a class is drawn. It is the one piece of geometry this file still needs,
 // to place a new box where there is room; the rest lives with the drawing, in
-// api/web/vendor/uml/src/index.js.
+// api/web/vendor/canvas/src/uml.js.
 const BOX_W = 200;
 
-// The canvas bundle is loaded on demand, the way the Modeler loads bpmn-js: it is
-// a hundred kilobytes that only this view needs, and the model list beside it should
-// not pay for them.
-let canvasReady;
+// The bundle carries both canvases; this view wants the UML half of it.
 function loadCanvas() {
-  if (canvasReady) return canvasReady;
-  canvasReady = new Promise((resolve, reject) => {
-    const href = "vendor/uml/diagram-js.css";
-    if (!document.querySelector(`link[href="${href}"]`)) {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = href;
-      document.head.appendChild(link);
-    }
-    if (window.AtlasUml) { resolve(window.AtlasUml); return; }
-    const script = document.createElement("script");
-    script.src = "vendor/uml/uml-canvas.js";
-    script.onload = () => resolve(window.AtlasUml);
-    script.onerror = () => reject(new Error("failed to load the class canvas assets"));
-    document.head.appendChild(script);
-  });
-  return canvasReady;
+  return loadCanvasBundle().then((bundle) => bundle.uml);
 }
 
 export async function mountClassDiagram(root, { api, toast, id }) {
   root.innerHTML = `<div class="card"><p class="muted">Loading class diagram…</p></div>`;
 
-  let doc, subset, AtlasUml;
+  let doc, subset, uml;
   try {
-    [doc, subset, AtlasUml] = await Promise.all([
+    [doc, subset, uml] = await Promise.all([
       api("GET", `/api/v1/infomodel/models/${encodeURIComponent(id)}`),
       api("GET", "/api/v1/infomodel/subset"),
       loadCanvas(),
@@ -159,7 +141,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // move, undo of a move, keyboard nudging — comes from diagram-js; what Atlas owns is
   // how a class is drawn and what the served subset permits between two of them
   // (ADR-0237).
-  const canvas = new AtlasUml.ClassCanvas(canvasEl, {
+  const canvas = new uml.ClassCanvas(canvasEl, {
     subset,
     onSelection: (bo, all) => onCanvasSelection(bo, all),
     onChange: () => { absorbMoves(); syncHistoryButtons(); },

@@ -12,6 +12,82 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The nugget screenshots are output now, not artifacts somebody once made.** Their
+  pictures are captures of the running product, which buys recognition and costs
+  staleness: a shot of a UI that has since moved still renders, and a ring drawn on a
+  button that moved still looks deliberate. Nothing throws, and the reader is the one who
+  finds out.
+
+  `make nuggets` re-takes the set. It builds the current tree, runs it on a throwaway data
+  directory with auth off, seeds it with this repo's own `order-to-cash` example — five
+  instances with baskets on both sides of the gateway, plus a built-in process whose user
+  task carries a real form — takes every shot, writes them as WebP, rewrites the
+  `#nug-data` block, then stops the server and deletes the data. Chromium encodes the
+  WebP, so the script adds no image dependency.
+
+  **Coordinates are never typed.** `scripts/nuggets/scenes.mjs` is the source and it names
+  targets rather than places: a scene says *highlight the Deploy button*, and the capture
+  reads that button's bounding box out of the live page. A button that moves is
+  re-measured; a target that disappears fails the capture loudly instead of leaving a ring
+  on empty space. This was not theoretical — between two runs the `order-to-cash` row moved
+  from a quarter down the process list to three quarters down, because the list sorts by
+  last activity, and the highlight followed it both times without anybody touching a number.
+
+  `e2e/nuggets.spec.mjs` holds the source and the generated block together: same nuggets in
+  the same order, same scenes, same captions, a measured rectangle wherever the source asks
+  for one and none where it does not. Written by confirming it fails against a changed
+  `scenes.mjs` that was never re-captured, a rectangle hand-edited into the block, and a
+  scene naming an image no shot produces.
+
+  What no test can catch, and the README says so plainly: a caption that no longer
+  describes its picture. That failure has already happened once in this chapter. Read them.
+
+### Changed
+
+- **The training nuggets show the real Atlas, not a drawing of it.** The stages
+  shipped as markup built from the handbook's own theme tokens, and the reasoning
+  for that was sound as far as it went: no binary weight, both colour schemes, both
+  languages in one file. What it missed is what a nugget is *for*. Somebody watching
+  one is trying to recognise the screen later, and a drawing has to guess the layout
+  — this one guessed a sidebar where Atlas runs its navigation across the top, and
+  drew the app switcher as a grid popup where the product opens a drawer. A learner
+  who trusted it would look in the wrong place twice before finding anything.
+
+  Every scene is now a capture of the running product: the Modeler with a real BPMN
+  model on the canvas, Operations showing five instances at once with their token
+  counts and their actual variables, the task inbox with its four filters, the
+  worker list, the audit log, the landscape. Twenty WebP images under `web/nuggets/`,
+  about 855 KB in total, fetched only when a nugget is played — opening the chapter
+  still costs nothing.
+
+  **A modelling error went out with the drawn version and is fixed by the same
+  change.** Two scenes drew an exclusive gateway with a single outgoing flow, which
+  is not a gateway at all: it branches or it is a waste of a shape. That is a poor
+  thing to teach anywhere and worse in material about BPMN. The shots carry a model
+  where the gateway genuinely splits — `Summe > 100 EUR?` into a human approval on
+  one side and straight through on the other, then a parallel gateway for picking,
+  shipping and invoicing — and the modeller nugget now says out loud that a gateway
+  with one exit would not be one.
+
+  Highlights and the cursor are percentages of the *image* rather than of the stage,
+  which is what makes them stable: an image keeps its aspect ratio at every width,
+  so a ring drawn on the Deploy button stays on it from a phone to a desktop. The
+  measurements are not eyeballed — the capture script reads each target's bounding
+  box out of the live page and writes it into the scene.
+
+  `e2e/nuggets.spec.mjs` follows the new failure modes: a scene naming an image that
+  is not shipped, a shipped image no scene uses (dead weight in a `//go:embed`
+  binary), a highlight running off the frame, a tap with no cursor, and every
+  referenced screenshot actually being served. Each was written by confirming it
+  fails against exactly that mistake.
+
+  The caption moved out of the picture and under it. Overlaying it looked tidier and
+  ate the bottom of every shot — which is where Atlas prints the legend explaining
+  the token markers, so the one scene that most needed its whole picture was the one
+  losing it.
+
 ### Fixed
 
 - **The replay drew a deferred choice as several tokens, and parked one on the gateway
@@ -77,9 +153,18 @@ _Changed_ / _Removed_ for each version.
   typed, rather than lagging until the next repaint.
 
   The view itself also stops sitting in the console's centred 1120px column when a
-  model is open, and takes the width of the window as the Starmap does. The canvas
-  fits the whole model into what it is given, so every pixel the column withheld came
-  straight off every box and every line between them.
+  model is open, and takes the whole window the way the Modeler does — no column, no
+  page gutter and no frame around the editor, because a drawing surface that stops
+  22px short of the edge is a window inside a window. The list of models beside it
+  keeps the reading column; a list read across a 2000px screen is a worse list.
+
+  And the fit now uses the room it is given. diagram-js fits by shrinking only, never
+  magnifying past 100%, which is right for diagrams usually larger than the viewport
+  and wrong for a class diagram of six classes on a wide screen: it was drawn at its
+  own size in the middle of the window with the width going to nothing on either side.
+  A model with room to grow is now grown into it, up to 1.6× — past that a class box
+  has nothing more to say for the extra pixels. A model larger than the window is
+  shrunk to fit exactly as before.
 
 - **The class canvas could not be zoomed, searched, or undone.**
   Two complaints from the same place: Data › Information model, on a model bigger
@@ -196,6 +281,26 @@ _Changed_ / _Removed_ for each version.
   Confirmed by moving one edge's endpoint and watching it fail — the first attempt at
   that check was itself broken, matching against unescaped quotes that the JSON block
   does not contain, so it never challenged the test at all.
+
+### Changed
+
+- **The two diagram-js canvases ship as one bundle.** The ArchiMate canvas
+  ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)) and
+  the UML class canvas ([ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md)) each
+  carried their own copy of the library, because the second arrived later and merging
+  them then would have meant touching Panorama's shipped canvas for a saving that was
+  real but not urgent. ADR-0237 named the merge as the follow-up; this is it.
+
+  Both now ship as `api/web/vendor/canvas/atlas-canvas.js` under one global with a
+  namespace each — 123,109 bytes where the two were 211,888, and one cache entry rather
+  than two. Neither canvas's own code is touched: two entry files became two modules
+  under one entry that exports both. The honest cost is on the other side: a page that
+  opens only one of the two now carries both renderers, some 15 KB more than its own
+  bundle was — the right way round, since the renderers are the small part.
+
+  Loading it moved into one place (`api/web/canvas-bundle.js`), because two views
+  fetching the same file is new: whichever is opened first fetches it and the second
+  gets what is there, rather than a second `<script>` for the same bytes.
 
 ### Added
 

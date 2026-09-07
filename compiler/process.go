@@ -1110,9 +1110,19 @@ type AdHocDetail struct {
 	CompletionCondition *expr.Compiled
 	CancelRemaining     bool
 
-	AgentDriven      bool
-	AgentWorker      int32 // interned agent Worker name → index, -1 when not agent-driven
-	AgentModel       int32 // interned language model name → index, -1 → the Worker's own model
+	AgentDriven bool
+	AgentWorker int32 // interned agent Worker name → index, -1 when not agent-driven
+	AgentModel  int32 // interned language model name → index, -1 → the Worker's own model
+	// AgentContext are the interned names of the process variables this agent is given,
+	// in the order they were authored (ADR-0257). Empty means
+	// the agent knows its goal, its tools and what its own calls returned, and nothing
+	// of the case it is working on — which is a real design, not an oversight, when its
+	// tools fetch what it needs.
+	//
+	// Names rather than values: what an agent may reach is the diagram (ADR-0253), and
+	// what it may read is in the diagram for the same reason. A reviewer reads the
+	// element and sees what leaves the process.
+	AgentContext     []int32
 	ResultCollection int32 // interned variable name a tool result is appended to, -1 if none
 	ResultElement    *expr.Compiled
 	Tools            []AgentTool
