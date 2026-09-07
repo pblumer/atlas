@@ -43,7 +43,9 @@
   is written wherever there is room around its node rather than always under it, and
   left unwritten where there is none; amended 2026-09-07 — the structural greys and
   the kind fills are drawn at a weight and a strength the canvas can carry, measured
-  against WCAG 2.1's 3:1 for a graphical object)
+  against WCAG 2.1's 3:1 for a graphical object; amended 2026-09-07 — a double-click
+  goes inside, and a process's inside is its Operations view rather than a smaller
+  starmap around it)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -798,6 +800,28 @@ unaffected.
 >
 > Quiet is still the intent (§4 is why), and none of this changes which channel says
 > what. It was simply quieter than legible.
+
+> **Amendment (2026-09-07): a double-click goes inside, and a process's inside is
+> Operations.**
+> §5 gave the double-click one meaning — go into this node, which reduces the
+> landscape to it and what it touches. For a process that is the wrong place to
+> arrive. This record's own division of altitudes says why: Panorama owns the
+> landscape and application altitudes and *links into* the process and instance ones
+> rather than reimplementing them. A process's inside is therefore not on this canvas
+> at all — it is the live view, with its instances, its tokens and its incidents — and
+> a reader who double-clicks the process they came for is asking for that, not for a
+> smaller starmap around it.
+>
+> So the gesture keeps its single meaning and the answer follows the kind: a process
+> opens in Operations, and every other kind, having no elsewhere to be opened in,
+> still becomes the centre of the picture.
+>
+> Nothing is lost from the landscape. A process can still be drilled into from the
+> header's "→", which is the control the drilldown was given when it became a path
+> (amended above) and the discoverable half of the pair — a gesture you have to be
+> told about is one most readers never find. The panel's "Open in Operations" link
+> stays exactly where it was, for the same reason: the gesture is the shortcut, the
+> link is the sentence.
 
 > **Amendment (2026-09-04): depth is a number, not a shortlist.**
 > The depth control offered 1 hop, 2 hops and all — which answers the question at

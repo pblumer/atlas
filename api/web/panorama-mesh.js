@@ -3031,11 +3031,28 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // the one thing somebody dragging toward the edge is not asking for.
   surface.addEventListener("pointerleave", () => { if (!moving) endGesture(); });
 
-  // Double-clicking a node goes into it.
+  // Double-clicking a node goes into it, and for a process "into it" is Operations.
+  //
+  // One gesture, one meaning — go inside the thing this stands for — and the two
+  // answers are not a special case so much as where the inside of each kind is.
+  // Panorama owns the landscape and application altitudes and links into the process
+  // one rather than reimplementing it (ADR-0211 §5), so a process's inside is not
+  // here: it is its live view, with its instances and its tokens. Every other kind
+  // has no elsewhere to be opened in, and going into it means what it has always
+  // meant — this node becomes the centre and the picture is redrawn around it.
+  //
+  // A process can still be drilled into on the landscape: the "→" in the header does
+  // it for whatever is selected, which is the control that gesture was given when the
+  // drilldown became a path, and it is the discoverable half of the pair.
   surface.addEventListener("dblclick", (event) => {
     const id = event.target.closest?.("[data-node-id]")?.getAttribute("data-node-id");
     if (!id) return;
     event.preventDefault();
+    const inside = hrefFor(at.get(id) || {});
+    if (inside) {
+      location.hash = inside;
+      return;
+    }
     drillTo(id);
   });
 
