@@ -1292,6 +1292,11 @@ function activeTab(root) {
   return (b && b.dataset.tab) || "design";
 }
 
+// AGENT_CONTAINER_GLYPH marks an agent-driven ad-hoc subprocess on the canvas: the ai
+// task's spark, ringed, because this one decides round by round rather than answering
+// once. Same violet, because it is the same Worker Type behind both (ADR-0256).
+const AGENT_CONTAINER_GLYPH = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#8e4ec6"/><circle cx="8" cy="8" r="5.4" fill="none" stroke="#fff" stroke-width="1" stroke-dasharray="2.2 1.6"/><path d="M8 4.4l.78 1.9 1.9.78-1.9.78L8 9.76l-.78-1.9-1.9-.78 1.9-.78z" fill="#fff"/></svg>`;
+
 // implMarker resolves an element's *implementation type* to the icon shown in the
 // Implement / runtime views, or null when the element carries no such type (so the
 // generic BPMN marker shows instead). Two task families have one: a job-script task
@@ -1300,6 +1305,20 @@ function activeTab(root) {
 // IS the service-task symbol). `label` is the tooltip; `icon` is a self-contained SVG.
 function implMarker(bo) {
   if (!bo) return null;
+  // An agent-driven ad-hoc subprocess is the one *container* with an implementation
+  // type, and marking it was the open follow-up ADR-0256 named: a reader had to open
+  // the panel to learn that entering this subprocess starts nothing and a model picks
+  // what runs. Two ad-hocs look identical on the canvas and behave oppositely, which is
+  // the exact condition ADR-0253 accepted on the promise that the Modeler would make it
+  // visible.
+  //
+  // The glyph is the ai task's spark with an orbit around it: same family — one Worker,
+  // one credential — and the orbit is the difference that matters, a container running
+  // rounds against a task asking once.
+  if (bo.$type === "bpmn:AdHocSubProcess") {
+    if (!agentConnectorOf(bo)) return null; // a plain ad-hoc: its ~ is its own marker
+    return { label: "AI agent (runs rounds)", icon: AGENT_CONTAINER_GLYPH };
+  }
   if (bo.$type === "bpmn:ScriptTask") {
     const js = findExt(bo, "atlas:JobScript");
     if (!js) return null; // FEEL script task — runs in the engine, no worker language

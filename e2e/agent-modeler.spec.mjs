@@ -265,3 +265,26 @@ test("an agent container names its model, and clearing it removes the attribute"
   expect(xml).toContain(`connector="anthropic_pb"`);
   expect(page.__errors).toEqual([]);
 });
+
+// The canvas mark ADR-0256 left open, and the reason it was worth closing: two ad-hoc
+// subprocesses look identical and behave oppositely — one starts every unconnected
+// activity at once, the other starts nothing and lets a model pick. A reader had to open
+// the panel to find out which. On the Implement tab the agent-driven one now carries the
+// Worker Type badge every implemented element carries, and the plain one carries none.
+test("an agent-driven ad-hoc is marked on the canvas, and a plain one is not", async ({ page }) => {
+  const badgeOf = (id) => page.locator(`[data-container-id="${id}"] .impl-badge, .djs-overlay[data-container-id="${id}"] .impl-badge`);
+
+  await expect(badgeOf("agent")).toHaveCount(1);
+  await expect(badgeOf("agent")).toHaveAttribute("title", /agent/i);
+  await expect(badgeOf("plain")).toHaveCount(0);
+
+  // And the mark follows the semantics rather than the element: switching the plain one
+  // over gives it the badge.
+  await open(page, "plain");
+  await expand(page, "Ad-hoc subprocess");
+  await page.locator("#f-adhocmode").selectOption("agent");
+  await page.locator("#f-agent-connector").fill("openai_pb");
+  await page.locator("#f-agent-connector").blur();
+  await expect(badgeOf("plain")).toHaveCount(1);
+  expect(page.__errors).toEqual([]);
+});
