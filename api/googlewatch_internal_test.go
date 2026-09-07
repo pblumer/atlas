@@ -55,10 +55,12 @@ func TestSheetRowWatchPublishesOnlyNewRows(t *testing.T) {
 	if events[0].Seq != 2 || events[1].Seq != 3 {
 		t.Errorf("sequences = %d, %d; want the absolute row numbers 2 and 3", events[0].Seq, events[1].Seq)
 	}
-	// No per-row mark: a row number is monotonic across the whole watch, so the scalar
-	// watch-level mark is correct — the clio case, not the Jira one.
-	if events[0].MarkKey != "" {
-		t.Errorf("markKey = %q; want the watch's own scalar mark", events[0].MarkKey)
+	// One mark for the watch, not one per row: a row number is monotonic across the
+	// whole watch, so this is the clio case and not the Jira one. The key is the
+	// spreadsheet rather than empty, which is what scopes the mark to *this* watch
+	// instead of to every Google watch on the Worker.
+	if events[0].MarkKey != "1B" {
+		t.Errorf("markKey = %q; want the watch's own spreadsheet, so two watches never share a mark", events[0].MarkKey)
 	}
 	if cursor != "3" {
 		t.Errorf("cursor = %q; want the new row count", cursor)

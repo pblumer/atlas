@@ -221,6 +221,16 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The key, the definitions updated, and when", schemaObj(map[string]any{
 				"key": tInteger(), "updated": tArray(), "diagramUpdatedAt": tInteger(),
 			}))}},
+		// Filing a deployment under an application, after the fact (ADR-0034). A
+		// deployment's project id was stamped once at deploy time and nothing could
+		// change it afterwards, so a definition deployed through the raw API — or
+		// before its application existed — stayed Ungrouped with a redeploy, and a
+		// version bump, the only way out.
+		{"PATCH", "/api/v1/processes/{key}", s.handleMoveProcess, apiOp{
+			summary: "File a deployed process under an application, or take it out of one (empty projectId means Ungrouped). Metadata only: the version, the model and everything running are untouched. Every version of the definition moves, and so do the other pools of a collaboration, because they are one drawing",
+			tag:     "Processes", role: RoleModeler,
+			req:  jsonBody("Move", tObject()),
+			resp: jsonBody("What moved", tObject())}},
 		{"DELETE", "/api/v1/processes/{key}", s.handleDeleteProcess, apiOp{
 			summary: "Delete a deployment (must have no running instances)", tag: "Processes", role: RoleModeler,
 			status: http.StatusNoContent}},
@@ -488,7 +498,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		// read — a consumer that renders this picture into a file has to put that
 		// date in the file (ADR-0211 §10), and only the server can supply it.
 		{"GET", "/api/v1/panorama/mesh", s.panoramaMesh.HandleGraph, apiOp{
-			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211)", tag: "Panorama", role: RoleModeler,
+			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211). Pass drafts=1 to include saved-but-not-deployed diagrams, which are left out by default so the size budget is spent on what this server actually runs", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Derived landscape graph", tObject())}},
 		// The vocabularies the landscape can be drawn in, with each one's mapping and
 		// what it drops (ADR-0211 §8). Served rather than duplicated in the browser:

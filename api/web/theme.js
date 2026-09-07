@@ -1,9 +1,12 @@
 // Atlas UI theming — org-wide company colours (buildless, ADR-0012 / ADR-0113).
 //
 // The whole app chrome (buttons, links, active nav, focus rings, pills, toggles)
-// is painted from three CSS custom properties: --accent, --accent-hover and
-// --accent-soft. Overriding those on the document root re-tints the entire UI to
-// an organisation's brand colour, without touching any component CSS.
+// is painted from four CSS custom properties: --accent, --accent-hover,
+// --accent-soft and --accent-ink. Overriding those on the document root re-tints
+// the entire UI to an organisation's brand colour, without touching any component
+// CSS. The same four carry the form runtime: form-theme.css maps them onto the
+// tokens the vendored form-js renderer reads, so a task form is painted from the
+// brand colour like everything else.
 //
 // The brand accent is **org-wide**: it is stored on the server
 // (GET/PUT/DELETE /api/v1/settings/theme) so every user of the instance sees it.
@@ -25,7 +28,7 @@ const THEME_URL = "/api/v1/settings/theme";
 
 // The variables a theme overrides. Kept as a list so applyAccent can cleanly
 // clear *all* of them when resetting to the built-in default.
-export const THEME_VARS = ["--accent", "--accent-hover", "--accent-soft"];
+export const THEME_VARS = ["--accent", "--accent-hover", "--accent-soft", "--accent-ink"];
 
 // The stock Atlas accent — shown as the "default" swatch and the value we reset
 // to. Mirrors :root in app.css; if that changes, change this too.
@@ -82,16 +85,57 @@ function mix(base, other, amount) {
   return toHex(a.map((v, i) => v * (1 - amount) + b[i] * amount));
 }
 
+// srgbToLinear undoes the sRGB transfer function for one 0-255 channel, per the
+// WCAG 2.1 relative-luminance definition.
+function srgbToLinear(channel) {
+  const c = channel / 255;
+  return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+// relativeLuminance is WCAG 2.1's L for a hex colour, in [0,1].
+export function relativeLuminance(hex) {
+  const [r, g, b] = toRgb(hex).map(srgbToLinear);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+// contrastRatio is WCAG 2.1's ratio between two hex colours, in [1,21].
+export function contrastRatio(a, b) {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+// INK_LIGHT / INK_DARK are the two candidates for text on an accent fill. The dark
+// one is the UI's own ink (--text in app.css), not pure black, so a button label on
+// a pale brand colour matches the type around it rather than out-blackening it.
+export const INK_LIGHT = "#ffffff";
+export const INK_DARK = "#14161a";
+
+// accentInk picks the readable label colour for text on the accent fill. Which of
+// the two wins is not a matter of taste: it is whichever has the higher WCAG
+// contrast against the fill, which for a mid-tone brand colour is the difference
+// between a legible primary button and one that fails an accessibility audit. The
+// stock blue and a federal red both keep white; a pale brand yellow or mint gets
+// dark ink instead of the white that was hard-coded at every such rule before.
+export function accentInk(color) {
+  const accent = normalizeHex(color) || DEFAULT_ACCENT;
+  return contrastRatio(accent, INK_LIGHT) >= contrastRatio(accent, INK_DARK)
+    ? INK_LIGHT
+    : INK_DARK;
+}
+
 // derivePalette turns one brand colour into the full accent variable map. The
 // hover shade is the colour darkened ~18% (matching the stock #0b5cff→#0a4ad1
 // step); the soft shade is a ~90% white tint, the pale background used behind
-// pills, focus rings and the active drawer item.
+// pills, focus rings and the active drawer item; the ink is the label colour that
+// stays readable on the accent itself.
 export function derivePalette(color) {
   const accent = normalizeHex(color) || DEFAULT_ACCENT;
   return {
     "--accent": accent,
     "--accent-hover": mix(accent, "#000000", 0.18),
     "--accent-soft": mix(accent, "#ffffff", 0.9),
+    "--accent-ink": accentInk(accent),
   };
 }
 

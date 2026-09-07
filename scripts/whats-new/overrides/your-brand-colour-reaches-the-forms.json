@@ -1,0 +1,18 @@
+{
+  "tags": ["Organization", "Forms"],
+  "title": {
+    "en": "Your brand colour now reaches the forms themselves",
+    "de": "Ihre Markenfarbe erreicht jetzt auch die Formulare"
+  },
+  "summary": {
+    "en": "Setting your organisation's colour used to tint everything around a form and stop at its edge: the form itself came from the form renderer's own stylesheet and stayed the stock blue, in a different typeface, on borders a shade off the ones beside it. It no longer does. A user task, an incident's repair form, the preview in the form editor and the public start form behind a share link are all painted from your palette, in the same typeface, on the same borders as the rest of Atlas.",
+    "de": "Bisher färbte Ihre Organisationsfarbe alles rund um ein Formular und hörte an dessen Rand auf: Das Formular selbst kam aus dem Stylesheet des Formular-Renderers, blieb im Standardblau, in einer anderen Schrift und mit Rahmen in einem leicht abweichenden Ton. Das ist vorbei. Eine Benutzeraufgabe, das Reparaturformular eines Incidents, die Vorschau im Formular-Editor und das öffentliche Startformular hinter einem Freigabelink werden aus Ihrer Palette gezeichnet — in derselben Schrift und mit denselben Rahmen wie der Rest von Atlas."
+  },
+  "try": {
+    "label": {
+      "en": "Set your brand colour",
+      "de": "Markenfarbe setzen"
+    },
+    "route": "#/console/org"
+  }
+}
