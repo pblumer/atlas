@@ -1,6 +1,6 @@
 # ADR-0255: An agent model is a Console Worker — the one field that is not a secret
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-09-07: the model named on the Worker is the *default*; a task or an agent container may name its own — [ADR-0256](0256-the-model-is-authored-the-provider-is-configured.md))
 - **Date:** 2026-09-06
 - **Deciders:** Atlas engine team
 
@@ -107,6 +107,23 @@ worker of its own accord, it parks with nothing to serve, and the moment an oper
 saves a model in the Console it comes up — the tenant a Console entry rather than a
 deployment change, which is ADR-0172's sentence applied to a fifth kind.
 
+### Amendment (2026-09-07, ADR-0256)
+
+The model named on the Worker is the **default**, not the only source: a task or an agent
+container may name its own with `model="…"`, and one Worker — one endpoint, one
+credential — then serves a cheap classification and a strong piece of advice in the same
+process.
+
+The argument below is kept as written, because it is right about what it argues and the
+correction is about a different axis. It asked *Console or vault* and answered Console:
+the model name is the one field an operator changes often, on cost against capability, and
+burying it in a secret bundle would make that a vault edit. That still holds, and this
+record's Console entry, its worker-only placement and its provisioning all stand. What it
+did not ask is *deployment configuration or model authoring* — and by ADR-0168's own
+division a model name is authoring, because it is neither reach nor credential. Read on
+with that in mind: everything here about the Worker's `Model` field is now about the
+default a step inherits when it names none.
+
 ### Consequences
 
 - **Positive:** an agent model is configured like everything else in the product, by
@@ -127,6 +144,7 @@ deployment change, which is ADR-0172's sentence applied to a fifth kind.
 
 ## Links
 
+- [ADR-0256](0256-the-model-is-authored-the-provider-is-configured.md) — the model is authored, the provider is configured (amends this)
 - [ADR-0253](0253-agent-tool-calls-drive-adhoc-activation.md) — agent tool calls drive ad-hoc activation
 - [ADR-0254](0254-agent-rounds-on-a-worker.md) — an agent round on a worker
 - [ADR-0203](0203-worker-execution-model.md) — Worker Type / Worker / Worker Instance
