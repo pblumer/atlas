@@ -1,4 +1,4 @@
-# ADR-XXXX: The engine stays namespace-blind, and the deploy says so
+# ADR-DRAFT: The engine stays namespace-blind, and the deploy says so
 
 - **Status:** Proposed
 - **Date:** 2026-09-07
@@ -109,13 +109,13 @@ doing if the panel is asked for; not worth the plumbing for the deploy warning a
 **A guard over the Go sources**, asserting every `xmlns:atlas="…"` literal in the
 repository is canonical. This would stop the fixtures drifting again, and it was worked
 through far enough to find what sinks it: it needs an exemption list.
-`api/infomodel/import_test.go` and
-`api/formgen/outline_test.go` bind `atlas` to *UML profile* namespaces in XMI documents,
-which are entirely legitimate and have nothing to do with BPMN; and the warning's own
-message-building line contains the literal. Distinguishing them requires guessing from
-the URI's shape. An exemption list that must be kept true is the failure mode this record
-exists to avoid — and the runtime check needs none, because it works on resolved
-namespaces of known element names rather than on text.
+`api/infomodel/import_test.go` and `api/formgen/outline_test.go` bind `atlas` to *UML
+profile* namespaces in XMI documents, which is entirely legitimate and has nothing to do
+with BPMN; and the warning's own message-building line contains the literal.
+Distinguishing them requires guessing from the URI's shape. An exemption list that must
+be kept true is the failure mode this record exists to avoid — and the runtime check
+needs none, because it works on resolved namespaces of known element names rather than
+on text.
 
 **Teaching bpmn-moddle both URIs.** It would make the wrong spelling permanently valid
 and double the surface every future reader has to know about.
