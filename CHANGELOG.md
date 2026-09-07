@@ -14,6 +14,35 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Clicking an element in Operations lists the instances sitting on it.** A live view
+  badged "25 205 here now" beside a page of fifty instances was a dead end: the count
+  said how many were waiting and nothing said *which*. Finding them meant a variable
+  search for a value the operator would have to know already.
+
+  The diagram is the query now. Click an element and the panel lists exactly the
+  instances whose token is sitting on it; click another and it switches; click the
+  process — the canvas around the shapes, or a collaboration's pool — and every instance
+  is back. A chip names what the list is narrowed to and offers the way out, the diagram
+  outlines the element, and an empty result says *"no instance is sitting here right
+  now"* rather than the listing's *"no instances yet"* — with thousands of gray visits
+  beside it, those are different sentences.
+
+  It works for every element a token can rest on, not only user tasks, and it costs the
+  page you are shown. The obvious implementation — walk the version's live instances and
+  keep the ones holding a token there — is a scan that grows with the instance population,
+  on a view that re-reads its list every 1.5 seconds. So a new index
+  (`piByEl:<procDefKey>:<elementId>:<piKey>:<elKey>`) is written and dropped by exactly
+  the two calls that move the ADR-0080 live-token counter: the number badged on a shape
+  and the rows in the panel are two readings of one fact. Existing stores are seeded once
+  at open — a missing index here does not read low, it reads *empty*.
+
+  `GET /api/v1/instances` gained `?element=`, scoped to `?process=` and live-only (a
+  finished instance holds no token), and `atlas_list_instances` (MCP) gained `process`,
+  `element`, `state` and `limit`, so an agent can put the same question to the engine
+  instead of sieving a page it happened to get. The click it takes over is the decision
+  inspection's, which keeps the ⚖ badge that was already its affordance
+  ([ADR-0261](docs/adr/0261-instances-on-an-element.md)).
+
 - **Forms written by the AI Worker.** The form editor has a **✨ Generate** button.
   Describe what the form should ask for — in your own words, in your own language —
   and, if you like, point it at the process the form belongs to and the step it is

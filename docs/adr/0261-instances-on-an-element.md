@@ -89,6 +89,18 @@ Chosen: **option 3**, a `cfInstanceByElement` column family keyed
   version that defines it, and the index is keyed by that pair. An id the version
   does not define is a 400, not an empty list: an empty list reads as a fact about
   the process.
+- **The MCP tool asks the same question.** `atlas_list_instances` took no arguments
+  and returned every instance in the engine; it now takes `process`, `element`,
+  `state` and `limit`. This is not convenience: an agent asked "which instances are
+  stuck on this task?" would otherwise list everything and sieve the page it happened
+  to get, which at a few hundred thousand instances answers with a subset of a page
+  and nothing to distinguish that from the truth. It refuses `element` without
+  `process` itself rather than relaying the server's 400, so the reason is part of the
+  tool's own answer and costs no round trip. It gains no `before`: the tool returns
+  the endpoint's body verbatim and the page cursor rides in a response *header* the
+  body does not carry, so the parameter would be one no caller could supply. Reaching
+  one particular instance stays `atlas_search_instances`' job, where a bare key is a
+  point read.
 
 In the view, clicking a **flow node** filters the panel to the instances sitting on
 it (clicking it again clears); clicking anything that is **not** one — the canvas
@@ -113,8 +125,9 @@ selected, inspecting a decision has no instance to inspect.
   five reads whether the version holds five instances or five hundred thousand — so
   the filter survives the 1.5-second poll it lives under.
 - **Positive:** The index makes "which instances are on this element?" a first-class
-  question. Nothing else asks it yet; the migration preview and any future
-  element-scoped bulk operation would.
+  question — asked by the view, by the HTTP API and by an agent over MCP, all off the
+  one index. The migration preview and any future element-scoped bulk operation would
+  ask it too.
 - **Negative / trade-offs accepted:** One more derived family to keep consistent, and
   one more entry written per element-instance activation and deletion — a valueless
   key beside the `elByProc` entry the same call already writes.
