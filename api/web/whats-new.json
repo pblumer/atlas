@@ -58,6 +58,48 @@
       }
     },
     {
+      "id": "every-instance-start-scanned-the-whole-runtime-on-the-single",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A busy server no longer slows itself down",
+        "de": "Ein ausgelasteter Server bremst sich nicht mehr selbst aus"
+      },
+      "summary": {
+        "en": "Starting an instance, publishing a message, cancelling or terminating a batch and uploading a CSV all report the runtime counts back to you — and working those counts out meant walking every running instance and every token. On a large installation that was a quarter of a million records per operation, done by the one component that also executes your processes. So the more work the system was given, the harder it braked itself, until the interface stopped responding altogether. The numbers are unchanged; they are simply no longer worked out in the one place where everybody else has to wait for them.",
+        "de": "Beim Starten einer Instanz, beim Senden einer Nachricht, beim Abbrechen oder Beenden mehrerer Instanzen und beim CSV-Upload werden Ihnen die Laufzeitzahlen zurückgemeldet — und um diese Zahlen zu ermitteln, wurde jede laufende Instanz und jedes Token durchgezählt. Auf einer grossen Installation war das eine Viertelmillion Datensätze pro Vorgang, erledigt von derselben Komponente, die auch Ihre Prozesse ausführt. Je mehr zu tun war, desto stärker bremste sich das System selbst aus — bis die Oberfläche ganz stehen blieb. Die Zahlen sind dieselben; sie werden nur nicht mehr an der einen Stelle ermittelt, an der alle anderen darauf warten müssen."
+      },
+      "link": {
+        "label": "ADR-0080",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0080-runtime-aggregate-counters.md"
+      },
+      "tags": [
+        "Operations"
+      ]
+    },
+    {
+      "id": "signing-in-waited-for-the-engine-so-a-busy-server-locked-eve",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Signing in no longer waits for the engine",
+        "de": "Die Anmeldung wartet nicht mehr auf die Engine"
+      },
+      "summary": {
+        "en": "On a heavily loaded server, signing in could stop working: the login page simply never answered, while the server itself looked perfectly healthy from the outside. Logging in needed a turn from the very component that runs your processes, so the busier the engine got, the longer the front door took — precisely when you needed to get in and do something about it. Signing in no longer depends on how busy the engine is.",
+        "de": "Auf einem stark ausgelasteten Server konnte die Anmeldung ausfallen: Die Login-Seite antwortete schlicht nicht mehr, während der Server von aussen völlig gesund aussah. Das Anmelden brauchte eine Zuteilung genau jener Komponente, die auch Ihre Prozesse ausführt — je beschäftigter die Engine, desto länger dauerte die Anmeldung. Und zwar ausgerechnet dann, wenn Sie sich anmelden mussten, um etwas gegen die Auslastung zu tun. Die Anmeldung hängt jetzt nicht mehr davon ab, wie beschäftigt die Engine ist."
+      },
+      "link": {
+        "label": "ADR-0002",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0002-single-writer-partition-model.md"
+      },
+      "tags": [
+        "Console"
+      ]
+    },
+    {
       "id": "the-replay-drew-a-deferred-choice-as-several-tokens-and-park",
       "version": "Unreleased",
       "date": null,
@@ -296,76 +338,6 @@
       "tags": [
         "Handbook"
       ]
-    },
-    {
-      "id": "an-element-s-documentation-is-markdown-now-and-the-people-wh",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Documentation you wrote in the model now reads as you wrote it",
-        "de": "Dokumentation aus dem Modell wird jetzt so gelesen, wie sie geschrieben ist"
-      },
-      "summary": {
-        "en": "The documentation field on an element understands Markdown: headings, bullet and numbered lists, quotes, code, bold and italic, links. Where it used to arrive as a wall of asterisks and hyphens, a work instruction now reaches the person doing the work as the checklist it was written as — in the Tasks app, in the instance replay and in the Panorama properties panel. Text written before this is untouched: a line break is still a line break, and a variable name is still a variable name.",
-        "de": "Das Dokumentationsfeld eines Elements versteht Markdown: Überschriften, Aufzählungen, nummerierte Listen, Zitate, Code, fett und kursiv, Links. Wo vorher eine Wand aus Sternchen und Bindestrichen ankam, erreicht eine Arbeitsanweisung die bearbeitende Person jetzt als die Prüfliste, als die sie geschrieben wurde — in der Tasks-App, im Instanz-Replay und im Panorama-Eigenschaftenpanel. Vorher geschriebener Text bleibt unangetastet: Ein Zeilenumbruch bleibt ein Zeilenumbruch, ein Variablenname bleibt ein Variablenname."
-      },
-      "link": {
-        "label": "ADR-0250",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0250-documentation-is-markdown.md"
-      },
-      "tags": [
-        "Tasks",
-        "Operations",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and select a user task.",
-          "In the Details panel, write the instruction in the Documentation field — a heading with ##, a checklist with -, an important word in **bold**.",
-          "Deploy and start the process, then open the task in the Tasks app: the instruction stands above the form, rendered."
-        ],
-        "de": [
-          "Öffnen Sie einen Prozess im Modeler und wählen Sie eine User-Task aus.",
-          "Schreiben Sie die Anweisung im Details-Panel ins Feld Documentation — eine Überschrift mit ##, eine Prüfliste mit -, ein wichtiges Wort in **fett**.",
-          "Deployen und starten Sie den Prozess und öffnen Sie die Aufgabe in der Tasks-App: Die Anweisung steht gerendert über dem Formular."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Tasks",
-          "de": "Aufgaben öffnen"
-        },
-        "route": "#/tasks"
-      }
-    },
-    {
-      "id": "the-handbook-is-caught-up-with-the-product-six-apps-the-play",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The handbook now covers all six apps",
-        "de": "Das Handbuch deckt jetzt alle sechs Apps ab"
-      },
-      "summary": {
-        "en": "Two of the six apps in the grid menu were not in the handbook at all: Panorama, which shows the landscape of everything deployed and how it hangs together, and Data, where you say what an order actually is across all your processes. Both now have a chapter, in German and English. So does the Playground — the Modeler tab that runs your draft against two hundred cases on the real engine, without deploying anything — and the two Console screens for connecting an AI assistant and reading who shared what with whom. The help menu's On this page entry points at the right chapter from those screens now, instead of dropping you at the top of the handbook.",
-        "de": "Zwei der sechs Apps im Rastermenü kamen im Handbuch überhaupt nicht vor: Panorama, das die Landschaft alles Deployten und ihre Zusammenhänge zeigt, und Data, wo festgehalten wird, was ein Auftrag über alle Prozesse hinweg tatsächlich ist. Beide haben jetzt ein Kapitel, auf Deutsch und Englisch. Ebenso der Playground — der Modeler-Tab, der Ihren Entwurf mit zweihundert Fällen auf der echten Engine durchrechnet, ohne etwas zu deployen — und die zwei Console-Seiten für den Anschluss eines KI-Assistenten und dafür, wer was mit wem geteilt hat. Der Eintrag «Auf dieser Seite» im Hilfemenü führt von diesen Bildschirmen nun ins passende Kapitel, statt an den Anfang des Handbuchs."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Handbook"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Panorama",
-          "de": "Panorama öffnen"
-        },
-        "route": "#/panorama/starmap"
-      }
     }
   ]
 }
