@@ -200,7 +200,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   and an instance recorded before the engine attributed writes must fall back to the old
   difference *and say so* on the section rather than presenting it as the element's own
   work. Drives the real `mountInstanceReplay` against a mock `api` serving both shapes of
-  timeline (`?legacy=1` for the unattributed one).
+  timeline (`?legacy=1` for the unattributed one). And the card's **stacking**: diagram-js
+  paints overlays in the order their elements first got one, so the execution badges of the
+  shapes a card covers were drawn on top of it, dropping a neighbour's count among the
+  card's own rows. The browser's own hit-testing answers which is on top.
 
 - **`id-check.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **live id-availability check** on an artifact's ID field. A draft is stored under

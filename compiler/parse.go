@@ -1688,6 +1688,10 @@ type xmlAgentConnector struct {
 	Prompt           string `xml:"prompt,attr"`
 	ResultVariable   string `xml:"resultVariable,attr"`
 	Retries          string `xml:"retries,attr"`
+	// Context names the process variables an agent-driven container is given, comma
+	// separated (ADR-0257). It is the container's alone: an ai
+	// task's prompt is FEEL over the variables it sees, so it carries its own data.
+	Context string `xml:"context,attr"`
 }
 
 // One <atlas:agentParam> on a contained activity: a value the model must supply when it calls
