@@ -296,7 +296,7 @@ func TestAOneShotCallIsFramedAsAQuestionNotARound(t *testing.T) {
 // The context reaches the model, under the heading the prompt has always had. This is the
 // end of the wire the bug was invisible from: the rendering was there, the payload carried
 // the field, and the map was empty every time because nothing filled it
-// (ADR-draft-what-an-agent-may-read).
+// (ADR-0257).
 func TestARoundPutsWhatTheProcessKnowsToTheModel(t *testing.T) {
 	srv, seen, _ := endpoint(t, http.StatusOK, `{"stop_reason":"end_turn","content":[{"type":"text","text":"fertig"}]}`)
 	m := &agent.HTTPModel{Endpoint: srv.URL, APIKey: "k", Client: srv.Client()}

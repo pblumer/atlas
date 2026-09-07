@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/wal"
 )
 
-// What an agent is given to read (ADR-draft-what-an-agent-may-read).
+// What an agent is given to read (ADR-0257).
 //
 // The bug this closes was not subtle. Request.Context was declared, serialized into the
 // job payload, rebuilt on the worker and rendered into the prompt under "What the process

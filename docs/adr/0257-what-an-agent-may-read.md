@@ -1,4 +1,4 @@
-# ADR-DRAFT: What an agent may read is authored, the way its reach already is
+# ADR-0257: What an agent may read is authored, the way its reach already is
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

@@ -1114,7 +1114,7 @@ type AdHocDetail struct {
 	AgentWorker int32 // interned agent Worker name → index, -1 when not agent-driven
 	AgentModel  int32 // interned language model name → index, -1 → the Worker's own model
 	// AgentContext are the interned names of the process variables this agent is given,
-	// in the order they were authored (ADR-draft-what-an-agent-may-read). Empty means
+	// in the order they were authored (ADR-0257). Empty means
 	// the agent knows its goal, its tools and what its own calls returned, and nothing
 	// of the case it is working on — which is a real design, not an oversight, when its
 	// tools fetch what it needs.

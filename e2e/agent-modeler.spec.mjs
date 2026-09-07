@@ -290,7 +290,7 @@ test("an agent-driven ad-hoc is marked on the canvas, and a plain one is not", a
 });
 
 // What an agent may read is authored on the element too, beside what it may reach
-// (ADR-draft-what-an-agent-may-read). A reviewer sees both in one place, which is the
+// (ADR-0257). A reviewer sees both in one place, which is the
 // whole argument — an agent whose data comes from somewhere the diagram does not show is
 // only half reviewable.
 test("an agent container names what it may read, and clearing it removes the attribute", async ({ page }) => {

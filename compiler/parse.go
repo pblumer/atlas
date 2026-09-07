@@ -1689,7 +1689,7 @@ type xmlAgentConnector struct {
 	ResultVariable   string `xml:"resultVariable,attr"`
 	Retries          string `xml:"retries,attr"`
 	// Context names the process variables an agent-driven container is given, comma
-	// separated (ADR-draft-what-an-agent-may-read). It is the container's alone: an ai
+	// separated (ADR-0257). It is the container's alone: an ai
 	// task's prompt is FEEL over the variables it sees, so it carries its own data.
 	Context string `xml:"context,attr"`
 }

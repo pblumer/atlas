@@ -263,7 +263,7 @@ func compileAiTask(t *testing.T, attrs string) (*CompiledProcess, *ConnectorTask
 	return cp, cp.ConnectorTask(cp.Node(task).Detail)
 }
 
-// --- What an agent is given to read (ADR-draft-what-an-agent-may-read) ---------
+// --- What an agent is given to read (ADR-0257) ---------
 
 // The container names the process variables its agent is given. Names rather than values,
 // on the element, for the reason ADR-0253 gives about tools: what an agent may reach is

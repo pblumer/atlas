@@ -71,7 +71,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, ei *model.Element
 // contextNotSet is what a named variable that is not there travels as. It is sent rather
 // than dropped because "the process meant to tell you this and had nothing" is a different
 // fact from "you were never told", and only the first one lets an agent say so instead of
-// inventing a value (ADR-draft-what-an-agent-may-read).
+// inventing a value (ADR-0257).
 const contextNotSet = "(not set)"
 
 // contextValues reads the process variables this agent was given by name, up the
