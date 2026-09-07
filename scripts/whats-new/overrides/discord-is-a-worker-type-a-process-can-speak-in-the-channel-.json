@@ -1,0 +1,37 @@
+{
+  "tags": [
+    "Workers",
+    "Modeler"
+  ],
+  "title": {
+    "en": "A process can post in Discord",
+    "de": "Ein Prozess kann in Discord schreiben"
+  },
+  "summary": {
+    "en": "A running process regularly has something to say to people, and e-mail is the wrong shape for a team that works in a chat channel. A process step can now send a message to a Discord channel, edit or delete one, read a message, list a channel, and open a thread — picked from a list in the Modeler instead of assembled as a REST call. What Discord answers goes into a variable, so a later step can address =sent.id to edit that same message or hang a thread under it. The bot token lives under Workers and is resolved by name, so the model never carries it. There is deliberately no reply-in-thread operation: in Discord a thread is itself a channel, so a reply is send-message addressing =thread.id.",
+    "de": "Ein laufender Prozess hat regelmässig etwas mitzuteilen, und E-Mail ist die falsche Form für ein Team, das in einem Chat-Kanal arbeitet. Ein Prozessschritt kann jetzt eine Nachricht in einen Discord-Kanal senden, sie bearbeiten oder löschen, eine Nachricht lesen, einen Kanal auflisten und einen Thread öffnen — im Modeler aus einer Liste gewählt statt als REST-Aufruf zusammengebaut. Was Discord zurückgibt, landet in einer Variable: ein späterer Schritt spricht =gesendet.id an, um dieselbe Nachricht zu ändern oder einen Thread darunter zu hängen. Das Bot-Token liegt beim Worker und wird über den Namen aufgelöst, das Modell trägt es nie. Eine eigene Operation „im Thread antworten\" gibt es bewusst nicht: In Discord ist ein Thread selbst ein Kanal, eine Antwort ist also send-message an =faden.id."
+  },
+  "tutorial": {
+    "en": [
+      "In Discord's developer portal, create an application, add a bot, and copy its token. Invite the bot to your server with at least View Channel and Send Messages.",
+      "Under Console › Workers, add a Worker of kind discord and store the token as {\"botToken\": \"…\"} — without the word Bot in front, Atlas adds that itself.",
+      "In the Modeler, drop a service task, pick Discord, and choose Send message. Fill in the channel id and the text; the fx toggle makes either a FEEL expression over the instance's variables.",
+      "For the channel id, enable Developer Mode in Discord (User Settings › Advanced), then right-click the channel and choose Copy Channel ID.",
+      "If the channel is private, server-wide permissions do not reach it: add the bot to the channel itself under Edit Channel › Permissions, and set the rights to the green tick rather than leaving them grey."
+    ],
+    "de": [
+      "Legen Sie im Discord-Entwicklerportal eine Anwendung an, fügen Sie einen Bot hinzu und kopieren Sie dessen Token. Laden Sie den Bot mit mindestens „Kanal ansehen\" und „Nachrichten senden\" auf Ihren Server ein.",
+      "Legen Sie unter Console › Workers einen Worker der Art discord an und hinterlegen Sie das Token als {\"botToken\": \"…\"} — ohne das Wort Bot davor, das ergänzt Atlas selbst.",
+      "Ziehen Sie im Modeler einen Service-Task auf, wählen Sie Discord und dann „Nachricht senden\". Tragen Sie Kanal-ID und Text ein; der fx-Schalter macht aus beidem eine FEEL-Expression über die Variablen der Instanz.",
+      "Für die Kanal-ID schalten Sie in Discord den Entwicklermodus ein (Einstellungen › Erweitert), dann Rechtsklick auf den Kanal › „Kanal-ID kopieren\".",
+      "Ist der Kanal privat, greifen serverweite Rechte dort nicht: Fügen Sie den Bot unter „Kanal bearbeiten › Berechtigungen\" dem Kanal selbst hinzu und setzen Sie die Rechte auf das grüne Häkchen statt sie grau zu lassen."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Workers öffnen"
+    },
+    "route": "#/console/workers"
+  }
+}

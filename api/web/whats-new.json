@@ -2,6 +2,119 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "discord-is-a-worker-type-a-process-can-speak-in-the-channel-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A process can post in Discord",
+        "de": "Ein Prozess kann in Discord schreiben"
+      },
+      "summary": {
+        "en": "A running process regularly has something to say to people, and e-mail is the wrong shape for a team that works in a chat channel. A process step can now send a message to a Discord channel, edit or delete one, read a message, list a channel, and open a thread — picked from a list in the Modeler instead of assembled as a REST call. What Discord answers goes into a variable, so a later step can address =sent.id to edit that same message or hang a thread under it. The bot token lives under Workers and is resolved by name, so the model never carries it. There is deliberately no reply-in-thread operation: in Discord a thread is itself a channel, so a reply is send-message addressing =thread.id.",
+        "de": "Ein laufender Prozess hat regelmässig etwas mitzuteilen, und E-Mail ist die falsche Form für ein Team, das in einem Chat-Kanal arbeitet. Ein Prozessschritt kann jetzt eine Nachricht in einen Discord-Kanal senden, sie bearbeiten oder löschen, eine Nachricht lesen, einen Kanal auflisten und einen Thread öffnen — im Modeler aus einer Liste gewählt statt als REST-Aufruf zusammengebaut. Was Discord zurückgibt, landet in einer Variable: ein späterer Schritt spricht =gesendet.id an, um dieselbe Nachricht zu ändern oder einen Thread darunter zu hängen. Das Bot-Token liegt beim Worker und wird über den Namen aufgelöst, das Modell trägt es nie. Eine eigene Operation „im Thread antworten\" gibt es bewusst nicht: In Discord ist ein Thread selbst ein Kanal, eine Antwort ist also send-message an =faden.id."
+      },
+      "link": {
+        "label": "ADR-0258",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0258-discord-worker.md"
+      },
+      "tags": [
+        "Workers",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "In Discord's developer portal, create an application, add a bot, and copy its token. Invite the bot to your server with at least View Channel and Send Messages.",
+          "Under Console › Workers, add a Worker of kind discord and store the token as {\"botToken\": \"…\"} — without the word Bot in front, Atlas adds that itself.",
+          "In the Modeler, drop a service task, pick Discord, and choose Send message. Fill in the channel id and the text; the fx toggle makes either a FEEL expression over the instance's variables.",
+          "For the channel id, enable Developer Mode in Discord (User Settings › Advanced), then right-click the channel and choose Copy Channel ID.",
+          "If the channel is private, server-wide permissions do not reach it: add the bot to the channel itself under Edit Channel › Permissions, and set the rights to the green tick rather than leaving them grey."
+        ],
+        "de": [
+          "Legen Sie im Discord-Entwicklerportal eine Anwendung an, fügen Sie einen Bot hinzu und kopieren Sie dessen Token. Laden Sie den Bot mit mindestens „Kanal ansehen\" und „Nachrichten senden\" auf Ihren Server ein.",
+          "Legen Sie unter Console › Workers einen Worker der Art discord an und hinterlegen Sie das Token als {\"botToken\": \"…\"} — ohne das Wort Bot davor, das ergänzt Atlas selbst.",
+          "Ziehen Sie im Modeler einen Service-Task auf, wählen Sie Discord und dann „Nachricht senden\". Tragen Sie Kanal-ID und Text ein; der fx-Schalter macht aus beidem eine FEEL-Expression über die Variablen der Instanz.",
+          "Für die Kanal-ID schalten Sie in Discord den Entwicklermodus ein (Einstellungen › Erweitert), dann Rechtsklick auf den Kanal › „Kanal-ID kopieren\".",
+          "Ist der Kanal privat, greifen serverweite Rechte dort nicht: Fügen Sie den Bot unter „Kanal bearbeiten › Berechtigungen\" dem Kanal selbst hinzu und setzen Sie die Rechte auf das grüne Häkchen statt sie grau zu lassen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
+      "id": "a-discord-channel-can-start-a-process",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A message in Discord can start a process",
+        "de": "Eine Nachricht in Discord kann einen Prozess starten"
+      },
+      "summary": {
+        "en": "The other direction: until now a process could write to Discord but never hear from it. A Discord Worker now has an Events tab — give it a channel id and a message name, and every new message in that channel starts the processes waiting for that message. Somebody reporting a fault in chat opens a case without leaving the channel. Atlas polls Discord on a schedule, so nothing has to reach your server from the internet. A new watch starts from now, so pointing one at a busy channel does not start a process per message of history. The process receives the text, the author, whether the author was a bot, the message and channel ids, and the whole message for anything else.",
+        "de": "Die Gegenrichtung: Bisher konnte ein Prozess nach Discord schreiben, aber nie von Discord hören. Ein Discord-Worker hat jetzt einen Reiter „Events\" — Sie hinterlegen eine Kanal-ID und einen Nachrichtennamen, und jede neue Nachricht in diesem Kanal startet die Prozesse, die auf diese Nachricht warten. Wer eine Störung im Chat meldet, eröffnet damit einen Vorgang, ohne den Kanal zu verlassen. Atlas fragt Discord in einem Takt ab; es muss also nichts aus dem Internet Ihren Server erreichen. Eine neue Überwachung beginnt ab jetzt: Sie auf einen vollen Kanal zu richten startet nicht pro Alt-Nachricht einen Prozess. Der Prozess bekommt Text, Autor, ob der Autor ein Bot war, Nachrichten- und Kanal-ID — und die ganze Nachricht für alles Weitere."
+      },
+      "link": {
+        "label": "ADR-0262",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0262-discord-inbound-watch.md"
+      },
+      "tags": [
+        "Workers",
+        "Operations",
+        "Events"
+      ],
+      "tutorial": {
+        "en": [
+          "Under Console › Workers, open the Events… dialog on your Discord Worker and add a watch.",
+          "Enter the channel id and the message name your model's message start event listens for, then save.",
+          "The bot needs Read Message History on that channel. Without it Discord answers with an empty list rather than an error, so the watch would run and quietly find nothing.",
+          "Post a new message in the channel — messages already there are skipped by design — and watch the instance appear under Operations.",
+          "If the Worker also posts into the channel it watches, branch on authorBot: its own messages come back through the watch, and without that gate each one starts another round."
+        ],
+        "de": [
+          "Öffnen Sie unter Console › Workers bei Ihrem Discord-Worker den Dialog „Events…\" und legen Sie eine Überwachung an.",
+          "Tragen Sie die Kanal-ID und den Nachrichtennamen ein, auf den das Message-Start-Event Ihres Modells hört, und speichern Sie.",
+          "Der Bot braucht auf diesem Kanal das Recht „Nachrichtenverlauf anzeigen\". Ohne dieses Recht antwortet Discord mit einer leeren Liste statt mit einem Fehler — die Überwachung liefe also und fände still nichts.",
+          "Schreiben Sie eine neue Nachricht in den Kanal — was schon darin steht, wird bewusst übersprungen — und sehen Sie die Instanz unter Operations auftauchen.",
+          "Schreibt der Worker auch selbst in den überwachten Kanal, verzweigen Sie auf authorBot: Seine eigenen Nachrichten kommen durch die Überwachung zurück, und ohne diese Weiche startet jede davon die nächste Runde."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
+      "id": "a-deploy-now-says-when-a-model-s-atlas-namespace-is-not-atla",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A deploy warns when a model would break in the Modeler",
+        "de": "Ein Deploy warnt, wenn ein Modell im Modeler zerbrechen würde"
+      },
+      "summary": {
+        "en": "Hand-written BPMN can bind the atlas prefix to a namespace that is almost right — and the engine will not notice, because it matches an extension element on its name alone. The model deploys, compiles and runs perfectly. The Modeler is stricter: it does not recognise those elements at all, so opening the process looks fine and then every Save fails with a message about a prefix called ns0. A deploy now says so up front, naming the elements, the namespace it found and the one line to change. The model still deploys — it runs correctly, and refusing it would strand models that have worked for years. Only models written or generated by hand are affected; anything the Modeler saved is already right.",
+        "de": "Handgeschriebenes BPMN kann das atlas-Präfix an einen Namensraum binden, der fast stimmt — und die Engine merkt es nicht, weil sie ein Extension-Element nur über seinen Namen erkennt. Das Modell wird deployt, kompiliert und läuft einwandfrei. Der Modeler ist strenger: Er erkennt diese Elemente gar nicht, das Öffnen sieht also gut aus, und dann scheitert jedes Speichern mit einer Meldung über ein Präfix namens ns0. Der Deploy sagt es jetzt vorher — mit den betroffenen Elementen, dem gefundenen Namensraum und der einen Zeile, die zu ändern ist. Das Modell wird trotzdem deployt: Es läuft korrekt, und es abzulehnen würde Modelle stranden lassen, die seit Jahren funktionieren. Betroffen sind nur von Hand geschriebene oder generierte Modelle; was der Modeler gespeichert hat, stimmt bereits."
+      },
+      "link": {
+        "label": "ADR-0269",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0269-atlas-namespace-deploy-warning.md"
+      },
+      "tags": [
+        "Modeler",
+        "Validation"
+      ]
+    },
+    {
       "id": "task-folders-the-tasks-app-s-sidebar-folders-are-now-saved-f",
       "version": "Unreleased",
       "date": null,
@@ -290,92 +403,6 @@
           "de": "Handbuch öffnen"
         },
         "route": "#/console"
-      }
-    },
-    {
-      "id": "the-object-diagram-is-drawn-on-diagram-js-now-so-it-zooms-an",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The object diagram zooms, pans and fits",
-        "de": "Das Objektdiagramm lässt sich zoomen, verschieben und einpassen"
-      },
-      "summary": {
-        "en": "The Data tab of an instance replay draws the objects it is carrying and the lines between them. Until now that picture could only be scrolled: a diagram wider than the panel ran off the edge, and there was no way to make it fit. It is drawn on the same canvas as the class diagram and the architecture views now, so it zooms with the wheel, pans with a drag, and carries the same three controls in the same corner. The zoom you set survives — the picture no longer jumps back when you click an element or when a running instance refreshes itself.",
-        "de": "Die Registerkarte «Daten» einer Instanz-Wiedergabe zeichnet die Objekte, die sie mit sich führt, und die Linien dazwischen. Bisher liess sich dieses Bild nur scrollen: Ein Diagramm, das breiter war als die Fläche, lief über den Rand hinaus, und es gab keine Möglichkeit, es einzupassen. Gezeichnet wird es jetzt auf derselben Zeichenfläche wie das Klassendiagramm und die Architekturansichten — also zoomen mit dem Mausrad, verschieben mit der Maus, und dieselben drei Bedienelemente in derselben Ecke. Der eingestellte Zoom bleibt erhalten: Das Bild springt nicht mehr zurück, wenn Sie ein Element anklicken oder eine laufende Instanz sich aktualisiert."
-      },
-      "link": {
-        "label": "ADR-0237",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0237-class-canvas-on-diagram-js.md"
-      },
-      "tags": [
-        "Operations",
-        "Data"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-training-nuggets-show-the-real-atlas-not-a-drawing-of-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The training nuggets now show the real Atlas",
-        "de": "Die Schulungsnuggets zeigen jetzt das echte Atlas"
-      },
-      "summary": {
-        "en": "The animated walk-throughs in the handbook used to be drawings of the interface. A drawing has to guess, and this one guessed wrong where it mattered: it put the navigation down the side, where Atlas runs it across the top. Every scene is now a capture of the running product — the Modeler with a real model on the canvas, Operations showing five instances at once with their tokens and variables, the task inbox with its filters. So what you see while learning is what you find when you open the app. The process shown is a proper one too: the gateway really does branch, into an approval on one side and straight through on the other.",
-        "de": "Die animierten Durchgänge im Handbuch waren bisher Zeichnungen der Oberfläche. Eine Zeichnung muss raten, und diese riet dort falsch, wo es zählt: Sie setzte die Navigation an den linken Rand, während Atlas sie über die Breite führt. Jede Szene ist jetzt eine Aufnahme des laufenden Produkts — der Modeler mit einem echten Modell auf der Fläche, Operations mit fünf Instanzen samt Token und Variablen, der Aufgaben-Posteingang mit seinen Filtern. Was man beim Lernen sieht, findet man so in der App wieder. Auch der gezeigte Prozess stimmt jetzt: Das Gateway verzweigt wirklich, in eine Freigabe auf der einen und den direkten Weg auf der anderen Seite."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Handbook"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the handbook",
-          "de": "Handbuch öffnen"
-        },
-        "route": "#/console"
-      }
-    },
-    {
-      "id": "every-shipped-model-now-carries-its-own-diagram",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Every shipped example now brings its own diagram",
-        "de": "Jedes mitgelieferte Beispiel bringt jetzt sein eigenes Diagramm mit"
-      },
-      "summary": {
-        "en": "Four of the shipped models had no drawing of their own, so Atlas generated one when they were deployed. That is enough to run a model and not enough to read one — which started to matter the moment the handbook began showing every example as a picture. They are drawn by hand now: one straight main axis, every branch in a lane of its own, and every gateway exit labelled with its answer, which meant giving names to eight branches that never had one. Open any of them in the Modeler and the picture is the one somebody meant to draw.",
-        "de": "Vier der mitgelieferten Modelle hatten keine eigene Zeichnung, also erzeugte Atlas beim Deployen eine. Das genügt, um ein Modell laufen zu lassen, und nicht, um es zu lesen — was in dem Moment zählte, als das Handbuch anfing, jedes Beispiel als Bild zu zeigen. Jetzt sind sie von Hand gezeichnet: eine gerade Hauptachse, jeder Zweig in einer eigenen Bahn, und jeder Gateway-Ausgang mit seiner Antwort beschriftet — wofür acht Zweige erstmals einen Namen bekommen mussten. Öffnen Sie eines davon im Modeler, und das Bild ist das, das jemand zeichnen wollte."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Examples",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]
