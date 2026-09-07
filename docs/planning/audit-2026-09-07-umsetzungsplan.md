@@ -315,6 +315,27 @@ Conditional Events und Job-Completion.
 
 ### AP3 — Wiederherstellbarkeit: F03, F04, F05 (M–L)
 
+> **Stand: umgesetzt.** Alle drei Befunde sind behoben. Der Reader kennt jetzt
+> den Unterschied zwischen «abgeschlossenes Segment» und «aktives Ende» und
+> meldet Korruption im ersten Fall hart, mit Datei und Offset; der Start
+> beweist seinen Präfix und verweigert sonst den Dienst; und die Ablage auf
+> der Platte hat eine einzige Liste, aus der Backup und Restore *abgeleitet*
+> sind statt danebengelegt.
+>
+> **Was erst die Abnahmekriterien gefunden haben.** Der Bericht nannte für F05
+> zwölf fehlende Verzeichnisse. Der Vollständigkeitstest, der einen Server
+> hochfährt und jedes nicht klassifizierte Verzeichnis ablehnt, hat zwei
+> weitere Sorten gefunden, die keine Liste je erwischt hätte: Stores, die
+> **erst bei Benutzung** entstehen (ihre Abwesenheit ist kein Fehler, ihre
+> Auslassung im Archiv schon), und einen, den das Archiv über einen **eigenen
+> Weg** trägt statt durch Kopieren des Verzeichnisses. Beide sind jetzt
+> Eigenschaften des Registers, nicht Fussnoten.
+>
+> Der Test hat seither schon einmal geliefert, wofür er da ist: `main` hat den
+> Store `task-folders` ergänzt, und der Merge in diesen Zweig ist daran
+> aufgelaufen, bevor irgendein Backup ihn stillschweigend ausgelassen hätte.
+
+
 **F03 — Korruption vs. erlaubtes Ende.** `readFrames` erfährt heute nicht, ob
 es das aktive letzte Segment liest, und behandelt ungültige Länge, CRC-Fehler
 und abgeschnittene Daten gleich als Dateiende. Der Reader bekommt die
@@ -387,6 +408,43 @@ schlägt eindeutig fehl.
 ---
 
 ### AP4 — BPMN-Semantik und Fairness: F06, F08, F12 (M)
+
+> **Stand: umgesetzt.** F06, F08 und F12 sind behoben — Schritt 1 von F06, wie
+> geplant; die Zählung je eingehendem Flow bleibt offen und getrennt.
+>
+> **F06.** Der Schlüssel des Joins ist jetzt (Prozessinstanz, Ausführungsscope,
+> Knoten). Der Inclusive-Join hatte dieselbe Verwechslung in *beiden* Hälften:
+> er wartete auf Geschwister, die nie ankommen können, und verbrauchte beim
+> Feuern jedes auf dem Knoten parkierende Token — auch die der anderen
+> Iteration. Die Gefahr lag beim Übercorrigieren, nicht beim Untercorrigieren;
+> dafür gibt es einen eigenen Test mit einem Subprozess auf einem Zweig.
+>
+> **F08.** Die Reihenfolge war der ganze Fehler: das Gateway schrieb
+> `Completed`, *bevor* die Route feststand, konnte also gar nicht mehr
+> parkieren. Jetzt entscheidet es zuerst. Der zweite, gefährlichere Defekt lag
+> drei Zeilen daneben — ein Auswertungsfehler wurde als `false` gelesen und
+> nahm mit Default-Flow einen Zweig, den niemand gewählt hat. Beides ist
+> getrennt behandelt und getrennt getestet.
+>
+> **F12.** Das Budget zählt **pro Token**, nicht pro Instanz. Das ist der
+> Unterschied zwischen einem Zyklus (ein Token dreht sich) und schwerer,
+> legitimer Arbeit (fünfzigtausend Multi-Instance-Iterationen sind
+> fünfzigtausend Token mit je einem Schritt). Jede Obergrenze pro Instanz, die
+> das erste stoppt, stoppt auch das zweite. Ein neu geprägtes Token *erbt* den
+> Zähler seines Elters, sonst setzt ein Zyklus durch jede Fork, jeden Join und
+> jeden Subprozessausgang sein eigenes Budget zurück — der Fork-Test hat genau
+> das gefunden, nachdem die erste Fassung ihn nicht bestand.
+>
+> **Was der Fixpfad zusätzlich brauchte.** Ein jobloser Incident wurde bisher
+> über den *Knotentyp* aufgelöst. Das trägt nur, solange ein Knotentyp genau
+> eine Art hat, steckenzubleiben — und das Budget kann jedes Element jeden
+> Typs anhalten. `model.IncidentValue` trägt darum jetzt einen `Reason`; er
+> hängt hinter der Nachricht, ältere Datensätze sind ein Byte kürzer und lesen
+> sich als «nicht klassifiziert». Die vier übrigen joblosen Quellen tragen
+> weiterhin genau das und werden weiterhin über den Knotentyp aufgelöst; sie
+> zu klassifizieren ist eine Änderung an jeder von ihnen und bewusst nicht
+> Teil dieses Schritts.
+
 
 **F06 — Join-Identität.** `ElementInstancesOnNode` filtert heute nur auf
 `ElementId`, nicht auf `FlowScopeKey`; parallele Iterationen eines
@@ -510,6 +568,12 @@ AP0 Harness  ──┬───────────────────�
 Freigabe für dauerhafte geschäftskritische Ausführung frühestens nach AP3 —
 das ist der Punkt, an dem V1 und V2 geschlossen sind.
 
+> **Stand:** AP0 bis AP4 sind umgesetzt. V1 und V2 sind damit geschlossen, die
+> Freigabeschwelle oben ist erreicht. V3 fehlt noch die zweite Achse (F11,
+> AP5). Offen sind ausserdem die vier P2-Befunde in AP6 und, aus AP4, die
+> Zählung je eingehendem Flow — die einzige bewusst zurückgestellte
+> Semantikschuld.
+
 ---
 
 ## 5. Teststrategie
@@ -582,22 +646,22 @@ dafür, dass F07 und F08 mit einer *Begründung im Code* danebenlagen.
 
 ## Anhang — Befundregister mit Zuordnung
 
-| ID | Prio | Befund | Paket | Reproduktion |
-|---|---|---|---|---|
-| F01 | P0 | Recovery stellt keine ausstehende Folgearbeit wieder her | AP2 | `TestAuditRecoveryResumesCommittedFollowups` |
-| F02 | P0 | WAL erkennt Frames, aber keine atomaren Batches | AP2 | `TestAuditPartialBatchMustNotRecoverHalfACommand` |
-| F03 | P1 | Korruption in abgeschlossenen Segmenten still übersprungen | AP3 | `TestAuditCorruptionInSealedSegmentMustFail` |
-| F04 | P1 | Nach Kompaktierung erfolgreicher, unvollständiger Recovery | AP3 | `TestAuditCompactedWALMissingStateFailsClosed` |
-| F05 | P1 | Vollsicherung lässt zentrale Stores aus | AP3 | `TestAuditFullSnapshotContainsPersistentStores` |
-| F06 | P1 | Joins vermischen Multi-Instance-Scopes | AP4 | `TestAuditParallelJoinSeparatesMultiInstanceScopes` |
-| F07 | P1 | Abbruch übersieht Kind aus demselben Batch | AP1 | `TestAuditCancelSeesChildCreatedInSameBatch` |
-| F08 | P1 | XOR ohne Route verliert Token ohne Incident | AP4 | `TestAuditXORNoMatchRaisesIncident` |
-| F09 | P1 | Deployment umgeht Projektmitgliedschaft | AP1 | `TestAuditRawDeployRequiresProjectMembership` |
-| F10 | P1 | Entzogene Rollen bleiben in Sessions wirksam | AP1 | `TestAuditRoleRevocationInvalidatesExistingSession` |
-| F11 | P1 | Jeder Benutzer liest fremde Instanzvariablen | AP5 | `TestAuditUnrelatedUserCannotReadInstanceVariables` |
-| F12 | P1 | Automatische Zyklen besetzen den Single-Writer | AP4 | `TestAuditAutomaticCycleHasExecutionBudget` |
-| F13 | P2 | Langsame Worker blockieren unabhängige Requests | AP6 | `TestAuditSlowWorkerDoesNotBlockIndependentMutation` |
-| F14 | P2 | Erreichbarkeit am Inclusive-Join neu aufgebaut | AP6 | `TestAuditReachabilityAllocations` |
-| F15 | P2 | Job-Polling scannt die ganze Warteschlange | AP6 | statisch belegt |
-| F16 | P2 | Ressourcenbudgets unvollständig | AP6 | statisch belegt |
-| F17 | P2 | Keine expliziten Lese-/Idle-Timeouts | AP1 | statisch belegt |
+| ID | Prio | Befund | Paket | Reproduktion | Stand |
+|---|---|---|---|---|---|
+| F01 | P0 | Recovery stellt keine ausstehende Folgearbeit wieder her | AP2 | `TestAuditRecoveryResumesCommittedFollowups` | behoben |
+| F02 | P0 | WAL erkennt Frames, aber keine atomaren Batches | AP2 | `TestAuditPartialBatchMustNotRecoverHalfACommand` | behoben |
+| F03 | P1 | Korruption in abgeschlossenen Segmenten still übersprungen | AP3 | `TestAuditCorruptionInSealedSegmentMustFail` | behoben |
+| F04 | P1 | Nach Kompaktierung erfolgreicher, unvollständiger Recovery | AP3 | `TestAuditCompactedWALMissingStateFailsClosed` | behoben |
+| F05 | P1 | Vollsicherung lässt zentrale Stores aus | AP3 | `TestAuditFullSnapshotContainsPersistentStores` | behoben |
+| F06 | P1 | Joins vermischen Multi-Instance-Scopes | AP4 | `TestAuditParallelJoinSeparatesMultiInstanceScopes` | Schritt 1 behoben |
+| F07 | P1 | Abbruch übersieht Kind aus demselben Batch | AP1 | `TestAuditCancelSeesChildCreatedInSameBatch` | behoben |
+| F08 | P1 | XOR ohne Route verliert Token ohne Incident | AP4 | `TestAuditXORNoMatchRaisesIncident` | behoben |
+| F09 | P1 | Deployment umgeht Projektmitgliedschaft | AP1 | `TestAuditRawDeployRequiresProjectMembership` | behoben |
+| F10 | P1 | Entzogene Rollen bleiben in Sessions wirksam | AP1 | `TestAuditRoleRevocationInvalidatesExistingSession` | behoben |
+| F11 | P1 | Jeder Benutzer liest fremde Instanzvariablen | AP5 | `TestAuditUnrelatedUserCannotReadInstanceVariables` | offen |
+| F12 | P1 | Automatische Zyklen besetzen den Single-Writer | AP4 | `TestAuditAutomaticCycleHasExecutionBudget` | behoben |
+| F13 | P2 | Langsame Worker blockieren unabhängige Requests | AP6 | `TestAuditSlowWorkerDoesNotBlockIndependentMutation` | offen |
+| F14 | P2 | Erreichbarkeit am Inclusive-Join neu aufgebaut | AP6 | `TestAuditReachabilityAllocations` | offen |
+| F15 | P2 | Job-Polling scannt die ganze Warteschlange | AP6 | statisch belegt | offen |
+| F16 | P2 | Ressourcenbudgets unvollständig | AP6 | statisch belegt | offen |
+| F17 | P2 | Keine expliziten Lese-/Idle-Timeouts | AP1 | statisch belegt | behoben |
