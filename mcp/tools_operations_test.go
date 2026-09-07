@@ -128,17 +128,7 @@ func TestCompleteJobViaTool(t *testing.T) {
 		t.Fatal("create_instance failed")
 	}
 
-	listText, isErr := toolText(t, result(t, run(t, ts, callTool(3, "atlas_list_instances", map[string]any{}))[0]))
-	if isErr {
-		t.Fatal("list_instances failed")
-	}
-	var instances []struct {
-		Key uint64 `json:"key"`
-	}
-	if err := json.Unmarshal([]byte(listText), &instances); err != nil || len(instances) == 0 {
-		t.Fatalf("parse instances: err=%v, list=%q", err, listText)
-	}
-	jobKey := instanceJobKey(t, ts.URL, instances[0].Key)
+	jobKey := instanceJobKey(t, ts.URL, firstInstanceKey(t, ts, 3, map[string]any{}))
 
 	// Complete the job with an output variable; the instance runs to completion.
 	text, isErr := toolText(t, result(t, run(t, ts, callTool(4, "atlas_complete_job", map[string]any{"key": jobKey, "reason": "test: completed by hand", "variables": map[string]any{"paid": true}}))[0]))

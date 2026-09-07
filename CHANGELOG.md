@@ -12,6 +12,21 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **`atlas_list_instances` (MCP) returns a page, not a bare array.** It answered with
+  a plain JSON array, which cannot say it is a *page* — and the endpoint behind it caps
+  at 1000 rows and flags the cut in a header the body does not carry. An agent handed
+  the array alone read the first page of three hundred thousand instances as though it
+  were the whole population, and acted on it.
+
+  It now answers with `{items, truncated, nextCursor}` — the envelope
+  `atlas_list_tasks` already used — and takes a `before` cursor to resume. The two list
+  tools are one protocol now: hand `nextCursor` back as `before`, never parse it. A
+  `truncated` page without a `nextCursor` means there is more but this listing has no
+  position to resume from; narrowing it (`process` plus a single `state`) is what gets
+  you one. **Breaking** for anything that parsed the array directly — read `items`.
+
 ### Added
 
 - **A deployed process can be filed under an application after the fact.**

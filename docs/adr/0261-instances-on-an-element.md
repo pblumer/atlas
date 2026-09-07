@@ -96,11 +96,16 @@ Chosen: **option 3**, a `cfInstanceByElement` column family keyed
   to get, which at a few hundred thousand instances answers with a subset of a page
   and nothing to distinguish that from the truth. It refuses `element` without
   `process` itself rather than relaying the server's 400, so the reason is part of the
-  tool's own answer and costs no round trip. It gains no `before`: the tool returns
-  the endpoint's body verbatim and the page cursor rides in a response *header* the
-  body does not carry, so the parameter would be one no caller could supply. Reaching
-  one particular instance stays `atlas_search_instances`' job, where a bare key is a
-  point read.
+  tool's own answer and costs no round trip. It answers with the
+  `{items, truncated, nextCursor}` envelope `atlas_list_tasks` already returns rather
+  than the bare array it used to: a list tool needs one to say it is a *page*, and the
+  instances endpoint caps at 1000 rows and flags the cut in a header the body does not
+  carry — so an agent handed the array alone would read the first page of three
+  hundred thousand instances as the whole population and act on it. The cursor is a
+  string where the task page's is a number, because the finished half's position is a
+  (completion time, key) pair; the contract is the same either way — hand `nextCursor`
+  back as `before`, never parse it. Reaching one *particular* instance stays
+  `atlas_search_instances`' job, where a bare key is a point read.
 
 In the view, clicking a **flow node** filters the panel to the instances sitting on
 it (clicking it again clears); clicking anything that is **not** one — the canvas
