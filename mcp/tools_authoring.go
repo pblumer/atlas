@@ -201,12 +201,6 @@ func withProjectID(path string, args map[string]any) string {
 // refuses it too, but as an HTTP 400 an agent then has to interpret; saying it here
 // makes the reason part of the tool's own answer, and costs a round trip nobody
 // wanted to make.
-//
-// There is deliberately no 'before': the tool returns the endpoint's JSON body
-// verbatim, and the cursor a page is resumed with rides in a response *header* the
-// body does not carry. Offering the parameter without a way to obtain a cursor
-// would be a dead argument. Reaching one particular instance is
-// atlas_search_instances' job, and a bare key there is a point read.
 func listInstancesPath(args map[string]any) (string, error) {
 	q := url.Values{}
 	process, hasProcess, err := optPositiveUint(args, "process")
@@ -232,10 +226,71 @@ func listInstancesPath(args map[string]any) (string, error) {
 	if hasLimit {
 		q.Set("limit", strconv.FormatUint(limit, 10))
 	}
+	// The cursor is passed through exactly as the server wrote it. It is a string,
+	// unlike the task inbox's, because the finished half's position is a (completion
+	// time, instance key) pair — completion order is not key order, so one number
+	// cannot name a place in it. Nothing here parses it: a cursor this tool
+	// interpreted would be a cursor it could get wrong.
+	if before := optString(args, "before"); before != "" {
+		q.Set("before", before)
+	}
 	if len(q) == 0 {
 		return "/api/v1/instances", nil
 	}
 	return "/api/v1/instances?" + q.Encode(), nil
+}
+
+// instanceListPage is what atlas_list_instances answers with: the rows, whether the
+// server capped them, and where the next page resumes.
+//
+// It is the shape atlas_list_tasks already returns, for the reason a list tool needs
+// one at all — a bare array cannot say it is a *page*. The instances endpoint caps
+// at 1000 rows by default and flags the cut in a header the body does not carry, so
+// an agent handed the array alone would read the first page of three hundred
+// thousand instances as though it were the whole population, and act on it.
+//
+// NextCursor is a string where the task page's is a number, because the two cursors
+// genuinely differ (see listInstancesPath). An agent's contract is the same either
+// way: hand nextCursor back as before. It is absent when the server offered none —
+// which happens on an unscoped listing, where a capped page has no position a cursor
+// can name. `truncated` without `nextCursor` therefore means "there is more, and
+// ?process= is how you reach it".
+type instanceListPage struct {
+	Items      []json.RawMessage `json:"items"`
+	Truncated  bool              `json:"truncated"`
+	NextCursor string            `json:"nextCursor,omitempty"`
+}
+
+// listInstancesPage runs the listing and wraps the answer with what the response
+// headers said about it.
+func listInstancesPage(c *Client, args map[string]any) (string, error) {
+	path, err := listInstancesPath(args)
+	if err != nil {
+		return "", err
+	}
+	body, headers, err := c.getWithHeaders(path)
+	if err != nil {
+		return "", err
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(body, &items); err != nil {
+		return "", fmt.Errorf("decode Atlas instance list: %w", err)
+	}
+	if items == nil {
+		// A JSON null would marshal straight back out as `"items": null`, and an agent
+		// that iterates items would break on it. An empty page is an empty list.
+		items = []json.RawMessage{}
+	}
+	page := instanceListPage{
+		Items:      items,
+		Truncated:  strings.EqualFold(strings.TrimSpace(headers.Get("X-Instances-Truncated")), "true"),
+		NextCursor: strings.TrimSpace(headers.Get("X-Instances-Next-Cursor")),
+	}
+	encoded, err := json.Marshal(page)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
 }
 
 func searchInstancesPath(q, process string) string {
@@ -856,6 +911,9 @@ func authoringTools() []Tool {
 				var items []json.RawMessage
 				if err := json.Unmarshal(body, &items); err != nil {
 					return "", fmt.Errorf("decode Atlas task list: %w", err)
+				}
+				if items == nil {
+					items = []json.RawMessage{} // never `"items": null`, as above
 				}
 				page := taskListPage{
 					Items:     items,

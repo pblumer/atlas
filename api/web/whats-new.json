@@ -195,6 +195,35 @@
       }
     },
     {
+      "id": "the-object-diagram-is-drawn-on-diagram-js-now-so-it-zooms-an",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The object diagram zooms, pans and fits",
+        "de": "Das Objektdiagramm lässt sich zoomen, verschieben und einpassen"
+      },
+      "summary": {
+        "en": "The Data tab of an instance replay draws the objects it is carrying and the lines between them. Until now that picture could only be scrolled: a diagram wider than the panel ran off the edge, and there was no way to make it fit. It is drawn on the same canvas as the class diagram and the architecture views now, so it zooms with the wheel, pans with a drag, and carries the same three controls in the same corner. The zoom you set survives — the picture no longer jumps back when you click an element or when a running instance refreshes itself.",
+        "de": "Die Registerkarte «Daten» einer Instanz-Wiedergabe zeichnet die Objekte, die sie mit sich führt, und die Linien dazwischen. Bisher liess sich dieses Bild nur scrollen: Ein Diagramm, das breiter war als die Fläche, lief über den Rand hinaus, und es gab keine Möglichkeit, es einzupassen. Gezeichnet wird es jetzt auf derselben Zeichenfläche wie das Klassendiagramm und die Architekturansichten — also zoomen mit dem Mausrad, verschieben mit der Maus, und dieselben drei Bedienelemente in derselben Ecke. Der eingestellte Zoom bleibt erhalten: Das Bild springt nicht mehr zurück, wenn Sie ein Element anklicken oder eine laufende Instanz sich aktualisiert."
+      },
+      "link": {
+        "label": "ADR-0237",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0237-class-canvas-on-diagram-js.md"
+      },
+      "tags": [
+        "Operations",
+        "Data"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "the-training-nuggets-show-the-real-atlas-not-a-drawing-of-it",
       "version": "Unreleased",
       "date": null,
@@ -313,27 +342,6 @@
       },
       "tags": [
         "Operations"
-      ]
-    },
-    {
-      "id": "signing-in-waited-for-the-engine-so-a-busy-server-locked-eve",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Signing in no longer waits for the engine",
-        "de": "Die Anmeldung wartet nicht mehr auf die Engine"
-      },
-      "summary": {
-        "en": "On a heavily loaded server, signing in could stop working: the login page simply never answered, while the server itself looked perfectly healthy from the outside. Logging in needed a turn from the very component that runs your processes, so the busier the engine got, the longer the front door took — precisely when you needed to get in and do something about it. Signing in no longer depends on how busy the engine is.",
-        "de": "Auf einem stark ausgelasteten Server konnte die Anmeldung ausfallen: Die Login-Seite antwortete schlicht nicht mehr, während der Server von aussen völlig gesund aussah. Das Anmelden brauchte eine Zuteilung genau jener Komponente, die auch Ihre Prozesse ausführt — je beschäftigter die Engine, desto länger dauerte die Anmeldung. Und zwar ausgerechnet dann, wenn Sie sich anmelden mussten, um etwas gegen die Auslastung zu tun. Die Anmeldung hängt jetzt nicht mehr davon ab, wie beschäftigt die Engine ist."
-      },
-      "link": {
-        "label": "ADR-0002",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0002-single-writer-partition-model.md"
-      },
-      "tags": [
-        "Console"
       ]
     }
   ]

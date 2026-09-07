@@ -24,19 +24,8 @@ func deployAndStartInstances(t *testing.T, atlas *httptest.Server, varsList []ma
 			t.Fatalf("create_instance %d failed", i)
 		}
 	}
-	listText, isErr := toolText(t, result(t, run(t, atlas, callTool(3, "atlas_list_instances", map[string]any{}))[0]))
-	if isErr {
-		t.Fatal("list_instances failed")
-	}
-	var instances []struct {
-		Key   uint64 `json:"key"`
-		State string `json:"state"`
-	}
-	if err := json.Unmarshal([]byte(listText), &instances); err != nil {
-		t.Fatalf("parse instances %q: %v", listText, err)
-	}
 	keys := []uint64{}
-	for _, in := range instances {
+	for _, in := range listedInstances(t, atlas, 3, map[string]any{}) {
 		if in.State == "active" {
 			keys = append(keys, in.Key)
 		}

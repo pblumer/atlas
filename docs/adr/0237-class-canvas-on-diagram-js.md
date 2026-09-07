@@ -1,6 +1,6 @@
 # ADR-0237: The class canvas on diagram-js
 
-- **Status:** Proposed (amended 2026-09-07: the marquee is a mode; the two bundles are one)
+- **Status:** Proposed (amended 2026-09-07: the marquee is a mode; the two bundles are one; the object diagram joined them)
 - **Date:** 2026-09-03
 - **Deciders:** Patrick Blumer
 
@@ -218,10 +218,77 @@ Those are third-party bundles vendored whole rather than Atlas sources built aga
 the library, so folding them in would mean building bpmn-js from source. That is a
 different decision, and this merge does not make it.
 
+## Amendment: the object diagram joined them
+
+This record moved the *class* diagram onto diagram-js and said nothing about the one
+beside it, because at the time the object diagram was somebody else's problem in the
+same building: `renderObjectDiagram` in `api/web/editor.js`, SVG strings with a layout
+of their own, no zoom, no pan and no selection. [ADR-0259](0259-data-object-lifecycle.md)
+named moving it as a follow-up and recommended doing it *before* a third notation was
+added rather than after. It is done.
+
+`AtlasCanvas.uml` now exports `ObjectCanvas` beside `ClassCanvas`. What Atlas owns is
+unchanged in kind — how an object is drawn, and where the boxes go — and the notation
+itself did not move a pixel: an object still reads as its label underlined, its state
+in brackets and its members as `name = value` with the business key marked; a
+containment still carries the composition diamond and a key-resolved reference is
+still dashed and bare. The three e2e tests asserting all of that were left exactly as
+they were — not a selector between them — and still pass, which is the evidence that
+this changed the substrate and not the picture. Two lines elsewhere in that file did
+change, and both name the wrapper the drawing sits in rather than the drawing: the
+old `.og-svg` element is a diagram-js container now.
+
+Two things differ from the class canvas, and both follow from the graph being
+*derived* rather than authored.
+
+**It is read-only, and that is not a reduced edition.** The server derives the graph
+from the instance's data objects because the rules for what relates to what are model
+semantics (ADR-0230 §4). There is no document to write back to, so a box dragged here
+would be put back by the next refresh. Move, resize and connect are therefore absent
+rather than refused — a canvas that offers a gesture it silently discards is worse
+than one that does not offer it. Selection is kept even though nothing edits what is
+selected, because in a diagram of a dozen objects, clicking a box to outline it is how
+a reader follows one of its lines.
+
+**Layout stays in the browser**, which is worth stating because the split looks
+arbitrary until it is named: the server owns what relates to what, and the canvas owns
+where it sits. Semantics travel; arrangement does not. So the roots-across,
+parts-beneath layout carried over intact from the renderer this replaces — it just
+lives beside the renderer that uses it now instead of inside a twelve-thousand-line
+view file.
+
+One thing about the picture *did* change on the way, and it was found by measuring
+the rendered DOM rather than by reading the code. diagram-js draws in insertion order
+within one layer, and shapes go in before connections — so every line came out *over*
+the boxes, where the SVG this replaces drew every line before every box precisely so
+they would pass behind. A line crossing over a box still looks like a diagram, which
+is what makes it the kind of regression that ships. Connections are now inserted at
+their own index ahead of the shapes: behind the boxes, and still in their own order,
+because putting them all at index 0 fixes the first half and reverses the second — and
+that reversal is visible in the order the edge labels come out, which is how the
+existing test caught it. Both properties have a test now.
+
+One thing is genuinely new. The canvas **survives a re-render**: selecting an element
+re-renders the whole inspector, and a live instance does it again on every poll that
+brings new frames, so rebuilding the drawing each time would throw away the zoom and
+the pan the reader had just set — the two things the port exists to give them. The
+host holds `{ canvas, el, graph }` and redraws only when the graph is a different
+object, which it is exactly when the data objects changed. That guard was written by
+disabling it and watching the test for it fail.
+
+The bundle grew 4,476 bytes, 123,109 to 127,585. That is the same arithmetic the
+merge above rests on, pointing the same way: one copy of diagram-js is the expensive
+part and it was already paid for, and a renderer is cheap. It is also the answer to
+the question that prompted ADR-0259 — whether Atlas should build a general `uml-js`
+library on the model of bpmn-js. A third notation costing four kilobytes inside the
+bundle Atlas already ships is not a case for a library; it is the case against one.
+
 ## Consequences
 
 - The class canvas gains zoom, pan, marquee selection, multi-select move, undo/redo
   and keyboard handling, and looks like the two canvases beside it.
+- The object diagram gains zoom, pan, selection and the same three controls, and is
+  drawn by the same bundle. *(See the amendment above.)*
 - `api/web/infomodel-editor.js` loses its drawing half — the hand-built SVG and the
   pointer-drag it dragged boxes with, some 300 lines — and gains the reconciliation
   that replaces the redraw: 1096 lines to 924. It keeps the panel, the validation
