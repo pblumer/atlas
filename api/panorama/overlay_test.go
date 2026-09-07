@@ -235,3 +235,33 @@ func TestOverlayDeduplicatesAbsentNodesAcrossModels(t *testing.T) {
 		t.Errorf("Modeled = %d, want one node for one missing resource", g.Modeled)
 	}
 }
+
+// TestOverlayIgnoresDrafts pins the one place a view switch could leak into a number.
+// Drift is a claim about the instance, and drafts are on the picture only because
+// this reader asked for them — so counting them would let two people read different
+// drift off one server. A model bound to a process id that only has a draft is
+// therefore still modeled-but-absent: the architecture says the instance runs this,
+// and the instance does not.
+func TestOverlayIgnoresDrafts(t *testing.T) {
+	land := overlayLandscape()
+	land.Drafts = []Draft{draftOf("refund", "Refund", "a1")}
+
+	g := DeriveGraph(land, Options{Overlays: []Overlay{{
+		ModelID: "m1", Elements: []ModelElement{
+			elem("app-orders", "ApplicationComponent", "Order Service", KeyApplicationID, "a1"),
+			elem("proc-refund", "ApplicationProcess", "Refund", KeyProcessID, "refund"),
+		},
+	}}})
+
+	// The same two as without the draft: the process and the worker.
+	if g.Unmodeled != 2 {
+		t.Errorf("Unmodeled = %d, want 2 — a draft is not part of what runs", g.Unmodeled)
+	}
+	if g.Modeled != 1 {
+		t.Errorf("Modeled = %d, want 1 — the model names a process this server does not run", g.Modeled)
+	}
+	// And the draft node itself is untouched: it was not bound to anything.
+	if n := nodeByID(t, g, "draft:refund"); n.Provenance != ProvenanceDerived || n.ModelElementID != "" {
+		t.Errorf("draft node = %+v, want it left out of the comparison", n)
+	}
+}

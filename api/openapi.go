@@ -488,7 +488,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		// read — a consumer that renders this picture into a file has to put that
 		// date in the file (ADR-0211 §10), and only the server can supply it.
 		{"GET", "/api/v1/panorama/mesh", s.panoramaMesh.HandleGraph, apiOp{
-			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211)", tag: "Panorama", role: RoleModeler,
+			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211). Pass drafts=1 to include saved-but-not-deployed diagrams, which are left out by default so the size budget is spent on what this server actually runs", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Derived landscape graph", tObject())}},
 		// The vocabularies the landscape can be drawn in, with each one's mapping and
 		// what it drops (ADR-0211 §8). Served rather than duplicated in the browser:

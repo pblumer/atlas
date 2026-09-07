@@ -28,6 +28,17 @@ const (
 	// yet, and this is new surface, so it says Worker.
 	KindWorker   = "worker"
 	KindDecision = "decision"
+	// KindDraft is a saved diagram nobody has deployed: it exists in the modeler and
+	// the engine has never been given it. Distinct from KindProcess on purpose — the
+	// rest of the mesh is a picture of what this server *runs*, and a draft is the
+	// one node on it that runs nothing. Distinct from KindUnresolved too: nothing is
+	// missing here, the work simply has not been deployed yet.
+	//
+	// Drafts are off by default and collected only when a caller asks for them
+	// (ADR-0211 §7): an estate typically holds several drafts per deployed process,
+	// so carrying them always would spend most of the size budget on diagrams that
+	// are not part of the running landscape at all.
+	KindDraft = "draft"
 	// KindRestricted is a resource that exists but which this caller may not see.
 	// It stands in for a real node so the edge to it survives (ADR-0211 §3).
 	KindRestricted = "restricted"
@@ -208,12 +219,31 @@ type IncidentSite struct {
 	Message string `json:"message,omitempty"`
 }
 
+// Draft is one saved-but-not-deployed diagram. It carries far less than a
+// [Process] because there is far less to know: a draft has no deployment key, no
+// version, no instances and no observation, and inventing any of them would put a
+// runtime claim on a thing that has never run.
+//
+// A draft whose process id is already deployed is not one of these. The server
+// leaves it out, because that draft and the deployed process are the same work seen
+// at two altitudes — drawing both would put a twin beside every process on the
+// canvas and say nothing true about either.
+type Draft struct {
+	ProcessID     string
+	Name          string
+	ApplicationID string
+	CanView       bool
+}
+
 // Landscape is everything the mesh derives from, already filtered for this caller.
 type Landscape struct {
 	Applications []Application
 	Processes    []Process
-	Workers      []Worker
-	Decisions    []Decision
+	// Drafts are the saved diagrams nobody has deployed, and are empty unless the
+	// caller asked for them — see [Draft].
+	Drafts    []Draft
+	Workers   []Worker
+	Decisions []Decision
 	// Targets are the peers this server can promote to, and what asking them
 	// produced. Filled in two halves: the collector names them on the run loop, and
 	// [ReachOut] supplies each one's state off it.
@@ -410,9 +440,14 @@ type Graph struct {
 	ObservedAt int64 `json:"observedAt,omitempty"`
 }
 
-func applicationNodeID(id string) string  { return KindApplication + ":" + id }
-func processNodeID(key uint64) string     { return fmt.Sprintf("%s:%d", KindProcess, key) }
-func workerNodeID(id string) string       { return KindWorker + ":" + id }
+func applicationNodeID(id string) string { return KindApplication + ":" + id }
+func processNodeID(key uint64) string    { return fmt.Sprintf("%s:%d", KindProcess, key) }
+func workerNodeID(id string) string      { return KindWorker + ":" + id }
+
+// draftNodeID keys a draft by its BPMN process id, which is the only identity a
+// draft has — there is no deployment key to key it by, and that absence is the
+// whole difference between it and a process node.
+func draftNodeID(processID string) string { return KindDraft + ":" + processID }
 func decisionNodeID(id string) string     { return KindDecision + ":" + id }
 func restrictedNodeID(ordinal int) string { return fmt.Sprintf("%s:%d", KindRestricted, ordinal) }
 func targetNodeID(id string) string       { return KindTarget + ":" + id }
@@ -504,6 +539,33 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		}
 		if _, ok := visibleApps[p.ApplicationID]; ok {
 			node.Application = applicationNodeID(p.ApplicationID)
+			addEdge(Edge{From: node.Application, To: node.ID, Kind: EdgeContains})
+		}
+		g.Nodes = append(g.Nodes, node)
+	}
+
+	// Drafts, where the caller asked for them. They are drawn beside the processes of
+	// the application that holds them and nowhere else: a draft is not deployed, so
+	// nothing calls it and it calls nothing the engine would take. Reading its call
+	// activities and drawing edges from them would be drawing the dependencies of a
+	// process that does not exist yet — a plan, rendered in the same ink as the
+	// facts around it, which is exactly what ADR-0211 §3 forbids.
+	var visibleDrafts []Draft
+	for _, d := range land.Drafts {
+		if d.CanView {
+			visibleDrafts = append(visibleDrafts, d)
+		}
+	}
+	sort.Slice(visibleDrafts, func(i, j int) bool {
+		return visibleDrafts[i].ProcessID < visibleDrafts[j].ProcessID
+	})
+	for _, d := range visibleDrafts {
+		node := Node{
+			ID: draftNodeID(d.ProcessID), Kind: KindDraft, Name: d.Name,
+			Provenance: ProvenanceDerived, ProcessID: d.ProcessID,
+		}
+		if _, ok := visibleApps[d.ApplicationID]; ok {
+			node.Application = applicationNodeID(d.ApplicationID)
 			addEdge(Edge{From: node.Application, To: node.ID, Kind: EdgeContains})
 		}
 		g.Nodes = append(g.Nodes, node)
@@ -653,7 +715,7 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	})
 
 	if opts.MaxNodes > 0 && len(g.Nodes) > opts.MaxNodes {
-		return cluster(g, visible, appIDs, visibleApps, land.PartialStatus)
+		return cluster(g, visible, visibleDrafts, appIDs, visibleApps, land.PartialStatus)
 	}
 	applyStatus(&g, land.PartialStatus)
 	return g
@@ -730,11 +792,18 @@ func applyOverlays(g *Graph, overlays []Overlay, visible []Process) {
 	// Unmodeled counts what Atlas has that nothing wrote down. Placeholders are not
 	// counted: a restricted node stands for something whose model status this caller
 	// cannot know, and an unresolved one is not a resource at all.
+	//
+	// Nor are drafts, for a different reason that matters more. Drift is a claim about
+	// this instance, and drafts are on the picture only because *this reader* asked
+	// for them — counting them would make the number depend on a switch, so two people
+	// looking at one server would read different drift off it. It is also the wrong
+	// comparison: the architecture is compared against what runs, and a diagram nobody
+	// has deployed is not yet part of that.
 	for _, n := range g.Nodes {
 		if n.Provenance != ProvenanceDerived {
 			continue
 		}
-		if n.Kind == KindRestricted || n.Kind == KindUnresolved {
+		if n.Kind == KindRestricted || n.Kind == KindUnresolved || n.Kind == KindDraft {
 			continue
 		}
 		g.Unmodeled++
@@ -744,9 +813,15 @@ func applyOverlays(g *Graph, overlays []Overlay, visible []Process) {
 // cluster collapses an over-budget graph to its applications, recording how many
 // nodes each one stands for. It answers with less rather than with a picture the
 // browser cannot lay out, and Clustered says which of the two happened.
-func cluster(full Graph, visible []Process, appIDs []string, apps map[string]Application,
-	partial bool) Graph {
+func cluster(full Graph, visible []Process, drafts []Draft, appIDs []string,
+	apps map[string]Application, partial bool) Graph {
 	children := map[string]int{}
+	// Processes are counted separately from children because the severity sentence
+	// names them: a collapsed application that also holds drafts stands for more
+	// nodes than it has processes, and "worst of 12 collapsed process(es)" against
+	// four processes and eight drafts would be a number nobody could reconcile with
+	// the picture.
+	processChildren := map[string]int{}
 	// Severity survives the collapse: an application hiding a critical process
 	// behind a count would be a worse picture than no picture. It is aggregated from
 	// the processes themselves rather than from the full graph's nodes, because the
@@ -767,6 +842,7 @@ func cluster(full Graph, visible []Process, appIDs []string, apps map[string]App
 			continue
 		}
 		children[p.ApplicationID]++
+		processChildren[p.ApplicationID]++
 		incidents[p.ApplicationID] += p.Incidents
 		if p.Runtime != nil {
 			acc := runtime[p.ApplicationID]
@@ -785,6 +861,15 @@ func cluster(full Graph, visible []Process, appIDs []string, apps map[string]App
 			worst[p.ApplicationID] = p
 		}
 	}
+	// A collapsed application stands for its drafts as well: they were on the
+	// uncollapsed picture, so leaving them out of the count would make the collapsed
+	// node claim to stand for fewer things than it does. They carry no state, no
+	// incidents and no instances, so they touch nothing else here.
+	for _, d := range drafts {
+		if _, ok := apps[d.ApplicationID]; ok {
+			children[d.ApplicationID]++
+		}
+	}
 	out := Graph{
 		Nodes: []Node{}, Edges: []Edge{},
 		Restricted: full.Restricted, Clustered: true, ObservedAt: full.ObservedAt,
@@ -796,7 +881,8 @@ func cluster(full Graph, visible []Process, appIDs []string, apps map[string]App
 		}
 		if p, ok := worst[id]; ok && p.State != "" {
 			node.State = p.State
-			node.Reason = fmt.Sprintf("worst of %d collapsed process(es): %s", children[id], p.Reason)
+			node.Reason = fmt.Sprintf("worst of %d collapsed process(es): %s",
+				processChildren[id], p.Reason)
 			node.Incidents = incidents[id]
 		}
 		out.Nodes = append(out.Nodes, node)

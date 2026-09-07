@@ -74,6 +74,34 @@ function installMock(page, mesh = graph) {
   });
 }
 
+// The drafts switch is the one control that re-asks the server, so a test about it
+// needs a mock that can tell the two questions apart. Same landscape either way, plus
+// one saved-but-undeployed diagram when it is asked for — which is exactly what the
+// server does with ?drafts=1.
+const withDrafts = {
+  ...graph,
+  nodes: [...graph.nodes,
+    { id: "draft:refund", kind: "draft", name: "Refund", provenance: "derived", application: "application:a1", processId: "refund", state: "unbound", severity: "unknown" }],
+  edges: [...graph.edges, { from: "application:a1", to: "draft:refund", kind: "contains" }],
+};
+
+// deployed is what the server answers when nothing is deployed at all: the landscape
+// is empty until the drafts are asked for. It is the cold start a new instance has,
+// where every diagram anybody has drawn is still a draft.
+function installDraftMock(page, { deployed = graph, drafted = withDrafts, failDrafts = false } = {}) {
+  page.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (url.pathname === "/api/v1/panorama/mesh") {
+      if (url.searchParams.get("drafts") !== "1") return route.fulfill({ json: deployed });
+      if (failDrafts) return route.fulfill({ status: 500, json: { error: "no" } });
+      return route.fulfill({ json: drafted });
+    }
+    if (url.pathname === "/api/v1/panorama/notations") return route.fulfill({ json: notations });
+    return route.fulfill({ json: [] });
+  });
+}
+
 // The depth control is a number field plus an "all" switch, so setting it is two
 // possible gestures rather than one option to pick. One helper, so every test says
 // what it wants rather than how the control is built.
@@ -3195,4 +3223,139 @@ test("a placeholder is not offered a page it does not have", async ({ page }) =>
     await expect(page.locator("#mesh-drill-trail")).toBeVisible();
     await page.keyboard.press("Escape");
   }
+});
+
+// Drafts (ADR-0211 §7 amendment). The picture's subject is what this server runs, so
+// a saved-but-undeployed diagram is off by default and switched on by name — and the
+// switch has to actually re-ask the server, because the drafts are not in the payload
+// until they are wanted.
+test("the starmap leaves drafts out until they are asked for", async ({ page }) => {
+  installDraftMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await expect(page.locator("#mesh-drafts")).not.toBeChecked();
+  await expect(page.locator('[data-node-id="draft:refund"]')).toHaveCount(0);
+
+  await page.locator("#mesh-drafts").check();
+  await expect(page.locator('[data-node-id="draft:refund"]')).toHaveCount(1);
+
+  // And off again, so the switch is a switch rather than a one-way door.
+  await page.locator("#mesh-drafts").uncheck();
+  await expect(page.locator('[data-node-id="draft:refund"]')).toHaveCount(0);
+});
+
+// Told apart by more than colour. The draft keeps the process square — it is a
+// process — and carries the dashed outline the placeholder kinds use, which is the
+// channel that survives a printout and a reader who does not separate the hues.
+test("a draft is drawn as a process that is not running", async ({ page }) => {
+  installDraftMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await page.locator("#mesh-drafts").check();
+
+  const draft = page.locator('[data-node-id="draft:refund"] .mesh-body');
+  const process = page.locator('[data-node-id="process:1"] .mesh-body');
+  await expect(draft).toHaveCount(1);
+
+  const [draftShape, processShape] = await Promise.all([
+    draft.evaluate((n) => n.tagName.toLowerCase()),
+    process.evaluate((n) => n.tagName.toLowerCase()),
+  ]);
+  expect(draftShape).toBe(processShape);
+
+  const [draftDash, processDash] = await Promise.all([
+    draft.evaluate((n) => n.getAttribute("stroke-dasharray") || ""),
+    process.evaluate((n) => n.getAttribute("stroke-dasharray") || ""),
+  ]);
+  expect(draftDash).not.toBe("");
+  expect(processDash).toBe("");
+
+  // And the fills genuinely differ, which is what was asked for.
+  const [draftFill, processFill] = await Promise.all([
+    draft.evaluate((n) => getComputedStyle(n).fill),
+    process.evaluate((n) => getComputedStyle(n).fill),
+  ]);
+  expect(draftFill).not.toBe(processFill);
+
+  // The tooltip says the same thing in words, and never claims a version: a draft has
+  // none, and "v undefined" would be the picture contradicting itself.
+  const title = await page.locator('[data-node-id="draft:refund"] title').textContent();
+  expect(title).toContain("not deployed");
+  expect(title).not.toContain("undefined");
+});
+
+// The legend explains what the picture contains and nothing else, so the draft row
+// appears with the drafts and goes away with them.
+test("the legend gains a draft row only while drafts are on", async ({ page }) => {
+  installDraftMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+
+  await expect(page.locator(".mesh-legend")).not.toContainText("Draft");
+  await page.locator("#mesh-drafts").check();
+  await expect(page.locator(".mesh-legend")).toContainText("Draft — saved, not deployed");
+  await page.locator("#mesh-drafts").uncheck();
+  await expect(page.locator(".mesh-legend")).not.toContainText("Draft");
+});
+
+// A draft's inside is the Modeler, not Operations: it has never run, so there is
+// nothing at the operational altitude to link into, and offering the link anyway
+// would be an absence reading as a fact (ADR-0211 §3).
+test("double-clicking a draft opens it in the Modeler", async ({ page }) => {
+  installDraftMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await page.locator("#mesh-drafts").check();
+
+  await page.locator('[data-node-id="draft:refund"] .mesh-body').click();
+  await expect(page.getByRole("link", { name: "Open in Modeler" })).toBeVisible();
+
+  await page.locator('[data-node-id="draft:refund"] .mesh-body').dblclick();
+  await expect(page).toHaveURL(/#\/modeler\/draft\/refund$/);
+});
+
+// An instance where nothing is deployed is one where everything is a draft. The empty
+// picture used to be the end of the road — its only switch was on the page it refused
+// to draw — so the view asks once before saying the landscape is empty.
+test("a landscape that is all drafts is drawn rather than declared empty", async ({ page }) => {
+  installDraftMock(page, { deployed: { nodes: [], edges: [], restricted: 0, clustered: false } });
+  await page.goto("/index.html#/panorama/starmap");
+
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await expect(page.locator("#mesh-drafts")).toBeChecked();
+  await expect(page.locator('[data-node-id="draft:refund"]')).toHaveCount(1);
+});
+
+// A failed fetch must not leave the control claiming something the picture does not
+// show. The switch goes back, because nothing changed.
+test("a drafts fetch that fails puts the switch back", async ({ page }) => {
+  installDraftMock(page, { failDrafts: true });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator("#mesh-drafts").check();
+  await expect(page.locator("#mesh-drafts")).not.toBeChecked();
+  await expect(page.locator('[data-node-id="process:1"]')).toHaveCount(1);
+});
+
+// A saved view carries the drafts switch the way it carries the instance counts. It
+// is the one setting whose restoration costs a fetch, and skipping it would open a
+// named view showing half the picture it was named for.
+test("a saved view comes back with its drafts", async ({ page }) => {
+  installDraftMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await page.locator(".mesh-node").first().waitFor();
+
+  await page.locator("#mesh-drafts").check();
+  await expect(page.locator('[data-node-id="draft:refund"]')).toHaveCount(1);
+  await page.fill("#mesh-view-name", "Everything drawn");
+  await page.locator("#mesh-view-save button").click();
+  await expect(page.locator(".mesh-view-open")).toHaveText("Everything drawn");
+  await expect(page.locator(".mesh-view-open")).toHaveAttribute("title", /with drafts/);
+
+  // Back to the deployed-only picture, then open the view again.
+  await page.locator("#mesh-drafts").uncheck();
+  await expect(page.locator('[data-node-id="draft:refund"]')).toHaveCount(0);
+
+  await page.locator(".mesh-view-open").click();
+  await expect(page.locator("#mesh-drafts")).toBeChecked();
+  await expect(page.locator('[data-node-id="draft:refund"]')).toHaveCount(1);
 });

@@ -950,6 +950,47 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 [ADR-0127](0127-layered-layout-pipeline-and-invariants.md)) already exists for BPMN
 — not a bundler and not a CDN dependency.
 
+> **Amendment (2026-09-07): what is not deployed can be drawn, and is switched on
+> rather than carried.**
+> §1 derives the landscape from what this server *runs*, and the picture was read as
+> a claim about the whole estate. It is not one: a saved diagram nobody has deployed
+> is invisible on it, so the reader who asks "is this deployed?" gets no answer from
+> the picture at all — the process is simply absent, which reads the same as not
+> existing.
+>
+> Drafts therefore become a node kind, on three conditions.
+>
+> - **They are asked for.** `GET /api/v1/panorama/mesh?drafts=1`, off by default. An
+>   estate holds several drafts per deployed process, and carrying them always would
+>   spend most of §7's budget on work the engine has never been given — a landscape
+>   that collapses to applications because of diagrams nobody deployed is a worse
+>   picture than one that leaves them out. Off by default is also the honest default
+>   for a view whose subject is what runs.
+> - **They carry no runtime claim.** A draft has no deployment key, no version, no
+>   instances, no incidents and no observation, and it is drawn with none of them.
+>   Its severity is the neutral class and it can never make its application look
+>   worse, because colour on this canvas is a finding (§4) and a plan is not one.
+>   Its only edge is the containment edge that says which application holds it:
+>   reading its call activities and drawing them would put an intention on the canvas
+>   in the same ink as the facts around it, which is what §3 forbids.
+> - **They are told apart by more than colour.** A draft keeps the process square —
+>   it is a process, and giving it its own shape would say the two are different
+>   kinds of thing — and is separated by the two channels a *state* may use here: a
+>   warmer fill and the dashed outline the placeholder kinds already carry, meaning
+>   on all three what it means here, that what is drawn is not running. On a printout
+>   and to a reader who does not separate the hues, the dash is what survives (§4).
+>
+> Two consequences follow from the same rule. A draft whose process id is already
+> deployed is not drawn: it is the editable copy of a node already on the picture,
+> and a twin beside every process says nothing true about either. And a draft opens
+> in the Modeler rather than in Operations (§5) — it has never run, so there is
+> nothing at the operational altitude to link into, and offering the link anyway
+> would be an absence reading as a fact.
+>
+> Neither export carries drafts. The ArchiMate and C4 mappings have no type for them
+> and each says so in its declared loss (§8): those documents describe a system that
+> exists, and a diagram nobody has deployed is not part of one.
+
 > **Amendment (2026-09-03): the picture is legible, it fills the sheet, and every
 > node on it can be reached.**
 > Three defects in §7's legibility half, and all three had the same shape: a rule

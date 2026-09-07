@@ -2928,6 +2928,24 @@ _Changed_ / _Removed_ for each version.
   **A search box** filters the mesh by name, kind or process id and reports how much
   it is hiding — a filtered landscape otherwise looks exactly like a small one.
 
+  **A Drafts switch** adds the diagrams nobody has deployed. The picture's subject is
+  what this server *runs*, so a saved draft is absent from it by default — which
+  answers "is this deployed?" only if you already knew the process existed. Switch
+  drafts on and they appear beside the processes of the application that holds them,
+  in the process square so they read as the same kind of thing, with a paler fill and
+  the dashed outline the placeholders already use: what is drawn is not running. They
+  claim nothing about running — no version, no instances, no status, and they can
+  never make an application look worse — and their only edge is the one that says
+  which application holds them, because a draft's call activities are a plan and
+  drawing them would put an intention on the canvas in the same ink as the facts.
+  A draft opens in the Modeler, where it exists, rather than in Operations, where it
+  does not. Off by default because an estate holds several drafts per deployed
+  process, and a landscape that collapsed to applications on account of undeployed
+  diagrams would be a worse picture than one that leaves them out; a saved view
+  remembers the switch, and an exported image says in its stamp that the drafts are
+  in it. Neither the ArchiMate nor the C4 export carries them, and each says so in
+  its declared loss: those documents describe a system that exists.
+
 - **Panorama opens ArchiMate diagrams.** An architecture model in the Panorama
   library now opens its Open Exchange Diagram views on a read-only `diagram-js`
   canvas, with ArchiMate layer colours and shapes, view tabs, zoom and pan, and

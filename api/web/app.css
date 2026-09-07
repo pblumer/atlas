@@ -3907,13 +3907,22 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    rather than the muted grey, because unlike the type it is a number that changes. */
 .mesh-runs { font-size: 11px; fill: var(--accent); pointer-events: none; }
 .mesh-application .mesh-runs { font-size: 15px; }
-/* The instance-count switch, beside the notation picker: both change what the
-   picture draws rather than what it is about. */
-.mesh-instances {
+/* A switch beside the notation picker that adds something to the picture. There are
+   two — the running counts and the drafts — and they wear the same clothes: to the
+   reader they are one gesture, "also show me this", and two switches side by side
+   that looked different would suggest they did different kinds of thing. They are
+   not the same underneath (the counts redraw what is here, the drafts re-ask the
+   server), and that difference belongs in the wait below, not in the styling. */
+.mesh-toggle {
   display: inline-flex; align-items: center; gap: 5px; flex: none;
   font-size: 13px; color: var(--text); white-space: nowrap; cursor: pointer;
 }
-.mesh-instances input { margin: 0; cursor: pointer; }
+.mesh-toggle input { margin: 0; cursor: pointer; }
+/* Disabled while an answer is being fetched — the drafts switch re-asks the server
+   rather than re-drawing what is already here — and it says so by going dim, so a
+   second click during the wait is not silently swallowed. */
+.mesh-toggle input:disabled { cursor: progress; }
+.mesh-toggle:has(input:disabled) { opacity: 0.55; cursor: progress; }
 /* What the projection drops. Collapsed by default and never absent: a projection
    that hides its loss is the failure §8's theme ban exists to prevent, and one that
    shouts it every time is one nobody reads twice. */
