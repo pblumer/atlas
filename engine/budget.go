@@ -80,3 +80,37 @@ func (p *Processor) overBudgetMessage() string {
 	return "this token took " + n + " steps in one run without ever waiting, which is the execution budget; " +
 		"the model most likely has a cycle of automatic elements. Resolve to allow " + n + " more"
 }
+
+// DefaultMaxIterations is how many iterations one multi-instance activity may ask
+// for before the engine refuses it with an incident.
+//
+// It is a *size* budget where DefaultExecutionBudget is a *rate* one, and neither
+// substitutes for the other: a hundred thousand iterations are a hundred thousand
+// tokens taking one step each, which the execution budget is deliberately built not
+// to stop. What makes them dangerous is that the count comes from the model or from
+// an instance variable, and the engine allocated from it before looking — a
+// variable holding a billion is a billion FEEL nulls, asked for in one call
+// (ADR-draft-iteration-budget).
+//
+// A hundred thousand is far above what a modelled loop plausibly wants and far
+// below the point where the allocation is the problem.
+const DefaultMaxIterations = 100_000
+
+// SetMaxIterations sets how many iterations one multi-instance activity may ask
+// for. Zero or less restores [DefaultMaxIterations].
+func (p *Processor) SetMaxIterations(n int) { p.maxIterations = n }
+
+// iterationCeiling is the effective limit, defaulted.
+func (p *Processor) iterationCeiling() int {
+	if p.maxIterations > 0 {
+		return p.maxIterations
+	}
+	return DefaultMaxIterations
+}
+
+// tooManyIterationsMessage is what the operator reads on a loop the budget refused.
+func (p *Processor) tooManyIterationsMessage(asked int) string {
+	return "this multi-instance activity asked for " + strconv.Itoa(asked) +
+		" iterations; the limit is " + strconv.Itoa(p.iterationCeiling()) +
+		". Check the collection or cardinality it reads, then resolve to try again"
+}

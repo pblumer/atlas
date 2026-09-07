@@ -122,6 +122,9 @@ type Processor struct {
 	// executionBudget is how many steps one token may take in a single run before the
 	// engine stops it with an incident. Set with SetExecutionBudget.
 	executionBudget int32
+	// maxIterations is how many iterations one multi-instance activity may ask for
+	// before the engine refuses it. Set with SetMaxIterations.
+	maxIterations int
 
 	// condDirty collects the process instances whose variables changed this batch, so the
 	// batch loop can schedule a conditional re-check for each (ADR-0137). Reused, not

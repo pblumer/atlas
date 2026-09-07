@@ -68,3 +68,30 @@ func TestInheritTokenStepsOnlyCarriesWhatWasCounted(t *testing.T) {
 		t.Error("a token with no parent inherited a count")
 	}
 }
+
+// TestIterationCeilingDefaults: like the execution budget, zero or less means the
+// default rather than "unbounded". The two are different kinds of limit — one is a
+// rate, one is a size — and neither substitutes for the other, so both are always on.
+func TestIterationCeilingDefaults(t *testing.T) {
+	var p Processor
+	for _, set := range []struct {
+		name string
+		call func()
+	}{
+		{"never set", func() {}},
+		{"zero", func() { p.SetMaxIterations(0) }},
+		{"negative", func() { p.SetMaxIterations(-5) }},
+	} {
+		set.call()
+		if got := p.iterationCeiling(); got != DefaultMaxIterations {
+			t.Errorf("%s: ceiling = %d, want the default %d", set.name, got, DefaultMaxIterations)
+		}
+	}
+	p.SetMaxIterations(12)
+	if got := p.iterationCeiling(); got != 12 {
+		t.Errorf("ceiling = %d, want 12", got)
+	}
+	if msg := p.tooManyIterationsMessage(99); msg == "" {
+		t.Error("the refusal message is empty, so the incident says nothing")
+	}
+}

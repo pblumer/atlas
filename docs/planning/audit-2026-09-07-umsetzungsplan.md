@@ -549,7 +549,7 @@ Seiteneffekte zurückbleiben.
 
 ### AP6 — Budgets und Entkopplung: F13, F14, F15, F16 (M)
 
-> **Stand: F14 und F15 umgesetzt**, F13 und F16 offen.
+> **Stand: F14 und F15 umgesetzt, F16 teilweise**, F13 offen.
 >
 > **F15.** Es fehlte keine Fähigkeit. Der Scan bricht seit jeher ab, wenn der
 > Callback einen Fehler zurückgibt, und die API-Schicht hat mit
@@ -573,6 +573,24 @@ Seiteneffekte zurückbleiben.
 > leere Menge an einem echten Join liest sich als «nichts stromaufwärts» und
 > lässt ihn zu früh feuern. Ein Compiler-Test hält fest, dass jeder Inclusive-Join
 > eine Menge hat.
+>
+> **F16 — die scharfe Hälfte.** Die Iterationszahl einer Multi-Instance-Aktivität
+> kommt aus dem Modell oder, häufiger, aus einer Instanzvariablen, und zwischen
+> der Zahl und der Allokation stand nichts: eine Variable mit einer Milliarde sind
+> eine Milliarde `expr.Value` in einem Aufruf, auf der Processor-Goroutine — die
+> Partition ist weg, bevor irgendwer sagen kann warum. Die Grenze greift jetzt
+> **vor** der Allokation, und die Ablehnung ist ein Incident am Body, der nach
+> Korrektur der Daten auflösbar ist. Grenzwert−1 / Grenzwert / Grenzwert+1 sind
+> getestet; der Grenzwert selbst ist erlaubt, sonst wäre es ein Budget von eins
+> weniger.
+>
+> **Was an F16 offen bleibt:** der Bericht verlangt *einheitliche*, konfigurierbare
+> Budgets — Response-Bytes, Script-Ausgabe, Variablengrösse, aktive Arbeit. Die
+> HTTP-seitigen haben je eigene Grenzen (`io.LimitReader` an jedem Request-Body,
+> Dekompressionsdeckel beim Restore); was fehlt, ist *eine* Stelle, die sie alle
+> benennt, und *ein* Weg, sie zu konfigurieren. Diese Vereinheitlichung ist nicht
+> gemacht — und die beiden Engine-Budgets aus AP4 und hier sind ebenfalls nur
+> Setter, nicht Installationseinstellungen.
 
 
 | Befund | Eingriff |
@@ -716,5 +734,5 @@ dafür, dass F07 und F08 mit einer *Begründung im Code* danebenlagen.
 | F13 | P2 | Langsame Worker blockieren unabhängige Requests | AP6 | `TestAuditSlowWorkerDoesNotBlockIndependentMutation` | offen |
 | F14 | P2 | Erreichbarkeit am Inclusive-Join neu aufgebaut | AP6 | `TestAuditReachabilityAllocations` | behoben |
 | F15 | P2 | Job-Polling scannt die ganze Warteschlange | AP6 | statisch belegt | behoben |
-| F16 | P2 | Ressourcenbudgets unvollständig | AP6 | statisch belegt | offen |
+| F16 | P2 | Ressourcenbudgets unvollständig | AP6 | statisch belegt | teilweise |
 | F17 | P2 | Keine expliziten Lese-/Idle-Timeouts | AP1 | statisch belegt | behoben |

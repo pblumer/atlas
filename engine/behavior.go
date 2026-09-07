@@ -1062,7 +1062,8 @@ func resumeParkedElement(c *ProcessingContext, elKey uint64, reason model.Incide
 	// running it now is the whole of the resume (ADR-draft-execution-budget). The
 	// reason says so outright; every case below infers the resume from the node type,
 	// which only works while a node type has one way of getting stuck.
-	if reason == model.IncidentOverBudget {
+	switch reason {
+	case model.IncidentOverBudget, model.IncidentTooManyIterations:
 		runElementBehavior(c, elKey, ei)
 		return
 	}
@@ -3966,7 +3967,11 @@ func seedMultiInstance(c *ProcessingContext, bodyKey uint64, ei *model.ElementIn
 		seedMultiInstanceIteration(c, bodyKey, ei, cp, d, 0, expr.Null)
 		return
 	}
-	items := multiInstanceItems(c, d, bodyKey)
+	items, asked := multiInstanceItems(c, d, bodyKey)
+	if asked > 0 {
+		parkOversizedLoop(c, bodyKey, ei, asked)
+		return
+	}
 	if d.OutputCollection >= 0 {
 		writeList(c, bodyKey, cp.Intern(d.OutputCollection), nullList(len(items)))
 	}
@@ -4088,28 +4093,60 @@ func standardLoop(cp *compiler.CompiledProcess, elementId int32) bool {
 // concrete list of N items: the input collection's elements, or — for a cardinality —
 // N nulls (there is no input element to bind). A non-list collection, a non-integer or
 // negative cardinality, or an evaluation error yields no iterations rather than a panic.
-func multiInstanceItems(c *ProcessingContext, d *compiler.MultiInstanceDetail, bodyKey uint64) []expr.Value {
+//
+// asked is non-zero when the loop wanted more iterations than the budget allows, and
+// then items is nil: the count comes from the model or from an instance variable, so
+// the check happens *before* the list is built rather than after
+// (ADR-draft-iteration-budget). The caller parks the body.
+func multiInstanceItems(c *ProcessingContext, d *compiler.MultiInstanceDetail, bodyKey uint64) (items []expr.Value, asked int) {
+	ceiling := c.p.iterationCeiling()
 	if d.InputCollection != nil {
 		v, err := d.InputCollection.Eval(bindInputsChain(c, d.InputCollection.Inputs(), bodyKey))
 		if err != nil {
-			return nil
+			return nil, 0
 		}
-		items, ok := expr.AsList(v)
+		got, ok := expr.AsList(v)
 		if !ok {
-			return nil
+			return nil, 0
 		}
-		return items
+		// The list itself already exists — it came from a variable — but seeding an
+		// iteration per element does not, and that is the part that is unbounded.
+		if len(got) > ceiling {
+			return nil, len(got)
+		}
+		return got, 0
 	}
 	if d.Cardinality != nil {
 		v, err := d.Cardinality.Eval(bindInputsChain(c, d.Cardinality.Inputs(), bodyKey))
 		if err != nil {
-			return nil
+			return nil, 0
 		}
 		if n, ok := expr.AsInt(v); ok && n >= 0 {
-			return nullList(n)
+			// Before nullList(n), not after: n is whatever the expression produced, and
+			// a variable holding a billion is a billion FEEL nulls in one call.
+			if n > ceiling {
+				return nil, n
+			}
+			return nullList(n), 0
 		}
 	}
-	return nil
+	return nil, 0
+}
+
+// parkOversizedLoop refuses a multi-instance activity that asked for more iterations
+// than the budget allows: the body stays activated holding its token, no iteration is
+// seeded, and an incident says how many were asked for and what the limit is
+// (ADR-draft-iteration-budget). Resolving re-evaluates the count, so fixing the data
+// — or raising the budget — lets the loop run, and leaving it parks it again.
+func parkOversizedLoop(c *ProcessingContext, bodyKey uint64, body *model.ElementInstanceValue, asked int) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: body.ProcessInstanceKey,
+		ElementInstanceKey: bodyKey,
+		ElementId:          body.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            c.p.tooManyIterationsMessage(asked),
+		Reason:             model.IncidentTooManyIterations,
+	})
 }
 
 // finishMultiInstanceIteration completes one inner iteration (ADR-0077): it collects the
@@ -4171,7 +4208,11 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 			}
 		}
 	} else if d.Sequential {
-		if items := multiInstanceItems(c, d, bodyKey); idx+1 < len(items) {
+		// A loop that got past the budget when it was seeded is under it here too, so
+		// the refusal count is not re-examined: an over-budget answer would mean the
+		// collection grew mid-loop, and the empty list it yields ends the loop, which
+		// is the same thing a shrunk collection does.
+		if items, _ := multiInstanceItems(c, d, bodyKey); idx+1 < len(items) {
 			if body := c.GetElementInstance(bodyKey); body != nil {
 				seedMultiInstanceIteration(c, bodyKey, body, cp, d, idx+1, items[idx+1])
 			}
