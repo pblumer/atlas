@@ -9,7 +9,11 @@
          the same zeebe:formDefinition the compiler reads. A user task must NOT offer it
          as a *repair* form — its own form binding is the work form, a different thing on
          the same extension. Mounted in deployment mode (key set, draftId null) so no
-         live collaboration SSE is attached. -->
+         live collaboration SSE is attached.
+
+         formgen-link.spec.mjs drives the same page for a second reason: this model has
+         all three elements whose "Create a new form" links differ (a user task, a plain
+         start event, and this service task), which is what that spec compares. -->
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }

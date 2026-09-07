@@ -2,7 +2,10 @@
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas/schema/1.0"
                   id="defs_entra"
-                  targetNamespace="http://atlas/examples">
+                  targetNamespace="http://atlas/examples"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI">
   <bpmn:process id="entra-create-account" name="Create EntraID Account" isExecutable="true">
 
     <bpmn:startEvent id="start" name="Onboarding requested"/>
@@ -35,4 +38,26 @@ if ($existing) {
     <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="createAccount"/>
     <bpmn:sequenceFlow id="f2" sourceRef="createAccount" targetRef="end"/>
   </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="entra-create-account">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="130" y="162" width="96" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_createAccount" bpmnElement="createAccount">
+        <dc:Bounds x="260" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end">
+        <dc:Bounds x="430" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="400" y="162" width="96" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1">
+        <di:waypoint x="196" y="140"/><di:waypoint x="260" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2">
+        <di:waypoint x="360" y="140"/><di:waypoint x="430" y="140"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </bpmn:definitions>

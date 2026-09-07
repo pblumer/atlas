@@ -1169,7 +1169,7 @@ function wireVarsPanel(root, viewer) {
   const panel = root.querySelector("#var-panel");
   const resizer = root.querySelector("#var-resizer");
   const toggle = root.querySelector("#vars-toggle");
-  if (!editor || !panel) return;
+  if (!editor || !panel) return { reveal() {} };
   const WKEY = "atlas.varsWidth";
   const CKEY = "atlas.varsCollapsed";
   const clamp = (w) => Math.max(240, Math.min(900, w));
@@ -1228,6 +1228,18 @@ function wireVarsPanel(root, viewer) {
       nudge();
     });
   }
+
+  // reveal opens the panel if the operator had it collapsed, and remembers that as
+  // their choice — the same thing the toggle does. It is for an action whose whole
+  // answer is in this panel (clicking a diagram element to filter the instance list):
+  // without it that click outlines a shape and appears to do nothing else.
+  return {
+    reveal() {
+      if (!editor.classList.contains("vars-collapsed")) return;
+      try { localStorage.setItem(CKEY, "0"); } catch { /* not storable; open it anyway */ }
+      applyCollapsed(false);
+    },
+  };
 }
 
 // wireBarMenu opens and closes the editor bar's overflow menu. The Console has a
@@ -1913,6 +1925,33 @@ function startFormId(modeler) {
     });
     return found;
   } catch { return ""; }
+}
+
+// owningProcessId walks up to the <bpmn:process> an element belongs to. Up rather than
+// at the canvas root, because both cases that matter are not the root: an element inside
+// a subprocess belongs to the process containing it, and a collaboration's root is the
+// collaboration, not any one of its pools.
+function owningProcessId(bo) {
+  for (let p = bo; p; p = p.$parent) {
+    if (/:Process$/.test(p.$type || "") && p.id) return p.id;
+  }
+  return "";
+}
+
+// newFormHref is the "Create a new form" link, carrying where it was pressed from
+// (ADR-0260). Pressing it on a step is the author saying what the
+// form is for, and the form editor's generator opens on exactly that: the process and
+// the step for a user task, the process alone for a start event — which is the
+// start-form case, where the form is for starting the process rather than for a step
+// inside it.
+//
+// A diagram whose element belongs to no identifiable process still gets the plain link:
+// a new form is a new form, and the generator simply opens with nothing preselected.
+function newFormHref(bo, forThisStep) {
+  const pid = owningProcessId(bo);
+  if (!pid) return "#/modeler/form/new";
+  const href = "#/modeler/form/new/for/" + encodeURIComponent(pid);
+  return forThisStep && bo.id ? href + "/" + encodeURIComponent(bo.id) : href;
 }
 
 // ensureFormFields fetches the schema of each not-yet-cached form id, records its
@@ -3537,6 +3576,91 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "discord", name: "Discord", group: "Messaging & events",
+    desc: "Send, edit, delete and read messages in a Discord channel, and open a thread for a case",
+    icon: "D",
+    // A speech bubble on Discord blurple: the message, which is what this Worker Type
+    // is for — its counterpart to Jira's ticked issue and Sheets' grid. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white marks.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5865f2"/><path d="M3.4 5.1a1.2 1.2 0 0 1 1.2-1.2h6.8a1.2 1.2 0 0 1 1.2 1.2v3.8a1.2 1.2 0 0 1-1.2 1.2H7l-2.6 2v-2h-.2a1.2 1.2 0 0 1-1.2-1.2z" fill="#fff"/><circle cx="6.3" cy="7" r=".85" fill="#5865f2"/><circle cx="9.7" cy="7" r=".85" fill="#5865f2"/></svg>`,
+    ext: "atlas:DiscordConnector",
+    fields: [
+      { group: "Discord worker" },
+      { key: "connector", label: "Worker", datalist: "discord", placeholder: "team", hint: "The configured Discord Worker this task posts as, by the name it has under Workers in the Console. Its bot token lives on the server, never in the model." },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "send-message", l: "Send message" },
+          { v: "edit-message", l: "Edit message" },
+          { v: "delete-message", l: "Delete message" },
+          { v: "get-message", l: "Read message" },
+          { v: "list-messages", l: "List messages" },
+          { v: "create-thread", l: "Open thread" },
+        ],
+      },
+      {
+        key: "channel", label: "Channel", placeholder: "123456789012345678", fx: true,
+        hint: "The channel id this task acts in — in Discord, enable Developer Mode and use the channel's \"Copy Channel ID\". A thread is itself a channel, so replying in one is a Send message naming the thread's id (=faden.id after an Open thread). May be a FEEL expression (fx).",
+      },
+      {
+        key: "messageId", label: "Message", placeholder: "=nachricht.id", fx: true,
+        showIf: (v) => ["edit-message", "delete-message", "get-message", "create-thread"].includes(v.operation),
+        hint: (v) => (v.operation === "create-thread"
+          ? "Optional. Naming a message hangs the thread under it, which is what keeps the discussion attached to the notice that started it. Leave empty for a standalone thread in the channel. May be a FEEL expression (fx)."
+          : "The message id this operation addresses. Usually a FEEL expression (fx) naming the variable an earlier Send message wrote — e.g. =nachricht.id."),
+      },
+      {
+        key: "content", label: "Message", placeholder: "Antrag =vorgang.nummer ist genehmigt", fx: true,
+        showIf: (v) => v.operation === "send-message" || v.operation === "edit-message",
+        hint: "The message body, up to Discord's 2000 characters. May be a FEEL expression (fx) — note that a boolean resolves to nothing, so use =if genehmigt then \"genehmigt\" else \"abgelehnt\" rather than =genehmigt.",
+      },
+      {
+        key: "name", label: "Thread name", placeholder: "=\"Antrag \" + vorgang.nummer", fx: true,
+        showIf: (v) => v.operation === "create-thread",
+        hint: "The thread's title, as it appears in the channel's thread list. May be a FEEL expression (fx), which is how one process instance gets its own named thread.",
+      },
+      {
+        key: "after", label: "After message", placeholder: "=letzteGelesen", fx: true,
+        showIf: (v) => v.operation === "list-messages",
+        hint: "Optional. Reads only messages newer than this id, exclusive. Discord orders by id, so keeping the last id you read and passing it back here pages a channel forward without re-reading what you already have. May be a FEEL expression (fx).",
+      },
+      {
+        key: "maxResults", label: "Maximum messages", placeholder: "50",
+        showIf: (v) => v.operation === "list-messages",
+        hint: "Caps what may land in the result variable. Empty uses 50; Discord's endpoint accepts at most 100 per call, and a larger value is refused at deploy.",
+      },
+      {
+        key: "fields", label: "Further fields", type: "map", childType: "atlas:DiscordField", fx: true,
+        showIf: (v) => ["send-message", "edit-message", "create-thread"].includes(v.operation),
+        hint: "Any other property of the request body, by its Discord name (embeds, allowed_mentions, components, tts…). A value may be a FEEL expression (fx), and its shape is kept: a FEEL list is sent as a list, an object as an object, a boolean as a boolean. These are merged last, so a field named content overrides the Message above.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable",
+        resultType: (v) => (v.operation === "list-messages" ? "array" : "object"),
+        placeholder: "nachricht",
+        // Delete is the one operation Discord answers with 204 No Content, so a result
+        // variable there would name a value that is never written — the panel hides it
+        // rather than letting an author expect one (the compiler refuses it too).
+        showIf: (v) => v.operation !== "delete-message",
+        hint: (v) => {
+          switch (v.operation) {
+            case "list-messages":
+              return "The messages are written into this process variable as a JSON array, newest first. FEEL lists are 1-based, so the newest message's id is =nachrichten[1].id.";
+            case "create-thread":
+              return "The created thread is written into this process variable. A thread is a channel, so a later Send message posts into it with channel ==faden.id. Leave empty to open the thread and post nothing into it \u2014 a place for people to discuss the notice it hangs under.";
+            case "send-message":
+              return "The created message is written into this process variable, so a later Edit message can address it as =nachricht.id. Leave empty to discard it.";
+            default:
+              return "What Discord returned is written into this process variable (leave empty to discard it).";
+          }
+        },
+      },
+    ],
+  },
+  {
     id: "aitask", name: "AI Task", group: "Applications",
     desc: "Ask a language model one question and put the answer in a process variable",
     icon: "A",
@@ -4510,6 +4634,13 @@ const REPAIR_FORM_TYPES = new Set(["bpmn:ServiceTask", "bpmn:SendTask", "bpmn:Bu
 // is identical (zeebe:formDefinition), only the element carrying it differs, which is
 // exactly what makes one the work form and the other the repair form. An element is one
 // type, so the two branches never both render and the id is never duplicated.
+//
+// Its "Create a new form" link is deliberately the plain one, where the work-form and
+// start-form links carry their step into the generator (newFormHref): a repair form is
+// neither of the two things the generator writes. It is the subset of a parked
+// instance's variables an operator corrects to get the task moving, and opening the
+// generator on this task would frame it as the task's work form — the very confusion
+// the paragraph below exists to prevent.
 function repairFormHTML(bo) {
   if (!REPAIR_FORM_TYPES.has(bo.$type)) return "";
   const fd = findExt(bo, "zeebe:FormDefinition") || {};
@@ -5373,6 +5504,25 @@ function isCollaborationRoot(modeler) {
   } catch { return false; }
 }
 
+// NOT_A_TOKEN_HOLDER matches the diagram elements the engine can never park a token
+// on: the containers a process is drawn in, and the data and annotations drawn beside
+// it. Everything else that is a shape — every task, event, gateway, subprocess and
+// call activity — is a flow node, and stating the exclusion is both shorter and
+// stabler than listing the twenty-odd BPMN types that are.
+const NOT_A_TOKEN_HOLDER =
+  /:(Collaboration|Process|Participant|Lane|LaneSet|TextAnnotation|Group|DataObjectReference|DataStoreReference|DataInput|DataOutput)$/;
+
+// tokenBearing reports whether a diagram element is one a token can sit on — which
+// is what makes it a thing an operator can ask "who is here?" about. A connection is
+// not one (it carries a token between elements, it never holds one), and neither is
+// a label: a click on a label means the shape it belongs to, which the caller
+// resolves through labelTarget before asking.
+function tokenBearing(el) {
+  const bo = el && el.businessObject;
+  if (!bo || el.waypoints) return false;
+  return !NOT_A_TOKEN_HOLDER.test(bo.$type || "");
+}
+
 // The scalar types a declared start variable can take, matching what the server
 // accepts (parseStartVariables) and what the typed Deploy form coerces to.
 const START_VAR_TYPES = ["string", "number", "boolean", "json"];
@@ -6194,7 +6344,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
             <p class="muted" style="font-size:12px">The form the Tasks app renders for this task, submitted as its variables.
-              <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
+              <a href="${newFormHref(bo, true)}" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
             <h3>Assignment</h3>
             <label class="field"><span>Assignee</span>
               <textarea id="f-assignee" rows="1" spellcheck="false" placeholder="editor">${esc(a.assignee || "")}</textarea></label>
@@ -6486,7 +6636,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
             <p class="muted" style="font-size:12px">Shown before the process starts — from the Tasks app's <b>Start</b> view — its data becomes the instance's start variables.
-              <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
+              <a href="${newFormHref(bo, false)}" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
             <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> start event instead.</p>`;
         }
       } else if (bo.$type === "bpmn:EventBasedGateway") {
@@ -8881,6 +9031,17 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   let activePages = 1, finishedPages = 1;
   let moreActive = false, moreFinished = false;
   let finishedCount = 0;    // finished instances of this version, for the honest total
+  // elementFilter is the diagram element the listing is narrowed to: clicking a task
+  // asks "which instances are sitting here?", and the panel answers with those and
+  // nothing else (ADR-0261). "" is the whole version, which
+  // is what clicking the process — the canvas around the shapes, or a collaboration's
+  // pool — goes back to. It is a listing filter and not a second selection: the
+  // diagram keeps showing the version's aggregate tokens, because the question the
+  // filter answers is about the instance list beside it.
+  let elementFilter = "";
+  // The variables panel's collapse control, wired further down. A filter's whole
+  // answer is in that panel, so setting one opens it.
+  let varsPanelCtl = null;
   let searchQuery = "";     // the active instance search; "" means the plain listing
   let searchDraft = "";     // what is currently typed, kept across the 1.5s poll's rebuilds
   let searchError = "";     // what the last search failed with, shown in the panel
@@ -8915,7 +9076,8 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // anything the first page does not show.
   async function loadHalf(state, cursor) {
     const q = `/api/v1/instances?process=${encodeURIComponent(key)}&state=${state}&limit=${PANEL_PAGE}` +
-      (cursor ? `&before=${encodeURIComponent(cursor)}` : "");
+      (cursor ? `&before=${encodeURIComponent(cursor)}` : "") +
+      (elementFilter ? `&element=${encodeURIComponent(elementFilter)}` : "");
     const { data, headers } = await apiRaw("GET", q);
     return {
       rows: (data || []).filter((r) => r.processDefKey === key),
@@ -8935,14 +9097,19 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // signature: otherwise the picker would keep the "80 of 80" it was first built
     // with while the panel beside it says "80 of 150".
     const total = Math.max(runningCount + finishedCount, instances.length);
-    const sig = instances.map((r) => `${r.key}:${r.state}`).join(",") + `|${searchQuery}|${total}`;
+    const sig = instances.map((r) => `${r.key}:${r.state}`).join(",") + `|${searchQuery}|${elementFilter}|${total}`;
     if (sig === instSig) return;
     instSig = sig;
     // Drop a selection that no longer exists (e.g. its definition was deleted).
     if (selected !== "all" && !instances.some((r) => String(r.key) === selected)) selected = "all";
+    // A filtered listing does not say "of 300000": the total is the version's, and
+    // what is listed is the instances on one element — two different populations, and
+    // putting them in one label is how a filter reads as a truncated page.
     const label = searchQuery
       ? `Search results (${instances.length})`
-      : `All instances (${listedAll() ? instances.length : `${instances.length} of ${total}`})`;
+      : elementFilter
+        ? `At ${elementLabel(elementFilter)} (${listedAll() ? instances.length : `${instances.length}+`})`
+        : `All instances (${listedAll() ? instances.length : `${instances.length} of ${total}`})`;
     instSel.innerHTML =
       `<option value="all"${selected === "all" ? " selected" : ""}>${esc(label)}</option>` +
       instances.map((r) =>
@@ -8975,14 +9142,64 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (searchQuery) return; // a search owns the list until it is cleared
     let active, done;
     try {
+      // A token exists only in a running instance, so a filtered listing has no
+      // finished half to read — asking for one would be a request per poll whose
+      // answer is always empty.
       [active, done] = await Promise.all([
         loadPages("active", activePages),
-        loadPages("finished", finishedPages),
+        elementFilter ? Promise.resolve({ rows: [], more: false }) : loadPages("finished", finishedPages),
       ]);
     } catch { return; } // transient; the picker just keeps its current options
     moreActive = active.more;
     moreFinished = done.more;
     applyInstances(active.rows.concat(done.rows));
+  }
+
+  // elementLabel names a diagram element the way the operator sees it: its label if
+  // it has one, otherwise its BPMN id — which is all an unlabelled gateway has.
+  function elementLabel(id) {
+    const el = registry.get(id);
+    const bo = el && el.businessObject;
+    return (bo && (bo.name || bo.id)) || id;
+  }
+
+  // setElementFilter narrows the listing to the instances sitting on one element, or
+  // — with "" — puts the whole version back. Clicking the same element again clears
+  // it, so the shape that switched the filter on is also what switches it off.
+  //
+  // Setting one puts a search away — the two are different questions of the server,
+  // and a panel showing one while labelled the other is worse than either. *Leaving*
+  // one does not: a click on the canvas is how a filter is left, and a stray click
+  // must not also throw away a query nobody asked about. It also goes back to the
+  // whole-version listing, because a filter on a single selected instance would be a
+  // list of one that is either that instance or empty.
+  function setElementFilter(id) {
+    const next = id && id !== elementFilter ? id : "";
+    if (next === elementFilter) return false;
+    elementFilter = next;
+    if (next) { searchQuery = searchDraft = ""; searchError = ""; archiveState = ""; }
+    selected = "all";
+    activePages = finishedPages = 1;
+    moreActive = moreFinished = false;
+    instSig = "";
+    instances = [];
+    // A selection was made against the previous list, so it does not survive a change
+    // of what the list is. Whole-version scope least of all: it means "every running
+    // instance of this version", which under a filter is emphatically not what is on
+    // screen.
+    selectMode = false;
+    scopeAllActive = false;
+    picked.clear();
+    if (elementFilter && varsPanelCtl) varsPanelCtl.reveal();
+    return true;
+  }
+
+  // applyFilterChange switches the filter and re-reads at once, so the panel answers
+  // on the click rather than up to 1.5 seconds later on the next tick. Nothing is
+  // rendered in between: the previous rows stay on screen for the one round trip and
+  // are then replaced whole, rather than blinking through an empty list.
+  async function applyFilterChange(id) {
+    if (setElementFilter(id)) await poll();
   }
 
   // loadMore deepens whichever half still has more, then re-reads. It goes through
@@ -9010,6 +9227,9 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // in the engine.
   async function runInstanceSearch(raw) {
     const q = (raw || "").trim();
+    // The search asks the server a different question than the element filter does,
+    // so running one puts the other away rather than pretending they compose.
+    if (q) elementFilter = "";
     searchQuery = q;
     searchDraft = q;
     searchError = "";
@@ -9206,7 +9426,9 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         : (listedAll() ? `${instances.length}` : `${instances.length} of ${total}`);
       const title = searchQuery
         ? `Variables · search “${esc(searchQuery)}” (${shown})`
-        : `Variables · all instances (${shown})`;
+        : elementFilter
+          ? `Variables · at ${esc(elementLabel(elementFilter))} (${listedAll() ? instances.length : `${instances.length}+`})`
+          : `Variables · all instances (${shown})`;
       const head = !activeInsts.length
         ? `<div class="vp-head"><span class="vp-title">${title}</span></div>`
         : `<div class="vp-head">
@@ -9214,13 +9436,26 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
             <span class="vp-actions">${selectMode
               ? (() => {
                   const n = scopeAllActive ? allActive : picked.size;
+                  // "All active" is the whole version, which is a different set from
+                  // the one a filtered panel is showing — so under a filter the only
+                  // scope offered is the ticks, which are what is actually on screen.
                   return `<button class="btn danger sm" data-term-go ${n ? "" : "disabled"} title="Terminate the selected instances">Terminate${n ? ` ${n}` : ""}</button>
-                 <button class="btn neutral sm${scopeAllActive ? " on" : ""}" data-term-all title="Select every running instance of this version">All active (${allActive})</button>
+                 ${elementFilter ? "" : `<button class="btn neutral sm${scopeAllActive ? " on" : ""}" data-term-all title="Select every running instance of this version">All active (${allActive})</button>`}
                  <button class="btn neutral sm" data-term-off title="Leave selection mode">Done</button>`;
                 })()
               : `<button class="btn neutral sm" data-term-on title="Select running instances to terminate in bulk">&#9745; Select</button>`}
             </span>
           </div>`;
+      // What the listing is narrowed to, and the way back out of it. The diagram
+      // outlines the element as well, but the panel is where the rows are, and a
+      // filter you cannot see is a filter you think is an empty process.
+      const filterRow = elementFilter
+        ? `<div class="vp-filter" title="Only instances whose token is sitting on this element right now. Click the process background — or this chip's × — to list every instance again.">
+             <span class="vp-filter-k">on</span>
+             <b>${esc(elementLabel(elementFilter))}</b>
+             <button class="btn ghost sm" type="button" data-filter-clear title="Show every instance of this version again">&times;</button>
+           </div>`
+        : "";
       // The search row is what makes this panel usable at scale: a bare instance key
       // is a point read on the server, and anything else is a variable search scoped
       // to this version. It sits above the list so it is the first thing reached
@@ -9250,10 +9485,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       const emptyNote = searchQuery
         ? `<p class="muted" style="margin:0">No instance of this version matches “${esc(searchQuery)}”.</p>` +
           (archiveNote ? `<p class="muted vp-archive-note" style="margin:6px 0 0">${esc(archiveNote)}</p>` : "")
-        : `<p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`;
+        : elementFilter
+          // An empty filtered list is a fact about right now, not about the process:
+          // tokens have very likely been through here, and the diagram's gray count
+          // beside the shape is saying so. Say which of the two this is.
+          ? `<p class="muted" style="margin:0">No instance is sitting on ${esc(elementLabel(elementFilter))} right now.</p>`
+          : `<p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`;
       html = !instances.length
-        ? `<div class="vp-head"><span class="vp-title">Variables</span></div>${searchRow}${emptyNote}`
-        : `${head}${searchRow}
+        ? `<div class="vp-head"><span class="vp-title">${elementFilter ? title : "Variables"}</span></div>${filterRow}${searchRow}${emptyNote}`
+        : `${head}${filterRow}${searchRow}
         <div class="vp-insts${selectMode ? " picking" : ""}">${instances.map((r) => {
           const ts = tasksFor(r.key);
           const active = r.state === "active";
@@ -9345,6 +9585,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     drawImplBadges(viewer); // type icons are static; overlays.clear() reaped them
     for (const [id, marker] of marked) canvas.removeMarker(id, marker);
     marked = [];
+    // The element the listing is filtered to is outlined on the diagram, so the chip
+    // in the panel and the shape that was clicked are visibly one thing. It is drawn
+    // outside the runtime loop below because an element nothing has ever reached has
+    // no runtime row — and "nobody is here" is an answer the filter must be able to
+    // show without the shape losing its outline.
+    if (elementFilter && registry.get(elementFilter)) {
+      canvas.addMarker(elementFilter, "atlas-filtered");
+      marked.push([elementFilter, "atlas-filtered"]);
+    }
     // The tasks in scope: a single instance's own, or (for "All instances") every
     // waiting task of this version. Grouped by element so a user-task element in
     // the diagram can be linked straight to its form.
@@ -9590,6 +9839,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (t.closest("[data-term-go]")) { await runTerminate(); return; }
     if (t.closest("[data-load-more]")) { await loadMore(); return; }
     if (t.closest("[data-search-clear]")) { await runInstanceSearch(""); return; }
+    if (t.closest("[data-filter-clear]")) { await applyFilterChange(""); return; }
   });
 
   // What is typed is mirrored into searchDraft, because the 1.5s poll rebuilds this
@@ -9703,7 +9953,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   root.querySelector("#refresh").addEventListener("click", poll);
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
   bindVarCopy(varPanel, toast);
-  wireVarsPanel(root, viewer);
+  varsPanelCtl = wireVarsPanel(root, viewer);
 
   // Decision panel: hovering (or focusing) a result row backed by a decision table
   // reveals that table, matched rule highlighted, in a shared viewport popover — the
@@ -9767,19 +10017,35 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     location.hash = `#/operations/p/${dep.key}`;
   });
 
-  // Inspecting a decision (ADR-0066): clicking a business rule task on the diagram
-  // opens how its decision was made in the side panel (toggle off by clicking it
-  // again); clicking any other element leaves the inspection. The ⚖ badge on a
-  // decided task is the discoverable affordance for the same thing.
-  viewer.on("element.click", ({ element }) => {
-    if (element && element.businessObject && element.businessObject.$type === "bpmn:BusinessRuleTask") {
-      focusEl = focusEl === element.id ? null : element.id;
-      renderVariables();
-      poll();
-    } else if (focusEl) {
-      focusEl = null;
-      renderVariables();
-    }
+  // Clicking the diagram is how an operator asks the instance list a question
+  // (ADR-0261). A flow node means "which instances are
+  // sitting here?" and narrows the panel to them; clicking it again, or clicking
+  // anything that is not one — the canvas around the shapes, a collaboration's pool
+  // or lane, a sequence flow — means "all of them" and puts the whole version back.
+  //
+  // That takes over the click a business rule task used to answer with its decision
+  // (ADR-0066). The ⚖ badge on a decided task keeps that: it is the affordance that
+  // says a decision is there to inspect, it is on exactly the tasks that have one,
+  // and unlike the bare click it does not have to be guessed at.
+  viewer.on("element.click", ({ element, originalEvent }) => {
+    const el = (element && element.labelTarget) || element;
+    // A click on a call activity's "+" is the first half of the drill-in gesture
+    // (ADR-0245), not a question about the list. Filtering on it would also break
+    // the drill-in it starts, since following the call needs the single instance a
+    // filter puts away.
+    if (isCallActivity(el && el.businessObject) && onCallMarker(canvas, el, originalEvent)) return;
+    const leavingDecision = focusEl !== null;
+    focusEl = null;
+    if (setElementFilter(tokenBearing(el) ? el.id : "")) poll();
+    else if (leavingDecision) renderVariables();
+  });
+  // A click that lands on no shape at all is the same instruction — "the process,
+  // not an element of it" — and bpmn-js does not always report one as an
+  // element.click, so the canvas carries it. Anything inside a shape's hit area or
+  // one of the diagram's own overlay badges is already somebody else's click.
+  canvasBox.addEventListener("click", (ev) => {
+    if (ev.target.closest(".djs-element, .djs-overlay")) return;
+    applyFilterChange("");
   });
   // The ⚖ badge (a diagram overlay) and the panel's "← Variables" button are HTML,
   // so they're wired by delegation on the view root.
@@ -11505,6 +11771,74 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     clockEl.textContent = `${shown} / ${frames.length}${shown ? ` · ${fmtClock(frames[shown - 1].at)}` : ""}`;
   }
 
+  // --- A deferred choice, drawn once (ADR-0110, ADR-0249) ---
+  //
+  // An event-based gateway arms every branch's catch at once, so a waiting instance holds
+  // a token on each branch and none on the gateway. The live view stopped drawing that
+  // literally — the race is one wait however many branches it has, so it is shown once, on
+  // the gateway, and the branches are outlined armed instead. The replay said the same
+  // moment differently: N token dots on N branches, and N entries in the token legend, for
+  // one wait. This is that rule, applied to the frame the replay is showing.
+  //
+  // The group is read off the diagram exactly as the live view reads it — a catch joins
+  // its gateway's race only when that gateway is its sole way in — so a catch reachable
+  // from elsewhere keeps its own token.
+  const armedBranches = new Map(); // catch id → the event gateway that arms it
+  const raceWidth = new Map();     // gateway id → how many branches it arms
+  for (const [gw, branches] of eventGatewayRaces(registry)) {
+    raceWidth.set(gw, branches.length);
+    for (const id of branches) armedBranches.set(id, gw);
+  }
+
+  // tokenKey identifies one token on one element — two tokens can sit on the same
+  // element, and one token id can appear on two of them across a fold.
+  const tokenKey = (t) => `${t.elementId}\u0000${t.tokenId}`;
+
+  // collapseRaces rewrites a frame's tokens into what the diagram should show: the forks
+  // of one armed race become a single token on their gateway, and the branches they sat
+  // on are named so they can be outlined armed rather than drawn as waits of their own.
+  //
+  // Which fork belongs to which race is not guessed: every armed catch is a fork of the
+  // gateway's own token (`parentTokenId`), so siblings group exactly, and two races
+  // running concurrently on one gateway stay two races.
+  //
+  // A group is only a race while *every* branch the gateway arms holds one of its forks.
+  // Once an event has fired and the losers are cancelled, what is left on a branch is a
+  // token running there — the winner — and it is drawn as one. That is the same rule the
+  // live view applies with its minimum over the branches.
+  function collapseRaces(tokens) {
+    const groups = new Map();
+    for (const t of tokens) {
+      const gw = armedBranches.get(t.elementId);
+      if (!gw || !t.parentTokenId) continue;
+      const k = `${gw}\u0000${t.parentTokenId}`;
+      if (!groups.has(k)) groups.set(k, { gw, tokenId: t.parentTokenId, forks: [] });
+      groups.get(k).forks.push(t);
+    }
+    const armed = new Set();  // element ids outlined armed
+    const folded = new Set(); // the forks the races below stand in for
+    const races = [];
+    for (const g of groups.values()) {
+      if (g.forks.length !== raceWidth.get(g.gw)) continue;
+      for (const f of g.forks) { armed.add(f.elementId); folded.add(tokenKey(f)); }
+      races.push(g);
+    }
+    if (!races.length) return { drawn: tokens, armed };
+    const drawn = tokens.filter((t) => !folded.has(tokenKey(t)));
+    for (const race of races) {
+      // Between arming its branches and completing, the gateway still holds the very
+      // token the race is — the forks are forks *of* it — so that token becomes the race
+      // rather than a second dot beside it.
+      const held = drawn.findIndex((t) => t.elementId === race.gw && t.tokenId === race.tokenId);
+      if (held >= 0) drawn[held] = { ...drawn[held], race: race.forks.length };
+      else drawn.push({ tokenId: race.tokenId, elementId: race.gw, state: "active", race: race.forks.length });
+    }
+    // Frames arrive in token order and the collapsed race is appended, so restore it:
+    // the dots on the diagram and the chips below it read in the same order.
+    drawn.sort((a, b) => (a.tokenId === b.tokenId ? 0 : a.tokenId < b.tokenId ? -1 : 1));
+    return { drawn, armed };
+  }
+
   // renderOverlay paints the current frame: every element a live token sits on is
   // highlighted (green, or orange while waiting at a join) and carries a colored
   // token dot; elements only walked earlier are grayed. An element that holds a
@@ -11518,12 +11852,21 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     while (dotLayer.firstChild) dotLayer.removeChild(dotLayer.firstChild);
     const frame = playhead ? frames[playhead - 1] : null;
     const position = frame ? frame.position : 0;
-    const tokens = frame ? frame.tokens : [];
+    const { drawn: tokens, armed } = collapseRaces(frame ? frame.tokens : []);
     const liveOn = new Set(tokens.map((t) => t.elementId));
     for (const s of steps.filter((item) => item.position <= position)) {
-      if (liveOn.has(s.elementId) || !registry.get(s.elementId)) continue;
+      if (liveOn.has(s.elementId) || armed.has(s.elementId) || !registry.get(s.elementId)) continue;
       canvas.addMarker(s.elementId, "atlas-visited");
       marked.push([s.elementId, "atlas-visited"]);
+    }
+    // An armed branch is live — its catch is waiting — but it is not where the wait is
+    // counted, so it is outlined and left without a token dot of its own. What the dashed
+    // outline means is said on the race's own chip below, once, rather than beside every
+    // branch of every race.
+    for (const elId of armed) {
+      if (liveOn.has(elId) || !registry.get(elId)) continue;
+      canvas.addMarker(elId, "atlas-armed");
+      marked.push([elId, "atlas-armed"]);
     }
     // Several tokens on one node — both arrivals at a join, a loop's body and the round
     // running under it — fan out along its top edge instead of stacking. They are grouped
@@ -11555,9 +11898,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       marked.push([elId, "atlas-incident"]);
     }
     const legend = root.querySelector("#token-legend");
+    const raceTitle = "An event-based gateway arms every branch at once, so the engine parks a token on each of them and none on the gateway. The wait is one race however many branches it has, so the replay draws it once — here, on the gateway — and outlines the armed branches dashed.";
     legend.innerHTML = tokens.length ? tokens.map((token) =>
-      `<span class="token-chip"><i style="--token-color:${tokenColor(token.tokenId)}">#</i>` +
-      `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)" : ""}</span>`).join("")
+      `<span class="token-chip"${token.race ? ` title="${esc(raceTitle)}"` : ""}>` +
+      `<i style="--token-color:${tokenColor(token.tokenId)}">#</i>` +
+      `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)"
+        : token.race ? ` (waiting for the first of ${token.race} events)` : ""}</span>`).join("")
       : `<span class="muted">No active tokens in this frame</span>`;
     applySelection();
   }

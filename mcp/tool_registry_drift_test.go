@@ -166,6 +166,20 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/task-folders/counts":   "sidebar badge numbers; an agent counts from atlas_list_tasks",
 	"POST /api/v1/task-folders/preview": "the folder dialog's live match count, an interaction rather than an action",
 
+	// Generating a form from a description (ADR-0260). This is
+	// the one route that is deliberately *not* for an agent, and the reason is that
+	// an agent is already on the other side of it: the caller here is a language
+	// model, and asking Atlas to ask its own configured model to write a form-js
+	// schema is a detour through a second provider, a second bill and a second
+	// prompt for a document this caller can write directly. It writes it and calls
+	// atlas_save_form, which is the tool for putting a form into Atlas.
+	//
+	// The screen keeps the feature: it is for the person in the form editor who has
+	// no agent, and its whole value is that it reaches the AI Worker an *operator*
+	// configured rather than one the author has to bring.
+	"POST /api/v1/forms/generate":        "an agent writes the form-js schema itself and saves it with atlas_save_form; asking Atlas to ask a second model is a detour",
+	"GET /api/v1/forms/generate/workers": "the form editor's own probe for whether to show its Generate button",
+
 	// Backup/restore: an admin file-transfer of the data directory (ADR-0107 design-
 	// time, ADR-0109 whole-instance snapshot), not an agent authoring/runtime action.
 	"GET /api/v1/backup":        "admin data backup download, not an agent action",
@@ -347,7 +361,16 @@ var mcpOmittedRoutes = map[string]string{
 	// the one exception (atlas_delete_draft): an agent can *create* drafts, so
 	// leaving it no way to remove one makes every generated or throwaway diagram
 	// permanent litter that only a human can clear.
-	"PATCH /api/v1/drafts/{id}":          "artifact editing is a UI concern",
+	"PATCH /api/v1/drafts/{id}": "artifact editing is a UI concern",
+	// Filing a deployment under an application is the same gesture one altitude
+	// down, and it is omitted on the same ground: it changes an artifact that
+	// already exists, and a human is the one who decides where their estate lives.
+	// It is worth saying what that costs, because the cost is real — re-filing the
+	// deployments of an estate is a bulk edit nobody wants to do by hand, and the
+	// only remaining path is a script holding an API token. If that trade is ever
+	// revisited, it should be revisited for the draft move above at the same time:
+	// the two are one decision wearing two routes.
+	"PATCH /api/v1/processes/{key}":      "artifact editing is a UI concern",
 	"DELETE /api/v1/forms/{id}":          "artifact editing is a UI concern",
 	"PATCH /api/v1/dmnrefs/{id}":         "artifact editing is a UI concern",
 	"DELETE /api/v1/dmnrefs/{id}":        "artifact editing is a UI concern",

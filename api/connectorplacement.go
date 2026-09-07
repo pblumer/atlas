@@ -93,6 +93,7 @@ var authoredKindJobTypes = map[string][]int32{
 	connectorKindRemedy:       {compiler.RemedyJobTypeIndex},
 	connectorKindJira:         {compiler.JiraJobTypeIndex},
 	connectorKindGoogleSheets: {compiler.GoogleSheetsJobTypeIndex},
+	connectorKindDiscord:      {compiler.DiscordJobTypeIndex},
 	"webscrape":               {compiler.WebScrapeJobTypeIndex},
 	"userconnector":           {compiler.UserConnectorJobTypeIndex},
 

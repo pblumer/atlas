@@ -56,6 +56,7 @@ import (
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/envname"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
@@ -84,6 +85,7 @@ import (
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/tracing"
 
+	"github.com/pblumer/atlas/api/formgen"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
 	"github.com/pblumer/atlas/api/token"
@@ -247,6 +249,11 @@ type Server struct {
 	processDocs *processdoc.Service
 	// taskFolders serves the Tasks app's saved filters (ADR-draft-task-folders-are-saved-filters).
 	taskFolders *taskfolder.Service
+	// formGen writes a form from a description and from the process it belongs to
+	// (ADR-0260). It is the one area service that holds no run
+	// loop, because it owns no state: it stores nothing, and the three closures in
+	// formgeneration.go are its whole reach into this server.
+	formGen *formgen.Service
 	// playground serves the Modeler's Playground area, and playgroundSessions
 	// holds its live sandboxes. Each sandbox owns its own single-writer goroutine,
 	// so neither field is guarded by this server's run loop (ADR-0215).
@@ -420,6 +427,12 @@ type Server struct {
 	// Worker's OAuth credential bundle resolved from the vault (ADR-0041). Read only
 	// while driving jobs on the run loop, so it needs no lock.
 	googleSheetsRegistry *googlesheets.Registry
+
+	// discordRegistry resolves a Worker name to a Discord API client for Discord tasks
+	// (ADR-0258), built from the Worker store at startup and rebuilt on
+	// every change to it, with each Worker's bot token resolved from the vault
+	// (ADR-0041). Read only while driving jobs on the run loop, so it needs no lock.
+	discordRegistry *discord.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
@@ -1237,6 +1250,15 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// collaborators are the server's: the shared public-route rate limiter, and the
 	// deployment lookup, which reads the registry and so is only ever called from
 	// inside the run loop the service was given.
+	// Generating a form is design-time authoring that asks the agent Worker an
+	// operator already configured (ADR-0255): one endpoint, one credential, one
+	// place to change the model. Its collaborators are this server's because the
+	// scopes and the single writer are this package's to apply.
+	s.formGen = formgen.New(
+		s.agentWorkersForGeneration,
+		s.dialAgentWorker,
+		s.processSourceForGeneration,
+	)
 	s.processDocs = processdoc.New(
 		s.runLoop,
 		processDocStore,

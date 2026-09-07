@@ -68,6 +68,187 @@ _Changed_ / _Removed_ for each version.
   The lane gave up its place on the row for it — it is on the detail pane with its full
   path, where it already said more than a truncated leaf name in the list.
 
+- **A deployed process can be filed under an application after the fact.**
+  `PATCH /api/v1/processes/{key}` with `{"projectId": "..."}` moves a deployed
+  definition into an application, or out of one (an empty id means Ungrouped).
+
+  A deployment carried its own application, stamped once when it was deployed — from
+  what the editor sent, or inherited from the matching draft at that moment, or
+  nothing. Afterwards there was no way to change it: moving the *draft* moved the
+  draft, so a process deployed through the API, or before its application existed,
+  stayed Ungrouped for good — on the Modeler home and on the Starmap as a process
+  belonging to nothing — with a redeploy, and a version bump, the only way out.
+
+  It is metadata and nothing else: the version, the model, the active flag and
+  everything running are untouched, and the engine never reads the filing at all. Two
+  things move that the caller does not name, because the alternative is an estate that
+  cannot be put back together: **every version** of the definition, since filing
+  belongs to the process rather than to one of its versions; and **the other pools of
+  a collaboration**, since they are one drawing, listed as one row, with no way to
+  address the others separately. Editor rights are needed at both ends, as moving a
+  draft already requires, and the platform-managed application refuses to be written
+  into (ADR-0122).
+
+- **Clicking an element in Operations lists the instances sitting on it.** A live view
+  badged "25 205 here now" beside a page of fifty instances was a dead end: the count
+  said how many were waiting and nothing said *which*. Finding them meant a variable
+  search for a value the operator would have to know already.
+
+  The diagram is the query now. Click an element and the panel lists exactly the
+  instances whose token is sitting on it; click another and it switches; click the
+  process — the canvas around the shapes, or a collaboration's pool — and every instance
+  is back. A chip names what the list is narrowed to and offers the way out, the diagram
+  outlines the element, and an empty result says *"no instance is sitting here right
+  now"* rather than the listing's *"no instances yet"* — with thousands of gray visits
+  beside it, those are different sentences.
+
+  It works for every element a token can rest on, not only user tasks, and it costs the
+  page you are shown. The obvious implementation — walk the version's live instances and
+  keep the ones holding a token there — is a scan that grows with the instance population,
+  on a view that re-reads its list every 1.5 seconds. So a new index
+  (`piByEl:<procDefKey>:<elementId>:<piKey>:<elKey>`) is written and dropped by exactly
+  the two calls that move the ADR-0080 live-token counter: the number badged on a shape
+  and the rows in the panel are two readings of one fact. Existing stores are seeded once
+  at open — a missing index here does not read low, it reads *empty*.
+
+  `GET /api/v1/instances` gained `?element=`, scoped to `?process=` and live-only (a
+  finished instance holds no token), and `atlas_list_instances` (MCP) gained `process`,
+  `element`, `state` and `limit`, so an agent can put the same question to the engine
+  instead of sieving a page it happened to get. The click it takes over is the decision
+  inspection's, which keeps the ⚖ badge that was already its affordance
+  ([ADR-0261](docs/adr/0261-instances-on-an-element.md)).
+
+- **Your brand colour reaches the forms.** Setting an organisation's accent under
+  *Settings → Appearance* used to tint the Console around a form and stop at its edge:
+  the form itself — its fields, labels, focus ring, buttons and typeface — came from
+  the form renderer's own stylesheet and stayed stock blue. It no longer does. A user
+  task, an incident's repair form, the preview in the form editor and the public start
+  form behind a share link are all painted from the same palette as everything else,
+  in the same typeface, on the same borders
+  ([ADR-0263](docs/adr/0263-form-runtime-brand-theming.md)).
+
+- **The public start form and the sign-in consent screen carry your branding.** Both
+  are shown before anyone has a session, and both used to display the built-in Atlas
+  mark and the default blue no matter what an admin had configured. They now ask the
+  server for the organisation's colour and logo like every other page — which matters
+  most for the start form, since that is the page an organisation's own customers
+  open. If the settings are momentarily unreachable the page still appears, in the
+  default colours: a form that is late is worse than a form that is unbranded.
+
+- **A button label that stays readable on your brand colour.** Text on an accent fill
+  used to be white, fixed. White on a deep blue or a federal red is fine; white on a
+  brand yellow or a pale mint is about 1.5:1, which nobody can read. Atlas now derives
+  the label colour from the accent you chose — white or near-black, whichever the
+  colour's own luminance makes legible — and applies it everywhere the accent is a
+  background: primary buttons, count badges, active segments, the submit button inside
+  a form.
+
+- **Forms written by the AI Worker.** The form editor has a **✨ Generate** button.
+  Describe what the form should ask for — in your own words, in your own language —
+  and, if you like, point it at the process the form belongs to and the step it is
+  for. What comes back is a form-js schema, open in the editor and **not saved**: you
+  read it, change what you want, and press Save yourself, exactly as with a form you
+  laid out by hand. Generating again over an open form is a refinement rather than a
+  fresh start, so "add a field for the period" adds one instead of replacing the other
+  twelve.
+
+  You mostly will not open it from there, though. In the Modeler, **"Create a new
+  form"** on a user task or on a start event now carries that step with it: the form
+  editor opens with the generator already up, on that process and that step, and the
+  only thing left to write is the sentence about what the form should ask for.
+  Pressing that link *was* you saying what the form is for, and you should not have to
+  say it twice. (A **repair form**'s link stays the plain one — that is a different kind
+  of form, the values an operator corrects to get a parked task moving, and the
+  generator does not write those.)
+
+  The half you do not have to type is the process. Naming one lets the generator read
+  the model's own words — the process documentation, each step's documentation, the
+  conditions on its sequence flows, and the variable names its mappings and data
+  objects already use — out of the **draft you are working on** (or the deployed
+  version when there is no draft). So the keys it writes are the names the process
+  already calls those things by, and a form for a step that is five minutes old sees
+  that step. Nothing about a running instance is read: no case data ever goes to a
+  model this way.
+
+  It asks **the AI Worker an operator already configured** for the runtime
+  ([ADR-0255](docs/adr/0255-agent-models-are-console-workers.md)) — one endpoint, one
+  credential in the vault, one place to change the model, and no key in the browser.
+  With several configured you choose which one writes the form; with one there is
+  nothing to choose. Where none is configured the button is simply absent, rather
+  than being a button that only ever fails.
+
+  What a model sends back is checked before you ever see it: the form keeps the id
+  the editor was holding (so a generated form cannot quietly unbind the user task
+  that binds it), every input gets a usable, unique key, the document is bounded, and
+  a component a task form cannot render is refused by name rather than dropped — a
+  form quietly missing the field you asked for would be worse than one that says it
+  could not be written. An answer that is not a form comes back as a sentence in the
+  dialog, with your brief still in it, so you can rephrase or simply try again.
+
+  See [ADR-0260](docs/adr/0260-ai-form-generation.md) for why
+  this runs where it does, and why it is authoring rather than a service task.
+- **The training nuggets play full screen, for showing one to a room.** A nugget sat in
+  the flow of the handbook at reading size, which is right for reading and wrong for the
+  case it keeps being used for: an onboarding session with the thing on a projector. The
+  ⛶ button hands the nugget the whole screen — dark surround, the caption set large and
+  centred underneath, and the space bar, arrow keys, Home and End driving it, so the
+  presenter is not aiming a mouse at a 24-pixel control. Going full screen starts the run
+  if nothing has played yet; leaving it stops the run rather than letting it animate on
+  behind whatever came next. The keys bind to the nugget only while it owns the screen —
+  bound globally they would take space and the arrows away from anyone scrolling the
+  handbook.
+
+  The picture keeps its own shape instead of filling the screen. That is not cosmetic and
+  it cost a build to learn: the highlight ring and the cursor are percentages *of the
+  stage*, so a stage wider than the picture inside it puts the ring beside the button
+  instead of on it — and a ring pointing at nothing looks exactly like a ring pointing at
+  something. The full-screen stage therefore carries the shots' 1200×703 and is centred in
+  what is left. `e2e/nuggets.spec.mjs` measures the ring against the picture at two screen
+  shapes; the check that does the work there is the one on the picture's aspect ratio,
+  because an `<img>` element box goes on filling its stage even when the picture inside it
+  does not.
+
+  Where a browser has no Fullscreen API, or an embedding forbids it, the button is not
+  offered rather than offered and inert.
+
+- **A weekly job asks whether the handbook's screenshots still match the product.**
+  `make nuggets` re-takes them, but nobody re-takes screenshots on a schedule — and
+  staleness here is silent: a shot of a UI that has since moved still renders, and a
+  highlight ring drawn on a button that moved still looks deliberate. Nothing throws.
+  The reader finds out months later, by looking for a button where the picture put it.
+
+  The **Nugget screenshots** workflow runs `capture.mjs --check` every Monday: it starts
+  a throwaway Atlas exactly as the capture does, measures where every highlighted element
+  actually is, and compares that against the committed block. It writes nothing — no
+  images, no commits. A difference opens an issue labelled `nuggets-stale` naming the
+  targets that moved, with the measurements; a difference still there the following week
+  comments on that issue instead of opening a second one.
+
+  Deliberately the cheap half. Regenerating and committing the images automatically would
+  keep the chapter current without anybody looking, at the price of a bot writing ~800 KB
+  of image data into the history on a schedule — and of captions drifting away from
+  pictures nobody read.
+
+  **Two bugs in the capture surfaced while proving the check works, and both were mine.**
+  The first run reported the UI had moved when it had not: an earlier capture that
+  outlived its `timeout` was still serving on the port, the next run seeded *that* engine
+  on top, and the process list grew by four rows between runs. `capture.mjs` now refuses
+  to run against a server it did not start, and kills its own on a signal rather than only
+  in a `finally` block that a signal skips. The second was in the comparison itself —
+  matching a measurement to the nearest committed rectangle is guesswork the moment two
+  targets sit close together, and Claim and Complete are neighbours on the task pane. The
+  target's name now travels with its rectangle, so the comparison is exact.
+
+  The generated block gains that `target` name per highlight; `e2e/nuggets.spec.mjs`
+  holds it against `scenes.mjs` like everything else.
+
+- **The README says which images a re-take actually changes.** Measured rather than
+  assumed: seven of the twenty, and always the same seven — the ones carrying a clock or
+  a live count. A diff touching only those is the capture re-photographing the clock; a
+  diff touching the other thirteen means something moved.
+
+### Added
+
 - **The nugget screenshots are output now, not artifacts somebody once made.** Their
   pictures are captures of the running product, which buys recognition and costs
   staleness: a shot of a UI that has since moved still renders, and a ring drawn on a
@@ -142,7 +323,138 @@ _Changed_ / _Removed_ for each version.
   the token markers, so the one scene that most needed its whole picture was the one
   losing it.
 
+- **Every shipped model now carries its own diagram.** Four of them did not:
+  `order-fulfillment`, `galsync`, `entra-create-account` and `pruefe-datensaetze` shipped
+  with no `<bpmndi:BPMNDiagram>`, and Atlas generated one on deploy. That is enough to run
+  a model and not enough to read one — which stopped being a detail the moment the
+  handbook began rendering every example on its card, because a generated layout is what
+  the reader then sees first.
+
+  They are laid out by hand now, to the conventions in `AGENTS.md`: one straight main
+  axis, every branch in a lane of its own, orthogonal waypoints that go around boxes
+  rather than through them, and every gateway exit labelled with its answer — which meant
+  naming six branches in `galsync` and two in `pruefe-datensaetze` that had no name at
+  all, so a reader could not tell which way "deleted?" went. The two subprocesses are
+  drawn expanded, because the branching inside them is the example; collapsed, all that is
+  left is a box that explains nothing.
+
+  Each was checked as a rendered picture and not only as a deploy, which is the only way
+  the two rounds of label collisions in `order-fulfillment` were ever going to surface: a
+  gateway label centred over its own branch line reads fine, the same label lying across a
+  task box does not.
+
+- **Three mechanisms the engine has always had now have an example.** Signal, escalation
+  and compensation were demonstrated by no scenario in `examples/` — only as isolated
+  patterns in the conformance gallery and the recipe chapter, which show *that* they work
+  and never *what they are for*. The handbook's mechanism matrix said so out loud. It no
+  longer has to:
+
+  - **`examples/mahnwesen/`** chases an unpaid invoice, and is the escalation example. Two
+    boundaries hang on the same subprocess and their difference is the whole business
+    logic: the message "payment received" **interrupts**, because the dunning run is then
+    moot; the escalation does **not**, because the run should finish *and* the owner
+    should be asked. The subprocess is not cosmetic — an escalation is caught on the
+    enclosing activity, so without one there is none. Its deadlines are start variables,
+    since `<timeDuration>` takes FEEL (ADR-0055): the same process runs in seconds instead
+    of weeks.
+  - **`examples/preisaenderung/`** recalculates every open quote when the price list
+    changes, and is the signal example — deliberately paired with the one above, because
+    the pair is the lesson: a **message** hits exactly one instance, the one whose
+    correlation key matches; a **signal** hits **all** that are waiting and does not know
+    how many that is. Verified against a live server: three waiting quotes, one instance
+    of the thrower, three recalculated quotes.
+  - **`examples/reisestorno/`** books a flight and a hotel, has the payment declined, and
+    takes both back — the compensation example. An error jumps out of an activity that
+    just went wrong; a compensation undoes activities that completed *successfully* long
+    ago, which is the case a rollback is actually about. It unwinds backwards, and the
+    handlers hang off an `<association>` rather than a sequence flow — the proof being
+    that a run with `zahlungOk: true` carries no cancellation variables at all.
+
+  All three are framed for the readers the examples were thinnest on: a small business and
+  a private person. All three run with no worker, no credential and no network.
+
+  A fourth, **`examples/umzug/`**, is there for the audience alone rather than a
+  mechanism: organising a move, because a workflow engine reads as something for
+  corporations until somebody shows it doing a private person's Saturday. It happens to be
+  the only model in the tree that fires a timer on a **computed date** rather than after a
+  duration — and its two trip hazards are documented because both actually happened while
+  it was being built, and both produce the same incident: a process variable is persisted
+  as JSON and comes back a string (so the date has to be parsed again), and a zone id
+  where the timer needs an offset.
+
+- **The handbook now shows every example Atlas ships, and what it takes to run one.**
+  Thirty scenarios live under `examples/` — a shopping cart that computes a total in
+  FEEL, an exam with a hard deadline, a CSV checked row by row, a directory recertified
+  against the HR system, a Google Form whose every new row becomes a case. The handbook
+  showed two of them. `examples/README.md`, the only overview there was, is written for
+  developers, is half in English, and was missing five examples entirely, because nothing
+  checked.
+
+  The new **Beispiele** chapter describes all of them in both languages and on two levels
+  at once: what the scenario is *for* — who has the problem, what they get out of it — and
+  how it is *built*, down to the trap the reader is about to walk into (`query-one`
+  returns null and fails on two hits; a Sheets cell is text, so comparing it with a number
+  is `null` in FEEL; a Jira user search without the browse permission finds nobody
+  *without failing*). Each card renders the real diagram, and installs the real artifacts —
+  application, decision, forms, processes, publish — into the reader's own instance in one
+  click. Nine of them then start with one more click, most running to an end event with no
+  worker configured at all.
+
+  Alongside it, **Worker in Betrieb nehmen**: a runbook per worker type for the half that
+  happens outside Atlas and is where commissioning actually fails. The Google service
+  account and the sharing step without which a document you have open in front of you
+  answers 403; the Entra app registration with the two application permissions that cover
+  a joiner/mover/leaver flow and the one to remove if it is there; the Atlassian API token
+  and the global permission an assignment needs; the AD service account that should be
+  delegated on an OU rather than made a domain admin; the SQL user that should be granted
+  on views. With, for each, the symptom that tells you what is missing — a parked token
+  with no incident is a worker that is not running, an empty search result is usually a
+  permission.
+
+  The models are not copied into the page. They travel as one generated asset,
+  `api/web/examples-catalog.json`, which `go test ./examples -update` builds from the
+  files; a plain run fails when the served catalogue has drifted from them, when an
+  example has no card, when a card names an example that does not exist, or when two
+  examples would ship the same form id and installing the second would silently overwrite
+  the first one's form. That last one was not hypothetical: `onboarding` and
+  `entra-onboarding-selfservice` both shipped a form called `onb-start`, and the
+  self-service pair is now `eonb-start`/`eonb-freigabe`.
+
 ### Fixed
+
+- **The replay drew a deferred choice as several tokens, and parked one on the gateway
+  that was not there.** The live diagram stopped drawing an event-based gateway's race
+  literally in [ADR-0249](docs/adr/0249-overlay-cancelled-tokens.md): the engine arms
+  every branch's catch at once ([ADR-0110](docs/adr/0110-event-based-gateways.md)), so a
+  waiting instance holds a token on each branch and none on the gateway, and drawn
+  one-for-one that says the same wait once per branch. The step-by-step instance replay
+  still drew it the old way — a token dot on every branch and a chip for each of them in
+  the legend below — so the two views described the same moment differently, which is what
+  a reader of both actually reported.
+
+  Two things were wrong, and the second one was a token drawn where no token was. The
+  frame fold ([ADR-0046](docs/adr/0046-single-process-step-replay.md),
+  [ADR-0136](docs/adr/0136-terminated-tokens-in-the-replay.md)) keeps a completed
+  element's token visible until the activation it causes appears, so the token never
+  flickers out between the two. An event gateway is the one element whose successors
+  activate *before* it completes — it arms the branches on activation and only then
+  completes itself, taking no outgoing flow of its own — so it waited for an arrival that
+  had already been and gone, and its token stayed on the gateway for the rest of the
+  replay. On a looping model that is a race drawn as still running a full round after it
+  was decided, which is what a production instance showed: three tokens on a two-branch
+  race, one of them a ghost.
+
+  The gateway's token is now released when it completes, like a leaf's and a loop round's
+  — the other two hand-offs that go to nobody. And the replay draws the race the way the
+  live view does: one token on the **gateway**, the armed branches outlined dashed and
+  without a dot of their own, and one chip in the legend that names the race and says what
+  it is waiting for — *waiting for the first of 2 events* — rather than one chip per
+  branch. The rule is read off the diagram, exactly as the live view reads it (a catch
+  joins its gateway's race only when that gateway is its sole way in), and off the token
+  that forked it: every armed catch is a fork of the gateway's own token, so two races
+  running at once on one gateway stay two races. Once an event has fired and the losers
+  are cancelled, what is left on a branch is the winner running there, and it is drawn as
+  itself again.
 
 - **The class canvas could not take hold of more than one class at a time.**
   [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md) put the canvas on diagram-js
@@ -2841,6 +3153,41 @@ _Changed_ / _Removed_ for each version.
 
   **A search box** filters the mesh by name, kind or process id and reports how much
   it is hiding — a filtered landscape otherwise looks exactly like a small one.
+
+  **Nothing is left stranded at the edge of the picture.** Reported three times as
+  "single nodes far away from the rest", and the first two fixes missed it because
+  both were about framing and this was about the settle. The pull that centres the
+  graph is deliberately weakest along the wide axis, so the picture takes the shape of
+  the frame — and that was tuned for a node its edges are also holding. A node with
+  **no edge** has none: the pull is all that keeps it near the picture, against a
+  repulsion that falls off with distance, and the balance sat far outside everything
+  else. On a thirty-four-node estate with ten unattached processes, two of them ended
+  hard against the left and right edges with the rest squeezed into the middle. That
+  is not a rare shape — a process deployed through the API, or before its application
+  existed, belongs to no application and is drawn with no edge at all. The pull is now
+  twice as strong on a node with nothing attached to it, which is measured rather than
+  reasoned: higher packs the loose nodes into a lump of their own instead.
+
+  **A Drafts switch** adds the diagrams nobody has deployed. The picture's subject is
+  what this server *runs*, so a saved draft is absent from it by default — which
+  answers "is this deployed?" only if you already knew the process existed. Switch
+  drafts on and they appear beside the processes of the application that holds them,
+  in the process square so they read as the same kind of thing, with a lighter fill and
+  the dashed outline the placeholders already use: what is drawn is not running. The
+  fill is lighter rather than merely different — its first version was a warm tone of
+  exactly the same brightness as a deployed process, which on a projector or in print
+  left the dash doing all the work. They
+  claim nothing about running — no version, no instances, no status, and they can
+  never make an application look worse — and their only edge is the one that says
+  which application holds them, because a draft's call activities are a plan and
+  drawing them would put an intention on the canvas in the same ink as the facts.
+  A draft opens in the Modeler, where it exists, rather than in Operations, where it
+  does not. Off by default because an estate holds several drafts per deployed
+  process, and a landscape that collapsed to applications on account of undeployed
+  diagrams would be a worse picture than one that leaves them out; a saved view
+  remembers the switch, and an exported image says in its stamp that the drafts are
+  in it. Neither the ArchiMate nor the C4 export carries them, and each says so in
+  its declared loss: those documents describe a system that exists.
 
 - **Panorama opens ArchiMate diagrams.** An architecture model in the Panorama
   library now opens its Open Exchange Diagram views on a read-only `diagram-js`

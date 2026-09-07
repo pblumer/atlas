@@ -191,6 +191,24 @@ test("a view remembers whether it was showing instance counts", async ({ page })
   expect(before.instances).toBe(false);
 });
 
+// And whether it was showing drafts, for a sharper version of the same reason: the
+// drafts are not even in the payload until they are asked for, so a view that
+// reopened without the flag would reopen a landscape with nodes missing from it.
+test("a view remembers whether it was showing drafts", async ({ page }) => {
+  const on = await page.evaluate((world) => window.views.captureView({
+    name: "Everything drawn", term: "", direction: "dependents", depth: "2",
+    drafts: true, world, at: 1700000000000,
+  }), WORLD);
+  expect(on.drafts).toBe(true);
+
+  // A view saved before drafts existed carries false: deployed-only is the picture it
+  // was looking at, and that is the picture the reader gets back.
+  const before = await page.evaluate((world) => window.views.captureView({
+    name: "Old", term: "", direction: "dependents", depth: "2", world, at: 1700000000000,
+  }), WORLD);
+  expect(before.drafts).toBe(false);
+});
+
 // The path into the picture is the narrowing a saved view is most likely to be
 // about: somebody who followed a dependency four deep and saved it saved the walk,
 // not the last node.

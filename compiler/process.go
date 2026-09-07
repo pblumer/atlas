@@ -467,6 +467,10 @@ type UserTaskDetail struct {
 //     instance; JiraOp is the issue-tracker operation and the Jira* fields below are
 //     the values it takes (all literal-or-FEEL); ResultVar, if set, receives what Jira
 //     returned (ADR-0201).
+//   - Discord (JobType == DiscordJobType): Connector names the configured Discord
+//     Worker whose bot token the server holds; DiscordOp is the chat operation and the
+//     Discord* fields below are the values it takes (all literal-or-FEEL); ResultVar,
+//     if set, receives what Discord returned (ADR-0258).
 //   - web scrape (JobType == WebScrapeJobType): Url is the model-authored page to
 //     fetch (literal-or-FEEL, like REST); ScrapeSelector is the CSS selector whose
 //     matches are extracted; ScrapeAttribute names the HTML attribute to read from
@@ -861,6 +865,44 @@ type ConnectorTaskDetail struct {
 	SheetsColumns []string
 	SheetsInput   int32
 	SheetsHeader  bool
+	// Discord fields (JobType == DiscordJobType, ADR-0258). Connector
+	// (above) names the configured Discord Worker — the field keeps that name because
+	// the BPMN attribute it is read from does; its bot token lives in the Worker store
+	// and the vault, never in a model. DiscordOp is the interned operation
+	// ("send-message"|"edit-message"|"delete-message"|"get-message"|"list-messages"|
+	// "create-thread"), and it decides which of the rest are populated; the compiler
+	// refuses a value on an operation that does not use it, so a field can never be
+	// quietly ignored at call time.
+	//
+	// DiscordChannel addresses the channel every operation acts in — a thread is a
+	// channel in Discord, so replying in one is a send addressing the thread's id
+	// rather than an operation of its own. DiscordMessage addresses one message (the
+	// three that act on one, and optionally create-thread, where naming a message is
+	// what hangs the thread under it instead of starting a standalone one).
+	// DiscordContent is a message body and DiscordName a new thread's title.
+	//
+	// DiscordAfter is a list's lower bound: the message id to read after. It is
+	// exclusive and Discord orders by id, so a process can page a channel forward
+	// without re-reading what it already has. DiscordMaxResults caps what a list may
+	// return, already defaulted by the compiler so the runtime interprets nothing (I5).
+	//
+	// DiscordFields are extra request-body properties as name/literal-or-FEEL pairs,
+	// each keeping the JSON shape its value had — how a model reaches embeds,
+	// allowed_mentions or components without this type naming every property Discord
+	// will ever add. They are merged last, so a model can override what the worker
+	// composed.
+	//
+	// Each RestExpr is a literal-or-FEEL value evaluated over the variables the task
+	// sees at call time; all are the zero value for a non-Discord task. ResultVar
+	// (above) receives what Discord returned, for the operations that return anything.
+	DiscordOp         int32
+	DiscordChannel    RestExpr
+	DiscordMessage    RestExpr
+	DiscordContent    RestExpr
+	DiscordName       RestExpr
+	DiscordAfter      RestExpr
+	DiscordMaxResults int32
+	DiscordFields     []RestKV
 	// AI task fields (JobType == AiTaskJobType, ADR-0256). Connector (above) names the
 	// agent Worker holding the endpoint, the credential and the wire format;
 	// a task carries none of those, because a provider is configured and not authored.
@@ -1995,6 +2037,26 @@ func (p *CompiledProcess) ElementBpmnId(id int32) string {
 		return ""
 	}
 	return p.Intern(p.elementIds[id])
+}
+
+// ElementIndexOf is [CompiledProcess.ElementBpmnId] read backwards: the node index
+// for a source BPMN element id, and false when the model has no such element. A
+// caller that arrives with an id off a diagram — an operator clicking a shape —
+// needs this direction to reach anything the engine keyed by node index.
+//
+// It is a scan of the id table rather than a map, because it answers one lookup per
+// request on a read path and a model has tens to hundreds of elements. It is never
+// called from the processor: the hot path deals in indices already (I5).
+func (p *CompiledProcess) ElementIndexOf(bpmnId string) (int32, bool) {
+	if bpmnId == "" {
+		return 0, false
+	}
+	for i := range p.elementIds {
+		if p.Intern(p.elementIds[i]) == bpmnId {
+			return int32(i), true
+		}
+	}
+	return 0, false
 }
 
 // ElementDocumentation returns the prose an author wrote about a node — its

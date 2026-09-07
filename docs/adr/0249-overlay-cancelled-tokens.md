@@ -13,6 +13,21 @@
 > (ADR-0110) is drawn as the one wait it is: the live count sits on the gateway, and its
 > armed branches are drawn armed instead of each repeating that same count.
 
+> **Amended 2026-09-07: the step replay draws the race the same way.** This record left
+> the single-instance replay (ADR-0046/0151) drawing a race as one token per armed
+> branch, on the grounds that it replays literal history — and the two views then
+> described the same moment differently, which is what a reader of both reported. The
+> replay now applies the same rule to the frame it is showing: one token on the gateway,
+> the armed branches outlined dashed and carrying no dot of their own, and one chip in
+> the token legend naming the race. It reads the group off the diagram exactly as the
+> live view does, and the forks off `parentTokenId` — every armed catch is a fork of the
+> gateway's own token — which the timeline's token view now carries, so two races running
+> at once on one gateway stay two races and a decided race goes back to being drawn
+> literally. Fixed in the same place: the frame fold deferred the gateway's completion
+> until a successor activated, and an event gateway's successors activate *before* it
+> completes (it arms them and takes no outgoing flow), so its token was left parked on
+> the gateway for the rest of the replay — one race behind, on a looping model.
+>
 > **Amended 2026-09-04, after first use on a running engine.** Two things this record
 > got wrong, both corrected in the same place they were decided below. **(1) "No
 > backfill" was not a neutral gap.** Gray is *derived* — `visits − live − terminated` —
@@ -154,13 +169,24 @@ Chosen: **option 1**, in two halves that stand on their own.
   termination path; one more O(elements) counter read per runtime poll; and the overlay
   now knows something about BPMN structure (which catches an event gateway arms) that it
   previously did not.
-- **Follow-ups / risks to watch:** the collaboration overlay carries `terminated` but
-  does not yet draw it. The step-by-step instance replay (ADR-0046/0151) still shows a
-  race as one token per armed branch — there that is the literal history it is replaying,
-  but the two views now describe the same moment differently. The playground's own heat
-  map still reads visits only. A future parallel event gateway (ADR-0110's deferred
-  option 4) would arm branches that all win, and the "one race, one count" rule would
-  need to say so.
+- **Follow-ups / risks to watch.** Each open one now has an issue, so it can be picked
+  up by somebody who never reads this record:
+  - ~~The step-by-step instance replay (ADR-0046/0151) still shows a race as one token per
+    armed branch — there that is the literal history it is replaying, but the two views now
+    describe the same moment differently.~~ **Done**, see the amendment above.
+  - The **collaboration overlay** (ADR-0038) is the third runtime view and the one still
+    drawing the old picture: it carries `terminated` and draws neither that count nor any
+    other — it has no per-element badges at all — and it does not collapse a race either,
+    so an event gateway between two pools is drawn as N waits, which is what this record
+    exists to stop ([#802](https://github.com/pblumer/atlas/issues/802)).
+  - The **playground's own heat map** still reads visits only, so it cannot tell a branch
+    that completed from one that was cancelled either
+    ([#803](https://github.com/pblumer/atlas/issues/803)).
+  - A **parallel event gateway** (ADR-0110's deferred option 4) would arm branches that
+    all win, and the "one race, one count" rule would need to say so — today the
+    `instantiate` attribute is dropped at parse time, so such a model deploys and runs as
+    an exclusive deferred choice without a word
+    ([#804](https://github.com/pblumer/atlas/issues/804)).
 
 ## Pros and cons of the options
 

@@ -51,6 +51,23 @@ type Request struct {
 	Tools   []Tool            `json:"tools"`
 	Results []string          `json:"results,omitempty"`
 	Round   int               `json:"round"`
+	// System replaces what an adapter would otherwise tell the model about the
+	// situation it is in. Empty is the normal case and the one every runtime caller
+	// uses: a round and an ai task each have a standing prompt below, written for
+	// them.
+	//
+	// It exists because both of those prompts open by saying the model is one step
+	// inside a running business process, and that is not true of every caller any
+	// more. Design-time form generation (ADR-0260) asks this same
+	// [Model], through this same adapter, from an authoring screen where there is no
+	// instance, no token and no variable to answer into — and a model told it is
+	// inside a process it is not inside answers as if it were. Overriding the sentence
+	// is cheaper and more honest than a second transport that would drift from this
+	// one.
+	//
+	// It is not serialized into a job payload: a round's framing is this package's to
+	// state, and a request that travelled from the engine never carries one.
+	System string `json:"-"`
 }
 
 // Decision is what the model answered. Exactly one of the two is the answer: tool calls

@@ -221,6 +221,16 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The key, the definitions updated, and when", schemaObj(map[string]any{
 				"key": tInteger(), "updated": tArray(), "diagramUpdatedAt": tInteger(),
 			}))}},
+		// Filing a deployment under an application, after the fact (ADR-0034). A
+		// deployment's project id was stamped once at deploy time and nothing could
+		// change it afterwards, so a definition deployed through the raw API — or
+		// before its application existed — stayed Ungrouped with a redeploy, and a
+		// version bump, the only way out.
+		{"PATCH", "/api/v1/processes/{key}", s.handleMoveProcess, apiOp{
+			summary: "File a deployed process under an application, or take it out of one (empty projectId means Ungrouped). Metadata only: the version, the model and everything running are untouched. Every version of the definition moves, and so do the other pools of a collaboration, because they are one drawing",
+			tag:     "Processes", role: RoleModeler,
+			req:  jsonBody("Move", tObject()),
+			resp: jsonBody("What moved", tObject())}},
 		{"DELETE", "/api/v1/processes/{key}", s.handleDeleteProcess, apiOp{
 			summary: "Delete a deployment (must have no running instances)", tag: "Processes", role: RoleModeler,
 			status: http.StatusNoContent}},
@@ -252,7 +262,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "file", "config")},
 			resp: jsonBody("Created instance with parsed row count", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
-			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); ?process=<key> narrows to one definition and reads its index (cost is the page, not the store); ?state=active|finished returns one half (all = both, the default); ?before=<cursor> pages it (requires ?process=); X-Instances-Truncated: true marks a capped page and X-Instances-Next-Cursor carries the next one", tag: "Instances", role: RoleOperator, resp: jsonBody("Instances", tArray())}},
+			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); ?process=<key> narrows to one definition and reads its index (cost is the page, not the store); ?state=active|finished returns one half (all = both, the default); ?before=<cursor> pages it (requires ?process=); ?element=<bpmn element id> narrows to the instances whose token is sitting on that element right now, read from its own index (requires ?process=, and lists live instances only — a finished one holds no token); X-Instances-Truncated: true marks a capped page and X-Instances-Next-Cursor carries the next one", tag: "Instances", role: RoleOperator, resp: jsonBody("Instances", tArray())}},
 		{"GET", "/api/v1/instances/summary", s.handleInstancesSummary, apiOp{
 			summary: "Per-definition instance counts (active/completed) — lean count-only scan for the operations overview", tag: "Instances", role: RoleOperator, resp: jsonBody("Instance summary", tArray())}},
 		{"GET", "/api/v1/instances/search", s.handleSearchInstances, apiOp{
@@ -484,6 +494,26 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/forms/{id}", s.handleDeleteForm, apiOp{
 			summary: "Delete a form definition", tag: "Forms", role: RoleModeler, resp: jsonBody("Deleted id", tObject())}},
 
+		// Writing a form from a description, and from the process it belongs to
+		// (ADR-0260). Design-time authoring: it asks the agent
+		// Worker an operator already configured (ADR-0255) and stores nothing — what
+		// comes back is a proposal the author reads in the editor and saves through
+		// the ordinary save path above, or does not.
+		// The capability probe sits a segment deeper than the generation itself, so
+		// that neither route can shadow GET /api/v1/forms/{id}: a form whose author
+		// named it "generate" is unlikely and would otherwise be unreadable.
+		{"GET", "/api/v1/forms/generate/workers", s.formGen.HandleCapability, apiOp{
+			summary: "Report whether an AI Worker is configured to generate forms, and which ones may be named — what the editor asks before it offers the affordance at all",
+			tag:     "Forms", role: RoleModeler, resp: jsonBody("Generation capability", tObject())}},
+		{"POST", "/api/v1/forms/generate", s.formGen.HandleGenerate, apiOp{
+			summary: "Generate a form-js schema from a description and, when a process is named, from that process's own documentation, steps and variable names. Nothing is stored: the schema is returned for the author to review and save",
+			tag:     "Forms", role: RoleModeler,
+			req: jsonBody("Generation request", schemaObj(map[string]any{
+				"description": tString(), "worker": tString(), "model": tString(),
+				"processId": tString(), "elementId": tString(), "formId": tString(), "schema": tObject(),
+			})),
+			resp: jsonBody("Generated form", tObject())}},
+
 		// Panorama architecture models (ADR-0189) are application-owned Open Group
 		// ArchiMate Model Exchange documents. Metadata and XML travel separately so a
 		// listing never hauls every landscape document through the browser.
@@ -498,7 +528,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		// read — a consumer that renders this picture into a file has to put that
 		// date in the file (ADR-0211 §10), and only the server can supply it.
 		{"GET", "/api/v1/panorama/mesh", s.panoramaMesh.HandleGraph, apiOp{
-			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211)", tag: "Panorama", role: RoleModeler,
+			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211). Pass drafts=1 to include saved-but-not-deployed diagrams, which are left out by default so the size budget is spent on what this server actually runs", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Derived landscape graph", tObject())}},
 		// The vocabularies the landscape can be drawn in, with each one's mapping and
 		// what it drops (ADR-0211 §8). Served rather than duplicated in the browser:

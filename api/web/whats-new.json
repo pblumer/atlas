@@ -100,6 +100,199 @@
       }
     },
     {
+      "id": "clicking-an-element-in-operations-lists-the-instances-sittin",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Click a task to see which instances are sitting on it",
+        "de": "Auf eine Aufgabe klicken zeigt, welche Instanzen dort stehen"
+      },
+      "summary": {
+        "en": "A live diagram badged “25 205 here now” beside a list of fifty instances told you how many were waiting on a task and nothing about which ones — finding them meant searching for a value you had to know already. The diagram is the query now: click an element and the list shows exactly the instances whose token is sitting on it, click another and it switches, click the process beside the shapes and every instance is back. It works for every element a token can rest on, not only user tasks, and it costs the page you are shown — at hundreds of thousands of instances too.",
+        "de": "Ein Live-Diagramm mit „25 205 hier“ neben einer Liste von fünfzig Instanzen sagte Ihnen, wie viele auf einer Aufgabe warten, aber nichts darüber, welche — sie zu finden hieß, nach einem Wert zu suchen, den Sie schon kennen mussten. Jetzt ist das Diagramm die Abfrage: Klicken Sie ein Element an, und die Liste zeigt genau die Instanzen, deren Token dort steht; ein Klick auf ein anderes Element wechselt, ein Klick auf den Prozess neben den Formen zeigt wieder alle. Das gilt für jedes Element, auf dem ein Token stehen kann, nicht nur für User-Tasks, und es kostet nur die angezeigte Seite — auch bei hunderttausenden Instanzen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "your-brand-colour-reaches-the-forms",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Your brand colour now reaches the forms themselves",
+        "de": "Ihre Markenfarbe erreicht jetzt auch die Formulare"
+      },
+      "summary": {
+        "en": "Setting your organisation's colour used to tint everything around a form and stop at its edge: the form itself came from the form renderer's own stylesheet and stayed the stock blue, in a different typeface, on borders a shade off the ones beside it. It no longer does. A user task, an incident's repair form, the preview in the form editor and the public start form behind a share link are all painted from your palette, in the same typeface, on the same borders as the rest of Atlas.",
+        "de": "Bisher färbte Ihre Organisationsfarbe alles rund um ein Formular und hörte an dessen Rand auf: Das Formular selbst kam aus dem Stylesheet des Formular-Renderers, blieb im Standardblau, in einer anderen Schrift und mit Rahmen in einem leicht abweichenden Ton. Das ist vorbei. Eine Benutzeraufgabe, das Reparaturformular eines Incidents, die Vorschau im Formular-Editor und das öffentliche Startformular hinter einem Freigabelink werden aus Ihrer Palette gezeichnet — in derselben Schrift und mit denselben Rahmen wie der Rest von Atlas."
+      },
+      "link": {
+        "label": "ADR-0263",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0263-form-runtime-brand-theming.md"
+      },
+      "tags": [
+        "Organization",
+        "Forms"
+      ],
+      "try": {
+        "label": {
+          "en": "Set your brand colour",
+          "de": "Markenfarbe setzen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
+      "id": "the-public-start-form-and-the-sign-in-consent-screen-carry-y",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The public start form and the consent screen carry your branding",
+        "de": "Öffentliches Startformular und Zustimmungsseite tragen Ihr Erscheinungsbild"
+      },
+      "summary": {
+        "en": "Both pages are shown before anyone has signed in, and both used to display the built-in Atlas mark and the default blue no matter what you had configured. They now ask the server for your colour and your logo like every other page. That matters most for the start form: it is the page your own customers open. If the settings are momentarily unreachable the page still appears, in the default colours — a form that is late is worse than a form that is unbranded.",
+        "de": "Beide Seiten werden vor jeder Anmeldung gezeigt, und beide zeigten bisher das eingebaute Atlas-Zeichen und das Standardblau, unabhängig von Ihrer Konfiguration. Sie holen Farbe und Logo jetzt wie jede andere Seite vom Server. Am wichtigsten ist das beim Startformular: Es ist die Seite, die Ihre eigenen Kundinnen und Kunden öffnen. Sind die Einstellungen kurzzeitig nicht erreichbar, erscheint die Seite trotzdem, in den Standardfarben — ein verspätetes Formular wäre schlimmer als ein ungebrandetes."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Organization",
+        "Forms",
+        "Security"
+      ],
+      "try": {
+        "label": {
+          "en": "Upload your logo",
+          "de": "Logo hochladen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
+      "id": "a-button-label-that-stays-readable-on-your-brand-colour",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A button label that stays readable on your brand colour",
+        "de": "Beschriftungen, die auf Ihrer Markenfarbe lesbar bleiben"
+      },
+      "summary": {
+        "en": "Text on a coloured button used to be white, fixed. White on a deep blue or a federal red is fine; white on a brand yellow or a pale mint is roughly 1.5:1, which nobody can read. Atlas now works out the label colour from the colour you chose — white or near-black, whichever the colour's own brightness makes legible — and applies it everywhere your colour is a background: primary buttons, count badges, active segments, and the submit button inside a form.",
+        "de": "Text auf einer farbigen Schaltfläche war bisher fest weiss. Weiss auf einem tiefen Blau oder einem Bundesrot ist gut lesbar; Weiss auf einem Markengelb oder einem hellen Mint ergibt rund 1.5:1 und ist für niemanden lesbar. Atlas leitet die Schriftfarbe jetzt aus der von Ihnen gewählten Farbe ab — Weiss oder ein sehr dunkles Grau, je nachdem, was auf dieser Helligkeit lesbar ist — und wendet sie überall dort an, wo Ihre Farbe als Fläche dient: primäre Schaltflächen, Zähler-Badges, aktive Segmente und die Absenden-Schaltfläche im Formular."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Organization",
+        "Console"
+      ],
+      "try": {
+        "label": {
+          "en": "Try a colour",
+          "de": "Farbe ausprobieren"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
+      "id": "forms-written-by-the-ai-worker",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Let the AI Worker write the form",
+        "de": "Der KI-Worker schreibt das Formular"
+      },
+      "summary": {
+        "en": "A blank form is the slow part of a form. Fourteen fields, a technical name for each one that has to match what the process calls that piece of data, a label, a hint, a rule about what is required — and you have already written most of that down twice: once in the process documentation, once in the mappings that name its variables. So: in the Modeler, press “Create a new form” on a user task or on a start event. The form editor opens with a generator already up, knowing which process and which step you came from — because pressing that link was you saying what the form is for, and you should not have to say it twice. Describe in your own words and your own language what the form should ask for, and it reads the model's own words for the rest: what the process is for, what each step says about itself, what its gateways decide on, and the names it already uses for its data. The fields come back named the way the process names them, and the form for a step you added five minutes ago knows about that step, because it reads the draft you are working on and not only what is deployed. The same button sits in the form editor's own bar, for a form you started from the Forms list. Nothing is saved. What comes back opens unsaved, under the id the form already had, and you read it, change what you want and press Save yourself — exactly as with a form you laid out by hand. Ask again over an open form and it changes that one instead of starting over, so “add a field for the period” adds a field rather than replacing the other twelve. It uses the AI Worker your operator already set up for processes: one address, one key in the vault, one place to change which model answers. Your browser never sees the key, no case data from a running instance is ever sent, and where no AI Worker is configured the button is simply not there. If a model sends back something that is not a form, you get the reason in the dialog with your description still in it, ready to try again.",
+        "de": "Das leere Formular ist der langsame Teil eines Formulars. Vierzehn Felder, für jedes ein technischer Name, der zu dem passen muss, wie der Prozess diese Angabe nennt, dazu Beschriftung, Hinweis und die Frage, was Pflicht ist — und das meiste davon hat man schon zweimal aufgeschrieben: in der Prozessdokumentation und in den Mappings, die die Variablen benennen. Also: im Modeler an einem User-Task oder an einem Start-Ereignis auf «Create a new form» drücken. Der Formular-Editor öffnet sich mit bereits geöffnetem Generator, der weiß, aus welchem Prozess und von welchem Schritt Sie kommen — denn dieser Klick war schon die Aussage, wofür das Formular da ist, und die soll man nicht zweimal machen müssen. Beschreiben Sie in eigenen Worten und in Ihrer Sprache, wonach gefragt werden soll; den Rest liest der Generator aus den eigenen Worten des Modells: wofür der Prozess da ist, was jeder Schritt über sich sagt, worüber seine Gateways entscheiden und welche Namen er für seine Daten schon verwendet. Die Felder kommen so benannt zurück, wie der Prozess sie benennt — und das Formular für einen Schritt, den Sie vor fünf Minuten eingefügt haben, kennt diesen Schritt, weil der Entwurf gelesen wird, an dem Sie arbeiten, und nicht nur das, was deployt ist. Derselbe Knopf sitzt in der Leiste des Formular-Editors, für ein Formular, das Sie über die Formularliste begonnen haben. Gespeichert wird nichts. Das Ergebnis öffnet sich ungespeichert unter der ID, die das Formular schon hatte; Sie lesen es, ändern, was Sie wollen, und drücken selbst auf Speichern — genau wie bei einem von Hand gebauten Formular. Fragen Sie über ein offenes Formular erneut, wird dieses geändert statt neu begonnen: «ein Feld für den Zeitraum ergänzen» ergänzt eines, statt die anderen zwölf zu ersetzen. Verwendet wird der KI-Worker, den Ihr Betrieb ohnehin für Prozesse eingerichtet hat: eine Adresse, ein Schlüssel im Tresor, eine Stelle, an der man das Modell wechselt. Ihr Browser sieht den Schlüssel nie, es werden keine Falldaten aus laufenden Instanzen gesendet, und wo kein KI-Worker eingerichtet ist, gibt es den Knopf schlicht nicht. Schickt ein Modell etwas zurück, das kein Formular ist, steht der Grund im Dialog — mit Ihrer Beschreibung noch darin, bereit für den nächsten Versuch."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Forms",
+        "AI"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the process in the Modeler and switch to the Implement tab.",
+          "Select the user task the form is for — or the start event, for the form that starts the process.",
+          "Press “Create a new form”. The form editor opens with the generator already on that step.",
+          "Write what the form should ask for. One or two sentences is enough.",
+          "Read what comes back on the canvas, change what you want, and Save.",
+          "Then go back to the task and link the form you just saved.",
+          "No generator? An administrator adds an AI Worker under Console › Workers first."
+        ],
+        "de": [
+          "Den Prozess im Modeler öffnen und auf den Tab Implement wechseln.",
+          "Den User-Task wählen, für den das Formular ist — oder das Start-Ereignis, für das Formular, das den Prozess startet.",
+          "Auf «Create a new form» drücken. Der Formular-Editor öffnet sich mit dem Generator auf genau diesem Schritt.",
+          "Aufschreiben, wonach gefragt werden soll. Ein, zwei Sätze genügen.",
+          "Das Ergebnis auf der Fläche lesen, anpassen, speichern.",
+          "Danach zurück zum Task und das eben gespeicherte Formular dort verknüpfen.",
+          "Kein Generator? Dann legt zuerst eine Administratorin unter Console › Workers einen KI-Worker an."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Forms",
+          "de": "Formulare öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "the-training-nuggets-play-full-screen-for-showing-one-to-a-r",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Training nuggets play full screen",
+        "de": "Schulungsnuggets laufen im Vollbild"
+      },
+      "summary": {
+        "en": "A nugget used to run at reading size, in the flow of the handbook. That is right for reading and wrong for what it keeps being used for: an onboarding session with the thing on a projector. The new button hands a nugget the whole screen — dark surround, the caption set large and centred underneath, and the space bar, arrow keys, Home and End driving it, so nobody has to aim a mouse at a small control in front of a room. Going full screen starts the run; leaving it stops it, rather than letting it animate on behind whatever came next. The picture keeps its own shape instead of filling the screen, so the highlight ring stays on the button it is pointing at.",
+        "de": "Ein Nugget lief bisher in Lesegrösse mitten im Handbuch. Das ist zum Lesen richtig und für den Fall falsch, für den es tatsächlich benutzt wird: eine Einführung mit dem Beamer im Raum. Die neue Schaltfläche gibt dem Nugget den ganzen Bildschirm — dunkler Rahmen, die Bildunterschrift gross und mittig darunter, und Leertaste, Pfeiltasten, Home und Ende steuern es, damit niemand vor einem Publikum eine kleine Schaltfläche treffen muss. Der Wechsel ins Vollbild startet den Ablauf, das Verlassen beendet ihn, statt ihn hinter dem nächsten Fenster weiterlaufen zu lassen. Das Bild behält seine eigene Form, statt den Bildschirm zu füllen — so bleibt der Markierungsrahmen auf der Schaltfläche, auf die er zeigt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Handbook"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the handbook",
+          "de": "Handbuch öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "the-training-nuggets-show-the-real-atlas-not-a-drawing-of-it",
       "version": "Unreleased",
       "date": null,
@@ -128,233 +321,53 @@
       }
     },
     {
-      "id": "the-class-canvas-could-not-take-hold-of-more-than-one-class-",
+      "id": "every-shipped-model-now-carries-its-own-diagram",
       "version": "Unreleased",
       "date": null,
-      "category": "Fixed",
+      "category": "Changed",
       "title": {
-        "en": "The class canvas could not take hold of more than one class at a time.",
-        "de": "The class canvas could not take hold of more than one class at a time."
+        "en": "Every shipped example now brings its own diagram",
+        "de": "Jedes mitgelieferte Beispiel bringt jetzt sein eigenes Diagramm mit"
       },
       "summary": {
-        "en": "Tidying a class diagram meant dragging one box at a time. There is now a control beside zoom and undo that lets you draw a box around several classes and move them together — holding Shift while you drag does the same without it, and Escape puts the drag back to moving the sheet. The panel lists what you are holding, and each line takes you back to editing that one on its own.",
-        "de": "Ein Klassendiagramm aufzuräumen hiess bisher: eine Box nach der anderen ziehen. Neben Zoom und Rückgängig gibt es jetzt eine Schaltfläche, mit der sich ein Rahmen um mehrere Klassen ziehen lässt — sie bewegen sich dann gemeinsam. Mit gedrückter Umschalttaste geht es auch ohne die Schaltfläche, Escape gibt die Geste wieder ans Verschieben der Fläche zurück. Das Panel zeigt, was gerade ausgewählt ist, und über jede Zeile kommt man zurück zum Bearbeiten des einzelnen Elements."
-      },
-      "link": {
-        "label": "ADR-0237",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0237-class-canvas-on-diagram-js.md"
-      },
-      "tags": [
-        "Data",
-        "UML"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data › Information model and pick a model with several classes on it.",
-          "Click the ⬚ control at the top right of the canvas — it lights up while the next drag draws a box.",
-          "Press on empty sheet and drag a box around the classes you want; everything fully inside it is taken hold of.",
-          "Drag any one of them by its header and they all move together. Undo puts them all back.",
-          "To edit one of them on its own, click its line in the panel on the right."
-        ],
-        "de": [
-          "Unter Daten › Informationsmodell ein Modell mit mehreren Klassen öffnen.",
-          "Oben rechts auf der Zeichenfläche die Schaltfläche ⬚ anklicken — sie leuchtet, solange die nächste Ziehbewegung einen Rahmen zieht.",
-          "Auf freier Fläche drücken und einen Rahmen um die gewünschten Klassen ziehen; alles, was vollständig darin liegt, wird ausgewählt.",
-          "Eine beliebige davon an ihrem Kopf ziehen — alle bewegen sich mit. Rückgängig setzt alle zurück.",
-          "Um eine einzelne zu bearbeiten, im Panel rechts auf ihre Zeile klicken."
-        ]
-      }
-    },
-    {
-      "id": "a-class-with-a-hundred-attributes-had-no-room-to-show-their-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A class with a hundred attributes had no room to show their names.",
-        "de": "A class with a hundred attributes had no room to show their names."
-      },
-      "summary": {
-        "en": "The panel was 340px wide and would not budge, and inside it the two selects — which carry every class name in the model as options — took what they liked, leaving the name column a stub that read allowedA… for forty members running.",
-        "de": "The panel was 340px wide and would not budge, and inside it the two selects — which carry every class name in the model as options — took what they liked, leaving the name column a stub that read allowedA… for forty members running."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-class-canvas-could-not-be-zoomed-searched-or-undone",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The class canvas could not be zoomed, searched, or undone.",
-        "de": "The class canvas could not be zoomed, searched, or undone."
-      },
-      "summary": {
-        "en": "Two complaints from the same place: Data › Information model, on a model bigger than the window.",
-        "de": "Two complaints from the same place: Data › Information model, on a model bigger than the window."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-waiting-task-badge-on-the-live-diagram-counted-its-own-p",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The waiting-task marker on the live diagram tells the truth again",
-        "de": "Die Marke für wartende Aufgaben im Live-Diagramm sagt wieder die Wahrheit"
-      },
-      "summary": {
-        "en": "A user task on the live diagram carries a 📋 link that takes you to the work waiting on it. On a busy process that link used to print a number, and the number was wrong: a task with 1 275 people's work parked on it said \"500\", and went on saying \"500\" however many of them were completed in the Tasks app. Nothing was stuck. 500 is simply as many tasks as one request for the inbox ever returns, and the link was counting what it had been handed — so it could not move until the queue fell below 500. Worse, the same limit applies across every process at once, so enough waiting tasks somewhere else made the link vanish from a task that plainly had people waiting on it. The link now takes both its facts — whether to show it, and whether it opens the form directly or the inbox — from the engine's own count of what is sitting on that element, which is exact however many there are. It no longer prints a number of its own: the green badge on the same shape is that number, it always was right, and it is the one that goes down as the queue is worked. Two more things in the same corner: isolating one instance now asks for that instance's tasks directly, so its form stays one click away even when hundreds of thousands of others are waiting; and completing a task in the Tasks app now refreshes the inbox properly, so the \"more exist\" note disappears once the backlog is gone and \"Load older\" keeps its place.",
-        "de": "Eine Benutzeraufgabe im Live-Diagramm trägt eine 📋-Verknüpfung, die zur wartenden Arbeit führt. Bei einem gut ausgelasteten Prozess stand auf dieser Verknüpfung eine Zahl, und die war falsch: Eine Aufgabe, auf der die Arbeit von 1 275 Personen lag, zeigte «500» — und zeigte weiterhin «500», wie viele davon in der Tasks-App auch abgeschlossen wurden. Es hing nichts. 500 ist schlicht die Zahl an Aufgaben, die eine Abfrage des Postkorbs höchstens zurückgibt, und die Verknüpfung zählte, was sie erhalten hatte — bewegen konnte sie sich also erst, wenn die Warteschlange unter 500 fällt. Schlimmer noch: Dieselbe Grenze gilt über alle Prozesse zusammen, genügend wartende Aufgaben anderswo liessen die Verknüpfung an einer Aufgabe, auf die sichtbar Leute warteten, ganz verschwinden. Beide Angaben — ob die Verknüpfung erscheint und ob sie direkt das Formular oder den Postkorb öffnet — stammen jetzt aus dem Zähler der Engine für das, was auf diesem Element liegt; der ist exakt, wie viele es auch sind. Eine eigene Zahl schreibt die Verknüpfung nicht mehr: Das grüne Badge am selben Element ist diese Zahl, war immer richtig, und ist die, die sinkt, während die Warteschlange abgearbeitet wird. Zwei weitere Dinge an derselben Stelle: Wird eine einzelne Instanz herausgegriffen, werden jetzt gezielt deren Aufgaben abgefragt — ihr Formular bleibt einen Klick entfernt, auch wenn Hunderttausende andere warten; und beim Abschliessen einer Aufgabe wird der Postkorb richtig neu geladen, sodass der Hinweis «weitere vorhanden» verschwindet, sobald der Rückstau weg ist, und «Ältere laden» seine Stelle behält."
+        "en": "Four of the shipped models had no drawing of their own, so Atlas generated one when they were deployed. That is enough to run a model and not enough to read one — which started to matter the moment the handbook began showing every example as a picture. They are drawn by hand now: one straight main axis, every branch in a lane of its own, and every gateway exit labelled with its answer, which meant giving names to eight branches that never had one. Open any of them in the Modeler and the picture is the one somebody meant to draw.",
+        "de": "Vier der mitgelieferten Modelle hatten keine eigene Zeichnung, also erzeugte Atlas beim Deployen eine. Das genügt, um ein Modell laufen zu lassen, und nicht, um es zu lesen — was in dem Moment zählte, als das Handbuch anfing, jedes Beispiel als Bild zu zeigen. Jetzt sind sie von Hand gezeichnet: eine gerade Hauptachse, jeder Zweig in einer eigenen Bahn, und jeder Gateway-Ausgang mit seiner Antwort beschriftet — wofür acht Zweige erstmals einen Namen bekommen mussten. Öffnen Sie eines davon im Modeler, und das Bild ist das, das jemand zeichnen wollte."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Operations",
-        "Tasks"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations › Processes and pick a process whose user task has a queue of waiting work on it.",
-          "Open its live view. The user task carries a green badge — how many are waiting right now — and a 📋 link in its upper corner.",
-          "Hover the 📋: with one task waiting it says it opens that task's form, with several it says it opens the inbox. The count itself is the green badge.",
-          "Open the Tasks app in a second tab and complete a few of those tasks.",
-          "Back on the diagram, watch the green badge come down by what you completed — at any queue length, not only under 500."
-        ],
-        "de": [
-          "Öffnen Sie Operations › Processes und wählen Sie einen Prozess, dessen Benutzeraufgabe eine Warteschlange hat.",
-          "Öffnen Sie die Live-Ansicht. Die Benutzeraufgabe trägt ein grünes Badge — wie viele gerade warten — und oben in der Ecke eine 📋-Verknüpfung.",
-          "Fahren Sie über die 📋: Wartet eine einzige Aufgabe, öffnet sie deren Formular; warten mehrere, öffnet sie den Postkorb. Die Zahl selbst steht im grünen Badge.",
-          "Öffnen Sie die Tasks-App in einem zweiten Tab und schliessen Sie einige dieser Aufgaben ab.",
-          "Zurück im Diagramm: Das grüne Badge sinkt um genau das, was Sie abgeschlossen haben — bei jeder Warteschlangenlänge, nicht erst unter 500."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "saving-a-layout-onto-a-deployment-was-refused-on-diagrams-no",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Saving a layout no longer fails on diagrams you did not change",
-        "de": "Layout speichern scheitert nicht mehr an Diagrammen, die Sie nicht geändert haben"
-      },
-      "summary": {
-        "en": "\"Save layout to deployment\" refused some diagrams with \"the model differs\" even when nothing about the process had been touched. The editor writes certain BPMN attributes back in shorter form — leaving out ones that already have their standard value — and the check read that as a changed process. It now reads short and long form as what they are: the same thing. Models with an interrupting boundary event, an event subprocess or a multi-instance activity were the ones affected. A refusal now also names the element that actually differs, instead of only saying that something does.",
-        "de": "«Save layout to deployment» wies manche Diagramme mit «the model differs» ab, obwohl am Prozess nichts angefasst worden war. Der Editor schreibt bestimmte BPMN-Attribute verkürzt zurück — er lässt jene weg, die ohnehin auf ihrem Standardwert stehen — und die Prüfung las das als geänderten Prozess. Sie liest Kurz- und Langform jetzt als das, was sie sind: dasselbe. Betroffen waren Modelle mit unterbrechendem Boundary-Event, Ereignis-Subprozess oder Mehrfachausführung. Und eine Ablehnung nennt jetzt das Element, das tatsächlich abweicht, statt nur zu sagen, dass etwas abweicht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Operations"
+        "Examples",
+        "Modeler"
       ],
       "try": {
         "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
         },
-        "route": "#/operations"
+        "route": "#/modeler"
       }
     },
     {
-      "id": "the-edges-in-the-landscape-nugget-missed-the-nodes-they-conn",
+      "id": "three-mechanisms-the-engine-has-always-had-now-have-an-examp",
       "version": "Unreleased",
       "date": null,
-      "category": "Fixed",
+      "category": "Changed",
       "title": {
-        "en": "The edges in the landscape nugget missed the nodes they connect.",
-        "de": "The edges in the landscape nugget missed the nodes they connect."
+        "en": "Signal, escalation and compensation now have examples",
+        "de": "Signal, Eskalation und Kompensation haben jetzt Beispiele"
       },
       "summary": {
-        "en": "The scene that shows Panorama drew its edges as divs rotated by an angle computed from percentage coordinates — and x is a share of the container's width while y is a share of its height, so on anything that is not square both the angle and the length come out of mixed units.",
-        "de": "The scene that shows Panorama drew its edges as divs rotated by an angle computed from percentage coordinates — and x is a share of the container's width while y is a share of its height, so on anything that is not square both the angle and the length come out of mixed units."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-deployed-diagram-can-be-tidied-up-without-redeploying-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Fix a deployed diagram without redeploying it",
-        "de": "Ein deploytes Diagramm korrigieren, ohne neu zu deployen"
-      },
-      "summary": {
-        "en": "You usually notice that a diagram is hard to read once it is running — a task's name under a token count, a label on an edge. Until now the only fix was to deploy it again, which made a new version for a change nobody can see, and left the instances already running with the old picture. Now you open the deployment in the Modeler, move what needs moving, and pick \"Save layout to deployment\" from the … menu. The definition keeps its version and its running instances; only the drawing changes, everywhere at once. If you changed anything but the layout, the save is refused and tells you to deploy instead.",
-        "de": "Dass ein Diagramm schwer zu lesen ist, merkt man meist erst im Betrieb — der Name einer Aufgabe unter einem Token-Zähler, ein Label auf einer Kante. Bisher half nur erneutes Deployen: eine neue Version für eine Änderung, die niemand sieht, und die bereits laufenden Instanzen behielten trotzdem das alte Bild. Jetzt öffnen Sie das Deployment im Modeler, schieben zurecht und wählen im …-Menü «Save layout to deployment». Die Definition behält ihre Version und ihre laufenden Instanzen; nur die Zeichnung ändert sich, überall gleichzeitig. Wer versehentlich mehr als das Layout ändert, bekommt die Speicherung verweigert und den Hinweis, stattdessen zu deployen."
+        "en": "Three things the engine has always been able to do had no scenario showing what they are for. Now they do, each written for a small business or a private person and each running with no worker, no credential and no network. Chasing an unpaid invoice shows escalation beside a message on the same subprocess — the message interrupts because the dunning run is then moot, the escalation does not because the owner should still be asked. A price change that reaches every open quote shows a signal: a message hits exactly one case, a signal hits all of them and does not know how many. And a trip whose payment is declined shows compensation, taking the hotel and the flight back in reverse order. A fourth, organising a move, is simply Atlas doing a private person's Saturday.",
+        "de": "Drei Dinge, die die Engine seit jeher kann, hatten kein Szenario, das zeigt wofür. Jetzt haben sie eines — je für einen Kleinbetrieb oder eine Privatperson geschrieben, und alle laufen ohne Worker, ohne Zugangsdaten und ohne Netz. Das Mahnen einer offenen Rechnung zeigt die Eskalation neben einer Nachricht am selben Teilprozess: Die Nachricht unterbricht, weil der Mahnlauf dann gegenstandslos ist, die Eskalation nicht, weil der Inhaber trotzdem gefragt werden soll. Eine Preisänderung, die jede offene Offerte erreicht, zeigt das Signal: Eine Nachricht trifft genau einen Fall, ein Signal trifft alle und weiss nicht, wie viele. Und eine Reise, deren Zahlung abgelehnt wird, zeigt die Kompensation, die Hotel und Flug in umgekehrter Reihenfolge zurücknimmt. Ein viertes, ein Umzug, ist schlicht Atlas am Samstag einer Privatperson."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Modeler",
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations and pick the deployed process whose diagram you want to fix.",
-          "Open that deployment in the Modeler.",
-          "Move the shapes, labels or edges that sit badly — change nothing else.",
-          "Open the … menu and choose \"Save layout to deployment\"."
-        ],
-        "de": [
-          "Operations öffnen und den deployten Prozess wählen, dessen Diagramm stört.",
-          "Dieses Deployment im Modeler öffnen.",
-          "Formen, Labels oder Kanten zurechtschieben — sonst nichts ändern.",
-          "Im …-Menü «Save layout to deployment» wählen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-handbook-plays",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The handbook now plays: Atlas in two and a half minutes, then your own role",
-        "de": "Das Handbuch spielt jetzt: Atlas in zweieinhalb Minuten, danach Ihre eigene Rolle"
-      },
-      "summary": {
-        "en": "New in the handbook: short animated walk-throughs you press play on. The lead one takes two and a half minutes to show what Atlas is and what you can do with it — the diagram is the program, a case moving through it, a task reaching a person, an incident that loses nothing. After that there is one path per role, each under seventy seconds: claiming and completing a task, going from diagram to deploy, resolving an incident, granting roles and storing a credential. Nothing starts on its own, and the language toggle carries a running animation with it.",
-        "de": "Neu im Handbuch: kurze animierte Durchgänge, die man abspielt. Der erste zeigt in zweieinhalb Minuten, was Atlas ist und was sich damit machen lässt — das Diagramm ist das Programm, ein Fall wandert hindurch, eine Aufgabe erreicht einen Menschen, ein Incident verliert nichts. Danach folgt ein Pfad je Rolle, jeder unter siebzig Sekunden: eine Aufgabe übernehmen und abschliessen, vom Diagramm zum Deploy, einen Incident auflösen, Rollen vergeben und Zugangsdaten hinterlegen. Nichts startet von allein, und der Sprachumschalter nimmt eine laufende Animation mit."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Handbook"
+        "Examples"
       ]
     }
   ]

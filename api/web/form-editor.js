@@ -16,9 +16,10 @@
 import { attachJSONEditor } from "./json-editor.js";
 import { installDevShortcut } from "./dev-view.js";
 import { makeIdCheck } from "./idcheck.js";
+import { generationWorkers, openFormGenerator } from "./formgen-dialog.js";
+import { ensureFormStyles } from "./formviewer.js";
 
 const FORM_CSS = "vendor/form-js/form-playground.css";
-const VIEWER_CSS = "vendor/form-js/form-js.css";
 
 // ensureCss injects a stylesheet once, keyed by id so repeat calls are cheap.
 function ensureCss(href, id) {
@@ -34,6 +35,10 @@ let playgroundReady; // memoized loader promise → { Playground }
 function loadPlayground() {
   if (!playgroundReady) {
     ensureCss(FORM_CSS, "form-playground-css");
+    // The Playground embeds a live preview of the form, so the preview has to be
+    // painted in the org's colours like the runtime is — the editor's own chrome
+    // comes from form-playground.css and is unaffected.
+    ensureFormStyles();
     playgroundReady = import("./vendor/form-js/form-playground.js");
   }
   return playgroundReady;
@@ -42,8 +47,8 @@ function loadPlayground() {
 let viewerReady; // memoized loader promise → { Form }
 function loadFormViewer() {
   if (!viewerReady) {
-    // Same stylesheet id the tasks app uses, so the 86 KB viewer CSS loads once.
-    ensureCss(VIEWER_CSS, "form-js-css");
+    // Same stylesheet ids the tasks app uses, so the 86 KB viewer CSS loads once.
+    ensureFormStyles();
     viewerReady = import("./vendor/form-js/form-viewer.js");
   }
   return viewerReady;
@@ -76,7 +81,12 @@ export function cleanup() {
 
 // mountFormEditor renders the form editor into root. With formId it edits an
 // existing form; without it creates a new one (optionally seeded into projectId).
-export async function mountFormEditor(root, { api, toast, formId, projectId }) {
+//
+// generateFor is {processId, elementId} when the editor was reached by pressing
+// "Create a new form" on a step in the Modeler. It says what the form is for, so the
+// generator opens on it straight away instead of asking the author to say again what
+// their click already said (ADR-0260).
+export async function mountFormEditor(root, { api, toast, formId, projectId, generateFor }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
   // Claim the shared cleanup slot so navigating away tears this editor down
@@ -98,6 +108,8 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
         <span class="id-warn" id="form-id-warn" hidden></span>
         <div style="flex:1"></div>
         <span class="muted" id="form-status"></span>
+        <button class="btn ghost" id="form-generate" hidden
+          title="Write this form from a description and from the process it belongs to">✨ Generate</button>
         <button class="btn" id="form-save" title="Save this form">Save</button>
       </div>
       <div class="editor-body fv-body">
@@ -584,6 +596,51 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
   }
   root.querySelector("#form-save").addEventListener("click", save);
   nameInput.addEventListener("input", () => { statusEl.textContent = ""; });
+
+  // ---- Generate ------------------------------------------------------------
+  // Writing the form from a description and from the process it belongs to
+  // (ADR-0260). The button appears only where an operator has
+  // configured an AI Worker: an affordance whose only possible outcome is "not
+  // configured" teaches an author that the feature does not work.
+  //
+  // What comes back is applied to the shared schema like any other edit — unsaved,
+  // under the id this editor is already holding — so the author reads it on the
+  // canvas and presses Save themselves, through the same path a hand-drawn form
+  // takes. That is the whole point: the model produces a draft, not a deployment.
+  const genBtn = root.querySelector("#form-generate");
+  async function generate() {
+    commit(activeTab); // generate over what is on screen, not over the last commit
+    // The form is passed in so a second generation refines it rather than replacing
+    // it, the id so the result comes back under the form's own, and generateFor so a
+    // form reached from a step opens on that step — this time and every time, because
+    // what this form is for does not change while it is open.
+    const got = await openFormGenerator({
+      api, workers: available, formId: currentId() || id, schema,
+      forProcess: (generateFor && generateFor.processId) || "",
+      forStep: (generateFor && generateFor.elementId) || "",
+    });
+    if (!got || !got.schema || gen !== generation) return;
+    schema = got.schema;
+    schema.id = currentId() || id; // the identity is the editor's, never the model's
+    rev++;
+    schemaSource = null; // every pane reloads: none of them authored this
+    await load(activeTab);
+    syncIdentity();
+    toast(`Generated by ${got.worker}${got.model ? " (" + got.model + ")" : ""} — read it before saving.`);
+  }
+  let available = [];
+  (async () => {
+    available = await generationWorkers(api);
+    if (gen !== generation || !available.length) return;
+    genBtn.hidden = false;
+    genBtn.addEventListener("click", generate);
+    // Reached by pressing "Create a new form" on a step: that click already said what
+    // the form is for, so the dialog opens on it rather than waiting behind a second
+    // button the author has no reason to look for. With no AI Worker configured this
+    // is never reached and the editor simply opens blank, which is what the link did
+    // before there was a generator at all.
+    if (generateFor) await generate();
+  })();
 
   // Session handle: tearing down destroys every surface that was built.
   current = {
