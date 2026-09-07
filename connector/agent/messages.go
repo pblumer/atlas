@@ -59,14 +59,38 @@ type HTTPModel struct {
 	Thinking string
 }
 
-// systemPrompt is what every round tells the model about the shape of its work. It is
+// roundSystemPrompt is what every round tells the model about the shape of its work. It is
 // short on purpose: the specifics — the goal and what each tool is for — come from the
 // model of the process, written by the person who modelled it, not from here.
-const systemPrompt = `You are one step inside a running business process. Each time you are asked, decide what to do next.
+const roundSystemPrompt = `You are one step inside a running business process. Each time you are asked, decide what to do next.
 
 Call one or more of the tools you are given, or answer if the work is done. A tool is an activity in the process; calling it runs that activity for real, and you will see its result the next time you are asked. Do not claim to have done something you did not call a tool for.
 
 Answer only when the goal is met or you cannot get further with the tools you have — and then say plainly what you found and what remains open.`
+
+// taskSystemPrompt is what an ai task says instead: one call, one answer, no tools
+// (ADR-0256).
+//
+// It is a second prompt rather than the same one, because the first describes a situation
+// an ai task is not in. Told to choose among tools it has not been given, a model looks
+// for them — it asks for one, or it hedges about not having any — and either is a worse
+// answer than the question deserved. What lands in the variable is read by the next step
+// of a program, so it says that too: the answer, and nothing wrapped around it.
+const taskSystemPrompt = `You are one step inside a running business process. Answer the question you are given, using only what it tells you.
+
+Write the answer itself and nothing else: no preamble, no restatement of the question, no offer to do more. What you write is stored in a process variable and read by the next step, which is a program.
+
+If the question cannot be answered from what it gives you, say so plainly in one sentence rather than guessing.`
+
+// systemFor picks between them. No tools is unambiguous: the compiler refuses an
+// agent-driven ad-hoc with no contained activity (ADR-0253), so a request offering none is
+// an ai task and never a round.
+func systemFor(req Request) string {
+	if len(req.Tools) == 0 {
+		return taskSystemPrompt
+	}
+	return roundSystemPrompt
+}
 
 // Decide asks the model for one round. Every round is a fresh request: the worker holds
 // nothing between rounds, so what the model knows of its own run is what the process
@@ -127,9 +151,9 @@ func (m *HTTPModel) request(req Request) messagesRequest {
 	return messagesRequest{
 		Model:     name,
 		MaxTokens: maxTokens,
-		System:    systemPrompt,
+		System:    systemFor(req),
 		Tools:     toolSchemas(req.Tools),
-		Messages:  []messagesTurn{{Role: "user", Content: roundPrompt(req)}},
+		Messages:  []messagesTurn{{Role: "user", Content: promptFor(req)}},
 		// Adaptive thinking lets the model spend more where a round is hard and less
 		// where it is not, which is the shape of agent work. Off is for an endpoint
 		// that does not implement it.
@@ -183,6 +207,24 @@ func toolSchemas(tools []Tool) []messagesTool {
 
 // roundPrompt states the round: the goal, what the process already knows, and what the
 // earlier calls returned.
+func promptFor(req Request) string {
+	if len(req.Tools) == 0 {
+		return taskPrompt(req)
+	}
+	return roundPrompt(req)
+}
+
+// taskPrompt is an ai task's message: the question as the author wrote it, and nothing
+// added. Round bookkeeping ("this is round 1", "your earlier tool calls returned") would
+// be describing a run that is not happening, and every sentence a model reads before the
+// question is a sentence competing with it.
+func taskPrompt(req Request) string {
+	if req.Goal == "" {
+		return "(the process states no question for this step)"
+	}
+	return req.Goal
+}
+
 func roundPrompt(req Request) string {
 	var b strings.Builder
 	b.WriteString("Goal: ")
@@ -286,4 +328,17 @@ func variableOf(name string, raw json.RawMessage) model.VariableValue {
 	default:
 		return model.VariableValue{Name: name, Kind: model.VarJSON, Text: string(raw)}
 	}
+}
+
+// ForModel implements [ModelChooser]: the model id is one field of the request body, so
+// asking a different one is a copy with that field replaced. A copy rather than a
+// mutation because a worker holds one adapter and works many jobs at once — writing the
+// field would race, and the loser would ask the wrong model.
+func (m *HTTPModel) ForModel(id string) Model {
+	if id == "" || id == m.Model {
+		return m
+	}
+	c := *m
+	c.Model = id
+	return &c
 }

@@ -357,7 +357,12 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		name:           connectorKindAgent,
 		workerOnly:     true,
 		validateCreate: validateAgentConnector,
-		jobTypes:       []int32{compiler.AgentJobTypeIndex},
+		// Two job types, one kind. The round an agent container parks, and the single
+		// call an ai service task makes (ADR-0256). They are one
+		// kind because they are one credential and one endpoint — an operator
+		// configuring "the model" configures both — and two job types because their
+		// completions are different shapes, which is clio's arrangement exactly.
+		jobTypes: []int32{compiler.AgentJobTypeIndex, compiler.AiTaskJobTypeIndex},
 	},
 }, sqlManagedConnectorKinds()...)
 

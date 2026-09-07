@@ -167,6 +167,14 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.AgentJobType] = CompletingExecFunc(func(ctx context.Context, j Job) (Outcome, error) {
 				return RunAgentRound(ctx, j, models)
 			})
+			// The same providers serve the ai task, under a job type of its own: one
+			// call, one answer, no tools (ADR-0256). It
+			// completes with variables like every ordinary connector, so the plain
+			// handler shape serves it — the wider one above is the round's, because a
+			// round answers with a choice of activities.
+			built.Handlers[compiler.AiTaskJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunAiTask(ctx, j, models)
+			})
 		case "temis":
 			// The one kind whose handler completes with more than variables: a central
 			// decision's evaluation is retained as a durable record (ADR-0066), so the

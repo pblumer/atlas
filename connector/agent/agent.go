@@ -68,6 +68,21 @@ type Model interface {
 	Decide(ctx context.Context, req Request) (Decision, error)
 }
 
+// ModelChooser is a [Model] that can be asked for a particular language model instead of
+// the one it is configured for. Both shipped adapters implement it, because for both the
+// model id is one field of the request body.
+//
+// It is a second interface rather than a method on [Model] so that an adapter which
+// genuinely serves one model — a local runtime with one file loaded — can decline by not
+// implementing it, and be *told* to decline: a caller that cannot honour an authored
+// model must fail the job rather than quietly ask a different one. That is the point of
+// letting a task name a model at all (ADR-0256).
+type ModelChooser interface {
+	// ForModel returns this model asked to use the named language model. An empty id
+	// means the configured one, so callers need no special case.
+	ForModel(id string) Model
+}
+
 // Toolbox translates a compiled agent-driven container's tool index into what the model
 // is offered. It is deliberately a pure function of the compiled process: the same index
 // the runtime activates from is the one the model chooses from, which is what keeps the

@@ -357,6 +357,23 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 				"resultVariable": "konten",
 			},
 		},
+		{
+			// An ai task's question travels resolved; the endpoint, the credential and
+			// the wire format never leave the Worker (ADR-0168, ADR-0041/0069). The
+			// *model* does travel, because which model a step asks is what the step is
+			// about rather than what the deployment is (ADR-0256) — which is the whole
+			// reason two tasks can ask two models through one Worker.
+			name:      "aitask",
+			variables: `{"variables":{"betreff":"Dachsanierung"}}`,
+			element: `<atlas:agentConnector connector="anthropic_pb" model="claude-haiku-4-5" ` +
+				`prompt="=&quot;Klassifiziere: &quot; + betreff" resultVariable="kategorie"/>`,
+			jobType: compiler.AiTaskJobType,
+			want:    "agent",
+			fields: map[string]any{
+				"connector": "anthropic_pb", "model": "claude-haiku-4-5",
+				"prompt": "Klassifiziere: Dachsanierung", "resultVariable": "kategorie",
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			instanceVars := vars
@@ -616,29 +633,53 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 	}
 }
 
-// payloadArmRe finds one arm of resolveConnectorTask: the job-type case it answers,
-// and the field map it puts on the wire. Source-read rather than exercised, because a
-// map literal is not something reflection can see — and reading it is the same move
-// the moddle drift tests make over compiler/parse.go.
-var payloadArmRe = regexp.MustCompile(`(?s)case (compiler\.[A-Za-z]+JobTypeIndex)[^\n]*:.*?connectorPayload\{Kind:[^,]+, Fields: map\[string\]any\{(.*?)\n\t\t\}\}`)
+// payloadCaseRe finds where one arm of resolveConnectorTask begins: the job-type case it
+// answers. The arm's *body* is then everything up to the next case, which is why this is
+// split from the map pattern rather than being one expression spanning both — an arm that
+// writes no map literal would otherwise reach forward and claim the next arm's map, and
+// the next arm would come up missing. That is not hypothetical: the ai task's arm hands
+// its map to agent.TaskJobPayload, and building the pattern this way is what keeps it from
+// silently eating Google Sheets' fields (ADR-0256).
+var payloadCaseRe = regexp.MustCompile(`(?m)^\tcase (compiler\.[A-Za-z]+JobTypeIndex)[^\n]*:$`)
+
+// payloadFieldsRe finds the field map inside one arm's body.
+var payloadFieldsRe = regexp.MustCompile(`(?s)connectorPayload\{Kind:[^,]+, Fields: map\[string\]any\{(.*?)\n\t\t\}\}`)
 
 // payloadKeyRe matches one key of such a map.
 var payloadKeyRe = regexp.MustCompile(`"([a-zA-Z0-9_]+)":`)
 
 // payloadArms reads the field set each arm sends, keyed by its job-type case.
+//
+// An arm that builds its payload through a function rather than a literal contributes
+// nothing here, and that is the honest answer: this test can only read what is written in
+// front of it. Such an arm owes the same check where its map actually lives — see
+// agent.TestTheTaskPayloadIsTheWholeTask, which makes it against the resolved struct in
+// the package that defines both.
 func payloadArms(t *testing.T) map[string]map[string]bool {
 	t.Helper()
-	src, err := os.ReadFile("handlers.go")
+	raw, err := os.ReadFile("handlers.go")
 	if err != nil {
 		t.Fatalf("read handlers.go: %v", err)
 	}
+	src := string(raw)
+	cases := payloadCaseRe.FindAllStringSubmatchIndex(src, -1)
 	out := map[string]map[string]bool{}
-	for _, m := range payloadArmRe.FindAllStringSubmatch(string(src), -1) {
+	for i, loc := range cases {
+		end := len(src)
+		if i+1 < len(cases) {
+			end = cases[i+1][0]
+		}
+		name := src[loc[2]:loc[3]]
+		body := src[loc[1]:end]
+		m := payloadFieldsRe.FindStringSubmatch(body)
+		if m == nil {
+			continue // this arm builds its payload elsewhere
+		}
 		keys := map[string]bool{}
-		for _, k := range payloadKeyRe.FindAllStringSubmatch(m[2], -1) {
+		for _, k := range payloadKeyRe.FindAllStringSubmatch(m[1], -1) {
 			keys[k[1]] = true
 		}
-		out[m[1]] = keys
+		out[name] = keys
 	}
 	if len(out) == 0 {
 		t.Fatal("found no payload arms in handlers.go; the pattern must have changed")

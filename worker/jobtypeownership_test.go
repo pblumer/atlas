@@ -28,8 +28,10 @@ import (
 // fails the coverage check below rather than being skipped, so adding a kind means
 // saying which job types are its own.
 var connectorJobTypes = map[string][]string{
-	"ad":           {compiler.AdJobType},
-	"agent":        {compiler.AgentJobType},
+	"ad": {compiler.AdJobType},
+	// Two job types, one kind: the container's round and the ai service task's single call
+	// (ADR-0256).
+	"agent":        {compiler.AgentJobType, compiler.AiTaskJobType},
 	"clio":         {compiler.ClioWriteJobType, compiler.ClioQueryJobType, compiler.ClioReadJobType},
 	"csv":          {compiler.CsvImportJobType},
 	"entra":        {compiler.EntraJobType},
