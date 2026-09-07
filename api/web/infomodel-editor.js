@@ -116,6 +116,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             <button type="button" class="icon-btn" data-tool="redo" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled>↻</button>
           </div>
         </div>
+        <div class="props-resizer im-resizer" id="im-resizer"
+          title="Drag to widen the panel — double-click to reset"></div>
         <div class="im-side" id="im-side"></div>
       </div>
       <div class="im-problems" id="im-problems"></div>
@@ -522,7 +524,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       <tr data-attr="${i}" data-member="${esc(`${a.name} ${a.type}`.toLowerCase())}">
         <td class="im-grip" title="Drag to reorder — the order is the order the class box reads in"
             aria-label="Reorder">⠿</td>
-        <td><input class="im-in" data-f="name" value="${esc(a.name)}" placeholder="name"/></td>
+        <td><input class="im-in" data-f="name" value="${esc(a.name)}" placeholder="name"
+              title="${esc(a.name)}"/></td>
         <td><select class="im-in" data-f="type">
           ${subset.primitives.map((p) => `<option value="${esc(p.type)}"${p.type === a.type ? " selected" : ""}>${esc(p.label)}</option>`).join("")}
           <optgroup label="Classes in this model">
@@ -784,6 +787,13 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           if (a[target.dataset.f] === target.value) return;
           a[target.dataset.f] = target.value;
         }
+        // This row is not repainted — that is what keeps the caret in the field being
+        // typed in — so the two things a repaint would have refreshed are refreshed
+        // here: the tooltip that makes a name readable when the column cannot show all
+        // of it, and what the filter matches this row against.
+        const nameInput = row.querySelector('[data-f="name"]');
+        if (nameInput) nameInput.title = a.name;
+        row.dataset.member = `${a.name} ${a.type}`.toLowerCase();
         markDirty(); syncCanvas();
         return;
       }
@@ -1219,6 +1229,60 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       toast(e.message, "err");
     }
   }
+
+  // ---- how wide the panel is -----------------------------------------------
+  //
+  // 340px is enough for a class with six attributes and not for one with a hundred,
+  // where the name is the column that loses the argument — and no amount of column
+  // arithmetic makes room that the panel does not have. So the panel is draggable,
+  // with the divider the Modeler's panel uses and remembered the same way: a person
+  // moves between the two surfaces in one session, and a divider that behaved
+  // differently on each would be worse than none.
+  //
+  // The canvas is told after every change, because a viewport that is not told keeps
+  // the width it was built with and draws into space that is no longer there.
+  (function wirePanelWidth() {
+    const resizer = root.querySelector("#im-resizer");
+    const KEY = "atlas.imPanelWidth";
+    const DEFAULT_WIDTH = 340;
+    const clamp = (w) => Math.max(280, Math.min(900, w));
+    const setWidth = (w) => {
+      sideEl.style.width = clamp(w) + "px";
+      // The same two nudges the Modeler's divider gives its canvas. The class canvas
+      // exposes no resized() of its own yet — the drawing keeps working without one,
+      // it simply does not re-centre — so the call is optional and the window event
+      // is what the library hears today.
+      canvas.resized?.();
+      window.dispatchEvent(new Event("resize"));
+    };
+
+    const saved = parseInt(localStorage.getItem(KEY) || "", 10);
+    if (saved) setWidth(saved);
+
+    let startX = 0;
+    let startW = 0;
+    const onMove = (e) => setWidth(startW - (e.clientX - startX));
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      resizer.classList.remove("dragging");
+      document.body.style.userSelect = "";
+      localStorage.setItem(KEY, String(parseInt(sideEl.style.width, 10) || DEFAULT_WIDTH));
+    };
+    resizer.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      startX = e.clientX;
+      startW = sideEl.getBoundingClientRect().width;
+      resizer.classList.add("dragging");
+      document.body.style.userSelect = "none";
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    });
+    resizer.addEventListener("dblclick", () => {
+      setWidth(DEFAULT_WIDTH);
+      localStorage.setItem(KEY, String(DEFAULT_WIDTH));
+    });
+  })();
 
   saveBtn.addEventListener("click", save);
   // Typing in a field owns its own undo — taking Ctrl+Z away from a half-typed class

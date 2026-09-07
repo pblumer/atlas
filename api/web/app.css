@@ -5038,7 +5038,18 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .im-hint-text { margin: 10px 0 0; font: 12px/1.55 system-ui, sans-serif; color: var(--muted); }
 .im-hint-text code { font-size: 11.5px; }
 
-table.im-attrs { width: 100%; border-collapse: collapse; font-size: 12px; }
+/* The name is the column that has to grow. A class with a hundred attributes is told
+   apart by the ends of its names, and a fixed layout is what stops the two selects
+   from taking the room: they carry class names as options, so left to size themselves
+   they grow to the longest one and squeeze the name to nothing. */
+table.im-attrs { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+.im-attrs th:nth-child(1), .im-attrs td:nth-child(1) { width: 16px; }
+.im-attrs th:nth-child(3), .im-attrs td:nth-child(3) { width: 88px; }
+.im-attrs th:nth-child(4), .im-attrs td:nth-child(4) { width: 56px; }
+.im-attrs th:nth-child(5), .im-attrs td:nth-child(5) { width: 24px; }
+.im-attrs th:nth-child(6), .im-attrs td:nth-child(6) { width: 28px; }
+/* The literals table has three columns and no header; only its grip and its ✕ are fixed. */
+.im-attrs tbody tr[data-lit] td:nth-child(3) { width: 28px; }
 .im-attrs th { text-align: left; font: 600 10px/1.6 system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 2px 4px; }
 .im-attrs td { padding: 2px 4px; vertical-align: middle; }
 .im-attrs input[type="text"], .im-attrs input:not([type]), .im-attrs select {

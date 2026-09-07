@@ -647,3 +647,70 @@ test.describe("undo and redo on the canvas", () => {
     expect(page.__errors).toEqual([]);
   });
 });
+
+// A class with a hundred attributes needs room the fixed panel does not have, and the
+// name is the column that loses when there is none: it is the one a member is found
+// by, and the two selects beside it carry class names, so left to size themselves they
+// take the width and leave the name a stub.
+test.describe("room for a long member list", () => {
+  const resizer = (page) => page.locator("#im-resizer");
+  const panelWidth = (page) => page.locator("#im-side").evaluate((el) => el.getBoundingClientRect().width);
+  const nameWidth = (page) => page.locator(".im-attrs tbody tr[data-attr] input[data-f='name']").first()
+    .evaluate((el) => el.getBoundingClientRect().width);
+
+  const widen = async (page, by) => {
+    const at = await resizer(page).boundingBox();
+    await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(at.x - by, at.y + at.height / 2, { steps: 10 });
+    await page.mouse.up();
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await page.evaluate(() => localStorage.removeItem("atlas.imPanelWidth"));
+    await box(page, "Order").click({ position: { x: 30, y: 12 } });
+    await expect(page.locator(".im-attrs")).toBeVisible();
+  });
+
+  test("the divider widens the panel, and the room goes to the name", async ({ page }) => {
+    const before = { panel: await panelWidth(page), name: await nameWidth(page) };
+    await widen(page, 200);
+    expect(await panelWidth(page)).toBeGreaterThan(before.panel + 150);
+    expect(await nameWidth(page)).toBeGreaterThan(before.name + 140);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("the width is remembered, and a double-click puts it back", async ({ page }) => {
+    await widen(page, 160);
+    const widened = await panelWidth(page);
+    expect(await page.evaluate(() => Number(localStorage.getItem("atlas.imPanelWidth")))).toBeGreaterThan(400);
+
+    await page.evaluate(() => window.__mount());
+    await expect(page.locator(".uml-class").first()).toBeVisible();
+    expect(await panelWidth(page)).toBeCloseTo(widened, 0);
+
+    await resizer(page).dblclick();
+    expect(await panelWidth(page)).toBeCloseTo(340, 0);
+  });
+
+  test("a name too long for its column is readable on hover, while it is typed", async ({ page }) => {
+    const first = page.locator(".im-attrs tbody tr[data-attr] input[data-f='name']").first();
+    await expect(first).toHaveAttribute("title", "id");
+    // The row is not repainted while it is typed in — that is what keeps the caret in
+    // the field — so the tooltip has to be kept current by hand.
+    await first.fill("allowedAttributesForThisParticularCase");
+    await expect(first).toHaveAttribute("title", "allowedAttributesForThisParticularCase");
+    // And the filter matches what the row says now, not what it said when it was drawn.
+    await page.locator("#im-member-filter").fill("ParticularCase");
+    await expect(page.locator(".im-attrs tbody tr[data-attr]:visible")).toHaveCount(1);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("the sheet keeps working after the panel takes its room", async ({ page }) => {
+    await widen(page, 220);
+    // The classes are still there to be clicked, and clicking one still selects it.
+    await box(page, "Customer").click({ position: { x: 30, y: 12 } });
+    await expect(page.locator(".psec input#im-c-name")).toHaveValue("Customer");
+    expect(page.__errors).toEqual([]);
+  });
+});

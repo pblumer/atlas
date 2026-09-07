@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A class with a hundred attributes had no room to show their names.** The panel was
+  340px wide and would not budge, and inside it the two selects — which carry every
+  class name in the model as options — took what they liked, leaving the name column a
+  stub that read `allowedA…` for forty members running.
+
+  The panel now takes the Modeler's divider: drag it to widen, double-click to put it
+  back, and the width is remembered. A person moves between the two surfaces in one
+  session, so it is the same divider with the same behaviour rather than a second one
+  of its own. Inside the table the layout is fixed, so the room goes to the name and
+  the selects keep the width they need and no more. And because the row being typed in
+  is deliberately *not* repainted — that is what keeps the caret in the field — the
+  name's tooltip and what the filter matches it against are now kept current as it is
+  typed, rather than lagging until the next repaint.
+
 - **The class canvas could not be zoomed, searched, or undone.**
   Two complaints from the same place: Data › Information model, on a model bigger
   than the window.

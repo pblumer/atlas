@@ -2,6 +2,24 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "a-class-with-a-hundred-attributes-had-no-room-to-show-their-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A class with a hundred attributes had no room to show their names.",
+        "de": "A class with a hundred attributes had no room to show their names."
+      },
+      "summary": {
+        "en": "The panel was 340px wide and would not budge, and inside it the two selects — which carry every class name in the model as options — took what they liked, leaving the name column a stub that read allowedA… for forty members running.",
+        "de": "The panel was 340px wide and would not budge, and inside it the two selects — which carry every class name in the model as options — took what they liked, leaving the name column a stub that read allowedA… for forty members running."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-class-canvas-could-not-be-zoomed-searched-or-undone",
       "version": "Unreleased",
       "date": null,
@@ -359,24 +377,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "opening-a-deployed-process-in-the-modeler-lost-the-applicati",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Opening a deployed process in the Modeler lost the application it belongs to, and with it the whole vocabulary behind a data object's Type.",
-        "de": "Opening a deployed process in the Modeler lost the application it belongs to, and with it the whole vocabulary behind a data object's Type."
-      },
-      "summary": {
-        "en": "A draft carries its application; a deployed version carries it too — the deploy records it — but the route that opens one (#/modeler/d/{key}) does not name it and nothing looked it up.",
-        "de": "A draft carries its application; a deployed version carries it too — the deploy records it — but the route that opens one (#/modeler/d/{key}) does not name it and nothing looked it up."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     }
   ]
