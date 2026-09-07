@@ -6,21 +6,42 @@
 <title>Start a process</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M128 26 244 214 12 214ZM128 172 178 214 78 214ZM111 72H145V99H172V133H145V160H111V133H84V99H111Z'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/vendor/form-js/form-js.css" />
+<!-- The Atlas → form-js theming bridge. It is what carries the org's brand colour
+     into the rendered form's fields, labels, focus ring and buttons; the page's own
+     chrome below reads the same tokens, so the two halves cannot drift. -->
+<link rel="stylesheet" href="/form-theme.css" />
 <style>
-  :root { --accent:#0b5cff; --accent-hover:#0a4ad1; --text:#14161a; --muted:#62666d; --border:#e2e4e9; --ok:#2d8a4e; --danger:#c0392b; }
+  /* The base token set. It is the same one app.css declares — the names matter,
+     because form-theme.css maps exactly these onto what form-js reads, and
+     TestFormThemeTokensExistOnEveryHostPage fails if this block loses one.
+     The accent values here are the stock defaults; theme.js overwrites them on
+     the root with the org's brand colour once the server answers (below). */
+  :root {
+    --bg:#f3f4f6; --surface:#ffffff;
+    --border:#e2e4e9; --border-strong:#cdd0d6;
+    --text:#14161a; --muted:#62666d;
+    --accent:#0b5cff; --accent-hover:#0a4ad1; --accent-soft:#eaf0ff; --accent-ink:#ffffff;
+    --ok:#2d8a4e; --danger:#c0392b;
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
   * { box-sizing: border-box; }
-  body { margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--text); background:#f3f4f6; }
+  body { margin:0; font:15px/1.5 var(--font-sans); color:var(--text); background:var(--bg); }
   .wrap { max-width: 640px; margin: 0 auto; padding: 40px 20px 80px; }
   .brand { display:flex; align-items:center; gap:10px; margin-bottom:24px; }
   .mark { display:inline-grid; place-items:center; width:28px; height:28px; border-radius:7px; background:#000; color:#fff; overflow:hidden; }
   .mark svg { width:100%; height:100%; display:block; }
-  .card { background:#fff; border:1px solid var(--border); border-radius:10px; box-shadow:0 1px 3px rgba(20,22,26,.08); padding:28px; }
+  /* An uploaded org logo replaces the built-in glyph (logo.js). Same two rules as
+     app.css: drop the black tile so a transparent PNG/SVG sits on the page cleanly,
+     and fit the image in the box without distortion. */
+  .mark.has-logo { background:transparent; }
+  .mark .mark-img { width:100%; height:100%; object-fit:contain; display:block; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow:0 1px 3px rgba(20,22,26,.08); padding:28px; }
   h1 { font-size:20px; margin:0 0 20px; }
   .muted { color:var(--muted); }
   .err { color:var(--danger); }
   .actions { margin-top:22px; }
-  button.submit { font:inherit; font-weight:600; color:#fff; background:var(--accent); border:1px solid var(--accent); border-radius:7px; padding:10px 18px; cursor:pointer; }
-  button.submit:hover { background:var(--accent-hover); }
+  button.submit { font:inherit; font-weight:600; color:var(--accent-ink); background:var(--accent); border:1px solid var(--accent); border-radius:7px; padding:10px 18px; cursor:pointer; }
+  button.submit:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
   button.submit:disabled { opacity:.5; cursor:not-allowed; }
   .done { text-align:center; padding:16px 0; }
   .done .check { width:44px; height:44px; border-radius:50%; background:#e7f6ec; color:var(--ok); display:inline-grid; place-items:center; font-size:24px; margin-bottom:10px; }
@@ -33,9 +54,25 @@
   </div>
   <script type="module">
     import { Form } from "/vendor/form-js/form-viewer.js";
+    import { syncFromServer } from "/theme.js";
+    import { syncLogoFromServer } from "/logo.js";
     const card = document.getElementById("card");
     // The token is the last non-empty segment of /public/forms/{token}.
     const token = location.pathname.split("/").filter(Boolean).pop();
+
+    // The org's brand colour and logo (ADR-0113 / ADR-0148). Both endpoints are
+    // public, which is what makes this page brandable at all: whoever opens a share
+    // link has no session, and the two settings are display metadata, not secrets.
+    //
+    // Started here and deliberately not awaited. The form is what this page is for,
+    // and a slow or failing theme endpoint must never be the reason a form does not
+    // appear — an unstyled form is a setback, an absent one is a broken link. Both
+    // requests leave alongside the schema fetch below and land, in practice, before
+    // the card is built; if one does not, the page keeps the stock palette and the
+    // built-in mark, which is what it showed before this existed. Neither can reject
+    // into an unhandled rejection: both swallow their own network errors.
+    syncFromServer();
+    syncLogoFromServer();
 
     async function main() {
       let def;

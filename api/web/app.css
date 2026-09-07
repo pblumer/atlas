@@ -15,6 +15,17 @@
   --accent: #0b5cff;
   --accent-hover: #0a4ad1;
   --accent-soft: #eaf0ff;
+  /* The ink laid on an accent-coloured fill: the label of a primary button, a
+     count badge, an active segment. It was `#fff` written out at each of those
+     rules, which is correct for the stock blue and a guess for anybody else's
+     brand colour — a pale accent leaves white text at a contrast ratio no
+     accessibility audit passes, and nothing in the CSS could express that.
+     As a token the theme can flip it: theme.js derives white or near-black from
+     the chosen accent's luminance (derivePalette), so a light brand colour gets
+     dark ink instead of an unreadable button. Its name starts with `--accent` on
+     purpose — the no-flash bootstrap in index.html applies exactly that prefix,
+     so the derived ink reaches first paint with the rest of the palette. */
+  --accent-ink: #ffffff;
   --danger: #c0392b;
   --danger-soft: #fdecea;
   --warn: #b7791f;
@@ -53,6 +64,16 @@
   --mesh-ink: #6e747d;
   --mesh-line: #8b9099;
   --ok: #2d8a4e;
+  /* The interface's two type stacks. They are named here so a surface that is not
+     app.css can ask for the same ones: form-theme.css hands --font-sans to the
+     vendored form-js runtime, which otherwise asks for an 'IBM Plex Sans' nothing
+     ships and lands on the browser's generic sans — a form in a different typeface
+     from the console around it. The rest of this file still writes the stack out
+     inside its `font:` shorthands; pointing those at the token is the next step,
+     and until it happens these two are a definition point, not yet a lever an
+     operator can pull. */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --topbar-h: 48px;
   --radius: 8px;
   --shadow: 0 1px 2px rgba(20, 22, 26, 0.06), 0 1px 3px rgba(20, 22, 26, 0.08);
@@ -103,7 +124,7 @@
 html, body { height: 100%; }
 body {
   margin: 0;
-  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 14px/1.5 var(--font-sans);
   color: var(--text);
   background: var(--bg);
 }
@@ -274,7 +295,7 @@ ol.steps li { margin: 6px 0; }
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent);
-  background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+  background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 600; cursor: pointer;
 }
 .btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); text-decoration: none; }
 .btn.ghost { background: transparent; color: var(--accent); }
@@ -762,8 +783,8 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .im-tool-sep { height: 1px; margin: 3px 2px; background: var(--border); }
 /* An armed tool is a mode, and a mode has to be visible or it is a trap: the button
    stays lit for exactly as long as the next drag draws a box instead of panning. */
-.im-tools .icon-btn.active { background: var(--accent); color: #fff; }
-.im-tools .icon-btn.active:hover { background: var(--accent); color: #fff; }
+.im-tools .icon-btn.active { background: var(--accent); color: var(--accent-ink); }
+.im-tools .icon-btn.active:hover { background: var(--accent); color: var(--accent-ink); }
 .im-canvas.marquee, .im-canvas.marquee .djs-container { cursor: crosshair; }
 /* The list of what a box took hold of. Each line goes back to editing that one. */
 .im-many { display: flex; flex-direction: column; gap: 2px; }
@@ -1077,7 +1098,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   background: none; border: 1px solid var(--border-strong); border-radius: 4px;
 }
 .fx-toggle:hover { border-color: var(--accent); color: var(--accent); }
-.fx-toggle.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+.fx-toggle.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 
 /* "Test expression" panel: sample variables + Run + the evaluated result. */
 .feel-test { margin: 4px 0 0; }
@@ -1283,7 +1304,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    on hover, which meant operators did not find it at all. */
 .ca-child-btn {
   display: grid; place-items: center; width: 20px; height: 20px; border-radius: 999px;
-  background: var(--accent); color: #fff; text-decoration: none; cursor: pointer;
+  background: var(--accent); color: var(--accent-ink); text-decoration: none; cursor: pointer;
   font: 700 13px/1 system-ui, sans-serif; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 .ca-child-btn:hover { filter: brightness(1.1); }
@@ -1311,7 +1332,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ca-drill-ring.on { box-shadow: 0 0 0 4px var(--accent-soft); }
 .ca-drill-tip {
   display: block; width: max-content; transform: translateX(-50%); white-space: nowrap;
-  background: var(--accent); color: #fff; border-radius: 999px; padding: 1px 7px;
+  background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 1px 7px;
   font: 600 10.5px/1.5 system-ui, sans-serif; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 /* "Decision" badge on a business rule task that has been evaluated: opens the
@@ -2391,7 +2412,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .tp-drill-back:hover { border-color: var(--accent); color: var(--accent); }
 .tp-drill-here {
-  border-radius: 999px; padding: 3px 11px; background: var(--accent); color: #fff;
+  border-radius: 999px; padding: 3px 11px; background: var(--accent); color: var(--accent-ink);
   font: 600 12px/1.5 system-ui, sans-serif; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 .tp-drill-note {
@@ -3023,7 +3044,7 @@ tr[hidden] { display: none; }
 .seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; }
 .seg button { border: 0; background: var(--surface); color: var(--muted); padding: 6px 18px; font: inherit; font-size: 13px; cursor: pointer; }
 .seg button + button { border-left: 1px solid var(--border-strong); }
-.seg button.active { background: var(--accent); color: #fff; }
+.seg button.active { background: var(--accent); color: var(--accent-ink); }
 
 /* Repository gallery (ADR-0081): a card grid of installable templates. */
 .repo-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-content: start; }
@@ -3041,7 +3062,7 @@ tr[hidden] { display: none; }
 .member-row + .member-row { border-top: 1px solid var(--border); }
 .member-id { flex: 1 1 auto; min-width: 0; font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .member-row .role-sel { max-width: 110px; }
-.avatar.sm { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: var(--accent); flex: 0 0 auto; }
+.avatar.sm { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: var(--accent); color: var(--accent-ink); flex: 0 0 auto; }
 
 .add-row { display: flex; gap: 8px; align-items: center; }
 .add-row input, .add-row select, .role-sel {
@@ -3096,7 +3117,7 @@ tr[hidden] { display: none; }
 
 /* The resting-token count badge sitting on an element. */
 .atlas-sim-token {
-  display: inline-block; background: var(--accent); color: #fff; border-radius: 999px;
+  display: inline-block; background: var(--accent); color: var(--accent-ink); border-radius: 999px;
   min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box;
   font: 700 12px/20px system-ui, sans-serif; text-align: center;
   box-shadow: 0 1px 4px rgba(0,0,0,0.35); pointer-events: none;
@@ -3203,7 +3224,7 @@ tr[hidden] { display: none; }
 .sp-targets { flex: 0 0 auto; display: inline-flex; gap: 4px; }
 .sp-tgt { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; cursor: pointer; }
 .sp-tgt:hover { border-color: var(--accent); color: var(--accent); }
-.sp-tgt.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.sp-tgt.on { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 .sp-foot { display: flex; gap: 16px; padding: 8px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
 .sp-foot kbd { font: 600 11px system-ui; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin-right: 2px; }
 
@@ -3301,7 +3322,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .dev-head-sp, .dev-foot-sp { flex: 1 1 auto; }
 .dev-badge {
   flex: 0 0 auto; font: 700 10px/1 system-ui, sans-serif; text-transform: uppercase;
-  letter-spacing: 0.04em; color: #fff; background: var(--accent);
+  letter-spacing: 0.04em; color: var(--accent-ink); background: var(--accent);
   border-radius: 4px; padding: 4px 6px;
 }
 .dev-title { font-size: 14px; }
@@ -3907,13 +3928,22 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    rather than the muted grey, because unlike the type it is a number that changes. */
 .mesh-runs { font-size: 11px; fill: var(--accent); pointer-events: none; }
 .mesh-application .mesh-runs { font-size: 15px; }
-/* The instance-count switch, beside the notation picker: both change what the
-   picture draws rather than what it is about. */
-.mesh-instances {
+/* A switch beside the notation picker that adds something to the picture. There are
+   two — the running counts and the drafts — and they wear the same clothes: to the
+   reader they are one gesture, "also show me this", and two switches side by side
+   that looked different would suggest they did different kinds of thing. They are
+   not the same underneath (the counts redraw what is here, the drafts re-ask the
+   server), and that difference belongs in the wait below, not in the styling. */
+.mesh-toggle {
   display: inline-flex; align-items: center; gap: 5px; flex: none;
   font-size: 13px; color: var(--text); white-space: nowrap; cursor: pointer;
 }
-.mesh-instances input { margin: 0; cursor: pointer; }
+.mesh-toggle input { margin: 0; cursor: pointer; }
+/* Disabled while an answer is being fetched — the drafts switch re-asks the server
+   rather than re-drawing what is already here — and it says so by going dim, so a
+   second click during the wait is not silently swallowed. */
+.mesh-toggle input:disabled { cursor: progress; }
+.mesh-toggle:has(input:disabled) { opacity: 0.55; cursor: progress; }
 /* What the projection drops. Collapsed by default and never absent: a projection
    that hides its loss is the failure §8's theme ban exists to prevent, and one that
    shouts it every time is one nobody reads twice. */
@@ -5078,7 +5108,7 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
   padding: 3px 9px; border-radius: 6px;
 }
 .im-add:hover, .im-connect:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-.im-connect.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+.im-connect.active { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
 .im-dirty { font: 11px/1.5 system-ui, sans-serif; color: var(--muted); font-style: italic; }
 
 .im-body { display: flex; flex: 1; min-height: 0; border: 1px solid var(--border); }
@@ -5259,7 +5289,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 .do-views button:first-child { border-radius: 5px 0 0 5px; }
 .do-views button:last-child { border-radius: 0 5px 5px 0; border-left: none; }
 .do-views button:hover { color: var(--accent); border-color: var(--accent); }
-.do-views button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.do-views button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
 /* The object diagram's stage. The drawing is diagram-js (ADR-0237), which fits its
    viewport to the box it is given — where the SVG this replaced carried its own

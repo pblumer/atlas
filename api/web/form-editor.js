@@ -17,9 +17,9 @@ import { attachJSONEditor } from "./json-editor.js";
 import { installDevShortcut } from "./dev-view.js";
 import { makeIdCheck } from "./idcheck.js";
 import { generationWorkers, openFormGenerator } from "./formgen-dialog.js";
+import { ensureFormStyles } from "./formviewer.js";
 
 const FORM_CSS = "vendor/form-js/form-playground.css";
-const VIEWER_CSS = "vendor/form-js/form-js.css";
 
 // ensureCss injects a stylesheet once, keyed by id so repeat calls are cheap.
 function ensureCss(href, id) {
@@ -35,6 +35,10 @@ let playgroundReady; // memoized loader promise → { Playground }
 function loadPlayground() {
   if (!playgroundReady) {
     ensureCss(FORM_CSS, "form-playground-css");
+    // The Playground embeds a live preview of the form, so the preview has to be
+    // painted in the org's colours like the runtime is — the editor's own chrome
+    // comes from form-playground.css and is unaffected.
+    ensureFormStyles();
     playgroundReady = import("./vendor/form-js/form-playground.js");
   }
   return playgroundReady;
@@ -43,8 +47,8 @@ function loadPlayground() {
 let viewerReady; // memoized loader promise → { Form }
 function loadFormViewer() {
   if (!viewerReady) {
-    // Same stylesheet id the tasks app uses, so the 86 KB viewer CSS loads once.
-    ensureCss(VIEWER_CSS, "form-js-css");
+    // Same stylesheet ids the tasks app uses, so the 86 KB viewer CSS loads once.
+    ensureFormStyles();
     viewerReady = import("./vendor/form-js/form-viewer.js");
   }
   return viewerReady;

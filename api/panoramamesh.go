@@ -140,6 +140,44 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama
 		land.Processes = append(land.Processes, proc)
 	}
 
+	// Drafts, only when the caller asked for them (ADR-0211 §7). The query parameter
+	// is read here rather than plumbed through Options because the collector is the
+	// half of the mesh that already takes the request — it needs it for the sharing
+	// scope — and a second channel for one boolean would be two places to look.
+	//
+	// A draft whose process id is already deployed is skipped: it is the editable
+	// copy of a process that is on the picture already, and drawing both would put a
+	// twin beside every node without saying anything true about either.
+	//
+	// LoadAll reads and decodes every draft file, XML included, on the run loop. That
+	// is the same read the Modeler's own draft list already makes on every visit, so
+	// it is a cost this server pays either way rather than a new one — and it is paid
+	// only by a caller who asked for drafts, which is the other half of why the
+	// parameter exists. Nothing of the XML reaches the landscape: a [panorama.Draft]
+	// carries an id, a name and a folder, and the derivation has no field to put a
+	// model in even if it wanted one.
+	if r.URL.Query().Get("drafts") == "1" {
+		deployed := make(map[string]bool, len(land.Processes))
+		for _, p := range land.Processes {
+			deployed[p.ProcessID] = true
+		}
+		saved, err := s.drafts.LoadAll()
+		if err != nil {
+			return panorama.Landscape{}, nil, err
+		}
+		for _, d := range saved {
+			if deployed[d.ProcessID] {
+				continue
+			}
+			land.Drafts = append(land.Drafts, panorama.Draft{
+				ProcessID: d.ProcessID, Name: d.Name, ApplicationID: d.ProjectID,
+				// The same rule the draft list applies: membership inherits from the
+				// artifact's project, falling back to its owner (ADR-0071).
+				CanView: s.canViewArtifact(r, d.ProjectID, d.OwnerID, projs),
+			})
+		}
+	}
+
 	// The peers, named here and asked off the loop. Naming them on the loop is what
 	// the two halves are for: the target list and the credential each one presents
 	// are loop reads, and the call that uses them is the one thing that must never

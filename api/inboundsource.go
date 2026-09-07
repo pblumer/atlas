@@ -416,10 +416,16 @@ func (s sheetRowSource) Read(ctx context.Context, rec inboundSubscription, limit
 	out := make([]inboundEvent, 0, limit)
 	for i := seen; i < len(rows) && len(out) < limit; i++ {
 		out = append(out, inboundEvent{
-			// No MarkKey: the row number *is* the watch's sequence, monotonic across
-			// the whole watch, so the scalar mark is correct — the clio case.
-			Seq:    uint64(i + 1), // absolute row number, 1-based as Sheets counts
-			Fields: sheetRowFields(rec, header, rows[i], i+1),
+			// The row number is monotonic across the whole watch, so one mark for the
+			// watch is the right *shape* — the clio case, not the Jira one. What it may
+			// not be is one mark for the whole Worker, which is what leaving this empty
+			// meant: the scalar branch keys on WatchedSubject, clio's field, which this
+			// kind's own validator refuses as non-empty. Two row watches then composed
+			// the same id and the one further down its sheet suppressed the other
+			// entirely (ADR-0264).
+			MarkKey: sheetRowMarkKey(rec),
+			Seq:     uint64(i + 1), // absolute row number, 1-based as Sheets counts
+			Fields:  sheetRowFields(rec, header, rows[i], i+1),
 		})
 	}
 	return out, strconv.Itoa(seen + len(out)), nil
@@ -456,6 +462,21 @@ func (s sheetRowSource) rows(ctx context.Context, rec inboundSubscription) ([]an
 		names[i] = strings.TrimSpace(fmt.Sprint(cell))
 	}
 	return rows, names, nil
+}
+
+// sheetRowMarkKey scopes a row watch's idempotency mark to the watch itself.
+//
+// It is the spreadsheet id, and what it buys is not that id: any non-empty value routes
+// the composition through the branch that already carries the watch's own ID
+// (inboundSourceID), which is what makes two watches on one Worker distinct. Naming the
+// spreadsheet is what makes the resulting id readable in a store dump.
+//
+// It does not need a migration, and that is a property of the source rather than an
+// argument: Read never emits a row at or below the watch's own cursor, so a live watch
+// handed a fresh, empty mark has nothing below that cursor left to replay.
+// TestRowWatchNeverEmitsAtOrBelowItsCursor pins it.
+func sheetRowMarkKey(rec inboundSubscription) string {
+	return strings.TrimSpace(rec.SpreadsheetID)
 }
 
 // sheetWatchRange is the A1 range a row watch reads; the create endpoint has already

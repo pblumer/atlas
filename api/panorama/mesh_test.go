@@ -676,3 +676,114 @@ func TestRestrictedProcessDisclosesNoInstanceTally(t *testing.T) {
 		}
 	}
 }
+
+// draftOf builds one visible draft owned by an application.
+func draftOf(processID, name, appID string) Draft {
+	return Draft{ProcessID: processID, Name: name, ApplicationID: appID, CanView: true}
+}
+
+// TestDeriveGraphContainsDraftsInTheirApplication is the switched-on picture: a
+// saved-but-undeployed diagram sits beside the processes of the application that
+// holds it, keyed by its BPMN process id because that is the only identity it has.
+func TestDeriveGraphContainsDraftsInTheirApplication(t *testing.T) {
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{proc(1, "invoice", "Invoice", "a1")},
+		Drafts:       []Draft{draftOf("refund", "Refund", "a1")},
+	}, Options{})
+
+	n := nodeByID(t, g, "draft:refund")
+	if n.Kind != KindDraft {
+		t.Errorf("Kind = %q, want %q", n.Kind, KindDraft)
+	}
+	if n.Name != "Refund" || n.ProcessID != "refund" {
+		t.Errorf("draft node = %+v, want the name and process id it was saved under", n)
+	}
+	if n.Version != 0 {
+		t.Errorf("Version = %d — a draft has no deployed version to report", n.Version)
+	}
+	if !hasEdge(g, "application:a1", "draft:refund", EdgeContains) {
+		t.Error("no containment edge — a draft belongs to the application that holds it")
+	}
+}
+
+// TestDeriveGraphDrawsNoDependenciesFromADraft is ADR-0211 §3 applied to a plan: a
+// draft is not deployed, so nothing the engine would take runs through it, and
+// drawing its call activities would put an intention on the canvas in the same ink
+// as the facts around it.
+func TestDeriveGraphDrawsNoDependenciesFromADraft(t *testing.T) {
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Drafts:       []Draft{draftOf("refund", "Refund", "a1")},
+	}, Options{})
+
+	for _, e := range g.Edges {
+		if e.From == "draft:refund" || (e.To == "draft:refund" && e.Kind != EdgeContains) {
+			t.Errorf("edge %+v — a draft's only edge is the one that says who holds it", e)
+		}
+	}
+	if got := kindsOf(g)[KindUnresolved]; got != 0 {
+		t.Errorf("unresolved nodes = %d — a draft must not mint placeholders", got)
+	}
+}
+
+// TestDeriveGraphOmitsADraftTheCallerCannotView keeps the draft filter the same one
+// the draft *listing* applies: a diagram absent from a list must not reappear here.
+func TestDeriveGraphOmitsADraftTheCallerCannotView(t *testing.T) {
+	hidden := draftOf("secret", "Secret", "a1")
+	hidden.CanView = false
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Drafts:       []Draft{draftOf("refund", "Refund", "a1"), hidden},
+	}, Options{})
+
+	if got := kindsOf(g)[KindDraft]; got != 1 {
+		t.Fatalf("draft nodes = %d, want 1 — the hidden one must not be drawn", got)
+	}
+	for _, n := range g.Nodes {
+		if strings.Contains(n.ID, "secret") || n.Name == "Secret" {
+			t.Errorf("node %+v names a draft this caller may not see", n)
+		}
+	}
+}
+
+// TestDeriveGraphGivesADraftNoSeverity: a draft has never run, so it has nothing to
+// report and cannot make its application look worse than its processes do. Colour on
+// this canvas is a finding (ADR-0211 §4), and a plan is not one.
+func TestDeriveGraphGivesADraftNoSeverity(t *testing.T) {
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{proc(1, "invoice", "Invoice", "a1")},
+		Drafts:       []Draft{draftOf("refund", "Refund", "a1")},
+	}, Options{})
+
+	if n := nodeByID(t, g, "draft:refund"); n.Severity != SeverityUnknown || n.State != StateUnbound {
+		t.Errorf("draft severity = %q state = %q, want the neutral class and unbound", n.Severity, n.State)
+	}
+	if n := nodeByID(t, g, "application:a1"); n.SeverityFrom == "draft:refund" {
+		t.Error("the application inherited its severity from a draft")
+	}
+}
+
+// TestDeriveGraphCountsDraftsAmongCollapsedChildren: over budget the application
+// stands for its drafts too, so the count has to include them — while the sentence
+// about the worst of them still names processes, which is all it looked at.
+func TestDeriveGraphCountsDraftsAmongCollapsedChildren(t *testing.T) {
+	land := Landscape{Applications: []Application{app("a1", "Billing")}}
+	for i := 1; i <= 3; i++ {
+		land.Processes = append(land.Processes, proc(uint64(i), "p", "P", "a1"))
+	}
+	for _, id := range []string{"d1", "d2"} {
+		land.Drafts = append(land.Drafts, draftOf(id, id, "a1"))
+	}
+
+	g := DeriveGraph(land, Options{MaxNodes: 4})
+
+	if !g.Clustered {
+		t.Fatal("Clustered = false — six nodes against a budget of four must collapse")
+	}
+	if n := nodeByID(t, g, "application:a1"); n.Children != 5 {
+		t.Errorf("Children = %d, want 5 — three processes and two drafts", n.Children)
+	}
+}

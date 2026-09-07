@@ -30,6 +30,94 @@
       }
     },
     {
+      "id": "your-brand-colour-reaches-the-forms",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Your brand colour now reaches the forms themselves",
+        "de": "Ihre Markenfarbe erreicht jetzt auch die Formulare"
+      },
+      "summary": {
+        "en": "Setting your organisation's colour used to tint everything around a form and stop at its edge: the form itself came from the form renderer's own stylesheet and stayed the stock blue, in a different typeface, on borders a shade off the ones beside it. It no longer does. A user task, an incident's repair form, the preview in the form editor and the public start form behind a share link are all painted from your palette, in the same typeface, on the same borders as the rest of Atlas.",
+        "de": "Bisher färbte Ihre Organisationsfarbe alles rund um ein Formular und hörte an dessen Rand auf: Das Formular selbst kam aus dem Stylesheet des Formular-Renderers, blieb im Standardblau, in einer anderen Schrift und mit Rahmen in einem leicht abweichenden Ton. Das ist vorbei. Eine Benutzeraufgabe, das Reparaturformular eines Incidents, die Vorschau im Formular-Editor und das öffentliche Startformular hinter einem Freigabelink werden aus Ihrer Palette gezeichnet — in derselben Schrift und mit denselben Rahmen wie der Rest von Atlas."
+      },
+      "link": {
+        "label": "ADR-0263",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0263-form-runtime-brand-theming.md"
+      },
+      "tags": [
+        "Organization",
+        "Forms"
+      ],
+      "try": {
+        "label": {
+          "en": "Set your brand colour",
+          "de": "Markenfarbe setzen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
+      "id": "the-public-start-form-and-the-sign-in-consent-screen-carry-y",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The public start form and the consent screen carry your branding",
+        "de": "Öffentliches Startformular und Zustimmungsseite tragen Ihr Erscheinungsbild"
+      },
+      "summary": {
+        "en": "Both pages are shown before anyone has signed in, and both used to display the built-in Atlas mark and the default blue no matter what you had configured. They now ask the server for your colour and your logo like every other page. That matters most for the start form: it is the page your own customers open. If the settings are momentarily unreachable the page still appears, in the default colours — a form that is late is worse than a form that is unbranded.",
+        "de": "Beide Seiten werden vor jeder Anmeldung gezeigt, und beide zeigten bisher das eingebaute Atlas-Zeichen und das Standardblau, unabhängig von Ihrer Konfiguration. Sie holen Farbe und Logo jetzt wie jede andere Seite vom Server. Am wichtigsten ist das beim Startformular: Es ist die Seite, die Ihre eigenen Kundinnen und Kunden öffnen. Sind die Einstellungen kurzzeitig nicht erreichbar, erscheint die Seite trotzdem, in den Standardfarben — ein verspätetes Formular wäre schlimmer als ein ungebrandetes."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Organization",
+        "Forms",
+        "Security"
+      ],
+      "try": {
+        "label": {
+          "en": "Upload your logo",
+          "de": "Logo hochladen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
+      "id": "a-button-label-that-stays-readable-on-your-brand-colour",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A button label that stays readable on your brand colour",
+        "de": "Beschriftungen, die auf Ihrer Markenfarbe lesbar bleiben"
+      },
+      "summary": {
+        "en": "Text on a coloured button used to be white, fixed. White on a deep blue or a federal red is fine; white on a brand yellow or a pale mint is roughly 1.5:1, which nobody can read. Atlas now works out the label colour from the colour you chose — white or near-black, whichever the colour's own brightness makes legible — and applies it everywhere your colour is a background: primary buttons, count badges, active segments, and the submit button inside a form.",
+        "de": "Text auf einer farbigen Schaltfläche war bisher fest weiss. Weiss auf einem tiefen Blau oder einem Bundesrot ist gut lesbar; Weiss auf einem Markengelb oder einem hellen Mint ergibt rund 1.5:1 und ist für niemanden lesbar. Atlas leitet die Schriftfarbe jetzt aus der von Ihnen gewählten Farbe ab — Weiss oder ein sehr dunkles Grau, je nachdem, was auf dieser Helligkeit lesbar ist — und wendet sie überall dort an, wo Ihre Farbe als Fläche dient: primäre Schaltflächen, Zähler-Badges, aktive Segmente und die Absenden-Schaltfläche im Formular."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Organization",
+        "Console"
+      ],
+      "try": {
+        "label": {
+          "en": "Try a colour",
+          "de": "Farbe ausprobieren"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
       "id": "forms-written-by-the-ai-worker",
       "version": "Unreleased",
       "date": null,
@@ -261,80 +349,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-class-canvas-could-not-take-hold-of-more-than-one-class-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The class canvas could not take hold of more than one class at a time.",
-        "de": "The class canvas could not take hold of more than one class at a time."
-      },
-      "summary": {
-        "en": "Tidying a class diagram meant dragging one box at a time. There is now a control beside zoom and undo that lets you draw a box around several classes and move them together — holding Shift while you drag does the same without it, and Escape puts the drag back to moving the sheet. The panel lists what you are holding, and each line takes you back to editing that one on its own.",
-        "de": "Ein Klassendiagramm aufzuräumen hiess bisher: eine Box nach der anderen ziehen. Neben Zoom und Rückgängig gibt es jetzt eine Schaltfläche, mit der sich ein Rahmen um mehrere Klassen ziehen lässt — sie bewegen sich dann gemeinsam. Mit gedrückter Umschalttaste geht es auch ohne die Schaltfläche, Escape gibt die Geste wieder ans Verschieben der Fläche zurück. Das Panel zeigt, was gerade ausgewählt ist, und über jede Zeile kommt man zurück zum Bearbeiten des einzelnen Elements."
-      },
-      "link": {
-        "label": "ADR-0237",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0237-class-canvas-on-diagram-js.md"
-      },
-      "tags": [
-        "Data",
-        "UML"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data › Information model and pick a model with several classes on it.",
-          "Click the ⬚ control at the top right of the canvas — it lights up while the next drag draws a box.",
-          "Press on empty sheet and drag a box around the classes you want; everything fully inside it is taken hold of.",
-          "Drag any one of them by its header and they all move together. Undo puts them all back.",
-          "To edit one of them on its own, click its line in the panel on the right."
-        ],
-        "de": [
-          "Unter Daten › Informationsmodell ein Modell mit mehreren Klassen öffnen.",
-          "Oben rechts auf der Zeichenfläche die Schaltfläche ⬚ anklicken — sie leuchtet, solange die nächste Ziehbewegung einen Rahmen zieht.",
-          "Auf freier Fläche drücken und einen Rahmen um die gewünschten Klassen ziehen; alles, was vollständig darin liegt, wird ausgewählt.",
-          "Eine beliebige davon an ihrem Kopf ziehen — alle bewegen sich mit. Rückgängig setzt alle zurück.",
-          "Um eine einzelne zu bearbeiten, im Panel rechts auf ihre Zeile klicken."
-        ]
-      }
-    },
-    {
-      "id": "a-class-with-a-hundred-attributes-had-no-room-to-show-their-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A class with a hundred attributes had no room to show their names.",
-        "de": "A class with a hundred attributes had no room to show their names."
-      },
-      "summary": {
-        "en": "The panel was 340px wide and would not budge, and inside it the two selects — which carry every class name in the model as options — took what they liked, leaving the name column a stub that read allowedA… for forty members running.",
-        "de": "The panel was 340px wide and would not budge, and inside it the two selects — which carry every class name in the model as options — took what they liked, leaving the name column a stub that read allowedA… for forty members running."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-class-canvas-could-not-be-zoomed-searched-or-undone",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The class canvas could not be zoomed, searched, or undone.",
-        "de": "The class canvas could not be zoomed, searched, or undone."
-      },
-      "summary": {
-        "en": "Two complaints from the same place: Data › Information model, on a model bigger than the window.",
-        "de": "Two complaints from the same place: Data › Information model, on a model bigger than the window."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     }
   ]

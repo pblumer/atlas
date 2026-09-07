@@ -14,6 +14,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A deployed process can be filed under an application after the fact.**
+  `PATCH /api/v1/processes/{key}` with `{"projectId": "..."}` moves a deployed
+  definition into an application, or out of one (an empty id means Ungrouped).
+
+  A deployment carried its own application, stamped once when it was deployed — from
+  what the editor sent, or inherited from the matching draft at that moment, or
+  nothing. Afterwards there was no way to change it: moving the *draft* moved the
+  draft, so a process deployed through the API, or before its application existed,
+  stayed Ungrouped for good — on the Modeler home and on the Starmap as a process
+  belonging to nothing — with a redeploy, and a version bump, the only way out.
+
+  It is metadata and nothing else: the version, the model, the active flag and
+  everything running are untouched, and the engine never reads the filing at all. Two
+  things move that the caller does not name, because the alternative is an estate that
+  cannot be put back together: **every version** of the definition, since filing
+  belongs to the process rather than to one of its versions; and **the other pools of
+  a collaboration**, since they are one drawing, listed as one row, with no way to
+  address the others separately. Editor rights are needed at both ends, as moving a
+  draft already requires, and the platform-managed application refuses to be written
+  into (ADR-0122).
+
 - **Clicking an element in Operations lists the instances sitting on it.** A live view
   badged "25 205 here now" beside a page of fifty instances was a dead end: the count
   said how many were waiting and nothing said *which*. Finding them meant a variable
@@ -42,6 +63,31 @@ _Changed_ / _Removed_ for each version.
   instead of sieving a page it happened to get. The click it takes over is the decision
   inspection's, which keeps the ⚖ badge that was already its affordance
   ([ADR-0261](docs/adr/0261-instances-on-an-element.md)).
+
+- **Your brand colour reaches the forms.** Setting an organisation's accent under
+  *Settings → Appearance* used to tint the Console around a form and stop at its edge:
+  the form itself — its fields, labels, focus ring, buttons and typeface — came from
+  the form renderer's own stylesheet and stayed stock blue. It no longer does. A user
+  task, an incident's repair form, the preview in the form editor and the public start
+  form behind a share link are all painted from the same palette as everything else,
+  in the same typeface, on the same borders
+  ([ADR-0263](docs/adr/0263-form-runtime-brand-theming.md)).
+
+- **The public start form and the sign-in consent screen carry your branding.** Both
+  are shown before anyone has a session, and both used to display the built-in Atlas
+  mark and the default blue no matter what an admin had configured. They now ask the
+  server for the organisation's colour and logo like every other page — which matters
+  most for the start form, since that is the page an organisation's own customers
+  open. If the settings are momentarily unreachable the page still appears, in the
+  default colours: a form that is late is worse than a form that is unbranded.
+
+- **A button label that stays readable on your brand colour.** Text on an accent fill
+  used to be white, fixed. White on a deep blue or a federal red is fine; white on a
+  brand yellow or a pale mint is about 1.5:1, which nobody can read. Atlas now derives
+  the label colour from the accent you chose — white or near-black, whichever the
+  colour's own luminance makes legible — and applies it everywhere the accent is a
+  background: primary buttons, count badges, active segments, the submit button inside
+  a form.
 
 - **Forms written by the AI Worker.** The form editor has a **✨ Generate** button.
   Describe what the form should ask for — in your own words, in your own language —
@@ -3097,6 +3143,41 @@ _Changed_ / _Removed_ for each version.
 
   **A search box** filters the mesh by name, kind or process id and reports how much
   it is hiding — a filtered landscape otherwise looks exactly like a small one.
+
+  **Nothing is left stranded at the edge of the picture.** Reported three times as
+  "single nodes far away from the rest", and the first two fixes missed it because
+  both were about framing and this was about the settle. The pull that centres the
+  graph is deliberately weakest along the wide axis, so the picture takes the shape of
+  the frame — and that was tuned for a node its edges are also holding. A node with
+  **no edge** has none: the pull is all that keeps it near the picture, against a
+  repulsion that falls off with distance, and the balance sat far outside everything
+  else. On a thirty-four-node estate with ten unattached processes, two of them ended
+  hard against the left and right edges with the rest squeezed into the middle. That
+  is not a rare shape — a process deployed through the API, or before its application
+  existed, belongs to no application and is drawn with no edge at all. The pull is now
+  twice as strong on a node with nothing attached to it, which is measured rather than
+  reasoned: higher packs the loose nodes into a lump of their own instead.
+
+  **A Drafts switch** adds the diagrams nobody has deployed. The picture's subject is
+  what this server *runs*, so a saved draft is absent from it by default — which
+  answers "is this deployed?" only if you already knew the process existed. Switch
+  drafts on and they appear beside the processes of the application that holds them,
+  in the process square so they read as the same kind of thing, with a lighter fill and
+  the dashed outline the placeholders already use: what is drawn is not running. The
+  fill is lighter rather than merely different — its first version was a warm tone of
+  exactly the same brightness as a deployed process, which on a projector or in print
+  left the dash doing all the work. They
+  claim nothing about running — no version, no instances, no status, and they can
+  never make an application look worse — and their only edge is the one that says
+  which application holds them, because a draft's call activities are a plan and
+  drawing them would put an intention on the canvas in the same ink as the facts.
+  A draft opens in the Modeler, where it exists, rather than in Operations, where it
+  does not. Off by default because an estate holds several drafts per deployed
+  process, and a landscape that collapsed to applications on account of undeployed
+  diagrams would be a worse picture than one that leaves them out; a saved view
+  remembers the switch, and an exported image says in its stamp that the drafts are
+  in it. Neither the ArchiMate nor the C4 export carries them, and each says so in
+  its declared loss: those documents describe a system that exists.
 
 - **Panorama opens ArchiMate diagrams.** An architecture model in the Panorama
   library now opens its Open Exchange Diagram views on a read-only `diagram-js`
