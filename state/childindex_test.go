@@ -268,3 +268,75 @@ func TestCorruptDataObjectReadsFail(t *testing.T) {
 		t.Error("DataObjectSnapshotHistory over a corrupt snapshot returned no error")
 	}
 }
+
+// TestChildByParentThroughTransaction is the same index read through an open
+// transaction, which is what the engine's teardown uses: a child linked earlier in
+// the batch must be visible before the batch commits, and one unlinked in the
+// batch must already be gone. Reading the committed store instead is what let a
+// cancelled caller leave its child running (ADR-draft-transactional-child-view).
+func TestChildByParentThroughTransaction(t *testing.T) {
+	s := openStore(t)
+	const callA, callB = uint64(10), uint64(20)
+
+	// One link already committed, so the transactional read has to merge both
+	// sources rather than seeing only its own writes.
+	tx := s.NewTransaction()
+	if err := tx.PutChildByParent(callA, 100); err != nil {
+		t.Fatalf("PutChildByParent: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	if err := tx.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	tx = s.NewTransaction()
+	defer func() { _ = tx.Close() }()
+	children := func(parent uint64) []uint64 {
+		t.Helper()
+		var out []uint64
+		if err := tx.ChildInstancesOfParent(parent, func(k uint64) error {
+			out = append(out, k)
+			return nil
+		}); err != nil {
+			t.Fatalf("ChildInstancesOfParent(%d): %v", parent, err)
+		}
+		return out
+	}
+
+	// Uncommitted writes in this transaction are visible to it.
+	if err := tx.PutChildByParent(callA, 101); err != nil {
+		t.Fatalf("PutChildByParent: %v", err)
+	}
+	if err := tx.PutChildByParent(callB, 200); err != nil {
+		t.Fatalf("PutChildByParent: %v", err)
+	}
+	if got := children(callA); len(got) != 2 || got[0] != 100 || got[1] != 101 {
+		t.Errorf("children of %d = %v, want [100 101] (committed plus this batch's own)", callA, got)
+	}
+	if got := children(callB); len(got) != 1 || got[0] != 200 {
+		t.Errorf("children of %d = %v, want [200]", callB, got)
+	}
+
+	// A child unlinked in this transaction is gone from its view straight away, so a
+	// teardown never sees a child that already ended in the same batch.
+	if err := tx.DeleteChildByParent(callA, 100); err != nil {
+		t.Fatalf("DeleteChildByParent: %v", err)
+	}
+	if got := children(callA); len(got) != 1 || got[0] != 101 {
+		t.Errorf("children of %d after unlink = %v, want [101]", callA, got)
+	}
+
+	// A call activity with no children answers empty, not an error.
+	if got := children(uint64(999)); len(got) != 0 {
+		t.Errorf("children of an unknown parent = %v, want none", got)
+	}
+
+	// The callback's error stops the scan and reaches the caller, so a failing
+	// teardown surfaces rather than silently listing fewer children.
+	want := pebble.ErrNotFound
+	if err := tx.ChildInstancesOfParent(callA, func(uint64) error { return want }); err != want {
+		t.Errorf("callback error = %v, want it propagated (%v)", err, want)
+	}
+}
