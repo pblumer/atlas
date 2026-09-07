@@ -14,6 +14,60 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Task folders: the Tasks app's sidebar folders are now saved filters somebody builds
+  from listboxes.** The sidebar had four fixed folders. The question a person actually
+  arrives with in the morning is a different one — "what is open on customer enquiries?" —
+  and until now it was retyped into the search box every day.
+
+  A folder is a saved filter. *＋ Neuer Ordner* asks for a name, who may see it, and
+  conditions as rows of three listboxes: field, operator, value. The fields are the task's
+  own metadata — process, task, assignee, candidate group, lane, priority, due date, how
+  long the instance has been running, and whether it has a form. **Nothing that can be
+  mistyped is typed:** the process list comes from the deployments, the task names and
+  candidate groups from the compiled models, the users from the directory.
+
+  What is stored is the *rule*, not the expression. The FEEL is generated from it and shown
+  under the conditions, with a match count that follows every click — you watch your
+  listbox choices become the thing the engine evaluates, and the folder reopens later as
+  the same rows. That direction is the whole design: a generated expression can always be
+  rendered back into the controls that produced it, a hand-written one cannot.
+
+  It is evaluated on the server and off the run loop (`readOffLoop`). That is not a detail:
+  the task list is capped at 500 rows, so a filter applied in the browser would have
+  reported an empty folder under load while matching work existed. Compilation happens once
+  at save, never on a read. Every folder's badge comes from a single scan.
+
+  A folder can be shared with a group or the whole organisation. Only its owner may change
+  it — a shared worklist that anyone can rewrite is not one a team can rely on. And a
+  folder is a view, not a permission: which tasks a person may see is still their role's
+  answer.
+
+  New: `GET/POST/PUT/DELETE /api/v1/task-folders`, `/task-folders/fields`,
+  `/task-folders/counts`, `/task-folders/preview`, and `?folder=<id>` on `/api/v1/tasks`.
+  See `docs/adr/draft-task-folders-are-saved-filters.md`.
+
+- **The console speaks German, on the screens that have been translated.** The interface
+  was English, hard-coded wherever a string appears. That does not hold for the Tasks app:
+  its readers are the people doing the work, and their processes and forms are German
+  already.
+
+  `api/web/i18n.js` is a message catalogue with no dependency and no build step — ADR-0012
+  still stands. German is the default and deliberately *not* the browser's language: the
+  rest of the console is still English, and half a translated screen because of a setting
+  nobody made is worse than an untranslated one. Another language is chosen explicitly
+  (`?lang=en`) and remembered per browser. A missing key renders as the key, so a hole in
+  the catalogue fails in review rather than falling back silently.
+
+  The boundary is the API: the server sends ids and model data, never interface text.
+  Translation proceeds per screen rather than per release; the folders are the first.
+  See `docs/adr/draft-console-speaks-german-first.md`.
+
+- **Every task row shows its key.** A queue of a dozen identically named tasks was
+  unreadable: nothing on the row told them apart, so there was no way to say which one you
+  meant or to notice that one of them was done. It is the same key the deep link carries.
+  The lane gave up its place on the row for it — it is on the detail pane with its full
+  path, where it already said more than a truncated leaf name in the list.
+
 - **The nugget screenshots are output now, not artifacts somebody once made.** Their
   pictures are captures of the running product, which buys recognition and costs
   staleness: a shot of a UI that has since moved still renders, and a ring drawn on a

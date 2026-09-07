@@ -152,6 +152,20 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/workers/{id}/jobs":    "operator diagnostics about a worker process, not an agent action",
 	"GET /api/v1/workers/{id}/history": "the same diagnostics, read from the operator's own clio; an agent with access to that clio queries it there",
 
+	// Task folders (ADR-draft-task-folders-are-saved-filters) are one person's saved
+	// filters over their own inbox — a preference, like the sort order or the column
+	// width, not a fact about the engine. An agent has no folders, because it has no
+	// sidebar; and giving it these tools would let it rearrange somebody else's
+	// workspace, which is neither authoring nor running a process. Everything a
+	// folder can filter on, an agent already reaches through atlas_list_tasks.
+	"GET /api/v1/task-folders":          "one person's saved inbox filters, a console preference rather than an engine fact",
+	"POST /api/v1/task-folders":         "the same: an agent has no sidebar to put a folder in",
+	"PUT /api/v1/task-folders/{id}":     "editing somebody's saved filter is not an authoring or runtime action",
+	"DELETE /api/v1/task-folders/{id}":  "deleting somebody's saved filter is not an authoring or runtime action",
+	"GET /api/v1/task-folders/fields":   "describes the folder editor's controls; there is no editor on the agent side",
+	"GET /api/v1/task-folders/counts":   "sidebar badge numbers; an agent counts from atlas_list_tasks",
+	"POST /api/v1/task-folders/preview": "the folder dialog's live match count, an interaction rather than an action",
+
 	// Backup/restore: an admin file-transfer of the data directory (ADR-0107 design-
 	// time, ADR-0109 whole-instance snapshot), not an agent authoring/runtime action.
 	"GET /api/v1/backup":        "admin data backup download, not an agent action",

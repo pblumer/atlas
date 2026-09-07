@@ -3942,6 +3942,16 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 		before = n
 	}
 
+	// ?folder= scopes the list to one saved folder's rule
+	// (ADR-draft-task-folders-are-saved-filters). It is answered off the run loop,
+	// because a filtered page has to keep scanning past the tasks the rule rejects
+	// and that walk grows with the open-task population, unlike the capped page
+	// below.
+	if id := folderQuery(r); id != "" {
+		s.listTasksForFolder(w, r, id, limit, before)
+		return
+	}
+
 	tasks := []taskResp{}
 	truncated := false
 	var nextCursor uint64
@@ -4033,16 +4043,31 @@ func (s *Server) listTasksForInstance(w http.ResponseWriter, raw string, limit i
 // It is the one place that shape is built, so the list and the by-key fetch can never
 // drift. Callers run it inside s.do (it reads the store and the deployments map).
 func (s *Server) enrichTask(jobKey uint64, jv *model.JobValue) taskResp {
+	return enrichTaskWith(s.store, s.deploymentMeta, jobKey, jv)
+}
+
+// enrichTaskWith is the enrichment itself, over whichever reader and deployment
+// lookup the caller holds: the loop-owned store and registry for the listing
+// above, an off-loop snapshot and its copy of the registry for a folder scan
+// (taskfolders.go). One walk, two callers — the alternative was a second copy of
+// it that would drift the first time either was touched.
+func enrichTaskWith(r elementReader, def taskDefLookup, jobKey uint64, jv *model.JobValue) taskResp {
 	tr := taskResp{
 		Key:                jobKey,
 		ProcessInstanceKey: jv.ProcessInstanceKey,
 		ElementInstanceKey: jv.ElementInstanceKey,
 	}
-	if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
+	if ei, ok, err := r.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
 		tr.ProcessDefKey = ei.ProcessDefKey
-		if d, dok := s.deployments[ei.ProcessDefKey]; dok {
-			tr.ProcessID = d.ProcessID
-			cp := d.cp
+		if processID, _, cp, dok := def(ei.ProcessDefKey); dok {
+			tr.ProcessID = processID
+			// A deployment whose compiled model is not loaded still names its process;
+			// everything below reads the model, so it stops here rather than at a nil
+			// dereference. On the loop that cannot happen, but an off-loop scan reads a
+			// copy of the registry where it can (see defMeta).
+			if cp == nil {
+				return tr
+			}
 			tr.ElementID = cp.ElementBpmnId(ei.ElementId)
 			// The organizational lane the task is drawn in (ADR-0121) — metadata for
 			// grouping in the inbox: the leaf name plus the outermost-to-leaf path.

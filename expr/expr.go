@@ -15,6 +15,7 @@ package expr
 
 import (
 	"strings"
+	"time"
 
 	"github.com/pblumer/feel"
 	"github.com/pblumer/feel/value"
@@ -247,6 +248,15 @@ func String(s string) Value { return value.Str(s) }
 
 // Bool returns a FEEL boolean value.
 func Bool(b bool) Value { return value.BoolOf(b) }
+
+// DateTime returns a FEEL date-and-time value for a Go instant, for building
+// bindings. It exists because a binding that must be *compared* to a moment —
+// a task's due date against `now` — cannot be a number: FEEL's `<` on numbers and
+// its `<` on instants are different comparisons, and only the second one accepts
+// `now + duration("P3D")` on the other side. Binding the instant rather than
+// calling now() inside the expression is also what makes a scan deterministic:
+// every row is judged against one moment instead of each against its own.
+func DateTime(t time.Time) Value { return value.NewDateTime(t) }
 
 // Null is the FEEL null value.
 var Null = value.Null

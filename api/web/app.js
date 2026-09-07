@@ -23,6 +23,8 @@ import {
 import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWorkerUsage, deleteWorkerFlow } from "./workerdialog.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
 import { openPickModal } from "./pickmodal.js";
+import { t as tr, plural as trPlural } from "./i18n.js";
+import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { runImport } from "./infomodel-import.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
@@ -6627,10 +6629,15 @@ function dueInfo(t) {
   return { overdue, label, rel, abs };
 }
 
-// The inbox folders. Each is a predicate over a task plus the current identity —
-// there is no auth yet (ADR-0028 leaves assignment/authorization open), so "me"
-// is a display-only identity the user types, and folder membership is derived
-// purely from the task's assignment metadata.
+// The built-in inbox folders. Each is a predicate over a task plus the current
+// identity — with auth off "me" is a display-only identity the user types, and
+// folder membership is derived purely from the task's assignment metadata.
+//
+// They are evaluated in the browser over the loaded page, which is what they have
+// always done. The folders a person *makes* are not: those are a saved rule the
+// server evaluates over the whole open-task population
+// (ADR-draft-task-folders-are-saved-filters), because a filter that only sees the
+// capped page would report an empty folder while matching work exists.
 const TASK_FOLDERS = [
   { id: "all", label: "All tasks", match: () => true },
   { id: "mine", label: "Assigned to me", match: (t, me) => !!me && t.assignee === me },
@@ -6644,8 +6651,17 @@ async function viewTasks(preselectKey) {
   const authOn = AUTH.enabled;
   const state = {
     tasks: [],
+    // filtered holds the page of a saved folder, kept apart from tasks above rather
+    // than replacing it: the built-in folders count from the unfiltered page, and
+    // overwriting it with a folder's three rows would make "All tasks" read 3.
+    filtered: null,
+    folders: [], // the saved folders this identity can see
+    folderCounts: {}, // folder id -> open tasks, from the server's single scan
+    countsTruncated: false, // the counting scan hit its budget, so the badges are floors
+    countsScanned: 0, // how many open tasks that scan looked at
     // A deep link (…/tasks/t/{jobKey}, e.g. from the Operations live view) lands on
     // the "All tasks" folder so the linked task is always in view, and preselects it.
+    // A saved folder is selected as "saved:<id>".
     folder: "all",
     selected: preselectKey != null ? preselectKey : null, // job key of the selected task
     me: authOn ? ((AUTH.user && AUTH.user.username) || "") : (localStorage.getItem("atlas.tasks.me") || ""),
@@ -6700,6 +6716,7 @@ async function viewTasks(preselectKey) {
             <select id="task-sort">${Object.entries(SORTS).map(([k, s]) => `<option value="${k}"${k === state.sort ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select>
           </label>
         </div>
+        <div class="tasks-rule" id="task-rule" hidden></div>
         <div class="tasks-bulk" id="task-bulk" hidden></div>
         <div class="tasks-trunc" id="task-trunc" hidden></div>
         <ul class="tasks-list" id="task-list"><li class="tasks-empty muted">Loading&hellip;</li></ul>
@@ -6726,7 +6743,7 @@ async function viewTasks(preselectKey) {
       ? view.querySelector(".tasks-folders").getBoundingClientRect().width : 210) || 210;
     const clamp = (w) => Math.min(MAXW, Math.max(MINW, w));
     const saved = parseInt(localStorage.getItem("atlas.tasks.listW"), 10);
-    let listW = Number.isFinite(saved) ? clamp(saved) : 340;
+    let listW = Number.isFinite(saved) ? clamp(saved) : 360;
     const apply = () => { grid.style.gridTemplateColumns = `${foldersW}px ${listW}px 1fr`; };
     apply();
     const move = (e) => { listW = clamp(Math.round(e.clientX - listPane.getBoundingClientRect().left)); apply(); };
@@ -6751,26 +6768,101 @@ async function viewTasks(preselectKey) {
     (taskTitle(t) + " " + (t.processId || "") + " " + (t.assignee || "") + " " +
       (t.candidateGroups || "") + " " + (t.elementId || "")).toLowerCase().includes(q);
   const visible = () => {
-    const f = TASK_FOLDERS.find((x) => x.id === state.folder) || TASK_FOLDERS[0];
     const q = state.query.trim().toLowerCase();
-    const items = state.tasks.filter((t) => f.match(t, state.me) && (!q || matchesQuery(t, q)));
+    // A saved folder's rows were selected by the server, so the only thing left to
+    // apply here is the free-text box and the sort. A built-in folder is still a
+    // predicate over the loaded page, exactly as before.
+    const items = savedFolder()
+      ? (state.filtered || []).filter((t) => !q || matchesQuery(t, q))
+      : (() => {
+        const f = TASK_FOLDERS.find((x) => x.id === state.folder) || TASK_FOLDERS[0];
+        return state.tasks.filter((t) => f.match(t, state.me) && (!q || matchesQuery(t, q)));
+      })();
     return items.sort((SORTS[state.sort] || SORTS.smart).cmp);
   };
 
+  // savedFolder is the saved folder currently selected, or null when a built-in
+  // one is. The selection carries the id as "saved:<id>" so one field can hold
+  // either kind without the two ever colliding on a name.
+  function savedFolder() {
+    if (!state.folder.startsWith("saved:")) return null;
+    const id = state.folder.slice(6);
+    return state.folders.find((f) => f.id === id) || null;
+  }
+
+  // folderButton draws one sidebar entry. count is a number, or null while the
+  // server's answer is still on its way — shown as an em dash rather than a zero,
+  // because a zero is a claim and "not counted yet" is not the same claim.
+  function folderButton(id, label, count, saved) {
+    const active = id === state.folder ? " active" : "";
+    const icon = saved
+      ? `<svg class="tasks-folder-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M1.8 4.2h4.4l1.2 1.5h6.8v6.6a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1V4.2z"/></svg>`
+      : "";
+    return `<button class="tasks-folder${active}" data-folder="${esc(id)}" title="${esc(label)}">
+      ${icon}<span class="tasks-folder-label">${esc(label)}</span>
+      <span class="tasks-count">${count === null ? "&mdash;" : count}</span>
+    </button>`;
+  }
+
   function renderFolders() {
-    nav.innerHTML = TASK_FOLDERS.map((f) => {
-      const n = state.tasks.filter((t) => f.match(t, state.me)).length;
-      const active = f.id === state.folder ? " active" : "";
-      return `<button class="tasks-folder${active}" data-folder="${f.id}">
-        <span>${esc(f.label)}</span><span class="tasks-count">${n}</span>
-      </button>`;
-    }).join("");
+    const builtin = TASK_FOLDERS.map((f) =>
+      folderButton(f.id, f.label, state.tasks.filter((t) => f.match(t, state.me)).length, false)).join("");
+    // A folder is "mine" when I may edit it, which is exactly when I own it. One
+    // shared with me sits under Geteilt: I work from it, I do not rewrite it.
+    const mine = state.folders.filter((f) => f.editable);
+    const shared = state.folders.filter((f) => !f.editable);
+    const savedGroup = (title, list) => list.length
+      ? `<div class="tasks-folder-head">${esc(title)}</div>` +
+        list.map((f) => folderButton("saved:" + f.id, f.name,
+          Object.prototype.hasOwnProperty.call(state.folderCounts, f.id) ? state.folderCounts[f.id] : null, true)).join("")
+      : "";
+
+    nav.innerHTML = builtin +
+      `<div class="tasks-folder-head">${esc(tr("tasks.folders.mine"))}</div>` +
+      mine.map((f) => folderButton("saved:" + f.id, f.name,
+        Object.prototype.hasOwnProperty.call(state.folderCounts, f.id) ? state.folderCounts[f.id] : null, true)).join("") +
+      `<button class="tasks-folder-new" id="task-folder-new">＋ ${esc(tr("tasks.folders.new"))}</button>` +
+      savedGroup(tr("tasks.folders.shared"), shared) +
+      // A count the scan could not finish is a floor, and the sidebar says so rather
+      // than letting a number that happens to be wrong pass for one that is right.
+      (state.countsTruncated
+        ? `<p class="tasks-folder-note muted">${esc(tr("tasks.folders.countsTruncated", { n: state.countsScanned || 0 }))}</p>`
+        : "");
+
     nav.querySelectorAll(".tasks-folder").forEach((b) => {
       b.addEventListener("click", () => {
+        if (b.dataset.folder === state.folder) return;
         state.folder = b.dataset.folder;
         state.selected = null;
-        renderAll();
+        state.filtered = null;
+        // A saved folder's rows come from the server, so selecting one is a load,
+        // not a re-filter of what is already here.
+        if (state.folder.startsWith("saved:")) loadFolderPage();
+        else renderAll();
       });
+    });
+    const add = nav.querySelector("#task-folder-new");
+    if (add) add.addEventListener("click", () => editFolder(null));
+  }
+
+  // editFolder opens the dialog, on an existing folder or on nothing for a new
+  // one, and puts the sidebar back in step with whatever came out of it.
+  function editFolder(folder) {
+    openFolderEditor({
+      api, folder, me: state.me, toast,
+      onSaved: async (saved) => {
+        state.folder = "saved:" + saved.id;
+        state.selected = null;
+        await loadFolderList();
+        await loadFolderPage();
+      },
+      onDeleted: async () => {
+        state.folder = "all";
+        state.filtered = null;
+        state.selected = null;
+        await loadFolderList();
+        renderAll();
+      },
     });
   }
 
@@ -6778,11 +6870,16 @@ async function viewTasks(preselectKey) {
 
   function renderList() {
     const items = visible();
+    const saved = savedFolder();
     const f = TASK_FOLDERS.find((x) => x.id === state.folder) || TASK_FOLDERS[0];
-    titleEl.textContent = f.label;
+    titleEl.textContent = saved ? saved.name : f.label;
+    renderFolderBar(saved);
     renderBulk();
     if (!items.length) {
-      listEl.innerHTML = `<li class="tasks-empty muted">${state.query.trim() ? "No tasks match your filter." : "No tasks in this folder."}</li>`;
+      const empty = state.query.trim()
+        ? "No tasks match your filter."
+        : saved ? tr("tasks.folders.empty") : "No tasks in this folder.";
+      listEl.innerHTML = `<li class="tasks-empty muted">${esc(empty)}</li>`;
       return;
     }
     const selMode = state.selectMode;
@@ -6795,15 +6892,27 @@ async function viewTasks(preselectKey) {
         const d = dueInfo(t);
         const due = d ? `<span class="due-badge${d.overdue ? " overdue" : ""}" title="${esc(d.abs)}">${esc(d.overdue ? "Overdue" : "Due " + d.rel)}</span>` : "";
         const cb = selMode ? `<input type="checkbox" class="tasks-check"${picked ? " checked" : ""} aria-label="Select task"/>` : "";
+        // The task's own key, shown on every row. A queue of a dozen "Ersatzgerät
+        // beschaffen" rows is otherwise unreadable: they differ in nothing a person
+        // can see, so there is no way to tell which one was just completed, or to
+        // name one to a colleague. It is the same key the deep link carries.
+        //
+        // It is what the lane chip used to sit beside, and the row has width for one
+        // of the two: an 18-digit key plus two chips left "Ersatzgerät beschaffen"
+        // rendering as "Ers…", which defeats both. The lane is on the detail pane
+        // with its full path (see renderDetail), where it was already more useful
+        // than a truncated leaf name here.
+        const id = `<span class="tasks-item-id" title="Job-Key ${t.key}">#${t.key}</span>`;
         return `<li class="tasks-item${sel}${picked ? " picked" : ""}" data-key="${t.key}">
           ${cb}
           <div class="tasks-item-body">
             <div class="tasks-item-top">
               <span class="tasks-item-title">${hi}${esc(taskTitle(t))}</span>
-              ${t.lane ? `<span class="chip" title="Lane">${esc(t.lane)}</span>` : ""}
-              <span class="chip">${esc(t.processId || "")}</span>
+              <span class="chip" title="${esc(t.processId || "")}">${esc(t.processId || "")}</span>
             </div>
-            <div class="tasks-item-sub muted"><span>${who}</span>${due}</div>
+            <div class="tasks-item-sub muted">
+              <span class="tasks-item-meta">${id}<span>${who}</span></span>${due}
+            </div>
           </div>
         </li>`;
       })
@@ -7219,8 +7328,11 @@ async function viewTasks(preselectKey) {
     if (!el) return;
     if (!state.truncated) { el.hidden = true; el.innerHTML = ""; return; }
     el.hidden = false;
+    // Count the list the person is actually looking at: inside a folder that is the
+    // folder's page, not the unfiltered one loaded beside it for the built-in badges.
+    const loaded = (savedFolder() ? state.filtered : state.tasks) || [];
     el.innerHTML =
-      `<span>Showing the newest ${state.tasks.length} tasks — more exist. Filter to narrow, or load older.</span>` +
+      `<span>Showing the newest ${loaded.length} tasks — more exist. Filter to narrow, or load older.</span>` +
       `<button class="btn ghost small" id="task-older"${state.nextCursor ? "" : " disabled"} title="Load the next page of older tasks">Load older</button>`;
     const older = document.getElementById("task-older");
     if (older) older.addEventListener("click", loadOlder);
@@ -7248,6 +7360,13 @@ async function viewTasks(preselectKey) {
       }
       state.tasks.sort(taskOrder);
       renderAll();
+      // Every mutation in this view (complete, claim, a bulk action) reloads through
+      // here. When a saved folder is open, its page and the sidebar badges are part
+      // of "what is there now" — without this a completed task stays in the folder
+      // it was completed from, because the unfiltered page above is not the list on
+      // screen.
+      if (savedFolder()) await loadFolderPage();
+      if (state.folders.length) await refreshCounts();
     } catch (e) {
       listEl.innerHTML = `<li class="tasks-empty err">Failed to load tasks: ${esc(e.message)}</li>`;
     }
@@ -7258,13 +7377,20 @@ async function viewTasks(preselectKey) {
   // operator can reach tasks beyond the newest page without narrowing by filter.
   async function loadOlder() {
     if (!state.nextCursor) return;
+    // Paging inside a saved folder has to keep the folder: without it the next page
+    // would be the unfiltered one, and rows that the folder excludes would appear
+    // under its name.
+    const saved = savedFolder();
+    const into = saved ? (state.filtered || (state.filtered = [])) : state.tasks;
+    const q = "/api/v1/tasks?before=" + encodeURIComponent(state.nextCursor) +
+      (saved ? "&folder=" + encodeURIComponent(saved.id) : "");
     try {
-      const { data, headers } = await apiRaw("GET", "/api/v1/tasks?before=" + encodeURIComponent(state.nextCursor));
-      const seen = new Set(state.tasks.map((t) => t.key));
-      for (const t of data) if (!seen.has(t.key)) state.tasks.push(t);
+      const { data, headers } = await apiRaw("GET", q);
+      const seen = new Set(into.map((t) => t.key));
+      for (const t of data) if (!seen.has(t.key)) into.push(t);
       state.truncated = headers.get("X-Tasks-Truncated") === "true";
       state.nextCursor = headers.get("X-Tasks-Next-Cursor") || null;
-      state.tasks.sort(taskOrder);
+      into.sort(taskOrder);
       renderAll();
     } catch (e) {
       toast("Load older failed: " + e.message, "err");
@@ -7276,6 +7402,78 @@ async function viewTasks(preselectKey) {
     catch { state.assignable = []; }
   }
 
+  // renderFolderBar shows what the selected saved folder actually asks for. The
+  // rule is the folder's own explanation of itself — without it, two folders with
+  // similar names are indistinguishable until you open the editor.
+  function renderFolderBar(saved) {
+    const bar = document.getElementById("task-rule");
+    if (!bar) return;
+    if (!saved) { bar.hidden = true; bar.innerHTML = ""; return; }
+    bar.hidden = false;
+    // The generated FEEL on one line: the folder editor shows it formatted, but
+    // here it is a caption, and a caption that wraps to four lines is a banner.
+    const oneLine = String(saved.feel || "").replace(/\s*\n\s*/g, " ");
+    // Edit sits with the rule rather than up in the header. The header holds the
+    // folder's name, and a name somebody chose is longer than "All tasks" — with a
+    // third button beside it there was no width left to show one.
+    const readOnly = !saved.editable;
+    bar.innerHTML = `<span>${esc(tr("tasks.folders.rule"))}</span>` +
+      `<code class="tasks-rule-feel" title="${esc(saved.feel || "")}">${esc(oneLine)}</code>` +
+      `<button class="btn ghost small" id="task-folder-edit"${readOnly ? " disabled" : ""} title="${
+        esc(readOnly ? tr("tasks.folders.readOnly", { owner: saved.owner || "—" }) : tr("common.edit"))
+      }">${esc(tr("common.edit"))}</button>`;
+    const edit = bar.querySelector("#task-folder-edit");
+    if (edit && !readOnly) edit.addEventListener("click", () => editFolder(saved));
+  }
+
+  // loadFolderList refreshes the saved folders and their badge counts. The counts
+  // are one request for all of them, not one per folder.
+  async function loadFolderList() {
+    try {
+      state.folders = await loadFolders(api, authOn ? "" : state.me);
+    } catch (e) {
+      state.folders = [];
+      toast(tr("tasks.folders.loadFailed", { error: e.message }), "err");
+    }
+    await refreshCounts();
+  }
+
+  // refreshCounts re-reads every folder's badge. It is its own function because a
+  // completed task changes the numbers, and re-listing the folders to learn that
+  // would be a second request for something that did not change.
+  async function refreshCounts() {
+    try {
+      const counts = await loadCounts(api, authOn ? "" : state.me);
+      state.folderCounts = (counts && counts.folders) || {};
+      state.countsTruncated = !!(counts && counts.truncated);
+      state.countsScanned = (counts && counts.total) || 0;
+    } catch {
+      // A failed count leaves the badges as em dashes rather than as zeros: the
+      // folders themselves still work, and a wrong number is worse than none.
+      state.folderCounts = {};
+    }
+    renderFolders();
+  }
+
+  // loadFolderPage fetches the rows of the selected saved folder. The server does
+  // the filtering, so this is a page like any other — same cap, same cursor.
+  async function loadFolderPage() {
+    const saved = savedFolder();
+    if (!saved) { state.filtered = null; renderAll(); return; }
+    try {
+      const { data, headers } = await apiRaw("GET", "/api/v1/tasks?folder=" + encodeURIComponent(saved.id) +
+        (authOn || !state.me ? "" : "&me=" + encodeURIComponent(state.me)));
+      state.filtered = data;
+      state.truncated = headers.get("X-Tasks-Truncated") === "true";
+      state.nextCursor = headers.get("X-Tasks-Next-Cursor") || null;
+      renderAll();
+    } catch (e) {
+      state.filtered = [];
+      renderAll();
+      toast(tr("tasks.folders.loadFailed", { error: e.message }), "err");
+    }
+  }
+
   const meInput = document.getElementById("task-me");
   if (meInput) {
     meInput.addEventListener("input", (e) => {
@@ -7283,9 +7481,18 @@ async function viewTasks(preselectKey) {
       localStorage.setItem("atlas.tasks.me", state.me);
       renderFolders();
       renderList();
+      // With auth off, who "me" is decides what an "assigned to me" folder counts,
+      // so the badges are stale the moment the name changes.
+      loadFolderList();
     });
   }
-  document.getElementById("task-refresh").addEventListener("click", load);
+  document.getElementById("task-refresh").addEventListener("click", async () => {
+    // A refresh is "show me what is there now", which includes a model somebody
+    // deployed since this page loaded — so the editor's value lists are re-read too.
+    forgetCatalogue();
+    await loadFolderList();
+    await load();
+  });
 
   const qEl = document.getElementById("task-q");
   if (qEl) qEl.addEventListener("input", (e) => { state.query = e.target.value; renderList(); });
@@ -7320,6 +7527,7 @@ async function viewTasks(preselectKey) {
 
   await loadAssignable();
   await load();
+  await loadFolderList();
 }
 
 // ---------- Start a process via its start form (ADR-0028) ----------
