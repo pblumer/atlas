@@ -2,7 +2,7 @@
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
 .PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server \
-        whats-new adr-number docker docker-powershell docker-buildx helm-lint helm-template helm-package
+        whats-new nuggets adr-number docker docker-powershell docker-buildx helm-lint helm-template helm-package
 
 all: check
 
@@ -48,6 +48,13 @@ cover:
 
 # The full gate. A change is "done" when this passes.
 check: build vet fmt-check race cover
+
+# Re-take the handbook's training-nugget screenshots and rebuild the #nug-data
+# block from scripts/nuggets/scenes.mjs. Builds and runs a throwaway Atlas, seeds
+# it, captures every shot and measures every highlight out of the live page.
+# Needs Playwright: run `npm ci` in e2e/ once. See scripts/nuggets/README.md.
+nuggets:
+	node scripts/nuggets/capture.mjs
 
 # Regenerate the Console "What's New" feed (api/web/whats-new.json) from CHANGELOG.md
 # and scripts/whats-new/overrides/. Commit the regenerated JSON. See
