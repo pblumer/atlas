@@ -1,0 +1,41 @@
+{
+  "id": "offerte-entscheid",
+  "type": "default",
+  "schemaVersion": 16,
+  "exporter": { "name": "Atlas", "version": "0.4.0-dev" },
+  "components": [
+    {
+      "id": "kopf",
+      "type": "text",
+      "text": "## Offerte offen\n\nDiese Aufgabe wartet auf den Kundenentscheid. Ändert sich zwischenzeitlich die Preisliste, rechnet ein zweiter Token nach — ohne diese Aufgabe zu schliessen."
+    },
+    { "id": "f-kunde", "type": "textfield", "key": "kunde", "label": "Kunde", "disabled": true },
+    { "id": "f-artikel", "type": "textfield", "key": "artikel", "label": "Artikel", "disabled": true },
+    {
+      "id": "f-summe",
+      "type": "number",
+      "key": "angebot.summe",
+      "label": "Offerierte Summe",
+      "disabled": true
+    },
+    {
+      "id": "f-neu",
+      "type": "number",
+      "key": "angebotNeu.summe",
+      "label": "Nachgerechnet (nach Preisänderung)",
+      "description": "Leer, solange keine Preisänderung eingetroffen ist.",
+      "disabled": true
+    },
+    {
+      "id": "f-entscheid",
+      "type": "radio",
+      "key": "entscheid",
+      "label": "Kundenentscheid",
+      "validate": { "required": true },
+      "values": [
+        { "label": "Angenommen — Auftrag", "value": "annehmen" },
+        { "label": "Abgelehnt", "value": "ablehnen" }
+      ]
+    }
+  ]
+}

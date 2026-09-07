@@ -85,7 +85,14 @@ If the question cannot be answered from what it gives you, say so plainly in one
 // systemFor picks between them. No tools is unambiguous: the compiler refuses an
 // agent-driven ad-hoc with no contained activity (ADR-0253), so a request offering none is
 // an ai task and never a round.
+//
+// A request that states its own prompt gets that one instead. Both standing prompts
+// describe a situation — one step inside a running instance — and a caller that is not in
+// it has to be able to say so (see [Request.System]).
 func systemFor(req Request) string {
+	if s := strings.TrimSpace(req.System); s != "" {
+		return s
+	}
 	if len(req.Tools) == 0 {
 		return taskSystemPrompt
 	}

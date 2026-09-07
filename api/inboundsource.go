@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/logging"
@@ -675,6 +677,167 @@ func driveFileFields(rec inboundSubscription, file map[string]any, field string)
 	}
 }
 
+// --- discord ---
+
+// discordSource reads a channel's messages, oldest first.
+//
+// It is clio's shape and not Jira's, and that is the whole design
+// (ADR-0262). A channel is a log: a message id is a snowflake,
+// monotonic by construction and never moved by an edit, and `after` bounds that
+// sequence exactly rather than querying an index that lags the write. So the sequence
+// is the snowflake itself, there is no lag knob and no cursor field, and the mark stays
+// one per watch instead of one per message — which matters because a channel's traffic
+// is unbounded and a per-message mark would grow durable state with it.
+//
+// The mark is keyed on the channel id rather than left empty. Empty would take the
+// composition's scalar branch, which keys on WatchedSubject — clio's field, and empty
+// here — collapsing every Discord watch on one Worker onto a single mark. A non-empty
+// key routes through the branch that already carries the watch's own ID, so one watch
+// gets one mark and two watches never share one.
+type discordSource struct{ client discord.Client }
+
+func (s discordSource) Read(ctx context.Context, rec inboundSubscription, limit int) ([]inboundEvent, string, error) {
+	msgs, err := s.list(ctx, rec, discordCursor(rec), limit)
+	if err != nil || len(msgs) == 0 {
+		return nil, "", err
+	}
+	out := make([]inboundEvent, 0, len(msgs))
+	var (
+		newest    string
+		newestSeq uint64
+	)
+	for _, m := range msgs {
+		id, _ := m["id"].(string)
+		seq := discordSeq(id)
+		if seq == 0 {
+			// Not a snowflake, so no sequence — and an event with no sequence has no
+			// place in a mechanism whose correctness rests on one. Skipped rather than
+			// published at zero, which the engine would read as already-applied anyway.
+			continue
+		}
+		out = append(out, inboundEvent{
+			MarkKey: rec.ChannelID,
+			Seq:     seq,
+			Fields:  discordFields(rec, m),
+		})
+		if seq > newestSeq {
+			newestSeq, newest = seq, id
+		}
+	}
+	if newest == "" {
+		return out, "", nil
+	}
+	// Ascending, and this is load-bearing rather than tidy. The bridge publishes a page
+	// in slice order and the engine skips anything at or below the mark, so a page
+	// delivered newest-first would set the mark from its first element and have every
+	// older message behind it correctly discarded. Discord returns newest-first.
+	sort.Slice(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
+	return out, newest, nil
+}
+
+func (s discordSource) Prime(ctx context.Context, rec inboundSubscription) (string, bool, error) {
+	// One read of the newest message reaches the tip; there is no backlog to page
+	// through, because what is being skipped is everything before now. Asking without a
+	// cursor is what returns the newest page — the one case where that is wanted.
+	msgs, err := s.list(ctx, rec, "", 1)
+	if err != nil {
+		return "", false, err
+	}
+	// An empty channel primes to nothing: there is no snowflake to resume from, and the
+	// next read starts from the beginning of a channel that has no beginning yet.
+	var cursor string
+	if len(msgs) > 0 {
+		cursor, _ = msgs[0]["id"].(string)
+	}
+	return cursor, true, nil
+}
+
+// list performs the read. It reuses the Worker's own list-messages operation rather
+// than adding a second read path, exactly as the Jira watch reuses search — the
+// difference from the Drive folder watch, whose ListFiles had to be added beside Do
+// because no authored operation covered it.
+//
+// The cap is Discord's, not the bridge's: defaultInboundBatch is 256 and is an operator
+// setting that knows nothing about any one API's page limit, so passing it through
+// would fail every poll with a 400 naming a field nobody set.
+func (s discordSource) list(ctx context.Context, rec inboundSubscription, after string, limit int) ([]map[string]any, error) {
+	// Compared as int, not by converting the limit to int32: the bridge's batch size is
+	// an operator setting, and a value past int32 would wrap to something small — or
+	// negative — and quietly ask for a page nobody chose.
+	if limit <= 0 || limit > int(discord.MaxListPageSize) {
+		limit = int(discord.MaxListPageSize)
+	}
+	raw, err := s.client.Do(ctx, discord.Request{
+		Operation:  "list-messages",
+		Channel:    rec.ChannelID,
+		After:      after,
+		MaxResults: int32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	list, _ := raw.([]any)
+	out := make([]map[string]any, 0, len(list))
+	for _, it := range list {
+		if m, _ := it.(map[string]any); m != nil {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+// discordCursor is where the next read resumes from.
+//
+// An absent cursor becomes [discord.BeginningCursor] rather than an absent `after`,
+// because the two are not the same question: Discord answers a bare list with the
+// *newest* page, so a backfill watch that omitted it would publish the most recent
+// hundred messages, advance past them, and never see the history it was pointed at.
+func discordCursor(rec inboundSubscription) string {
+	if c := strings.TrimSpace(rec.LastEventID); c != "" {
+		return c
+	}
+	return discord.BeginningCursor
+}
+
+// discordSeq turns a snowflake into the uint64 the engine deduplicates on. The id *is*
+// the order — its high bits are the creation timestamp — so nothing has to be parsed
+// out of it. A non-numeric id (not a real message) yields 0, which the caller drops.
+func discordSeq(id string) uint64 {
+	n, err := strconv.ParseUint(strings.TrimSpace(id), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// discordFields is the binding environment a message exposes: a curated envelope plus
+// the raw message under `message`, following the Jira watch.
+//
+// authorBot earns its place among them. The most common thing a channel watch must not
+// react to is its own Worker's outbound message, and neither a correlation key nor a
+// process condition can say so without it.
+func discordFields(rec inboundSubscription, m map[string]any) map[string]any {
+	out := map[string]any{
+		"eventType": "discord.message.created",
+		"messageId": m["id"],
+		"channelId": rec.ChannelID,
+		"content":   m["content"],
+		"timestamp": m["timestamp"],
+		"message":   m,
+	}
+	if a, _ := m["author"].(map[string]any); a != nil {
+		out["authorId"] = a["id"]
+		out["authorName"] = a["username"]
+		bot, _ := a["bot"].(bool)
+		out["authorBot"] = bot
+	} else {
+		// A message with no author object still has to answer the question, because a
+		// watch that filters on it would otherwise treat "unknown" as "not a bot".
+		out["authorBot"] = false
+	}
+	return out
+}
+
 // validateInboundWatch checks a watch against the kind of worker it names, returning
 // the message to refuse it with or "" when it is usable. The kind is the discriminator
 // (ADR-0214), so this is where a clio watch's subject and a jira watch's query are each
@@ -735,10 +898,38 @@ func validateInboundWatch(kind string, rec *inboundSubscription) string {
 	case connectorKindGoogleSheets:
 		return validateGoogleWatch(rec)
 
+	case connectorKindDiscord:
+		if rec.ChannelID == "" {
+			return "channelId is required for a discord watch: the channel whose messages start " +
+				"processes. In Discord, enable Developer Mode and use the channel's \"Copy Channel ID\" " +
+				"(a thread is itself a channel, so its id works here too)"
+		}
+		if rec.WatchedSubject != "" || rec.Recursive || rec.JQL != "" || rec.SpreadsheetID != "" || rec.FolderID != "" {
+			return "watchedSubject, recursive, jql, spreadsheetId and folderId belong to a clio, jira " +
+				"or google watch; a discord watch names a channel"
+		}
+		// A channel needs neither, and refusing them is not pedantry: both exist to
+		// work around a source whose order is a query's, and a reader who set one here
+		// would believe the watch was tuned when nothing reads it. A snowflake is
+		// monotonic and `after` is exact, so there is no late-index window to lag
+		// behind and no second timestamp to choose between.
+		if rec.CursorField != "" {
+			return "cursorField belongs to a jira or google watch; a discord message is sequenced " +
+				"by its own id, which never moves"
+		}
+		if rec.LagSeconds != 0 {
+			return "lagSeconds belongs to a jira or google watch; a discord channel is read by " +
+				"message id, not by a timestamp an index publishes late"
+		}
+		if rec.PollSeconds < 0 {
+			return "pollSeconds cannot be negative"
+		}
+		return ""
+
 	case "":
 		return "no worker with that id"
 	default:
-		return "Worker Type " + kind + " has no inbound half: only clio, jira and googlesheets workers can carry a watch"
+		return "Worker Type " + kind + " has no inbound half: only clio, jira, googlesheets and discord workers can carry a watch"
 	}
 }
 

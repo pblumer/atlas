@@ -193,6 +193,51 @@ func withProjectID(path string, args map[string]any) string {
 // names/values). A non-empty process key narrows the search to that definition,
 // which is also what lets the server read that definition's index instead of every
 // instance.
+// listInstancesPath builds the instances-listing URL from the tool's optional
+// arguments. Every one of them is a narrowing, and the unscoped call — no
+// arguments at all — stays the bare path it always was.
+//
+// The one combination it refuses itself is 'element' without 'process'. The server
+// refuses it too, but as an HTTP 400 an agent then has to interpret; saying it here
+// makes the reason part of the tool's own answer, and costs a round trip nobody
+// wanted to make.
+//
+// There is deliberately no 'before': the tool returns the endpoint's JSON body
+// verbatim, and the cursor a page is resumed with rides in a response *header* the
+// body does not carry. Offering the parameter without a way to obtain a cursor
+// would be a dead argument. Reaching one particular instance is
+// atlas_search_instances' job, and a bare key there is a point read.
+func listInstancesPath(args map[string]any) (string, error) {
+	q := url.Values{}
+	process, hasProcess, err := optPositiveUint(args, "process")
+	if err != nil {
+		return "", err
+	}
+	if hasProcess {
+		q.Set("process", strconv.FormatUint(process, 10))
+	}
+	if element := optString(args, "element"); element != "" {
+		if !hasProcess {
+			return "", fmt.Errorf("argument \"element\" requires \"process\": a BPMN element id is only meaningful within the version that defines it")
+		}
+		q.Set("element", element)
+	}
+	if state := optString(args, "state"); state != "" {
+		q.Set("state", state)
+	}
+	limit, hasLimit, err := optPositiveUint(args, "limit")
+	if err != nil {
+		return "", err
+	}
+	if hasLimit {
+		q.Set("limit", strconv.FormatUint(limit, 10))
+	}
+	if len(q) == 0 {
+		return "/api/v1/instances", nil
+	}
+	return "/api/v1/instances?" + q.Encode(), nil
+}
+
 func searchInstancesPath(q, process string) string {
 	path := "/api/v1/instances/search?q=" + url.QueryEscape(q)
 	if process != "" {

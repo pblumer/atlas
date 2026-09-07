@@ -167,6 +167,7 @@ The log is the truth; the state store is a fast, queryable materialization. Stat
 ```
 el:<elementInstanceKey>          → ElementInstanceValue       (primary state)
 elByProc:<procInstKey>:<elKey>   → nil                        (elements of an instance, for termination)
+piByEl:<procDefKey>:<elementId>:<piKey>:<elKey> → nil         (the instances a token is sitting on an element in)
 job:<jobKey>                     → JobValue
 jobActivatable:<jobType>:<key>   → nil                        (open jobs per type, worker polling)
 timer:<dueDate>:<timerKey>       → TimerValue                 (sorted by due date → range scan)
@@ -187,6 +188,18 @@ a business value, not a key. It holds only the variable names a process declared
 searchable (`atlas:searchable`), so a process that declares none writes no entries
 and pays nothing; the NUL between the value and the instance key is what lets an
 *exact* match be a different query from a *prefix* one over the same ordered range.
+
+`piByEl` is `elByProc` read the other way round, and it answers the operator's
+question at the shape rather than at the instance: "which instances are sitting on
+*this* element right now?" — the click that filters the Operations instance list
+(ADR-0261). Without it that filter is a walk of the
+version's live instances testing each for a token, once per 1.5-second poll of an
+open view. The instance key precedes the element-instance key so the range walked
+backwards yields instances newest first and one instance's several tokens on the
+same element (a loop, a multi-instance activity) are adjacent and collapse to one
+row. It is written and dropped by exactly the two calls that move the ADR-0080
+live-token counter, so the count badged on a shape and the rows the filter lists
+are two readings of one fact.
 
 The two `…ByDef` indexes are the same idea for the operator's question. Without them, "show me this version's instances" is a walk of every instance in the store filtered by definition, and "the ten most recently finished" is that walk plus an in-memory sort. With the definition key as the prefix each is a bounded range scan, and putting `completedAt` ahead of the instance key in the history index makes *completion order* the scan order — walked backwards, it is "most recently finished first" without sorting anything. Both entries are valueless: the key is the whole fact, and the instance's own record holds the rest.
 

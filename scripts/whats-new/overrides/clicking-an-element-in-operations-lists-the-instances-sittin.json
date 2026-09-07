@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "Click a task to see which instances are sitting on it",
+    "de": "Auf eine Aufgabe klicken zeigt, welche Instanzen dort stehen"
+  },
+  "summary": {
+    "en": "A live diagram badged “25 205 here now” beside a list of fifty instances told you how many were waiting on a task and nothing about which ones — finding them meant searching for a value you had to know already. The diagram is the query now: click an element and the list shows exactly the instances whose token is sitting on it, click another and it switches, click the process beside the shapes and every instance is back. It works for every element a token can rest on, not only user tasks, and it costs the page you are shown — at hundreds of thousands of instances too.",
+    "de": "Ein Live-Diagramm mit „25 205 hier“ neben einer Liste von fünfzig Instanzen sagte Ihnen, wie viele auf einer Aufgabe warten, aber nichts darüber, welche — sie zu finden hieß, nach einem Wert zu suchen, den Sie schon kennen mussten. Jetzt ist das Diagramm die Abfrage: Klicken Sie ein Element an, und die Liste zeigt genau die Instanzen, deren Token dort steht; ein Klick auf ein anderes Element wechselt, ein Klick auf den Prozess neben den Formen zeigt wieder alle. Das gilt für jedes Element, auf dem ein Token stehen kann, nicht nur für User-Tasks, und es kostet nur die angezeigte Seite — auch bei hunderttausenden Instanzen."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

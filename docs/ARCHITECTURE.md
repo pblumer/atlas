@@ -305,7 +305,10 @@ atlas/
 │   ├── collab/        Live collaborative modeling sessions (ADR-0140)
 │   ├── vault/         Encrypted secret store (ADR-0069/0070)
 │   ├── sidecar/       Store[T]: the durable one-file-per-record store behind every design-time store
-│   └── processdoc/    Process documentation (ADR-0143), the first per-area service (ADR-0147)
+│   ├── processdoc/    Process documentation (ADR-0143), the first per-area service (ADR-0147)
+│   └── formgen/       Writing a form from a description and from the process it belongs
+│                      to (ADR-0260) — design-time authoring against
+│                      the agent Worker an operator already configured (ADR-0255)
 ├── mcp/           MCP server over the HTTP API (ADR-0016)
 ├── metrics/       Prometheus metrics (ADR-0142)
 ├── opensearch/    OpenSearch event exporter (ADR-0114)

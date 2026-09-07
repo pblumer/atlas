@@ -1751,7 +1751,7 @@ async function viewConsoleWorkers() {
     // Kind-specific first: these are the reasons an operator came to this row rather
     // than to any other, and they exist on no other kind.
     if (c.kind === "clio") items.push({ label: "Provision access…", icon: "🔑", act: "provision" });
-    if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets") items.push({ label: "Events…", icon: "⇄", act: "subs" });
+    if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord") items.push({ label: "Events…", icon: "⇄", act: "subs" });
     // Every Worker Type the check covers: mail connects and authenticates (or sends a
     // test message), a SQL worker dials its connection string. workerShape is the one
     // place that knows, so the menu does not go stale the next type that gains one.
@@ -4100,7 +4100,7 @@ async function toggleInboundSubs(row, workerId, kind) {
   }
   const subs = (await api("GET", "/api/v1/connectors/" + encodeURIComponent(workerId) + "/inbound-subscriptions")) || [];
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
-      <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}</td>
+      <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.channelId || s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}${s.channelId ? ' <span class="muted">(new messages)</span>' : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
       <td>${s.enabled
         ? '<span class="pill ok"><span class="dot"></span>on</span>'
@@ -4110,12 +4110,17 @@ async function toggleInboundSubs(row, workerId, kind) {
     </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">No subscriptions. Add one below to have clio events start or wake processes.</td></tr>`;
   const isJira = kind === "jira";
   const isGoogle = kind === "googlesheets";
-  const what = isGoogle
+  const isDiscord = kind === "discord";
+  const what = isDiscord
+    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the messages posted in a Discord channel are published as Atlas messages, so a message starts a process. Atlas polls every 15 seconds by default; nothing has to reach this server from the internet. <b>The bot needs the Message Content intent</b> — without it Discord returns every message with an empty <code>content</code>, no error and no warning, and a correlation key over it quietly matches nothing. Enable it under <i>Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Privileged Gateway Intents</i>. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a channel the Worker also posts into has no natural end. Empty uses 60.</div>`
+    : isGoogle
     ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — a spreadsheet's new rows, or the files put into a Drive folder, are published as Atlas messages so each one starts a process. Atlas polls once a minute by default; nothing has to reach this server from the internet. <b>A row watch follows the sheet's own row numbers</b>, so it sees rows appended at the end — which is what a form response sheet does. Deleting rows from the watched range renumbers the tail, and a later row landing on a number already delivered is not delivered again. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a watch fed by what its own processes write has no natural end. Empty uses 60.</div>`
     : isJira
     ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as Atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`
     : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0075). <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`;
-  const source = isGoogle
+  const source = isDiscord
+    ? `<label class="field" style="margin:0"><span>Channel</span><input name="channelId" placeholder="123456789012345678" required/></label>`
+    : isGoogle
     ? `<label class="field" style="margin:0"><span>Watch</span><select name="googleTarget" class="input">
         <option value="rows">new rows in a spreadsheet</option>
         <option value="files">new files in a Drive folder</option>
@@ -4124,7 +4129,9 @@ async function toggleInboundSubs(row, workerId, kind) {
     : isJira
     ? `<label class="field" style="margin:0"><span>JQL</span><input name="jql" placeholder="project = OPS AND issuetype = Bug" required/></label>`
     : `<label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="/employees" required/></label>`;
-  const extra = isGoogle
+  const extra = isDiscord
+    ? `<div class="muted" style="grid-column:1 / -1">In Discord, enable <b>Developer Mode</b> (User Settings &rsaquo; Advanced) and use the channel's <b>Copy Channel ID</b>. A thread is itself a channel, so a thread's id works here too. The correlation key (FEEL) sees <code>messageId</code>, <code>channelId</code>, <code>content</code>, <code>authorId</code>, <code>authorName</code>, <code>authorBot</code>, <code>timestamp</code>, <code>eventType</code>, and <code>message</code> — the whole message, for anything not named here. These are also seeded as process variables on the started instance. <b>Guard against your own bot</b>: if this Worker also posts into this channel, key or condition on <code>authorBot</code>, or the watch will react to what it wrote. A new watch is forward-only, so the messages already in the channel are skipped.</div>`
+    : isGoogle
     ? `<div class="google-rows" style="grid-column:1 / -1;display:flex;gap:12px;align-items:end;flex-wrap:wrap">
         <label class="field" style="margin:0;flex:1 1 200px"><span>Range (optional)</span><input name="watchRange" placeholder="Formularantworten 1!A:F"/></label>
         <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center">
@@ -4196,7 +4203,9 @@ async function toggleInboundSubs(row, workerId, kind) {
         correlationKey: (f.get("correlationKey") || "").trim(),
         maxPerHour: Number(f.get("maxPerHour") || 0) || 0,
       };
-      if (isGoogle) {
+      if (isDiscord) {
+        body.channelId = (f.get("channelId") || "").trim();
+      } else if (isGoogle) {
         const id = (f.get("googleId") || "").trim();
         if (f.get("googleTarget") === "files") {
           body.folderId = id;
@@ -8074,11 +8083,15 @@ async function viewEditorDraft(id) {
   await mod.mountEditor(view, { api, toast, draftId: id, projectId, project });
 }
 
-async function viewFormEditor(formId, projectId) {
+// generateFor, when given, is the {processId, elementId} the "Create a new form" link
+// on a step carried here: the editor opens its generator on that step rather than
+// asking the author to say again what pressing that link already said
+// (ADR-0260).
+async function viewFormEditor(formId, projectId, generateFor) {
   const gen = navGen;
   const mod = await import("./form-editor.js");
   if (superseded(gen)) return; // don't mount over a newer view after the dynamic import
-  await mod.mountFormEditor(view, { api, toast, formId, projectId });
+  await mod.mountFormEditor(view, { api, toast, formId, projectId, generateFor });
 }
 
 async function viewLive(key, instance) {
@@ -8497,6 +8510,16 @@ async function route() {
     if (dnew) return await viewEditor(null, dnew[1] ? decodeURIComponent(dnew[1]) : "");
     const fnew = path.match(/^#\/modeler\/form\/new(?:\/p\/(.+))?$/);
     if (fnew) return await viewFormEditor(null, fnew[1] ? decodeURIComponent(fnew[1]) : "");
+    // A new form for a named step: the Modeler's "Create a new form" link on a user
+    // task carries the process and the element, and on a start event the process
+    // alone — which is the start-form case, where the form is for the process itself.
+    const ffor = path.match(/^#\/modeler\/form\/new\/for\/([^/]+)(?:\/([^/]+))?$/);
+    if (ffor) {
+      return await viewFormEditor(null, "", {
+        processId: decodeURIComponent(ffor[1]),
+        elementId: ffor[2] ? decodeURIComponent(ffor[2]) : "",
+      });
+    }
     const fe = path.match(/^#\/modeler\/form\/e\/(.+)$/);
     if (fe) return await viewFormEditor(decodeURIComponent(fe[1]));
     const dm = path.match(/^#\/modeler\/draft\/(.+)$/);

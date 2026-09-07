@@ -585,6 +585,25 @@ Making processes wait, react, and time out.
   dependency. Authored in the Modeler (the mode switch, the Worker and result collection, and a
   parameter editor per tool), and an undocumented tool is warned about at deploy and where it is
   written.
+- ✅ **Forms written by the AI Worker** ([ADR-0260](docs/adr/0260-ai-form-generation.md)):
+  the same Worker an operator configured for the runtime also writes forms at **design time**.
+  **"Create a new form" on a user task or a start event carries that step into the editor**, which
+  opens with the generator already on it — pressing that link was the author saying what the form is
+  for, so the dialog does not ask again (a repair form's link stays plain: a different kind of form).
+  The form editor's **✨ Generate** button asks for a brief in prose and, optionally, the process the
+  form belongs to and the step it is for — and the process's *own words* do the rest of the talking:
+  its documentation, each step's `<bpmn:documentation>`, the sequence-flow conditions, and the
+  variable names its mappings and data objects already use, read tolerantly from the **draft** the
+  author is looking at (or the deployed version) rather than from a compile. Regenerating over an
+  open form is a refinement, not a fresh start. **Nothing is stored**: what comes back opens unsaved
+  in the editor, under the id the editor was already holding, and the author reads it and saves it
+  through the ordinary path — ADR-0032's stance about generated diagrams, applied to forms. One
+  configuration and one credential for runtime and authoring alike (ADR-0255), no key in the browser,
+  and the call runs on the request's own goroutine, never on the run loop: it is authoring, not a
+  service task, so ADR-0164 is untouched. What comes back is gated before it is shown — form-js's
+  one root type, a curated component vocabulary (an `iframe` is refused **by name**, not dropped),
+  a unique key on every input, and a bound on the document — and an answer that is not a form is a
+  422 with the reason rather than a broken editor.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
@@ -845,6 +864,19 @@ What it takes to run this for real.
   anything; no backfill is needed, since the attribute postdates every definition that
   could lack it. Remaining, and deliberately so: substring and free text stay in the
   OpenSearch export (ADR-0114) rather than becoming a second engine index.
+  The **third way in is the diagram itself**
+  ([ADR-0261](docs/adr/0261-instances-on-an-element.md)): a
+  live view badged "25 205 here now" beside a page of fifty was a dead end — the count
+  said how many were waiting and nothing said *which*. Clicking an element in
+  Operations now filters the instance list to the instances whose token is sitting on
+  it, clicking another switches, and clicking the process (or a collaboration's pool)
+  lists them all again. It is answered from a fourth column family,
+  `piByEl:<procDefKey>:<elementId>:<piKey>:<elKey>`, written and dropped by the same
+  two calls that move the ADR-0080 live-token counter — so the number on the shape and
+  the rows in the panel are two readings of one fact — and backfilled once at open like
+  its predecessors. `GET /api/v1/instances` gained `?element=`, scoped to `?process=`
+  and live-only, since a finished instance holds no token. The click it takes over is
+  the decision inspection's (ADR-0066), which keeps the ⚖ badge it already had.
 
 ## Milestone 5 — Scale-out 🔲
 
@@ -1491,6 +1523,12 @@ dataset of up to 50 000 cases":
 - 🔲 A copilot panel over a user-configured agent endpoint that drops generated
   models into a reviewable draft — no LLM or provider SDK in the binary, every
   result passes the compiler + Problems gate before deploy.
+- ✅ The **seam** this needs is delivered, for forms first
+  ([ADR-0260](docs/adr/0260-ai-form-generation.md)): a design-time
+  authoring call to the agent Worker an operator already configured (ADR-0255), whose
+  result is an unsaved draft. The copilot is the same shape with a diagram where the
+  form is — and ADR-0032's "a user-configured agent endpoint" is now answered by the
+  Console record rather than by a second place to put a key.
 
 **Canvas polish** (bpmn-js affordances; mostly no ADR needed, toolkit features):
 - 🔲 Minimap, align/distribute, element color/appearance.
