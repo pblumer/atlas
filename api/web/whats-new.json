@@ -2,6 +2,34 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-training-nuggets-show-the-real-atlas-not-a-drawing-of-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The training nuggets now show the real Atlas",
+        "de": "Die Schulungsnuggets zeigen jetzt das echte Atlas"
+      },
+      "summary": {
+        "en": "The animated walk-throughs in the handbook used to be drawings of the interface. A drawing has to guess, and this one guessed wrong where it mattered: it put the navigation down the side, where Atlas runs it across the top. Every scene is now a capture of the running product — the Modeler with a real model on the canvas, Operations showing five instances at once with their tokens and variables, the task inbox with its filters. So what you see while learning is what you find when you open the app. The process shown is a proper one too: the gateway really does branch, into an approval on one side and straight through on the other.",
+        "de": "Die animierten Durchgänge im Handbuch waren bisher Zeichnungen der Oberfläche. Eine Zeichnung muss raten, und diese riet dort falsch, wo es zählt: Sie setzte die Navigation an den linken Rand, während Atlas sie über die Breite führt. Jede Szene ist jetzt eine Aufnahme des laufenden Produkts — der Modeler mit einem echten Modell auf der Fläche, Operations mit fünf Instanzen samt Token und Variablen, der Aufgaben-Posteingang mit seinen Filtern. Was man beim Lernen sieht, findet man so in der App wieder. Auch der gezeigte Prozess stimmt jetzt: Das Gateway verzweigt wirklich, in eine Freigabe auf der einen und den direkten Weg auf der anderen Seite."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Handbook"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the handbook",
+          "de": "Handbuch öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "the-class-canvas-could-not-be-zoomed-searched-or-undone",
       "version": "Unreleased",
       "date": null,
@@ -359,24 +387,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "opening-a-deployed-process-in-the-modeler-lost-the-applicati",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Opening a deployed process in the Modeler lost the application it belongs to, and with it the whole vocabulary behind a data object's Type.",
-        "de": "Opening a deployed process in the Modeler lost the application it belongs to, and with it the whole vocabulary behind a data object's Type."
-      },
-      "summary": {
-        "en": "A draft carries its application; a deployed version carries it too — the deploy records it — but the route that opens one (#/modeler/d/{key}) does not name it and nothing looked it up.",
-        "de": "A draft carries its application; a deployed version carries it too — the deploy records it — but the route that opens one (#/modeler/d/{key}) does not name it and nothing looked it up."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     }
   ]

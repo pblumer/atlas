@@ -12,6 +12,50 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **The training nuggets show the real Atlas, not a drawing of it.** The stages
+  shipped as markup built from the handbook's own theme tokens, and the reasoning
+  for that was sound as far as it went: no binary weight, both colour schemes, both
+  languages in one file. What it missed is what a nugget is *for*. Somebody watching
+  one is trying to recognise the screen later, and a drawing has to guess the layout
+  — this one guessed a sidebar where Atlas runs its navigation across the top, and
+  drew the app switcher as a grid popup where the product opens a drawer. A learner
+  who trusted it would look in the wrong place twice before finding anything.
+
+  Every scene is now a capture of the running product: the Modeler with a real BPMN
+  model on the canvas, Operations showing five instances at once with their token
+  counts and their actual variables, the task inbox with its four filters, the
+  worker list, the audit log, the landscape. Twenty WebP images under `web/nuggets/`,
+  about 855 KB in total, fetched only when a nugget is played — opening the chapter
+  still costs nothing.
+
+  **A modelling error went out with the drawn version and is fixed by the same
+  change.** Two scenes drew an exclusive gateway with a single outgoing flow, which
+  is not a gateway at all: it branches or it is a waste of a shape. That is a poor
+  thing to teach anywhere and worse in material about BPMN. The shots carry a model
+  where the gateway genuinely splits — `Summe > 100 EUR?` into a human approval on
+  one side and straight through on the other, then a parallel gateway for picking,
+  shipping and invoicing — and the modeller nugget now says out loud that a gateway
+  with one exit would not be one.
+
+  Highlights and the cursor are percentages of the *image* rather than of the stage,
+  which is what makes them stable: an image keeps its aspect ratio at every width,
+  so a ring drawn on the Deploy button stays on it from a phone to a desktop. The
+  measurements are not eyeballed — the capture script reads each target's bounding
+  box out of the live page and writes it into the scene.
+
+  `e2e/nuggets.spec.mjs` follows the new failure modes: a scene naming an image that
+  is not shipped, a shipped image no scene uses (dead weight in a `//go:embed`
+  binary), a highlight running off the frame, a tap with no cursor, and every
+  referenced screenshot actually being served. Each was written by confirming it
+  fails against exactly that mistake.
+
+  The caption moved out of the picture and under it. Overlaying it looked tidier and
+  ate the bottom of every shot — which is where Atlas prints the legend explaining
+  the token markers, so the one scene that most needed its whole picture was the one
+  losing it.
+
 ### Fixed
 
 - **The class canvas could not be zoomed, searched, or undone.**
