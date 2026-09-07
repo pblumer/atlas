@@ -2949,12 +2949,29 @@ _Changed_ / _Removed_ for each version.
   **A search box** filters the mesh by name, kind or process id and reports how much
   it is hiding — a filtered landscape otherwise looks exactly like a small one.
 
+  **Nothing is left stranded at the edge of the picture.** Reported three times as
+  "single nodes far away from the rest", and the first two fixes missed it because
+  both were about framing and this was about the settle. The pull that centres the
+  graph is deliberately weakest along the wide axis, so the picture takes the shape of
+  the frame — and that was tuned for a node its edges are also holding. A node with
+  **no edge** has none: the pull is all that keeps it near the picture, against a
+  repulsion that falls off with distance, and the balance sat far outside everything
+  else. On a thirty-four-node estate with ten unattached processes, two of them ended
+  hard against the left and right edges with the rest squeezed into the middle. That
+  is not a rare shape — a process deployed through the API, or before its application
+  existed, belongs to no application and is drawn with no edge at all. The pull is now
+  twice as strong on a node with nothing attached to it, which is measured rather than
+  reasoned: higher packs the loose nodes into a lump of their own instead.
+
   **A Drafts switch** adds the diagrams nobody has deployed. The picture's subject is
   what this server *runs*, so a saved draft is absent from it by default — which
   answers "is this deployed?" only if you already knew the process existed. Switch
   drafts on and they appear beside the processes of the application that holds them,
-  in the process square so they read as the same kind of thing, with a paler fill and
-  the dashed outline the placeholders already use: what is drawn is not running. They
+  in the process square so they read as the same kind of thing, with a lighter fill and
+  the dashed outline the placeholders already use: what is drawn is not running. The
+  fill is lighter rather than merely different — its first version was a warm tone of
+  exactly the same brightness as a deployed process, which on a projector or in print
+  left the dash doing all the work. They
   claim nothing about running — no version, no instances, no status, and they can
   never make an application look worse — and their only edge is the one that says
   which application holds them, because a draft's call activities are a plan and

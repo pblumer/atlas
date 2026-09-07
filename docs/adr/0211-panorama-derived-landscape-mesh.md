@@ -950,6 +950,39 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 [ADR-0127](0127-layered-layout-pipeline-and-invariants.md)) already exists for BPMN
 — not a bundler and not a CDN dependency.
 
+> **Amendment (2026-09-07): a node with no edge is held by the pull alone, so the
+> pull has to be enough on its own.**
+> The third report of the same symptom — an opening picture with single nodes far
+> away from everything else — and the first two amendments above had both missed it,
+> because both were about *framing* and this is about the settle.
+>
+> The centring pull is anisotropic (see the aiming amendment) so the graph takes the
+> shape of the frame it is drawn in. That shape was decided for a node the springs are
+> also holding, and springs are ten times the pull. A node with **no edge** has no
+> springs: the pull is the whole of what keeps it near the picture, balanced against a
+> repulsion that falls off as 1/d² — and along the wide axis, where the pull is
+> deliberately weakest, that balance sits far outside the sprung cluster. Measured on a
+> thirty-four-node estate with ten unattached processes at 1400x900: two of them ended
+> hard against the left and right edges, with the rest of the picture squeezed into the
+> middle and the bottom third of the canvas empty.
+>
+> This is not a rare shape. A process deployed through the API, or before its
+> application existed, belongs to no application and is drawn with no edge of any kind;
+> on a real instance that was most of the estate.
+>
+> The pull is therefore stronger on a node with no edge — measured at twice, across
+> five estate shapes from six nodes to a hundred and nineteen. Higher is not better,
+> and the measurement says why: past that the loose nodes stop being spread through
+> the picture and collapse into a lump of their own in the middle, with the
+> applications pushed out around it. The pull that holds a straggler in is not the
+> pull that packs a crowd.
+>
+> The §7 fill test could not have caught this and no adjustment of it would: an outlier
+> makes the bounding box *wider*, so a picture filled by two stragglers scores better
+> than a good one. What is measured instead is every node's distance to its nearest
+> neighbour against the median of those — the gap a reader actually sees. The defect
+> measures 3.1 with two nodes past the threshold; the corrected layout measures 1.1.
+
 > **Amendment (2026-09-07): what is not deployed can be drawn, and is switched on
 > rather than carried.**
 > §1 derives the landscape from what this server *runs*, and the picture was read as
@@ -976,9 +1009,19 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > - **They are told apart by more than colour.** A draft keeps the process square —
 >   it is a process, and giving it its own shape would say the two are different
 >   kinds of thing — and is separated by the two channels a *state* may use here: a
->   warmer fill and the dashed outline the placeholder kinds already carry, meaning
+>   lighter fill and the dashed outline the placeholder kinds already carry, meaning
 >   on all three what it means here, that what is drawn is not running. On a printout
 >   and to a reader who does not separate the hues, the dash is what survives (§4).
+>
+>   The fill is measured, and the first attempt at it failed that measurement. It was
+>   a warm tone at the same *luminance* as the process fill — a contrast ratio of 1.00
+>   between the two — so the pair differed in hue alone and the dash was carrying the
+>   whole distinction on its own, which is the state §4 exists to prevent in the other
+>   direction. It is now 1.09 against the process fill and 1.08 against the canvas: the
+>   colour channel does measurable work, the deployed process is the more substantial
+>   mark of the two — the way round it has to be, since what runs is what this view is
+>   about — and it stays nowhere near a finding, the amber badge being 3.59 against the
+>   canvas and the red 5.44.
 >
 > Two consequences follow from the same rule. A draft whose process id is already
 > deployed is not drawn: it is the editable copy of a node already on the picture,

@@ -3270,12 +3270,29 @@ test("a draft is drawn as a process that is not running", async ({ page }) => {
   expect(draftDash).not.toBe("");
   expect(processDash).toBe("");
 
-  // And the fills genuinely differ, which is what was asked for.
+  // And the fills differ in *brightness*, not only in hue. The first version of this
+  // colour was a warm tone at the same luminance as the process fill — a contrast
+  // ratio of 1.00 between them — so on a projector, in a print, and to a reader who
+  // does not separate those hues the two were identical and the dash carried the whole
+  // distinction. A ratio is the measurement that catches that; "the fills differ" does
+  // not. It stays far below a finding, which is the other half of the rule: the amber
+  // status badge is 3.59 against the canvas (ADR-0211 §4).
   const [draftFill, processFill] = await Promise.all([
     draft.evaluate((n) => getComputedStyle(n).fill),
     process.evaluate((n) => getComputedStyle(n).fill),
   ]);
   expect(draftFill).not.toBe(processFill);
+  const contrast = (a, b) => {
+    const lum = (css) => {
+      const [r, g, b2] = css.match(/[\d.]+/g).slice(0, 3).map((v) => Number(v) / 255);
+      const f = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b2);
+    };
+    const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m);
+    return (x + 0.05) / (y + 0.05);
+  };
+  expect(contrast(draftFill, processFill)).toBeGreaterThan(1.05);
+  expect(contrast(draftFill, "rgb(255, 255, 255)")).toBeLessThan(1.5);
 
   // The tooltip says the same thing in words, and never claims a version: a draft has
   // none, and "v undefined" would be the picture contradicting itself.
@@ -3358,4 +3375,61 @@ test("a saved view comes back with its drafts", async ({ page }) => {
   await page.locator(".mesh-view-open").click();
   await expect(page.locator("#mesh-drafts")).toBeChecked();
   await expect(page.locator('[data-node-id="draft:refund"]')).toHaveCount(1);
+});
+
+// A node with no edge, and the picture it used to be dragged out of shape by.
+//
+// The centring pull is anisotropic so the graph takes the shape of the frame, and
+// that shape was decided for a node the springs are also holding. A node with no edge
+// has no springs: the pull is all that keeps it near the picture, against a repulsion
+// that falls off as 1/d². Measured here at 1400x900, the balance put two of the ten
+// unattached processes hard against the left and right edges of an otherwise centred
+// picture, with everything else squeezed into the middle of it.
+//
+// The fill test above cannot see this and never could: an outlier makes the bounding
+// box *wider*, so a picture "filled" by two stragglers scores better than a good one.
+// This measures the gap instead — every node's distance to its nearest neighbour,
+// against the median of them — which is the thing a reader actually notices.
+test("nothing is left stranded at the edge of the picture", async ({ page }) => {
+  // Four applications with their processes, and ten deployed processes filed under
+  // nothing at all. That last part is not contrived: a process deployed through the
+  // API, or before its application existed, belongs to no application and is drawn
+  // with no edge of any kind.
+  const estate = { nodes: [], edges: [], restricted: 0, clustered: false };
+  for (let a = 1; a <= 4; a++) {
+    estate.nodes.push({ id: `application:a${a}`, kind: "application", name: `App ${a}`, provenance: "derived" });
+    for (let p = 1; p <= 5; p++) {
+      const id = `process:${a}_${p}`;
+      estate.nodes.push({ id, kind: "process", name: `Proc ${a}.${p}`, provenance: "derived", processId: `p${a}_${p}`, version: 1 });
+      estate.edges.push({ from: `application:a${a}`, to: id, kind: "contains" });
+    }
+  }
+  for (let i = 1; i <= 10; i++) {
+    estate.nodes.push({ id: `process:free${i}`, kind: "process", name: `Frei ${i}`, provenance: "derived", processId: `f${i}`, version: 1 });
+  }
+  installMock(page, estate);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+  await page.waitForTimeout(600);
+
+  const spread = await page.evaluate(() => {
+    const at = [...document.querySelectorAll(".mesh-node")].map((el) => {
+      const t = /translate\(([-\d.]+),([-\d.]+)\)/.exec(el.getAttribute("transform"));
+      return { id: el.getAttribute("data-node-id"), x: +t[1], y: +t[2] };
+    });
+    const nearest = at.map((a) => Math.min(...at.filter((b) => b !== a)
+      .map((b) => Math.hypot(a.x - b.x, a.y - b.y))));
+    const sorted = [...nearest].sort((x, y) => x - y);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    return {
+      ratio: sorted[sorted.length - 1] / median,
+      stranded: at.filter((_, i) => nearest[i] > median * 2.5).map((a) => a.id),
+    };
+  });
+
+  // Two and a half times the median is already a visible hole in the picture; the
+  // defect measured 3.1 with two nodes past it, and the corrected layout measures 1.1.
+  expect(spread.stranded, "nodes with no neighbour near them").toEqual([]);
+  expect(spread.ratio).toBeLessThan(2);
 });

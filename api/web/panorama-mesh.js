@@ -70,7 +70,18 @@ const KIND = {
   // band: the eye sorts by size first, and on a picture with drafts switched on the
   // running estate has to stay the thing you see. Still comfortably larger than a
   // worker, because it is not one.
-  draft: { r: 14, grow: 4, shape: "square", fill: "#f3ece2", stroke: "var(--muted)", label: "Draft — saved, not deployed", dashed: true },
+  //
+  // The fill is lighter than any other kind's, and that is the measured part. Its
+  // first draft was a warm tone at the same *luminance* as the process fill — 1.00
+  // against it — so the two differed in hue alone: identical on a projector, in a
+  // print, and to a reader who does not separate those hues, leaving the dash to carry
+  // the whole distinction. This is 1.09 against the process fill and 1.08 against the
+  // canvas, so the colour channel does measurable work and a deployed process is the
+  // more substantial mark of the two — which is the way round it has to be, since the
+  // running estate is what this view is about. It stays far below a finding: the amber
+  // status badge is 3.59 against the canvas and the red 5.44, and a kind must never
+  // compete with those (ADR-0211 §4).
+  draft: { r: 14, grow: 4, shape: "square", fill: "#fbf6ee", stroke: "var(--muted)", label: "Draft — saved, not deployed", dashed: true },
   worker: { r: 12, grow: 3.5, shape: "hexagon", fill: "#d9efe1", stroke: "var(--ok)", label: "Worker" },
   decision: { r: 12, grow: 3.5, shape: "triangle", fill: "#dbe6ff", stroke: "var(--accent-hover)", label: "Decision" },
   // A placeholder for something real whose kind we may not learn, so it takes the
@@ -539,6 +550,35 @@ function share(overlap, aHeld, bHeld) {
   return [overlap / 2, overlap / 2];
 }
 
+// LOOSE_PULL is how much harder the centring pull works on a node with no edges.
+//
+// The pull is anisotropic — weaker along the wider axis, so the graph takes the shape
+// of the frame — and that shape is decided for a node the springs are also holding.
+// A node with no edge has no springs: the pull is the whole of what keeps it near the
+// picture, and it balances against a repulsion that falls off as 1/d². Measured on a
+// 34-node estate with ten unattached processes at 1400x900, the balance put two of
+// them hard against the left and right edges of an otherwise centred picture, with
+// everything else squeezed into the middle — the frame was "filled" by two stragglers
+// rather than by the content, which is why the fill test never saw it.
+//
+// The number is measured rather than reasoned. Across five estate shapes — from six
+// nodes to a hundred and nineteen, from one loose node to eighty-three — this is the
+// worst node's distance to its nearest neighbour, as a multiple of the median:
+//
+//	              1×     2×     3×     4×     8×
+//	1 app + 1     1.60   1.32   1.21   1.15   1.04
+//	2 apps + 3    1.28   1.03   1.08   1.06   1.05
+//	4 apps + 10   3.11   1.10   1.22   1.39   1.44
+//	6 apps + 83   1.32   1.56   1.71   1.94   2.56
+//	1 app + 40    2.14   1.19   1.18   1.67   2.18
+//
+// Two is the only column with no bad case in it. Higher is not better and the table
+// says why: past it the loose nodes stop being spread through the picture and collapse
+// into a lump of their own in the middle, with the applications pushed out around it —
+// the same defect mirrored. The pull that holds a straggler in is not the pull that
+// packs a crowd.
+const LOOSE_PULL = 2;
+
 // forcesFor derives the constants the simulation runs on from the world it runs in.
 //
 // Everything scales with the world rather than being a fixed number, because a
@@ -572,6 +612,11 @@ function forcesFor(nodes, width, height) {
 // A node marked `held` is not simulated: its position is whatever put it there, and
 // everything else arranges itself around it.
 function settle(nodes, links, radii, force, iterations) {
+  // Which nodes have an edge at all. A sprung node is held in place by its springs,
+  // which are ten times the centring pull; a node with no edge is held by the pull
+  // alone, and the pull was tuned for nodes that also have springs.
+  const linked = new Uint8Array(nodes.length);
+  for (const [a, b] of links) { linked[a] = 1; linked[b] = 1; }
   for (let step = 0; step < iterations; step++) {
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
@@ -605,16 +650,18 @@ function settle(nodes, links, radii, force, iterations) {
       const fx = (dx / d) * magnitude, fy = (dy / d) * magnitude;
       a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
     }
-    for (const n of nodes) {
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
       // A held node keeps its place and its stillness: carrying velocity through a
       // drag would make it spring away the moment it was let go.
       if (n.held) { n.vx = 0; n.vy = 0; continue; }
+      const hold = linked[i] ? 1 : LOOSE_PULL;
       // The pull toward the centre is anisotropic, weaker along the wider axis, so
       // the graph settles into the shape of the frame instead of into a disc. A disc
       // in a wide viewport is what produced the empty bands on either side: the
       // content was never the shape of the space it had.
-      n.vx += (force.cx - n.x) * 0.0012 * force.pullX;
-      n.vy += (force.cy - n.y) * 0.0012 * force.pullY;
+      n.vx += (force.cx - n.x) * 0.0012 * force.pullX * hold;
+      n.vy += (force.cy - n.y) * 0.0012 * force.pullY * hold;
       n.vx *= force.damping; n.vy *= force.damping;
       n.x += n.vx; n.y += n.vy;
     }
