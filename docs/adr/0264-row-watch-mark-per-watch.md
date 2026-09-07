@@ -1,4 +1,4 @@
-# ADR-DRAFT: A row watch's idempotency mark is its own, and the cursor is why that needs no migration
+# ADR-0264: A row watch's idempotency mark is its own, and the cursor is why that needs no migration
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

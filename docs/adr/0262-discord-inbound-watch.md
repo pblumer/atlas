@@ -1,6 +1,6 @@
 # ADR-0262: Discord as an inbound event source — a channel is a log, and a snowflake is its sequence
 
-- **Status:** Proposed (amended 2026-09-07: the Google row watch this record established as unfixable-here is fixed, and needed no migration — [ADR-draft-row-watch-mark-per-watch](draft-row-watch-mark-per-watch.md))
+- **Status:** Proposed (amended 2026-09-07: the Google row watch this record established as unfixable-here is fixed, and needed no migration — [ADR-0264](0264-row-watch-mark-per-watch.md))
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 
@@ -77,7 +77,7 @@ That is a defect in ADR-0234's watch and is **not fixed here**: changing a live 
 flood ADR-0075 exists to prevent. It needs its own record and a migration. What this
 record does is refuse to reproduce it.
 
-### Amendment (2026-09-07, ADR-draft-row-watch-mark-per-watch)
+### Amendment (2026-09-07, ADR-0264)
 
 The paragraph above is right that the Google row watch shares a mark, and wrong about what
 that costs to fix. It says changing a live watch's `SourceID` "resets its mark and replays
@@ -224,6 +224,6 @@ so it belongs in the Console's hint beside the field and not only here.
 - [ADR-0075](0075-clio-inbound-event-bridge.md) — the bridge, and the scalar mark
 - [ADR-0214](0214-jira-inbound-issue-watch.md) — the per-item mark, and why a query needs one
 - [ADR-0234](0234-google-inbound-watch.md) — the second and third sources
-- [ADR-draft-row-watch-mark-per-watch](draft-row-watch-mark-per-watch.md) — fixes the row watch's mark, and amends this record's claim about the cost
+- [ADR-0264](0264-row-watch-mark-per-watch.md) — fixes the row watch's mark, and amends this record's claim about the cost
 - [ADR-0020](0020-message-correlation.md) — where a published message goes
 - [ADR-0035](0035-message-start-events.md) — what starts from one

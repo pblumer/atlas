@@ -422,7 +422,7 @@ func (s sheetRowSource) Read(ctx context.Context, rec inboundSubscription, limit
 			// meant: the scalar branch keys on WatchedSubject, clio's field, which this
 			// kind's own validator refuses as non-empty. Two row watches then composed
 			// the same id and the one further down its sheet suppressed the other
-			// entirely (ADR-draft-row-watch-mark-per-watch).
+			// entirely (ADR-0264).
 			MarkKey: sheetRowMarkKey(rec),
 			Seq:     uint64(i + 1), // absolute row number, 1-based as Sheets counts
 			Fields:  sheetRowFields(rec, header, rows[i], i+1),

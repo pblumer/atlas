@@ -317,6 +317,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0261](0261-instances-on-an-element.md) | The diagram is the query — filtering instances by the element they sit on | Proposed |
 | [0262](0262-discord-inbound-watch.md) | Discord as an inbound event source — a channel is a log, and a snowflake is its sequence | Proposed |
 | [0263](0263-form-runtime-brand-theming.md) | The brand palette reaches the form runtime | Proposed |
+| [0264](0264-row-watch-mark-per-watch.md) | A row watch's idempotency mark is its own, and the cursor is why that needs no migration | Proposed |
 
 ## Status values
 
