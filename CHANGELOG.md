@@ -481,6 +481,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The handbook blamed itself for a diagram the reader was simply not signed in to
+  see.** The recipes in _Rezepte_ ship their models without BPMN-DI, so the coordinates
+  come from `POST /api/v1/layout` — an endpoint that carries the `modeler` role, on a
+  page that is public. A reader who was not signed in therefore got no picture on any
+  of the 28 cards, and the note under each one said Atlas *"cannot lay this pattern out
+  completely yet"*. That was never true: Atlas lays them out fine, the request was
+  refused. The note now separates the three answers — sign in (with a link that takes
+  you there), a session that lacks the `modeler` role, and an actual layout limit, which
+  is the only one that is about the model. The first refusal also settles the chapter,
+  so the 27 further requests that could only fail the same way are no longer sent.
+
 - **Every instance start scanned the whole runtime on the single writer.** `/stats` looks
   like an aggregate and is not one: all three of its counts walk a whole column family,
   so on a server holding 50.000 instances and 200.000 tokens a single call was a

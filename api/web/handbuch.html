@@ -7739,18 +7739,66 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
   const sandbox = document.createElement("div");
   sandbox.style.cssText = "position:absolute;left:-10000px;top:0;width:900px;height:420px";
   document.body.appendChild(sandbox);
+  // Why a diagram is missing, said accurately. The recipes ship without BPMN-DI to
+  // keep their XML readable, so the coordinates come from POST /api/v1/layout — and
+  // that endpoint carries RoleModeler while this page is public. A reader who is not
+  // signed in, or signed in without the role, therefore gets no picture for a reason
+  // that has nothing to do with the model: telling them Atlas "cannot lay this out"
+  // would blame the engine for the reader's session.
+  const NO_LAYOUT = 0, NEEDS_LOGIN = 1, NEEDS_ROLE = 2;
+  const HINTS = {
+    [NEEDS_LOGIN]: ["Das Diagramm rechnet der Server — dafür musst du in der App angemeldet sein.",
+                    "The server draws this diagram, which needs you signed in to the app."],
+    [NEEDS_ROLE]:  ["Das Diagramm rechnet der Server, und dafür braucht dein Konto die Rolle "
+                    + "<code>modeler</code>. Das Modell selbst steht unverändert im Rezept.",
+                    "The server draws this diagram, and that needs your account to hold the "
+                    + "<code>modeler</code> role. The model itself is in the recipe, unchanged."],
+    [NO_LAYOUT]:   ["Für dieses Muster erzeugt Atlas noch kein vollständiges Layout — "
+                    + "öffne es im Modeler, um es anzuordnen.",
+                    "Atlas cannot lay this pattern out completely yet — "
+                    + "open it in the Modeler to arrange it."],
+  };
+  // Both languages are written out and the page's own [data-l] rule hides one, so the
+  // hint follows the DE/EN toggle like the rest of the chapter instead of freezing in
+  // whichever language happened to be active when the diagram failed.
+  function diagramHint(host, why){
+    const [de, en] = HINTS[why] || HINTS[NO_LAYOUT];
+    const link = why === NEEDS_LOGIN
+      ? { de: ' <a href="/#/console">Anmelden</a>', en: ' <a href="/#/console">Sign in</a>' }
+      : { de: "", en: "" };
+    host.classList.add("failed");
+    host.innerHTML = '<span class="rz-dhint" data-l="de">' + de + link.de + "</span>"
+                   + '<span class="rz-dhint" data-l="en">' + en + link.en + "</span>";
+  }
+
+  // Once the layout endpoint has refused this reader it will refuse every other card
+  // too, so the first answer settles the chapter: the remaining round trips are never
+  // made, and 27 further requests that could only fail the same way stay unsent.
+  let layoutRefused = 0;
+
   // needLayout is false for a model that ships its own BPMN-DI (the workshop's two):
   // there is nothing to generate, and asking the server for a layout it would hand
   // straight back is a round trip that can only fail.
   async function renderInto(host, src, needLayout){
     if (!host || host.dataset.done) return;
     host.dataset.done = "1";
+    if (needLayout && layoutRefused){ diagramHint(host, layoutRefused); return; }
+    let refused = NO_LAYOUT;
     try {
       const BpmnJS = await loadBpmn();
       const Viewer = (BpmnJS && (BpmnJS.NavigatedViewer || BpmnJS.Viewer)) || BpmnJS;
       let laidOut = src;
       if (needLayout){
-        laidOut = await call("POST", "/api/v1/layout", src, true, true);
+        try {
+          laidOut = await call("POST", "/api/v1/layout", src, true, true);
+        } catch (e) {
+          // 401 is "no session"; 403 is a session without RoleModeler. They call for
+          // different sentences, and neither is a statement about the model.
+          if (e.status === 401) refused = NEEDS_LOGIN;
+          else if (e.status === 403) refused = NEEDS_ROLE;
+          layoutRefused = refused;
+          throw e;
+        }
         // The generated layout does not yet cover every element type (a transaction's
         // contents, for instance). Rendering a partial picture would misinform, so
         // count what the layout placed against the model's flow nodes and bail out
@@ -7783,15 +7831,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         }
       }
     } catch (e) {
-      host.classList.add("failed");
-      host.innerHTML = "";
-      const p = document.createElement("span");
-      p.className = "rz-dhint";
-      p.textContent = T("Für dieses Muster erzeugt Atlas noch kein vollständiges Layout — "
-                        + "öffne es im Modeler, um es anzuordnen.",
-                        "Atlas cannot lay this pattern out completely yet — "
-                        + "open it in the Modeler to arrange it.");
-      host.appendChild(p);
+      diagramHint(host, refused);
     }
   }
 
