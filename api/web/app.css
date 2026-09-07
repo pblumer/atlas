@@ -1222,6 +1222,14 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .badges-hide-passed .token-badge.history,
 .badges-hide-cancelled .token-badge.cancelled,
 .badges-hide-live .token-badge:not(.history):not(.cancelled) { display: none; }
+/* The element the instance list is filtered to (ADR-draft-instances-on-an-element).
+   It is drawn in the accent colour rather than in any of the token colours: green,
+   gray and amber all say something about where tokens are, and this says something
+   about what the panel beside the diagram is showing. Solid and thick so it reads as
+   the one element under discussion, whatever its token state happens to be. */
+.djs-element.atlas-filtered .djs-visual > :nth-child(1) {
+  stroke: var(--accent) !important; stroke-width: 3px !important;
+}
 /* An element whose token is parked behind an incident (ADR-0061) is drawn red over
    its live-token green, and carries a badge with the reason. Without it a stuck task
    is pixel-identical to one that is legitimately waiting, which is exactly how a
@@ -1497,6 +1505,20 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 /* Find-an-instance row above the listed page. The panel shows one page of a
    version that may hold hundreds of thousands of instances, so this — not the
    list — is how an operator reaches a specific one. */
+/* The chip that says what the listing is narrowed to, and the way back out of it
+   (ADR-draft-instances-on-an-element). It sits above the search row because it is
+   the coarser of the two filters and because an operator who clicked a shape needs
+   to see, without hunting, that the short list in front of them is a filtered one
+   and not an empty process. */
+.var-panel .vp-filter {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+  padding: 4px 6px 4px 10px; border-radius: var(--radius);
+  background: var(--accent-soft); border: 1px solid var(--accent);
+  font-size: 12px;
+}
+.var-panel .vp-filter b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.var-panel .vp-filter-k { color: var(--muted); }
+.var-panel .vp-filter .btn { margin-left: auto; }
 .var-panel .vp-search { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .var-panel .vp-search-q {
   flex: 1 1 auto; min-width: 0; padding: 4px 8px;

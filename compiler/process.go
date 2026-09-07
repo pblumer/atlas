@@ -1997,6 +1997,26 @@ func (p *CompiledProcess) ElementBpmnId(id int32) string {
 	return p.Intern(p.elementIds[id])
 }
 
+// ElementIndexOf is [CompiledProcess.ElementBpmnId] read backwards: the node index
+// for a source BPMN element id, and false when the model has no such element. A
+// caller that arrives with an id off a diagram — an operator clicking a shape —
+// needs this direction to reach anything the engine keyed by node index.
+//
+// It is a scan of the id table rather than a map, because it answers one lookup per
+// request on a read path and a model has tens to hundreds of elements. It is never
+// called from the processor: the hot path deals in indices already (I5).
+func (p *CompiledProcess) ElementIndexOf(bpmnId string) (int32, bool) {
+	if bpmnId == "" {
+		return 0, false
+	}
+	for i := range p.elementIds {
+		if p.Intern(p.elementIds[i]) == bpmnId {
+			return int32(i), true
+		}
+	}
+	return 0, false
+}
+
 // ElementDocumentation returns the prose an author wrote about a node — its
 // <bpmn:documentation> (ADR-0025) — or "" when the node is undocumented or the index is
 // out of range. It is design-time metadata the engine never reads: it changes no

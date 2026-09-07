@@ -252,7 +252,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "file", "config")},
 			resp: jsonBody("Created instance with parsed row count", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
-			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); ?process=<key> narrows to one definition and reads its index (cost is the page, not the store); ?state=active|finished returns one half (all = both, the default); ?before=<cursor> pages it (requires ?process=); X-Instances-Truncated: true marks a capped page and X-Instances-Next-Cursor carries the next one", tag: "Instances", role: RoleOperator, resp: jsonBody("Instances", tArray())}},
+			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); ?process=<key> narrows to one definition and reads its index (cost is the page, not the store); ?state=active|finished returns one half (all = both, the default); ?before=<cursor> pages it (requires ?process=); ?element=<bpmn element id> narrows to the instances whose token is sitting on that element right now, read from its own index (requires ?process=, and lists live instances only — a finished one holds no token); X-Instances-Truncated: true marks a capped page and X-Instances-Next-Cursor carries the next one", tag: "Instances", role: RoleOperator, resp: jsonBody("Instances", tArray())}},
 		{"GET", "/api/v1/instances/summary", s.handleInstancesSummary, apiOp{
 			summary: "Per-definition instance counts (active/completed) — lean count-only scan for the operations overview", tag: "Instances", role: RoleOperator, resp: jsonBody("Instance summary", tArray())}},
 		{"GET", "/api/v1/instances/search", s.handleSearchInstances, apiOp{
