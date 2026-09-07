@@ -354,3 +354,33 @@ test.describe("data stores", () => {
     await expect(page.locator(".im-note")).toContainText("Writing through a data store");
   });
 });
+
+// A class box takes its colour from CSS alone — the renderer sets no `fill` (see
+// api/web/vendor/uml/src/index.js). That makes the canvas one bad paint away from
+// unreadable, because `fill` is inherited and its initial value is black: a tint
+// that fails to compute is not an off-colour box, it is a solid black one with its
+// label painted black on top. The tints are registered with @property so a mix a
+// browser will not compute falls to a pale literal instead, and this pins that —
+// asserting the fallback, not the mix, because the mix is what breaks.
+test("a class box never falls through to SVG's black default", async ({ page }) => {
+  const fills = () => page.evaluate(() =>
+    [".uml-class.businessObject .uml-box", ".uml-class.enumeration .uml-box",
+      ".uml-class.valueType .uml-box", ".uml-store .uml-store-body"]
+      .map((sel) => getComputedStyle(document.querySelector(sel)).fill));
+
+  // Every source the tints mix from, made unresolvable at the root — which is what
+  // a malformed theme cache does, since index.html applies it without validating.
+  await page.evaluate(() => {
+    for (const v of ["--accent-soft", "--bg", "--muted", "--accent"]) {
+      document.documentElement.style.setProperty(v, "not-a-colour");
+    }
+  });
+
+  for (const fill of await fills()) {
+    expect(fill).not.toBe("rgb(0, 0, 0)");
+    // Still the intended pale tint: the colour is lost, the drawing is not.
+    const [r, g, b] = fill.match(/[\d.]+/g).map(Number);
+    expect(Math.min(r, g, b)).toBeGreaterThan(200);
+  }
+  expect(page.__errors).toEqual([]);
+});

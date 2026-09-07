@@ -45,6 +45,44 @@
   color-scheme: light;
 }
 
+/* Canvas fills, mixed once here rather than at each shape.
+
+   These sit apart from the palette above because `fill` fails differently from
+   every other property in this file. A `background` that cannot be resolved
+   computes to `transparent` and nobody notices. `fill` is inherited and its initial
+   value is *black* — and a paint that cannot be resolved does not fall back to the
+   declaration before it, it becomes `unset`, inherits, and reaches that black. So a
+   class box whose tint fails to compute is not a slightly-off box: it is a solid
+   black one, with its label painted black on top of it. The one failure this file
+   can produce that destroys a diagram outright is the one it had no fallback for.
+
+   Registering each tint closes that path. A mix a browser will not compute — an
+   unsupported `color-mix()`, or an `--accent-soft` that reached the root malformed
+   from the theme cache the bootstrap in index.html applies unvalidated — is invalid
+   at computed-value time, and a *registered* property answers that with its initial
+   value instead of with the guaranteed-invalid one. Each literal below is its own
+   mix evaluated against the default palette, so the floor under a themed instance
+   is the stock colour, not a placeholder: the tint is lost, the drawing is not. */
+@property --canvas-fill { syntax: "<color>"; inherits: true; initial-value: #f3f4f6; }
+@property --surface-fill { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
+@property --class-fill { syntax: "<color>"; inherits: true; initial-value: #eef2fb; }
+@property --enum-fill { syntax: "<color>"; inherits: true; initial-value: #eee9e2; }
+@property --uml-store-fill { syntax: "<color>"; inherits: true; initial-value: #e2e3e6; }
+@property --im-store-fill { syntax: "<color>"; inherits: true; initial-value: #ede6dd; }
+@property --object-fill { syntax: "<color>"; inherits: true; initial-value: #eef2fb; }
+@property --sim-scope-fill { syntax: "<color>"; inherits: true; initial-value: rgba(11, 92, 255, .08); }
+
+:root {
+  --canvas-fill: var(--bg);
+  --surface-fill: var(--surface);
+  --class-fill: color-mix(in srgb, var(--accent-soft) 60%, var(--bg));
+  --enum-fill: color-mix(in srgb, #b26a00 8%, var(--bg));
+  --uml-store-fill: color-mix(in srgb, var(--muted) 12%, var(--bg));
+  --im-store-fill: color-mix(in srgb, #b26a00 10%, var(--bg));
+  --object-fill: color-mix(in srgb, var(--accent-soft) 55%, var(--bg));
+  --sim-scope-fill: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
 * { box-sizing: border-box; }
 /* An id/class `display` rule outranks the UA [hidden] rule; restore it explicitly. */
 [hidden] { display: none !important; }
@@ -2977,7 +3015,7 @@ tr[hidden] { display: none; }
    held token still gives it the accent "here" outline; this adds a faint tint so it reads as
    an active *container*, not just an element holding a token. */
 .djs-element.atlas-sim-scope .djs-visual > :nth-child(1) {
-  fill: color-mix(in srgb, var(--accent) 8%, transparent) !important;
+  fill: var(--sim-scope-fill) !important;
   stroke: var(--accent) !important; stroke-width: 2.5px !important;
 }
 /* A token lands on / leaves an element (start / end pulse). */
@@ -4300,7 +4338,7 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 /* Severity (ADR-0211 §4). The badge is a glyph on a filled dot, so the class is
    readable without colour perception; colour is the second channel, never the only
    one. Node fills stay as the kind and the ArchiMate layer set them (ADR-0189 §6). */
-.mesh-badge-dot { fill: var(--surface); stroke: var(--border-strong); stroke-width: 1.5; }
+.mesh-badge-dot { fill: var(--surface-fill); stroke: var(--border-strong); stroke-width: 1.5; }
 .mesh-badge-glyph { font-size: 10px; font-weight: 700; fill: var(--text); }
 /* Both findings are drawn as a *filled* badge, and that is the correction.
    Critical always was; attention was a pale wash inside a thin ochre outline, so
@@ -4320,7 +4358,7 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .mesh-sev-attention .mesh-body, .mesh-sev-critical .mesh-body { stroke-width: 3.5; }
 .mesh-node.mesh-sev-attention:hover .mesh-body,
 .mesh-node.mesh-sev-critical:hover .mesh-body { stroke-width: 4.5; }
-.mesh-sev-unknown .mesh-badge-dot { fill: var(--bg); stroke: var(--muted); }
+.mesh-sev-unknown .mesh-badge-dot { fill: var(--canvas-fill); stroke: var(--muted); }
 .mesh-sev-unknown .mesh-badge-glyph { fill: var(--muted); }
 .mesh-sev-glyph { font-size: 10px; font-weight: 700; fill: var(--text); }
 .mesh-finding {
@@ -4857,7 +4895,7 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 
 /* A class box. The three kinds are told apart by the colour of their header strip
    rather than by shape, because shape is what the notation already uses. */
-.uml-class .uml-box { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+.uml-class .uml-box { fill: var(--canvas-fill); stroke: var(--border); stroke-width: 1; }
 .uml-class .uml-sep { stroke: var(--border); }
 .uml-class .uml-stereo { fill: var(--muted); font: 10px/1.4 system-ui, sans-serif; letter-spacing: .02em; }
 .uml-class .uml-cname { fill: var(--text); font: 600 13px/1.4 system-ui, sans-serif; }
@@ -4872,9 +4910,9 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 /* While a relationship is being drawn, a class the matrix would refuse fades: the
    canvas offers only what the server would accept. */
 .uml-class.unreachable { opacity: .35; }
-.uml-class.businessObject .uml-box { fill: color-mix(in srgb, var(--accent-soft) 60%, var(--bg)); }
-.uml-class.valueType .uml-box { fill: var(--bg); stroke-dasharray: 0; }
-.uml-class.enumeration .uml-box { fill: color-mix(in srgb, #b26a00 8%, var(--bg)); }
+.uml-class.businessObject .uml-box { fill: var(--class-fill); }
+.uml-class.valueType .uml-box { fill: var(--canvas-fill); stroke-dasharray: 0; }
+.uml-class.enumeration .uml-box { fill: var(--enum-fill); }
 
 .uml-edge .uml-edge-line { stroke: var(--text); stroke-width: 1.4; fill: none; }
 .uml-edge.generalization .uml-edge-line { stroke-width: 1.2; }
@@ -4883,7 +4921,7 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 
 /* A store is kept visibly unlike a class, because it is not one: a cylinder, joined
    to the class it holds by a dashed annotation rather than by an association. */
-.uml-store .uml-store-body { fill: color-mix(in srgb, var(--muted) 12%, var(--bg)); stroke: var(--border); }
+.uml-store .uml-store-body { fill: var(--uml-store-fill); stroke: var(--border); }
 .uml-store .uml-store-lip { stroke: var(--border); }
 .uml-store .uml-store-name { fill: var(--text); font: 600 12px/1.4 system-ui, sans-serif; }
 .uml-store .uml-store-sub { fill: var(--muted); font: 11px/1.4 system-ui, sans-serif; }
@@ -5008,12 +5046,12 @@ button.im-problem:hover { background: var(--accent-soft); }
 
 .og-scroll { overflow: auto; }
 .og-svg { display: block; }
-.og-node .og-box { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+.og-node .og-box { fill: var(--canvas-fill); stroke: var(--border); stroke-width: 1; }
 .og-node .og-sep { stroke: var(--border); }
 /* A root object is a thing the instance carries; a nested one exists only inside
    its whole. The weight says which is which without a legend. */
-.og-node .og-box { fill: color-mix(in srgb, var(--accent-soft) 55%, var(--bg)); }
-.og-node.nested .og-box { fill: var(--bg); }
+.og-node .og-box { fill: var(--object-fill); }
+.og-node.nested .og-box { fill: var(--canvas-fill); }
 .og-node.unset .og-box { stroke-dasharray: 4 3; }
 /* UML underlines an object's name — that is the notation's way of saying "this is
    an instance, not a type", and it is the one mark that tells the two diagrams
@@ -5101,7 +5139,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 .im-add.store { border-style: dashed; }
 .im-store { cursor: grab; }
 .im-store .im-store-body {
-  fill: color-mix(in srgb, #b26a00 10%, var(--bg));
+  fill: var(--im-store-fill);
   stroke: var(--border); stroke-width: 1;
 }
 .im-store .im-store-lip { stroke: var(--border); stroke-width: 1; }
