@@ -1,4 +1,4 @@
-# ADR-DRAFT: The data object lifecycle — what the BPMN data state resolves against
+# ADR-0259: The data object lifecycle — what the BPMN data state resolves against
 
 - **Status:** Proposed
 - **Date:** 2026-09-07
