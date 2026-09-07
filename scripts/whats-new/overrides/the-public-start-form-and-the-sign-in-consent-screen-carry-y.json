@@ -1,0 +1,18 @@
+{
+  "tags": ["Organization", "Forms", "Security"],
+  "title": {
+    "en": "The public start form and the consent screen carry your branding",
+    "de": "Öffentliches Startformular und Zustimmungsseite tragen Ihr Erscheinungsbild"
+  },
+  "summary": {
+    "en": "Both pages are shown before anyone has signed in, and both used to display the built-in Atlas mark and the default blue no matter what you had configured. They now ask the server for your colour and your logo like every other page. That matters most for the start form: it is the page your own customers open. If the settings are momentarily unreachable the page still appears, in the default colours — a form that is late is worse than a form that is unbranded.",
+    "de": "Beide Seiten werden vor jeder Anmeldung gezeigt, und beide zeigten bisher das eingebaute Atlas-Zeichen und das Standardblau, unabhängig von Ihrer Konfiguration. Sie holen Farbe und Logo jetzt wie jede andere Seite vom Server. Am wichtigsten ist das beim Startformular: Es ist die Seite, die Ihre eigenen Kundinnen und Kunden öffnen. Sind die Einstellungen kurzzeitig nicht erreichbar, erscheint die Seite trotzdem, in den Standardfarben — ein verspätetes Formular wäre schlimmer als ein ungebrandetes."
+  },
+  "try": {
+    "label": {
+      "en": "Upload your logo",
+      "de": "Logo hochladen"
+    },
+    "route": "#/console/org"
+  }
+}
