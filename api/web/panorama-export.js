@@ -367,6 +367,12 @@ export function standaloneSVG(source, {
   // magnification: it is zoomed by whatever opens it. A file that hid the names it
   // happened to be hiding at the moment of export would be a picture of a scroll
   // position rather than of a landscape.
+  //
+  // Every name the picture *has room for*, that is: a name with nowhere to go is left
+  // out of the file as it is left out of the canvas (see placeCaptions). That is not
+  // the magnification argument above in disguise — it is the same graph in the same
+  // layout, so it is the same set of names, and the alternative is a file with two
+  // names written across each other and no pointer to disentangle them with.
   clone.classList.add("mesh-names-all");
   clone.setAttribute("viewBox", box.join(" "));
   clone.setAttribute("x", "0");

@@ -3906,6 +3906,19 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    as the view moves in and nothing is re-rendered to show them. */
 .mesh-names-all .mesh-named .mesh-label-ink { opacity: 1; }
 .mesh-names-anchors .mesh-application.mesh-named .mesh-label-ink { opacity: 1; }
+/* And a name with nowhere to go stays unpainted even at the tier that paints them
+   all (see placeCaptions). Two names on top of each other are worse than one name
+   and a node whose name you ask for: the overlap costs both of them, and it also
+   looks like a rendering fault rather than a full canvas.
+   The states in which the reader is asking about this particular node are excluded
+   in the selector rather than left to be overridden below: a rule that has to be
+   beaten by another rule is a rule that stops working the day somebody adds a class,
+   and this one has to lose reliably — hiding a name from the picture is fine, hiding
+   it from somebody pointing at the node is not. */
+.mesh-names-all .mesh-crowded:not(:hover):not(:focus-visible):not(.mesh-related):not(.mesh-relating-self):not(.mesh-picked) .mesh-label-ink,
+.mesh-names-anchors .mesh-crowded.mesh-application:not(:hover):not(:focus-visible):not(.mesh-related):not(.mesh-relating-self):not(.mesh-picked) .mesh-label-ink {
+  opacity: 0;
+}
 /* An application's name is set larger because its circle is: it crosses the
    readable threshold first, which is what makes "where is Billing" answerable
    before the detail is. */

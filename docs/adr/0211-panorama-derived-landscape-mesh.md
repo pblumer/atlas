@@ -39,7 +39,9 @@
   write rather than only on a re-layout, and §4's two channels are drawn in screen
   units so a finding stays visible at the size §7 budgets for; amended 2026-09-07 —
   the pull that gives the graph its shape is aimed at the canvas's shape rather than
-  assumed, so the picture fills the frame it is fitted to)
+  assumed, so the picture fills the frame it is fitted to; amended 2026-09-07 — a name
+  is written wherever there is room around its node rather than always under it, and
+  left unwritten where there is none)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -731,6 +733,42 @@ unaffected.
 > crushed into a square to fill a frame. On the same estate the height filled goes
 > from 55% to 73% and the average distance between neighbouring nodes from 78 to 91
 > device pixels.
+
+> **Amendment (2026-09-07): the names move, not the nodes.**
+> With the picture filling its frame, what was left of "the nodes are too close
+> together" was the names: measured on a 36-node estate at 1400x900, nine pairs of
+> them written across each other.
+>
+> The obvious repair is to teach the layout about them — give every node personal
+> space as wide as its own name — and the numbers rule it out. Names here run to about
+> 250 world units against node radii of 6 to 18, so the world would grow by roughly an
+> order of magnitude in area; and because §7's opening view fits the whole world onto
+> the canvas, every node and every name would then be drawn that much smaller. It
+> answers "the names overlap" with "the names are too small to read", which is the
+> same complaint one step further on.
+>
+> So the graph stays exactly where it settled and the names move instead. Each is
+> offered four places around its own node — under it, over it, beside it either way —
+> and takes the first that is free, biggest node first, because a hub's name is the
+> one a reader navigates by. It costs no space at all.
+>
+> Two things decide whether this reads well rather than merely measuring well. The
+> first is that a name moves only when *another name* is in the way. A name across a
+> circle is still readable — the ink is painted with a halo behind it for exactly that
+> reason — while a name across a name destroys both; ranking the two alike moved 31 of
+> 36 names off their nodes and left six unwritten, for a picture where every
+> association has to be worked out, instead of moving eight and leaving one. The
+> second is that a name with nowhere to go is not written. Two names on top of each
+> other cost both, and look like a rendering fault rather than a full canvas.
+>
+> An unwritten name is not a lost one: it comes back on hover, on focus, on selection,
+> and whenever the filter or a drilldown gives it room. It does *not* come back by
+> zooming in, and that is a consequence rather than an oversight — the placement is in
+> world units, as a caption's size is, so two names that clear each other clear each
+> other at every magnification, and two that cannot, cannot at any. That is also what
+> makes it worth doing once per layout: panning and zooming need no re-placement, and
+> at 400 nodes the whole pass costs under a millisecond to measure and a few to place,
+> against the 266 the simulation itself takes.
 
 > **Amendment (2026-09-04): depth is a number, not a shortlist.**
 > The depth control offered 1 hop, 2 hops and all — which answers the question at

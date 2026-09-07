@@ -2972,3 +2972,77 @@ test("the graph settles into the shape of its canvas, not into a band across it"
     expect(fill.y, `height at ${w}x${h}`).toBeGreaterThan(0.65);
   }
 });
+
+// Names that used to be written on top of each other.
+//
+// The alternative was to make the layout keep them apart — personal space as wide as
+// a name — and the numbers rule it out: names run to 250 world units against radii of
+// 6 to 18, so the world would grow about tenfold in area, and since the opening view
+// fits the whole world onto the canvas, every node and every name would be drawn that
+// much smaller. That answers "the names overlap" with "the names are too small to
+// read". So the graph stays where it settled and the names move instead.
+test("no two names are written on top of each other", async ({ page }) => {
+  const crowd = { nodes: [], edges: [], restricted: 0, clustered: false };
+  const long = ["Benutzerverwaltung: Benutzer aufnehmen", "Benutzerverwaltung: Benutzer offboarden",
+    "Order-to-Cash (Warenkorb bis Zahlung)", "Konten-Rezertifizierung (Entra ID)",
+    "Hypothekarzinsen erfassen (Migros Bank)", "GALSync (cross-forest address list)"];
+  for (let i = 1; i <= 24; i++) {
+    crowd.nodes.push({ id: `process:${i}`, kind: "process", name: `${long[i % long.length]} ${i}`,
+      provenance: "derived", processId: `p${i}`, version: 1 });
+    if (i > 1) crowd.edges.push({ from: `process:${i - 1}`, to: `process:${i}`, kind: "calls" });
+  }
+  installMock(page, crowd);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+  await page.waitForTimeout(300);
+
+  const read = await page.evaluate(() => {
+    const painted = [...document.querySelectorAll(".mesh-node")].filter((g) => {
+      const ink = g.querySelector(".mesh-label-ink");
+      return ink && ink.textContent.trim() && Number(getComputedStyle(ink).opacity) > 0.5;
+    });
+    const boxes = painted.map((g) => g.querySelector(".mesh-caption").getBoundingClientRect());
+    let clashes = 0;
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) clashes++;
+      }
+    }
+    return { painted: painted.length, clashes };
+  });
+
+  expect(read.clashes).toBe(0);
+  // And moving them apart is what happened, not hiding them: nearly every name is
+  // still written. A pass that fixed the overlap by dropping names would satisfy the
+  // line above and be a worse picture than the one it replaced.
+  expect(read.painted).toBeGreaterThan(crowd.nodes.length * 0.75);
+});
+
+// A name there was no room for is not a name that is gone.
+test("a name there was no room for comes back when you point at its node", async ({ page }) => {
+  // Names long enough, on nodes enough of them, that four places around a node are
+  // not always four free places.
+  const crowd = { nodes: [], edges: [], restricted: 0, clustered: false };
+  for (let i = 1; i <= 60; i++) {
+    crowd.nodes.push({ id: `process:${i}`, kind: "process",
+      name: `Benutzerverwaltung: Benutzer aufnehmen, prüfen und freigeben (Stufe ${i})`,
+      provenance: "derived", processId: `p${i}`, version: 1 });
+    if (i > 1) crowd.edges.push({ from: `process:${i - 1}`, to: `process:${i}`, kind: "uses" });
+  }
+  installMock(page, crowd);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+  await page.waitForTimeout(300);
+
+  const crowdedOut = page.locator(".mesh-node.mesh-crowded").first();
+  await expect(crowdedOut).toBeAttached();
+  expect(await crowdedOut.locator(".mesh-label-ink")
+    .evaluate((el) => Number(getComputedStyle(el).opacity))).toBeLessThan(0.5);
+
+  await crowdedOut.hover({ force: true });
+  await expect.poll(async () => crowdedOut.locator(".mesh-label-ink")
+    .evaluate((el) => Number(getComputedStyle(el).opacity))).toBeGreaterThan(0.9);
+});
