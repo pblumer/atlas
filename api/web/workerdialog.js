@@ -126,9 +126,13 @@ export function workerShape(kind, provider) {
     // The provider select's options follow the kind: mail picks a transport, an agent
     // picks a wire format. One list per kind, so the form cannot offer SMTP to an agent.
     providerOptions: agent ? AGENT_PROTOCOLS : (mail ? PROVIDERS : []),
-    // An agent names the model it asks. It is the setting an operator changes most
-    // often — cost against capability — which is why it is a record field and not a
-    // vault bundle entry they would have to open a secret store to read.
+    // An agent Worker names the model it asks, and since ADR-0256 that is the *default*
+    // rather than the only source: a task or an agent container may name its own, so one
+    // Worker — one endpoint, one key — serves a cheap classification and a strong piece
+    // of advice in the same process. What stays here is the answer to "what does a step
+    // that names none ask?", which is a deployment's business and an operator's to read
+    // without opening a secret store. That is also why it is a record field and not a
+    // vault bundle entry.
     model: agent,
     endpoint: !bundle && !preview,
     // A mail worker always has a sender: it is the default From address, and the
@@ -257,7 +261,7 @@ function askWorker({ api, worker, intro, extraLabel }) {
             <label class="field conn-f-provider"><span class="conn-provider-label">Provider</span><select id="conn-provider"></select></label>
             <label class="field conn-f-endpoint" style="flex:1 1 220px"><span class="conn-endpoint-label">Endpoint</span><input id="conn-endpoint" value="${esc(c.endpoint || "")}"/></label>
             <label class="field conn-f-sender" style="flex:1 1 200px"><span>Sender</span><input id="conn-sender" value="${esc(c.sender || "")}" placeholder="bot@example.com"/></label>
-            <label class="field conn-f-model" style="flex:1 1 200px"><span>Model</span><input id="conn-model" value="${esc(c.model || "")}"/></label>
+            <label class="field conn-f-model" style="flex:1 1 200px"><span>Default model</span><input id="conn-model" value="${esc(c.model || "")}" title="What a task that names no model of its own asks. A task or an agent container may name one, and then that one runs."/></label>
             <label class="field conn-f-credref" style="flex:1 1 200px"><span class="conn-credref-label">Token reference</span><input id="conn-credref" value="${esc(c.credentialsRef || "")}"/></label>
           </div>
           <label class="conn-enabled"><input type="checkbox" id="conn-enabled"${c.enabled ? " checked" : ""}/> <span>Enabled — a disabled worker is skipped, and its tasks park</span></label>

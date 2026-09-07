@@ -76,8 +76,16 @@ var authoredKindJobTypes = map[string][]int32{
 	"entra": {compiler.EntraJobTypeIndex},
 	// The round job an agent-driven ad-hoc subprocess parks on (ADR-0253). Authored on
 	// the container itself rather than on a task, but it is a Worker Type an operator
-	// configures and the Console places like any other.
-	connectorKindAgent:        {compiler.AgentJobTypeIndex, compiler.AiTaskJobTypeIndex},
+	// configures and the Console places like any other. It answers for both of the kind's
+	// job types, because one Console record — one endpoint, one credential — configures
+	// both (ADR-0256).
+	connectorKindAgent: {compiler.AgentJobTypeIndex, compiler.AiTaskJobTypeIndex},
+	// The ai task is the Modeler's own entry for the second of those: a service task that
+	// asks a model once. It is keyed separately from the Worker Type because this table
+	// answers the *picker*, and what the picker is pointing at is one element — a reader
+	// who has selected an ai task is asking where an ai task runs, not where the agent
+	// Worker's whole repertoire does.
+	"aitask":                  {compiler.AiTaskJobTypeIndex},
 	connectorKindClio:         {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
 	connectorKindMail:         {compiler.MailJobTypeIndex},
 	"csv":                     {compiler.CsvImportJobTypeIndex},

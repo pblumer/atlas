@@ -109,3 +109,41 @@ func TestTheNewWorkerFormOffersEveryConfigurableKind(t *testing.T) {
 		}
 	}
 }
+
+// catalogDescRe matches one catalog entry's description text.
+var catalogDescRe = regexp.MustCompile(`\n\s*desc:\s*"((?:[^"\\]|\\.)*)"`)
+
+// The card renders its description with esc(), so markup in it is shown to the operator
+// as markup. That is not a hypothetical: the AI Worker Type's card carried
+// <b>…</b> around three phrases and read them out literally on the page —
+// "The model an <b>agent-driven ad-hoc subprocess</b> asks…" — for as long as the card
+// existed, because nothing looks at these strings and nobody re-reads a paragraph they
+// wrote themselves.
+//
+// The escaping is right: these are operator-facing sentences, not a template. So the
+// rule is that they are plain prose, and this is what holds them to it.
+func TestNoWorkerTypeCardShowsItsMarkup(t *testing.T) {
+	body, err := fs.ReadFile(webFS, "web/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	matches := catalogDescRe.FindAllStringSubmatch(string(body), -1)
+	if len(matches) == 0 {
+		t.Fatal("no Worker catalog descriptions found in app.js; the pattern must have changed, and this guard would pass vacuously")
+	}
+	// Three spellings, because the bracket can reach this file as any of them: plain;
+	// the HTML entity; and the JavaScript unicode escape, which is what an edit made
+	// through JSON produces and is exactly how the AI card's markup got in without
+	// looking like markup to anyone reading the diff.
+	brackets := []string{"<", "&lt;", `\u003c`, `\u003C`}
+	for _, m := range matches {
+		desc := m[1]
+		for _, bracket := range brackets {
+			if strings.Contains(desc, bracket) {
+				t.Errorf("a Worker Type card's description contains %s, which esc() shows to the operator "+
+					"as literal markup rather than rendering it:\n\t%s", bracket, desc)
+				break
+			}
+		}
+	}
+}

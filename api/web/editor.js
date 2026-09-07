@@ -1292,6 +1292,11 @@ function activeTab(root) {
   return (b && b.dataset.tab) || "design";
 }
 
+// AGENT_CONTAINER_GLYPH marks an agent-driven ad-hoc subprocess on the canvas: the ai
+// task's spark, ringed, because this one decides round by round rather than answering
+// once. Same violet, because it is the same Worker Type behind both (ADR-0256).
+const AGENT_CONTAINER_GLYPH = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#8e4ec6"/><circle cx="8" cy="8" r="5.4" fill="none" stroke="#fff" stroke-width="1" stroke-dasharray="2.2 1.6"/><path d="M8 4.4l.78 1.9 1.9.78-1.9.78L8 9.76l-.78-1.9-1.9-.78 1.9-.78z" fill="#fff"/></svg>`;
+
 // implMarker resolves an element's *implementation type* to the icon shown in the
 // Implement / runtime views, or null when the element carries no such type (so the
 // generic BPMN marker shows instead). Two task families have one: a job-script task
@@ -1300,6 +1305,20 @@ function activeTab(root) {
 // IS the service-task symbol). `label` is the tooltip; `icon` is a self-contained SVG.
 function implMarker(bo) {
   if (!bo) return null;
+  // An agent-driven ad-hoc subprocess is the one *container* with an implementation
+  // type, and marking it was the open follow-up ADR-0256 named: a reader had to open
+  // the panel to learn that entering this subprocess starts nothing and a model picks
+  // what runs. Two ad-hocs look identical on the canvas and behave oppositely, which is
+  // the exact condition ADR-0253 accepted on the promise that the Modeler would make it
+  // visible.
+  //
+  // The glyph is the ai task's spark with an orbit around it: same family — one Worker,
+  // one credential — and the orbit is the difference that matters, a container running
+  // rounds against a task asking once.
+  if (bo.$type === "bpmn:AdHocSubProcess") {
+    if (!agentConnectorOf(bo)) return null; // a plain ad-hoc: its ~ is its own marker
+    return { label: "AI agent (runs rounds)", icon: AGENT_CONTAINER_GLYPH };
+  }
   if (bo.$type === "bpmn:ScriptTask") {
     const js = findExt(bo, "atlas:JobScript");
     if (!js) return null; // FEEL script task — runs in the engine, no worker language
@@ -3514,6 +3533,39 @@ const SERVICE_TASK_KINDS = [
               return "What Google returned is written into this process variable (leave empty to discard it).";
           }
         },
+      },
+    ],
+  },
+  {
+    id: "aitask", name: "AI Task", group: "Applications",
+    desc: "Ask a language model one question and put the answer in a process variable",
+    icon: "A",
+    // A spark on violet: one question, one answer. It is deliberately *not* the agent
+    // container's mark — an ai task asks once and a container runs rounds, and a reader
+    // scanning a diagram has to be able to tell those apart without opening a panel
+    // (ADR-0256).
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#8e4ec6"/><path d="M8 3.2l1.05 2.55L11.6 6.8 9.05 7.85 8 10.4 6.95 7.85 4.4 6.8l2.55-1.05z" fill="#fff"/><path d="M11.6 9.9l.45 1.1 1.1.45-1.1.45-.45 1.1-.45-1.1-1.1-.45 1.1-.45z" fill="#fff"/></svg>`,
+    ext: "atlas:AgentConnector",
+    fields: [
+      { group: "AI worker" },
+      {
+        key: "connector", label: "Worker", datalist: "agent", placeholder: "anthropic_pb",
+        hint: "The configured AI Worker this task asks through, by the name it has under Workers in the Console. Its endpoint, its API key and the wire format it speaks live on the server, never in the model.",
+      },
+      {
+        key: "model", label: "Model", placeholder: "leave empty for the Worker's own model",
+        hint: "Which language model to ask, by the provider's own model id — e.g. claude-haiku-4-5 for a classification and claude-opus-5 for advice, both through the same Worker and the same key. Empty asks whatever that Worker is configured for.",
+      },
+      { group: "Question" },
+      {
+        key: "prompt", label: "Prompt", fx: true, rows: 6,
+        placeholder: "Klassifiziere den Antrag in genau eine Kategorie: Neubau, Sanierung, Umschuldung.",
+        hint: "What the model is asked. May be a FEEL expression (fx) built from the variables this task sees, e.g. =\"Fasse zusammen: \" + antrag.text. There is no tool list here: a step that may run activities is an agent-driven ad-hoc subprocess instead.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", resultType: "string", placeholder: "kategorie",
+        hint: "The model's answer is written into this process variable. It is required — an answer nothing reads is a call nobody needed.",
       },
     ],
   },
@@ -6214,7 +6266,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               <input type="text" id="f-agent-connector" list="dl-agent-connector" autocomplete="off" value="${esc(ac.connector || "")}" placeholder="anthropic_pb"/>
               <datalist id="dl-agent-connector"></datalist></label>
             <p class="muted" id="nt-agent-connector" style="font-size:12px"></p>
-            <p class="muted" style="font-size:12px">The Worker holding the model endpoint and its credential — neither travels in the model (<b>General → Documentation</b> on this subprocess is the agent's <b>goal</b>: the sentence the model reads to know what it is here for).</p>
+            <label class="field"><span>Model</span>
+              <input type="text" id="f-agent-model" value="${esc(ac.model || "")}" placeholder="leave empty for the Worker's own model"/></label>
+            <p class="muted" style="font-size:12px">The Worker holding the model endpoint and its credential — neither travels in the model (<b>General → Documentation</b> on this subprocess is the agent's <b>goal</b>: the sentence the model reads to know what it is here for). <b>Model</b> is which language model it asks, by the provider's own id; leave it empty and whatever that Worker is configured for runs.</p>
             <h3>Tool results</h3>
             <label class="field"><span>Collect results into</span>
               <input type="text" id="f-agent-resultcoll" value="${esc(ac.resultCollection || "")}" placeholder="toolCallResults"/></label>
@@ -7617,17 +7671,24 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // others. resultElement is stored '=' prefixed like every other FEEL attribute.
     const fagentconn = body.querySelector("#f-agent-connector");
     if (fagentconn) {
+      const fagentmodel = body.querySelector("#f-agent-model");
       const fagentcoll = body.querySelector("#f-agent-resultcoll");
       const fagentelem = body.querySelector("#f-agent-resultelem");
       const saveAgent = () => savePreservingPanel(() => {
         const elem = (fagentelem.value || "").trim();
         upsertExt(modeler, element, "atlas:AgentConnector", {
           connector: (fagentconn.value || "").trim(),
+          // Empty means "the Worker's own model", so it is written as absent rather than
+          // as an empty attribute — the compiler reads a missing model as that answer,
+          // and an attribute spelling it out would only be a second way to say it
+          // (ADR-0256).
+          model: (fagentmodel.value || "").trim() || undefined,
           resultCollection: (fagentcoll.value || "").trim() || undefined,
           resultElement: elem === "" ? undefined : (elem.startsWith("=") ? elem : "= " + elem),
         });
       });
       fagentconn.addEventListener("change", saveAgent);
+      fagentmodel.addEventListener("change", saveAgent);
       fagentcoll.addEventListener("change", saveAgent);
       fagentelem.addEventListener("change", saveAgent);
       fillWorkerDatalist(api, body.querySelector("#dl-agent-connector"),

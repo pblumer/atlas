@@ -109,9 +109,11 @@ element and moves one string; it does not touch how a round runs.
   on the first call, which is the same failure a wrong decision id has, and the deploy
   cannot check it without asking the provider.
 - **Follow-ups:** ADR-0255 is amended by this, not superseded: its Console record, its
-  worker-only placement and its provisioning all stand. And the ad-hoc container is
-  still not marked as agent-driven *on the canvas* — a reader must open the panel — which
-  is a Modeler question this record does not answer.
+  worker-only placement and its provisioning all stand. The ad-hoc container was also not
+  marked as agent-driven *on the canvas* when this was written — a reader had to open the
+  panel — which is a Modeler question this record does not answer; it has since been
+  answered the way every other implemented element answers it, with the Worker Type badge
+  on the Implement tab.
 
 ## Links
 

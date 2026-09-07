@@ -645,8 +645,8 @@ const WORKER_TYPES = [
   },
   {
     id: "agent", name: "AI agent model", kind: "AI",
-    desc: "The model an \u003cb\u003eagent-driven ad-hoc subprocess\u003c/b\u003e asks which of its tools to run next. What an agent may reach is the diagram: the contained activities no sequence flow leads to are its tools, named by their element ids, described by the modeller\u0027s own documentation. A round is one job and a tool call one activity, so the loop is durable and replayable \u2014 and it never runs in the engine, because one model call can take minutes and hang. Two wire formats: Messages (Anthropic, and OpenRouter\u0027s Messages-compatible endpoint) and Chat Completions (OpenAI, and anything OpenAI-compatible). Configure each model below: its API key lives in the vault and never enters a model. Worker-only, and Atlas supervises the worker for it.",
-    refs: "ADR-0117 \u00b7 ADR-0253 \u00b7 ADR-0254", status: "active", statusLabel: "configured below",
+    desc: "The model an agent-driven ad-hoc subprocess asks which of its tools to run next. What an agent may reach is the diagram: the contained activities no sequence flow leads to are its tools, named by their element ids, described by the modeller\u0027s own documentation. A round is one job and a tool call one activity, so the loop is durable and replayable \u2014 and it never runs in the engine, because one model call can take minutes and hang. Two wire formats: Messages (Anthropic, and OpenRouter\u0027s Messages-compatible endpoint) and Chat Completions (OpenAI, and anything OpenAI-compatible). Configure each model below: its API key lives in the vault and never enters a model, and the model named here is the default \u2014 a task or a container may name its own, so one Worker serves a cheap classification and a strong piece of advice. The same configuration also serves the AI Task: a service task that asks a model once and puts the answer in a variable, with no tools, because a step with tools is the container. Worker-only, and Atlas supervises the worker for it.",
+    refs: "ADR-0117 \u00b7 ADR-0253 \u00b7 ADR-0254 \u00b7 ADR-0256", status: "active", statusLabel: "configured below",
   },
   {
     id: "entra", name: "Entra ID", kind: "Cloud directory",
@@ -3734,7 +3734,7 @@ function wireWorkerManagement(workers) {
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
-        <label class="field model-field" style="margin:0;flex:1 1 180px"><span>Model</span><input name="model"/></label>
+        <label class="field model-field" style="margin:0;flex:1 1 180px"><span>Default model</span><input name="model" title="What a step that names no model of its own asks. A task or an agent container may name one, and then that one runs (ADR-0256)."/></label>
         <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit" title="Add this configured worker">Add worker</button>
