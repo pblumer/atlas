@@ -1650,6 +1650,21 @@ func (p *CompiledProcess) NodeConnectorRef(id int32) (ConnectorRef, bool) {
 	case TypeBusinessRuleTask:
 		d := p.BusinessRuleTask(p.nodes[id].Detail)
 		jobType, connector = d.JobType, d.Connector
+	case TypeAdHocSubProcess:
+		// An agent-driven ad-hoc names its Worker on the *container* rather than on a
+		// task (ADR-0253), which is the only reason it was missed here — and being
+		// missed here is not cosmetic. This is the enumeration a deploy warns from when
+		// nothing answers to a name (ADR-0158) and a delete refuses from while a
+		// deployed model still depends on one (ADR-0163). Left out, an agent Worker
+		// deleted out from under a running process took every round with it, silently,
+		// which is exactly the mistake those two records exist to prevent.
+		//
+		// A plain ad-hoc names no Worker and contributes none.
+		d := p.AdHoc(p.nodes[id].Detail)
+		if !d.AgentDriven {
+			return ConnectorRef{}, false
+		}
+		jobType, connector = AgentJobTypeIndex, d.AgentWorker
 	default:
 		return ConnectorRef{}, false
 	}
