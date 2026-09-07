@@ -1,6 +1,6 @@
 # ADR-0255: An agent model is a Console Worker — the one field that is not a secret
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-06
 - **Deciders:** Atlas engine team
 
