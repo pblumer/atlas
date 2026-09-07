@@ -116,6 +116,11 @@ const CATALOGS = {
     "tasks.folders.within.P7D": "7 Tagen",
     "tasks.folders.unit.h": "Stunden",
     "tasks.folders.unit.d": "Tagen",
+
+    "tasks.complete.invalidFields": "Bitte noch prüfen: {fields}",
+    "tasks.complete.invalidMore.one": "und ein weiteres Feld.",
+    "tasks.complete.invalidMore.other": "und {n} weitere Felder.",
+    "tasks.complete.fileUnreadable": "Datei konnte nicht gelesen werden: {error}",
   },
 
   // English is here to prove the mechanism carries a second language rather than
@@ -206,6 +211,11 @@ const CATALOGS = {
     "tasks.folders.within.P7D": "7 days",
     "tasks.folders.unit.h": "hours",
     "tasks.folders.unit.d": "days",
+
+    "tasks.complete.invalidFields": "Still to check: {fields}",
+    "tasks.complete.invalidMore.one": "and one more field.",
+    "tasks.complete.invalidMore.other": "and {n} more fields.",
+    "tasks.complete.fileUnreadable": "The file could not be read: {error}",
   },
 };
 

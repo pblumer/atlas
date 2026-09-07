@@ -7042,7 +7042,7 @@ async function viewTasks(preselectKey) {
     let payload;
     if (state.mountedForm) {
       const { data, errors } = state.mountedForm.submit();
-      if (errors && Object.keys(errors).length > 0) { toast("Please fix the highlighted fields", "err"); return; }
+      if (errors && Object.keys(errors).length > 0) { refuseIncompleteForm(errors, t); return; }
       // A file field (form-js filepicker) holds the picked File client-side, not its
       // bytes — so read the selected file as text and submit it as the `csvText`
       // variable a CSV-import service task parses (ADR-0087). This keeps the upload a
@@ -7050,7 +7050,7 @@ async function viewTasks(preselectKey) {
       const fileInput = document.querySelector("#task-form input[type=file]");
       if (fileInput && fileInput.files && fileInput.files.length) {
         try { data.csvText = await fileInput.files[0].text(); }
-        catch (err) { toast("Datei konnte nicht gelesen werden: " + err.message, "err"); return; }
+        catch (err) { toast(tr("tasks.complete.fileUnreadable", { error: err.message }), "err"); return; }
       }
       payload = { variables: data };
     }
@@ -7076,6 +7076,56 @@ async function viewTasks(preselectKey) {
       toast("Complete failed: " + err.message, "err");
       if (btn) btn.disabled = false;
     }
+  }
+
+  // refuseIncompleteForm answers a submit the form itself rejected. form-js has
+  // already marked the offending fields; the two things it cannot do are what this
+  // adds.
+  //
+  // The first is where. The form stays mounted while the Process tab is showing —
+  // that is deliberate, it is how Complete has its data either way — so pressing
+  // Complete from there used to answer "please fix the highlighted fields" about
+  // fields on the pane the person was not looking at. Nothing was highlighted on
+  // their screen. So the refusal brings the form forward before it complains about
+  // it.
+  //
+  // The second is which. The message names the fields the way the person reading it
+  // sees them — "IBAN", not the variable key behind it and not an id.
+  function refuseIncompleteForm(errors, t) {
+    showDetailTab("form", t);
+    // A blank form refuses every required field it has, and a toast listing fifteen
+    // of them names none of them: the first few plus a count is what somebody can
+    // read at a glance and act on. Two fields may share a label, so the list is
+    // deduplicated before it is cut.
+    const names = [...new Set(invalidFieldNames(errors))];
+    const shown = names.slice(0, 4);
+    const rest = names.length - shown.length;
+    let msg = tr("tasks.complete.invalidFields", { fields: shown.join(", ") });
+    if (rest > 0) msg += " " + trPlural("tasks.complete.invalidMore", rest);
+    toast(msg, "err");
+    // Long forms scroll: the first thing to fix can be below the fold even once the
+    // form is the pane in front. After the current task, because the marks are drawn
+    // by the form's own re-render and are not in the document yet.
+    setTimeout(() => {
+      const first = document.querySelector("#task-form .fjs-has-errors, #task-form .fjs-form-field-error");
+      if (first && first.scrollIntoView) first.scrollIntoView({ block: "center" });
+    }, 0);
+  }
+
+  // invalidFieldNames turns what the form refused into the names it shows those
+  // fields under. form-js keys its errors by *field id* — the opaque `Field_1a2b3c`
+  // the form editor generates — so the ids are resolved through the form's own field
+  // registry, which is the table it keyed them with in the first place. A field with
+  // no label falls back to its variable key, and one the registry does not know
+  // falls back to the id: worse to read, still better than "some field somewhere".
+  function invalidFieldNames(errors) {
+    let reg = null;
+    try { reg = state.mountedForm.get("formFieldRegistry"); } catch { /* no registry to ask */ }
+    return Object.keys(errors).map((id) => {
+      const f = reg && reg.get(id);
+      const label = f && typeof f.label === "string" ? f.label.trim() : "";
+      return label || (f && f.key) || id;
+    });
   }
 
   // destroyForm tears down the live form-js instance (if any) before the detail
@@ -7307,24 +7357,33 @@ async function viewTasks(preselectKey) {
     // time its tab is opened; the chosen tab is kept across task selections.
     if (t.formId) mountForm(t);
     const dtabs = document.getElementById("task-dtabs");
-    const paneForm = document.getElementById("pane-form");
-    const paneProc = document.getElementById("pane-process");
     dtabs.addEventListener("click", (e) => {
       const b = e.target.closest("button[data-dtab]");
       if (!b) return;
-      const next = b.dataset.dtab;
-      if (next === state.detailTab) return;
-      state.detailTab = next;
-      for (const btn of dtabs.querySelectorAll("button")) {
-        const on = btn.dataset.dtab === next;
-        btn.classList.toggle("active", on);
-        btn.setAttribute("aria-selected", on ? "true" : "false");
-      }
-      paneForm.hidden = next !== "form";
-      paneProc.hidden = next !== "process";
-      if (next === "process" && !state.mountedProc) mountProc(t);
+      showDetailTab(b.dataset.dtab, t);
     });
     if (tab === "process") mountProc(t);
+  }
+
+  // showDetailTab moves the detail pane to one of its two tabs — the tab strip's
+  // click handler, factored out because Complete needs it too (see
+  // refuseIncompleteForm). Re-reads the panes from the document rather than closing
+  // over them, so it is safe to call from anywhere after a render.
+  function showDetailTab(next, t) {
+    if (next !== "form" && next !== "process") return;
+    if (next === state.detailTab) return;
+    state.detailTab = next;
+    const dtabs = document.getElementById("task-dtabs");
+    for (const btn of (dtabs ? dtabs.querySelectorAll("button[data-dtab]") : [])) {
+      const on = btn.dataset.dtab === next;
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    }
+    const paneForm = document.getElementById("pane-form");
+    const paneProc = document.getElementById("pane-process");
+    if (paneForm) paneForm.hidden = next !== "form";
+    if (paneProc) paneProc.hidden = next !== "process";
+    if (next === "process" && t && !state.mountedProc) mountProc(t);
   }
 
   function renderAll() {
