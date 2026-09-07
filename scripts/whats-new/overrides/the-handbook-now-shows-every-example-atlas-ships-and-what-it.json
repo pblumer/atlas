@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Handbook",
+    "Examples"
+  ],
+  "title": {
+    "en": "Every example Atlas ships now has a page in the handbook",
+    "de": "Jedes mitgelieferte Beispiel hat jetzt eine Seite im Handbuch"
+  },
+  "summary": {
+    "en": "Atlas ships thirty finished scenarios — a shopping cart that computes a total, an exam with a hard deadline, a CSV checked row by row, a Google Form whose every new row becomes a case — and the handbook showed two of them. The new Beispiele chapter describes all thirty in German and English, on two levels at once: what the scenario is for, and how it is built. Every card draws the real diagram and installs the real thing into your instance in one click; nine of them then start with one more click and run with no worker configured at all. Beside it, a runbook per worker type for the part that happens outside Atlas — the Google service account and the sharing step people forget, the two Entra permissions that cover a joiner/mover/leaver flow, the Jira token — each with the symptom that tells you what is missing.",
+    "de": "Atlas liefert dreissig fertige Szenarien mit — einen Warenkorb, der eine Summe rechnet, eine Prüfung mit hartem Zeitlimit, eine CSV, die Zeile für Zeile geprüft wird, ein Google-Formular, dessen jede neue Zeile ein Vorgang wird — und das Handbuch zeigte zwei davon. Das neue Kapitel «Beispiele» beschreibt alle dreissig auf Deutsch und Englisch, auf zwei Ebenen zugleich: wofür das Szenario gut ist, und wie es gebaut ist. Jede Karte zeichnet das echte Diagramm und installiert das Echte mit einem Klick in Ihre Instanz; neun davon starten mit einem weiteren Klick und laufen ganz ohne konfigurierten Worker. Daneben steht je Worker-Typ ein Runbook für den Teil, der ausserhalb von Atlas passiert — das Google-Dienstkonto und der Freigabeschritt, den alle vergessen, die zwei Entra-Berechtigungen für einen Eintritts-/Wechsel-/Austrittsprozess, das Jira-Token — jeweils mit dem Fehlerbild, an dem Sie erkennen, was fehlt."
+  }
+}

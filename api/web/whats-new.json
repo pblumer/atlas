@@ -30,6 +30,78 @@
       }
     },
     {
+      "id": "every-shipped-model-now-carries-its-own-diagram",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Every shipped example now brings its own diagram",
+        "de": "Jedes mitgelieferte Beispiel bringt jetzt sein eigenes Diagramm mit"
+      },
+      "summary": {
+        "en": "Four of the shipped models had no drawing of their own, so Atlas generated one when they were deployed. That is enough to run a model and not enough to read one — which started to matter the moment the handbook began showing every example as a picture. They are drawn by hand now: one straight main axis, every branch in a lane of its own, and every gateway exit labelled with its answer, which meant giving names to eight branches that never had one. Open any of them in the Modeler and the picture is the one somebody meant to draw.",
+        "de": "Vier der mitgelieferten Modelle hatten keine eigene Zeichnung, also erzeugte Atlas beim Deployen eine. Das genügt, um ein Modell laufen zu lassen, und nicht, um es zu lesen — was in dem Moment zählte, als das Handbuch anfing, jedes Beispiel als Bild zu zeigen. Jetzt sind sie von Hand gezeichnet: eine gerade Hauptachse, jeder Zweig in einer eigenen Bahn, und jeder Gateway-Ausgang mit seiner Antwort beschriftet — wofür acht Zweige erstmals einen Namen bekommen mussten. Öffnen Sie eines davon im Modeler, und das Bild ist das, das jemand zeichnen wollte."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Examples",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "three-mechanisms-the-engine-has-always-had-now-have-an-examp",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Signal, escalation and compensation now have examples",
+        "de": "Signal, Eskalation und Kompensation haben jetzt Beispiele"
+      },
+      "summary": {
+        "en": "Three things the engine has always been able to do had no scenario showing what they are for. Now they do, each written for a small business or a private person and each running with no worker, no credential and no network. Chasing an unpaid invoice shows escalation beside a message on the same subprocess — the message interrupts because the dunning run is then moot, the escalation does not because the owner should still be asked. A price change that reaches every open quote shows a signal: a message hits exactly one case, a signal hits all of them and does not know how many. And a trip whose payment is declined shows compensation, taking the hotel and the flight back in reverse order. A fourth, organising a move, is simply Atlas doing a private person's Saturday.",
+        "de": "Drei Dinge, die die Engine seit jeher kann, hatten kein Szenario, das zeigt wofür. Jetzt haben sie eines — je für einen Kleinbetrieb oder eine Privatperson geschrieben, und alle laufen ohne Worker, ohne Zugangsdaten und ohne Netz. Das Mahnen einer offenen Rechnung zeigt die Eskalation neben einer Nachricht am selben Teilprozess: Die Nachricht unterbricht, weil der Mahnlauf dann gegenstandslos ist, die Eskalation nicht, weil der Inhaber trotzdem gefragt werden soll. Eine Preisänderung, die jede offene Offerte erreicht, zeigt das Signal: Eine Nachricht trifft genau einen Fall, ein Signal trifft alle und weiss nicht, wie viele. Und eine Reise, deren Zahlung abgelehnt wird, zeigt die Kompensation, die Hotel und Flug in umgekehrter Reihenfolge zurücknimmt. Ein viertes, ein Umzug, ist schlicht Atlas am Samstag einer Privatperson."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Examples"
+      ]
+    },
+    {
+      "id": "the-handbook-now-shows-every-example-atlas-ships-and-what-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Every example Atlas ships now has a page in the handbook",
+        "de": "Jedes mitgelieferte Beispiel hat jetzt eine Seite im Handbuch"
+      },
+      "summary": {
+        "en": "Atlas ships thirty finished scenarios — a shopping cart that computes a total, an exam with a hard deadline, a CSV checked row by row, a Google Form whose every new row becomes a case — and the handbook showed two of them. The new Beispiele chapter describes all thirty in German and English, on two levels at once: what the scenario is for, and how it is built. Every card draws the real diagram and installs the real thing into your instance in one click; nine of them then start with one more click and run with no worker configured at all. Beside it, a runbook per worker type for the part that happens outside Atlas — the Google service account and the sharing step people forget, the two Entra permissions that cover a joiner/mover/leaver flow, the Jira token — each with the symptom that tells you what is missing.",
+        "de": "Atlas liefert dreissig fertige Szenarien mit — einen Warenkorb, der eine Summe rechnet, eine Prüfung mit hartem Zeitlimit, eine CSV, die Zeile für Zeile geprüft wird, ein Google-Formular, dessen jede neue Zeile ein Vorgang wird — und das Handbuch zeigte zwei davon. Das neue Kapitel «Beispiele» beschreibt alle dreissig auf Deutsch und Englisch, auf zwei Ebenen zugleich: wofür das Szenario gut ist, und wie es gebaut ist. Jede Karte zeichnet das echte Diagramm und installiert das Echte mit einem Klick in Ihre Instanz; neun davon starten mit einem weiteren Klick und laufen ganz ohne konfigurierten Worker. Daneben steht je Worker-Typ ein Runbook für den Teil, der ausserhalb von Atlas passiert — das Google-Dienstkonto und der Freigabeschritt, den alle vergessen, die zwei Entra-Berechtigungen für einen Eintritts-/Wechsel-/Austrittsprozess, das Jira-Token — jeweils mit dem Fehlerbild, an dem Sie erkennen, was fehlt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Handbook",
+        "Examples"
+      ]
+    },
+    {
       "id": "the-class-canvas-could-not-take-hold-of-more-than-one-class-",
       "version": "Unreleased",
       "date": null,
@@ -258,104 +330,6 @@
       "tags": [
         "Handbook"
       ]
-    },
-    {
-      "id": "an-element-s-documentation-is-markdown-now-and-the-people-wh",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Documentation you wrote in the model now reads as you wrote it",
-        "de": "Dokumentation aus dem Modell wird jetzt so gelesen, wie sie geschrieben ist"
-      },
-      "summary": {
-        "en": "The documentation field on an element understands Markdown: headings, bullet and numbered lists, quotes, code, bold and italic, links. Where it used to arrive as a wall of asterisks and hyphens, a work instruction now reaches the person doing the work as the checklist it was written as — in the Tasks app, in the instance replay and in the Panorama properties panel. Text written before this is untouched: a line break is still a line break, and a variable name is still a variable name.",
-        "de": "Das Dokumentationsfeld eines Elements versteht Markdown: Überschriften, Aufzählungen, nummerierte Listen, Zitate, Code, fett und kursiv, Links. Wo vorher eine Wand aus Sternchen und Bindestrichen ankam, erreicht eine Arbeitsanweisung die bearbeitende Person jetzt als die Prüfliste, als die sie geschrieben wurde — in der Tasks-App, im Instanz-Replay und im Panorama-Eigenschaftenpanel. Vorher geschriebener Text bleibt unangetastet: Ein Zeilenumbruch bleibt ein Zeilenumbruch, ein Variablenname bleibt ein Variablenname."
-      },
-      "link": {
-        "label": "ADR-0250",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0250-documentation-is-markdown.md"
-      },
-      "tags": [
-        "Tasks",
-        "Operations",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and select a user task.",
-          "In the Details panel, write the instruction in the Documentation field — a heading with ##, a checklist with -, an important word in **bold**.",
-          "Deploy and start the process, then open the task in the Tasks app: the instruction stands above the form, rendered."
-        ],
-        "de": [
-          "Öffnen Sie einen Prozess im Modeler und wählen Sie eine User-Task aus.",
-          "Schreiben Sie die Anweisung im Details-Panel ins Feld Documentation — eine Überschrift mit ##, eine Prüfliste mit -, ein wichtiges Wort in **fett**.",
-          "Deployen und starten Sie den Prozess und öffnen Sie die Aufgabe in der Tasks-App: Die Anweisung steht gerendert über dem Formular."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Tasks",
-          "de": "Aufgaben öffnen"
-        },
-        "route": "#/tasks"
-      }
-    },
-    {
-      "id": "the-handbook-is-caught-up-with-the-product-six-apps-the-play",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The handbook now covers all six apps",
-        "de": "Das Handbuch deckt jetzt alle sechs Apps ab"
-      },
-      "summary": {
-        "en": "Two of the six apps in the grid menu were not in the handbook at all: Panorama, which shows the landscape of everything deployed and how it hangs together, and Data, where you say what an order actually is across all your processes. Both now have a chapter, in German and English. So does the Playground — the Modeler tab that runs your draft against two hundred cases on the real engine, without deploying anything — and the two Console screens for connecting an AI assistant and reading who shared what with whom. The help menu's On this page entry points at the right chapter from those screens now, instead of dropping you at the top of the handbook.",
-        "de": "Zwei der sechs Apps im Rastermenü kamen im Handbuch überhaupt nicht vor: Panorama, das die Landschaft alles Deployten und ihre Zusammenhänge zeigt, und Data, wo festgehalten wird, was ein Auftrag über alle Prozesse hinweg tatsächlich ist. Beide haben jetzt ein Kapitel, auf Deutsch und Englisch. Ebenso der Playground — der Modeler-Tab, der Ihren Entwurf mit zweihundert Fällen auf der echten Engine durchrechnet, ohne etwas zu deployen — und die zwei Console-Seiten für den Anschluss eines KI-Assistenten und dafür, wer was mit wem geteilt hat. Der Eintrag «Auf dieser Seite» im Hilfemenü führt von diesen Bildschirmen nun ins passende Kapitel, statt an den Anfang des Handbuchs."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Handbook"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Panorama",
-          "de": "Panorama öffnen"
-        },
-        "route": "#/panorama/starmap"
-      }
-    },
-    {
-      "id": "runtime-badges-no-longer-sit-on-the-names-they-are-pointing-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Runtime badges keep off the names",
-        "de": "Laufzeit-Badges bleiben von den Namen weg"
-      },
-      "summary": {
-        "en": "On a running diagram each shape can carry badges: how many tokens are on it, whether it is stuck, a link to a waiting task, a decision to inspect. They used to sit in the corners inside the shape, which is where the name is — on a task with a long name the decision badge covered a whole line of it, and on an event the token count landed on the caption underneath. They now hang just outside the shape, on the side the name is not, and they are the size of a count instead of spelling out a word. Each one kept its corner, so they still read the same way; hover for the wording.",
-        "de": "Auf einem laufenden Diagramm trägt jede Form Badges: wie viele Tokens auf ihr liegen, ob sie klemmt, ein Link zur wartenden Aufgabe, eine Entscheidung zum Nachsehen. Sie saßen bisher in den Ecken *innerhalb* der Form — also dort, wo der Name steht: Bei einer Aufgabe mit langem Namen verdeckte das Entscheidungs-Badge eine ganze Zeile, bei einem Ereignis landete der Token-Zähler auf der Beschriftung darunter. Jetzt hängen sie knapp außerhalb der Form, auf der Seite, auf der der Name nicht steht, und sie sind so groß wie eine Zahl statt so breit wie ein Wort. Die Ecke jedes Badges ist geblieben, sie lesen sich also unverändert; den Wortlaut zeigt der Tooltip."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
     }
   ]
 }
