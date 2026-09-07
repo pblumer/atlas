@@ -1,0 +1,13 @@
+{
+  "title": {
+    "en": "A busy server no longer slows itself down",
+    "de": "Ein ausgelasteter Server bremst sich nicht mehr selbst aus"
+  },
+  "tags": [
+    "Operations"
+  ],
+  "summary": {
+    "en": "Starting an instance, publishing a message, cancelling or terminating a batch and uploading a CSV all report the runtime counts back to you — and working those counts out meant walking every running instance and every token. On a large installation that was a quarter of a million records per operation, done by the one component that also executes your processes. So the more work the system was given, the harder it braked itself, until the interface stopped responding altogether. The numbers are unchanged; they are simply no longer worked out in the one place where everybody else has to wait for them.",
+    "de": "Beim Starten einer Instanz, beim Senden einer Nachricht, beim Abbrechen oder Beenden mehrerer Instanzen und beim CSV-Upload werden Ihnen die Laufzeitzahlen zurückgemeldet — und um diese Zahlen zu ermitteln, wurde jede laufende Instanz und jedes Token durchgezählt. Auf einer grossen Installation war das eine Viertelmillion Datensätze pro Vorgang, erledigt von derselben Komponente, die auch Ihre Prozesse ausführt. Je mehr zu tun war, desto stärker bremste sich das System selbst aus — bis die Oberfläche ganz stehen blieb. Die Zahlen sind dieselben; sie werden nur nicht mehr an der einen Stelle ermittelt, an der alle anderen darauf warten müssen."
+  }
+}

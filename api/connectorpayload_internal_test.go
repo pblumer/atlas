@@ -14,6 +14,7 @@ import (
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
@@ -610,6 +611,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.GoogleSheetsJobTypeIndex", googlesheets.Job{}},
 		{"compiler.CsvImportJobTypeIndex", csvimport.Job{}},
 		{"compiler.LdifJobTypeIndex", ldif.Job{}},
+		{"compiler.DiscordJobTypeIndex", discord.Job{}},
 	} {
 		t.Run(tc.arm, func(t *testing.T) {
 			sent, ok := arms[tc.arm]
@@ -702,6 +704,117 @@ func jsonFieldNames(t *testing.T, v any) map[string]bool {
 	}
 	if len(out) == 0 {
 		t.Fatalf("%s declares no json fields; it is not a resolved-job struct", rt)
+	}
+	return out
+}
+
+// Every offloadable Worker Type has a payload arm — and this is the check that was
+// missing when the Discord Worker Type shipped.
+//
+// The table above holds each arm against its resolved job, which catches a *renamed* or
+// *forgotten field*. It cannot catch a *missing arm*, because its rows are written by
+// hand: a kind nobody adds a row for is simply not looked at. Discord had a worker case,
+// a job type, a registry and an offload default, and no arm — so the engine leased the
+// job, sent it with no resolved detail, and the worker raised
+// "the job carried no resolved worker detail" on the first real message. Everything
+// compiled and every other test passed.
+//
+// This derives its expectation from offloadableKinds instead, so the next kind is covered
+// the moment it becomes offloadable rather than when somebody remembers.
+func TestEveryOffloadableJobTypeHasAPayloadArm(t *testing.T) {
+	answered := payloadArmCases(t)
+
+	// Two kinds are offloadable and correctly have no arm, for reasons the tree states
+	// elsewhere: a local DMN decision must never gain one
+	// (TestLocalDMNMustNotGainAPayloadArm), and a script task is a different node type,
+	// resolved before this switch is reached.
+	exempt := map[string]bool{"dmn": true, "script": true}
+
+	for kind, jobTypes := range offloadableKinds {
+		if exempt[kind] {
+			continue
+		}
+		for _, jt := range jobTypes {
+			if !answered[jt] {
+				t.Errorf("kind %q is offloadable but resolveConnectorTask answers no case for job type "+
+					"index %d — the engine would lease its jobs and send them with no resolved detail, "+
+					"and the worker would fail on the first real one", kind, jt)
+			}
+		}
+	}
+}
+
+// payloadArmCaseRe matches a whole case line of resolveConnectorTask's switch, so that a
+// shared arm is read as answering *every* constant it names rather than only the first.
+// Three kinds share an arm today — the SQL products, and clio's write/query/read — and
+// keying them by the first constant is what would otherwise make this guard demand arms
+// that already exist.
+var payloadArmCaseRe = regexp.MustCompile(`(?m)^\tcase (compiler\.[A-Za-z]+JobTypeIndex(?:, compiler\.[A-Za-z]+JobTypeIndex)*):$`)
+
+// payloadArmConstRe pulls the individual constants out of such a line.
+var payloadArmConstRe = regexp.MustCompile(`compiler\.([A-Za-z]+JobTypeIndex)`)
+
+// payloadArmCases is the set of reserved job-type indices resolveConnectorTask answers.
+//
+// The constant names are mapped to their values explicitly rather than derived from the
+// job-type strings: the two do not fold onto each other (TemisDecisionJobTypeIndex serves
+// "io.atlas.temis.decision"), and a clever rule that is wrong for one entry is worse than
+// a table. What keeps the table from rotting is the count assertion below — a job type
+// added to the reserved list fails here until it is named.
+func payloadArmCases(t *testing.T) map[int32]bool {
+	t.Helper()
+	indexByConstName := map[string]int32{
+		"DMNJobTypeIndex":           compiler.DMNJobTypeIndex,
+		"UserTaskJobTypeIndex":      compiler.UserTaskJobTypeIndex,
+		"PwshJobTypeIndex":          compiler.PwshJobTypeIndex,
+		"TemisDecisionJobTypeIndex": compiler.TemisDecisionJobTypeIndex,
+		"RestJobTypeIndex":          compiler.RestJobTypeIndex,
+		"PythonJobTypeIndex":        compiler.PythonJobTypeIndex,
+		"JsJobTypeIndex":            compiler.JsJobTypeIndex,
+		"ClioWriteJobTypeIndex":     compiler.ClioWriteJobTypeIndex,
+		"ClioQueryJobTypeIndex":     compiler.ClioQueryJobTypeIndex,
+		"ClioReadJobTypeIndex":      compiler.ClioReadJobTypeIndex,
+		"MailJobTypeIndex":          compiler.MailJobTypeIndex,
+		"CsvImportJobTypeIndex":     compiler.CsvImportJobTypeIndex,
+		"SharePointJobTypeIndex":    compiler.SharePointJobTypeIndex,
+		"RemedyJobTypeIndex":        compiler.RemedyJobTypeIndex,
+		"WebScrapeJobTypeIndex":     compiler.WebScrapeJobTypeIndex,
+		"UserConnectorJobTypeIndex": compiler.UserConnectorJobTypeIndex,
+		"ScimJobTypeIndex":          compiler.ScimJobTypeIndex,
+		"LdapJobTypeIndex":          compiler.LdapJobTypeIndex,
+		"SoapJobTypeIndex":          compiler.SoapJobTypeIndex,
+		"AdJobTypeIndex":            compiler.AdJobTypeIndex,
+		"MsSqlJobTypeIndex":         compiler.MsSqlJobTypeIndex,
+		"MariaDBJobTypeIndex":       compiler.MariaDBJobTypeIndex,
+		"PostgresJobTypeIndex":      compiler.PostgresJobTypeIndex,
+		"EntraJobTypeIndex":         compiler.EntraJobTypeIndex,
+		"LdifJobTypeIndex":          compiler.LdifJobTypeIndex,
+		"JiraJobTypeIndex":          compiler.JiraJobTypeIndex,
+		"GoogleSheetsJobTypeIndex":  compiler.GoogleSheetsJobTypeIndex,
+		"AgentJobTypeIndex":         compiler.AgentJobTypeIndex,
+		"AiTaskJobTypeIndex":        compiler.AiTaskJobTypeIndex,
+		"DiscordJobTypeIndex":       compiler.DiscordJobTypeIndex,
+	}
+	if len(indexByConstName) != int(compiler.ReservedJobTypeCount()) {
+		t.Fatalf("this table names %d job-type constants but the compiler reserves %d; "+
+			"a reserved job type was added without being named here, and this guard would "+
+			"stop covering it", len(indexByConstName), compiler.ReservedJobTypeCount())
+	}
+
+	raw, err := os.ReadFile("handlers.go")
+	if err != nil {
+		t.Fatalf("read handlers.go: %v", err)
+	}
+	out := map[int32]bool{}
+	for _, line := range payloadArmCaseRe.FindAllStringSubmatch(string(raw), -1) {
+		for _, c := range payloadArmConstRe.FindAllStringSubmatch(line[1], -1) {
+			if idx, ok := indexByConstName[c[1]]; ok {
+				out[idx] = true
+			}
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("found no payload arm cases in handlers.go; the pattern must have changed")
 	}
 	return out
 }

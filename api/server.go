@@ -2625,20 +2625,55 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 
 // readStats reads the live instance counts. It must be called on the run-loop
 // goroutine (inside do).
-func (s *Server) readStats() (statsResp, error) {
-	pi, err := s.store.ActiveProcessInstanceCount()
+// readStats counts what the runtime holds, from a consistent view.
+//
+// All three counts are scans of a whole column family rather than maintained
+// counters. That is deliberate for incidents, which leave state two ways and so
+// cannot be tracked by a number kept up to date, and it is what makes the instance
+// and token counts the *authoritative* ones ADR-0080 contrasts with its
+// per-definition sums. The price is that one call costs O(active instances +
+// tokens): on a server holding 50.000 instances and 200.000 tokens it walks a
+// quarter of a million keys.
+//
+// Affordable for a request; ruinous on the run loop, which is where all eight of its
+// callers used to put it. Taking a [state.ReadView] is what moved it off, and the
+// signature is the enforcement — there is no way to call this against the live store
+// any more (ADR-0266).
+func readStats(rv *state.ReadView) (statsResp, error) {
+	pi, err := rv.ActiveProcessInstanceCount()
 	if err != nil {
 		return statsResp{}, err
 	}
-	ei, err := s.store.ActiveElementInstanceCount()
+	ei, err := rv.ActiveElementInstanceCount()
 	if err != nil {
 		return statsResp{}, err
 	}
-	inc, err := s.store.IncidentCount()
+	inc, err := rv.IncidentCount()
 	if err != nil {
 		return statsResp{}, err
 	}
 	return statsResp{ActiveProcessInstances: pi, ActiveElementInstances: ei, UnresolvedIncidents: inc}, nil
+}
+
+// statsOffLoop reads the runtime counts with the run loop free.
+//
+// Seven of the eight callers are write paths that report the counts back in their
+// response — starting an instance, publishing a message, cancelling or terminating a
+// batch, a CSV upload. Each took a run-loop turn of its own purely for that read-back,
+// so under a load generator the engine paid the quarter-million-key scan above *per
+// write*, on the single writer. That, rather than the parked instances themselves, is
+// what kept the loop busy enough to put the whole API out of reach.
+//
+// The turn this still takes is the bounded one [Server.readOffLoop] describes: take
+// the view, copy the deployment metadata. The counting happens with the loop free.
+func (s *Server) statsOffLoop() (statsResp, error) {
+	var stats statsResp
+	err := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+		var err error
+		stats, err = readStats(rv)
+		return err
+	})
+	return stats, err
 }
 
 // webETags maps each embedded UI file to a strong ETag over its bytes, built once at

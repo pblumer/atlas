@@ -201,3 +201,66 @@ func TestListAndTimelineDuringShutdown(t *testing.T) {
 		})
 	}
 }
+
+// TestStatsAndIncidentsDuringShutdown pins the two endpoints converted alongside the
+// login to the off-loop read path, and it discriminates rather than merely covers.
+//
+// A closure handed to do() is silently skipped once the loop is closing, so the old
+// handlers answered 200: /stats with three zeros, which reads as "the engine is
+// empty", and /incidents with an empty list, which reads as "nothing is stuck". Both
+// are answers an operator would act on, and both were untrue. Only a handler that
+// takes its view through readOffLoop can tell "no answer" from "the empty answer".
+func TestStatsAndIncidentsDuringShutdown(t *testing.T) {
+	srv, closeSrv := newOffLoopServer(t)
+	closeSrv()
+
+	for _, tc := range []struct {
+		name    string
+		handler func(http.ResponseWriter, *http.Request)
+		req     *http.Request
+	}{
+		{"stats", srv.handleStats, httptest.NewRequest("GET", "/api/v1/stats", nil)},
+		{"incidents", srv.handleListIncidents, httptest.NewRequest("GET", "/api/v1/incidents", nil)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			tc.handler(w, tc.req)
+			if w.Code != http.StatusServiceUnavailable {
+				t.Errorf("status = %d, want %d (body: %s)",
+					w.Code, http.StatusServiceUnavailable, w.Body.String())
+			}
+		})
+	}
+}
+
+// TestStatsCountsWhatTheViewHolds checks the conversion did not change the answer:
+// the counts still come from the same three queries, now read from a snapshot. The
+// write goes through the loop, so it is ordered before the view this takes.
+func TestStatsCountsWhatTheViewHolds(t *testing.T) {
+	srv, _ := newOffLoopServer(t)
+
+	before, err := srv.statsOffLoop()
+	if err != nil {
+		t.Fatalf("statsOffLoop: %v", err)
+	}
+
+	srv.do(func() {
+		tx := srv.store.NewTransaction()
+		if err := tx.PutProcessInstance(4242, &model.ProcessInstanceValue{ProcessDefKey: 1}); err != nil {
+			t.Errorf("PutProcessInstance: %v", err)
+			return
+		}
+		if err := tx.Commit(); err != nil {
+			t.Errorf("Commit: %v", err)
+		}
+	})
+
+	after, err := srv.statsOffLoop()
+	if err != nil {
+		t.Fatalf("statsOffLoop: %v", err)
+	}
+	if after.ActiveProcessInstances != before.ActiveProcessInstances+1 {
+		t.Errorf("active process instances = %d, want %d",
+			after.ActiveProcessInstances, before.ActiveProcessInstances+1)
+	}
+}

@@ -607,13 +607,20 @@ func TestConnectorStoreLoadAllOrdering(t *testing.T) {
 }
 
 // TestConnectorStoreLoadAllReadError covers loadAll's per-file read-error branch:
-// a hex-named .json record that is a directory passes the name filter but can't
-// be read.
+// an entry that clears the hex/.json filter and is not a directory, but still
+// cannot be read.
+//
+// Unreadable, not absent: a record that has gone away is skipped now, because an
+// off-loop reader meets that legitimately when the loop deletes one mid-listing
+// (ADR-0265). Two symlinks pointing at each other are
+// neither missing nor a directory, so they still reach the error branch.
 func TestConnectorStoreLoadAllReadError(t *testing.T) {
 	st, _ := newConnectorStore(filepath.Join(t.TempDir(), "c"))
-	// A dangling symlink named like a record: ReadDir reports it as a non-directory
-	// entry that clears the hex/.json filter, but ReadFile follows it and fails.
-	if err := os.Symlink(filepath.Join(st.Dir(), "missing"), st.FileFor("x")); err != nil {
+	loopA, loopB := st.FileFor("x"), st.FileFor("y")
+	if err := os.Symlink(loopB, loopA); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(loopA, loopB); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.LoadAll(); err == nil {

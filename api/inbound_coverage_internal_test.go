@@ -297,11 +297,19 @@ func TestResolveInboundSubsLoadErrors(t *testing.T) {
 	}
 }
 
-// TestInboundSubStoreLoadAllReadError covers loadAll's per-file read-error branch: a
-// dangling symlink named like a record passes the hex/.json filter but fails to read.
+// TestInboundSubStoreLoadAllReadError covers loadAll's per-file read-error branch: an
+// entry named like a record that passes the hex/.json filter but fails to read.
+//
+// A pair of symlinks pointing at each other rather than a dangling one, because a
+// record that is merely absent is now skipped rather than reported
+// (ADR-0265).
 func TestInboundSubStoreLoadAllReadError(t *testing.T) {
 	st, _ := newInboundSubStore(filepath.Join(t.TempDir(), "s"))
-	if err := os.Symlink(filepath.Join(st.Dir(), "missing"), st.FileFor("x")); err != nil {
+	loopA, loopB := st.FileFor("x"), st.FileFor("y")
+	if err := os.Symlink(loopB, loopA); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(loopA, loopB); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.LoadAll(); err == nil {
