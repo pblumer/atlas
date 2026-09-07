@@ -112,6 +112,7 @@ var persistentStores = []storeEntry{
 	{name: "information-models", class: classInstance, why: "the vocabulary data objects are typed against"},
 	{name: "playground-scenarios", class: classInstance, why: "saved playground scenarios"},
 	{name: "call-overrides", class: classInstance, why: "which process a call activity resolves to on this server"},
+	{name: "task-folders", class: classInstance, why: "the saved task views people work out of, and who each is shared with"},
 
 	// --- identity ----------------------------------------------------------
 	{name: "users", class: classIdentity, why: "accounts and their roles"},
