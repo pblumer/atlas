@@ -29,6 +29,49 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Discord is a Worker Type: a process can speak in the channel the team already
+  reads.** A running process regularly has something to say to people, and outbound mail
+  is the wrong shape for a team that works in a chat channel. What they want is a message
+  where they are already looking, a thread under it, and a status the process keeps
+  current instead of repeating (ADR-0258).
+
+  Six named operations — send, edit, delete and read a message, list a channel, and open
+  a thread — each with its values checked at deploy rather than dropped at call time. The
+  bot token lives in the Worker record and is resolved server-side by name, so a model
+  refers to a Discord Worker by name only and never carries a token. Replying in a thread
+  is deliberately not a seventh operation: in Discord a thread *is* a channel, and its id
+  is on what `create-thread` returns, so a reply is `send-message` addressing that id.
+
+- **A Discord channel can start a process.** The other direction: a watch polls a channel
+  and publishes each new message as an Atlas message, so somebody reporting a fault in
+  chat opens a case without leaving the channel. Configure it under Workers › *Events…*
+  with the channel id and the message name your model starts on (ADR-0262).
+
+  A message id is a snowflake — monotonic by construction, assigned at creation, never
+  moved by an edit — so the watch is sequenced on the id itself and needs neither a lag
+  window nor a cursor field. A new watch is forward-only: the messages already in the
+  channel are skipped, rather than starting one process per item of history. The started
+  instance is seeded with `messageId`, `channelId`, `content`, `authorId`, `authorName`,
+  `authorBot`, `timestamp`, `eventType` and the whole `message`.
+
+  **If the Worker also posts into the channel it watches, guard on `authorBot`.** Its own
+  messages come back through the watch, and without that gate each one starts another
+  round — a loop in which every instance looks correct on its own.
+
+- **A deploy now says when a model's `atlas:` namespace is not Atlas'.** The compiler
+  matches an extension element on its local name alone, so a model that binds the `atlas`
+  prefix to the wrong URI compiles, deploys and runs exactly like a correct one. The
+  Modeler is not lenient in the same way: it resolves `atlas:*` against the single URI in
+  its moddle, and an element outside it is not an Atlas element at all — importing appears
+  to work, and then every Save fails with `no namespace uri given for prefix <ns0>`
+  (ADR-0269).
+
+  The parser stays lenient, because a deployed definition is recompiled from its stored
+  XML on recovery and rejecting a stray namespace would strand every model already
+  deployed with one. Instead the deploy warns, naming the elements, the namespace found
+  and the one line to change. The check reads the moddle the Modeler itself loads, so it
+  cannot drift from what the Modeler accepts.
+
 - **Task folders: the Tasks app's sidebar folders are now saved filters somebody builds
   from listboxes.** The sidebar had four fixed folders. The question a person actually
   arrives with in the morning is a different one — "what is open on customer enquiries?" —
@@ -3661,6 +3704,21 @@ _Changed_ / _Removed_ for each version.
   is how it immediately found that the DMN Modeler bundle recorded no sum at all — a
   hand-edit or a forgotten rebuild there would have been invisible. That sum is recorded
   now.
+
+### Fixed
+
+- **Two Google Sheets row watches on one Worker no longer share an idempotency mark.**
+  A row watch's mark was composed from the Worker's id and a field only clio watches
+  fill, which for every other kind is the empty string. So two watches on the same
+  Worker — two different spreadsheets — composed the *same* mark, and whichever polled
+  first advanced it past the other's rows. The second watch's form responses were
+  silently never delivered: no error, no incident, just processes that did not start
+  (ADR-0264).
+
+  A row watch now keys its mark on the spreadsheet it watches. Existing watches need no
+  migration and replay nothing: a row watch reads from its own stored cursor, and only
+  rows past that cursor are ever emitted, so the mark's only job is to catch a duplicate
+  within one page.
 
 ## [0.4.0] — 2026-08-26
 
