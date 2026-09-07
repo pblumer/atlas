@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Offerte, die auf den Kunden wartet — und auf eine Preisänderung reagiert.
+
+  Die eine Hälfte des Signal-Beispiels. Die andere ist preisliste.bpmn, die das
+  Signal wirft. Der Lehrsatz steht zwischen den beiden Dateien:
+
+    Eine NACHRICHT trifft genau eine Instanz — die, deren Korrelationsschlüssel
+    passt. Ein SIGNAL trifft ALLE, die gerade darauf warten, und weiss nicht,
+    wie viele das sind.
+
+  Deshalb korreliert ein Signal auch über nichts: es gibt keinen Schlüssel, weil
+  es keinen Empfänger gibt, sondern beliebig viele. Wer versucht, ein Signal
+  „an eine bestimmte Offerte" zu schicken, hat das falsche Ereignis gewählt —
+  dafür ist die Nachricht da (siehe examples/mahnwesen).
+
+    Start "Anfrage eingegangen"
+      → Script "Preis berechnen"      menge × einzelpreis → angebot
+      → User-Task "Auf Entscheid warten"
+         └─ Boundary SIGNAL "preisliste.geaendert" (nicht unterbrechend)
+              → Script "Preis nachrechnen" → Ende "Nachgerechnet"
+      → (X) Angenommen? → Ende "Auftrag" / Ende "Abgelehnt"
+
+  Die Boundary ist **nicht unterbrechend**, und das ist der ganze Trick: die
+  Offerte bleibt offen, der Kunde kann weiterhin zusagen, und parallel dazu
+  rechnet ein zweiter Token den Preis neu. Unterbrechend wäre sie ein Abbruch —
+  eine Preisänderung würde jede offene Offerte vernichten.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_offerte" targetNamespace="http://atlas/examples">
+
+  <signal id="Sig_preise" name="preisliste.geaendert"/>
+
+  <process id="proc_offerte" name="Offerte mit Preisüberwachung" isExecutable="true">
+    <documentation>Rechnet eine Offerte, wartet auf den Kundenentscheid und rechnet zwischendurch neu,
+wenn die Preisliste sich ändert. Startvariablen: kunde, artikel, menge, einzelpreis. Das Signal
+preisliste.geaendert wirft proc_preisliste — eine Instanz davon erreicht jede wartende Offerte.</documentation>
+
+    <extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="kunde" type="string" required="true" default="&quot;Muster GmbH&quot;"/>
+        <atlas:startVariable name="artikel" type="string" required="true" default="&quot;Zaunfeld verzinkt&quot;"/>
+        <atlas:startVariable name="menge" type="number" required="true" default="40"/>
+        <atlas:startVariable name="einzelpreis" type="number" required="true" default="89.5"/>
+      </atlas:startForm>
+    </extensionElements>
+
+    <startEvent id="start" name="Anfrage eingegangen">
+      <outgoing>f_start_berechnen</outgoing>
+    </startEvent>
+
+    <scriptTask id="berechnen" name="Preis berechnen">
+      <documentation>decimal(…, 2) rundet auf Rappen: FEEL rechnet exakt dezimal, also ist der Betrag
+reproduzierbar und nicht das Ergebnis einer Gleitkommazahl.</documentation>
+      <extensionElements>
+        <zeebe:script resultVariable="angebot"
+          expression="= { artikel: artikel, menge: menge, einzelpreis: einzelpreis, summe: decimal(menge * einzelpreis, 2), stand: &quot;erstellt&quot; }"/>
+      </extensionElements>
+      <incoming>f_start_berechnen</incoming>
+      <outgoing>f_berechnen_warten</outgoing>
+    </scriptTask>
+
+    <userTask id="warten" name="Auf Entscheid warten">
+      <documentation>Hier steht der Token, oft wochenlang. Genau deshalb muss eine Preisänderung ihn
+erreichen können, ohne ihn zu vertreiben.</documentation>
+      <extensionElements>
+        <zeebe:formDefinition formId="offerte-entscheid"/>
+      </extensionElements>
+      <incoming>f_berechnen_warten</incoming>
+      <outgoing>f_warten_gw</outgoing>
+    </userTask>
+
+    <boundaryEvent id="preiswechsel" name="Preisliste geändert" attachedToRef="warten" cancelActivity="false">
+      <documentation>Nicht unterbrechend: die Offerte bleibt offen. Unterbrechend wäre eine Preisänderung
+ein Abbruch jeder offenen Offerte — der teuerste Modellierfehler in diesem Diagramm.</documentation>
+      <outgoing>f_preiswechsel_nachrechnen</outgoing>
+      <signalEventDefinition signalRef="Sig_preise"/>
+    </boundaryEvent>
+
+    <scriptTask id="nachrechnen" name="Preis nachrechnen">
+      <documentation>Liest den neuen Einzelpreis aus der Signal-Nutzlast, wenn einer mitkam, und behält
+sonst den alten. Das Ergebnis steht in angebotNeu — die ursprüngliche Offerte bleibt unangetastet, denn
+was dem Kunden genannt wurde, ist ein Fakt und keine Variable.</documentation>
+      <extensionElements>
+        <zeebe:script resultVariable="angebotNeu"
+          expression="= { einzelpreis: if neuerPreis = null then angebot.einzelpreis else neuerPreis, summe: decimal(angebot.menge * (if neuerPreis = null then angebot.einzelpreis else neuerPreis), 2), differenz: decimal(angebot.menge * (if neuerPreis = null then angebot.einzelpreis else neuerPreis) - angebot.summe, 2) }"/>
+      </extensionElements>
+      <incoming>f_preiswechsel_nachrechnen</incoming>
+      <outgoing>f_nachrechnen_end</outgoing>
+    </scriptTask>
+
+    <endEvent id="end_nachgerechnet" name="Nachgerechnet">
+      <incoming>f_nachrechnen_end</incoming>
+    </endEvent>
+
+    <exclusiveGateway id="gw" name="Angenommen?" default="f_gw_nein">
+      <incoming>f_warten_gw</incoming>
+      <outgoing>f_gw_ja</outgoing>
+      <outgoing>f_gw_nein</outgoing>
+    </exclusiveGateway>
+
+    <endEvent id="end_auftrag" name="Auftrag">
+      <incoming>f_gw_ja</incoming>
+    </endEvent>
+
+    <endEvent id="end_abgelehnt" name="Abgelehnt">
+      <incoming>f_gw_nein</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_berechnen" sourceRef="start" targetRef="berechnen"/>
+    <sequenceFlow id="f_berechnen_warten" sourceRef="berechnen" targetRef="warten"/>
+    <sequenceFlow id="f_warten_gw" sourceRef="warten" targetRef="gw"/>
+    <sequenceFlow id="f_preiswechsel_nachrechnen" sourceRef="preiswechsel" targetRef="nachrechnen"/>
+    <sequenceFlow id="f_nachrechnen_end" sourceRef="nachrechnen" targetRef="end_nachgerechnet"/>
+    <sequenceFlow id="f_gw_ja" name="ja" sourceRef="gw" targetRef="end_auftrag">
+      <conditionExpression>= entscheid = "annehmen"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_gw_nein" name="nein" sourceRef="gw" targetRef="end_abgelehnt"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_offerte">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="162" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="128" y="202" width="100" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_berechnen" bpmnElement="berechnen">
+        <dc:Bounds x="250" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_warten" bpmnElement="warten">
+        <dc:Bounds x="400" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_preiswechsel" bpmnElement="preiswechsel">
+        <dc:Bounds x="432" y="202" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="380" y="242" width="140" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw" bpmnElement="gw" isMarkerVisible="true">
+        <dc:Bounds x="550" y="155" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="537" y="212" width="76" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_auftrag" bpmnElement="end_auftrag">
+        <dc:Bounds x="670" y="162" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="654" y="202" width="70" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_abgelehnt" bpmnElement="end_abgelehnt">
+        <dc:Bounds x="557" y="50" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="537" y="30" width="78" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_nachrechnen" bpmnElement="nachrechnen">
+        <dc:Bounds x="382" y="310" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_nachgerechnet" bpmnElement="end_nachgerechnet">
+        <dc:Bounds x="552" y="332" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="528" y="372" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_berechnen" bpmnElement="f_start_berechnen">
+        <di:waypoint x="196" y="180"/><di:waypoint x="250" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_berechnen_warten" bpmnElement="f_berechnen_warten">
+        <di:waypoint x="350" y="180"/><di:waypoint x="400" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_warten_gw" bpmnElement="f_warten_gw">
+        <di:waypoint x="500" y="180"/><di:waypoint x="550" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_ja" bpmnElement="f_gw_ja">
+        <di:waypoint x="600" y="180"/><di:waypoint x="670" y="180"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="622" y="158" width="26" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_nein" bpmnElement="f_gw_nein">
+        <di:waypoint x="575" y="155"/><di:waypoint x="575" y="86"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="583" y="104" width="34" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_preiswechsel_nachrechnen" bpmnElement="f_preiswechsel_nachrechnen">
+        <di:waypoint x="450" y="238"/><di:waypoint x="450" y="310"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_nachrechnen_end" bpmnElement="f_nachrechnen_end">
+        <di:waypoint x="482" y="350"/><di:waypoint x="552" y="350"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

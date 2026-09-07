@@ -210,6 +210,32 @@ test("the two examples the server owns or cannot deploy offer no install button"
   await expect(page.locator("#bsp-ad-objektmodell .bsp-open")).toHaveCount(0);
 });
 
+test("the three mechanisms that had no example now have one", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await openChapter(page);
+
+  // Signal, escalation and compensation were demonstrated by no scenario for a long time —
+  // the chapter's mechanism matrix said so in as many words. These three cards are what
+  // replaced that admission, so the matrix must keep pointing at models that exist.
+  for (const id of ["bsp-preisaenderung", "bsp-mahnwesen", "bsp-reisestorno"]) {
+    await expect(page.locator("#" + id)).toHaveCount(1);
+    await expect(page.locator(`#${id} .bsp-install`)).toHaveCount(1);
+  }
+  // The chapter points at the card in the reader's language — the other variant is hidden
+  // by the page's data-l rule, so :visible is what "the reader can follow this" means here.
+  await expect(page.locator('#beispiele a[href="#bsp-preisaenderung"]:visible').first()).toBeVisible();
+
+  // The signal example is two processes, and the card has to lead with the one that
+  // catches — the thrower is three elements and explains nothing on its own.
+  const lead = await page.evaluate(async () => {
+    const cat = await (await fetch("examples-catalog.json")).json();
+    const ex = cat.examples.find((e) => e.id === "preisaenderung");
+    return { first: ex.processes[0].processId, count: ex.processes.length };
+  });
+  expect(lead).toEqual({ first: "proc_offerte", count: 2 });
+});
+
 test("a refused publish shows the reason rather than claiming success", async ({ page }) => {
   const calls = [];
   installMock(page, calls, {

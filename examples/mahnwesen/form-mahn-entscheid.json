@@ -1,0 +1,54 @@
+{
+  "$schema": "https://unpkg.com/@bpmn-io/form-js@1/dist/assets/form-js.css",
+  "id": "mahn-entscheid",
+  "type": "default",
+  "schemaVersion": 16,
+  "exporter": { "name": "Atlas", "version": "0.4.0-dev" },
+  "components": [
+    {
+      "id": "titel",
+      "type": "text",
+      "text": "## Zahlungsziel überschritten\n\nDie Nachfrist ist abgelaufen, ohne dass Geld eingegangen ist. Wie soll es weitergehen?"
+    },
+    {
+      "id": "rechnung",
+      "type": "textfield",
+      "key": "rechnungsnummer",
+      "label": "Rechnung",
+      "disabled": true
+    },
+    {
+      "id": "kunde-feld",
+      "type": "textfield",
+      "key": "kunde",
+      "label": "Kunde",
+      "disabled": true
+    },
+    {
+      "id": "betrag-feld",
+      "type": "number",
+      "key": "betrag",
+      "label": "Offener Betrag",
+      "disabled": true
+    },
+    {
+      "id": "entscheid-feld",
+      "type": "radio",
+      "key": "entscheid",
+      "label": "Entscheid",
+      "validate": { "required": true },
+      "values": [
+        { "label": "An Inkasso übergeben", "value": "inkasso" },
+        { "label": "Abschreiben — der Aufwand lohnt nicht", "value": "abschreiben" }
+      ]
+    },
+    {
+      "id": "begruendung-feld",
+      "type": "textarea",
+      "key": "begruendung",
+      "label": "Begründung",
+      "description": "Steht später im Verlauf der Instanz — der Grund, warum jemand so entschieden hat.",
+      "validate": { "required": true }
+    }
+  ]
+}

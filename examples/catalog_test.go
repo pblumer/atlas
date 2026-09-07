@@ -100,6 +100,34 @@ var catalogSources = []catalogSource{
 		Files: []string{"bonitaet-mockup.bpmn"},
 		Start: &catalogStart{"proc_bonitaet_mockup", map[string]any{"betrag": 7500}},
 	},
+	{
+		ID: "reisestorno", App: "Beispiel: Reise-Rückabwicklung",
+		Dir: "reisestorno",
+		// zahlungOk false on purpose: the compensation path is the half worth seeing,
+		// and the other one is a start variable away.
+		Start: &catalogStart{"proc_reisestorno", map[string]any{
+			"reiseziel": "Lissabon", "reisende": 2, "zahlungOk": false,
+		}},
+	},
+	{
+		ID: "mahnwesen", App: "Beispiel: Mahnwesen",
+		Dir: "mahnwesen",
+		// Seconds instead of the P10D/P20D the model defaults to: a reader watching a
+		// dunning run wants to see the escalation open the task, not wait a fortnight.
+		Start: &catalogStart{"proc_mahnwesen", map[string]any{
+			"rechnungsnummer": "RE-2026-0042", "kunde": "Muster GmbH", "betrag": 1250,
+			"zahlungsfrist": "PT10S", "nachfrist": "PT10S",
+		}},
+	},
+	{
+		ID: "preisaenderung", App: "Beispiel: Preisänderung",
+		Dir: "preisaenderung", Main: "preisaenderung/offerte.bpmn",
+		// Starts an offer, which parks at the customer decision — that is the state the
+		// signal is thrown into. The card says to start the price list next.
+		Start: &catalogStart{"proc_offerte", map[string]any{
+			"kunde": "Kunde A", "artikel": "Zaunfeld verzinkt", "menge": 40, "einzelpreis": 89.5,
+		}},
+	},
 	{ID: "pruefung", App: "Beispiel: Prüfung", Dir: "pruefung"},
 	{ID: "reisebuchung", App: "Beispiel: Reisebuchung", Dir: "reisebuchung", Main: "reisebuchung/reisebuchung.bpmn"},
 	{ID: "bewerbermanagement", App: "Bewerbermanagement", Dir: "bewerbermanagement", Main: "bewerbermanagement/bewerbung.bpmn"},
@@ -177,6 +205,8 @@ var catalogSources = []catalogSource{
 // TestFormIDsAreUniqueAcrossExamples keeps unique. A form with no entry is listed
 // under its id.
 var formDisplayNames = map[string]string{
+	"mahn-entscheid":        "Mahnung – Entscheid",
+	"offerte-entscheid":     "Offerte – Kundenentscheid",
 	"bw-bewerbung-eingang":  "Bewerbung – Eingang",
 	"bw-interview-feedback": "Interview – Feedback",
 	"bw-entscheidung":       "Bewerbung – Entscheidung",

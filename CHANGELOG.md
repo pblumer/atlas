@@ -14,8 +14,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Three mechanisms the engine has always had now have an example.** Signal, escalation
+  and compensation were demonstrated by no scenario in `examples/` — only as isolated
+  patterns in the conformance gallery and the recipe chapter, which show *that* they work
+  and never *what they are for*. The handbook's mechanism matrix said so out loud. It no
+  longer has to:
+
+  - **`examples/mahnwesen/`** chases an unpaid invoice, and is the escalation example. Two
+    boundaries hang on the same subprocess and their difference is the whole business
+    logic: the message "payment received" **interrupts**, because the dunning run is then
+    moot; the escalation does **not**, because the run should finish *and* the owner
+    should be asked. The subprocess is not cosmetic — an escalation is caught on the
+    enclosing activity, so without one there is none. Its deadlines are start variables,
+    since `<timeDuration>` takes FEEL (ADR-0055): the same process runs in seconds instead
+    of weeks.
+  - **`examples/preisaenderung/`** recalculates every open quote when the price list
+    changes, and is the signal example — deliberately paired with the one above, because
+    the pair is the lesson: a **message** hits exactly one instance, the one whose
+    correlation key matches; a **signal** hits **all** that are waiting and does not know
+    how many that is. Verified against a live server: three waiting quotes, one instance
+    of the thrower, three recalculated quotes.
+  - **`examples/reisestorno/`** books a flight and a hotel, has the payment declined, and
+    takes both back — the compensation example. An error jumps out of an activity that
+    just went wrong; a compensation undoes activities that completed *successfully* long
+    ago, which is the case a rollback is actually about. It unwinds backwards, and the
+    handlers hang off an `<association>` rather than a sequence flow — the proof being
+    that a run with `zahlungOk: true` carries no cancellation variables at all.
+
+  All three are framed for the readers the examples were thinnest on: a small business and
+  a private person. All three run with no worker, no credential and no network.
+
 - **The handbook now shows every example Atlas ships, and what it takes to run one.**
-  Twenty-six scenarios live under `examples/` — a shopping cart that computes a total in
+  Twenty-nine scenarios live under `examples/` — a shopping cart that computes a total in
   FEEL, an exam with a hard deadline, a CSV checked row by row, a directory recertified
   against the HR system, a Google Form whose every new row becomes a case. The handbook
   showed two of them. `examples/README.md`, the only overview there was, is written for
@@ -29,8 +59,8 @@ _Changed_ / _Removed_ for each version.
   is `null` in FEEL; a Jira user search without the browse permission finds nobody
   *without failing*). Each card renders the real diagram, and installs the real artifacts —
   application, decision, forms, processes, publish — into the reader's own instance in one
-  click. Ten of them then start with one more click and run to an end event with no worker
-  configured at all.
+  click. Eight of them then start with one more click, most running to an end event with no
+  worker configured at all.
 
   Alongside it, **Worker in Betrieb nehmen**: a runbook per worker type for the half that
   happens outside Atlas and is where commissioning actually fails. The Google service

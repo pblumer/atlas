@@ -2134,12 +2134,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Sechsundzwanzig fertige Szenarien, die im Atlas-Repository liegen und hier
+      <p class="lead" data-l="de">Neunundzwanzig fertige Szenarien, die im Atlas-Repository liegen und hier
         vollständig beschrieben sind – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Twenty-six finished scenarios that live in the Atlas repository and are described
+      <p class="lead" data-l="en">Twenty-nine finished scenarios that live in the Atlas repository and are described
         here in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -2174,6 +2174,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <td><a href="#bsp-cart-total" data-l="de">Warenkorb</a><a href="#bsp-cart-total" data-l="en">Shopping cart</a></td></tr>
           <tr><td data-l="de">… einen Antrag von einem Menschen freigeben lassen</td><td data-l="en">… have a person approve a request</td>
             <td><a href="#bsp-jira-zugangsantrag">Zugangsantrag</a>, <a href="#bsp-account-bestellung">Account-Bestellung</a></td></tr>
+          <tr><td data-l="de">… etwas rückgängig machen, das schon passiert ist</td><td data-l="en">… undo something that already happened</td>
+            <td><a href="#bsp-reisestorno" data-l="de">Reise-Rückabwicklung</a><a href="#bsp-reisestorno" data-l="en">Trip rollback</a></td></tr>
+          <tr><td data-l="de">… eine Nachricht an <i>alle</i> laufenden Fälle schicken</td><td data-l="en">… send word to <i>all</i> running cases</td>
+            <td><a href="#bsp-preisaenderung" data-l="de">Preisänderung</a><a href="#bsp-preisaenderung" data-l="en">Price change</a></td></tr>
+          <tr><td data-l="de">… nachfassen, bis jemand zahlt</td><td data-l="en">… follow up until somebody pays</td>
+            <td><a href="#bsp-mahnwesen" data-l="de">Mahnwesen</a><a href="#bsp-mahnwesen" data-l="en">Dunning</a></td></tr>
           <tr><td data-l="de">… eine Frist setzen, die wirklich greift</td><td data-l="en">… set a deadline that actually bites</td>
             <td><a href="#bsp-pruefung" data-l="de">Prüfung mit Zeitlimit</a><a href="#bsp-pruefung" data-l="en">Exam with a time limit</a></td></tr>
           <tr><td data-l="de">… Fachregeln pflegen, ohne zu deployen</td><td data-l="en">… maintain business rules without deploying</td>
@@ -2206,9 +2212,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="card">
           <b><span class="tag ok" data-l="de">läuft sofort</span><span class="tag ok" data-l="en">runs at once</span></b>
           <p class="lead" data-l="de">Kein Worker, kein Zugang, kein Internet. Installieren, starten, in Operations
-            zusehen. Elf der Beispiele sind so – darunter jedes, das etwas Grundsätzliches erklärt.</p>
+            zusehen. Vierzehn der Beispiele sind so – darunter jedes, das etwas Grundsätzliches erklärt.</p>
           <p class="lead" data-l="en">No worker, no credential, no internet. Install it, start it, watch it in
-            Operations. Eleven of the examples are like this – including every one that explains something fundamental.</p>
+            Operations. Fourteen of the examples are like this – including every one that explains something fundamental.</p>
         </div>
         <div class="card">
           <b><span class="tag warn" data-l="de">braucht Internet</span><span class="tag warn" data-l="en">needs the internet</span></b>
@@ -2268,6 +2274,18 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <td data-l="de">Auskunft einholen, bevor es die Auskunftei gibt</td><td data-l="en">Get a rating before the rating agency exists</td>
             <td><span class="tag ok">–</span></td>
             <td data-l="de">Mockup-Worker, Ausfallquote, Fehler-Boundary</td><td data-l="en">Mockup worker, failure rate, error boundary</td></tr>
+          <tr><td><a href="#bsp-reisestorno" data-l="de">Reise-Rückabwicklung</a><a href="#bsp-reisestorno" data-l="en">Trip rollback</a></td>
+            <td data-l="de">Flug und Hotel gebucht, Zahlung abgelehnt – beides sauber zurücknehmen</td><td data-l="en">Flight and hotel booked, payment declined – take both back cleanly</td>
+            <td><span class="tag ok">–</span></td>
+            <td data-l="de">Kompensation, rückwärts abgewickelt</td><td data-l="en">Compensation, unwound backwards</td></tr>
+          <tr><td><a href="#bsp-mahnwesen" data-l="de">Mahnwesen</a><a href="#bsp-mahnwesen" data-l="en">Dunning</a></td>
+            <td data-l="de">Rechnung überwachen, mahnen, und den Inhaber entscheiden lassen</td><td data-l="en">Watch an invoice, remind, and let the owner decide</td>
+            <td><span class="tag ok">–</span></td>
+            <td data-l="de">Eskalation neben Nachricht, an einem Teilprozess</td><td data-l="en">Escalation beside a message, on a subprocess</td></tr>
+          <tr><td><a href="#bsp-preisaenderung" data-l="de">Preisänderung</a><a href="#bsp-preisaenderung" data-l="en">Price change</a></td>
+            <td data-l="de">Eine Preisliste ändert sich – jede offene Offerte rechnet nach</td><td data-l="en">A price list changes – every open quote recalculates</td>
+            <td><span class="tag ok">–</span></td>
+            <td data-l="de">Signal: einer wirft, alle empfangen</td><td data-l="en">Signal: one throws, all receive</td></tr>
           <tr><td><a href="#bsp-pruefung" data-l="de">Prüfung</a><a href="#bsp-pruefung" data-l="en">Exam</a></td>
             <td data-l="de">Prüfung mit hartem Zeitlimit und Notenschlüssel</td><td data-l="en">An exam with a hard time limit and a grading scale</td>
             <td><span class="tag ok">–</span></td>
@@ -2361,15 +2379,15 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 
       <h3 data-l="de">Welches Beispiel zeigt welchen Mechanismus</h3><h3 data-l="en">Which example shows which mechanism</h3>
       <p data-l="de">Wer von der Technik her sucht – „ich brauche ein Beispiel für einen Event-Subprozess" –, findet
-        es hier. Leere Zeilen sind ehrlich gemeint: <b>Signal</b>, <b>Eskalation</b> und <b>Kompensation</b> führt
-        heute kein Beispiel vor, obwohl die Engine alle drei kann; die
-        <a href="/conformance-gallery.html" target="_blank" rel="noopener">Conformance-Galerie</a> zeigt sie als
-        Einzelmuster.</p>
+        es hier. Jeder Mechanismus, den die Engine kann, hat inzwischen ein Beispiel – zuletzt kamen
+        <b>Signal</b>, <b>Eskalation</b> und <b>Kompensation</b> dazu, die lange nur als Einzelmuster in der
+        <a href="/conformance-gallery.html" target="_blank" rel="noopener">Conformance-Galerie</a> und in den
+        <a href="#rezepte">Rezepten</a> standen.</p>
       <p data-l="en">If you are searching from the technical side – "I need an example of an event subprocess" – this
-        is where it is. The empty rows are meant honestly: <b>signal</b>, <b>escalation</b> and <b>compensation</b> are
-        demonstrated by no example today, although the engine does all three; the
-        <a href="/conformance-gallery.html" target="_blank" rel="noopener">conformance gallery</a> shows them as
-        isolated patterns.</p>
+        is where it is. Every mechanism the engine has now has an example – <b>signal</b>, <b>escalation</b> and
+        <b>compensation</b> were the last to arrive, having long existed only as isolated patterns in the
+        <a href="/conformance-gallery.html" target="_blank" rel="noopener">conformance gallery</a> and the
+        <a href="#rezepte">recipes</a>.</p>
       <table>
         <thead><tr>
           <th data-l="de">Mechanismus</th><th data-l="en">Mechanism</th>
@@ -2413,15 +2431,16 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <td><a href="#bsp-bewerbermanagement">Bewerbermanagement</a></td></tr>
           <tr><td data-l="de">Call-Activity (eigenständiger Teilprozess)</td><td data-l="en">Call activity (a standalone subprocess)</td>
             <td><a href="#bsp-bewerbermanagement">Bewerbermanagement</a></td></tr>
-          <tr><td data-l="de">Signal</td><td data-l="en">Signal</td>
-            <td data-l="de">— noch keines; <a href="#rz-signal">Rezept</a> und Conformance-Galerie zeigen das Muster</td>
-            <td data-l="en">— none yet; the <a href="#rz-signal">recipe</a> and the conformance gallery show the pattern</td></tr>
+          <tr><td data-l="de">Signal (werfen und fangen)</td><td data-l="en">Signal (throw and catch)</td>
+            <td><a href="#bsp-preisaenderung" data-l="de">Preisänderung</a><a href="#bsp-preisaenderung" data-l="en">Price change</a></td></tr>
           <tr><td data-l="de">Eskalation</td><td data-l="en">Escalation</td>
-            <td data-l="de">— noch keines; das <a href="#rz-escalation">Rezept</a> zeigt das Muster</td>
-            <td data-l="en">— none yet; the <a href="#rz-escalation">recipe</a> shows the pattern</td></tr>
+            <td><a href="#bsp-mahnwesen" data-l="de">Mahnwesen</a><a href="#bsp-mahnwesen" data-l="en">Dunning</a></td></tr>
           <tr><td data-l="de">Kompensation</td><td data-l="en">Compensation</td>
-            <td data-l="de">— noch keines; das <a href="#rz-compensation">Rezept</a> zeigt das Muster</td>
-            <td data-l="en">— none yet; the <a href="#rz-compensation">recipe</a> shows the pattern</td></tr>
+            <td><a href="#bsp-reisestorno" data-l="de">Reise-Rückabwicklung</a><a href="#bsp-reisestorno" data-l="en">Trip rollback</a></td></tr>
+          <tr><td data-l="de">Boundary-Nachricht an einer Aktivität</td><td data-l="en">Boundary message on an activity</td>
+            <td><a href="#bsp-mahnwesen" data-l="de">Mahnwesen</a><a href="#bsp-mahnwesen" data-l="en">Dunning</a></td></tr>
+          <tr><td data-l="de">Eingebetteter Teilprozess</td><td data-l="en">Embedded subprocess</td>
+            <td><a href="#bsp-mahnwesen" data-l="de">Mahnwesen</a><a href="#bsp-mahnwesen" data-l="en">Dunning</a>, <a href="#bsp-pruefe-datensaetze" data-l="de">Datensätze</a><a href="#bsp-pruefe-datensaetze" data-l="en">Records</a></td></tr>
         </tbody>
       </table>
       <h3 class="rz-group"><span data-l="de">Läuft sofort – ohne einen einzigen Zugang</span><span data-l="en">Runs at once – with no credential at all</span></h3>
@@ -2681,6 +2700,203 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           </ul>
         </details>
       </div>
+      <div class="bsp" id="bsp-reisestorno">
+        <h4><span class="rz-emoji" aria-hidden="true">🧳</span>
+          <span data-l="de">Reise buchen – und sauber rückabwickeln</span><span data-l="en">Book a trip – and unwind it cleanly</span></h4>
+        <p class="bsp-tags">
+          <span class="tag ok" data-l="de">läuft sofort</span><span class="tag ok" data-l="en">runs at once</span>
+          <span class="tag" data-l="de">Kompensation</span><span class="tag" data-l="en">compensation</span>
+          <span class="tag">Mockup</span>
+          <span class="tag">examples/reisestorno/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Der Fall, den jede Privatperson kennt: Der Flug ist gebucht. Das Hotel ist gebucht.
+              Die Karte wird abgelehnt. <b>Niemandem ist geholfen, wenn der Prozess jetzt nur „Fehler" sagt</b> – die
+              zwei Buchungen sind trotzdem in der Welt und kosten Stornofristen. Dasselbe gilt für ein Reisebüro, eine
+              Bestellung aus drei Lieferantenteilen oder eine Anmeldung, die Platz, Material und Versicherung
+              gleichzeitig reserviert.</p>
+            <p data-l="en">The case every private person knows: the flight is booked. The hotel is booked. The card
+              is declined. <b>Nobody is helped by a process that now only says "error"</b> – the two bookings are in
+              the world regardless, and cancellation deadlines are running. The same holds for a travel agency, an
+              order made of three suppliers' parts, or a registration that reserves a place, equipment and insurance
+              at once.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Der Unterschied, um den es geht: Ein <b>Fehler</b> springt aus einer Aktivität heraus, die
+              gerade schiefging – eine <b>Kompensation</b> macht Aktivitäten rückgängig, die längst <i>erfolgreich</i>
+              abgeschlossen sind. Jede Buchung trägt eine Kompensations-Boundary, an der über eine
+              <code>&lt;association&gt;</code> ein Task mit <code>isForCompensation="true"</code> hängt – <b>kein
+              Sequenzfluss</b>, sonst liefe er immer. Zwei Wurf-Ereignisse wickeln <b>rückwärts</b> ab: erst das
+              Hotel, dann der Flug. Und kompensiert wird nur, was gelaufen ist – bricht es schon beim Flug ab, hat das
+              Hotel nie stattgefunden.</p>
+            <p data-l="en">The distinction at issue: an <b>error</b> jumps out of an activity that just went wrong –
+              a <b>compensation</b> undoes activities that completed <i>successfully</i> long ago. Each booking carries
+              a compensation boundary with a task hanging off it through an <code>&lt;association&gt;</code>, marked
+              <code>isForCompensation="true"</code> – <b>no sequence flow</b>, or it would always run. Two throw events
+              unwind <b>backwards</b>: the hotel first, then the flight. And only what ran is compensated – if it
+              breaks at the flight, the hotel never happened.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Der Beweis steht in den Variablen</span><span data-l="en">The proof is in the variables</span></summary>
+          <p data-l="de">Der Starten-Knopf setzt <code>zahlungOk</code> auf <code>false</code> – der Weg, der etwas
+            zeigt. Danach stehen auf der Instanz <code>flugbuchung</code>, <code>hotelbuchung</code>,
+            <code>zahlungsergebnis</code> <b>und</b> <code>hotelstorno</code> plus <code>flugstorno</code>. Startest du
+            dieselbe Definition mit <code>zahlungOk: true</code>, fehlen die beiden Storno-Variablen – <b>das</b> ist
+            der Beweis, dass die Kompensations-Tasks ausserhalb des normalen Ablaufs liegen und nur laufen, wenn
+            kompensiert wird.</p>
+          <p data-l="en">The start button sets <code>zahlungOk</code> to <code>false</code> – the path that shows
+            something. Afterwards the instance carries <code>flugbuchung</code>, <code>hotelbuchung</code>,
+            <code>zahlungsergebnis</code> <b>and</b> <code>hotelstorno</code> plus <code>flugstorno</code>. Start the
+            same definition with <code>zahlungOk: true</code> and the two cancellation variables are absent – <b>that</b>
+            is the proof that compensation tasks sit outside the normal flow and run only when compensation is
+            thrown.</p>
+          <p data-l="de"><b>Scharf schalten:</b> aus den Mockups werden REST-Tasks gegen die jeweilige Buchungs-API.
+            Ein Storno-Aufruf muss dann <b>idempotent</b> sein oder vorher prüfen, ob schon storniert wurde –
+            Zustellung ist „mindestens einmal", und eine zweite Stornierung ist bei manchen Anbietern ein Fehler, bei
+            anderen eine zweite Gebühr.</p>
+          <p data-l="en"><b>Going live:</b> the mockups become REST tasks against the respective booking API. A
+            cancellation call then has to be <b>idempotent</b> or check first whether it already happened – delivery is
+            at-least-once, and a second cancellation is an error at some providers and a second fee at others.</p>
+        </details>
+      </div>
+
+      <div class="bsp" id="bsp-mahnwesen">
+        <h4><span class="rz-emoji" aria-hidden="true">💸</span>
+          <span data-l="de">Offene Rechnung mahnen</span><span data-l="en">Chase an unpaid invoice</span></h4>
+        <p class="bsp-tags">
+          <span class="tag ok" data-l="de">läuft sofort</span><span class="tag ok" data-l="en">runs at once</span>
+          <span class="tag" data-l="de">Eskalation</span><span class="tag" data-l="en">escalation</span>
+          <span class="tag" data-l="de">Nachricht</span><span class="tag" data-l="en">message</span>
+          <span class="tag">Timer</span>
+          <span class="tag">examples/mahnwesen/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Der Zahlungseingang, den ein kleiner Betrieb heute im Kopf oder in einer Excel-Spalte
+              führt: Rechnung raus, nach zehn Tagen mahnen, nach zwanzig entscheiden – Inkasso oder abschreiben. Der
+              Prozess <b>vergisst keine Rechnung</b>, und niemand muss eine Liste durchgehen. Wichtiger noch: die
+              Entscheidung am Ende bleibt bei einem Menschen, weil sie von diesem Kunden, diesem Betrag und dieser
+              Beziehung abhängt – keine Regel nimmt sie ab.</p>
+            <p data-l="en">The payment tracking a small business keeps in its head or in a spreadsheet column: invoice
+              out, remind after ten days, decide after twenty – debt collection or write-off. The process
+              <b>forgets no invoice</b>, and nobody has to work through a list. More importantly, the decision at the
+              end stays with a person, because it depends on this customer, this amount and this relationship – no
+              rule takes it off them.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Das Beispiel zur <b>Eskalation</b> – der einzigen Ereignisart, die einen Fall aus einem
+              Teilprozess nach oben meldet, <i>ohne ihn abzubrechen</i>. Am Teilprozess hängen zwei Boundaries, und
+              ihr Unterschied ist die ganze Fachlichkeit: Die <b>Nachricht</b> „Zahlung eingegangen" <b>unterbricht</b>
+              – der Mahnlauf ist gegenstandslos. Die <b>Eskalation</b> unterbricht <b>nicht</b> – der Lauf endet
+              ordentlich <i>und</i> der Inhaber wird gefragt. Der Teilprozess ist dabei keine Kosmetik: Eine Eskalation
+              wird an der umschliessenden Aktivität gefangen, ohne sie gäbe es keine. Die Fristen sind
+              <b>Startvariablen</b> – <code>&lt;timeDuration&gt;</code> nimmt FEEL, also läuft derselbe Prozess mit
+              <code>PT10S</code> statt <code>P10D</code>.</p>
+            <p data-l="en">The escalation example – the one event kind that reports a case out of a subprocess
+              <i>without cancelling it</i>. Two boundaries hang on the subprocess, and their difference is the whole
+              business logic: the <b>message</b> "payment received" <b>interrupts</b> – the dunning run is moot. The
+              <b>escalation</b> does <b>not</b> – the run ends properly <i>and</i> the owner is asked. The subprocess
+              is not cosmetic: an escalation is caught on the enclosing activity, and without one there is none. The
+              deadlines are <b>start variables</b> – <code>&lt;timeDuration&gt;</code> takes FEEL, so the same process
+              runs with <code>PT10S</code> instead of <code>P10D</code>.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Beide Wege durchspielen</span><span data-l="en">Play both paths through</span></summary>
+          <p data-l="de">Der Starten-Knopf setzt die Fristen auf <code>PT10S</code>. Nach gut zwanzig Sekunden steht
+            die Aufgabe <i>„Wie weiter?"</i> in <a href="/#/tasks">Tasks</a> – <b>während der Teilprozess bereits in
+            seinem Ende angekommen ist</b>. Genau dieses Nebeneinander ist der Unterschied zwischen einer
+            unterbrechenden und einer nicht unterbrechenden Boundary, und in der Timeline sieht man beide Token.</p>
+          <p data-l="en">The start button sets the deadlines to <code>PT10S</code>. After a good twenty seconds the
+            task <i>"Wie weiter?"</i> stands in <a href="/#/tasks">Tasks</a> – <b>while the subprocess has already
+            reached its end</b>. That coexistence is exactly the difference between an interrupting and a
+            non-interrupting boundary, and the timeline shows both tokens.</p>
+          <p data-l="de">Den anderen Weg zeigt eine Nachricht: veröffentliche <code>zahlung.eingegangen</code> mit dem
+            Korrelationsschlüssel <code>RE-2026-0042</code> (Operations, oder per MCP), und der Mahnlauf wird
+            abgebrochen – Ende <i>„Bezahlt"</i>. Der Schlüssel ist der Punkt: die Nachricht trifft <b>genau diese
+            eine</b> Rechnung. Ein Signal träfe alle – die Gegenprobe steht in
+            <a href="#bsp-preisaenderung">Preisänderung</a>.</p>
+          <p data-l="en">A message shows the other path: publish <code>zahlung.eingegangen</code> with the correlation
+            key <code>RE-2026-0042</code> (in Operations, or over MCP) and the dunning run is cancelled – ending in
+            <i>"Bezahlt"</i>. The key is the point: the message hits <b>exactly this one</b> invoice. A signal would
+            hit all of them – the counter-experiment is <a href="#bsp-preisaenderung">Price change</a>.</p>
+        </details>
+      </div>
+
+      <div class="bsp" id="bsp-preisaenderung">
+        <h4><span class="rz-emoji" aria-hidden="true">📣</span>
+          <span data-l="de">Preisänderung erreicht jede offene Offerte</span><span data-l="en">A price change reaches every open quote</span></h4>
+        <p class="bsp-tags">
+          <span class="tag ok" data-l="de">läuft sofort</span><span class="tag ok" data-l="en">runs at once</span>
+          <span class="tag">Signal</span>
+          <span class="tag" data-l="de">zwei Prozesse</span><span class="tag" data-l="en">two processes</span>
+          <span class="tag">examples/preisaenderung/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Ein Handwerksbetrieb hat ein Dutzend Offerten draussen, die auf einen Kundenentscheid
+              warten. Der Lieferant erhöht die Preise. Ohne Prozess heisst das, sich an jede offene Offerte zu
+              <i>erinnern</i> – und die eine zu vergessen, die zum Selbstkostenpreis rausgeht. Mit Prozess wirft eine
+              Instanz ein Signal, und <b>jede</b> wartende Offerte rechnet sich selbst nach. Dasselbe Muster trägt eine
+              Betriebsschliessung, einen Produktrückruf oder einen Systemausfall.</p>
+            <p data-l="en">A trade business has a dozen quotes out, waiting for a customer's decision. The supplier
+              raises prices. With no process that means <i>remembering</i> every open quote – and forgetting the one
+              that goes out at cost. With a process, one instance throws a signal and <b>every</b> waiting quote
+              recalculates itself. The same pattern carries a site closure, a product recall or a system outage.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Zwei Modelle, und der Satz dazwischen ist der ganze Lehrsatz: <b>Eine Nachricht trifft
+              genau eine Instanz</b> – die, deren Korrelationsschlüssel passt. <b>Ein Signal trifft alle</b>, die
+              gerade darauf warten, und weiss nicht, wie viele das sind. Deshalb hat ein Signal bewusst
+              <b>keinen</b> Korrelationsschlüssel. Die Boundary an der Offerte ist <b>nicht unterbrechend</b> – eine
+              unterbrechende würde bei jeder Preisänderung jede offene Offerte vernichten, der teuerste
+              Modellierfehler in diesem Diagramm. Und das Ergebnis landet in <code>angebotNeu</code>, überschreibt
+              <code>angebot</code> also nicht: Was dem Kunden genannt wurde, ist ein Fakt und keine Variable.</p>
+            <p data-l="en">Two models, and the sentence between them is the whole lesson: <b>a message hits exactly
+              one instance</b> – the one whose correlation key matches. <b>A signal hits all</b> that are waiting for
+              it, and does not know how many that is. Which is why a signal deliberately has <b>no</b> correlation key.
+              The boundary on the quote is <b>non-interrupting</b> – an interrupting one would destroy every open quote
+              on each price change, the most expensive modelling mistake in this diagram. And the result lands in
+              <code>angebotNeu</code>, so it does not overwrite <code>angebot</code>: what was quoted to the customer
+              is a fact, not a variable.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">So siehst du es passieren</span><span data-l="en">How to watch it happen</span></summary>
+          <p data-l="de">Drücke <b>Installieren und starten</b> zwei- oder dreimal – jedes Mal entsteht eine Offerte,
+            die am Kundenentscheid parkt. Dann starte im Modeler den zweiten Prozess
+            <code>proc_preisliste</code> <b>einmal</b>. Danach trägt in <a href="/#/operations">Operations</a>
+            <i>jede</i> der Offerten ein <code>angebotNeu</code> – und der Werfer hat nie erfahren, dass es drei
+            waren.</p>
+          <p data-l="en">Press <b>install and start</b> two or three times – each press creates a quote that parks at
+            the customer decision. Then start the second process <code>proc_preisliste</code> <b>once</b> from the
+            Modeler. Afterwards <a href="/#/operations">Operations</a> shows an <code>angebotNeu</code> on <i>every</i>
+            quote – and the thrower never learned that there were three.</p>
+          <p data-l="de"><b>Die Kopplung ist der Signalname.</b> Weicht er zwischen Werfer und Fänger um ein Zeichen
+            ab, laufen beide Modelle fehlerfrei und treffen sich nie – genau wie beim Nachrichtennamen einer
+            Ereignisüberwachung.</p>
+          <p data-l="en"><b>The coupling is the signal name.</b> One character apart between thrower and catcher and
+            both models run flawlessly and never meet – exactly as with the message name of an event watch.</p>
+        </details>
+      </div>
+
       <div class="bsp" id="bsp-pruefung">
         <h4><span class="rz-emoji" aria-hidden="true">⏱️</span>
           <span data-l="de">Prüfung mit Zeitlimit und Notenschlüssel</span><span data-l="en">An exam with a time limit and a grading scale</span></h4>
@@ -7070,7 +7286,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle 26 Beispiele im Handbuch</span><span data-l="en">All 26 examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle 29 Beispiele im Handbuch</span><span data-l="en">All 29 examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>
