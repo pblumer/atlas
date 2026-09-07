@@ -14,6 +14,44 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A weekly job asks whether the handbook's screenshots still match the product.**
+  `make nuggets` re-takes them, but nobody re-takes screenshots on a schedule — and
+  staleness here is silent: a shot of a UI that has since moved still renders, and a
+  highlight ring drawn on a button that moved still looks deliberate. Nothing throws.
+  The reader finds out months later, by looking for a button where the picture put it.
+
+  The **Nugget screenshots** workflow runs `capture.mjs --check` every Monday: it starts
+  a throwaway Atlas exactly as the capture does, measures where every highlighted element
+  actually is, and compares that against the committed block. It writes nothing — no
+  images, no commits. A difference opens an issue labelled `nuggets-stale` naming the
+  targets that moved, with the measurements; a difference still there the following week
+  comments on that issue instead of opening a second one.
+
+  Deliberately the cheap half. Regenerating and committing the images automatically would
+  keep the chapter current without anybody looking, at the price of a bot writing ~800 KB
+  of image data into the history on a schedule — and of captions drifting away from
+  pictures nobody read.
+
+  **Two bugs in the capture surfaced while proving the check works, and both were mine.**
+  The first run reported the UI had moved when it had not: an earlier capture that
+  outlived its `timeout` was still serving on the port, the next run seeded *that* engine
+  on top, and the process list grew by four rows between runs. `capture.mjs` now refuses
+  to run against a server it did not start, and kills its own on a signal rather than only
+  in a `finally` block that a signal skips. The second was in the comparison itself —
+  matching a measurement to the nearest committed rectangle is guesswork the moment two
+  targets sit close together, and Claim and Complete are neighbours on the task pane. The
+  target's name now travels with its rectangle, so the comparison is exact.
+
+  The generated block gains that `target` name per highlight; `e2e/nuggets.spec.mjs`
+  holds it against `scenes.mjs` like everything else.
+
+- **The README says which images a re-take actually changes.** Measured rather than
+  assumed: seven of the twenty, and always the same seven — the ones carrying a clock or
+  a live count. A diff touching only those is the capture re-photographing the clock; a
+  diff touching the other thirteen means something moved.
+
+### Added
+
 - **The nugget screenshots are output now, not artifacts somebody once made.** Their
   pictures are captures of the running product, which buys recognition and costs
   staleness: a shot of a UI that has since moved still renders, and a ring drawn on a
