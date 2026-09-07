@@ -2,6 +2,55 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "forms-written-by-the-ai-worker",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Let the AI Worker write the form",
+        "de": "Der KI-Worker schreibt das Formular"
+      },
+      "summary": {
+        "en": "A blank form is the slow part of a form. Fourteen fields, a technical name for each one that has to match what the process calls that piece of data, a label, a hint, a rule about what is required — and you have already written most of that down twice: once in the process documentation, once in the mappings that name its variables. So: in the Modeler, press “Create a new form” on a user task or on a start event. The form editor opens with a generator already up, knowing which process and which step you came from — because pressing that link was you saying what the form is for, and you should not have to say it twice. Describe in your own words and your own language what the form should ask for, and it reads the model's own words for the rest: what the process is for, what each step says about itself, what its gateways decide on, and the names it already uses for its data. The fields come back named the way the process names them, and the form for a step you added five minutes ago knows about that step, because it reads the draft you are working on and not only what is deployed. The same button sits in the form editor's own bar, for a form you started from the Forms list. Nothing is saved. What comes back opens unsaved, under the id the form already had, and you read it, change what you want and press Save yourself — exactly as with a form you laid out by hand. Ask again over an open form and it changes that one instead of starting over, so “add a field for the period” adds a field rather than replacing the other twelve. It uses the AI Worker your operator already set up for processes: one address, one key in the vault, one place to change which model answers. Your browser never sees the key, no case data from a running instance is ever sent, and where no AI Worker is configured the button is simply not there. If a model sends back something that is not a form, you get the reason in the dialog with your description still in it, ready to try again.",
+        "de": "Das leere Formular ist der langsame Teil eines Formulars. Vierzehn Felder, für jedes ein technischer Name, der zu dem passen muss, wie der Prozess diese Angabe nennt, dazu Beschriftung, Hinweis und die Frage, was Pflicht ist — und das meiste davon hat man schon zweimal aufgeschrieben: in der Prozessdokumentation und in den Mappings, die die Variablen benennen. Also: im Modeler an einem User-Task oder an einem Start-Ereignis auf «Create a new form» drücken. Der Formular-Editor öffnet sich mit bereits geöffnetem Generator, der weiß, aus welchem Prozess und von welchem Schritt Sie kommen — denn dieser Klick war schon die Aussage, wofür das Formular da ist, und die soll man nicht zweimal machen müssen. Beschreiben Sie in eigenen Worten und in Ihrer Sprache, wonach gefragt werden soll; den Rest liest der Generator aus den eigenen Worten des Modells: wofür der Prozess da ist, was jeder Schritt über sich sagt, worüber seine Gateways entscheiden und welche Namen er für seine Daten schon verwendet. Die Felder kommen so benannt zurück, wie der Prozess sie benennt — und das Formular für einen Schritt, den Sie vor fünf Minuten eingefügt haben, kennt diesen Schritt, weil der Entwurf gelesen wird, an dem Sie arbeiten, und nicht nur das, was deployt ist. Derselbe Knopf sitzt in der Leiste des Formular-Editors, für ein Formular, das Sie über die Formularliste begonnen haben. Gespeichert wird nichts. Das Ergebnis öffnet sich ungespeichert unter der ID, die das Formular schon hatte; Sie lesen es, ändern, was Sie wollen, und drücken selbst auf Speichern — genau wie bei einem von Hand gebauten Formular. Fragen Sie über ein offenes Formular erneut, wird dieses geändert statt neu begonnen: «ein Feld für den Zeitraum ergänzen» ergänzt eines, statt die anderen zwölf zu ersetzen. Verwendet wird der KI-Worker, den Ihr Betrieb ohnehin für Prozesse eingerichtet hat: eine Adresse, ein Schlüssel im Tresor, eine Stelle, an der man das Modell wechselt. Ihr Browser sieht den Schlüssel nie, es werden keine Falldaten aus laufenden Instanzen gesendet, und wo kein KI-Worker eingerichtet ist, gibt es den Knopf schlicht nicht. Schickt ein Modell etwas zurück, das kein Formular ist, steht der Grund im Dialog — mit Ihrer Beschreibung noch darin, bereit für den nächsten Versuch."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Forms",
+        "AI"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the process in the Modeler and switch to the Implement tab.",
+          "Select the user task the form is for — or the start event, for the form that starts the process.",
+          "Press “Create a new form”. The form editor opens with the generator already on that step.",
+          "Write what the form should ask for. One or two sentences is enough.",
+          "Read what comes back on the canvas, change what you want, and Save.",
+          "Then go back to the task and link the form you just saved.",
+          "No generator? An administrator adds an AI Worker under Console › Workers first."
+        ],
+        "de": [
+          "Den Prozess im Modeler öffnen und auf den Tab Implement wechseln.",
+          "Den User-Task wählen, für den das Formular ist — oder das Start-Ereignis, für das Formular, das den Prozess startet.",
+          "Auf «Create a new form» drücken. Der Formular-Editor öffnet sich mit dem Generator auf genau diesem Schritt.",
+          "Aufschreiben, wonach gefragt werden soll. Ein, zwei Sätze genügen.",
+          "Das Ergebnis auf der Fläche lesen, anpassen, speichern.",
+          "Danach zurück zum Task und das eben gespeicherte Formular dort verknüpfen.",
+          "Kein Generator? Dann legt zuerst eine Administratorin unter Console › Workers einen KI-Worker an."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Forms",
+          "de": "Formulare öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "the-training-nuggets-play-full-screen-for-showing-one-to-a-r",
       "version": "Unreleased",
       "date": null,
@@ -297,49 +346,6 @@
         "Modeler",
         "Operations"
       ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-deployed-diagram-can-be-tidied-up-without-redeploying-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Fix a deployed diagram without redeploying it",
-        "de": "Ein deploytes Diagramm korrigieren, ohne neu zu deployen"
-      },
-      "summary": {
-        "en": "You usually notice that a diagram is hard to read once it is running — a task's name under a token count, a label on an edge. Until now the only fix was to deploy it again, which made a new version for a change nobody can see, and left the instances already running with the old picture. Now you open the deployment in the Modeler, move what needs moving, and pick \"Save layout to deployment\" from the … menu. The definition keeps its version and its running instances; only the drawing changes, everywhere at once. If you changed anything but the layout, the save is refused and tells you to deploy instead.",
-        "de": "Dass ein Diagramm schwer zu lesen ist, merkt man meist erst im Betrieb — der Name einer Aufgabe unter einem Token-Zähler, ein Label auf einer Kante. Bisher half nur erneutes Deployen: eine neue Version für eine Änderung, die niemand sieht, und die bereits laufenden Instanzen behielten trotzdem das alte Bild. Jetzt öffnen Sie das Deployment im Modeler, schieben zurecht und wählen im …-Menü «Save layout to deployment». Die Definition behält ihre Version und ihre laufenden Instanzen; nur die Zeichnung ändert sich, überall gleichzeitig. Wer versehentlich mehr als das Layout ändert, bekommt die Speicherung verweigert und den Hinweis, stattdessen zu deployen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations and pick the deployed process whose diagram you want to fix.",
-          "Open that deployment in the Modeler.",
-          "Move the shapes, labels or edges that sit badly — change nothing else.",
-          "Open the … menu and choose \"Save layout to deployment\"."
-        ],
-        "de": [
-          "Operations öffnen und den deployten Prozess wählen, dessen Diagramm stört.",
-          "Dieses Deployment im Modeler öffnen.",
-          "Formen, Labels oder Kanten zurechtschieben — sonst nichts ändern.",
-          "Im …-Menü «Save layout to deployment» wählen."
-        ]
-      },
       "try": {
         "label": {
           "en": "Open Operations",

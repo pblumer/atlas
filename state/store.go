@@ -101,6 +101,14 @@ func Open(dir string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill instance-by-definition index: %w", err)
 	}
+	// The which-instances-are-on-this-element index is the newest of them, and reads
+	// empty rather than low for the same reason: an operator filtering by a task on an
+	// upgraded store would be told nothing is waiting there. The live tokens already
+	// record the element they sit on, so it is seeded once from them.
+	if err := s.backfillElementTokenIndexIfNeeded(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: backfill element-token index: %w", err)
+	}
 	return s, nil
 }
 
@@ -836,6 +844,46 @@ func (s *Store) backfillInstanceDefIndexIfNeeded() error {
 	return b.Commit(pebble.Sync)
 }
 
+const metaElementTokenIndexV1 = "element_token_index_v1"
+
+// backfillElementTokenIndexIfNeeded seeds the piByEl index from the element
+// instances a store already holds, the first time it gains that index, then records
+// that it has done so.
+//
+// It matters for the same reason the by-definition one does: a missing index does
+// not read low, it reads *empty*. An operator on an upgraded store who clicked a
+// task holding thousands of tokens would be told no instance is sitting on it — an
+// answer that looks like a fact about the process rather than about the upgrade.
+// Every live token already carries its (definition, element) on its own record, so
+// nothing was lost; only the direction the reader needs was missing.
+//
+// One scan of the element-instance family, written with the marker in a single
+// atomic, synced batch: a crash mid-migration leaves nothing and the next open
+// re-runs cleanly. The entries are valueless, so a repeated run could only rewrite
+// keys it had already written.
+func (s *Store) backfillElementTokenIndexIfNeeded() error {
+	if _, ok, err := getCopy(s.db, keyMeta(metaElementTokenIndexV1)); err != nil || ok {
+		return err
+	}
+
+	b := s.db.NewBatch()
+	defer b.Close()
+	if err := s.scanPrefix([]byte{byte(cfElementInstance)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTElementInstance, raw)
+		if err != nil {
+			return err
+		}
+		ei := v.(*model.ElementInstanceValue)
+		return b.Set(keyInstanceByElement(ei.ProcessDefKey, ei.ElementId, ei.ProcessInstanceKey, trailingKey(k)), nil, nil)
+	}); err != nil {
+		return err
+	}
+	if err := b.Set(keyMeta(metaElementTokenIndexV1), []byte{1}, nil); err != nil {
+		return err
+	}
+	return b.Commit(pebble.Sync)
+}
+
 // InjectCorruptProcessInstance writes an undecodable record under a process
 // instance's key. It is a test/tooling affordance only — it lets a caller in another
 // package exercise the decode-error path of the active-instance scan
@@ -947,6 +995,56 @@ func (q queries) FinishedInstancesOfDefDesc(procDefKey uint64, beforeCompletedAt
 		hi = keyInstanceDoneByDef(procDefKey, beforeCompletedAt, beforeKey)
 	}
 	return q.instancesOfDefDesc(lo, hi, keyProcessInstanceHistory, fn)
+}
+
+// InstancesOnElementDesc calls fn with every live instance of one definition that
+// currently holds a token on the given element, in DESCENDING instance-key order —
+// newest first — starting just below `before`; before == 0 starts from the newest.
+//
+// It reads the piByEl index, so its cost is the answer and not the version: an
+// element five instances are waiting on costs five reads whether the definition
+// holds five instances or five hundred thousand. That is the whole point of the
+// index — the alternative is testing every live instance of the version for a
+// token on one element, which is a walk that grows with the population and would
+// run on every poll of the Operations view (ADR-0080's rule, applied to a filter).
+//
+// An instance is yielded once however many tokens it holds on the element: a loop
+// or a multi-instance activity puts several there, and "which instances are on
+// this task" is a question about instances. The entries of one instance are
+// adjacent, so the de-duplication is a comparison with the previous key rather
+// than a set.
+//
+// fn may stop the walk early by returning a sentinel error, exactly as the
+// by-definition walks do; the key of the last row it kept is the cursor for the
+// next (older) page.
+func (q queries) InstancesOnElementDesc(procDefKey uint64, elementId int32, before uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	lo := instanceByElementPrefix(procDefKey, elementId)
+	hi := prefixEnd(lo)
+	if before != 0 {
+		// UpperBound is exclusive and every entry of an instance sorts at or above the
+		// start of its own sub-range, so this starts strictly below the whole instance.
+		hi = appendBE64(instanceByElementPrefix(procDefKey, elementId), before)
+	}
+	var last uint64 // the instance the previous entry named; keys are never 0
+	return q.scanRangeDesc(lo, hi, func(k, _ []byte) error {
+		key := instanceFromElementIndexKey(k)
+		if key == last {
+			return nil // another token of the same instance on the same element
+		}
+		last = key
+		raw, ok, err := getCopy(q.r, keyProcessInstance(key))
+		if err != nil || !ok {
+			// An entry whose instance is gone is skipped rather than reported, for the
+			// same reason the by-definition walks skip theirs: the pair is written in
+			// one batch, so this is only reachable on a store awaiting its backfill.
+			return err
+		}
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		return fn(key, v.(*model.ProcessInstanceValue))
+	})
 }
 
 // instancesOfDefDesc walks one of the by-definition indexes backwards and hands fn

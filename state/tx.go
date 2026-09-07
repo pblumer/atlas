@@ -64,12 +64,27 @@ func (t *Tx) encodeValue(v model.Value) []byte {
 
 // --- ElementInstance ---
 
-// PutElementInstance writes the element instance and its elByProc index entry.
+// PutElementInstance writes the element instance and its two index entries: the
+// elByProc one (this instance's tokens) and the piByEl one (this element's
+// instances). The second is the reverse direction, and it is what lets an operator
+// ask "which instances are sitting on this task?" without walking the version.
 func (t *Tx) PutElementInstance(key uint64, v *model.ElementInstanceValue) error {
 	if err := t.b.Set(keyElementInstance(key), t.encodeValue(v), nil); err != nil {
 		return err
 	}
-	return t.b.Set(keyElByProc(v.ProcessInstanceKey, key), nil, nil)
+	if err := t.b.Set(keyElByProc(v.ProcessInstanceKey, key), nil, nil); err != nil {
+		return err
+	}
+	return t.b.Set(keyInstanceByElement(v.ProcessDefKey, v.ElementId, v.ProcessInstanceKey, key), nil, nil)
+}
+
+// DropInstanceByElement removes one piByEl entry by the coordinates it was written
+// under. It exists for migration, which re-puts an element instance under a
+// different (definition, element) pair: the new entry is written by the re-put, and
+// the old one has to be named to be dropped, because the record no longer carries
+// where it used to be.
+func (t *Tx) DropInstanceByElement(procDefKey uint64, elementId int32, piKey, elKey uint64) error {
+	return t.b.Delete(keyInstanceByElement(procDefKey, elementId, piKey, elKey), nil)
 }
 
 // GetElementInstanceInto decodes the element instance into dst without
@@ -95,7 +110,10 @@ func (t *Tx) DeleteElementInstance(key uint64, v *model.ElementInstanceValue) er
 	if err := t.b.Delete(keyElementInstance(key), nil); err != nil {
 		return err
 	}
-	return t.b.Delete(keyElByProc(v.ProcessInstanceKey, key), nil)
+	if err := t.b.Delete(keyElByProc(v.ProcessInstanceKey, key), nil); err != nil {
+		return err
+	}
+	return t.DropInstanceByElement(v.ProcessDefKey, v.ElementId, v.ProcessInstanceKey, key)
 }
 
 // ElementInstancesOfProcess calls fn for every element instance of a process
@@ -672,6 +690,12 @@ func (t *Tx) MigrateInstance(v *model.ProcessMigrationValue) error {
 	}
 	for i := range rebinds {
 		r := &rebinds[i]
+		// The re-put writes the token's index entry under the target version's
+		// (definition, element); the one it had under the source version is named
+		// here, because after the re-put the record no longer says where it was.
+		if err := t.DropInstanceByElement(v.FromProcessDefKey, r.from, v.ProcessInstanceKey, r.key); err != nil {
+			return err
+		}
 		if err := t.PutElementInstance(r.key, &r.next); err != nil {
 			return err
 		}

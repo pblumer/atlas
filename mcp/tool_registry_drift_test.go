@@ -152,6 +152,20 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/workers/{id}/jobs":    "operator diagnostics about a worker process, not an agent action",
 	"GET /api/v1/workers/{id}/history": "the same diagnostics, read from the operator's own clio; an agent with access to that clio queries it there",
 
+	// Generating a form from a description (ADR-0260). This is
+	// the one route that is deliberately *not* for an agent, and the reason is that
+	// an agent is already on the other side of it: the caller here is a language
+	// model, and asking Atlas to ask its own configured model to write a form-js
+	// schema is a detour through a second provider, a second bill and a second
+	// prompt for a document this caller can write directly. It writes it and calls
+	// atlas_save_form, which is the tool for putting a form into Atlas.
+	//
+	// The screen keeps the feature: it is for the person in the form editor who has
+	// no agent, and its whole value is that it reaches the AI Worker an *operator*
+	// configured rather than one the author has to bring.
+	"POST /api/v1/forms/generate":        "an agent writes the form-js schema itself and saves it with atlas_save_form; asking Atlas to ask a second model is a detour",
+	"GET /api/v1/forms/generate/workers": "the form editor's own probe for whether to show its Generate button",
+
 	// Backup/restore: an admin file-transfer of the data directory (ADR-0107 design-
 	// time, ADR-0109 whole-instance snapshot), not an agent authoring/runtime action.
 	"GET /api/v1/backup":        "admin data backup download, not an agent action",

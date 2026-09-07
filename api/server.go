@@ -84,6 +84,7 @@ import (
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/tracing"
 
+	"github.com/pblumer/atlas/api/formgen"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
 	"github.com/pblumer/atlas/api/token"
@@ -245,6 +246,11 @@ type Server struct {
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
 	processDocs *processdoc.Service
+	// formGen writes a form from a description and from the process it belongs to
+	// (ADR-0260). It is the one area service that holds no run
+	// loop, because it owns no state: it stores nothing, and the three closures in
+	// formgeneration.go are its whole reach into this server.
+	formGen *formgen.Service
 	// playground serves the Modeler's Playground area, and playgroundSessions
 	// holds its live sandboxes. Each sandbox owns its own single-writer goroutine,
 	// so neither field is guarded by this server's run loop (ADR-0215).
@@ -1237,6 +1243,15 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// collaborators are the server's: the shared public-route rate limiter, and the
 	// deployment lookup, which reads the registry and so is only ever called from
 	// inside the run loop the service was given.
+	// Generating a form is design-time authoring that asks the agent Worker an
+	// operator already configured (ADR-0255): one endpoint, one credential, one
+	// place to change the model. Its collaborators are this server's because the
+	// scopes and the single writer are this package's to apply.
+	s.formGen = formgen.New(
+		s.agentWorkersForGeneration,
+		s.dialAgentWorker,
+		s.processSourceForGeneration,
+	)
 	s.processDocs = processdoc.New(
 		s.runLoop,
 		processDocStore,

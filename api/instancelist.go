@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -33,6 +34,12 @@ type instanceListQuery struct {
 	beforeKey    uint64
 	beforeDoneAt int64
 	hasBefore    bool
+	// element is the BPMN id of a diagram element, and narrows the listing to the
+	// instances whose token is sitting on it right now (ADR-0261).
+	// It is resolved to the definition's node index against the compiled process, so
+	// it requires ?process= — an element id means nothing without the version that
+	// defines it, and the index it reads is keyed by that pair.
+	element string
 }
 
 // parseInstanceListQuery reads the query string, reporting the first thing wrong
@@ -93,6 +100,9 @@ func parseInstanceListQuery(q map[string][]string) (instanceListQuery, error) {
 	if out.hasBefore && !out.hasDef {
 		return out, errors.New("before requires process=<definition key>: the cursor addresses a position in one definition's index, and that index is what makes the page cost the page rather than the store")
 	}
+	if out.element = get("element"); out.element != "" && !out.hasDef {
+		return out, errors.New("element requires process=<definition key>: a BPMN element id is only meaningful within the version that defines it")
+	}
 	return out, nil
 }
 
@@ -139,29 +149,43 @@ type instancePage struct {
 	nextCursor string
 }
 
+// errNoSuchElement reports an ?element= id the named definition does not define.
+// It is a client error rather than an empty answer: an id that is not in the model
+// cannot have tokens on it, and "no instances" would read as a fact about the
+// process rather than about the request.
+var errNoSuchElement = errors.New("no such element in this process version")
+
+// fillInstanceRow turns one instance record into a listing row: its definition
+// labels, its live element instances (running rows only), and its variables.
+func fillInstanceRow(rv *state.ReadView, defs defIndex, key uint64, v *model.ProcessInstanceValue) (instanceResp, error) {
+	r := newInstanceRow(key, v, defs)
+	if v.State == model.PIActive {
+		if err := rv.ElementInstancesOfProcess(key, func(uint64) error {
+			r.ElementInstances++
+			return nil
+		}); err != nil {
+			return r, err
+		}
+	}
+	err := rv.VariablesOfScope(key, func(vv *model.VariableValue) error {
+		r.Variables = append(r.Variables, toVariableView(vv))
+		return nil
+	})
+	return r, err
+}
+
 // listInstances builds a page against a read view. It never reads loop-owned state
 // — [Server.readOffLoop] copied the definition labels on the loop and handed them
 // in — so the scan runs on the request goroutine.
 func listInstances(rv *state.ReadView, defs defIndex, q instanceListQuery) (instancePage, error) {
 	var page instancePage
 
-	// fill turns one instance record into a row: its definition labels, its live
-	// element instances (running rows only), and its variables.
+	if q.element != "" {
+		return listInstancesOnElement(rv, defs, q)
+	}
+
 	fill := func(key uint64, v *model.ProcessInstanceValue) (instanceResp, error) {
-		r := newInstanceRow(key, v, defs)
-		if v.State == model.PIActive {
-			if err := rv.ElementInstancesOfProcess(key, func(uint64) error {
-				r.ElementInstances++
-				return nil
-			}); err != nil {
-				return r, err
-			}
-		}
-		err := rv.VariablesOfScope(key, func(vv *model.VariableValue) error {
-			r.Variables = append(r.Variables, toVariableView(vv))
-			return nil
-		})
-		return r, err
+		return fillInstanceRow(rv, defs, key, v)
 	}
 	// collect appends up to limit rows, stopping the scan with the page-full
 	// sentinel rather than enriching rows it will not return.
@@ -237,6 +261,61 @@ func listInstances(rv *state.ReadView, defs defIndex, q instanceListQuery) (inst
 	return page, nil
 }
 
+// listInstancesOnElement pages the instances whose token is sitting on one element
+// of one definition right now — the Operations view's "click a task, see who is
+// waiting on it" filter (ADR-0261).
+//
+// It reads the piByEl index, so the cost is the page it returns and not the
+// version's instance population. That distinction is the whole reason the index
+// exists: the obvious implementation — walk this definition's live instances and
+// keep the ones holding a token there — is a scan that grows with the population,
+// and it would run on every 1.5-second poll of a view an operator leaves open.
+//
+// Only live instances are listed, and not because they are filtered for: a token
+// exists only in a running instance, so the finished half of this listing is empty
+// by construction. An instance holding several tokens on the element (a loop, a
+// multi-instance activity) is one row — the question is which instances are there.
+func listInstancesOnElement(rv *state.ReadView, defs defIndex, q instanceListQuery) (instancePage, error) {
+	page := instancePage{rows: []instanceResp{}}
+	def, ok := defs[q.defKey]
+	if !ok || def.cp == nil {
+		// The definition is not deployed here (deleted, or never was). Nothing is
+		// running on it, which is an empty answer rather than a bad request.
+		return page, nil
+	}
+	elementId, ok := def.cp.ElementIndexOf(q.element)
+	if !ok {
+		return page, fmt.Errorf("%w: %q", errNoSuchElement, q.element)
+	}
+	if q.state == "finished" {
+		return page, nil
+	}
+	rows := []instanceResp{}
+	err := rv.InstancesOnElementDesc(q.defKey, elementId, q.beforeKey, func(key uint64, v *model.ProcessInstanceValue) error {
+		if len(rows) >= q.limit {
+			page.truncated = true
+			return errListTruncated
+		}
+		r, err := fillInstanceRow(rv, defs, key, v)
+		if err != nil {
+			return err
+		}
+		rows = append(rows, r)
+		return nil
+	})
+	if err = unlessTruncated(err); err != nil {
+		return page, err
+	}
+	page.rows = rows
+	// The index is in instance-key order, so a capped page resumes exactly where the
+	// active half's does — and only when a half was named, since that is the only
+	// shape ?before= is accepted in.
+	if q.state == "active" && page.truncated && len(rows) > 0 {
+		page.nextCursor = formatInstanceCursor("active", rows[len(rows)-1])
+	}
+	return page, nil
+}
+
 // handleListInstances lists process instances — live ones (with their current
 // token count) followed by finished ones, most recently completed first (ADR-0017).
 // It is the operator "instances" view.
@@ -261,6 +340,9 @@ func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(scanErr, errLoopClosing):
 		httpapi.Error(w, http.StatusServiceUnavailable, scanErr.Error())
+		return
+	case errors.Is(scanErr, errNoSuchElement):
+		httpapi.Error(w, http.StatusBadRequest, scanErr.Error())
 		return
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())

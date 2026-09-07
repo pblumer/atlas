@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas instance element-filter e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js live view against a mock `api` that answers
+         GET /api/v1/instances the way the server does: the whole version's page when no
+         ?element= is given, and only the instances holding a token on that element when
+         one is. That is the contract the click depends on, so the harness reproduces it
+         literally — including the empty answer for an element nothing is sitting on.
+
+         It also records every instances URL the view asked for, so a spec can prove the
+         filter is a question put to the server and not a filter applied in the browser
+         over a page it happened to have. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+      /* Read-only here: the palette would only intercept clicks meant for the shapes. */
+      .djs-palette { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountLive } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const DEF = 7;
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_life" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="life" name="Identitäts-Lebenszyklus" isExecutable="true">
+    <bpmn:startEvent id="start"><bpmn:outgoing>f1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="eintritt" name="Eintritt verbuchen">
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="austritt" name="Austritt: alle Services kündigen">
+      <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="end"><bpmn:incoming>f3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="eintritt"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="eintritt" targetRef="austritt"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="austritt" targetRef="end"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="life">
+    <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="150" y="180" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="eintritt_di" bpmnElement="eintritt"><dc:Bounds x="250" y="158" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="austritt_di" bpmnElement="austritt"><dc:Bounds x="420" y="158" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="end_di" bpmnElement="end"><dc:Bounds x="590" y="180" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="186" y="198"/><di:waypoint x="250" y="198"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="350" y="198"/><di:waypoint x="420" y="198"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="520" y="198"/><di:waypoint x="590" y="198"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      const inst = (key, variables) => ({
+        key, processDefKey: DEF, state: "active", createdAt: 1_700_000_000_000_000_000,
+        variables,
+      });
+      // Three running instances: two waiting on "eintritt", one on "austritt".
+      const ON_EINTRITT = [
+        inst(1003, [{ name: "identityId", value: "MT-59000", kind: "string" }]),
+        inst(1001, [{ name: "identityId", value: "MT-58000", kind: "string" }]),
+      ];
+      const ON_AUSTRITT = [inst(1002, [{ name: "identityId", value: "MT-58500", kind: "string" }])];
+      const ALL_ACTIVE = [ON_EINTRITT[0], ON_AUSTRITT[0], ON_EINTRITT[1]];
+
+      // Every /api/v1/instances URL the view asked for, oldest first.
+      window.__instanceCalls = [];
+
+      const instancesFor = (url) => {
+        window.__instanceCalls.push(url);
+        const q = new URLSearchParams(url.slice(url.indexOf("?") + 1));
+        const element = q.get("element");
+        const state = q.get("state");
+        if (!element) return state === "finished" ? [] : ALL_ACTIVE;
+        // A token lives only in a running instance, so a filtered finished half is empty.
+        if (state === "finished") return [];
+        if (element === "eintritt") return ON_EINTRITT;
+        if (element === "austritt") return ON_AUSTRITT;
+        return [];
+      };
+
+      const api = async (method, url) => {
+        if (url === "/api/v1/processes") {
+          return [{ key: DEF, processId: "life", name: "Identitäts-Lebenszyklus", version: 2 }];
+        }
+        if (/\/processes\/\d+\/xml$/.test(url)) return XML;
+        if (url.startsWith("/api/v1/instances?process=")) return instancesFor(url);
+        if (url.startsWith("/api/v1/tasks")) return [];
+        if (url.includes("/runtime")) {
+          return {
+            instances: 3, finished: 12, tokens: 3,
+            incidents: [], incidentsTruncated: false,
+            elements: [
+              { elementId: "start", type: "bpmn:StartEvent", tokens: 0, visits: 15, terminated: 0, incidents: 0 },
+              { elementId: "eintritt", type: "bpmn:UserTask", tokens: 2, visits: 15, terminated: 0, incidents: 0 },
+              { elementId: "austritt", type: "bpmn:UserTask", tokens: 1, visits: 13, terminated: 0, incidents: 0 },
+              { elementId: "end", type: "bpmn:EndEvent", tokens: 0, visits: 12, terminated: 0, incidents: 0 },
+            ],
+          };
+        }
+        return {};
+      };
+      const apiRaw = async (method, url, body) => ({ data: await api(method, url, body), headers: new Headers() });
+
+      window.__mountLive = () => mountLive(view, { api, apiRaw, toast: noop, key: DEF });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

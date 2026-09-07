@@ -14,6 +14,50 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Forms written by the AI Worker.** The form editor has a **✨ Generate** button.
+  Describe what the form should ask for — in your own words, in your own language —
+  and, if you like, point it at the process the form belongs to and the step it is
+  for. What comes back is a form-js schema, open in the editor and **not saved**: you
+  read it, change what you want, and press Save yourself, exactly as with a form you
+  laid out by hand. Generating again over an open form is a refinement rather than a
+  fresh start, so "add a field for the period" adds one instead of replacing the other
+  twelve.
+
+  You mostly will not open it from there, though. In the Modeler, **"Create a new
+  form"** on a user task or on a start event now carries that step with it: the form
+  editor opens with the generator already up, on that process and that step, and the
+  only thing left to write is the sentence about what the form should ask for.
+  Pressing that link *was* you saying what the form is for, and you should not have to
+  say it twice. (A **repair form**'s link stays the plain one — that is a different kind
+  of form, the values an operator corrects to get a parked task moving, and the
+  generator does not write those.)
+
+  The half you do not have to type is the process. Naming one lets the generator read
+  the model's own words — the process documentation, each step's documentation, the
+  conditions on its sequence flows, and the variable names its mappings and data
+  objects already use — out of the **draft you are working on** (or the deployed
+  version when there is no draft). So the keys it writes are the names the process
+  already calls those things by, and a form for a step that is five minutes old sees
+  that step. Nothing about a running instance is read: no case data ever goes to a
+  model this way.
+
+  It asks **the AI Worker an operator already configured** for the runtime
+  ([ADR-0255](docs/adr/0255-agent-models-are-console-workers.md)) — one endpoint, one
+  credential in the vault, one place to change the model, and no key in the browser.
+  With several configured you choose which one writes the form; with one there is
+  nothing to choose. Where none is configured the button is simply absent, rather
+  than being a button that only ever fails.
+
+  What a model sends back is checked before you ever see it: the form keeps the id
+  the editor was holding (so a generated form cannot quietly unbind the user task
+  that binds it), every input gets a usable, unique key, the document is bounded, and
+  a component a task form cannot render is refused by name rather than dropped — a
+  form quietly missing the field you asked for would be worse than one that says it
+  could not be written. An answer that is not a form comes back as a sentence in the
+  dialog, with your brief still in it, so you can rephrase or simply try again.
+
+  See [ADR-0260](docs/adr/0260-ai-form-generation.md) for why
+  this runs where it does, and why it is authoring rather than a service task.
 - **The training nuggets play full screen, for showing one to a room.** A nugget sat in
   the flow of the handbook at reading size, which is right for reading and wrong for the
   case it keeps being used for: an onboarding session with the thing on a projector. The
