@@ -154,6 +154,14 @@ const jiraDefaultPoll = 60 * time.Second
 // a knob on the watch for the folder somebody really does need read faster.
 const googleDefaultPoll = 60 * time.Second
 
+// discordDefaultPoll is how often a channel watch is read when it names no cadence of
+// its own. Discord rate-limits per bot token and a read is one request per watch, so
+// this is a budget question rather than a latency one — but a chat channel is watched
+// because somebody is waiting, so it sits far below Google's minute. Fifteen seconds
+// is a request every four minutes per watch against a limit measured in dozens per
+// second, and an operator who needs it faster sets pollSeconds on the watch.
+const discordDefaultPoll = 15 * time.Second
+
 // inboundCadence is how often a watch is read: its own pollSeconds, or its kind's
 // default when it states none — which is what the field has always documented itself to
 // mean. Zero means "every tick", which is what a clio read is cheap enough for and what
@@ -167,6 +175,8 @@ func inboundCadence(kind string, rec inboundSubscription) time.Duration {
 		return jiraDefaultPoll
 	case connectorKindGoogleSheets:
 		return googleDefaultPoll
+	case connectorKindDiscord:
+		return discordDefaultPoll
 	}
 	return 0
 }
@@ -356,6 +366,12 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 			} else {
 				src = sheetRowSource{client: client}
 			}
+		case connectorKindDiscord:
+			client, ok := s.discordRegistry.Client(c.Name)
+			if !ok {
+				continue
+			}
+			src = discordSource{client: client}
 		default:
 			continue // a kind with no inbound half; its worker is outbound only
 		}

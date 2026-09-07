@@ -89,6 +89,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		WatchRange     string `json:"watchRange"`
 		HeaderRow      bool   `json:"headerRow"`
 		FolderID       string `json:"folderId"`
+		ChannelID      string `json:"channelId"`
 		CursorField    string `json:"cursorField"`
 		LagSeconds     int    `json:"lagSeconds"`
 		PollSeconds    int    `json:"pollSeconds"`
@@ -157,6 +158,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		WatchRange:    strings.TrimSpace(p.WatchRange),
 		HeaderRow:     p.HeaderRow,
 		FolderID:      strings.TrimSpace(p.FolderID),
+		ChannelID:     strings.TrimSpace(p.ChannelID),
 		CursorField:   strings.TrimSpace(p.CursorField),
 		LagSeconds:    p.LagSeconds,
 		PollSeconds:   p.PollSeconds,
