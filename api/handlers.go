@@ -4614,13 +4614,25 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 }
 
 // incidentType names what an incident parked, the distinction the operator views
-// label: a job incident holds a service-task job whose retries ran out; a job-less
-// incident is a timer whose FEEL schedule stopped resolving (ADR-0064/0111).
+// label: a job incident holds a service-task job whose retries ran out; one the
+// execution budget raised holds a token that never got to run
+// (ADR-draft-execution-budget); a job-less incident is otherwise a timer whose FEEL
+// schedule stopped resolving (ADR-0064/0111).
+//
+// That last fallback is approximate and was already: a mockup task's simulated
+// failure, a runaway loop and a gateway that cannot route all raise job-less
+// incidents and all read as "timer" here. Classifying them is what
+// model.IncidentReason is for, and doing it is a change to each of those sources
+// rather than to this function.
 func incidentType(v *model.IncidentValue) string {
-	if v.JobKey != 0 {
+	switch {
+	case v.JobKey != 0:
 		return "job"
+	case v.Reason == model.IncidentOverBudget:
+		return "budget"
+	default:
+		return "timer"
 	}
-	return "timer"
 }
 
 // handleListIncidents lists the unresolved incidents — the operator "what's stuck"

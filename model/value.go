@@ -1158,7 +1158,31 @@ type IncidentValue struct {
 	ElementId          int32 // the compiled-graph element the token is stuck on (maps to a BPMN element id for the operator)
 	RaisedAt           int64 // unix nanoseconds the incident was raised; read at command time and frozen into the event (I6)
 	Message            string
+	// Reason says what raised the incident, where the message says it in words. It
+	// exists because resolving one is not one act: an incident the element never got
+	// to run past needs its behavior run, where a failed job needs the job re-created.
+	// The engine used to infer that from the element's node type, which works only as
+	// long as each node type has one way of getting stuck.
+	//
+	// Zero is IncidentUnclassified and means exactly that — nothing was recorded —
+	// which is what every incident written before this field existed decodes as, and
+	// what the sources still resolved by node type write today.
+	Reason IncidentReason
 }
+
+// IncidentReason classifies why an incident was raised, for the resolve path and for
+// an operator reading a list of them.
+type IncidentReason uint8
+
+const (
+	// IncidentUnclassified is "not recorded": an older record, or a source whose
+	// resolution the element's node type still decides.
+	IncidentUnclassified IncidentReason = 0
+	// IncidentOverBudget marks an element that was activated but never ran, because
+	// its token had used up the execution budget for this run
+	// (ADR-draft-execution-budget). Resolving it runs the behavior that never ran.
+	IncidentOverBudget IncidentReason = 1
+)
 
 func (*IncidentValue) ValueType() ValueType { return VTIncident }
 
@@ -1168,7 +1192,9 @@ func (v *IncidentValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.JobKey)
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.RaisedAt))
-	return appendString(dst, v.Message)
+	// Reason rides after the message, so a record written before it existed is simply
+	// one byte shorter and decodes as IncidentUnclassified.
+	return append(appendString(dst, v.Message), byte(v.Reason))
 }
 
 func (v *IncidentValue) decode(src []byte) error {
@@ -1181,11 +1207,15 @@ func (v *IncidentValue) decode(src []byte) error {
 	v.JobKey = binary.LittleEndian.Uint64(src[16:])
 	v.ElementId = int32(binary.LittleEndian.Uint32(src[24:]))
 	v.RaisedAt = int64(binary.LittleEndian.Uint64(src[28:]))
-	msg, _, err := readString(src[incidentFixed:])
+	msg, rest, err := readString(src[incidentFixed:])
 	if err != nil {
 		return err
 	}
 	v.Message = msg
+	v.Reason = IncidentUnclassified
+	if len(rest) > 0 {
+		v.Reason = IncidentReason(rest[0])
+	}
 	return nil
 }
 

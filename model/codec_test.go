@@ -163,6 +163,19 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "incident carries the reason it was raised",
+			vt:     VTIncident,
+			intent: IntentIncidentCreated,
+			value: &IncidentValue{
+				ProcessInstanceKey: NewKey(1, 5),
+				ElementInstanceKey: NewKey(1, 6),
+				ElementId:          4,
+				RaisedAt:           1_700_000_999,
+				Message:            "this token took 10000 steps in one run without ever waiting",
+				Reason:             IncidentOverBudget,
+			},
+		},
+		{
 			name:   "active process instance",
 			vt:     VTProcessInstance,
 			intent: IntentActivated,

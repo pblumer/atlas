@@ -433,13 +433,47 @@ func isEventSubTrigger(ei *model.ElementInstanceValue) bool {
 func handleElementActivating(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
 	c.AppendElementEvent(c.cmd.Key, model.IntentActivated, *ei)
+	// The token exists here and its behavior has not run yet, which is the one point
+	// where stopping it costs nothing: the element instance is on the log and can
+	// carry an incident, and nothing downstream has been set in motion
+	// (ADR-draft-execution-budget).
+	if c.p.chargeToken(ei.TokenID) {
+		parkOverBudget(c, c.cmd.Key, ei)
+		return
+	}
+	runElementBehavior(c, c.cmd.Key, ei)
+}
+
+// parkOverBudget stops a token that has used up its execution budget: the element
+// stays Activated, its behavior never runs, and an incident says why. Resolving it
+// runs the behavior — resumeParkedElement dispatches on the incident's reason, which
+// is what makes "this element never got to start" distinguishable from every other
+// way an element can be parked (ADR-draft-execution-budget).
+func parkOverBudget(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            c.p.overBudgetMessage(),
+		Reason:             model.IncidentOverBudget,
+	})
+}
+
+// runElementBehavior is what an activated element does: seed its iterations if it is
+// a multi-instance body, otherwise map its inputs, run its behavior and arm its
+// boundary events. Split out of handleElementActivating because an element the
+// execution budget stopped runs exactly this, later, when its incident is resolved —
+// so the resumed element starts the same way a fresh one would rather than a
+// second, drifting copy of it.
+func runElementBehavior(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	// A multi-instance body seeds its iterations rather than running the node's real
 	// behavior; its per-iteration data-input associations and io-mappings apply on
 	// each inner instance, not on the body (ADR-0077). An inner instance (role 2)
 	// falls through to the normal path and runs the real behavior.
 	if node := c.process(ei.ProcessDefKey).Node(ei.ElementId); node.MultiInstance >= 0 && ei.MultiInstance != miInner {
-		seedMultiInstance(c, c.cmd.Key, ei)
-		armBoundaryEvents(c, c.cmd.Key, ei)
+		seedMultiInstance(c, key, ei)
+		armBoundaryEvents(c, key, ei)
 		return
 	}
 	// Read the activity's data-input associations into process variables before its
@@ -452,11 +486,11 @@ func handleElementActivating(c *ProcessingContext) {
 	if !isEventSubTrigger(ei) {
 		applyDataInputAssociations(c, ei)
 		if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
-			applyInputMappings(c, c.cmd.Key, ei)
+			applyInputMappings(c, key, ei)
 		}
 	}
-	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
-	armBoundaryEvents(c, c.cmd.Key, ei)
+	c.p.behavior(ei.BpmnElementType).OnActivated(c, key, ei)
+	armBoundaryEvents(c, key, ei)
 }
 
 // Multi-instance element-instance roles (ADR-0077), mirrored on
@@ -989,7 +1023,7 @@ func handleIncidentResolved(c *ProcessingContext) {
 	if inc.JobKey == 0 {
 		// A timer incident carries no job (ADR-0064): re-arm the parked catch/boundary
 		// element instead of re-creating one.
-		resumeParkedElement(c, inc.ElementInstanceKey)
+		resumeParkedElement(c, inc.ElementInstanceKey, inc.Reason)
 		return
 	}
 	job := c.GetJob(inc.JobKey)
@@ -1015,13 +1049,21 @@ func handleIncidentResolved(c *ProcessingContext) {
 // so an incident never outlives its element. The check stays because the processor
 // loop has no recover() — if that invariant ever shifts, returning is a no-op while
 // dereferencing nil would take the whole partition down with it.
-func resumeParkedElement(c *ProcessingContext, elKey uint64) {
+func resumeParkedElement(c *ProcessingContext, elKey uint64, reason model.IncidentReason) {
 	ei := c.GetElementInstance(elKey)
 	if ei == nil {
 		return
 	}
 	cp := c.process(ei.ProcessDefKey)
 	if cp == nil {
+		return
+	}
+	// An element the execution budget stopped never ran at all, whatever its type, so
+	// running it now is the whole of the resume (ADR-draft-execution-budget). The
+	// reason says so outright; every case below infers the resume from the node type,
+	// which only works while a node type has one way of getting stuck.
+	if reason == model.IncidentOverBudget {
+		runElementBehavior(c, elKey, ei)
 		return
 	}
 	// A parked runaway loop carries a job-less incident too (ADR-0133, amended), on the
@@ -1465,6 +1507,17 @@ func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, flowI
 	tokenID, parentID := ei.TokenID, uint64(0)
 	if tokenID == 0 || fork {
 		parentID, tokenID = ei.TokenID, key
+		// Taking a flow continues a thread of control even where it mints a new token
+		// id — a fork's branches, a join's continuation, a subprocess's exit — so the
+		// execution budget carries over. Otherwise a cycle through any of them would
+		// reset its own budget every lap (ADR-draft-execution-budget). A parallel
+		// join hands over a continuation whose own TokenID is already cleared and
+		// whose lineage is in ParentTokenID, so that is where its ancestry is read.
+		from := parentID
+		if from == 0 {
+			from = ei.ParentTokenID
+		}
+		c.p.inheritTokenSteps(tokenID, from)
 	}
 	c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,

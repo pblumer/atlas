@@ -112,6 +112,17 @@ type Processor struct {
 	routeBuf []int32
 	fatalErr error
 
+	// tokenSteps counts, per token, how many element activations it has driven in the
+	// current run — the execution budget (ADR-draft-execution-budget). It is
+	// deliberately not durable: the question it answers is "is one token occupying the
+	// single writer right now", and a token that waited for a job or a timer in between
+	// was never the problem. Cleared when a run starts, and reused across runs like the
+	// per-batch maps beside it.
+	tokenSteps map[uint64]int32
+	// executionBudget is how many steps one token may take in a single run before the
+	// engine stops it with an incident. Set with SetExecutionBudget.
+	executionBudget int32
+
 	// condDirty collects the process instances whose variables changed this batch, so the
 	// batch loop can schedule a conditional re-check for each (ADR-0137). Reused, not
 	// reallocated; drained and cleared at the end of Phase 1.
@@ -699,6 +710,9 @@ func (p *Processor) TickTimers() error {
 // drains. Deterministic and synchronous — the basis for tests and simple
 // embedding; the channel-driven concurrent loop arrives with the API milestone.
 func (p *Processor) RunUntilIdle() error {
+	// A run is the unit the execution budget is measured in: this is where a token's
+	// step count starts over, because this is where the writer was last free.
+	clear(p.tokenSteps)
 	for len(p.queue) > 0 {
 		if err := p.processBatch(); err != nil {
 			return err
