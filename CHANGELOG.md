@@ -14,6 +14,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A deployed process can be filed under an application after the fact.**
+  `PATCH /api/v1/processes/{key}` with `{"projectId": "..."}` moves a deployed
+  definition into an application, or out of one (an empty id means Ungrouped).
+
+  A deployment carried its own application, stamped once when it was deployed — from
+  what the editor sent, or inherited from the matching draft at that moment, or
+  nothing. Afterwards there was no way to change it: moving the *draft* moved the
+  draft, so a process deployed through the API, or before its application existed,
+  stayed Ungrouped for good — on the Modeler home and on the Starmap as a process
+  belonging to nothing — with a redeploy, and a version bump, the only way out.
+
+  It is metadata and nothing else: the version, the model, the active flag and
+  everything running are untouched, and the engine never reads the filing at all. Two
+  things move that the caller does not name, because the alternative is an estate that
+  cannot be put back together: **every version** of the definition, since filing
+  belongs to the process rather than to one of its versions; and **the other pools of
+  a collaboration**, since they are one drawing, listed as one row, with no way to
+  address the others separately. Editor rights are needed at both ends, as moving a
+  draft already requires, and the platform-managed application refuses to be written
+  into (ADR-0122).
+
 - **Forms written by the AI Worker.** The form editor has a **✨ Generate** button.
   Describe what the form should ask for — in your own words, in your own language —
   and, if you like, point it at the process the form belongs to and the step it is
