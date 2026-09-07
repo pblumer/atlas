@@ -23,6 +23,26 @@ import (
 // the same for everyone else.
 const DefaultBaseURL = "https://discord.com/api/v10"
 
+// MaxListPageSize is the most messages Discord's list endpoint returns in one call. A
+// larger `limit` is answered with a 400 naming a field the caller did not think it set.
+//
+// It is exported because the inbound bridge has to clamp to it: the bridge's own batch
+// size is an operator setting (defaultInboundBatch is 256) and knows nothing about any
+// one API's page cap, so a channel watch that passed it through would fail every poll.
+// The compiler keeps its own copy of this number for the authored maxResults ceiling —
+// it cannot import this package — and TestDiscordOpsMatchTheConnector holds the two
+// together.
+const MaxListPageSize int32 = 100
+
+// BeginningCursor is the `after` value that means "from the start of the channel".
+//
+// It exists because an *absent* `after` does not mean that: Discord answers a bare list
+// with the newest page, so a reader with no cursor that omitted it would publish the
+// most recent hundred messages, advance past them, and never see the history it was
+// pointed at. A snowflake of zero is the Discord epoch, so it bounds nothing and the
+// first read pages forward exactly like every read after it.
+const BeginningCursor = "0"
+
 // publicThreadType is the channel type a standalone thread is created as. Discord
 // requires a type on the thread-without-a-message endpoint and takes none on the
 // thread-from-a-message one, where the parent decides it.

@@ -2,6 +2,34 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "clicking-an-element-in-operations-lists-the-instances-sittin",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Click a task to see which instances are sitting on it",
+        "de": "Auf eine Aufgabe klicken zeigt, welche Instanzen dort stehen"
+      },
+      "summary": {
+        "en": "A live diagram badged “25 205 here now” beside a list of fifty instances told you how many were waiting on a task and nothing about which ones — finding them meant searching for a value you had to know already. The diagram is the query now: click an element and the list shows exactly the instances whose token is sitting on it, click another and it switches, click the process beside the shapes and every instance is back. It works for every element a token can rest on, not only user tasks, and it costs the page you are shown — at hundreds of thousands of instances too.",
+        "de": "Ein Live-Diagramm mit „25 205 hier“ neben einer Liste von fünfzig Instanzen sagte Ihnen, wie viele auf einer Aufgabe warten, aber nichts darüber, welche — sie zu finden hieß, nach einem Wert zu suchen, den Sie schon kennen mussten. Jetzt ist das Diagramm die Abfrage: Klicken Sie ein Element an, und die Liste zeigt genau die Instanzen, deren Token dort steht; ein Klick auf ein anderes Element wechselt, ein Klick auf den Prozess neben den Formen zeigt wieder alle. Das gilt für jedes Element, auf dem ein Token stehen kann, nicht nur für User-Tasks, und es kostet nur die angezeigte Seite — auch bei hunderttausenden Instanzen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "forms-written-by-the-ai-worker",
       "version": "Unreleased",
       "date": null,
@@ -105,6 +133,78 @@
         },
         "route": "#/console"
       }
+    },
+    {
+      "id": "every-shipped-model-now-carries-its-own-diagram",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Every shipped example now brings its own diagram",
+        "de": "Jedes mitgelieferte Beispiel bringt jetzt sein eigenes Diagramm mit"
+      },
+      "summary": {
+        "en": "Four of the shipped models had no drawing of their own, so Atlas generated one when they were deployed. That is enough to run a model and not enough to read one — which started to matter the moment the handbook began showing every example as a picture. They are drawn by hand now: one straight main axis, every branch in a lane of its own, and every gateway exit labelled with its answer, which meant giving names to eight branches that never had one. Open any of them in the Modeler and the picture is the one somebody meant to draw.",
+        "de": "Vier der mitgelieferten Modelle hatten keine eigene Zeichnung, also erzeugte Atlas beim Deployen eine. Das genügt, um ein Modell laufen zu lassen, und nicht, um es zu lesen — was in dem Moment zählte, als das Handbuch anfing, jedes Beispiel als Bild zu zeigen. Jetzt sind sie von Hand gezeichnet: eine gerade Hauptachse, jeder Zweig in einer eigenen Bahn, und jeder Gateway-Ausgang mit seiner Antwort beschriftet — wofür acht Zweige erstmals einen Namen bekommen mussten. Öffnen Sie eines davon im Modeler, und das Bild ist das, das jemand zeichnen wollte."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Examples",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "three-mechanisms-the-engine-has-always-had-now-have-an-examp",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Signal, escalation and compensation now have examples",
+        "de": "Signal, Eskalation und Kompensation haben jetzt Beispiele"
+      },
+      "summary": {
+        "en": "Three things the engine has always been able to do had no scenario showing what they are for. Now they do, each written for a small business or a private person and each running with no worker, no credential and no network. Chasing an unpaid invoice shows escalation beside a message on the same subprocess — the message interrupts because the dunning run is then moot, the escalation does not because the owner should still be asked. A price change that reaches every open quote shows a signal: a message hits exactly one case, a signal hits all of them and does not know how many. And a trip whose payment is declined shows compensation, taking the hotel and the flight back in reverse order. A fourth, organising a move, is simply Atlas doing a private person's Saturday.",
+        "de": "Drei Dinge, die die Engine seit jeher kann, hatten kein Szenario, das zeigt wofür. Jetzt haben sie eines — je für einen Kleinbetrieb oder eine Privatperson geschrieben, und alle laufen ohne Worker, ohne Zugangsdaten und ohne Netz. Das Mahnen einer offenen Rechnung zeigt die Eskalation neben einer Nachricht am selben Teilprozess: Die Nachricht unterbricht, weil der Mahnlauf dann gegenstandslos ist, die Eskalation nicht, weil der Inhaber trotzdem gefragt werden soll. Eine Preisänderung, die jede offene Offerte erreicht, zeigt das Signal: Eine Nachricht trifft genau einen Fall, ein Signal trifft alle und weiss nicht, wie viele. Und eine Reise, deren Zahlung abgelehnt wird, zeigt die Kompensation, die Hotel und Flug in umgekehrter Reihenfolge zurücknimmt. Ein viertes, ein Umzug, ist schlicht Atlas am Samstag einer Privatperson."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Examples"
+      ]
+    },
+    {
+      "id": "the-handbook-now-shows-every-example-atlas-ships-and-what-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Every example Atlas ships now has a page in the handbook",
+        "de": "Jedes mitgelieferte Beispiel hat jetzt eine Seite im Handbuch"
+      },
+      "summary": {
+        "en": "Atlas ships thirty finished scenarios — a shopping cart that computes a total, an exam with a hard deadline, a CSV checked row by row, a Google Form whose every new row becomes a case — and the handbook showed two of them. The new Beispiele chapter describes all thirty in German and English, on two levels at once: what the scenario is for, and how it is built. Every card draws the real diagram and installs the real thing into your instance in one click; nine of them then start with one more click and run with no worker configured at all. Beside it, a runbook per worker type for the part that happens outside Atlas — the Google service account and the sharing step people forget, the two Entra permissions that cover a joiner/mover/leaver flow, the Jira token — each with the symptom that tells you what is missing.",
+        "de": "Atlas liefert dreissig fertige Szenarien mit — einen Warenkorb, der eine Summe rechnet, eine Prüfung mit hartem Zeitlimit, eine CSV, die Zeile für Zeile geprüft wird, ein Google-Formular, dessen jede neue Zeile ein Vorgang wird — und das Handbuch zeigte zwei davon. Das neue Kapitel «Beispiele» beschreibt alle dreissig auf Deutsch und Englisch, auf zwei Ebenen zugleich: wofür das Szenario gut ist, und wie es gebaut ist. Jede Karte zeichnet das echte Diagramm und installiert das Echte mit einem Klick in Ihre Instanz; neun davon starten mit einem weiteren Klick und laufen ganz ohne konfigurierten Worker. Daneben steht je Worker-Typ ein Runbook für den Teil, der ausserhalb von Atlas passiert — das Google-Dienstkonto und der Freigabeschritt, den alle vergessen, die zwei Entra-Berechtigungen für einen Eintritts-/Wechsel-/Austrittsprozess, das Jira-Token — jeweils mit dem Fehlerbild, an dem Sie erkennen, was fehlt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Handbook",
+        "Examples"
+      ]
     },
     {
       "id": "the-replay-drew-a-deferred-choice-as-several-tokens-and-park",
@@ -251,141 +351,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "saving-a-layout-onto-a-deployment-was-refused-on-diagrams-no",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Saving a layout no longer fails on diagrams you did not change",
-        "de": "Layout speichern scheitert nicht mehr an Diagrammen, die Sie nicht geändert haben"
-      },
-      "summary": {
-        "en": "\"Save layout to deployment\" refused some diagrams with \"the model differs\" even when nothing about the process had been touched. The editor writes certain BPMN attributes back in shorter form — leaving out ones that already have their standard value — and the check read that as a changed process. It now reads short and long form as what they are: the same thing. Models with an interrupting boundary event, an event subprocess or a multi-instance activity were the ones affected. A refusal now also names the element that actually differs, instead of only saying that something does.",
-        "de": "«Save layout to deployment» wies manche Diagramme mit «the model differs» ab, obwohl am Prozess nichts angefasst worden war. Der Editor schreibt bestimmte BPMN-Attribute verkürzt zurück — er lässt jene weg, die ohnehin auf ihrem Standardwert stehen — und die Prüfung las das als geänderten Prozess. Sie liest Kurz- und Langform jetzt als das, was sie sind: dasselbe. Betroffen waren Modelle mit unterbrechendem Boundary-Event, Ereignis-Subprozess oder Mehrfachausführung. Und eine Ablehnung nennt jetzt das Element, das tatsächlich abweicht, statt nur zu sagen, dass etwas abweicht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-deployed-diagram-can-be-tidied-up-without-redeploying-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Fix a deployed diagram without redeploying it",
-        "de": "Ein deploytes Diagramm korrigieren, ohne neu zu deployen"
-      },
-      "summary": {
-        "en": "You usually notice that a diagram is hard to read once it is running — a task's name under a token count, a label on an edge. Until now the only fix was to deploy it again, which made a new version for a change nobody can see, and left the instances already running with the old picture. Now you open the deployment in the Modeler, move what needs moving, and pick \"Save layout to deployment\" from the … menu. The definition keeps its version and its running instances; only the drawing changes, everywhere at once. If you changed anything but the layout, the save is refused and tells you to deploy instead.",
-        "de": "Dass ein Diagramm schwer zu lesen ist, merkt man meist erst im Betrieb — der Name einer Aufgabe unter einem Token-Zähler, ein Label auf einer Kante. Bisher half nur erneutes Deployen: eine neue Version für eine Änderung, die niemand sieht, und die bereits laufenden Instanzen behielten trotzdem das alte Bild. Jetzt öffnen Sie das Deployment im Modeler, schieben zurecht und wählen im …-Menü «Save layout to deployment». Die Definition behält ihre Version und ihre laufenden Instanzen; nur die Zeichnung ändert sich, überall gleichzeitig. Wer versehentlich mehr als das Layout ändert, bekommt die Speicherung verweigert und den Hinweis, stattdessen zu deployen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations and pick the deployed process whose diagram you want to fix.",
-          "Open that deployment in the Modeler.",
-          "Move the shapes, labels or edges that sit badly — change nothing else.",
-          "Open the … menu and choose \"Save layout to deployment\"."
-        ],
-        "de": [
-          "Operations öffnen und den deployten Prozess wählen, dessen Diagramm stört.",
-          "Dieses Deployment im Modeler öffnen.",
-          "Formen, Labels oder Kanten zurechtschieben — sonst nichts ändern.",
-          "Im …-Menü «Save layout to deployment» wählen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-handbook-plays",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The handbook now plays: Atlas in two and a half minutes, then your own role",
-        "de": "Das Handbuch spielt jetzt: Atlas in zweieinhalb Minuten, danach Ihre eigene Rolle"
-      },
-      "summary": {
-        "en": "New in the handbook: short animated walk-throughs you press play on. The lead one takes two and a half minutes to show what Atlas is and what you can do with it — the diagram is the program, a case moving through it, a task reaching a person, an incident that loses nothing. After that there is one path per role, each under seventy seconds: claiming and completing a task, going from diagram to deploy, resolving an incident, granting roles and storing a credential. Nothing starts on its own, and the language toggle carries a running animation with it.",
-        "de": "Neu im Handbuch: kurze animierte Durchgänge, die man abspielt. Der erste zeigt in zweieinhalb Minuten, was Atlas ist und was sich damit machen lässt — das Diagramm ist das Programm, ein Fall wandert hindurch, eine Aufgabe erreicht einen Menschen, ein Incident verliert nichts. Danach folgt ein Pfad je Rolle, jeder unter siebzig Sekunden: eine Aufgabe übernehmen und abschliessen, vom Diagramm zum Deploy, einen Incident auflösen, Rollen vergeben und Zugangsdaten hinterlegen. Nichts startet von allein, und der Sprachumschalter nimmt eine laufende Animation mit."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Handbook"
-      ]
-    },
-    {
-      "id": "an-element-s-documentation-is-markdown-now-and-the-people-wh",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Documentation you wrote in the model now reads as you wrote it",
-        "de": "Dokumentation aus dem Modell wird jetzt so gelesen, wie sie geschrieben ist"
-      },
-      "summary": {
-        "en": "The documentation field on an element understands Markdown: headings, bullet and numbered lists, quotes, code, bold and italic, links. Where it used to arrive as a wall of asterisks and hyphens, a work instruction now reaches the person doing the work as the checklist it was written as — in the Tasks app, in the instance replay and in the Panorama properties panel. Text written before this is untouched: a line break is still a line break, and a variable name is still a variable name.",
-        "de": "Das Dokumentationsfeld eines Elements versteht Markdown: Überschriften, Aufzählungen, nummerierte Listen, Zitate, Code, fett und kursiv, Links. Wo vorher eine Wand aus Sternchen und Bindestrichen ankam, erreicht eine Arbeitsanweisung die bearbeitende Person jetzt als die Prüfliste, als die sie geschrieben wurde — in der Tasks-App, im Instanz-Replay und im Panorama-Eigenschaftenpanel. Vorher geschriebener Text bleibt unangetastet: Ein Zeilenumbruch bleibt ein Zeilenumbruch, ein Variablenname bleibt ein Variablenname."
-      },
-      "link": {
-        "label": "ADR-0250",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0250-documentation-is-markdown.md"
-      },
-      "tags": [
-        "Tasks",
-        "Operations",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and select a user task.",
-          "In the Details panel, write the instruction in the Documentation field — a heading with ##, a checklist with -, an important word in **bold**.",
-          "Deploy and start the process, then open the task in the Tasks app: the instruction stands above the form, rendered."
-        ],
-        "de": [
-          "Öffnen Sie einen Prozess im Modeler und wählen Sie eine User-Task aus.",
-          "Schreiben Sie die Anweisung im Details-Panel ins Feld Documentation — eine Überschrift mit ##, eine Prüfliste mit -, ein wichtiges Wort in **fett**.",
-          "Deployen und starten Sie den Prozess und öffnen Sie die Aufgabe in der Tasks-App: Die Anweisung steht gerendert über dem Formular."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Tasks",
-          "de": "Aufgaben öffnen"
-        },
-        "route": "#/tasks"
       }
     }
   ]

@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Examples",
+    "Modeler"
+  ],
+  "title": {
+    "en": "Every shipped example now brings its own diagram",
+    "de": "Jedes mitgelieferte Beispiel bringt jetzt sein eigenes Diagramm mit"
+  },
+  "summary": {
+    "en": "Four of the shipped models had no drawing of their own, so Atlas generated one when they were deployed. That is enough to run a model and not enough to read one — which started to matter the moment the handbook began showing every example as a picture. They are drawn by hand now: one straight main axis, every branch in a lane of its own, and every gateway exit labelled with its answer, which meant giving names to eight branches that never had one. Open any of them in the Modeler and the picture is the one somebody meant to draw.",
+    "de": "Vier der mitgelieferten Modelle hatten keine eigene Zeichnung, also erzeugte Atlas beim Deployen eine. Das genügt, um ein Modell laufen zu lassen, und nicht, um es zu lesen — was in dem Moment zählte, als das Handbuch anfing, jedes Beispiel als Bild zu zeigen. Jetzt sind sie von Hand gezeichnet: eine gerade Hauptachse, jeder Zweig in einer eigenen Bahn, und jeder Gateway-Ausgang mit seiner Antwort beschriftet — wofür acht Zweige erstmals einen Namen bekommen mussten. Öffnen Sie eines davon im Modeler, und das Bild ist das, das jemand zeichnen wollte."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

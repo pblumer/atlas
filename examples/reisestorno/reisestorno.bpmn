@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Reise buchen — und sauber rückabwickeln, wenn die Zahlung scheitert.
+
+  Das Beispiel zu **Kompensation**: dem einzigen BPMN-Mittel, das bereits
+  getane Arbeit rückgängig macht. Der Unterschied zu einem Fehlerpfad ist der
+  ganze Punkt:
+
+    Ein FEHLER springt aus einer Aktivität heraus, die gerade schiefging.
+    Eine KOMPENSATION macht Aktivitäten rückgängig, die längst **erfolgreich**
+    abgeschlossen sind — und genau die sind das Problem, wenn hinten etwas
+    scheitert. Der Flug ist gebucht. Das Hotel ist gebucht. Die Karte wird
+    abgelehnt. Niemandem ist geholfen, wenn der Prozess jetzt nur „Fehler" sagt.
+
+    Start "Reise buchen"
+      → Flug buchen    ⟲ Kompensation: Flug stornieren
+      → Hotel buchen   ⟲ Kompensation: Hotel stornieren
+      → Zahlung ausführen
+      → (X) Zahlung ok?
+           ja   → Ende "Reise gebucht"
+           nein → Kompensation Hotel → Kompensation Flug → Ende "Alles storniert"
+
+  Drei Dinge, die man beim Nachbauen falsch macht:
+
+  * **Die Reihenfolge ist rückwärts.** Zuerst das Hotel, dann der Flug — die
+    zuletzt getane Arbeit wird zuerst zurückgenommen. Zwei Wurf-Ereignisse
+    hintereinander machen das sichtbar; ein einziger Wurf über alles würde die
+    Reihenfolge verstecken, die fachlich zählt (Stornofristen unterscheiden sich).
+  * **Der Kompensations-Task hängt an keiner Sequenz.** Er ist über eine
+    <association> mit der Boundary verbunden und trägt isForCompensation="true".
+    Wer ihn mit einem Sequenzfluss anschliesst, bekommt einen Task, der immer
+    läuft — auch wenn nichts zu stornieren ist.
+  * **Kompensiert wird nur, was gelaufen ist.** Bricht die Buchung schon beim
+    Flug ab, hat das Hotel nie stattgefunden, und sein Handler wird nicht
+    aufgerufen. Das ist keine Sonderbehandlung im Modell, sondern die Semantik.
+
+  Alle Umsysteme sind Mockups (ADR-0120), das Modell läuft also ohne eine
+  einzige Anbindung. Die Zahlung schlägt in einem von fünf Läufen fehl —
+  zahlungOk als Startvariable auf false setzt den Storno-Weg gezielt.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_reisestorno" targetNamespace="http://atlas/examples">
+
+  <process id="proc_reisestorno" name="Reise buchen mit Rückabwicklung" isExecutable="true">
+    <documentation>Bucht Flug und Hotel, führt die Zahlung aus und macht bei einer abgelehnten Zahlung
+beide Buchungen in umgekehrter Reihenfolge rückgängig. Startvariablen: reiseziel, reisende, abflug und
+zahlungOk (true erzwingt den Erfolgsweg, false den Storno-Weg).</documentation>
+
+    <extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="reiseziel" type="string" required="true" default="&quot;Lissabon&quot;"/>
+        <atlas:startVariable name="reisende" type="number" required="true" default="2"/>
+        <atlas:startVariable name="abflug" type="string" required="false" default="&quot;2026-10-12&quot;"/>
+        <atlas:startVariable name="zahlungOk" type="boolean" required="false" default="false"/>
+      </atlas:startForm>
+    </extensionElements>
+
+    <startEvent id="start" name="Reise buchen">
+      <outgoing>f_start_flug</outgoing>
+    </startEvent>
+
+    <serviceTask id="flug" name="Flug buchen">
+      <documentation>Erfolgreich abgeschlossen — und deshalb das Problem, wenn die Zahlung später scheitert.
+Genau dafür hängt eine Kompensations-Boundary daran.</documentation>
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
+          resultExpression="={ referenz: &quot;FL-8842&quot;, ziel: reiseziel, plaetze: reisende, preis: 318 }"
+          resultVariable="flugbuchung"/>
+      </extensionElements>
+      <incoming>f_start_flug</incoming>
+      <outgoing>f_flug_hotel</outgoing>
+    </serviceTask>
+
+    <boundaryEvent id="flug_comp" attachedToRef="flug">
+      <compensateEventDefinition/>
+    </boundaryEvent>
+
+    <serviceTask id="storno_flug" name="Flug stornieren" isForCompensation="true">
+      <documentation>Läuft nur, wenn kompensiert wird. Kein Sequenzfluss führt hierher — die Verbindung ist
+die &lt;association&gt; von der Boundary, und isForCompensation="true" ist das, was ihn aus dem normalen
+Ablauf heraushält.</documentation>
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
+          resultExpression="={ storniert: true, gebuehr: 40 }"
+          resultVariable="flugstorno"/>
+      </extensionElements>
+    </serviceTask>
+
+    <serviceTask id="hotel" name="Hotel buchen">
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
+          resultExpression="={ referenz: &quot;HO-1177&quot;, naechte: 5, preis: 620 }"
+          resultVariable="hotelbuchung"/>
+      </extensionElements>
+      <incoming>f_flug_hotel</incoming>
+      <outgoing>f_hotel_zahlung</outgoing>
+    </serviceTask>
+
+    <boundaryEvent id="hotel_comp" attachedToRef="hotel">
+      <compensateEventDefinition/>
+    </boundaryEvent>
+
+    <serviceTask id="storno_hotel" name="Hotel stornieren" isForCompensation="true">
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
+          resultExpression="={ storniert: true, gebuehr: 0 }"
+          resultVariable="hotelstorno"/>
+      </extensionElements>
+    </serviceTask>
+
+    <serviceTask id="zahlung" name="Zahlung ausführen">
+      <documentation>Der Schritt, der alles Vorherige entwertet, wenn er scheitert. zahlungOk kommt aus dem
+Startformular, damit beide Wege gezielt vorführbar sind statt vom Zufall abzuhängen.</documentation>
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
+          resultExpression="={ erfolgreich: zahlungOk, betrag: flugbuchung.preis + hotelbuchung.preis }"
+          resultVariable="zahlungsergebnis"/>
+      </extensionElements>
+      <incoming>f_hotel_zahlung</incoming>
+      <outgoing>f_zahlung_gw</outgoing>
+    </serviceTask>
+
+    <exclusiveGateway id="gw" name="Zahlung ok?" default="f_gw_nein">
+      <documentation>Default ist die Rückabwicklung. Ein Gateway, dessen Bedingung nicht greift, darf keine
+Reise als bezahlt gelten lassen.</documentation>
+      <incoming>f_zahlung_gw</incoming>
+      <outgoing>f_gw_ja</outgoing>
+      <outgoing>f_gw_nein</outgoing>
+    </exclusiveGateway>
+
+    <endEvent id="end_gebucht" name="Reise gebucht">
+      <incoming>f_gw_ja</incoming>
+    </endEvent>
+
+    <intermediateThrowEvent id="undo_hotel" name="Hotel rückabwickeln">
+      <documentation>Zuerst das Hotel: die zuletzt getane Arbeit wird zuerst zurückgenommen.</documentation>
+      <incoming>f_gw_nein</incoming>
+      <outgoing>f_undohotel_undoflug</outgoing>
+      <compensateEventDefinition activityRef="hotel"/>
+    </intermediateThrowEvent>
+
+    <intermediateThrowEvent id="undo_flug" name="Flug rückabwickeln">
+      <incoming>f_undohotel_undoflug</incoming>
+      <outgoing>f_undoflug_end</outgoing>
+      <compensateEventDefinition activityRef="flug"/>
+    </intermediateThrowEvent>
+
+    <endEvent id="end_storniert" name="Alles storniert">
+      <incoming>f_undoflug_end</incoming>
+    </endEvent>
+
+    <association id="a_flug" sourceRef="flug_comp" targetRef="storno_flug"/>
+    <association id="a_hotel" sourceRef="hotel_comp" targetRef="storno_hotel"/>
+
+    <sequenceFlow id="f_start_flug" sourceRef="start" targetRef="flug"/>
+    <sequenceFlow id="f_flug_hotel" sourceRef="flug" targetRef="hotel"/>
+    <sequenceFlow id="f_hotel_zahlung" sourceRef="hotel" targetRef="zahlung"/>
+    <sequenceFlow id="f_zahlung_gw" sourceRef="zahlung" targetRef="gw"/>
+    <sequenceFlow id="f_gw_ja" name="ja" sourceRef="gw" targetRef="end_gebucht">
+      <conditionExpression>= zahlungsergebnis.erfolgreich</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_gw_nein" name="nein" sourceRef="gw" targetRef="undo_hotel"/>
+    <sequenceFlow id="f_undohotel_undoflug" sourceRef="undo_hotel" targetRef="undo_flug"/>
+    <sequenceFlow id="f_undoflug_end" sourceRef="undo_flug" targetRef="end_storniert"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_reisestorno">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="162" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="140" y="202" width="78" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_flug" bpmnElement="flug">
+        <dc:Bounds x="250" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_flug_comp" bpmnElement="flug_comp">
+        <dc:Bounds x="282" y="202" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_storno_flug" bpmnElement="storno_flug">
+        <dc:Bounds x="250" y="300" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_hotel" bpmnElement="hotel">
+        <dc:Bounds x="420" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_hotel_comp" bpmnElement="hotel_comp">
+        <dc:Bounds x="452" y="202" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_storno_hotel" bpmnElement="storno_hotel">
+        <dc:Bounds x="420" y="300" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_zahlung" bpmnElement="zahlung">
+        <dc:Bounds x="590" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw" bpmnElement="gw" isMarkerVisible="true">
+        <dc:Bounds x="760" y="155" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="750" y="120" width="72" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_gebucht" bpmnElement="end_gebucht">
+        <dc:Bounds x="880" y="162" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="855" y="202" width="88" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_undo_hotel" bpmnElement="undo_hotel">
+        <dc:Bounds x="767" y="322" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="732" y="362" width="108" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_undo_flug" bpmnElement="undo_flug">
+        <dc:Bounds x="887" y="322" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="854" y="362" width="102" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_storniert" bpmnElement="end_storniert">
+        <dc:Bounds x="1007" y="322" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="982" y="362" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_flug" bpmnElement="f_start_flug">
+        <di:waypoint x="196" y="180"/><di:waypoint x="250" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_flug_hotel" bpmnElement="f_flug_hotel">
+        <di:waypoint x="350" y="180"/><di:waypoint x="420" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_hotel_zahlung" bpmnElement="f_hotel_zahlung">
+        <di:waypoint x="520" y="180"/><di:waypoint x="590" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_zahlung_gw" bpmnElement="f_zahlung_gw">
+        <di:waypoint x="690" y="180"/><di:waypoint x="760" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_ja" bpmnElement="f_gw_ja">
+        <di:waypoint x="810" y="180"/><di:waypoint x="880" y="180"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="832" y="158" width="26" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_nein" bpmnElement="f_gw_nein">
+        <di:waypoint x="785" y="205"/><di:waypoint x="785" y="322"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="793" y="250" width="34" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_undohotel_undoflug" bpmnElement="f_undohotel_undoflug">
+        <di:waypoint x="803" y="340"/><di:waypoint x="887" y="340"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_undoflug_end" bpmnElement="f_undoflug_end">
+        <di:waypoint x="923" y="340"/><di:waypoint x="1007" y="340"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_a_flug" bpmnElement="a_flug">
+        <di:waypoint x="300" y="238"/><di:waypoint x="300" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_a_hotel" bpmnElement="a_hotel">
+        <di:waypoint x="470" y="238"/><di:waypoint x="470" y="300"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
