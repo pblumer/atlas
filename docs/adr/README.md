@@ -322,6 +322,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0266](0266-stats-and-incidents-off-the-loop.md) | The runtime counts leave the run loop, and take the write paths with them | Proposed |
 | [0267](0267-console-speaks-german-first.md) | The console speaks German first, through a catalogue rather than a rewrite | Proposed |
 | [0268](0268-task-folders-are-saved-filters.md) | Task folders are saved filters, stored as rules and generated into FEEL | Proposed |
+| [0269](0269-atlas-namespace-deploy-warning.md) | The engine stays namespace-blind, and the deploy says so | Proposed |
 
 ## Status values
 
