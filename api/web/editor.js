@@ -17,7 +17,8 @@ import { migrateInstanceFlow } from "./migrationdialog.js";
 // Which keys a form-js schema binds — the Developer View reads it to offer a linked
 // form's fields as variables, the incident's repair form reads it to know which keys a
 // submit may write (ADR-0169). One description of it, in one place.
-import { formFieldKeys, formFieldTypes, loadFormViewer, withLoadDeadline } from "./formviewer.js";
+import { formFieldKeys, formFieldTypes, formRefusalNames, loadFormViewer,
+  scrollToFirstInvalidField, withLoadDeadline } from "./formviewer.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 // Documentation prose is Markdown (ADR-0250). The replay
@@ -8539,7 +8540,16 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
         if (!form) return;
         const { data, errors } = form.submit();
         if (errors && Object.keys(errors).length > 0) {
-          errEl.textContent = "Please fix the highlighted fields.";
+          // "Fix the highlighted fields" is what this used to say, which asks the author
+          // to go find a colour instead of telling them what is missing. The same
+          // answer the Tasks app gives, in this dialog's own language: the Modeler is
+          // English throughout, and the console's catalogue is German-first
+          // (ADR-0267) — so the names come from the shared helper and the sentence
+          // around them is this screen's.
+          const { shown, rest } = formRefusalNames(form, errors);
+          const more = rest > 0 ? ` and ${rest} more field${rest === 1 ? "" : "s"}` : "";
+          errEl.textContent = `Still to fill in: ${shown.join(", ")}${more}.`;
+          scrollToFirstInvalidField("sf-host");
           return;
         }
         errEl.textContent = "";

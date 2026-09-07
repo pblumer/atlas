@@ -28,7 +28,7 @@ import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./ta
 import { runImport } from "./infomodel-import.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
-import { loadFormViewer } from "./formviewer.js";
+import { formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
 import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
 // Giving an AI assistant access, as a screen (ADR-0200). Its own module because it
 // is a self-contained page and this file is long enough; it takes its dependencies
@@ -6659,57 +6659,15 @@ const TASK_FOLDERS = [
   { id: "group", label: "Group tasks", match: (t) => !!t.candidateGroups },
 ];
 
-// ---------- Answering a form that refused to submit --------------------------
-//
-// form-js validates on submit and marks the fields it rejected, and both places that
-// mount a form — completing a task, starting a process — used to answer that with
-// "Please fix the highlighted fields". That sentence assumes the person can see the
-// highlighting. In the Tasks app they could not: the form stays mounted while the
-// Process tab is showing, so the marked fields were on a pane nobody was looking at.
-// Even where they can, "highlighted" makes them go hunting through a form for a
-// colour instead of being told what is missing.
-//
-// So the two views share this: name the fields, and scroll to the first one.
-
-// FORM_REFUSAL_NAMES is how many fields a refusal spells out before it starts
-// counting. A blank form refuses everything it has, and a message listing fifteen
-// field names names none of them — the first few plus "and 11 more fields" is what
-// somebody can read at a glance and act on.
-const FORM_REFUSAL_NAMES = 4;
-
-// formRefusalMessage turns what a form refused into the sentence to put in front of
-// the person: the fields to go back to, called what the form calls them.
-//
-// form-js keys its errors by *field id* — the opaque `Field_1a2b3c` the form editor
-// generates — so the ids are resolved through the form's own field registry, which
-// is the table it keyed them with in the first place. A field with no label falls
-// back to its variable key, and one the registry does not know falls back to the id:
-// worse to read, still better than "some field somewhere". Two fields may share a
-// label, so the names are deduplicated before they are cut.
+// formRefusalMessage is what the Tasks app says when a form refuses to submit: the
+// fields to go back to, named the way the form labels them. formviewer.js works out
+// which fields those are and how many did not fit; this puts the console's own words
+// around them (ADR-0267).
 function formRefusalMessage(form, errors) {
-  let reg = null;
-  try { reg = form.get("formFieldRegistry"); } catch { /* no registry to ask */ }
-  const names = [...new Set(Object.keys(errors).map((id) => {
-    const f = reg && reg.get(id);
-    const label = f && typeof f.label === "string" ? f.label.trim() : "";
-    return label || (f && f.key) || id;
-  }))];
-  const shown = names.slice(0, FORM_REFUSAL_NAMES);
-  const rest = names.length - shown.length;
+  const { shown, rest } = formRefusalNames(form, errors);
   let msg = tr("form.invalidFields", { fields: shown.join(", ") });
   if (rest > 0) msg += " " + trPlural("form.invalidMore", rest);
   return msg;
-}
-
-// scrollToFirstInvalidField brings the first field the form marked into view — long
-// forms scroll, and the thing to fix can be below the fold. `hostId` is the element
-// the form was mounted into. After the current task, because the marks are drawn by
-// the form's own re-render and are not in the document yet.
-function scrollToFirstInvalidField(hostId) {
-  setTimeout(() => {
-    const first = document.querySelector(`#${hostId} .fjs-has-errors, #${hostId} .fjs-form-field-error`);
-    if (first && first.scrollIntoView) first.scrollIntoView({ block: "center" });
-  }, 0);
 }
 
 async function viewTasks(preselectKey) {

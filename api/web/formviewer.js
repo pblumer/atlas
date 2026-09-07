@@ -76,6 +76,59 @@ export function loadFormViewer() {
   return _formViewer;
 }
 
+// ---------- Answering a form that refused to submit --------------------------
+//
+// form-js validates on submit and marks the fields it rejected, and every surface that
+// renders a form used to answer that with "Please fix the highlighted fields". That
+// sentence assumes the person can see the highlighting. In the Tasks app they could
+// not: the form stays mounted while the Process tab is showing, so the marked fields
+// were on a pane nobody was looking at. Even where they can, "highlighted" sends them
+// hunting through a form for a colour instead of telling them what is missing.
+//
+// The two halves that every surface needs are here; the sentence itself is not. The
+// console is German-first where it has been translated and English everywhere else
+// (ADR-0267), so which words go around these names is the caller's to decide — the
+// Modeler putting a German sentence in an English dialog is exactly the half-translated
+// screen that ADR warns about.
+
+// FORM_REFUSAL_NAMES is how many fields a refusal spells out before it starts counting.
+// A blank form refuses everything it has, and a message listing fifteen field names
+// names none of them — the first few plus "and 11 more" is what somebody can read at a
+// glance and act on.
+export const FORM_REFUSAL_NAMES = 4;
+
+// formRefusalNames turns what a form refused into the fields to send somebody back to,
+// called what the form calls them: `{shown, rest}`, where shown is at most `max` names
+// and rest is how many more there were.
+//
+// form-js keys its errors by *field id* — the opaque `Field_1a2b3c` the form editor
+// generates — so the ids are resolved through the form's own field registry, which is
+// the table it keyed them with in the first place. A field with no label falls back to
+// its variable key, and one the registry does not know falls back to the id: worse to
+// read, still better than "some field somewhere". Two fields may share a label, so the
+// names are deduplicated before they are cut.
+export function formRefusalNames(form, errors, max = FORM_REFUSAL_NAMES) {
+  let reg = null;
+  try { reg = form.get("formFieldRegistry"); } catch { /* no registry to ask */ }
+  const names = [...new Set(Object.keys(errors || {}).map((id) => {
+    const f = reg && reg.get(id);
+    const label = f && typeof f.label === "string" ? f.label.trim() : "";
+    return label || (f && f.key) || id;
+  }))];
+  return { shown: names.slice(0, max), rest: Math.max(0, names.length - max) };
+}
+
+// scrollToFirstInvalidField brings the first field the form marked into view — forms
+// scroll, and the thing to fix can be below the fold. `hostId` is the element the form
+// was mounted into. After the current task, because the marks are drawn by the form's
+// own re-render and are not in the document yet.
+export function scrollToFirstInvalidField(hostId) {
+  setTimeout(() => {
+    const first = document.querySelector(`#${hostId} .fjs-has-errors, #${hostId} .fjs-form-field-error`);
+    if (first && first.scrollIntoView) first.scrollIntoView({ block: "center" });
+  }, 0);
+}
+
 // formFieldKeys extracts the variable-bearing field keys from a form-js schema — the
 // keys a submit would write, and so exactly the set a repair form is allowed to touch.
 //
