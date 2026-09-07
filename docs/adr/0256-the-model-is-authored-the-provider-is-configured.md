@@ -1,4 +1,4 @@
-# ADR-DRAFT: The model is authored, the provider is configured — and one call is a task
+# ADR-0256: The model is authored, the provider is configured — and one call is a task
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

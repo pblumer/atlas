@@ -309,6 +309,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0253](0253-agent-tool-calls-drive-adhoc-activation.md) | Agent tool calls drive ad-hoc activation — the toolbox is the model | Accepted |
 | [0254](0254-agent-rounds-on-a-worker.md) | An agent round on a worker — the toolbox travels out, the tool calls travel back | Accepted |
 | [0255](0255-agent-models-are-console-workers.md) | An agent model is a Console Worker — the one field that is not a secret | Accepted |
+| [0256](0256-the-model-is-authored-the-provider-is-configured.md) | The model is authored, the provider is configured — and one call is a task | Proposed |
 
 ## Status values
 
