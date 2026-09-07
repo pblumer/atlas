@@ -1298,3 +1298,93 @@ func TestADConnectorNeedsAnLDAPURLAndABindBundle(t *testing.T) {
 		}
 	}
 }
+
+// agentRefBPMN parks on an agent-driven ad-hoc subprocess, which names its Worker on
+// the container rather than on a task (ADR-0253) — the shape ConnectorRefs did not
+// enumerate, and so the shape neither the deploy warning nor the delete refusal saw.
+const agentRefBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0" id="defs-agentref">
+  <process id="berater" isExecutable="true">
+    <startEvent id="s"/><endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="berater_adhoc"/>
+    <sequenceFlow id="f2" sourceRef="berater_adhoc" targetRef="e"/>
+    <adHocSubProcess id="berater_adhoc">
+      <documentation>Finde den guenstigsten Zins.</documentation>
+      <extensionElements><atlas:agentConnector connector="anthropic_pb"/></extensionElements>
+      <serviceTask id="zinsen_holen">
+        <documentation>Liest die Zinstabelle.</documentation>
+        <extensionElements><zeebe:taskDefinition type="rates"/></extensionElements>
+      </serviceTask>
+    </adHocSubProcess>
+  </process>
+</definitions>`
+
+// A model naming an agent Worker nobody configured warns at deploy, like every other
+// kind. It did not, because the container's reference was invisible to ConnectorRefs —
+// so a model could reach production naming a model endpoint that was never created,
+// and the first round would be the one to find out (ADR-0158).
+func TestAnUnconfiguredAgentWorkerWarnsAtDeploy(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	cp, err := compiler.Parse(1, 1, strings.NewReader(agentRefBPMN))
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	warns := srv.connectorWarnings(cp)
+	if len(warns) != 1 || !strings.Contains(warns[0], "not configured on this server") {
+		t.Fatalf("warnings = %v, want one naming the agent Worker as unconfigured", warns)
+	}
+	if !strings.Contains(warns[0], "anthropic_pb") || !strings.Contains(warns[0], "berater_adhoc") {
+		t.Errorf("warning names neither the container nor the Worker: %q", warns[0])
+	}
+
+	// Configured, and the warning goes.
+	_ = srv.connectors.Save(connector{
+		ID: "1", Name: "anthropic_pb", Kind: connectorKindAgent, Enabled: true, CreatedAt: 1,
+		CredentialsRef: "k", Provider: agentProtocolMessages, Model: "claude-opus-5",
+	})
+	if warns = srv.connectorWarnings(cp); len(warns) != 0 {
+		t.Errorf("warnings with the Worker configured = %v, want none", warns)
+	}
+}
+
+// And the other end of the same reference: deleting an agent Worker a deployed model
+// depends on is refused, naming what depends on it. It was not — the delete returned
+// 204 and every round of every running instance was left pointing at nothing, which is
+// precisely the silent removal ADR-0163 refuses for every other kind.
+func TestDeletingAnAgentWorkerADeployedModelUsesIsRefused(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", agentRefBPMN, "application/xml")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("deploy: status=%d body=%s", code, raw)
+	}
+	code, raw = serveInternal(t, srv, http.MethodPost, "/api/v1/configured-workers",
+		`{"name":"anthropic_pb","kind":"agent","provider":"messages","model":"claude-opus-5","credentialsRef":"k"}`,
+		"application/json")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create worker: status=%d body=%s", code, raw)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &created); err != nil {
+		t.Fatalf("decode worker: %v (%s)", err, raw)
+	}
+
+	code, raw = serveInternal(t, srv, http.MethodDelete, "/api/v1/configured-workers/"+created.ID, "", "")
+	if code == http.StatusNoContent || code == http.StatusOK {
+		t.Fatalf("the delete succeeded (status=%d); a deployed model depends on this Worker", code)
+	}
+	if !strings.Contains(string(raw), "berater") {
+		t.Errorf("refusal = %s, want it to name the process that depends on the Worker", raw)
+	}
+
+	// And force still deletes, because an operator who has read that list may mean it.
+	code, raw = serveInternal(t, srv, http.MethodDelete,
+		"/api/v1/configured-workers/"+created.ID+"?force=true", "", "")
+	if code != http.StatusNoContent && code != http.StatusOK {
+		t.Fatalf("forced delete: status=%d body=%s", code, raw)
+	}
+}

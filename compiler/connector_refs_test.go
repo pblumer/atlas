@@ -76,3 +76,42 @@ func TestNodeConnectorRefPerElement(t *testing.T) {
 		}
 	}
 }
+
+// A third shape, and the one that was missed: an agent-driven ad-hoc subprocess names
+// its Worker on the *container*, not on a task (ADR-0253). Being absent here was not
+// cosmetic — this enumeration is what a deploy warns from when nothing answers to a
+// name (ADR-0158) and what a delete refuses from while a deployed model still depends
+// on one (ADR-0163). Without it an agent Worker could be deleted out from under a
+// running process, silently, and a model naming a Worker nobody had created deployed
+// without a word.
+func TestConnectorRefsEnumeratesAnAgentContainer(t *testing.T) {
+	cp, err := Parse(1, 1, strings.NewReader(agentAdHoc(twoToolAdHoc)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	refs := cp.ConnectorRefs()
+	if len(refs) != 1 {
+		t.Fatalf("ConnectorRefs = %+v, want exactly the agent container", refs)
+	}
+	if refs[0].ElementId != "adhoc" || refs[0].Connector != "anthropic_pb" || refs[0].JobType != AgentJobTypeIndex {
+		t.Errorf("ref = %+v, want element adhoc → anthropic_pb on the agent job type", refs[0])
+	}
+	// The tools themselves name no Worker: they are ordinary activities, and a job
+	// type is not a Worker reference.
+	if _, ok := cp.NodeConnectorRef(nodeIndexOf(t, cp, "zinsen_holen")); ok {
+		t.Error("a tool was reported as naming a Worker; only the container does")
+	}
+}
+
+// A plain ad-hoc subprocess names none, so nothing about ADR-0143's containers changes.
+func TestAPlainAdHocNamesNoWorker(t *testing.T) {
+	cp, err := Parse(1, 1, strings.NewReader(agentAdHoc(`<adHocSubProcess id="adhoc">
+	  <serviceTask id="frei"><extensionElements><zeebe:taskDefinition type="free"/></extensionElements></serviceTask>
+	</adHocSubProcess>`)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if refs := cp.ConnectorRefs(); len(refs) != 0 {
+		t.Errorf("ConnectorRefs = %+v, want none: a plain ad-hoc names no Worker", refs)
+	}
+}
