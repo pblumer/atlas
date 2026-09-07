@@ -133,3 +133,41 @@ test("the capability probe decides whether the button exists at all", async ({ p
   // nothing, and the editor leaves the button hidden rather than offering a failure.
   expect(await page.evaluate(() => window.__noWorkers)).toEqual([]);
 });
+
+test("opened from a user task, the process and the step are already set", async ({ page }) => {
+  await page.locator("#open-for-step").click();
+
+  // Pressing "Create a new form" on a step said what the form is for. The dialog does
+  // not ask again — all that is left is the brief.
+  await expect(page.locator("#fg-process")).toHaveValue("urlaubsantrag");
+  await expect(page.locator("#fg-step")).toHaveValue("Task_Melden");
+  await expect(page.locator("#fg-step-field")).toBeVisible();
+
+  await page.locator("#fg-brief").fill("Wer war abwesend und wie lange.");
+  await page.locator("[data-ok]").click();
+  await expect(sent(page)).toHaveText(/"processId":"urlaubsantrag"/);
+  await expect(sent(page)).toHaveText(/"elementId":"Task_Melden"/);
+  expect(page.__errors).toEqual([]);
+});
+
+test("opened from a start event, the process is set and the step stays the start form", async ({ page }) => {
+  await page.locator("#open-for-start").click();
+  await expect(page.locator("#fg-process")).toHaveValue("urlaubsantrag");
+  // The steps are loaded and offered — the author may still pick one — but none is
+  // chosen: a start form is for the process, not for a step in it.
+  await expect(page.locator("#fg-step").locator("option")).toHaveCount(3);
+  await expect(page.locator("#fg-step")).toHaveValue("");
+
+  await page.locator("[data-ok]").click();
+  await expect(sent(page)).toHaveText(/"processId":"urlaubsantrag"/);
+  await expect(sent(page)).not.toHaveText(/"elementId"/);
+});
+
+test("a process the picker has not got preselects nothing", async ({ page }) => {
+  await page.locator("#open-for-unknown").click();
+  // The picker has finished loading — the real processes are in it — and none of them
+  // is the one that was asked for, so nothing is claimed.
+  await expect(page.locator("#fg-process").locator("option")).toHaveCount(4);
+  await expect(page.locator("#fg-process")).toHaveValue("");
+  await expect(page.locator("#fg-step-field")).toBeHidden();
+});

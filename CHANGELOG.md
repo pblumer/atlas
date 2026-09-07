@@ -23,6 +23,15 @@ _Changed_ / _Removed_ for each version.
   fresh start, so "add a field for the period" adds one instead of replacing the other
   twelve.
 
+  You mostly will not open it from there, though. In the Modeler, **"Create a new
+  form"** on a user task or on a start event now carries that step with it: the form
+  editor opens with the generator already up, on that process and that step, and the
+  only thing left to write is the sentence about what the form should ask for.
+  Pressing that link *was* you saying what the form is for, and you should not have to
+  say it twice. (A **repair form**'s link stays the plain one — that is a different kind
+  of form, the values an operator corrects to get a parked task moving, and the
+  generator does not write those.)
+
   The half you do not have to type is the process. Naming one lets the generator read
   the model's own words — the process documentation, each step's documentation, the
   conditions on its sequence flows, and the variable names its mappings and data

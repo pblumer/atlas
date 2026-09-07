@@ -16,6 +16,9 @@
       <button class="btn" id="open">Generate (one Worker)</button>
       <button class="btn" id="open-many">Generate (two Workers)</button>
       <button class="btn" id="open-fails">Generate (the model refuses)</button>
+      <button class="btn" id="open-for-step">Generate (opened from a user task)</button>
+      <button class="btn" id="open-for-start">Generate (opened from a start event)</button>
+      <button class="btn" id="open-for-unknown">Generate (opened from a process the picker has not got)</button>
       <pre id="result">—</pre>
       <pre id="sent">—</pre>
     </div>
@@ -74,13 +77,23 @@
         };
       }
 
+      const ONE = [{ name: "haus", model: "claude-opus-5" }];
       const OPEN = {
-        open: { workers: [{ name: "haus", model: "claude-opus-5" }], mode: "ok" },
+        open: { workers: ONE, mode: "ok" },
         "open-many": {
           workers: [{ name: "haus", model: "claude-opus-5" }, { name: "lokal", model: "qwen3" }],
           mode: "ok",
         },
-        "open-fails": { workers: [{ name: "haus", model: "claude-opus-5" }], mode: "fails" },
+        "open-fails": { workers: ONE, mode: "fails" },
+        // Reached by pressing "Create a new form" on a user task: the process and the
+        // step are known before the dialog opens.
+        "open-for-step": { workers: ONE, mode: "ok", forProcess: "urlaubsantrag", forStep: "Task_Melden" },
+        // The same link on a start event names the process and no step, because the
+        // form starts the process rather than completing a step in it.
+        "open-for-start": { workers: ONE, mode: "ok", forProcess: "urlaubsantrag" },
+        // A process the picker does not list — a pool filed under another id, a draft
+        // deleted between the two screens. Nothing is preselected.
+        "open-for-unknown": { workers: ONE, mode: "ok", forProcess: "verschwunden", forStep: "Task_Melden" },
       };
       for (const [id, cfg] of Object.entries(OPEN)) {
         document.getElementById(id).addEventListener("click", async () => {
@@ -90,6 +103,8 @@
             workers: cfg.workers,
             formId: "urlaub-pruefen",
             schema: { type: "default", components: [{ type: "textfield", key: "alt", label: "Alt" }] },
+            forProcess: cfg.forProcess || "",
+            forStep: cfg.forStep || "",
           }));
         });
       }

@@ -2154,18 +2154,24 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         submitted fields become process variables.</p>
 
       <h4 data-l="de">Ein Formular schreiben lassen</h4><h4 data-l="en">Letting the AI Worker write one</h4>
-      <p data-l="de">Ist ein <b>KI-Worker</b> eingerichtet (Console &rsaquo; Workers, Typ <code>agent</code>), hat der
-        Formular-Editor oben einen Knopf <b>✨ Generate</b>. Man beschreibt in eigenen Worten, wonach das Formular
-        fragen soll, und zeigt ihm — das ist der lohnende Teil — den <b>Prozess</b>, zu dem es gehört, und den
-        <b>Schritt</b>, für den es ist. Gelesen werden dann die eigenen Worte des Modells: die Prozessdokumentation,
+      <p data-l="de">Ist ein <b>KI-Worker</b> eingerichtet (Console &rsaquo; Workers, Typ <code>agent</code>), geht das
+        so: im Modeler am <b>User-Task</b> (oder am <b>Start-Ereignis</b>) auf <i>Create a new form</i> drücken. Der
+        Formular-Editor öffnet sich mit bereits geöffnetem Generator, der Prozess und Schritt schon kennt — dieser
+        Klick war ja die Aussage, wofür das Formular da ist. Zu schreiben bleibt der Satz, wonach gefragt werden soll.
+        Derselbe Knopf <b>✨ Generate</b> sitzt in der Leiste des Editors, für ein Formular, das über die Formularliste
+        begonnen wurde; dort wählt man <b>Prozess</b> und <b>Schritt</b> selbst.</p>
+      <p data-l="en">With an <b>AI Worker</b> configured (Console &rsaquo; Workers, kind <code>agent</code>), it goes
+        like this: in the Modeler, press <i>Create a new form</i> on the <b>user task</b> (or on the <b>start
+        event</b>). The form editor opens with the generator already up and the process and step already known —
+        pressing that link was you saying what the form is for. What is left to write is the sentence about what it
+        should ask for. The same <b>✨ Generate</b> button sits in the editor's bar for a form begun from the forms
+        list, where you pick the <b>process</b> and <b>step</b> yourself.</p>
+      <p data-l="de">Der lohnende Teil ist der Prozess. Gelesen werden dann die eigenen Worte des Modells: die Prozessdokumentation,
         die <code>&lt;bpmn:documentation&gt;</code> jedes Schritts, die Bedingungen an den Sequenzflüssen und die
         Variablennamen aus Mappings und Datenobjekten — aus dem <b>Entwurf</b>, an dem du gerade arbeitest, sonst aus
         der deployten Version. Deshalb heissen die Felder hinterher so, wie der Prozess sie ohnehin nennt. Wer bei
         offenem Formular erneut generiert, <i>ändert</i> es, statt neu zu beginnen.</p>
-      <p data-l="en">With an <b>AI Worker</b> configured (Console &rsaquo; Workers, kind <code>agent</code>), the form
-        editor's bar carries a <b>✨ Generate</b> button. Describe in your own words what the form should ask for and
-        — this is the part worth doing — point it at the <b>process</b> the form belongs to and the <b>step</b> it is
-        for. It then reads the model's own words: the process documentation, each step's
+      <p data-l="en">The process is the part worth having. The generator reads the model's own words: the process documentation, each step's
         <code>&lt;bpmn:documentation&gt;</code>, the conditions on its sequence flows, and the variable names its
         mappings and data objects use — out of the <b>draft</b> you are working on, or the deployed version when
         there is none. So the fields come back named the way the process already names them. Generating again over an

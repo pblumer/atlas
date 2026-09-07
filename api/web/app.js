@@ -8069,11 +8069,15 @@ async function viewEditorDraft(id) {
   await mod.mountEditor(view, { api, toast, draftId: id, projectId, project });
 }
 
-async function viewFormEditor(formId, projectId) {
+// generateFor, when given, is the {processId, elementId} the "Create a new form" link
+// on a step carried here: the editor opens its generator on that step rather than
+// asking the author to say again what pressing that link already said
+// (ADR-draft-ai-form-generation).
+async function viewFormEditor(formId, projectId, generateFor) {
   const gen = navGen;
   const mod = await import("./form-editor.js");
   if (superseded(gen)) return; // don't mount over a newer view after the dynamic import
-  await mod.mountFormEditor(view, { api, toast, formId, projectId });
+  await mod.mountFormEditor(view, { api, toast, formId, projectId, generateFor });
 }
 
 async function viewLive(key, instance) {
@@ -8492,6 +8496,16 @@ async function route() {
     if (dnew) return await viewEditor(null, dnew[1] ? decodeURIComponent(dnew[1]) : "");
     const fnew = path.match(/^#\/modeler\/form\/new(?:\/p\/(.+))?$/);
     if (fnew) return await viewFormEditor(null, fnew[1] ? decodeURIComponent(fnew[1]) : "");
+    // A new form for a named step: the Modeler's "Create a new form" link on a user
+    // task carries the process and the element, and on a start event the process
+    // alone — which is the start-form case, where the form is for the process itself.
+    const ffor = path.match(/^#\/modeler\/form\/new\/for\/([^/]+)(?:\/([^/]+))?$/);
+    if (ffor) {
+      return await viewFormEditor(null, "", {
+        processId: decodeURIComponent(ffor[1]),
+        elementId: ffor[2] ? decodeURIComponent(ffor[2]) : "",
+      });
+    }
     const fe = path.match(/^#\/modeler\/form\/e\/(.+)$/);
     if (fe) return await viewFormEditor(decodeURIComponent(fe[1]));
     const dm = path.match(/^#\/modeler\/draft\/(.+)$/);

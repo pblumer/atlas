@@ -587,6 +587,9 @@ Making processes wait, react, and time out.
   written.
 - ✅ **Forms written by the AI Worker** ([ADR-draft-ai-form-generation](docs/adr/draft-ai-form-generation.md)):
   the same Worker an operator configured for the runtime also writes forms at **design time**.
+  **"Create a new form" on a user task or a start event carries that step into the editor**, which
+  opens with the generator already on it — pressing that link was the author saying what the form is
+  for, so the dialog does not ask again (a repair form's link stays plain: a different kind of form).
   The form editor's **✨ Generate** button asks for a brief in prose and, optionally, the process the
   form belongs to and the step it is for — and the process's *own words* do the rest of the talking:
   its documentation, each step's `<bpmn:documentation>`, the sequence-flow conditions, and the

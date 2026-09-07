@@ -75,6 +75,18 @@ the ordinary save path — with the ordinary id check (ADR-0222), the ordinary s
 (ADR-0071), and their own name on it. This is ADR-0032's sentence about diagrams, applied
 to forms for the same reason.
 
+**The entry point is the diagram, not the forms list.** "Create a new form" on a user
+task, and on a start event, carries the process and the element into the route
+(`#/modeler/form/new/for/{processId}[/{elementId}]`), and the editor opens with the
+generator already on that step. Pressing that link *is* the author saying what the form
+is for; asking them to say it again in a dialog is asking twice for one answer. A start
+event names the process and no element, because a start form is for starting the process
+rather than for a step inside it. A **repair form**'s link (ADR-0169) stays the plain one:
+it is neither of the two things this generator writes — it is the subset of a parked
+instance's variables an operator corrects — and opening the generator on that task would
+frame it as the task's work form, the confusion that panel's wording exists to prevent.
+The button in the form editor's own bar remains, for a form begun from the forms list.
+
 ### Why this is not a service task, and does not contradict ADR-0164
 
 ADR-0164 says no side-effecting service task runs in the engine process, because a slow

@@ -84,7 +84,7 @@ async function listSteps(api, process) {
 // the author closed the dialog. It resolves only on a generation that succeeded: a
 // failure is shown inside the dialog, where the brief that caused it is still on screen
 // and can be changed.
-export function openFormGenerator({ api, workers = [], formId = "", schema = null }) {
+export function openFormGenerator({ api, workers = [], formId = "", schema = null, forProcess = "", forStep = "" }) {
   return new Promise((resolve) => {
     const refinable = !!(schema && Array.isArray(schema.components) && schema.components.length > 0);
     const ov = document.createElement("div");
@@ -161,6 +161,22 @@ export function openFormGenerator({ api, workers = [], formId = "", schema = nul
         opt.value = p.id;
         opt.textContent = p.name === p.id ? p.id : `${p.name} (${p.id})`;
         procSel.appendChild(opt);
+      }
+      // Opened from a step in the Modeler — "Create a new form" on a user task, or on
+      // a start event — the process and the step are already known, and pressing that
+      // link was the author saying so. They arrive selected, and all that is left to
+      // write is the brief.
+      //
+      // A process the picker does not list leaves both unset rather than pretending to
+      // a selection the request could not honour: a pool of a collaboration is filed
+      // under the first pool's id, and a draft can be deleted between the two screens.
+      if (forProcess && processes.some((p) => p.id === forProcess)) {
+        procSel.value = forProcess;
+        await loadSteps();
+        if (settled) return;
+        if (forStep && Array.from(stepSel.options).some((o) => o.value === forStep)) {
+          stepSel.value = forStep;
+        }
       }
     })();
 
