@@ -44,8 +44,8 @@
   left unwritten where there is none; amended 2026-09-07 — the structural greys and
   the kind fills are drawn at a weight and a strength the canvas can carry, measured
   against WCAG 2.1's 3:1 for a graphical object; amended 2026-09-07 — a double-click
-  goes inside, and a process's inside is its Operations view rather than a smaller
-  starmap around it)
+  goes inside, and for a process and a decision the inside is their Operations view
+  rather than a smaller starmap around them)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -812,11 +812,19 @@ unaffected.
 > a reader who double-clicks the process they came for is asking for that, not for a
 > smaller starmap around it.
 >
-> So the gesture keeps its single meaning and the answer follows the kind: a process
-> opens in Operations, and every other kind, having no elsewhere to be opened in,
-> still becomes the centre of the picture.
+> So the gesture keeps its single meaning and the answer follows the kind. Two kinds
+> have an elsewhere: a process opens on its live view, and a decision on its evaluation
+> history — the same question one altitude down, what has this actually done and with
+> what. Every other kind, having no elsewhere to be opened in, still becomes the centre
+> of the picture.
 >
-> Nothing is lost from the landscape. A process can still be drilled into from the
+> The two placeholder kinds are the case this must not get wrong (§3). A decision the
+> caller may not see is a *restricted* node and one nothing provides is an *unresolved*
+> node; neither is a `decision`, so neither is offered a link to a page that would not
+> have it. An absence must never read as a fact, and a door onto nothing is exactly
+> that.
+>
+> Nothing is lost from the landscape. Either can still be drilled into from the
 > header's "→", which is the control the drilldown was given when it became a path
 > (amended above) and the discoverable half of the pair — a gesture you have to be
 > told about is one most readers never find. The panel's "Open in Operations" link

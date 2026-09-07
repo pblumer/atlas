@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas in/out-card placement e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountInstanceReplay against a mock `api`, on
+         the geometry that made the case for choosing where the card hangs (ADR-0161):
+         the event hub of the identity lifecycle, at the DI coordinates it is deployed
+         with. "Service-Ereignis" is a 36px event with eight input-mapping values, so its
+         card is nearly six times its own height — hung under the element, as it used to
+         be, it comes down over the whole mutation branch drawn below: two shapes and both
+         their captions. The runtime response badges the elements, so the gateway's badge
+         sits in the air the card has to take. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountInstanceReplay } from "/editor.js";
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000;
+      const ns = (ms) => ms * 1e6;
+
+      // The event hub of identitaet-lebenszyklus v2 with the two lifecycle tasks above
+      // it, at their real DI coordinates. Track A is here because it is what stands in
+      // the air above the hub: the card has to weigh the branch below against it.
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="D" targetNamespace="http://atlas/identity">
+  <bpmn:process id="identitaet-lebenszyklus" isExecutable="true">
+    <bpmn:scriptTask id="s_aktivieren" name="Eintritt verbuchen"/>
+    <bpmn:receiveTask id="rt_aktiv" name="Aktiv"/>
+    <bpmn:eventBasedGateway id="gw_hub" name="nächstes Ereignis"><bpmn:outgoing>f_b1</bpmn:outgoing><bpmn:outgoing>f_b5</bpmn:outgoing></bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="c_service" name="Service-Ereignis"><bpmn:incoming>f_b1</bpmn:incoming><bpmn:outgoing>f_b2</bpmn:outgoing><bpmn:messageEventDefinition id="m1"/></bpmn:intermediateCatchEvent>
+    <bpmn:scriptTask id="s_register" name="Service-Register fortschreiben"><bpmn:incoming>f_b2</bpmn:incoming><bpmn:outgoing>f_b3</bpmn:outgoing></bpmn:scriptTask>
+    <bpmn:scriptTask id="s_uebersicht" name="Übersicht nachführen"><bpmn:incoming>f_b3</bpmn:incoming></bpmn:scriptTask>
+    <bpmn:intermediateCatchEvent id="c_mutation" name="Stammdaten-Mutation"><bpmn:incoming>f_b5</bpmn:incoming><bpmn:outgoing>f_b6</bpmn:outgoing><bpmn:messageEventDefinition id="m2"/></bpmn:intermediateCatchEvent>
+    <bpmn:scriptTask id="s_mutation" name="Stammdaten mutieren"><bpmn:incoming>f_b6</bpmn:incoming></bpmn:scriptTask>
+    <bpmn:sequenceFlow id="f_b1" sourceRef="gw_hub" targetRef="c_service"/>
+    <bpmn:sequenceFlow id="f_b2" sourceRef="c_service" targetRef="s_register"/>
+    <bpmn:sequenceFlow id="f_b3" sourceRef="s_register" targetRef="s_uebersicht"/>
+    <bpmn:sequenceFlow id="f_b5" sourceRef="gw_hub" targetRef="c_mutation"/>
+    <bpmn:sequenceFlow id="f_b6" sourceRef="c_mutation" targetRef="s_mutation"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Di"><bpmndi:BPMNPlane id="P" bpmnElement="identitaet-lebenszyklus">
+    <bpmndi:BPMNShape id="a1" bpmnElement="s_aktivieren"><dc:Bounds x="650" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="a2" bpmnElement="rt_aktiv"><dc:Bounds x="800" y="140" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="b1" bpmnElement="gw_hub"><dc:Bounds x="500" y="375" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="483" y="432" width="85" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="b2" bpmnElement="c_service"><dc:Bounds x="650" y="382" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="622" y="345" width="92" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="b3" bpmnElement="s_register"><dc:Bounds x="740" y="360" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="b4" bpmnElement="s_uebersicht"><dc:Bounds x="890" y="360" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="b5" bpmnElement="c_mutation"><dc:Bounds x="650" y="502" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="614" y="541" width="109" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="b6" bpmnElement="s_mutation"><dc:Bounds x="740" y="480" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="e1" bpmnElement="f_b1"><di:waypoint x="550" y="400"/><di:waypoint x="650" y="400"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="e2" bpmnElement="f_b2"><di:waypoint x="686" y="400"/><di:waypoint x="740" y="400"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="e3" bpmnElement="f_b3"><di:waypoint x="840" y="400"/><di:waypoint x="890" y="400"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="e5" bpmnElement="f_b5"><di:waypoint x="550" y="400"/><di:waypoint x="575" y="400"/><di:waypoint x="575" y="520"/><di:waypoint x="650" y="520"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="e6" bpmnElement="f_b6"><di:waypoint x="686" y="520"/><di:waypoint x="740" y="520"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      const v = (name, value, kind) => ({ name, value, kind: kind || "string" });
+      const ins = [
+        v("Bewegung", "service"), v("identityId", "MT-58974"), v("item", '{"a":1}', "json"),
+        v("loopCounter", "29", "number"), v("neueFunktion", "Disposition"), v("neueOrgEinheit", "Einkauf"),
+        v("offset", "55000", "number"), v("praefix", "MT-"),
+      ];
+      const after = [v("serviceId", "notebook-standard"), v("serviceStatus", "IN_BETRIEB")];
+
+      const steps = [
+        { elementId: "c_service", elementInstanceKey: "1001", type: "bpmn:intermediateCatchEvent", position: 1,
+          tokenId: "2", variables: [], variablesAfter: after, writes: after, inputs: ins },
+        { elementId: "s_register", elementInstanceKey: "1002", type: "bpmn:scriptTask", position: 2,
+          tokenId: "2", variables: after, variablesAfter: after, writes: [] },
+      ].map((s, i) => ({ ...s, at: ns(T + i * 1000), endAt: ns(T + i * 1000 + 500) }));
+
+      const frames = steps.map((s) => ({ position: s.position, at: s.at,
+        tokens: [{ elementId: s.elementId, tokenId: s.tokenId, elementInstanceKey: s.elementInstanceKey, state: "active" }] }));
+
+      const TIMELINE = { processDefKey: "386", processId: "identitaet-lebenszyklus", version: 2,
+        state: "active", frames, variableAttribution: true, steps };
+
+      const api = async (method, url) => {
+        if (/\/instances\/\d+\/timeline$/.test(url)) return TIMELINE;
+        if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (url.includes("/runtime")) return { elements: [
+          { elementId: "c_service", visits: 11 }, { elementId: "s_register", visits: 9 },
+          { elementId: "s_uebersicht", visits: 9 }, { elementId: "c_mutation", visits: 11 },
+          { elementId: "s_mutation", visits: 1 }, { elementId: "gw_hub", visits: 11 },
+        ] };
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        if (/\/instances\/\d+\/data-objects$/.test(url)) return [];
+        if (/\/instances\/\d+\/object-graph$/.test(url)) return { nodes: [], links: [], unresolved: [] };
+        return {};
+      };
+
+      window.__mount = () => mountInstanceReplay(view, { api, toast: noop, key: "281474979489827" });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

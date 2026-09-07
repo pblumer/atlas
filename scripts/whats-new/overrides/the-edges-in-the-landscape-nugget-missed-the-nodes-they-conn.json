@@ -1,0 +1,4 @@
+{
+  "hidden": true,
+  "_why": "This fixed a drawn Panorama stage that no longer exists: the nugget scenes were replaced by captures of the running product in the same unreleased cycle. Neither the drawing nor its bug ever reached a release, so the feed would be telling readers about a defect in something they never saw, in a scene that is gone."
+}

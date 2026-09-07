@@ -417,7 +417,13 @@ type manualActionView struct {
 }
 
 type timelineToken struct {
-	TokenID            uint64 `json:"tokenId"`
+	TokenID uint64 `json:"tokenId"`
+	// ParentTokenID is the token this one was forked from — 0 where nothing forked it.
+	// It is what lets a reader put a group of sibling tokens back together: an
+	// event-based gateway's armed branches are all forks of the gateway's own token, so
+	// the replay can draw their race once, on the gateway, the way the live overlay
+	// does (ADR-0110, ADR-0249).
+	ParentTokenID      uint64 `json:"parentTokenId,omitempty"`
 	ElementID          string `json:"elementId"`
 	ElementInstanceKey uint64 `json:"elementInstanceKey"`
 	State              string `json:"state"`
@@ -2073,15 +2079,24 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				if n, ok := ver.node(rr.pos, v.ElementID); ok && n.Type == compiler.TypeParallelGateway && n.IncomingCount > 1 {
 					stateName = "waiting"
 				}
-				active[v.ElementInstanceKey] = timelineToken{TokenID: v.TokenID, ElementID: ver.elementID(rr.pos, v.ElementID), ElementInstanceKey: v.ElementInstanceKey, State: stateName}
+				active[v.ElementInstanceKey] = timelineToken{TokenID: v.TokenID, ParentTokenID: v.ParentTokenID, ElementID: ver.elementID(rr.pos, v.ElementID), ElementInstanceKey: v.ElementInstanceKey, State: stateName}
 				emitFrame(rr.pos, rr.at)
-			case v.Action == state.ReplayTerminated, ver.isLeaf(rr.pos, v.ElementID), isLoopRound(v):
+			case v.Action == state.ReplayTerminated, ver.isLeaf(rr.pos, v.ElementID), isLoopRound(v),
+				ver.isType(rr.pos, v.ElementID, compiler.TypeEventBasedGateway):
 				if v.Action == state.ReplayTerminated {
 					torn[v.ElementInstanceKey] = true
 				}
 				// Nothing will activate from here — a termination hands its token on to
-				// no one, a leaf has no successor to move into, and a finished loop round
-				// leaves its activity's outgoing flow to the body — so remove it at once.
+				// no one, a leaf has no successor to move into, a finished loop round
+				// leaves its activity's outgoing flow to the body, and an event-based
+				// gateway armed its branches back on *activation* and takes no outgoing
+				// flow of its own (ADR-0110) — so remove it at once.
+				//
+				// The gateway is the one element whose successors activate before it
+				// completes, so deferring it waits for an arrival that has already been
+				// and gone: its token would sit on the gateway for the rest of the
+				// replay, and on a looping model that reads as a race still running one
+				// round after it was decided.
 				endAt[v.ElementInstanceKey] = rr.at
 				endPos[v.ElementInstanceKey] = rr.pos
 				delete(pending, v.ElementInstanceKey)

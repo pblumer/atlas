@@ -3155,3 +3155,44 @@ test("a process can still be made the centre of the picture, from the header", a
   await expect(page.locator(".mesh-crumb-here")).toHaveText("Invoice");
   await expect(page).toHaveURL(/#\/panorama\/starmap$/);
 });
+
+// A decision's inside is its evaluation history — the same question one altitude
+// down: what has this actually done, and with what.
+test("double-clicking a decision opens its evaluations in Operations", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator('[data-node-id="decision:credit"] .mesh-body').dblclick();
+  await expect(page).toHaveURL(/#\/operations\/decisions\/credit$/);
+});
+
+// And it is said in words too, for the same reason the process link is: a gesture you
+// have to be told about is one most readers never find.
+test("the panel says where a decision opens, and the link goes there", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+
+  await page.locator('[data-node-id="decision:credit"] .mesh-body').click();
+  await page.getByRole("link", { name: "Open in Operations" }).click();
+  await expect(page).toHaveURL(/#\/operations\/decisions\/credit$/);
+});
+
+// The two placeholder kinds are the case this must not get wrong (§3). A decision the
+// caller may not see is a restricted node and one nothing provides is an unresolved
+// node — neither is a decision, and neither has a page. Offering a link to one would
+// be an absence reading as a fact.
+test("a placeholder is not offered a page it does not have", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+
+  for (const id of ["restricted:1", "unresolved:process:archive"]) {
+    await page.locator(`[data-node-id="${id}"] .mesh-body`).click();
+    await expect(page.getByRole("link", { name: "Open in Operations" })).toHaveCount(0);
+    await page.locator(`[data-node-id="${id}"] .mesh-body`).dblclick();
+    // Going into it on the canvas is what it does instead.
+    await expect(page).toHaveURL(/#\/panorama\/starmap$/);
+    await expect(page.locator("#mesh-drill-trail")).toBeVisible();
+    await page.keyboard.press("Escape");
+  }
+});

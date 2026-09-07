@@ -1,0 +1,121 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas event-gateway replay e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountInstanceReplay against a mock `api`
+         serving one instance that races a message against a timer (ADR-0110). The
+         engine parks a token on every armed branch and none on the gateway, so the
+         frames say so literally; the replay has to draw what the live view draws — the
+         race once, on the gateway, with the armed branches outlined rather than each
+         carrying a token of its own (ADR-0249). -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountInstanceReplay } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000; // fixed wall-clock (ms) so timestamps are deterministic
+      const ns = (ms) => ms * 1e6;
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_gw" targetNamespace="http://atlas/bpmn">
+  <bpmn:message id="Msg_go" name="go"/>
+  <bpmn:process id="race" name="Antwort oder Timeout" isExecutable="true">
+    <bpmn:startEvent id="start"><bpmn:outgoing>f1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:eventBasedGateway id="gw" name="nächstes Ereignis">
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing><bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="reply" name="Antwort">
+      <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f4</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="med" messageRef="Msg_go"/>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="timeout" name="Timeout">
+      <bpmn:incoming>f3</bpmn:incoming><bpmn:outgoing>f5</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="ted"><bpmn:timeDuration>PT30S</bpmn:timeDuration></bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="end_reply"><bpmn:incoming>f4</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="end_timeout"><bpmn:incoming>f5</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="gw"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="gw" targetRef="reply"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="gw" targetRef="timeout"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="reply" targetRef="end_reply"/>
+    <bpmn:sequenceFlow id="f5" sourceRef="timeout" targetRef="end_timeout"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="race">
+    <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="150" y="180" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="gw_di" bpmnElement="gw"><dc:Bounds x="250" y="173" width="50" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="reply_di" bpmnElement="reply"><dc:Bounds x="380" y="100" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="timeout_di" bpmnElement="timeout"><dc:Bounds x="380" y="260" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="end_reply_di" bpmnElement="end_reply"><dc:Bounds x="500" y="100" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="end_timeout_di" bpmnElement="end_timeout"><dc:Bounds x="500" y="260" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="186" y="198"/><di:waypoint x="250" y="198"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="275" y="173"/><di:waypoint x="275" y="118"/><di:waypoint x="380" y="118"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="275" y="223"/><di:waypoint x="275" y="278"/><di:waypoint x="380" y="278"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><di:waypoint x="416" y="118"/><di:waypoint x="500" y="118"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><di:waypoint x="416" y="278"/><di:waypoint x="500" y="278"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // The walk: start, the gateway, its two armed catches, the message winning, the end.
+      const steps = [
+        { elementId: "start", elementInstanceKey: "1000", type: "bpmn:startEvent", position: 1, tokenId: "1" },
+        { elementId: "gw", elementInstanceKey: "1001", type: "bpmn:eventBasedGateway", position: 2, tokenId: "1" },
+        { elementId: "reply", elementInstanceKey: "1002", type: "bpmn:intermediateCatchEvent", position: 3, tokenId: "2" },
+        { elementId: "timeout", elementInstanceKey: "1003", type: "bpmn:intermediateCatchEvent", position: 4, tokenId: "3" },
+        { elementId: "end_reply", elementInstanceKey: "1004", type: "bpmn:endEvent", position: 7, tokenId: "2" },
+      ].map((s, i) => ({ ...s, at: ns(T + i * 1000), endAt: ns(T + i * 1000 + 500), variables: [] }));
+
+      // The frames the fold produces for a deferred choice. Note what the engine really
+      // stores, and what these therefore say: the gateway holds its token until it
+      // completes (frames 3-4), and from frame 5 the wait lives on the two branches and
+      // nowhere else. Frame 6 is the decided race — the timer branch was cancelled, so
+      // what is left on `reply` is the winner running, not a wait.
+      const tok = (elementId, tokenId, eik, parentTokenId) =>
+        ({ elementId, tokenId, elementInstanceKey: eik, state: "active", ...(parentTokenId ? { parentTokenId } : {}) });
+      const REPLY = tok("reply", "2", "1002", "1");
+      const TIMEOUT = tok("timeout", "3", "1003", "1");
+      const GW = tok("gw", "1", "1001");
+      const frames = [
+        { position: 1, tokens: [tok("start", "1", "1000")] },
+        { position: 2, tokens: [GW] },
+        { position: 3, tokens: [GW, REPLY] },
+        { position: 4, tokens: [GW, REPLY, TIMEOUT] },
+        { position: 5, tokens: [REPLY, TIMEOUT] },
+        { position: 6, tokens: [REPLY] },
+        { position: 7, tokens: [tok("end_reply", "2", "1004")] },
+        { position: 8, tokens: [] },
+      ].map((f, i) => ({ ...f, at: ns(T + i * 1000) }));
+
+      const TIMELINE = { processDefKey: "5", processId: "race", version: 1, state: "completed", steps, frames };
+
+      const api = async (method, url) => {
+        if (/\/instances\/\d+\/timeline$/.test(url)) return TIMELINE;
+        if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (url.includes("/runtime")) {
+          return { elements: [
+            { elementId: "start", visits: 1, tokens: 0, incidents: 0 },
+            { elementId: "gw", visits: 1, tokens: 0, incidents: 0 },
+            { elementId: "reply", visits: 1, tokens: 0, incidents: 0 },
+            { elementId: "timeout", visits: 1, tokens: 0, incidents: 0 },
+            { elementId: "end_reply", visits: 1, tokens: 0, incidents: 0 },
+          ] };
+        }
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        if (/\/instances\/\d+\/data-objects$/.test(url)) return [];
+        if (/\/instances\/\d+\/object-graph$/.test(url)) return { nodes: [], links: [], unresolved: [] };
+        return {};
+      };
+
+      window.__mount = () => mountInstanceReplay(view, { api, toast: noop, key: "281474976723211" });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

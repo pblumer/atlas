@@ -93,6 +93,58 @@ The body is identified from the log rather than guessed: every iteration is acti
 carrying its body's token as `ParentTokenID`, so the tokens named that way are the
 bodies. A loop that never ran an iteration has no such scope and nothing to show in it.
 
+## Amendment: the card chooses where to hang
+
+The first cut hung the card under its element, always, and listed *the card can cover
+what the modeler drew below a task* among the things accepted for it. Read on a real
+model, that turned out to be an understatement. An event is 36px tall and a card with
+eight input values is nearly 210px, so on the identity lifecycle the card of
+"Service-Ereignis" came down over the entire mutation branch — two shapes and both their
+captions — while the band above the event stood empty. Accepting that the card covers
+the model is one thing; covering a branch while free air sits next to it is another.
+
+So the card no longer has one place. It has eight — the four sides of its element, each
+flush with one of that side's two edges — and it takes the one that hides the least, the
+first of them in a fixed order when several tie. A card with room under it therefore does
+not move at all, which keeps the ordinary case exactly where a reader has learned to look
+for it.
+
+**"Least" is measured as how much of each element disappears, not as area covered.**
+Summed area answers the same question with the sign flipped: it prefers swallowing two
+small elements to clipping the corner of a big one, which is how the first attempt at
+this managed to cover the mutation branch a second time. Hiding an 8px strip of a 100×80
+task costs 0.1; hiding a 36px event whole costs 1. A caption is scored as an element of
+its own, because an element whose name is hidden is not much better off than one whose
+shape is.
+
+Two things are deliberately not weighed. **Sequence flows**, because a line whose two
+ends both stay visible reads across a card, and no spot crosses none of them. And
+**badges**, because they are 20px pills scattered over every executed element; dodging
+them would push the card around for nothing, and what happens when the card lands on one
+is already settled — the card is opaque over it (the stacking rule below).
+
+**What is on screen counts too**, at twice the weight of hiding an element. A diagram is
+fitted to its canvas, so an element at the edge of the model has free air on that side
+and none of it in view; a card hung out there hides nothing by virtue of being nowhere.
+
+The spot is chosen when the card is drawn — that is, when its content changes — and not
+re-chosen on pan or zoom. A card that chased the viewport would be the more distracting
+of the two ways to be wrong.
+
+## Amendment: the card is one surface
+
+Nothing pokes through the card. diagram-js wraps every overlay in a bare positioned div
+with no `z-index`, so overlays paint in the order their *elements* first received one,
+which is the order the runtime response lists them in. That order works against this card
+systematically: it hangs off its element, so what it covers are shapes drawn after it,
+whose execution and incident badges therefore landed on top of it — a covered neighbour's
+"11" standing among the card's own value rows, reading as one of its values.
+
+The card is the thing being read at that moment, so it takes the layer above the badges:
+the overlay is typed `atlas-io` and the stylesheet gives that type a positive `z-index`.
+What it covers is covered, and the transport bar's toggle is how a reader gets the model
+underneath back.
+
 ## Consequences
 
 **Positive.** The question a replay is opened to answer is answered in place, from
@@ -108,5 +160,14 @@ or recovery path: the timeline reads a scope it already stores.
   becomes real, the scans belong behind a query parameter, not in the default response.
 - **"in" covers input mappings only.** A task without them receives its variables by
   the ordinary scope chain, and the card says so rather than inventing a list.
-- **The card can cover what the modeler drew** below a task. Hence the toggle, and
-  hence the six-row cap.
+- **The card can still cover what the modeler drew.** It now takes the least bad of
+  eight spots rather than always the same one, but on a dense diagram every spot covers
+  something and one of them is still chosen. Hence the toggle, and hence the six-row cap.
+- **Placement costs one layout per redraw.** The card's height depends on its content and
+  the CSS that lays it out, so it is measured — the real markup, off-screen, at its real
+  width — rather than predicted from the row count. It is paid only when the card's
+  content changes, not on every frame of a scrub.
+- **Where the card hangs depends on the diagram around it**, so the same element can put
+  its card on a different side after the model is edited, and two elements side by side
+  need not agree. The alternative is a fixed side that is wrong wherever the model is
+  dense, which is where a replay is read most closely.

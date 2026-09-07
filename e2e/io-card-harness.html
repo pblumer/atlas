@@ -8,7 +8,13 @@
          ADR-0219): two branches that each write one variable,
          so each one's *snapshot* holds both and only the recorded attribution can say
          which task produced which. ?legacy=1 serves the same instance as one recorded
-         before attribution existed. bpmn assets are the production ones. -->
+         before attribution existed. bpmn assets are the production ones.
+
+         The runtime response carries visit counts, so the view badges the elements the
+         way it does on a real instance — and the upper branch's card, which is tall
+         enough to reach over the join and the lower branch, then has two of those badges
+         under it. That is the geometry the card's stacking rule is about: the elements it
+         covers are drawn after it, so their overlays would otherwise paint on top. -->
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
@@ -63,6 +69,15 @@
       // Both branches finish after the other has written, so both snapshots hold both
       // variables — which is the whole reason the out side cannot be a diff.
       const both = [newTicket, tickets];
+      // The creating task's own input mappings, as they were evaluated. They are here to
+      // give the card the height a real one has — six rows a side is its cap, and a card
+      // that only ever showed two would not reach the branch below it.
+      const mapped = [
+        { name: "betreff", value: "Drucker klemmt", kind: "string" },
+        { name: "melder", value: "p.blumer", kind: "string" },
+        { name: "prioritaet", value: "2", kind: "number" },
+        { name: "queue", value: "arbeitsplatz", kind: "string" },
+      ];
 
       const steps = [
         { elementId: "Start_1", elementInstanceKey: "1000", type: "bpmn:startEvent", position: 1, tokenId: "1",
@@ -70,7 +85,7 @@
         { elementId: "Fork_1", elementInstanceKey: "1001", type: "bpmn:parallelGateway", position: 2, tokenId: "1",
           variables: [], variablesAfter: [] },
         { elementId: "Erstelle_1", elementInstanceKey: "1002", type: "bpmn:scriptTask", position: 3, tokenId: "2",
-          variables: [], variablesAfter: both, writes: [newTicket] },
+          variables: [], variablesAfter: both, writes: [newTicket], inputs: mapped },
         { elementId: "Hole_1", elementInstanceKey: "1003", type: "bpmn:scriptTask", position: 4, tokenId: "3",
           variables: [newTicket], variablesAfter: both, writes: [tickets] },
         { elementId: "Join_1", elementInstanceKey: "1004", type: "bpmn:parallelGateway", position: 5, tokenId: "2",
@@ -97,7 +112,14 @@
       const api = async (method, url) => {
         if (/\/instances\/\d+\/timeline$/.test(url)) return TIMELINE;
         if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
-        if (url.includes("/runtime")) return { elements: [] };
+        // Model order, which is the order the server reports elements in and therefore the
+        // order their overlay containers are created in: the selected task's container
+        // exists before the containers of everything its card covers.
+        if (url.includes("/runtime")) return { elements: [
+          { elementId: "Erstelle_1", visits: 1 },
+          { elementId: "Hole_1", visits: 11 },
+          { elementId: "Join_1", visits: 1 },
+        ] };
         if (/\/instances\/\d+\/decisions$/.test(url)) return [];
         if (/\/instances\/\d+\/data-objects$/.test(url)) return [];
         if (/\/instances\/\d+\/object-graph$/.test(url)) return { nodes: [], links: [], unresolved: [] };

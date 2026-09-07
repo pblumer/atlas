@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/logging"
 )
@@ -204,9 +205,14 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// holding neither could serve no Jira task at all.
 		connectorKindJira:         s.jiraWorkerEnv,
 		connectorKindGoogleSheets: s.googleSheetsWorkerEnv,
-		connectorKindPostgres:     func() []string { return s.sqlWorkerEnvByName(connectorKindPostgres) },
-		connectorKindMariaDB:      func() []string { return s.sqlWorkerEnvByName(connectorKindMariaDB) },
-		connectorKindMSSQL:        func() []string { return s.sqlWorkerEnvByName(connectorKindMSSQL) },
+		// Discord is provisioned for Google Sheets' reason: the bot token is the whole
+		// configuration and lives in the Worker store and the vault
+		// (ADR-0258), so a supervised worker holding neither could serve
+		// no Discord task at all.
+		connectorKindDiscord:  s.discordWorkerEnv,
+		connectorKindPostgres: func() []string { return s.sqlWorkerEnvByName(connectorKindPostgres) },
+		connectorKindMariaDB:  func() []string { return s.sqlWorkerEnvByName(connectorKindMariaDB) },
+		connectorKindMSSQL:    func() []string { return s.sqlWorkerEnvByName(connectorKindMSSQL) },
 	}
 }
 
@@ -852,6 +858,121 @@ func (s *Server) googleSheetsWorkerEnv() []string {
 		return nil
 	}
 	return append(env, googleSheetsConnectorsEnv+"="+strings.Join(names, ","))
+}
+
+// Environment a supervised Discord worker reads its bot identities from — the same
+// names an operator sets by hand for an external worker (there is no private channel,
+// ADR-0157). discordEnvPrefix matches the worker's own constant of the same name;
+// TestSupervisedDiscordEnvUsesTheWorkersOwnNames holds the two together.
+const (
+	discordEnvPrefix     = "ATLAS_DISCORD_"
+	discordConnectorsEnv = discordEnvPrefix + "CONNECTORS"
+)
+
+// discordWorkerEnv renders the bot tokens a supervised Discord worker needs out of the
+// vault, one variable per Worker the store holds.
+//
+// It is Google Sheets' shape with a chat platform in place of a spreadsheet API: the
+// credential is the whole configuration, and the endpoint is an optional override
+// rather than a per-tenant address, so a record carrying only a credentialsRef is
+// complete. The token is handed over as the bare value the worker's own
+// ATLAS_DISCORD_<NAME>_TOKEN takes — there is one field, so there is no bundle shape to
+// decide twice.
+//
+// A worker an operator configured on the host is left untouched and kept in the
+// rendered list: the child inherits ATLAS_DISCORD_<NAME>_* already, and dropping its
+// name would let a store instance silently take the whole list away from it.
+//
+// It reads the worker store and the vault, so it runs on the run-loop goroutine (their
+// owner, invariant I3), like buildDiscordClients does.
+func (s *Server) discordWorkerEnv() []string {
+	var (
+		env       []string
+		names     []string
+		fromStore bool // a store instance contributed a name; only then must CONNECTORS be rendered
+	)
+	seen := map[string]bool{}
+	addName := func(n string) {
+		if n = strings.TrimSpace(n); n != "" && !seen[n] {
+			seen[n] = true
+			names = append(names, n)
+		}
+	}
+	// Identities an operator set directly on the host: inherited by the child as they
+	// are, so nothing is rendered for them — they are only kept in the list below.
+	for _, name := range splitConnectorList(os.Getenv(discordConnectorsEnv)) {
+		addName(name)
+	}
+	s.do(func() {
+		recs, err := s.connectors.LoadAll()
+		if err != nil {
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the worker store for a supervised discord worker",
+				slog.String("error", err.Error()))
+			return
+		}
+		sort.Slice(recs, func(i, j int) bool { return recs[i].Name < recs[j].Name })
+		taken := map[string]string{}
+		for _, c := range recs {
+			if c.Kind != connectorKindDiscord || !c.Enabled {
+				continue
+			}
+			envKey := connectorEnvKey(c.Name)
+			if envKey == "" {
+				continue
+			}
+			// Two names that fold to one variable would silently give one the other's
+			// token — the mail/jira collision, left out for the same reason.
+			if first, dup := taken[envKey]; dup {
+				logging.Warn(logging.WorkerSupervisorFailed,
+					"two discord workers share one environment name; the second is not handed to the supervised worker",
+					slog.String("connector", c.Name), slog.String("collidesWith", first))
+				continue
+			}
+			token, ok := discordBundleParse(s.resolveConnectorSecret(c.CredentialsRef))
+			// A Worker whose bundle does not resolve — no secret set yet, or no
+			// botToken in it — is left out rather than handed over empty: the worker
+			// refuses at startup on a *named* identity it cannot build, which would
+			// take down every other kind it serves. Left out, it is simply not served,
+			// and the Console shows it as configured-not-working.
+			if !ok {
+				continue
+			}
+			taken[envKey] = c.Name
+			key := discordEnvPrefix + envKey + "_"
+			// The endpoint is optional: blank means Discord's own API base, which is
+			// what buildDiscordClients passes too, so a record without one builds the
+			// same client on both sides.
+			if endpoint := strings.TrimSpace(c.Endpoint); endpoint != "" {
+				env = append(env, key+"URL="+endpoint)
+			}
+			env = append(env, key+"TOKEN="+token)
+			addName(c.Name)
+			fromStore = true
+		}
+	})
+	// Only a store identity needs CONNECTORS rendered: an operator who set it on the
+	// host has it inherited by the child already. When the store does contribute,
+	// render the union so a host-named identity is not lost to the override.
+	if !fromStore {
+		return nil
+	}
+	return append(env, discordConnectorsEnv+"="+strings.Join(names, ","))
+}
+
+// discordBundleParse reads a Discord Worker's vault bundle and answers with the bare
+// token, or false when the bundle is absent, malformed or carries no usable botToken.
+//
+// The reading itself is connector/discord's, not a second copy of it: a supervised
+// worker must be handed exactly what the engine would have built its client from, and
+// the scheme-prefix rule in particular is too easy to restate differently. What stays
+// here is only the shape this caller wants — a value and "is it usable" — because a
+// worker with no credential is skipped rather than reported (see the callers above).
+func discordBundleParse(raw string) (string, bool) {
+	token, err := discord.TokenFromBundle(raw)
+	if err != nil {
+		return "", false
+	}
+	return token, true
 }
 
 // Environment a supervised Jira worker reads its sites from — the same names an

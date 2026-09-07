@@ -94,6 +94,9 @@ export function workerShape(kind, provider) {
   // Google Sheets is SharePoint's shape: Google's API bases are the same for everyone,
   // so there is no endpoint to author — the credential bundle *is* the configuration.
   const googlesheets = kind === "googlesheets";
+  // Discord is Google Sheets' shape: one API base for everyone, so the credential is
+  // the whole configuration and there is no endpoint to author.
+  const discord = kind === "discord";
   // Active Directory is Remedy's shape: an LDAP URL to dial and a bind account to dial
   // it with, neither derivable from the other. It is the newest kind to stop carrying
   // its directory in the model (ADR-0206).
@@ -110,7 +113,7 @@ export function workerShape(kind, provider) {
   const sql = kind === "postgres" || kind === "mariadb" || kind === "mssql";
   // Kinds that default their API base and authenticate with a credential bundle
   // instead of dialing a host:port. Remedy is not one: it needs both.
-  const bundle = native || sharepoint || entra || sql || googlesheets;
+  const bundle = native || sharepoint || entra || sql || googlesheets || discord;
   return {
     mail,
     sql,
@@ -159,6 +162,8 @@ export function workerShape(kind, provider) {
       ? "API key reference (a vault key holding the key)"
       : ad
       ? "Credential reference (vault {bindDN, password})"
+      : discord
+      ? "Credential reference (vault {botToken})"
       : googlesheets
       ? "Credential reference (vault Google auth bundle)"
       : jira
@@ -172,6 +177,8 @@ export function workerShape(kind, provider) {
       ? "anthropic_api_key (a vault key holding the key)"
       : ad
       ? "ad_prod_bind (vault {bindDN, password})"
+      : discord
+      ? "discord_team (vault {botToken})"
       : googlesheets
       ? "google_sheets_auth (vault JSON bundle)"
       : jira
@@ -183,6 +190,8 @@ export function workerShape(kind, provider) {
           : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token")))),
     hint: agent
       ? "The model an <b>agent-driven ad-hoc subprocess</b> asks which of its tools to run next. Its <b>API key</b> is a vault key named here \u2014 never a value \u2014 and the endpoint is optional: each wire format has a public default, so name one only for a gateway, a proxy or a self-hosted deployment. A round is one model call, minutes long and able to hang, so Atlas never runs it itself: it supervises a worker for this kind and picks the model up as soon as you save, with no restart. <b>Messages</b> is Anthropic's format (also OpenRouter's <code>/api/v1/messages</code>); <b>Chat Completions</b> is OpenAI's, and anything calling itself OpenAI-compatible \u2014 that one has no default model, so name it."
+      : discord
+      ? "The credential reference names a vault bundle holding the bot token \u2014 never a value: <code>{\"botToken\": \"\u2026\"}</code>, from <b>Discord Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Reset Token</b>. Store the token alone; Atlas composes the <code>Bot </code> scheme itself. There is no endpoint to name \u2014 Discord\u0027s API base is the same for everyone \u2014 so the field stays empty unless you sit behind a proxy. The bot must be <b>invited to the server</b> and hold <b>View Channel</b> and <b>Send Messages</b> in every channel a process writes to: a missing grant comes back as code 50001, <i>Missing Access</i>, not as a bad token."
       : googlesheets
       ? "The credential reference names a JSON auth bundle in the vault \u2014 never a secret value. A <b>service account</b> is the normal shape: <code>{\"method\": \"serviceAccount\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\"}</code>, copied out of the JSON key file Google hands out. A service account owns nothing by itself: <b>share each spreadsheet or folder with its address</b>, exactly as you would with a colleague, or it will read a 403 where you see a document."
       : ad

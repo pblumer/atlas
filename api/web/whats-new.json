@@ -51,6 +51,34 @@
       }
     },
     {
+      "id": "the-training-nuggets-play-full-screen-for-showing-one-to-a-r",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Training nuggets play full screen",
+        "de": "Schulungsnuggets laufen im Vollbild"
+      },
+      "summary": {
+        "en": "A nugget used to run at reading size, in the flow of the handbook. That is right for reading and wrong for what it keeps being used for: an onboarding session with the thing on a projector. The new button hands a nugget the whole screen — dark surround, the caption set large and centred underneath, and the space bar, arrow keys, Home and End driving it, so nobody has to aim a mouse at a small control in front of a room. Going full screen starts the run; leaving it stops it, rather than letting it animate on behind whatever came next. The picture keeps its own shape instead of filling the screen, so the highlight ring stays on the button it is pointing at.",
+        "de": "Ein Nugget lief bisher in Lesegrösse mitten im Handbuch. Das ist zum Lesen richtig und für den Fall falsch, für den es tatsächlich benutzt wird: eine Einführung mit dem Beamer im Raum. Die neue Schaltfläche gibt dem Nugget den ganzen Bildschirm — dunkler Rahmen, die Bildunterschrift gross und mittig darunter, und Leertaste, Pfeiltasten, Home und Ende steuern es, damit niemand vor einem Publikum eine kleine Schaltfläche treffen muss. Der Wechsel ins Vollbild startet den Ablauf, das Verlassen beendet ihn, statt ihn hinter dem nächsten Fenster weiterlaufen zu lassen. Das Bild behält seine eigene Form, statt den Bildschirm zu füllen — so bleibt der Markierungsrahmen auf der Schaltfläche, auf die er zeigt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Handbook"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the handbook",
+          "de": "Handbuch öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "the-training-nuggets-show-the-real-atlas-not-a-drawing-of-it",
       "version": "Unreleased",
       "date": null,
@@ -76,6 +104,34 @@
           "de": "Handbuch öffnen"
         },
         "route": "#/console"
+      }
+    },
+    {
+      "id": "the-replay-drew-a-deferred-choice-as-several-tokens-and-park",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A race in the replay is one wait again",
+        "de": "Ein Rennen im Replay ist wieder ein Warten"
+      },
+      "summary": {
+        "en": "An event-based gateway waits for whichever event comes first — a reply, say, or a timeout. The engine opens all of those waits at once, so it really does hold a token on every branch, and the replay drew each of them: three token dots and three entries in the token bar for one instance that was waiting for one thing. One of them was not even there any more — the gateway kept a token of its own long after its race had been decided, so on a process that loops you saw a race still running a full round after it ended. The live view has drawn this as the one wait it is for a while now; the replay does too. One token on the gateway, the events it is waiting for outlined dashed, and one line underneath that says what it is waiting for. Nothing to re-run: open any instance and its history is drawn the new way.",
+        "de": "Ein Ereignis-Gateway wartet darauf, was zuerst eintrifft — etwa eine Antwort oder ein Timeout. Die Engine öffnet alle diese Warten gleichzeitig, hält also tatsächlich auf jedem Zweig einen Token, und das Replay zeichnete jeden davon: drei Token-Punkte und drei Einträge in der Token-Leiste für eine Instanz, die auf eine Sache wartet. Einer davon war gar nicht mehr da — das Gateway behielt einen eigenen Token, lange nachdem sein Rennen entschieden war, und bei einem Prozess mit Schleife sah man ein Rennen darum noch eine ganze Runde nach seinem Ende als laufend. Die Live-Ansicht zeigt das schon länger als das eine Warten, das es ist; das Replay jetzt auch. Ein Token auf dem Gateway, die Ereignisse, auf die es wartet, gestrichelt umrandet, und darunter eine Zeile, die sagt, worauf gewartet wird. Nichts neu zu starten: Jede Instanz wird beim Öffnen neu gezeichnet."
+      },
+      "link": {
+        "label": "ADR-0249",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0249-overlay-cancelled-tokens.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
       }
     },
     {
@@ -227,24 +283,6 @@
       }
     },
     {
-      "id": "the-edges-in-the-landscape-nugget-missed-the-nodes-they-conn",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The edges in the landscape nugget missed the nodes they connect.",
-        "de": "The edges in the landscape nugget missed the nodes they connect."
-      },
-      "summary": {
-        "en": "The scene that shows Panorama drew its edges as divs rotated by an angle computed from percentage coordinates — and x is a share of the container's width while y is a share of its height, so on anything that is not square both the angle and the length come out of mixed units.",
-        "de": "The scene that shows Panorama drew its edges as divs rotated by an angle computed from percentage coordinates — and x is a share of the container's width while y is a share of its height, so on anything that is not square both the angle and the length come out of mixed units."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
       "id": "a-deployed-diagram-can-be-tidied-up-without-redeploying-it",
       "version": "Unreleased",
       "date": null,
@@ -348,34 +386,6 @@
           "de": "Aufgaben öffnen"
         },
         "route": "#/tasks"
-      }
-    },
-    {
-      "id": "the-handbook-is-caught-up-with-the-product-six-apps-the-play",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The handbook now covers all six apps",
-        "de": "Das Handbuch deckt jetzt alle sechs Apps ab"
-      },
-      "summary": {
-        "en": "Two of the six apps in the grid menu were not in the handbook at all: Panorama, which shows the landscape of everything deployed and how it hangs together, and Data, where you say what an order actually is across all your processes. Both now have a chapter, in German and English. So does the Playground — the Modeler tab that runs your draft against two hundred cases on the real engine, without deploying anything — and the two Console screens for connecting an AI assistant and reading who shared what with whom. The help menu's On this page entry points at the right chapter from those screens now, instead of dropping you at the top of the handbook.",
-        "de": "Zwei der sechs Apps im Rastermenü kamen im Handbuch überhaupt nicht vor: Panorama, das die Landschaft alles Deployten und ihre Zusammenhänge zeigt, und Data, wo festgehalten wird, was ein Auftrag über alle Prozesse hinweg tatsächlich ist. Beide haben jetzt ein Kapitel, auf Deutsch und Englisch. Ebenso der Playground — der Modeler-Tab, der Ihren Entwurf mit zweihundert Fällen auf der echten Engine durchrechnet, ohne etwas zu deployen — und die zwei Console-Seiten für den Anschluss eines KI-Assistenten und dafür, wer was mit wem geteilt hat. Der Eintrag «Auf dieser Seite» im Hilfemenü führt von diesen Bildschirmen nun ins passende Kapitel, statt an den Anfang des Handbuchs."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Handbook"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Panorama",
-          "de": "Panorama öffnen"
-        },
-        "route": "#/panorama/starmap"
       }
     }
   ]

@@ -1,6 +1,6 @@
 # ADR-0237: The class canvas on diagram-js
 
-- **Status:** Proposed (amended 2026-09-07: the marquee is a mode)
+- **Status:** Proposed (amended 2026-09-07: the marquee is a mode; the two bundles are one)
 - **Date:** 2026-09-03
 - **Deciders:** Patrick Blumer
 
@@ -186,6 +186,38 @@ each line is the way back to editing that one on its own — rather than showing
 first one's fields and leaving the reader to guess which of the four they are typing
 into.
 
+## Amendment: the two bundles are one
+
+"Two bundles now, one later" above named the merge as the follow-up rather than
+pretending the duplication was free. It is done, and it was the easy change the record
+said it would be: two `src/index.js` entries became `src/archimate.js` and `src/uml.js`
+under one entry that exports both, and neither canvas's own code was touched.
+
+Both now ship as `api/web/vendor/canvas/atlas-canvas.js` under one global,
+`AtlasCanvas`, with a namespace each — `AtlasCanvas.archimate` and `AtlasCanvas.uml`.
+Namespaced rather than flattened: the two share diagram-js and nothing else, each
+keeping its own renderer, its own rules and its own idea of what a document is, and
+`Viewer` beside `ClassCanvas` in one export list would read as two kinds of the same
+thing. **123,109 bytes where the two were 211,888** — 88,779 fewer, and one cache entry
+rather than two.
+
+The honest cost is on the other side of that trade: a page that opens only one of the
+two canvases now carries both renderers, some 15 KB more than its own bundle was. That
+is the price of one copy of the library, and it is the right way round — the renderers
+are the small part.
+
+One thing follows for the shell rather than for either canvas. Two views loading the
+same file is new, so the loading moved into `api/web/canvas-bundle.js`, one place both
+ask: whichever view is opened first fetches it and the second gets what is there,
+rather than a second `<script>` and a second stylesheet link for the same two files.
+A load that failed is forgotten rather than remembered as one still in flight, or the
+next view to ask would wait on a promise that will never settle.
+
+There is still a copy of diagram-js inside the vendored bpmn-js and dmn-js bundles.
+Those are third-party bundles vendored whole rather than Atlas sources built against
+the library, so folding them in would mean building bpmn-js from source. That is a
+different decision, and this merge does not make it.
+
 ## Consequences
 
 - The class canvas gains zoom, pan, marquee selection, multi-select move, undo/redo
@@ -195,7 +227,7 @@ into.
   that replaces the redraw: 1096 lines to 924. It keeps the panel, the validation
   strip and the save path.
 - A second vendored diagram-js copy ships until the two bundles are merged. That merge
-  is the named follow-up.
+  is the named follow-up. *(Done — see the amendment above.)*
 - The e2e suite addresses shapes through diagram-js's element registry rather than by
   querying raw SVG, so the existing selectors in `e2e/infomodel.spec.mjs` change even
   where the behaviour does not.

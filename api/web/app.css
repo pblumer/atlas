@@ -1194,7 +1194,9 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 /* A catch event armed by an event-based gateway: waiting, but not the place the wait
    is counted — the race is one wait however many branches it has, and it is counted
    once, on the gateway. Green like a live element because it is live, dashed because
-   the token here is a branch of a race and not a token that got this far on its own. */
+   the token here is a branch of a race and not a token that got this far on its own.
+   Both runtime views draw it: the live overlay's count and the step replay's token dot
+   sit on the gateway, and the branches carry this outline in either (ADR-0249). */
 .djs-element.atlas-armed .djs-visual > :nth-child(1) {
   stroke: var(--ok) !important; stroke-width: 2.5px !important;
   stroke-dasharray: 5 4 !important;
@@ -1960,6 +1962,17 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px;
   box-shadow: var(--shadow); overflow: hidden; font-size: 11px; color: var(--text);
 }
+/* The card is one opaque surface: what it covers is covered, badges included.
+   diagram-js wraps every overlay in the same bare position:absolute div and gives none of
+   them a z-index, so they paint in the order their *elements* first got an overlay — data
+   order, not a decision. That order is systematically wrong for this card, which hangs
+   below and to the right of its element and therefore covers shapes drawn after it: their
+   execution-count and incident badges landed on top of it, and a covered neighbour's "11"
+   sat among the card's rows reading as one of its own values. One positive z-index puts
+   the card above every sibling overlay (they are all z-index auto in the overlay root's
+   stacking context), which is the layer the thing being read belongs on; the transport
+   bar's I/O toggle is how a reader gets the model underneath back. */
+.djs-overlay-atlas-io { z-index: 2; }
 .io-ov-h {
   padding: 4px 8px; border-bottom: 1px solid var(--border);
   background: var(--bg); font-weight: 600; font-size: 11px;
@@ -3808,7 +3821,16 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    width taken off every node, every label and every gap at once — the one view where
    the reading column costs more than it gives. */
 .starmap-mode main { max-width: none; }
-.infomodel-mode main { max-width: none; }
+/* The class diagram takes the window, the way the Modeler does: no centred column, no
+   page gutter, and no frame around the editor — a drawing surface that stops 22px
+   short of the edge is a window inside a window. The bar, the sheet and the problem
+   strip keep the borders that separate them from each other and lose only the ones
+   that separated them from the page. */
+.infomodel-mode main { max-width: none; padding: 0; margin: 0; }
+.infomodel-mode .im-editor { height: calc(100vh - var(--topbar-h, 96px)); }
+.infomodel-mode .im-bar { border-left: 0; border-right: 0; border-top: 0; border-radius: 0; }
+.infomodel-mode .im-body { border-left: 0; border-right: 0; }
+.infomodel-mode .im-problems { border-left: 0; border-right: 0; border-bottom: 0; border-radius: 0; }
 .mesh-card { display: flex; flex-direction: column; gap: 12px; }
 /* One line, and it stays one line: the header is a row of controls, and a row that
    wraps into three stacked lines stops reading as one. What gives under pressure is
@@ -5048,7 +5070,7 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 
 /* The class canvas. The drawing is diagram-js now
    (ADR-0237), so these style what the Atlas renderer in
-   api/web/vendor/uml/ emits; the selection outline and the hit layer are the
+   api/web/vendor/canvas/src/uml.js emits; the selection outline and the hit layer are the
    library's own. */
 .im-canvas .djs-container { background: var(--bg); }
 

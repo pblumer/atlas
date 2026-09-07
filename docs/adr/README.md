@@ -311,6 +311,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0255](0255-agent-models-are-console-workers.md) | An agent model is a Console Worker — the one field that is not a secret | Accepted (amended) |
 | [0256](0256-the-model-is-authored-the-provider-is-configured.md) | The model is authored, the provider is configured — and one call is a task | Proposed |
 | [0257](0257-what-an-agent-may-read.md) | What an agent may read is authored, the way its reach already is | Proposed |
+| [0258](0258-discord-worker.md) | Discord as a Worker Type — a process speaks in the channel the team already reads | Proposed |
 
 ## Status values
 

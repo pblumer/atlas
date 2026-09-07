@@ -3564,6 +3564,91 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "discord", name: "Discord", group: "Messaging & events",
+    desc: "Send, edit, delete and read messages in a Discord channel, and open a thread for a case",
+    icon: "D",
+    // A speech bubble on Discord blurple: the message, which is what this Worker Type
+    // is for — its counterpart to Jira's ticked issue and Sheets' grid. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white marks.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5865f2"/><path d="M3.4 5.1a1.2 1.2 0 0 1 1.2-1.2h6.8a1.2 1.2 0 0 1 1.2 1.2v3.8a1.2 1.2 0 0 1-1.2 1.2H7l-2.6 2v-2h-.2a1.2 1.2 0 0 1-1.2-1.2z" fill="#fff"/><circle cx="6.3" cy="7" r=".85" fill="#5865f2"/><circle cx="9.7" cy="7" r=".85" fill="#5865f2"/></svg>`,
+    ext: "atlas:DiscordConnector",
+    fields: [
+      { group: "Discord worker" },
+      { key: "connector", label: "Worker", datalist: "discord", placeholder: "team", hint: "The configured Discord Worker this task posts as, by the name it has under Workers in the Console. Its bot token lives on the server, never in the model." },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "send-message", l: "Send message" },
+          { v: "edit-message", l: "Edit message" },
+          { v: "delete-message", l: "Delete message" },
+          { v: "get-message", l: "Read message" },
+          { v: "list-messages", l: "List messages" },
+          { v: "create-thread", l: "Open thread" },
+        ],
+      },
+      {
+        key: "channel", label: "Channel", placeholder: "123456789012345678", fx: true,
+        hint: "The channel id this task acts in — in Discord, enable Developer Mode and use the channel's \"Copy Channel ID\". A thread is itself a channel, so replying in one is a Send message naming the thread's id (=faden.id after an Open thread). May be a FEEL expression (fx).",
+      },
+      {
+        key: "messageId", label: "Message", placeholder: "=nachricht.id", fx: true,
+        showIf: (v) => ["edit-message", "delete-message", "get-message", "create-thread"].includes(v.operation),
+        hint: (v) => (v.operation === "create-thread"
+          ? "Optional. Naming a message hangs the thread under it, which is what keeps the discussion attached to the notice that started it. Leave empty for a standalone thread in the channel. May be a FEEL expression (fx)."
+          : "The message id this operation addresses. Usually a FEEL expression (fx) naming the variable an earlier Send message wrote — e.g. =nachricht.id."),
+      },
+      {
+        key: "content", label: "Message", placeholder: "Antrag =vorgang.nummer ist genehmigt", fx: true,
+        showIf: (v) => v.operation === "send-message" || v.operation === "edit-message",
+        hint: "The message body, up to Discord's 2000 characters. May be a FEEL expression (fx) — note that a boolean resolves to nothing, so use =if genehmigt then \"genehmigt\" else \"abgelehnt\" rather than =genehmigt.",
+      },
+      {
+        key: "name", label: "Thread name", placeholder: "=\"Antrag \" + vorgang.nummer", fx: true,
+        showIf: (v) => v.operation === "create-thread",
+        hint: "The thread's title, as it appears in the channel's thread list. May be a FEEL expression (fx), which is how one process instance gets its own named thread.",
+      },
+      {
+        key: "after", label: "After message", placeholder: "=letzteGelesen", fx: true,
+        showIf: (v) => v.operation === "list-messages",
+        hint: "Optional. Reads only messages newer than this id, exclusive. Discord orders by id, so keeping the last id you read and passing it back here pages a channel forward without re-reading what you already have. May be a FEEL expression (fx).",
+      },
+      {
+        key: "maxResults", label: "Maximum messages", placeholder: "50",
+        showIf: (v) => v.operation === "list-messages",
+        hint: "Caps what may land in the result variable. Empty uses 50; Discord's endpoint accepts at most 100 per call, and a larger value is refused at deploy.",
+      },
+      {
+        key: "fields", label: "Further fields", type: "map", childType: "atlas:DiscordField", fx: true,
+        showIf: (v) => ["send-message", "edit-message", "create-thread"].includes(v.operation),
+        hint: "Any other property of the request body, by its Discord name (embeds, allowed_mentions, components, tts…). A value may be a FEEL expression (fx), and its shape is kept: a FEEL list is sent as a list, an object as an object, a boolean as a boolean. These are merged last, so a field named content overrides the Message above.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable",
+        resultType: (v) => (v.operation === "list-messages" ? "array" : "object"),
+        placeholder: "nachricht",
+        // Delete is the one operation Discord answers with 204 No Content, so a result
+        // variable there would name a value that is never written — the panel hides it
+        // rather than letting an author expect one (the compiler refuses it too).
+        showIf: (v) => v.operation !== "delete-message",
+        hint: (v) => {
+          switch (v.operation) {
+            case "list-messages":
+              return "The messages are written into this process variable as a JSON array, newest first. FEEL lists are 1-based, so the newest message's id is =nachrichten[1].id.";
+            case "create-thread":
+              return "The created thread is written into this process variable. A thread is a channel, so a later Send message posts into it with channel ==faden.id. Leave empty to open the thread and post nothing into it \u2014 a place for people to discuss the notice it hangs under.";
+            case "send-message":
+              return "The created message is written into this process variable, so a later Edit message can address it as =nachricht.id. Leave empty to discard it.";
+            default:
+              return "What Discord returned is written into this process variable (leave empty to discard it).";
+          }
+        },
+      },
+    ],
+  },
+  {
     id: "aitask", name: "AI Task", group: "Applications",
     desc: "Ask a language model one question and put the answer in a process variable",
     icon: "A",
@@ -11539,6 +11624,74 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     clockEl.textContent = `${shown} / ${frames.length}${shown ? ` · ${fmtClock(frames[shown - 1].at)}` : ""}`;
   }
 
+  // --- A deferred choice, drawn once (ADR-0110, ADR-0249) ---
+  //
+  // An event-based gateway arms every branch's catch at once, so a waiting instance holds
+  // a token on each branch and none on the gateway. The live view stopped drawing that
+  // literally — the race is one wait however many branches it has, so it is shown once, on
+  // the gateway, and the branches are outlined armed instead. The replay said the same
+  // moment differently: N token dots on N branches, and N entries in the token legend, for
+  // one wait. This is that rule, applied to the frame the replay is showing.
+  //
+  // The group is read off the diagram exactly as the live view reads it — a catch joins
+  // its gateway's race only when that gateway is its sole way in — so a catch reachable
+  // from elsewhere keeps its own token.
+  const armedBranches = new Map(); // catch id → the event gateway that arms it
+  const raceWidth = new Map();     // gateway id → how many branches it arms
+  for (const [gw, branches] of eventGatewayRaces(registry)) {
+    raceWidth.set(gw, branches.length);
+    for (const id of branches) armedBranches.set(id, gw);
+  }
+
+  // tokenKey identifies one token on one element — two tokens can sit on the same
+  // element, and one token id can appear on two of them across a fold.
+  const tokenKey = (t) => `${t.elementId}\u0000${t.tokenId}`;
+
+  // collapseRaces rewrites a frame's tokens into what the diagram should show: the forks
+  // of one armed race become a single token on their gateway, and the branches they sat
+  // on are named so they can be outlined armed rather than drawn as waits of their own.
+  //
+  // Which fork belongs to which race is not guessed: every armed catch is a fork of the
+  // gateway's own token (`parentTokenId`), so siblings group exactly, and two races
+  // running concurrently on one gateway stay two races.
+  //
+  // A group is only a race while *every* branch the gateway arms holds one of its forks.
+  // Once an event has fired and the losers are cancelled, what is left on a branch is a
+  // token running there — the winner — and it is drawn as one. That is the same rule the
+  // live view applies with its minimum over the branches.
+  function collapseRaces(tokens) {
+    const groups = new Map();
+    for (const t of tokens) {
+      const gw = armedBranches.get(t.elementId);
+      if (!gw || !t.parentTokenId) continue;
+      const k = `${gw}\u0000${t.parentTokenId}`;
+      if (!groups.has(k)) groups.set(k, { gw, tokenId: t.parentTokenId, forks: [] });
+      groups.get(k).forks.push(t);
+    }
+    const armed = new Set();  // element ids outlined armed
+    const folded = new Set(); // the forks the races below stand in for
+    const races = [];
+    for (const g of groups.values()) {
+      if (g.forks.length !== raceWidth.get(g.gw)) continue;
+      for (const f of g.forks) { armed.add(f.elementId); folded.add(tokenKey(f)); }
+      races.push(g);
+    }
+    if (!races.length) return { drawn: tokens, armed };
+    const drawn = tokens.filter((t) => !folded.has(tokenKey(t)));
+    for (const race of races) {
+      // Between arming its branches and completing, the gateway still holds the very
+      // token the race is — the forks are forks *of* it — so that token becomes the race
+      // rather than a second dot beside it.
+      const held = drawn.findIndex((t) => t.elementId === race.gw && t.tokenId === race.tokenId);
+      if (held >= 0) drawn[held] = { ...drawn[held], race: race.forks.length };
+      else drawn.push({ tokenId: race.tokenId, elementId: race.gw, state: "active", race: race.forks.length });
+    }
+    // Frames arrive in token order and the collapsed race is appended, so restore it:
+    // the dots on the diagram and the chips below it read in the same order.
+    drawn.sort((a, b) => (a.tokenId === b.tokenId ? 0 : a.tokenId < b.tokenId ? -1 : 1));
+    return { drawn, armed };
+  }
+
   // renderOverlay paints the current frame: every element a live token sits on is
   // highlighted (green, or orange while waiting at a join) and carries a colored
   // token dot; elements only walked earlier are grayed. An element that holds a
@@ -11552,12 +11705,21 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     while (dotLayer.firstChild) dotLayer.removeChild(dotLayer.firstChild);
     const frame = playhead ? frames[playhead - 1] : null;
     const position = frame ? frame.position : 0;
-    const tokens = frame ? frame.tokens : [];
+    const { drawn: tokens, armed } = collapseRaces(frame ? frame.tokens : []);
     const liveOn = new Set(tokens.map((t) => t.elementId));
     for (const s of steps.filter((item) => item.position <= position)) {
-      if (liveOn.has(s.elementId) || !registry.get(s.elementId)) continue;
+      if (liveOn.has(s.elementId) || armed.has(s.elementId) || !registry.get(s.elementId)) continue;
       canvas.addMarker(s.elementId, "atlas-visited");
       marked.push([s.elementId, "atlas-visited"]);
+    }
+    // An armed branch is live — its catch is waiting — but it is not where the wait is
+    // counted, so it is outlined and left without a token dot of its own. What the dashed
+    // outline means is said on the race's own chip below, once, rather than beside every
+    // branch of every race.
+    for (const elId of armed) {
+      if (liveOn.has(elId) || !registry.get(elId)) continue;
+      canvas.addMarker(elId, "atlas-armed");
+      marked.push([elId, "atlas-armed"]);
     }
     // Several tokens on one node — both arrivals at a join, a loop's body and the round
     // running under it — fan out along its top edge instead of stacking. They are grouped
@@ -11589,9 +11751,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       marked.push([elId, "atlas-incident"]);
     }
     const legend = root.querySelector("#token-legend");
+    const raceTitle = "An event-based gateway arms every branch at once, so the engine parks a token on each of them and none on the gateway. The wait is one race however many branches it has, so the replay draws it once — here, on the gateway — and outlines the armed branches dashed.";
     legend.innerHTML = tokens.length ? tokens.map((token) =>
-      `<span class="token-chip"><i style="--token-color:${tokenColor(token.tokenId)}">#</i>` +
-      `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)" : ""}</span>`).join("")
+      `<span class="token-chip"${token.race ? ` title="${esc(raceTitle)}"` : ""}>` +
+      `<i style="--token-color:${tokenColor(token.tokenId)}">#</i>` +
+      `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)"
+        : token.race ? ` (waiting for the first of ${token.race} events)` : ""}</span>`).join("")
       : `<span class="muted">No active tokens in this frame</span>`;
     applySelection();
   }
@@ -11716,10 +11881,130 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       </div>`;
   }
 
+  // --- Where the card hangs --------------------------------------------------------
+  // Under the element is the obvious place for it, and on a busy diagram the wrong one:
+  // an event is 36px tall and its card three or four times that, so on the identity
+  // lifecycle the card of "Service-Ereignis" came down over the whole mutation branch —
+  // two shapes and both their captions — while the band above the event stood empty.
+  // Covering the model is the price ADR-0161 accepted for answering the question on the
+  // diagram. Paying it next to free air is not the same bargain.
+  //
+  // So the spot is chosen rather than fixed: the card goes on one of the element's four
+  // sides, flush with one of that side's two edges, and of those eight the one that
+  // hides the least wins — the first of them, in the order below, when several tie. A
+  // card with room under it therefore does not move at all.
+  //
+  // What "the least" counts is how much of each element disappears, not how many square
+  // pixels are covered: hiding an 8px strip of a 100×80 task costs 0.1, hiding a 36px
+  // event whole costs 1. Summed area answers the same question with the sign flipped —
+  // it would rather swallow two small elements than clip the corner of a big one, which
+  // is how the first cut of this came to cover the mutation branch a second time. A
+  // caption is an element in its own right here, because an element whose name is hidden
+  // is not much better off than one whose shape is.
+  //
+  // Sequence flows are not counted: a line whose two ends both stay visible is still
+  // readable across a card, and no spot crosses none of them.
+  //
+  // The window counts too, because the alternative is worse than anything on this list: a
+  // diagram is fitted to the canvas, so an element at its edge has free air on that side
+  // and none of it on screen, and a card hung out there hides nothing by being nowhere.
+  // Hence the second term — the share of the card that would fall outside what is on
+  // screen, at twice the weight, so a card fully out of view loses to one that covers
+  // two whole elements.
+  const IO_GAP = 10;                        // clear air between the element and its card
+  const IO_SCALE = { min: 0.7, max: 1.15 }; // the zoom range the card is held between
+
+  const boxOverlap = (a, b) =>
+    Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) *
+    Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+
+  // ioFootprint is the card's size in *diagram* units, which is what an overlay position
+  // is measured in. It measures rather than predicts: the html carries a variable number
+  // of rows and the CSS laying them out is not this file's to duplicate, so the real
+  // markup is laid out off-screen at its real width and thrown away. One layout per
+  // redraw, and a redraw only happens when the card's content changed.
+  //
+  // The scale bounds are read back rather than assumed to be 1: an overlay counter-scales
+  // outside them, so at a zoom of 0.5 a card held at 0.7 covers 1.4× its own CSS size of
+  // the model.
+  function ioFootprint(html) {
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:absolute;left:-10000px;top:0;visibility:hidden";
+    probe.innerHTML = html;
+    root.appendChild(probe);
+    const box = probe.firstElementChild.getBoundingClientRect();
+    probe.remove();
+    const z = canvas.zoom() || 1;
+    const r = z < IO_SCALE.min ? IO_SCALE.min / z : z > IO_SCALE.max ? IO_SCALE.max / z : 1;
+    return { width: box.width * r, height: box.height * r };
+  }
+
+  // ioObstacles is what the card would rather not sit on: every shape and every caption
+  // on the plane, minus two things. Its own element and that element's caption, because
+  // a card over the name it repeats in its own header hides nothing. And the containers —
+  // a pool, a lane, an expanded subprocess — whose area is the room their children are
+  // drawn in rather than drawing of their own.
+  function ioObstacles() {
+    const out = [];
+    for (const el of registry.getAll()) {
+      if (el.waypoints || !el.parent) continue;                      // connections, and the plane
+      if (!Number.isFinite(el.x) || !el.width || !el.height) continue;
+      if (el.children && el.children.length) continue;               // containers
+      if ((el.labelTarget || el).id === selElId) continue;
+      out.push(el);
+    }
+    return out;
+  }
+
+  // ioSpot picks where the card hangs off its element, in the element-relative diagram
+  // units overlays are positioned in. The five candidates are in preference order, so the
+  // first one that covers nothing is taken as it is found and a fully boxed-in element
+  // still gets the least bad of them.
+  function ioSpot(el, size) {
+    const { width: w, height: h } = size;
+    const ew = el.width || 100;   // a shape with no size is not a thing bpmn-js draws,
+    const eh = el.height || 80;   // but the arithmetic below should not produce NaN either
+    const spots = [
+      { top: eh + IO_GAP, left: 0 },            // under it, where it has always been
+      { top: eh + IO_GAP, left: ew - w },       // under it, hanging the other way
+      { top: 0, left: ew + IO_GAP },            // beside it, reading on
+      { top: eh - h, left: ew + IO_GAP },       // beside it, hanging up from its foot
+      { top: -(h + IO_GAP), left: 0 },          // over it
+      { top: -(h + IO_GAP), left: ew - w },     // over it, the other way
+      { top: 0, left: -(w + IO_GAP) },          // back beside it
+      { top: eh - h, left: -(w + IO_GAP) },     // back beside it, hanging up from its foot
+    ];
+    // Nothing measurable (the view is not laid out yet): keep the place it has always had
+    // rather than pick a spot from a size of zero.
+    if (!(w > 0) || !(h > 0)) return spots[0];
+    const obstacles = ioObstacles();
+    const onScreen = canvas.viewbox();
+    let best = spots[0];
+    let least = Infinity;
+    for (const spot of spots) {
+      const box = { x: el.x + spot.left, y: el.y + spot.top, width: w, height: h };
+      let cost = 2 * (1 - boxOverlap(box, onScreen) / (w * h));
+      for (const o of obstacles) cost += boxOverlap(box, o) / (o.width * o.height);
+      if (cost < least) { least = cost; best = spot; }
+      if (!cost) break;
+    }
+    return best;
+  }
+
   // drawIOOverlay re-attaches the card to the selected element. renderOverlay runs on
   // every frame and every 1.5s poll, so it re-draws only when the card's content (or the
   // element it belongs to) actually changed — otherwise a scrub would rebuild the same
-  // DOM dozens of times.
+  // DOM dozens of times. The spot is chosen on that same redraw: a card does not chase
+  // the diagram around under a pan or a zoom, which would be the more distracting of the
+  // two ways to be wrong.
+  //
+  // The card is typed "atlas-io" so the stylesheet can lift it above the other overlays.
+  // diagram-js gives every overlay the same bare position:absolute wrapper and no z-index,
+  // which leaves paint order at the order the *elements* first received an overlay — and
+  // that order works systematically against this card: it hangs below and to the right of
+  // its element, so what it covers are the shapes drawn after it, whose badges therefore
+  // land on top of it. An execution count from a covered neighbour then reads as one of
+  // the card's own rows (.djs-overlay-atlas-io in app.css).
   function drawIOOverlay() {
     const html = ioOverlayHTML();
     const sig = html ? selElId + "\u0000" + html : "";
@@ -11730,9 +12015,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const el = html && registry.get(selElId);
     if (!el) return;
     try {
-      ioOverlays.push(overlays.add(selElId, {
-        position: { top: (el.height || 80) + 10, left: 0 },
-        scale: { min: 0.7, max: 1.15 },
+      ioOverlays.push(overlays.add(selElId, "atlas-io", {
+        position: ioSpot(el, ioFootprint(html)),
+        scale: IO_SCALE,
         html,
       }));
     } catch { /* element not in this diagram */ }

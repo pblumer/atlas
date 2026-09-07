@@ -634,6 +634,11 @@ const WORKER_TYPES = [
     refs: "ADR-0041", status: "active", statusLabel: "configurable",
   },
   {
+    id: "discord", name: "Discord", kind: "Chat",
+    desc: "Sends, edits, deletes and reads messages in a Discord channel from a service task off the processor loop, and opens a thread for one case. The operation, the channel and the message body are model-authored (FEEL-capable) and what Discord returned is written into a result variable; the bot token — a {botToken} bundle — is managed below and resolved from the vault. Replying in a thread is a Send message naming the thread\u0027s id, because in Discord a thread is itself a channel. Outbound only: a message that starts a process is not this Worker Type. Authored on a service task with the Discord Worker Type.",
+    refs: "ADR-0041", status: "active", statusLabel: "configurable",
+  },
+  {
     id: "remedy", name: "BMC Remedy", kind: "ITSM",
     desc: "Creates an entry (e.g. an incident) in a BMC Remedy / Helix ITSM form from a service task off the processor loop via the AR System REST API. The form and its field values are model-authored (FEEL-capable) and the created entry's id is written into a result variable; the base URL and the {username,password} credential bundle are managed below and resolved from the vault. Authored on a service task with the BMC Remedy Worker Type.",
     refs: "ADR-0041 · ADR-0106", status: "active", statusLabel: "configurable",
@@ -3735,7 +3740,7 @@ function wireWorkerManagement(workers) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>

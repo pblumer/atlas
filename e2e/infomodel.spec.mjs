@@ -356,7 +356,7 @@ test.describe("data stores", () => {
 });
 
 // A class box takes its colour from CSS alone — the renderer sets no `fill` (see
-// api/web/vendor/uml/src/index.js). That makes the canvas one bad paint away from
+// api/web/vendor/canvas/src/uml.js). That makes the canvas one bad paint away from
 // unreadable, because `fill` is inherited and its initial value is black: a tint
 // that fails to compute is not an off-colour box, it is a solid black one with its
 // label painted black on top. The tints are registered with @property so a mix a
