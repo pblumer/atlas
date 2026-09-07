@@ -219,23 +219,44 @@ Der Start ist bewusst **nicht** singleton (ADR-0094): zwei Störungen derselben
 Person ergeben zwei Tickets. Der Korrelationsschlüssel dient dem Wiederfinden,
 nicht der Eindeutigkeit.
 
-Zwei Wege, mit Absicht verschieden:
+Drei Wege, mit Absicht verschieden:
 
 | | Aufgabe | Automatik | Ausgang | Anteil |
 |---|---|---|---|---|
-| normal | Störung analysieren | Boundary-Timer PT5M | Service wieder `IN_BETRIEB` | 95 % |
-| ersatz | Ersatzgerät beschaffen | **keine** | Service auf `BESTELLT` | 5 % |
+| auto | **keine** | 2 min Standzeit | Service wieder `IN_BETRIEB` | 79 % |
+| analyse | Störung analysieren | Boundary-Timer PT5M | Service wieder `IN_BETRIEB` | 20 % |
+| ersatz | Ersatzgerät beschaffen | **keine** | Service auf `BESTELLT` | 1 % |
 
-Der Timer im Normalfall ist der Demo-Ersatz für den 1st Level. In einem Test
-arbeitet niemand die Warteschlange ab, und ohne Abfluss wüchse sie unbegrenzt;
-mit ihm stellt sich ein Gleichgewicht ein — im Zeitraffer bei rund sieben
-Störungen je Minute etwa 35 offene Aufgaben. Wer von Hand abschliesst, kommt dem
-Timer zuvor und bricht ihn ab.
+Diese Verteilung ist teuer erkauft. Der erste Entwurf legte *jede* Störung einem
+Menschen vor, und drei Tage Dauerlauf haben gezeigt, was das heisst: 30.665
+Tickets in 69 Stunden, davon 1.412 Beschaffungsaufgaben ohne Timer — jede einzelne
+von Hand geschlossen. Das ist keine Operations-Ansicht, das ist Akkordarbeit.
 
-Die Beschaffungsaufgabe hat absichtlich keinen Timer. Sie wartet wirklich auf
-einen Menschen und ist damit der sichtbare "hängt"-Stapel, den ein
-Operations-Blick braucht: er wächst langsam (rund 20 je Stunde) und geht nur weg,
-wenn jemand ihn anfasst.
+Der wirksame Hebel war nicht die Störungsrate (10 % → 5 % der Ereignisse), sondern
+der dritte Weg: die grosse Mehrheit der Störungen heilt selbst und sieht nie einen
+Menschen. So verhält sich ein 1st Level mit Selbstheilung und Self-Service auch in
+Wirklichkeit.
+
+Die zwei Minuten Standzeit auf dem Auto-Weg sind kein Zierrat. Ohne sie entstünde
+und verschwände die Störung im selben Augenblick, und im Produkt-Register wäre nie
+ein Service als gestört zu sehen — der Zustand existierte nur in der Historie.
+
+Der Timer im Analyse-Fall ist der Demo-Ersatz für den Bearbeiter: in einem Test
+arbeitet niemand die Warteschlange ab, und ohne Abfluss wüchse sie unbegrenzt. Wer
+von Hand abschliesst, kommt ihm zuvor und bricht ihn ab.
+
+Die Beschaffungsaufgabe hat weiterhin absichtlich keinen Timer. Sie wartet wirklich
+auf einen Menschen und ist der sichtbare "hängt"-Stapel — jetzt aber in einer
+Menge, die man ansehen statt abarbeiten muss.
+
+Gerechnet über einen simulierten Tag:
+
+| | vorher | jetzt |
+|---|---:|---:|
+| Tickets je Stunde | 445 | 200 |
+| Aufgaben mit Timer je Stunde | 424 | 30 |
+| **Aufgaben für Menschen je Stunde** | **21** | **2,5** |
+| gleichzeitig sichtbar (Spitze) | ~85 | ~20 |
 
 Beide Wege enden gleich: das Ticket wirft ein `service-ereignis` zurück an die
 Identität. Wer eine Aufgabe abschliesst, sieht unmittelbar, wie sich das
