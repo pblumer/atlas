@@ -11686,6 +11686,14 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // every frame and every 1.5s poll, so it re-draws only when the card's content (or the
   // element it belongs to) actually changed — otherwise a scrub would rebuild the same
   // DOM dozens of times.
+  //
+  // The card is typed "atlas-io" so the stylesheet can lift it above the other overlays.
+  // diagram-js gives every overlay the same bare position:absolute wrapper and no z-index,
+  // which leaves paint order at the order the *elements* first received an overlay — and
+  // that order works systematically against this card: it hangs below and to the right of
+  // its element, so what it covers are the shapes drawn after it, whose badges therefore
+  // land on top of it. An execution count from a covered neighbour then reads as one of
+  // the card's own rows (.djs-overlay-atlas-io in app.css).
   function drawIOOverlay() {
     const html = ioOverlayHTML();
     const sig = html ? selElId + "\u0000" + html : "";
@@ -11696,7 +11704,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const el = html && registry.get(selElId);
     if (!el) return;
     try {
-      ioOverlays.push(overlays.add(selElId, {
+      ioOverlays.push(overlays.add(selElId, "atlas-io", {
         position: { top: (el.height || 80) + 10, left: 0 },
         scale: { min: 0.7, max: 1.15 },
         html,
