@@ -37,7 +37,9 @@
   frame is observed rather than measured once, so a picture laid out before the canvas
   had a box corrects itself; amended 2026-09-07 — framing is measured on every view
   write rather than only on a re-layout, and §4's two channels are drawn in screen
-  units so a finding stays visible at the size §7 budgets for)
+  units so a finding stays visible at the size §7 budgets for; amended 2026-09-07 —
+  the pull that gives the graph its shape is aimed at the canvas's shape rather than
+  assumed, so the picture fills the frame it is fitted to)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -701,6 +703,34 @@ unaffected.
 > positions and radii are the picture and scale with it, and a stroke is a channel —
 > it has to carry the same claim at every magnification, or it is a claim the view
 > only makes when the estate is small enough not to need it.
+
+> **Amendment (2026-09-07): the pull that shapes the graph is aimed, not assumed.**
+> Looking at a real derived starmap once the framing was right showed the rest of the
+> report. §7's fit scales both axes by one factor — stretching them independently
+> would fill the frame by misreporting distance, and distance is the only thing a
+> force layout is trying to say — so whatever shape the settle lands on is the shape
+> that gets framed, and any difference from the canvas's own shape is left over as a
+> band of empty canvas along one edge.
+>
+> The centring pull exists to stop that, by settling the graph into the shape of the
+> space it has to live in. It was applying the frame's aspect ratio to one axis and
+> its reciprocal to the other, which is that ratio *squared* between them. Measured on
+> a 36-node estate: the graph settled at 2.8:1 whatever the canvas was — 1.4:1, 1.7:1
+> and 2.1:1 all produced the same 2.8 — so at 1400x900 it filled 93% of the width and
+> 55% of the height, crowded the nodes into that half, and left eight of their names
+> overlapping while a third of the canvas stayed blank.
+>
+> A ratio cannot simply be corrected to the frame's, because the shape a settle
+> reaches depends on the graph too: how much of it is one hub's spokes, how long the
+> chains are, and — the common case, since an estate is not a graph anybody drew — how
+> much of it is joined to nothing at all and placed by the pull alone. So the pull is
+> aimed. Most of the run settles the graph; then the shape it has reached is measured
+> against the shape it is for, and the rest of the run is spent under a pull corrected
+> by the difference. It costs nothing — those steps were going to run anyway — and the
+> correction is bounded, because a graph that genuinely wants to be a line must not be
+> crushed into a square to fill a frame. On the same estate the height filled goes
+> from 55% to 73% and the average distance between neighbouring nodes from 78 to 91
+> device pixels.
 
 > **Amendment (2026-09-04): depth is a number, not a shortlist.**
 > The depth control offered 1 hop, 2 hops and all — which answers the question at
