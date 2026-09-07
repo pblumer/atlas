@@ -143,37 +143,6 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
-- **The Starmap sometimes opened with its nodes huddled together.** Reported from use,
-  and a follow-up to the first-paint correction: watching the canvas was necessary and
-  not sufficient. The observer only ever asked for one thing — a full re-layout — and
-  because that is the expensive half it is debounced, so every further resize reset the
-  wait. While a page was still settling around the canvas — a panel filling in, a
-  scrollbar deciding, a window being dragged — the re-layout never ran, and nothing else
-  recomputed the framing either. The viewBox kept an aspect ratio the canvas no longer
-  had, the browser letterboxed the difference, and the whole drawing shrank into the
-  middle of the surface with empty bands beside it.
-
-  Framing and re-settling are separated now. Framing is a bounding box and a division,
-  so it is measured rather than scheduled: on every write of the view, and again on the
-  frame after every paint — a paint makes the page taller, a taller page can take a
-  scrollbar, and a scrollbar is fifteen pixels off the width of the canvas the picture
-  was just settled for. Re-settling stays debounced, against the frame the layout
-  actually used and with a ceiling on the wait, so a stream of resizes can no longer
-  postpone it indefinitely. A zoomed-in reader keeps their magnification and what they
-  were looking at across a reframe.
-
-- **A failing node stopped announcing itself on a large Starmap.** Severity is drawn in
-  three channels (ADR-0211 §4) and two of them are strokes: the node's thickened outline
-  and the ring that beats under it. Both were drawn in world units, which the opening
-  view scales by however much it takes to fit the estate on screen — so they faded out
-  in proportion to how much landscape there was to look at. Measured on the fitted view
-  at a 1400px window: the red outline is 3.3 device pixels at twelve nodes, 1.0 at a
-  hundred and sixty and 0.73 at three hundred and twenty; the heartbeat ring 2.4, 0.73
-  and 0.52. Three hundred and twenty nodes is inside the four hundred the size budget
-  allows for, so both channels were disappearing exactly where a finding has to
-  announce itself. They are drawn with a non-scaling stroke now, as the edges and the
-  hover halo already were.
-
 - **A search term found more than it was asked for.** Reported from use:
   `kdnr=MT-100` also returned MT-10001. The instance search widened every term into a
   substring match, so an operator who named one customer got a list holding another one
