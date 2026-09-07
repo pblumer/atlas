@@ -17,6 +17,7 @@ import (
 type errEngine struct{ err error }
 
 func (e errEngine) RunUntilIdle() error                                                       { return e.err }
+func (e errEngine) ActivateJob(uint64, string, int64)                                         {}
 func (e errEngine) CompleteJob(uint64, ...model.VariableValue)                                {}
 func (e errEngine) CompleteJobWithToolCalls(uint64, []model.ToolCall, ...model.VariableValue) {}
 

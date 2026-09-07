@@ -204,8 +204,10 @@ type Server struct {
 	// (ADR-0157). Guarded by its own mutex, deliberately NOT run-loop owned: the
 	// waiting happens off the loop — see api/jobwait.go.
 	jobWaiters *jobWaiters
-	// driveMu serializes job driving, so two callers never claim the same job and
-	// work it twice. See [Server.drive].
+	// driveMu serializes the scheduler halves of job driving — claiming a round and
+	// applying its outcomes — and deliberately not the handlers in between, so a
+	// worker waiting on a dead host no longer holds up unrelated work. See
+	// [Server.drive].
 	driveMu sync.Mutex
 	// supervisor runs the worker processes Atlas launches itself (ADR-0157 step 7).
 	// nil unless the operator asked for them on the command line — never from a
@@ -2163,22 +2165,34 @@ func WithWorkerHistory(connector, scope string) Option {
 // every test would otherwise change meaning. What changed is *who* waits — the
 // caller's goroutine instead of the one goroutine everything else needs.
 //
-// Drivers are serialized. Two concurrent callers must not claim the same job and
-// work it twice, and the second waiting for the first is also what keeps "my
-// request's work is done when it returns" true.
+// The mutex covers the *scheduler* steps — claiming a round and applying its
+// outcomes — and deliberately not the handlers in between. It used to cover the
+// whole loop, and that is what the audit reported: one worker waiting on a dead
+// host held it for its entire timeout, so starting, completing or cancelling any
+// *other* instance waited behind a request that had nothing to do with it.
+//
+// Narrowing it is only safe because a claim now leases
+// (ADR-draft-in-process-job-leases). Without an identity on the claim, two callers
+// driving at once would be
+// handed the same job and work it twice; with one, the activation takes the job off
+// the activatable index before Claim returns, so the second caller's claim cannot
+// see it. The identity was the work — the mutex was only ever standing in for it.
+//
+// Serializing the two ends still buys something worth keeping: a claim and a submit
+// are short, and running them one at a time keeps the run loop's queue from filling
+// with drivers.
 //
 // Handlers read through a [state.ReadView] taken while the loop is held, so each
 // round sees one coherent state rather than whatever the writer has reached since —
 // the guarantee they used to get for free by running on the writer itself.
 func (s *Server) drive() error {
-	s.driveMu.Lock()
-	defer s.driveMu.Unlock()
 	for {
 		var (
 			jobs []job.Job
 			view *state.ReadView
 			err  error
 		)
+		s.driveMu.Lock()
 		s.do(func() {
 			if err = s.proc.RunUntilIdle(); err != nil {
 				return
@@ -2188,18 +2202,24 @@ func (s *Server) drive() error {
 			}
 			view = s.store.ReadView()
 		})
+		s.driveMu.Unlock()
 		if err != nil {
 			return err
 		}
 		if len(jobs) == 0 {
 			return nil
 		}
+		// The slow part, with nobody waiting on it: a handler makes the outbound call
+		// a worker exists for, and the caller that dispatched this round is the only
+		// one that waits for it.
 		outcomes := s.jobRunner.Work(jobs, view)
 		_ = view.Close()
 		if len(outcomes) == 0 {
 			return nil // nothing this runner serves; the rest is an external worker's
 		}
+		s.driveMu.Lock()
 		s.do(func() { s.jobRunner.Submit(outcomes) })
+		s.driveMu.Unlock()
 	}
 }
 

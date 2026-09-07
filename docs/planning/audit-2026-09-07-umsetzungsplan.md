@@ -549,7 +549,7 @@ Seiteneffekte zurückbleiben.
 
 ### AP6 — Budgets und Entkopplung: F13, F14, F15, F16 (M)
 
-> **Stand: F14 und F15 umgesetzt, F16 teilweise**, F13 offen.
+> **Stand: F13, F14 und F15 umgesetzt, F16 teilweise.**
 >
 > **F15.** Es fehlte keine Fähigkeit. Der Scan bricht seit jeher ab, wenn der
 > Callback einen Fehler zurückgibt, und die API-Schicht hat mit
@@ -591,6 +591,24 @@ Seiteneffekte zurückbleiben.
 > benennt, und *ein* Weg, sie zu konfigurieren. Diese Vereinheitlichung ist nicht
 > gemacht — und die beiden Engine-Budgets aus AP4 und hier sind ebenfalls nur
 > Setter, nicht Installationseinstellungen.
+>
+> **F13.** Der Plan hatte recht mit der Reihenfolge: die Identität *war* die
+> Arbeit, der Mutex stand nur dafür ein. `Claim` least jetzt — Aktivierung unter
+> dem Namen `atlas:in-process`, wodurch der Job den Aktivierungsindex verlässt,
+> bevor `Claim` zurückkommt; ein zweiter Claim kann ihn nicht mehr sehen.
+> `Submit` prüft Lease und Epoche, bevor er anwendet, mit derselben Fence, die der
+> HTTP-Abschluss einem externen Worker vorsetzt. Erst danach liess sich `driveMu`
+> auf Claim und Submit verengen.
+>
+> Nicht ganz weggenommen: zwei unsynchronisierte Treiber würden jeder nur bis zu
+> *ihrer* leeren Runde laufen, und das ist nicht dasselbe wie «das System ist
+> ruhig». «Die Arbeit, die mein Request ausgelöst hat, ist erledigt, wenn er
+> zurückkommt» ist ein Vertrag, an dem jeder Requestpfad und sehr viele Tests
+> hängen. Zwei kurze Schritte zu serialisieren erhält ihn und kostet nichts
+> Messbares.
+>
+> Der Test dazu hängt einen Handler auf und verlangt, dass währenddessen eine
+> unabhängige Instanz startet. Gegen den vorherigen Code schlägt er fehl.
 
 
 | Befund | Eingriff |
@@ -640,10 +658,10 @@ AP0 Harness  ──┬───────────────────�
 Freigabe für dauerhafte geschäftskritische Ausführung frühestens nach AP3 —
 das ist der Punkt, an dem V1 und V2 geschlossen sind.
 
-> **Stand:** AP0 bis AP5 sind umgesetzt. V1, V2 und V3 sind damit geschlossen und
-> die Freigabeschwelle oben ist erreicht. Offen sind die vier P2-Befunde in AP6
-> und, aus AP4, die Zählung je eingehendem Flow — die einzige bewusst
-> zurückgestellte Semantikschuld.
+> **Stand:** AP0 bis AP6 sind umgesetzt. V1, V2 und V3 sind geschlossen und die
+> Freigabeschwelle oben ist erreicht. Offen bleiben zwei bewusst zurückgestellte
+> Stücke: die Zählung je eingehendem Flow aus AP4 — eine Spezifikationsangleichung
+> mit eigenem Risiko, kein Bugfix — und die Vereinheitlichung der Budgets aus F16.
 
 ---
 
@@ -731,7 +749,7 @@ dafür, dass F07 und F08 mit einer *Begründung im Code* danebenlagen.
 | F10 | P1 | Entzogene Rollen bleiben in Sessions wirksam | AP1 | `TestAuditRoleRevocationInvalidatesExistingSession` | behoben |
 | F11 | P1 | Jeder Benutzer liest fremde Instanzvariablen | AP5 | `TestAuditUnrelatedUserCannotReadInstanceVariables` | behoben |
 | F12 | P1 | Automatische Zyklen besetzen den Single-Writer | AP4 | `TestAuditAutomaticCycleHasExecutionBudget` | behoben |
-| F13 | P2 | Langsame Worker blockieren unabhängige Requests | AP6 | `TestAuditSlowWorkerDoesNotBlockIndependentMutation` | offen |
+| F13 | P2 | Langsame Worker blockieren unabhängige Requests | AP6 | `TestAuditSlowWorkerDoesNotBlockIndependentMutation` | behoben |
 | F14 | P2 | Erreichbarkeit am Inclusive-Join neu aufgebaut | AP6 | `TestAuditReachabilityAllocations` | behoben |
 | F15 | P2 | Job-Polling scannt die ganze Warteschlange | AP6 | statisch belegt | behoben |
 | F16 | P2 | Ressourcenbudgets unvollständig | AP6 | statisch belegt | teilweise |

@@ -15,6 +15,7 @@ package job
 import (
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -27,6 +28,11 @@ type Job struct {
 	ProcessInstanceKey uint64
 	ElementInstanceKey uint64
 	Retries            int32
+	// LeaseEpoch is the round's claim on this job — the fencing token the engine
+	// minted when the runner leased it (ADR-0007). Submit presents it back, so an
+	// outcome from a round whose lease has since elapsed and been handed on is
+	// dropped instead of applied (ADR-draft-in-process-job-leases).
+	LeaseEpoch uint64
 }
 
 // Handler does a job's work with no output. Returning nil completes the job;
@@ -67,6 +73,7 @@ type CompletingHandler func(Job) (Completion, error)
 // incident, ADR-0061).
 type Engine interface {
 	RunUntilIdle() error
+	ActivateJob(jobKey uint64, worker string, leaseFor int64)
 	CompleteJob(jobKey uint64, outputs ...model.VariableValue)
 	CompleteJobWithDecision(jobKey uint64, decision *model.DecisionEvaluationValue, outputs ...model.VariableValue)
 	CompleteJobWithToolCalls(jobKey uint64, toolCalls []model.ToolCall, outputs ...model.VariableValue)
@@ -104,12 +111,27 @@ type Runner struct {
 	Concurrency int
 	// claimBatch bounds how many jobs one round collects; see SetClaimBatch.
 	claimBatch int
+	// leaseFor is how long a claimed job is held; see SetLease.
+	leaseFor int64
 }
 
 // DefaultConcurrency is how many handlers a round runs at once when nothing says
 // otherwise. It is well above serial, so a burst still drains quickly, and well
 // below the point where the sockets and memory of one round are a problem.
 const DefaultConcurrency = 16
+
+// InProcessWorker is the name the in-process runner leases jobs under. It is a
+// name no external worker can present — an external worker's name comes from its
+// own configuration, and this one names the engine itself — so a job leased here is
+// visibly the runner's in every operator view that shows an assignee.
+const InProcessWorker = "atlas:in-process"
+
+// DefaultLease is how long the in-process runner holds a claimed job. A lease is a
+// bound, not a lock (ADR-0007): if a handler outlives it the job is offered again,
+// which is what makes a wedged handler recoverable without an operator. Five
+// minutes is well past any handler that is going to return and well short of
+// leaving a job stuck behind one that is not.
+const DefaultLease = int64(5 * time.Minute)
 
 // NewRunner creates a runner over a state store and the engine it feeds.
 func NewRunner(store *state.Store, engine Engine) *Runner {
@@ -192,6 +214,18 @@ var errClaimFull = errors.New("job: claim batch full")
 // [DefaultClaimBatch].
 func (r *Runner) SetClaimBatch(n int) { r.claimBatch = n }
 
+// SetLease sets how long a claimed job is held, in nanoseconds. Zero or less
+// restores [DefaultLease].
+func (r *Runner) SetLease(d int64) { r.leaseFor = d }
+
+// lease is the effective hold, defaulted.
+func (r *Runner) lease() int64 {
+	if r.leaseFor > 0 {
+		return r.leaseFor
+	}
+	return DefaultLease
+}
+
 // claimBatchSize is the effective cap, defaulted.
 func (r *Runner) claimBatchSize() int {
 	if r.claimBatch > 0 {
@@ -200,50 +234,86 @@ func (r *Runner) claimBatchSize() int {
 	return DefaultClaimBatch
 }
 
-// Claim collects up to a round's worth of activatable jobs of the registered types.
-// It reads state, so it runs on the goroutine that owns it — the run loop — and it
-// does nothing slow: the work itself happens in [Runner.Work], off the loop.
+// Claim leases up to a round's worth of activatable jobs of the registered types.
+// It reads and writes engine state, so it runs on the goroutine that owns it — the
+// run loop — and it does nothing slow: the work itself happens in [Runner.Work],
+// off the loop.
+//
+// It *leases*, where it used to merely dispatch. The runner had no claim identity,
+// so two callers driving at once would both be handed the same job and work it
+// twice — which is why the server serialized driving end to end, holding one mutex
+// across every handler's outbound call. A lease is the identity that makes the
+// serialization unnecessary: the activation takes the job off the activatable index
+// before this returns, so a second claim cannot see it
+// (ADR-draft-in-process-job-leases).
 //
 // Each served type gets an equal share of the round rather than whatever is left
 // after the types before it. Ranging a map is randomly ordered, so leaving it to
 // chance would work *on average*, and "on average" is not what a job type flooded
 // by its neighbour needs.
 func (r *Runner) Claim() ([]Job, error) {
-	var jobs []Job
 	share := r.claimBatchSize() / max(1, len(r.factories))
 	if share < 1 {
 		share = 1
 	}
+	var keys []uint64
 	for jobType := range r.factories {
-		var keys []uint64
+		before := len(keys)
 		err := r.store.ActivatableJobs(jobType, func(k uint64) error {
 			keys = append(keys, k)
-			if len(keys) >= share {
+			if len(keys)-before >= share {
 				return errClaimFull
 			}
 			return nil
 		})
 		if err != nil && !errors.Is(err, errClaimFull) {
-			return jobs, err
-		}
-		for _, k := range keys {
-			jv, ok, err := r.store.GetJob(k)
-			if err != nil {
-				return jobs, err
-			}
-			if !ok {
-				continue // completed since the scan; skip
-			}
-			jobs = append(jobs, Job{
-				Key:                k,
-				Type:               jv.JobType,
-				ProcessInstanceKey: jv.ProcessInstanceKey,
-				ElementInstanceKey: jv.ElementInstanceKey,
-				Retries:            jv.Retries,
-			})
+			return nil, err
 		}
 	}
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	// Lease them all, then apply: activating mutates the index the scan just read,
+	// so the two are kept apart the same way the external pull keeps them apart.
+	for _, k := range keys {
+		r.engine.ActivateJob(k, InProcessWorker, r.lease())
+	}
+	if err := r.engine.RunUntilIdle(); err != nil {
+		return nil, err
+	}
+	jobs := make([]Job, 0, len(keys))
+	for _, k := range keys {
+		jv, ok, err := r.store.GetJob(k)
+		if err != nil {
+			return jobs, err
+		}
+		// Gone (completed meanwhile) or held by somebody else: not this round's.
+		if !ok || jv.Assignee != InProcessWorker || jv.LeaseExpiresAt == 0 {
+			continue
+		}
+		jobs = append(jobs, Job{
+			Key:                k,
+			Type:               jv.JobType,
+			ProcessInstanceKey: jv.ProcessInstanceKey,
+			ElementInstanceKey: jv.ElementInstanceKey,
+			Retries:            jv.Retries,
+			LeaseEpoch:         jv.LeaseEpoch,
+		})
+	}
 	return jobs, nil
+}
+
+// holdsLease reports whether the job is still held by the round that claimed it.
+// It is the in-process form of the check the HTTP completion endpoint makes on an
+// external worker's report: the epoch is the fencing token, and a report from a
+// round whose lease elapsed and was handed on presents a number the job has moved
+// past (ADR-0007).
+func (r *Runner) holdsLease(j Job) bool {
+	jv, ok, err := r.store.GetJob(j.Key)
+	if err != nil || !ok {
+		return false
+	}
+	return jv.LeaseExpiresAt != 0 && jv.Assignee == InProcessWorker && jv.LeaseEpoch == j.LeaseEpoch && j.LeaseEpoch != 0
 }
 
 // Work runs the handlers for claimed jobs and returns what each produced. This is
@@ -303,6 +373,14 @@ func (r *Runner) Work(jobs []Job, reader state.Reader) []Outcome {
 // instead (ADR-0111).
 func (r *Runner) Submit(outcomes []Outcome) {
 	for _, o := range outcomes {
+		// Only the round that still holds the lease may report on it. A handler that
+		// outlived its lease has had the job handed on, and applying its outcome now
+		// would be the double execution the lease exists to prevent — the same fence
+		// the HTTP completion endpoint puts in front of an external worker's report
+		// (ADR-draft-in-process-job-leases).
+		if !r.holdsLease(o.Job) {
+			continue
+		}
 		if o.Err != nil {
 			r.engine.FailJob(o.Job.Key, o.Job.Retries-1, o.Err.Error(), 0)
 			continue
