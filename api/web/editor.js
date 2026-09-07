@@ -8688,9 +8688,12 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         <span id="legend-armed" hidden title="An event-based gateway arms every branch at once, so the engine parks a token on each of them and none on the gateway. The wait is one race however many branches it has, so it is counted once — on the gateway.">
           <span class="legend-swatch armed" style="margin-left:12px"></span> armed branch of an event gateway</span>
         <span class="legend-swatch incident" style="margin-left:12px"></span> parked on an incident
-        <span class="token-badge history" style="margin-left:16px">N</span> completed here and moved on
-        <span class="token-badge cancelled" style="margin-left:10px">N</span> cancelled here
-        <span class="token-badge" style="margin-left:10px">N</span> tokens here now
+        <button type="button" class="legend-toggle" data-badge="passed" aria-pressed="true" style="margin-left:16px" title="Show or hide the gray counts on the diagram">
+          <span class="token-badge history">N</span> completed here and moved on</button>
+        <button type="button" class="legend-toggle" data-badge="cancelled" aria-pressed="true" style="margin-left:10px" title="Show or hide the amber counts on the diagram">
+          <span class="token-badge cancelled">N</span> cancelled here</button>
+        <button type="button" class="legend-toggle" data-badge="live" aria-pressed="true" style="margin-left:10px" title="Show or hide the green counts on the diagram">
+          <span class="token-badge">N</span> tokens here now</button>
         <span style="flex:1"></span>
         <span class="muted">Polling every 1.5s</span>
       </div>
@@ -8702,6 +8705,27 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     const next = Number(e.target.value);
     if (next && next !== key) location.hash = `#/operations/p/${next}`;
   });
+
+  // The legend's three count badges are switches as well as a key: each one takes its
+  // own number off every shape and puts it back. Which counts an operator wants on the
+  // diagram depends on the question being asked — "where is work sitting right now"
+  // wants the green ones alone, "which branch does this process actually take" wants the
+  // gray history without live counts crowding the same corner — and the three badges
+  // side by side are exactly what makes a busy diagram hard to read either way.
+  //
+  // Hiding is a class on the canvas rather than a flag the badge markup reads, because
+  // the poll rebuilds every overlay from scratch 1.5 seconds from now: a state the
+  // renderer has to remember would blink back the moment the next runtime arrives. The
+  // legend's own samples stay lit whatever the diagram shows — they are the switch, not
+  // a reading of it, and the pressed state says which way it is thrown.
+  const canvasBox = root.querySelector("#canvas");
+  for (const toggle of root.querySelectorAll(".legend-toggle[data-badge]")) {
+    toggle.addEventListener("click", () => {
+      const on = toggle.getAttribute("aria-pressed") !== "true";
+      toggle.setAttribute("aria-pressed", String(on));
+      canvasBox.classList.toggle(`badges-hide-${toggle.dataset.badge}`, !on);
+    });
+  }
 
   let lib;
   try {
