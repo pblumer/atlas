@@ -227,3 +227,47 @@ func TestInclusiveSplitNoRouteParksWithIncident(t *testing.T) {
 		t.Fatalf("element instances = %d, want 1 (the parked gateway)", ei)
 	}
 }
+
+// TestInclusiveSplitConditionErrorParksToo: the OR split routes through its own
+// function, so the rule that an unevaluable condition is not a false one needs its
+// own proof there. Same contract as the exclusive gateway, different code path —
+// which is exactly the kind of pair that drifts when only one of them is tested.
+func TestInclusiveSplitConditionErrorParksToo(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(1, "or-error", 1)
+	start := b.AddStartEvent()
+	gw := b.AddInclusiveGateway()
+	primary := b.AddServiceTask("or-error.primary", 3)
+	fallback := b.AddServiceTask("or-error.fallback", 3)
+	end := b.AddEndEvent()
+	b.Connect(start, gw)
+	f := b.Connect(gw, primary)
+	b.SetFlowCondition(f, mustCompile(t, runawayFEEL)) // fails at evaluation time
+	b.SetFlowDefault(b.Connect(gw, fallback))
+	b.Connect(primary, end)
+	b.Connect(fallback, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	fallbackType := cp.ServiceTask(cp.Node(fallback).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if n := len(activatableJobs(t, h.store, fallbackType)); n != 0 {
+		t.Fatalf("default jobs = %d, want 0: an unevaluable condition is not a false one", n)
+	}
+	_, inc := oneIncident(t, h)
+	if inc.ElementId != gw {
+		t.Errorf("incident on element %d, want the gateway (%d)", inc.ElementId, gw)
+	}
+}

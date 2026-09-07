@@ -160,3 +160,20 @@ func TestSecretsAreNotInTheDesignTimeBackup(t *testing.T) {
 		}
 	}
 }
+
+// TestAnUnclassifiedNameIsReportedAsSuch: storeClassOf answers "no" for a name the
+// registry does not carry, rather than a zero class that would read as a real one.
+// The completeness test leans on that "no" — a directory nobody classified has to be
+// distinguishable from one classified as something — and the restore allowlist leans
+// on it to skip an archive entry that is not ours.
+func TestAnUnclassifiedNameIsReportedAsSuch(t *testing.T) {
+	if class, ok := storeClassOf("a-directory-nobody-declared"); ok {
+		t.Errorf("storeClassOf(unknown) = (%q, true), want (\"\", false)", class)
+	}
+	if !allowedBackupDir("drafts") {
+		t.Error("drafts is design-time and must be restorable")
+	}
+	if allowedBackupDir("vault") {
+		t.Error("the vault is a secret and must never be restored from a design-time archive")
+	}
+}

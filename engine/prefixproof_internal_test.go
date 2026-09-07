@@ -175,3 +175,48 @@ func TestCompactedLogWithAnUnusableCheckpointFailsClosed(t *testing.T) {
 		t.Fatal("recovery with a compacted log and no usable checkpoint reported success")
 	}
 }
+
+// TestThePrefixProofTakesTheFurtherBound: the proof is asked about two numbers —
+// what the store has applied, and what a checkpoint stands in for — and the log has
+// to reach back to whichever of them is further along. Recovery only ever hands it
+// a checkpoint at or below the store's position today (checkpointSeed refuses one
+// that is ahead), so the other order is a rule rather than a path. It is a rule
+// worth holding: the day a checkpoint can be installed *and* skipped past, taking
+// the smaller bound would ask the log for a prefix nobody needs and refuse a
+// perfectly good start.
+func TestThePrefixProofTakesTheFurtherBound(t *testing.T) {
+	dir := t.TempDir()
+	l, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	defer l.Close()
+	s, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	defer s.Close()
+
+	cp := childViewProcess(t, 8, "further-bound", false)
+	p := New(1, l, s, &wbClock{})
+	p.Deploy(cp)
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	earliest, ok, err := l.EarliestPosition(recordPosition)
+	if err != nil || !ok {
+		t.Fatalf("EarliestPosition: %v (ok=%v)", err, ok)
+	}
+
+	// A store that reaches nowhere, and a checkpoint that reaches past where the log
+	// begins: the further bound is the checkpoint's, and the prefix is proven.
+	if err := p.proveThePrefix(0, earliest, ""); err != nil {
+		t.Errorf("proveThePrefix with a checkpoint past the log's start = %v, want nil", err)
+	}
+	// The same two numbers the other way round is the case recovery actually meets,
+	// and it is proven for the same reason.
+	if err := p.proveThePrefix(earliest, 0, ""); err != nil {
+		t.Errorf("proveThePrefix with an applied position past the log's start = %v, want nil", err)
+	}
+}
