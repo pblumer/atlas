@@ -3046,3 +3046,50 @@ test("a name there was no room for comes back when you point at its node", async
   await expect.poll(async () => crowdedOut.locator(".mesh-label-ink")
     .evaluate((el) => Number(getComputedStyle(el).opacity))).toBeGreaterThan(0.9);
 });
+
+// Contrast, as a number rather than as an opinion.
+//
+// The two structural colours had drifted under what a canvas needs: WCAG 2.1 asks 3:1
+// of a graphical object against what it is drawn on, and against the white canvas the
+// edges were 2.13 — below the floor, on the thinnest mark in the picture — and the
+// process outline 3.21, the bare minimum, on the most numerous node there is. Both
+// were also drawn in world units, so they thinned out as the estate grew: 2.2 units
+// came to 1.4 device pixels at 36 nodes and 0.64 at 160.
+//
+// Held here as a floor, not as an exact value: a palette may be retuned, and this
+// says only that the retuning cannot take the picture back under the line.
+test("the structure of the picture clears the contrast floor a canvas needs", async ({ page }) => {
+  installMock(page, radiusGraph);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+
+  const seen = await page.evaluate(() => {
+    const lin = (c) => (c /= 255) <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    const lum = (rgb) => {
+      const [r, g, b] = rgb.match(/\d+(\.\d+)?/g).map(Number);
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const ratio = (a, b) => {
+      const [x, y] = [lum(a), lum(b)];
+      return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+    };
+    const canvas = document.querySelector(".mesh-canvas");
+    const paper = getComputedStyle(canvas).backgroundColor;
+    const body = document.querySelector(".mesh-process .mesh-body");
+    const edge = document.querySelector(".mesh-edge");
+    return {
+      outline: ratio(getComputedStyle(body).stroke, paper),
+      edge: ratio(getComputedStyle(edge).stroke, paper),
+      // Drawn in screen pixels, so the weight holds however far out the view is.
+      outlineScales: getComputedStyle(body).vectorEffect,
+      edgeScales: getComputedStyle(edge).vectorEffect,
+    };
+  });
+
+  expect(seen.edge).toBeGreaterThanOrEqual(3);
+  // More than the floor for the outline: it is what a process *is* on this canvas,
+  // the fill being a tint and the shape a rounded square.
+  expect(seen.outline).toBeGreaterThan(4);
+  expect(seen.outlineScales).toBe("non-scaling-stroke");
+  expect(seen.edgeScales).toBe("non-scaling-stroke");
+});

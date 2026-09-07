@@ -41,7 +41,9 @@
   the pull that gives the graph its shape is aimed at the canvas's shape rather than
   assumed, so the picture fills the frame it is fitted to; amended 2026-09-07 — a name
   is written wherever there is room around its node rather than always under it, and
-  left unwritten where there is none)
+  left unwritten where there is none; amended 2026-09-07 — the structural greys and
+  the kind fills are drawn at a weight and a strength the canvas can carry, measured
+  against WCAG 2.1's 3:1 for a graphical object)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -769,6 +771,33 @@ unaffected.
 > makes it worth doing once per layout: panning and zooming need no re-placement, and
 > at 400 nodes the whole pass costs under a millisecond to measure and a few to place,
 > against the 266 the simulation itself takes.
+
+> **Amendment (2026-09-07): the structure is drawn at a weight a canvas can carry.**
+> Reported from use as too little contrast. It was measurable rather than a matter of
+> taste. WCAG 2.1 asks 3:1 of a graphical object against what it is drawn on, and this
+> canvas is white: the edges were #adb2ba at **2.13** — under the floor, on the
+> thinnest mark in the picture — and the process outline #8b9099 at **3.21**, the bare
+> minimum, on the most numerous node there is. Both were also drawn in world units, so
+> they thinned as the estate grew: 2.2 units came to 1.4 device pixels at 36 nodes and
+> 0.64 at 160, which is the same defect §4's two channels had.
+>
+> Each of the two greys moves one step down — the edges take the value the outlines
+> had (3.21, the floor, where the thinnest thing on the canvas belongs) and the
+> outlines take #6e747d (4.71, with room above it) — every node's outline joins the
+> edges, the halo and the severity ring in being drawn in screen pixels, and the
+> amber mark deepens with them so it keeps its lead over the structure it is drawn
+> against.
+>
+> The kind fills stop borrowing the page's soft tokens. Those are tuned to sit behind
+> text in a panel, where they must not compete with the words on them; a node is a
+> shape at a distance, seen against white at a fifth of its drawn size, and
+> --accent-soft is 1.06 against this canvas — so the kinds had stopped being told
+> apart by colour at all and shape was carrying it alone. A step of tint each, and the
+> strongest is 1.35 where the amber badge is 3.59 and the red 5.44: enough to separate
+> the kinds, nowhere near enough to compete with a finding.
+>
+> Quiet is still the intent (§4 is why), and none of this changes which channel says
+> what. It was simply quieter than legible.
 
 > **Amendment (2026-09-04): depth is a number, not a shortlist.**
 > The depth control offered 1 hop, 2 hops and all — which answers the question at

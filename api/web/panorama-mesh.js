@@ -40,21 +40,30 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
 // one and still smaller than any process. Size therefore says two things at once
 // without either overwriting the other — what kind of thing this is, and how much
 // of the landscape hangs off it.
+// The fills are literals rather than the page's soft tokens, and that is the same
+// argument the stylesheet makes for --mesh-ink and --mesh-attention. A soft token is
+// tuned to sit behind text in a panel, where it must not compete with the words on
+// it; a node on a canvas is a shape at a distance, seen against white and at a fifth
+// of its drawn size once the estate is big enough to need this view. The panel values
+// vanish there — --accent-soft is 1.06 against the canvas — so the kinds stopped
+// being told apart by colour at all and shape was left carrying it alone.
+//
+// A step of tint each, which is enough to separate them and nowhere near enough to
+// compete with a status mark: the strongest of them is 1.35 against the canvas, where
+// the amber badge is 3.59 and the red 5.44. --ok has no soft companion at :root and
+// never had one, which is how this file came to hold the first of these literals.
 const KIND = {
-  application: { r: 30, grow: 12, shape: "circle", fill: "var(--accent-soft)", stroke: "var(--accent)", label: "Application" },
-  process: { r: 17, grow: 5, shape: "square", fill: "var(--surface)", stroke: "var(--mesh-ink)", label: "Process" },
-  // --ok is a fixed green rather than a shade of the configurable accent, so its
-  // soft companion is a literal here too. There is no --ok-soft at :root, and
-  // defining one would change the one other rule that already asks for it.
-  worker: { r: 12, grow: 3.5, shape: "hexagon", fill: "#e8f5ec", stroke: "var(--ok)", label: "Worker" },
-  decision: { r: 12, grow: 3.5, shape: "triangle", fill: "var(--accent-soft)", stroke: "var(--accent-hover)", label: "Decision" },
+  application: { r: 30, grow: 12, shape: "circle", fill: "#dbe6ff", stroke: "var(--accent)", label: "Application" },
+  process: { r: 17, grow: 5, shape: "square", fill: "#e9edf5", stroke: "var(--mesh-ink)", label: "Process" },
+  worker: { r: 12, grow: 3.5, shape: "hexagon", fill: "#d9efe1", stroke: "var(--ok)", label: "Worker" },
+  decision: { r: 12, grow: 3.5, shape: "triangle", fill: "#dbe6ff", stroke: "var(--accent-hover)", label: "Decision" },
   // A placeholder for something real whose kind we may not learn, so it takes the
   // shape that is not any kind's. Drawing it as one of them would be a guess wearing
   // the same clothes as a fact.
   restricted: { r: 11, grow: 3, shape: "diamond", fill: "var(--bg)", stroke: "var(--muted)", label: "Restricted — outside your access", dashed: true },
   // Shape comes from the id, which names the kind of thing that is missing — see
   // shapeForNode. The fallback is the same "no kind" diamond.
-  unresolved: { r: 11, grow: 3, shape: "diamond", fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
+  unresolved: { r: 11, grow: 3, shape: "diamond", fill: "#fdedd1", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
   // A peer Atlas this server can promote to. Drawn large, because it is the only
   // thing on this landscape whose state was fetched over the network — and therefore
   // the only one that can be *unreachable* or *stale*, which is exactly what somebody
