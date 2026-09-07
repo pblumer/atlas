@@ -195,6 +195,35 @@
       }
     },
     {
+      "id": "the-object-diagram-is-drawn-on-diagram-js-now-so-it-zooms-an",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The object diagram zooms, pans and fits",
+        "de": "Das Objektdiagramm lässt sich zoomen, verschieben und einpassen"
+      },
+      "summary": {
+        "en": "The Data tab of an instance replay draws the objects it is carrying and the lines between them. Until now that picture could only be scrolled: a diagram wider than the panel ran off the edge, and there was no way to make it fit. It is drawn on the same canvas as the class diagram and the architecture views now, so it zooms with the wheel, pans with a drag, and carries the same three controls in the same corner. The zoom you set survives — the picture no longer jumps back when you click an element or when a running instance refreshes itself.",
+        "de": "Die Registerkarte «Daten» einer Instanz-Wiedergabe zeichnet die Objekte, die sie mit sich führt, und die Linien dazwischen. Bisher liess sich dieses Bild nur scrollen: Ein Diagramm, das breiter war als die Fläche, lief über den Rand hinaus, und es gab keine Möglichkeit, es einzupassen. Gezeichnet wird es jetzt auf derselben Zeichenfläche wie das Klassendiagramm und die Architekturansichten — also zoomen mit dem Mausrad, verschieben mit der Maus, und dieselben drei Bedienelemente in derselben Ecke. Der eingestellte Zoom bleibt erhalten: Das Bild springt nicht mehr zurück, wenn Sie ein Element anklicken oder eine laufende Instanz sich aktualisiert."
+      },
+      "link": {
+        "label": "ADR-0237",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0237-class-canvas-on-diagram-js.md"
+      },
+      "tags": [
+        "Operations",
+        "Data"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "the-training-nuggets-show-the-real-atlas-not-a-drawing-of-it",
       "version": "Unreleased",
       "date": null,
@@ -320,44 +349,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-class-canvas-could-not-take-hold-of-more-than-one-class-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The class canvas could not take hold of more than one class at a time.",
-        "de": "The class canvas could not take hold of more than one class at a time."
-      },
-      "summary": {
-        "en": "Tidying a class diagram meant dragging one box at a time. There is now a control beside zoom and undo that lets you draw a box around several classes and move them together — holding Shift while you drag does the same without it, and Escape puts the drag back to moving the sheet. The panel lists what you are holding, and each line takes you back to editing that one on its own.",
-        "de": "Ein Klassendiagramm aufzuräumen hiess bisher: eine Box nach der anderen ziehen. Neben Zoom und Rückgängig gibt es jetzt eine Schaltfläche, mit der sich ein Rahmen um mehrere Klassen ziehen lässt — sie bewegen sich dann gemeinsam. Mit gedrückter Umschalttaste geht es auch ohne die Schaltfläche, Escape gibt die Geste wieder ans Verschieben der Fläche zurück. Das Panel zeigt, was gerade ausgewählt ist, und über jede Zeile kommt man zurück zum Bearbeiten des einzelnen Elements."
-      },
-      "link": {
-        "label": "ADR-0237",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0237-class-canvas-on-diagram-js.md"
-      },
-      "tags": [
-        "Data",
-        "UML"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data › Information model and pick a model with several classes on it.",
-          "Click the ⬚ control at the top right of the canvas — it lights up while the next drag draws a box.",
-          "Press on empty sheet and drag a box around the classes you want; everything fully inside it is taken hold of.",
-          "Drag any one of them by its header and they all move together. Undo puts them all back.",
-          "To edit one of them on its own, click its line in the panel on the right."
-        ],
-        "de": [
-          "Unter Daten › Informationsmodell ein Modell mit mehreren Klassen öffnen.",
-          "Oben rechts auf der Zeichenfläche die Schaltfläche ⬚ anklicken — sie leuchtet, solange die nächste Ziehbewegung einen Rahmen zieht.",
-          "Auf freier Fläche drücken und einen Rahmen um die gewünschten Klassen ziehen; alles, was vollständig darin liegt, wird ausgewählt.",
-          "Eine beliebige davon an ihrem Kopf ziehen — alle bewegen sich mit. Rückgängig setzt alle zurück.",
-          "Um eine einzelne zu bearbeiten, im Panel rechts auf ihre Zeile klicken."
-        ]
       }
     }
   ]

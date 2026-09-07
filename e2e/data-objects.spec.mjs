@@ -132,7 +132,9 @@ test("a write the log cannot attribute says unknown rather than borrowing a name
 test.describe("the object diagram", () => {
   test.beforeEach(async ({ page }) => {
     await page.locator('#tab-data [data-dview="diagram"]').click();
-    await expect(page.locator(".og-svg")).toBeVisible();
+    // The canvas bundle is fetched on demand, so the first assertion waits for the
+    // drawing rather than for the markup around it.
+    await expect(page.locator(".og-node").first()).toBeVisible();
   });
 
   test("each object is drawn with its class, its members and its business key", async ({ page }) => {
@@ -164,6 +166,21 @@ test.describe("the object diagram", () => {
     await expect(page.locator(".og-line-label")).toHaveText(["lines", "customer"]);
   });
 
+  // Lines pass behind boxes, not across them. The SVG this replaced drew every line
+  // before every box to get that; diagram-js draws in insertion order within one
+  // layer, and the shapes go in first, so the connections have to ask for the front
+  // of the list. Found by measuring the rendered DOM rather than by reading the code,
+  // and worth a test because a line crossing over a box still looks like a diagram.
+  test("a line passes behind the boxes rather than across them", async ({ page }) => {
+    const order = await page.evaluate(() =>
+      [...document.querySelectorAll(".og-canvas svg .og-node, .og-canvas svg .og-line")]
+        .map((el) => (el.classList.contains("og-node") ? "box" : "line")));
+    expect(order.length).toBeGreaterThan(2);
+    // Every line before every box: the last line comes before the first box.
+    expect(order.lastIndexOf("line")).toBeLessThan(order.indexOf("box"));
+    expect(page.__errors).toEqual([]);
+  });
+
   test("a reference this instance cannot satisfy is stated, and points at where to look", async ({ page }) => {
     // Not a fault: it is the edge of what one instance can see, and exactly the
     // boundary a data store removes.
@@ -178,11 +195,48 @@ test.describe("the object diagram", () => {
       "#/data/instances?class=Customer&key=C-99&history=true");
   });
 
+  // What moving onto diagram-js bought, and the reason the port happened at all: the
+  // hand-rolled SVG this replaced had no zoom and no pan, so a diagram larger than
+  // the panel could only be scrolled (ADR-0237, and the follow-up ADR-0259 named).
+  test("the diagram zooms, and says so with the same three controls as the canvases beside it", async ({ page }) => {
+    const tools = page.locator(".og-tools");
+    await expect(tools.locator("[data-tool]")).toHaveCount(3);
+
+    // diagram-js zooms by transforming the viewport group, so that transform is the
+    // honest witness that the control did something rather than merely existing.
+    const viewport = page.locator(".og-canvas .viewport");
+    const before = await viewport.getAttribute("transform");
+    await tools.locator('[data-tool="zoom-in"]').click();
+    await expect(viewport).not.toHaveAttribute("transform", before);
+
+    // And fitting puts it back to a diagram that fills its frame.
+    await tools.locator('[data-tool="fit"]').click();
+    await expect(viewport).toHaveAttribute("transform", /matrix/);
+    expect(page.__errors).toEqual([]);
+  });
+
+  // Selecting an element re-renders the whole inspector, and a live instance does it
+  // again on every poll that brings new frames. The diagram has to survive that:
+  // rebuilding the canvas each time would throw away the zoom and the pan the reader
+  // had just set, which are the two things this port exists to give them.
+  test("re-rendering the inspector keeps the diagram, and the zoom the reader set on it", async ({ page }) => {
+    const viewport = page.locator(".og-canvas .viewport");
+    await page.locator('.og-tools [data-tool="zoom-in"]').click();
+    const zoomed = await viewport.getAttribute("transform");
+
+    // Clicking a history row selects that element instance, which is one of the two
+    // paths through renderInspector().
+    await page.locator("#rp-history .ops-hrow").first().click();
+    await expect(page.locator(".og-node").first()).toBeVisible();
+    await expect(viewport).toHaveAttribute("transform", zoomed);
+    expect(page.__errors).toEqual([]);
+  });
+
   test("the reading is remembered, and switching back shows the list", async ({ page }) => {
     await expect(page.locator('#tab-data [data-dview="diagram"]')).toHaveClass(/active/);
     await page.locator('#tab-data [data-dview="list"]').click();
     await expect(page.locator(".do-table")).toBeVisible();
-    await expect(page.locator(".og-svg")).toHaveCount(0);
+    await expect(page.locator(".og-canvas")).toHaveCount(0);
     // The preference is about how a person reads data, not about this instance.
     const stored = await page.evaluate(() => localStorage.getItem("atlas.replay.datadiagram"));
     expect(stored).toBe("0");

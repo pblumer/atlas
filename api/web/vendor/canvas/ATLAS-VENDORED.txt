@@ -4,8 +4,11 @@ Atlas draws with, namespaced, under the global AtlasCanvas:
   - AtlasCanvas.archimate — the ArchiMate 3.2 canvas (ADR-0189): the Open Group
     Model Exchange parser, the renderer, and the authoring behaviour loaded on top
     when the caller may edit. Source: src/archimate.js
-  - AtlasCanvas.uml — the UML class-diagram canvas for the information model
-    (ADR-0237): the renderer and the subset-driven rules provider.
+  - AtlasCanvas.uml — the two UML canvases (ADR-0237). ClassCanvas draws the
+    information model: the renderer and the subset-driven rules provider, editable
+    because the model is a working copy with an explicit Save. ObjectCanvas draws
+    one instance's object diagram — the run-time twin, read-only because the graph
+    is derived by the server and has no document to write back to.
     Source: src/uml.js
 
   - diagram-js@15.26.0, once, for both of them
@@ -28,7 +31,12 @@ The editing modules (modeling, move, resize, outline, rules) are part of the bun
 whether or not a given canvas loads them. They are instantiated only for an editable
 canvas, so a reader's diagram carries no modeling behaviour — but the code ships
 either way, because a single buildless bundle is the whole point of vendoring it
-(ADR-0012).
+(ADR-0012). The object canvas is the clearest case: it loads a renderer, selection,
+pan and zoom and nothing else, because a derived picture has no document to edit.
+
+Adding that third notation cost 4,476 bytes — 123,109 to 127,585 — which is the
+same arithmetic the merge above rests on. One copy of diagram-js is the expensive
+part and it is already paid for; a renderer is cheap.
 
 There is still a separate copy of diagram-js inside the vendored bpmn-js and dmn-js
 bundles. Those are third-party bundles vendored whole rather than Atlas sources
@@ -49,4 +57,4 @@ Do not edit atlas-canvas.js by hand. To rebuild:
     api/web/vendor/canvas/diagram-js.css
 
 SHA-256 atlas-canvas.js:
-d93a28eff99c5f5bc47844f0ad32657447ac2c051d1dbbdd0569e79f632e6fa3
+9805dcb3eda0d4baf552e534460f9be3ae94b1488f523a9cf4d63afd1b0c7789

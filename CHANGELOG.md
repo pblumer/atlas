@@ -242,6 +242,50 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The object diagram is drawn on diagram-js now, so it zooms and pans.** The
+  instance's objects and the lines between them were built here as SVG strings, with a
+  layout of their own, and the cost showed up as things a reader expects and does not
+  find: a diagram bigger than the panel could only be scrolled, nothing could be
+  clicked, and there was no way to make it fit. That is word for word the complaint
+  [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md) made about the *class*
+  canvas a fortnight ago, one altitude down — the look was downstream of the
+  substrate — and it is the follow-up
+  [ADR-0259](docs/adr/0259-data-object-lifecycle.md) named.
+
+  So the drawing moved onto the same shared bundle the class canvas and Panorama
+  already use, as `AtlasCanvas.uml.ObjectCanvas`, and the diagram gained zoom, pan,
+  selection and the same three controls — the same icons, the same step, the same
+  corner — that the two canvases beside it carry. Zooming a diagram is the same act
+  on all three surfaces, and a near-miss between them is worse than any one of the
+  choices on its own.
+
+  **Nothing about the notation changed, deliberately.** An object still reads as its
+  label underlined, its state in brackets, its members as `name = value` with the
+  business key marked and an absent member saying so; a containment still carries the
+  composition diamond and a key-resolved reference is still dashed and bare, because
+  those are different claims. The three e2e tests that state all of that were left
+  exactly as they were and still pass — which is the evidence the port changed the
+  substrate and not the picture. One detail did have to be put back deliberately:
+  diagram-js draws in insertion order, so the lines came out *over* the boxes where
+  they had always passed behind them. They are inserted ahead of the shapes now, in
+  their own order, and both halves of that have a test.
+
+  Two things are new rather than moved. The canvas **survives a re-render**: selecting
+  an element re-renders the whole inspector, and a live instance does it again on
+  every poll that brings new frames, so rebuilding the drawing each time would have
+  thrown away the zoom and the pan the reader had just set — the two things the port
+  exists to give them. And the diagram is **read-only on purpose**: the graph is
+  derived by the server, so there is no document to write back to and a box dragged
+  here would be put back by the next refresh. Move, resize and connect are absent
+  rather than refused, because a canvas that offers a gesture it silently discards is
+  worse than one that does not offer it.
+
+  Where a box *sits* is still decided in the browser, and that is not an oversight:
+  the server owns what relates to what because that is model semantics, and layout is
+  drawing. It just lives beside the renderer that uses it now instead of in a
+  twelve-thousand-line view file. The bundle grew 4,476 bytes for the whole notation
+  — one copy of diagram-js is the expensive part, and it was already paid for.
+
 - **The training nuggets show the real Atlas, not a drawing of it.** The stages
   shipped as markup built from the handbook's own theme tokens, and the reasoning
   for that was sound as far as it went: no binary weight, both colour schemes, both
