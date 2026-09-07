@@ -3790,7 +3790,16 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    width taken off every node, every label and every gap at once — the one view where
    the reading column costs more than it gives. */
 .starmap-mode main { max-width: none; }
-.infomodel-mode main { max-width: none; }
+/* The class diagram takes the window, the way the Modeler does: no centred column, no
+   page gutter, and no frame around the editor — a drawing surface that stops 22px
+   short of the edge is a window inside a window. The bar, the sheet and the problem
+   strip keep the borders that separate them from each other and lose only the ones
+   that separated them from the page. */
+.infomodel-mode main { max-width: none; padding: 0; margin: 0; }
+.infomodel-mode .im-editor { height: calc(100vh - var(--topbar-h, 96px)); }
+.infomodel-mode .im-bar { border-left: 0; border-right: 0; border-top: 0; border-radius: 0; }
+.infomodel-mode .im-body { border-left: 0; border-right: 0; }
+.infomodel-mode .im-problems { border-left: 0; border-right: 0; border-bottom: 0; border-radius: 0; }
 .mesh-card { display: flex; flex-direction: column; gap: 12px; }
 /* One line, and it stays one line: the header is a row of controls, and a row that
    wraps into three stacked lines stops reading as one. What gives under pressure is
@@ -5030,7 +5039,7 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 
 /* The class canvas. The drawing is diagram-js now
    (ADR-0237), so these style what the Atlas renderer in
-   api/web/vendor/uml/ emits; the selection outline and the hit layer are the
+   api/web/vendor/canvas/src/uml.js emits; the selection outline and the hit layer are the
    library's own. */
 .im-canvas .djs-container { background: var(--bg); }
 

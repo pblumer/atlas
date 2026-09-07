@@ -43,9 +43,18 @@ _Changed_ / _Removed_ for each version.
   typed, rather than lagging until the next repaint.
 
   The view itself also stops sitting in the console's centred 1120px column when a
-  model is open, and takes the width of the window as the Starmap does. The canvas
-  fits the whole model into what it is given, so every pixel the column withheld came
-  straight off every box and every line between them.
+  model is open, and takes the whole window the way the Modeler does — no column, no
+  page gutter and no frame around the editor, because a drawing surface that stops
+  22px short of the edge is a window inside a window. The list of models beside it
+  keeps the reading column; a list read across a 2000px screen is a worse list.
+
+  And the fit now uses the room it is given. diagram-js fits by shrinking only, never
+  magnifying past 100%, which is right for diagrams usually larger than the viewport
+  and wrong for a class diagram of six classes on a wide screen: it was drawn at its
+  own size in the middle of the window with the width going to nothing on either side.
+  A model with room to grow is now grown into it, up to 1.6× — past that a class box
+  has nothing more to say for the extra pixels. A model larger than the window is
+  shrunk to fit exactly as before.
 
 - **The class canvas could not be zoomed, searched, or undone.**
   Two complaints from the same place: Data › Information model, on a model bigger
@@ -162,6 +171,26 @@ _Changed_ / _Removed_ for each version.
   Confirmed by moving one edge's endpoint and watching it fail — the first attempt at
   that check was itself broken, matching against unescaped quotes that the JSON block
   does not contain, so it never challenged the test at all.
+
+### Changed
+
+- **The two diagram-js canvases ship as one bundle.** The ArchiMate canvas
+  ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)) and
+  the UML class canvas ([ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md)) each
+  carried their own copy of the library, because the second arrived later and merging
+  them then would have meant touching Panorama's shipped canvas for a saving that was
+  real but not urgent. ADR-0237 named the merge as the follow-up; this is it.
+
+  Both now ship as `api/web/vendor/canvas/atlas-canvas.js` under one global with a
+  namespace each — 123,109 bytes where the two were 211,888, and one cache entry rather
+  than two. Neither canvas's own code is touched: two entry files became two modules
+  under one entry that exports both. The honest cost is on the other side: a page that
+  opens only one of the two now carries both renderers, some 15 KB more than its own
+  bundle was — the right way round, since the renderers are the small part.
+
+  Loading it moved into one place (`api/web/canvas-bundle.js`), because two views
+  fetching the same file is new: whichever is opened first fetches it and the second
+  gets what is there, rather than a second `<script>` for the same bytes.
 
 ### Added
 
