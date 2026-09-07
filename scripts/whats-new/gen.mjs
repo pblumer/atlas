@@ -22,7 +22,13 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, "..", "..");
+// --root points the generator at another tree. It exists so the guard below can be
+// tested against a deliberately broken CHANGELOG without breaking this one; the
+// default is the repository this script lives in, which is what every real run uses.
+const rootArg = process.argv.indexOf("--root");
+const ROOT = rootArg >= 0 && process.argv[rootArg + 1]
+  ? resolve(process.argv[rootArg + 1])
+  : resolve(HERE, "..", "..");
 const CHANGELOG = resolve(ROOT, "CHANGELOG.md");
 // One file per entry, rather than one file holding all of them.
 //
@@ -37,9 +43,36 @@ const CHANGELOG = resolve(ROOT, "CHANGELOG.md");
 // files and merge cleanly; two branches editing the *same* entry still conflict, in a
 // small file where the conflict is readable and the resolution obvious. The file name
 // is the key, so a duplicate key cannot be written at all.
-const OVERRIDES_DIR = resolve(HERE, "overrides");
+const OVERRIDES_DIR = resolve(ROOT, "scripts", "whats-new", "overrides");
 const OUT = resolve(ROOT, "api", "web", "whats-new.json");
 const ADR_DIR = resolve(ROOT, "docs", "adr");
+
+// A merge conflict in the source is the one input this generator must not accept.
+//
+// The feed is derived from CHANGELOG.md, and `.gitattributes` marks the *output*
+// unmergeable so git raises a conflict there instead of interleaving two generated
+// files. The documented resolution is to take the merged CHANGELOG and re-run this.
+// But the two files change together, so the CHANGELOG is usually conflicted at that
+// same moment — and this script would read straight past the markers: it looks for
+// `- **bullets**`, and `<<<<<<< HEAD` is simply not one. Both sides' bullets then
+// become two entries in a feed that looks perfectly well-formed, and CI's staleness
+// check *passes*, because the committed file really is what the generator produces
+// from that source. The wrongness only surfaces later, to a reader.
+//
+// So it refuses. This is the same argument the unmergeable attribute makes, applied
+// one step upstream: a generated artifact must never be a function of a half-merged
+// input.
+const CONFLICT_MARKER = /^(<{7}|={7}|>{7})(?: |$)/m;
+
+function refuseConflicted(path, text) {
+  if (!CONFLICT_MARKER.test(text)) return;
+  const rel = path.startsWith(ROOT) ? path.slice(ROOT.length + 1) : path;
+  console.error(`whats-new: ${rel} still has unresolved merge conflicts.`);
+  console.error("  Resolve it first, then re-run this. Generating from a conflicted");
+  console.error("  source would put both sides in the feed as separate entries, and");
+  console.error("  nothing downstream would notice.");
+  process.exit(1);
+}
 
 const REPO = "https://github.com/pblumer/atlas";
 const BLOB = `${REPO}/blob/main`;
@@ -241,8 +274,13 @@ function readOverrides() {
   names.sort(); // a stable read order, so a malformed file is reported the same way every run
   for (const name of names) {
     const file = resolve(OVERRIDES_DIR, name);
+    const text = readFileSync(file, "utf8");
+    // A conflicted override would fail the JSON parse below anyway, but as a syntax
+    // error about an unexpected `<` — which sends the reader looking for a typo
+    // rather than for the merge they are in the middle of.
+    refuseConflicted(file, text);
     try {
-      out[name.slice(0, -".json".length)] = JSON.parse(readFileSync(file, "utf8"));
+      out[name.slice(0, -".json".length)] = JSON.parse(text);
     } catch (e) {
       console.error(`whats-new: ${name} is not valid JSON: ${e.message}`);
       process.exit(1);
@@ -253,6 +291,7 @@ function readOverrides() {
 
 function main() {
   const changelog = readFileSync(CHANGELOG, "utf8");
+  refuseConflicted(CHANGELOG, changelog);
   const overrides = readOverrides();
 
   const parsed = parseChangelog(changelog);
