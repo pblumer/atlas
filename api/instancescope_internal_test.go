@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -111,5 +113,49 @@ func TestHoldsTask(t *testing.T) {
 	anonymous := &httpapi.Principal{}
 	if anonymous.Username == "" && s.holdsTask(anonymous, "someone", "") {
 		t.Error("a principal with no username matched an assignee")
+	}
+}
+
+// TestAnUnauthenticatedRequestIsRefusedNotServed: with authentication on, a request
+// that carries no principal has no relationship to anything. The role gate should
+// never let one through to this handler, which is exactly why the handler must not
+// assume it — a check that only holds because something upstream holds it is a check
+// that disappears the day the upstream one moves.
+func TestAnUnauthenticatedRequestIsRefusedNotServed(t *testing.T) {
+	s := &Server{authEnabled: true}
+	acc, code, msg := s.instanceAccessFor(httptest.NewRequest(http.MethodGet, "/api/v1/instances/1/variables", nil), 1)
+	if code != http.StatusUnauthorized {
+		t.Fatalf("code = %d (%q), want 401", code, msg)
+	}
+	if acc.any() {
+		t.Error("an unauthenticated request was granted access")
+	}
+	// And with authentication off the same request is the single user, as everywhere.
+	open := &Server{}
+	if acc, code, _ := open.instanceAccessFor(httptest.NewRequest(http.MethodGet, "/", nil), 1); code != 0 || !acc.full {
+		t.Errorf("single-user mode = (%+v, %d), want full access", acc, code)
+	}
+}
+
+// TestAGroupThatNoLongerExistsGrantsNothing: a session snapshots its group ids at
+// login (ADR-0180), so a group deleted since then is still in the principal and must
+// resolve to nothing. Skipping it rather than failing keeps the caller's *other*
+// groups working, which is the behaviour a deletion should have.
+func TestAGroupThatNoLongerExistsGrantsNothing(t *testing.T) {
+	groups, err := newGroupStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("newGroupStore: %v", err)
+	}
+	if err := groups.Save(group{ID: "grp_live", Name: "Live"}); err != nil {
+		t.Fatalf("save group: %v", err)
+	}
+	s := &Server{groups: groups}
+	stale := &httpapi.Principal{UserID: "usr_a", Username: "alice", GroupIDs: []string{"grp_gone", "grp_live"}}
+
+	if s.holdsTask(stale, "", "Deleted") {
+		t.Error("a group id that resolves to nothing matched a candidate group by name")
+	}
+	if !s.holdsTask(stale, "", "Live") {
+		t.Error("a stale id in the snapshot stopped the caller's live groups from matching")
 	}
 }

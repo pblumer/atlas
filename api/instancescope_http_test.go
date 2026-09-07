@@ -363,3 +363,211 @@ func TestAMachineCredentialIsJudgedByItsIssuersRoles(t *testing.T) {
 		t.Errorf("variables = %v, want the whole instance for an admin-issued token", vars)
 	}
 }
+
+// mixedBPMN parks four live elements on one instance at once: a user task with a
+// form, a user task without one, a service task, and an intermediate timer. Between
+// them they are every kind of thing the allowlist scan walks past, which is the
+// point — the scan has to answer for a whole instance, not for the one element the
+// happy path puts there.
+const mixedBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="mixed" isExecutable="true">
+    <startEvent id="start"/>
+    <parallelGateway id="fork"/>
+    <userTask id="check">
+      <extensionElements>
+        <zeebe:formDefinition formId="review-form"/>
+        <zeebe:assignmentDefinition candidateGroups="Reviewers"/>
+      </extensionElements>
+    </userTask>
+    <userTask id="note">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="Reviewers"/>
+      </extensionElements>
+    </userTask>
+    <serviceTask id="work">
+      <extensionElements><zeebe:taskDefinition type="mixed.work"/></extensionElements>
+    </serviceTask>
+    <intermediateCatchEvent id="wait">
+      <timerEventDefinition><timeDuration xsi:type="tFormalExpression">PT30M</timeDuration></timerEventDefinition>
+    </intermediateCatchEvent>
+    <sequenceFlow id="f0" sourceRef="start" targetRef="fork"/>
+    <sequenceFlow id="f1" sourceRef="fork" targetRef="check"/>
+    <sequenceFlow id="f2" sourceRef="fork" targetRef="note"/>
+    <sequenceFlow id="f3" sourceRef="fork" targetRef="work"/>
+    <sequenceFlow id="f4" sourceRef="fork" targetRef="wait"/>
+  </process>
+</definitions>`
+
+// reviewerOn creates a `user` account in a group named after the models' candidate
+// group and returns a signed-in client for it. Membership is snapshotted at login
+// (ADR-0180), so the sign-in comes last.
+func reviewerOn(t *testing.T, admin *http.Client, ts *httptest.Server, username string) *http.Client {
+	t.Helper()
+	id := createUserWithRoles(t, admin, ts.URL, username, `["user"]`)
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/groups", `{"name":"Reviewers"}`)
+	if code != http.StatusCreated && code != http.StatusOK {
+		t.Fatalf("create group = %d: %s", code, body)
+	}
+	var grp struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &grp); err != nil {
+		t.Fatalf("decode group: %v", err)
+	}
+	if code, body := cReq(t, admin, ts, "PUT", "/api/v1/groups/"+grp.ID+"/members/"+id, ""); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("add group member = %d: %s", code, body)
+	}
+	return signInAs(t, ts.URL, username, "a-password-that-is-long")
+}
+
+// startMixed deploys mixedBPMN (optionally saving the form first) and returns the
+// instance key.
+func startMixed(t *testing.T, admin *http.Client, ts *httptest.Server, withForm bool) uint64 {
+	t.Helper()
+	if withForm {
+		if code, body := cReq(t, admin, ts, "POST", "/api/v1/forms", reviewForm); code != http.StatusOK {
+			t.Fatalf("save form = %d: %s", code, body)
+		}
+	}
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/deployments", mixedBPMN)
+	if code != http.StatusOK {
+		t.Fatalf("deploy = %d: %s", code, body)
+	}
+	var dep struct{ Key uint64 }
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deployment: %v", err)
+	}
+	if code, body := cReq(t, admin, ts, "POST", fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key),
+		`{"variables":{"comment":"","secret":"only-for-the-project"}}`); code != http.StatusOK {
+		t.Fatalf("start instance = %d: %s", code, body)
+	}
+	code, body = cReq(t, admin, ts, "GET", "/api/v1/instances", "")
+	if code != http.StatusOK {
+		t.Fatalf("list instances = %d: %s", code, body)
+	}
+	var rows []struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &rows); err != nil || len(rows) != 1 {
+		t.Fatalf("decode instances: %v (%d rows)", err, len(rows))
+	}
+	return rows[0].Key
+}
+
+// TestTheAllowlistWalksPastEverythingThatIsNotTheirTask: the scan meets a service
+// task's job, an intermediate timer holding no job at all, and a user task with no
+// form, alongside the one task that does have a form. Only the last contributes.
+//
+// The formless user task is the interesting one and the contract worth stating: it
+// is the caller's own task, and it still grants nothing, because there is no
+// declared set of fields to grant and inventing one is how an allowlist stops being
+// one.
+func TestTheAllowlistWalksPastEverythingThatIsNotTheirTask(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	admin := newClient(t)
+	login(t, admin, ts, "admin", "password1")
+	reviewer := reviewerOn(t, admin, ts, "reviewer")
+
+	key := startMixed(t, admin, ts, true)
+
+	code, vars := instanceVarsAs(t, reviewer, ts.URL, key)
+	if code != http.StatusOK {
+		t.Fatalf("the task holder was refused: HTTP %d %v", code, vars)
+	}
+	if _, ok := vars["comment"]; !ok {
+		t.Errorf("variables = %v, want the field the one form asks for", vars)
+	}
+	if _, ok := vars["secret"]; ok {
+		t.Errorf("variables = %v, want nothing a form did not ask for", vars)
+	}
+}
+
+// TestAFormThatWasNeverSavedGrantsNothing: the model names a form the installation
+// does not have — a deployment that outlived its form, or one restored without it.
+// There is nothing to read the field list from, so the task grants nothing rather
+// than everything.
+func TestAFormThatWasNeverSavedGrantsNothing(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	admin := newClient(t)
+	login(t, admin, ts, "admin", "password1")
+	reviewer := reviewerOn(t, admin, ts, "reviewer")
+
+	key := startMixed(t, admin, ts, false) // the form is never saved
+
+	if code, vars := instanceVarsAs(t, reviewer, ts.URL, key); code != http.StatusNotFound {
+		t.Fatalf("a task whose form does not exist granted access: HTTP %d %v", code, vars)
+	}
+}
+
+// TestADeploymentWhoseProjectIsGoneGrantsNothing: a project can be deleted while
+// the deployments filed into it keep running. ADR-0034 calls that state Ungrouped,
+// and there is no membership left to inherit — so the instance falls back to the
+// task rule like any other, and somebody who was a member of the project it used to
+// belong to is a stranger to it again.
+//
+// The alternative reading, "a deployment with no resolvable project is everybody's",
+// is the hole this whole change closes, so it is worth a test that says which way it
+// goes rather than a comment.
+func TestADeploymentWhoseProjectIsGoneGrantsNothing(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	admin := newClient(t)
+	login(t, admin, ts, "admin", "password1")
+	memberID := createUserWithRoles(t, admin, ts.URL, "member", `["user"]`)
+
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/projects", `{"name":"Doomed"}`)
+	if code != http.StatusCreated && code != http.StatusOK {
+		t.Fatalf("create project = %d: %s", code, body)
+	}
+	var proj struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &proj); err != nil {
+		t.Fatalf("decode project: %v", err)
+	}
+	if code, body := cReq(t, admin, ts, "PUT", "/api/v1/projects/"+proj.ID+"/members/"+memberID,
+		`{"role":"viewer"}`); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("add project member = %d: %s", code, body)
+	}
+	if code, body := cReq(t, admin, ts, "POST", "/api/v1/deployments?projectId="+proj.ID, reviewBPMN); code != http.StatusOK {
+		t.Fatalf("deploy into project = %d: %s", code, body)
+	}
+	code, body = cReq(t, admin, ts, "GET", "/api/v1/processes", "")
+	if code != http.StatusOK {
+		t.Fatalf("list processes = %d: %s", code, body)
+	}
+	var procs []struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &procs); err != nil || len(procs) != 1 {
+		t.Fatalf("decode processes: %v (%d)", err, len(procs))
+	}
+	if code, body := cReq(t, admin, ts, "POST", fmt.Sprintf("/api/v1/processes/%d/instances", procs[0].Key),
+		`{"variables":{"secret":"only-for-the-project"}}`); code != http.StatusOK {
+		t.Fatalf("start instance = %d: %s", code, body)
+	}
+	code, body = cReq(t, admin, ts, "GET", "/api/v1/instances", "")
+	if code != http.StatusOK {
+		t.Fatalf("list instances = %d: %s", code, body)
+	}
+	var rows []struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &rows); err != nil || len(rows) != 1 {
+		t.Fatalf("decode instances: %v (%d)", err, len(rows))
+	}
+
+	member := signInAs(t, ts.URL, "member", "a-password-that-is-long")
+	if code, vars := instanceVarsAs(t, member, ts.URL, rows[0].Key); code != http.StatusOK {
+		t.Fatalf("the project member could not read it while the project existed: HTTP %d %v", code, vars)
+	}
+
+	if code, body := cReq(t, admin, ts, "DELETE", "/api/v1/projects/"+proj.ID, ""); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("delete project = %d: %s", code, body)
+	}
+	// The session still carries the old membership; the project it pointed at does not.
+	if code, vars := instanceVarsAs(t, member, ts.URL, rows[0].Key); code != http.StatusNotFound {
+		t.Fatalf("a deployment whose project is gone still granted access: HTTP %d %v", code, vars)
+	}
+}
