@@ -3154,7 +3154,9 @@ func (exclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 // once, producing a token on every outgoing flow. As a join (several incoming) it
 // waits until a token has arrived on each incoming flow — every arrival parks as a
 // live element instance on the gateway — then consumes them all and fires the
-// outgoing flow(s) once. The synchronization is captured entirely by which
+// outgoing flow(s) once. It synchronizes *within its own execution scope*: two
+// iterations of a multi-instance subprocess each have their own join
+// (ADR-draft-join-scope-identity). The synchronization is captured entirely by which
 // element instances exist and by the Completed/Activating events emitted, so it
 // replays deterministically without re-counting (invariants I4/I6).
 type parallelGatewayBehavior struct{}
@@ -3167,7 +3169,7 @@ func (parallelGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 	}
 	// Join: fire only when a token sits on every incoming flow. Until then this
 	// arrival waits here (stays Activated).
-	arrived := c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.ElementId)
+	arrived := c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId)
 	if int32(len(arrived)) < node.IncomingCount {
 		return
 	}
@@ -3189,9 +3191,10 @@ func (parallelGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei
 
 // inclusiveGatewayBehavior: an OR gateway. As a split (one incoming) it fires at
 // once, taking every outgoing flow whose condition holds (or the default). As a
-// join (several incoming) it waits until no token could still arrive — no active
-// token upstream and none in flight toward it — then consumes every token parked
-// on it and fires the outgoing flow(s) once. That "no more can arrive" test is
+// join (several incoming) it waits until no token could still arrive *in its own
+// execution scope* — no active token upstream and none in flight toward it — then
+// consumes every token parked on it in that scope and fires the outgoing flow(s)
+// once (ADR-draft-join-scope-identity). That "no more can arrive" test is
 // what distinguishes it from a parallel join, which waits for a fixed count: an
 // inclusive join waits only for the branches the split actually took.
 type inclusiveGatewayBehavior struct{}
@@ -3203,10 +3206,10 @@ func (inclusiveGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei
 		return
 	}
 	// Join: park until nothing more can arrive at this gateway.
-	if c.TokenCanStillReach(ei.ProcessInstanceKey, ei.ElementId, cp.NodesReaching(ei.ElementId)) {
+	if c.TokenCanStillReach(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId, cp.NodesReaching(ei.ElementId)) {
 		return
 	}
-	for _, k := range c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.ElementId) {
+	for _, k := range c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId) {
 		if a := c.GetElementInstance(k); a != nil {
 			c.AppendElementEvent(k, model.IntentCompleted, *a)
 		}

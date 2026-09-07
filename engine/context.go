@@ -210,13 +210,21 @@ func (c *ProcessingContext) ForEachStartTimer(fn func(key uint64, v model.TimerV
 }
 
 // ElementInstancesOnNode returns the keys of every live element instance sitting
-// on the given BPMN node within a process instance, seen through the in-flight
+// on the given BPMN node *within one execution scope*, seen through the in-flight
 // transaction (so it includes one activated earlier in this batch). A parallel
 // join uses it to count how many tokens have arrived on its incoming flows.
-func (c *ProcessingContext) ElementInstancesOnNode(procKey uint64, elementId int32) []uint64 {
+//
+// scopeKey is the caller's own FlowScopeKey and is what makes a join belong to one
+// execution rather than to the node. Two iterations of a multi-instance subprocess
+// share a process instance and a node id but are separate executions with separate
+// tokens; matching on (instance, node) alone, a join counted the *other* iteration's
+// arrival as its own, fired early, and consumed a token that was never its to take
+// (ADR-draft-join-scope-identity). A token's scope is the identity of the execution
+// it belongs to, so it is part of the join's identity too.
+func (c *ProcessingContext) ElementInstancesOnNode(procKey, scopeKey uint64, elementId int32) []uint64 {
 	var keys []uint64
 	err := c.tx.ElementInstancesOfProcess(procKey, func(elKey uint64, v *model.ElementInstanceValue) error {
-		if v.ElementId == elementId {
+		if v.ElementId == elementId && v.FlowScopeKey == scopeKey {
 			keys = append(keys, elKey)
 		}
 		return nil
@@ -225,18 +233,29 @@ func (c *ProcessingContext) ElementInstancesOnNode(procKey uint64, elementId int
 	return keys
 }
 
-// TokenCanStillReach reports whether any live token could still arrive at nodeId:
-// an active element instance sitting on a node from which nodeId is reachable
-// (per reaches), or a token in flight as an element-activating command not yet
-// processed — the rest of this batch's queue plus followups generated so far —
+// TokenCanStillReach reports whether any live token in scopeKey could still arrive
+// at nodeId: an active element instance sitting on a node from which nodeId is
+// reachable (per reaches), or a token in flight as an element-activating command not
+// yet processed — the rest of this batch's queue plus followups generated so far —
 // targeting such a node or nodeId itself. Tokens already parked on nodeId are the
 // join's own arrivals and are excluded. An inclusive join fires only when this is
-// false. Considering in-flight commands is what keeps two pass-through branches
-// from each firing the join separately.
-func (c *ProcessingContext) TokenCanStillReach(procKey uint64, nodeId int32, reaches map[int32]bool) bool {
+// false. Considering in-flight commands is what keeps two pass-through branches from
+// each firing the join separately.
+//
+// scopeKey scopes the question the same way it scopes a parallel join's count
+// (ADR-draft-join-scope-identity): a token in a *sibling* iteration of a
+// multi-instance subprocess is on the same node ids but can never arrive here, and
+// letting it hold the join open made every iteration wait for the slowest one.
+//
+// Narrowing to one scope does not blind the join to a token running inside a nested
+// subprocess on one of its branches: reaches follows sequence flows, which never
+// cross a scope boundary, so an inner node is not in reaches at all — what keeps the
+// join waiting is the subprocess's own element instance, which sits in *this* scope
+// on a node that does reach the join.
+func (c *ProcessingContext) TokenCanStillReach(procKey, scopeKey uint64, nodeId int32, reaches map[int32]bool) bool {
 	upstream := false
 	err := c.tx.ElementInstancesOfProcess(procKey, func(_ uint64, v *model.ElementInstanceValue) error {
-		if v.ElementId != nodeId && reaches[v.ElementId] {
+		if v.FlowScopeKey == scopeKey && v.ElementId != nodeId && reaches[v.ElementId] {
 			upstream = true
 		}
 		return nil
@@ -252,7 +271,10 @@ func (c *ProcessingContext) TokenCanStillReach(procKey uint64, nodeId int32, rea
 				continue
 			}
 			e := &cmd.Value.element
-			if e.ProcessInstanceKey == procKey && (e.ElementId == nodeId || reaches[e.ElementId]) {
+			if e.ProcessInstanceKey != procKey || e.FlowScopeKey != scopeKey {
+				continue
+			}
+			if e.ElementId == nodeId || reaches[e.ElementId] {
 				return true
 			}
 		}
