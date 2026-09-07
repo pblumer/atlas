@@ -124,7 +124,7 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
 	// read-back that follows it are two separate visits to the loop — and the
 	// read-back's is now only long enough to take a view, not to do the counting
-	// (ADR-draft-stats-and-incidents-off-the-loop).
+	// (ADR-0266).
 	if driveNeeded {
 		if runErr = s.drive(); runErr == nil {
 			stats, statErr = s.statsOffLoop()

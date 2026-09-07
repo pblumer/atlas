@@ -15,7 +15,7 @@ import (
 // onto it anyway, which made the front door only as available as the engine — on a
 // server carrying ~50k active instances the loop was busy enough that
 // POST /api/v1/auth/login stopped answering, and nobody could get in to do
-// anything about it (ADR-draft-login-off-the-run-loop).
+// anything about it (ADR-0265).
 //
 // The loop is held for the whole request here, exactly as a saturated processor
 // holds it. On the intended path the login never asks for it and answers straight

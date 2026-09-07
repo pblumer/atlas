@@ -2453,7 +2453,7 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
 	// read-back that follows it are two separate visits to the loop — and the
 	// read-back's is now only long enough to take a view, not to do the counting
-	// (ADR-draft-stats-and-incidents-off-the-loop).
+	// (ADR-0266).
 	if driveNeeded {
 		if runErr = s.drive(); runErr == nil {
 			stats, statErr = s.statsOffLoop()
@@ -3450,7 +3450,7 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
 	// read-back that follows it are two separate visits to the loop — and the
 	// read-back's is now only long enough to take a view, not to do the counting
-	// (ADR-draft-stats-and-incidents-off-the-loop).
+	// (ADR-0266).
 	if driveNeeded {
 		if runErr = s.drive(); runErr == nil {
 			stats, statErr = s.statsOffLoop()
@@ -3497,7 +3497,7 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
 	// read-back that follows it are two separate visits to the loop — and the
 	// read-back's is now only long enough to take a view, not to do the counting
-	// (ADR-draft-stats-and-incidents-off-the-loop).
+	// (ADR-0266).
 	if driveNeeded {
 		if runErr = s.drive(); runErr == nil {
 			stats, statErr = s.statsOffLoop()
@@ -4601,7 +4601,7 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	}
 	list := []incidentView{}
 	truncated := false
-	// Off the run loop (ADR-draft-stats-and-incidents-off-the-loop). The walk itself
+	// Off the run loop (ADR-0266). The walk itself
 	// is over the incident family, which an operator is expected to keep near zero,
 	// so cost is not what moved it: a turn on the loop is simply unavailable for as
 	// long as the engine is busy, and this is an endpoint somebody reaches for
@@ -4619,7 +4619,7 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 		// One resolver for the whole page: the worker store is read once, not once
 		// per parked token, and not at all when nothing on the page is on a worker
 		// task (ADR-0159). It reads a durable sidecar, which is safe to do off the
-		// loop (ADR-draft-login-off-the-run-loop).
+		// loop (ADR-0265).
 		connectorFor := s.incidentConnectorLookup()
 		lookup := func(piKey uint64) (instanceCtx, error) {
 			if ctx, ok := resolved[piKey]; ok {

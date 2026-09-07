@@ -2638,7 +2638,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 // Affordable for a request; ruinous on the run loop, which is where all eight of its
 // callers used to put it. Taking a [state.ReadView] is what moved it off, and the
 // signature is the enforcement — there is no way to call this against the live store
-// any more (ADR-draft-stats-and-incidents-off-the-loop).
+// any more (ADR-0266).
 func readStats(rv *state.ReadView) (statsResp, error) {
 	pi, err := rv.ActiveProcessInstanceCount()
 	if err != nil {

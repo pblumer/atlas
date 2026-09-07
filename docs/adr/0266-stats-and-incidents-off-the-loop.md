@@ -1,4 +1,4 @@
-# ADR-DRAFT: The runtime counts leave the run loop, and take the write paths with them
+# ADR-0266: The runtime counts leave the run loop, and take the write paths with them
 
 - **Status:** Proposed
 - **Date:** 2026-09-07
@@ -6,7 +6,7 @@
 
 ## Context and problem statement
 
-ADR-draft-login-off-the-run-loop took the login off the run loop after nobody could
+ADR-0265 took the login off the run loop after nobody could
 sign in to a server holding ~50.000 active instances. It left the obvious question
 open: the login reads no engine state and was merely *queued*, so what was it queued
 behind?
@@ -90,7 +90,7 @@ Chosen: **option 2.**
   counting with the loop free.
 - **`handleListIncidents` runs inside `readOffLoop`**, reading instances from the view
   and definitions from the copied `defIndex`. Its connector resolver reads a durable
-  sidecar, which ADR-draft-login-off-the-run-loop established is safe off the loop.
+  sidecar, which ADR-0265 established is safe off the loop.
 - **Both endpoints now answer 503 while the loop is closing** instead of a 200 the
   caller cannot distinguish from a true empty answer.
 
@@ -155,7 +155,7 @@ Chosen: **option 2.**
 
 ## Links
 
-- follows ADR-draft-login-off-the-run-loop — the same incident, the other half; it also
+- follows ADR-0265 — the same incident, the other half; it also
   established that a durable sidecar may be read off the loop
 - applies ADR-0239 — read-only queries off the run loop, on a consistent view
 - relates to ADR-0080 — the maintained counters, and the line between them and the

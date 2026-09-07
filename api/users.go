@@ -107,7 +107,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// so this lookup has no reason to queue behind whatever the engine is doing,
 	// and one hard reason not to: a busy processor must never be able to lock
 	// people out of the instance they are trying to sign in and fix
-	// (ADR-draft-login-off-the-run-loop). Verifying the password already ran off
+	// (ADR-0265). Verifying the password already ran off
 	// the loop; it was only the cheap half that waited.
 	u, ok, lookErr := s.users.byUsername(username)
 	if lookErr != nil {

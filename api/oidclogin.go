@@ -282,7 +282,7 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Off the run loop, like the password login's (ADR-draft-login-off-the-run-loop):
+	// Off the run loop, like the password login's (ADR-0265):
 	// a callback that has already proven who somebody is must not then wait for the
 	// engine. A membership change racing it still reaches the session (ADR-0185).
 	//

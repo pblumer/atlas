@@ -302,7 +302,7 @@ func TestResolveInboundSubsLoadErrors(t *testing.T) {
 //
 // A pair of symlinks pointing at each other rather than a dangling one, because a
 // record that is merely absent is now skipped rather than reported
-// (ADR-draft-login-off-the-run-loop).
+// (ADR-0265).
 func TestInboundSubStoreLoadAllReadError(t *testing.T) {
 	st, _ := newInboundSubStore(filepath.Join(t.TempDir(), "s"))
 	loopA, loopB := st.FileFor("x"), st.FileFor("y")

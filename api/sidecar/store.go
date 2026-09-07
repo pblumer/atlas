@@ -31,7 +31,7 @@ import (
 // new one and never a torn one, and a temp file is not named like a record so a
 // listing never picks one up. A caller that must not wait for the engine may
 // therefore read directly — which is what keeps signing in independent of how busy
-// the processor is (ADR-draft-login-off-the-run-loop).
+// the processor is (ADR-0265).
 type Store[T any] struct {
 	dir  string
 	name string

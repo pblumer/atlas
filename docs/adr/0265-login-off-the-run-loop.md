@@ -1,4 +1,4 @@
-# ADR-DRAFT: Signing in does not wait for the run loop
+# ADR-0265: Signing in does not wait for the run loop
 
 - **Status:** Proposed
 - **Date:** 2026-09-07
@@ -40,7 +40,7 @@ read that needs a turn on the loop is only as available as the engine is idle.
 What they were queued *behind* is the subject of its own record, and it was not idle
 time: `/stats` walks all three column families, so at this population one call was a
 quarter-million-key scan, and seven write paths ran that same scan on the loop to
-report the counts back (ADR-draft-stats-and-incidents-off-the-loop). That is what a
+report the counts back (ADR-0266). That is what a
 login had to wait for. It does not change this record's decision — a login must not
 wait for the loop *however* long the queue happens to be — but it is why the wait was
 unbounded in practice rather than merely noticeable.

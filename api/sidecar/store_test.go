@@ -394,7 +394,7 @@ func TestStoreLoadAllSurvivesARecordDeletedMidListing(t *testing.T) {
 // TestStoreLoadAllRacesADelete is the same property under the real race: readers
 // listing while the writer deletes, which is what a store now sees whenever
 // somebody signs in while an administrator is editing accounts
-// (ADR-draft-login-off-the-run-loop). Under -race it also asserts the claim the
+// (ADR-0265). Under -race it also asserts the claim the
 // type comment makes — that a Store keeps no shared mutable state to protect.
 func TestStoreLoadAllRacesADelete(t *testing.T) {
 	s := newItemStore(t)

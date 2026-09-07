@@ -452,7 +452,7 @@ _Changed_ / _Removed_ for each version.
   with a token counted after it. Both also answer 503 while the server is shutting down
   rather than a 200 that cannot be told apart from a true empty answer: the old code
   reported `{"activeProcessInstances":0,…}`, which reads as "the engine is empty". The
-  reasoning is in [the record on the runtime counts](docs/adr/draft-stats-and-incidents-off-the-loop.md).
+  reasoning is in [the record on the runtime counts](docs/adr/0266-stats-and-incidents-off-the-loop.md).
 
   `/stats` is no faster for its own caller — it still walks the population. It simply no
   longer walks it for everybody else.
@@ -479,7 +479,7 @@ _Changed_ / _Removed_ for each version.
   resolving and the check-then-write is atomic only inside one turn. A listing that meets
   a record deleted from under it now skips that record instead of failing outright, which
   is what an off-loop reader can legitimately see. The reasoning is in
-  [the record on signing in off the run loop](docs/adr/draft-login-off-the-run-loop.md).
+  [the record on signing in off the run loop](docs/adr/0265-login-off-the-run-loop.md).
 
   What the login was queued *behind* is the entry below.
 

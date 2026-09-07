@@ -612,7 +612,7 @@ func TestConnectorStoreLoadAllOrdering(t *testing.T) {
 //
 // Unreadable, not absent: a record that has gone away is skipped now, because an
 // off-loop reader meets that legitimately when the loop deletes one mid-listing
-// (ADR-draft-login-off-the-run-loop). Two symlinks pointing at each other are
+// (ADR-0265). Two symlinks pointing at each other are
 // neither missing nor a directory, so they still reach the error branch.
 func TestConnectorStoreLoadAllReadError(t *testing.T) {
 	st, _ := newConnectorStore(filepath.Join(t.TempDir(), "c"))

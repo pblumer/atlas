@@ -177,7 +177,7 @@ func TestPublicLinkStoreLoadAllSkipsAndErrors(t *testing.T) {
 	// isn't a directory, so it isn't skipped). It has to be unreadable rather than
 	// absent: a record that has gone away is skipped now, since that is what a
 	// reader off the run loop legitimately meets
-	// (ADR-draft-login-off-the-run-loop). Two symlinks pointing at each other are
+	// (ADR-0265). Two symlinks pointing at each other are
 	// neither.
 	dead, alsoDead := s.FileFor("dead"), s.FileFor("deae")
 	if err := os.Symlink(alsoDead, dead); err != nil {

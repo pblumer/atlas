@@ -77,7 +77,7 @@ func TestUserStoreErrorBranches(t *testing.T) {
 	// loadAll surfaces a read error on a hex-named .json entry it cannot read.
 	// Unreadable, not absent: a record deleted from under a listing is skipped now,
 	// because a reader running off the run loop meets that legitimately
-	// (ADR-draft-login-off-the-run-loop), so this is a pair of symlinks pointing at
+	// (ADR-0265), so this is a pair of symlinks pointing at
 	// each other.
 	st5dir := t.TempDir()
 	st5, _ := newUserStore(st5dir)
