@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas object canvas e2e harness</title>
+    <!-- Drives AtlasCanvas.uml.ObjectCanvas directly (ADR-0237), on the derived graph
+         shape the server's /object-graph endpoint returns. The replay's own harness
+         covers the Data tab around it; this one holds the canvas to the part of its
+         contract the host does not exercise — drawing a second graph into a canvas
+         that already holds one. -->
+    <link rel="stylesheet" href="/vendor/canvas/diagram-js.css" />
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; }
+      #canvas { position: absolute; inset: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="canvas"></div>
+    <script src="/vendor/canvas/atlas-canvas.js"></script>
+    <script>
+      const graphA = {
+        nodes: [
+          { id: "o1", label: "order : Order", name: "order", class: "Order", state: "erfasst",
+            attributes: [{ name: "id", value: "ORD-1", key: true }, { name: "total", value: "42" }] },
+          { id: "o2", label: "line : LineItem", name: "line", class: "LineItem", nested: true,
+            attributes: [{ name: "sku", value: "A-1" }] },
+        ],
+        links: [{ from: "o1", to: "o2", kind: "composition", via: "containment", label: "lines" }],
+        unresolved: [],
+      };
+      const graphB = {
+        nodes: [
+          { id: "c1", label: "customer : Customer", name: "customer", class: "Customer",
+            attributes: [{ name: "nr", value: "C-1", key: true }] },
+        ],
+        links: [],
+        unresolved: [],
+      };
+      window.__canvas = new AtlasCanvas.uml.ObjectCanvas(document.getElementById("canvas"));
+      window.__draw = (which) => window.__canvas.render(which === "b" ? graphB : graphA);
+      window.__ready = true;
+    </script>
+  </body>
+</html>
