@@ -1,6 +1,6 @@
 # ADR-0237: The class canvas on diagram-js
 
-- **Status:** Proposed
+- **Status:** Proposed (amended 2026-09-07: the marquee is a mode)
 - **Date:** 2026-09-03
 - **Deciders:** Patrick Blumer
 
@@ -155,6 +155,36 @@ point, so only General starts open. A class has three, and one of them is its
 attributes — the attributes *are* the class, so hiding them behind a click on every
 selection would make the panel worse than one with no groups at all. So the controller
 takes that as a parameter, and the class panel opens everything.
+
+## Amendment: the marquee is a mode
+
+The record listed marquee selection among what moving to diagram-js buys, and it was
+the one thing the move did not deliver on its own. diagram-js ships the lasso tool and
+the canvas registers it; what it never got was the gesture. Panning listens on
+`element.mousedown` at priority 500 and claims every plain left-drag — it has to, or a
+diagram larger than its window could not be moved — so a tool that waits for one is
+never reached. The two are not reconcilable on the same gesture: a drag on empty sheet
+either moves the sheet or draws a box, and something has to say which.
+
+So the marquee is entered rather than simply done: a control beside zoom and undo arms
+it for the next drag, and holding Shift while dragging reaches it without the control
+(that is the modifier panning declines, and it is the same gesture the process modeler
+answers to). It ends by itself once the box is drawn, and Escape gives the drag back.
+A second press of the control cannot mean "never mind" — the press *is* what diagram-js
+takes as the start of the gesture — so it does not pretend to.
+
+Two things follow for the canvas's API. It reports the whole selection rather than the
+first of it: a host told only the first puts that one back as *the* selection, which
+takes the rest off again before anything can be done with them, and the feature looks
+like it worked. And selecting takes a list as readily as an id, because reconciling
+rebuilds every relationship, so a selection outlives an edit only by being put back by
+id afterwards.
+
+The panel still edits one element at a time. A name, a type and a multiplicity each
+belong to exactly one thing, so with several selected it says what it is holding and
+each line is the way back to editing that one on its own — rather than showing the
+first one's fields and leaving the reader to guess which of the four they are typing
+into.
 
 ## Consequences
 

@@ -2,6 +2,62 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-class-canvas-could-not-take-hold-of-more-than-one-class-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The class canvas could not take hold of more than one class at a time.",
+        "de": "The class canvas could not take hold of more than one class at a time."
+      },
+      "summary": {
+        "en": "Tidying a class diagram meant dragging one box at a time. There is now a control beside zoom and undo that lets you draw a box around several classes and move them together — holding Shift while you drag does the same without it, and Escape puts the drag back to moving the sheet. The panel lists what you are holding, and each line takes you back to editing that one on its own.",
+        "de": "Ein Klassendiagramm aufzuräumen hiess bisher: eine Box nach der anderen ziehen. Neben Zoom und Rückgängig gibt es jetzt eine Schaltfläche, mit der sich ein Rahmen um mehrere Klassen ziehen lässt — sie bewegen sich dann gemeinsam. Mit gedrückter Umschalttaste geht es auch ohne die Schaltfläche, Escape gibt die Geste wieder ans Verschieben der Fläche zurück. Das Panel zeigt, was gerade ausgewählt ist, und über jede Zeile kommt man zurück zum Bearbeiten des einzelnen Elements."
+      },
+      "link": {
+        "label": "ADR-0237",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0237-class-canvas-on-diagram-js.md"
+      },
+      "tags": [
+        "Data",
+        "UML"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data › Information model and pick a model with several classes on it.",
+          "Click the ⬚ control at the top right of the canvas — it lights up while the next drag draws a box.",
+          "Press on empty sheet and drag a box around the classes you want; everything fully inside it is taken hold of.",
+          "Drag any one of them by its header and they all move together. Undo puts them all back.",
+          "To edit one of them on its own, click its line in the panel on the right."
+        ],
+        "de": [
+          "Unter Daten › Informationsmodell ein Modell mit mehreren Klassen öffnen.",
+          "Oben rechts auf der Zeichenfläche die Schaltfläche ⬚ anklicken — sie leuchtet, solange die nächste Ziehbewegung einen Rahmen zieht.",
+          "Auf freier Fläche drücken und einen Rahmen um die gewünschten Klassen ziehen; alles, was vollständig darin liegt, wird ausgewählt.",
+          "Eine beliebige davon an ihrem Kopf ziehen — alle bewegen sich mit. Rückgängig setzt alle zurück.",
+          "Um eine einzelne zu bearbeiten, im Panel rechts auf ihre Zeile klicken."
+        ]
+      }
+    },
+    {
+      "id": "a-class-with-a-hundred-attributes-had-no-room-to-show-their-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A class with a hundred attributes had no room to show their names.",
+        "de": "A class with a hundred attributes had no room to show their names."
+      },
+      "summary": {
+        "en": "The panel was 340px wide and would not budge, and inside it the two selects — which carry every class name in the model as options — took what they liked, leaving the name column a stub that read allowedA… for forty members running.",
+        "de": "The panel was 340px wide and would not budge, and inside it the two selects — which carry every class name in the model as options — took what they liked, leaving the name column a stub that read allowedA… for forty members running."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-class-canvas-could-not-be-zoomed-searched-or-undone",
       "version": "Unreleased",
       "date": null,
@@ -316,67 +372,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-search-term-found-more-than-it-was-asked-for",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A search finds what you typed, not what resembles it",
-        "de": "Die Suche findet, was du eingibst — nicht, was ihm ähnelt"
-      },
-      "summary": {
-        "en": "kdnr=MT-100 also returned MT-10001. Every search term was quietly widened into a substring, so naming one customer gave you a list holding another beside it, with no way to ask about only the one you meant. Worse, it was not consistent: a variable the model declared searchable was matched exactly, any other as a substring — so the same query meant two things depending on the model, which you cannot see from the search box. A term is now matched whole. Widen it yourself with * for any run of characters and ? for exactly one, so *MT-1* is the old behaviour asked for explicitly, and write \\* or \\? to search for those characters themselves. The same rule now guards bulk termination, where an unasked-for widening selected instances you had not named.",
-        "de": "kdnr=MT-100 lieferte auch MT-10001. Jeder Suchbegriff wurde still zu einem Teilstring erweitert — wer einen Kunden benannte, bekam einen zweiten danebengestellt, ohne Möglichkeit, nur nach dem gemeinten zu fragen. Schlimmer noch: es war nicht einmal einheitlich. Eine vom Modell als searchable deklarierte Variable wurde exakt getroffen, jede andere als Teilstring — dieselbe Anfrage bedeutete also je nach Modell zwei verschiedene Dinge, und das sieht man dem Suchfeld nicht an. Ein Begriff wird jetzt vollständig verglichen. Erweitern tust du selbst: * steht für beliebig viele Zeichen, ? für genau eines, *MT-1* ist also das alte Verhalten, ausdrücklich verlangt; \\* und \\? suchen nach den Zeichen selbst. Dieselbe Regel schützt jetzt auch die Massenbeendigung, wo eine ungefragte Erweiterung Instanzen ausgewählt hat, die du nicht benannt hattest."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Search"
-      ],
-      "tutorial": {
-        "en": [
-          "In Operations, open a version's live view and type a full value into the search box beside the diagram — kdnr=MT-100 now finds MT-100 and nothing else.",
-          "Add * where you want any run of characters: kdnr=MT-1* for everything starting with MT-1, *MT-1* for everything containing it.",
-          "Use ? for exactly one character: kdnr=MT-10? matches MT-100 and MT-10X, but not MT-1000.",
-          "To search for a literal star or question mark, escape it: kdnr=10\\* finds the value 10*."
-        ],
-        "de": [
-          "In Operations die Live-Ansicht einer Version öffnen und einen vollständigen Wert in das Suchfeld neben dem Diagramm eingeben — kdnr=MT-100 findet jetzt MT-100 und sonst nichts.",
-          "Ein * setzen, wo beliebig viele Zeichen stehen dürfen: kdnr=MT-1* für alles, was mit MT-1 beginnt, *MT-1* für alles, worin es vorkommt.",
-          "? steht für genau ein Zeichen: kdnr=MT-10? trifft MT-100 und MT-10X, aber nicht MT-1000.",
-          "Für einen echten Stern oder ein Fragezeichen das Zeichen maskieren: kdnr=10\\* findet den Wert 10*."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "opening-a-deployed-process-in-the-modeler-lost-the-applicati",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Opening a deployed process in the Modeler lost the application it belongs to, and with it the whole vocabulary behind a data object's Type.",
-        "de": "Opening a deployed process in the Modeler lost the application it belongs to, and with it the whole vocabulary behind a data object's Type."
-      },
-      "summary": {
-        "en": "A draft carries its application; a deployed version carries it too — the deploy records it — but the route that opens one (#/modeler/d/{key}) does not name it and nothing looked it up.",
-        "de": "A draft carries its application; a deployed version carries it too — the deploy records it — but the route that opens one (#/modeler/d/{key}) does not name it and nothing looked it up."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     }
   ]

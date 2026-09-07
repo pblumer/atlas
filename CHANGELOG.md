@@ -14,6 +14,39 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The class canvas could not take hold of more than one class at a time.**
+  [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md) put the canvas on diagram-js
+  for marquee selection among other things, and the marquee was the one it did not
+  reach: diagram-js ships the tool, but a plain drag on empty sheet pans — it has to,
+  or a diagram larger than its window could not be moved — so the gesture was never
+  offered to it, and ten boxes were still moved one at a time.
+
+  There is now a control for it beside zoom and undo, and holding Shift while dragging
+  does the same without it. Escape gives the drag back to panning. What the box takes
+  hold of moves together, and the panel says what it is holding — it still edits one
+  element at a time, because a name, a type and a multiplicity each belong to exactly
+  one thing, so it lists what is selected and each line is the way back to editing that
+  one on its own.
+
+- **A class with a hundred attributes had no room to show their names.** The panel was
+  340px wide and would not budge, and inside it the two selects — which carry every
+  class name in the model as options — took what they liked, leaving the name column a
+  stub that read `allowedA…` for forty members running.
+
+  The panel now takes the Modeler's divider: drag it to widen, double-click to put it
+  back, and the width is remembered. A person moves between the two surfaces in one
+  session, so it is the same divider with the same behaviour rather than a second one
+  of its own. Inside the table the layout is fixed, so the room goes to the name and
+  the selects keep the width they need and no more. And because the row being typed in
+  is deliberately *not* repainted — that is what keeps the caret in the field — the
+  name's tooltip and what the filter matches it against are now kept current as it is
+  typed, rather than lagging until the next repaint.
+
+  The view itself also stops sitting in the console's centred 1120px column when a
+  model is open, and takes the width of the window as the Starmap does. The canvas
+  fits the whole model into what it is given, so every pixel the column withheld came
+  straight off every box and every line between them.
+
 - **The class canvas could not be zoomed, searched, or undone.**
   Two complaints from the same place: Data › Information model, on a model bigger
   than the window.
