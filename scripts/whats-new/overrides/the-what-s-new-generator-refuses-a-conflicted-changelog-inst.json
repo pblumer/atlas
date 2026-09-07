@@ -1,0 +1,7 @@
+{
+  "hidden": true,
+  "summary": {
+    "en": "Authoring tooling: the What's New generator refuses a conflicted CHANGELOG.md or override instead of quietly building a feed from it. Nothing a person using Atlas sees, so it stays out of this list.",
+    "de": "Autorenwerkzeug: Der What's-New-Generator verweigert ein konfliktbehaftetes CHANGELOG.md oder Override, statt still einen Feed daraus zu bauen. Für Anwenderinnen und Anwender von Atlas nicht sichtbar, deshalb nicht in dieser Liste."
+  }
+}

@@ -481,6 +481,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The What's New generator refuses a conflicted CHANGELOG instead of shipping both
+  sides of it.** `api/web/whats-new.json` is generated and committed, and
+  `.gitattributes` marks it unmergeable so git raises a conflict rather than
+  interleaving two generated files. The documented resolution is to take the merged
+  `CHANGELOG.md` and re-run the generator — but the two files change together, so at
+  that moment the CHANGELOG is usually conflicted too, and the generator read straight
+  past the markers: it looks for `- **bullets**`, and `<<<<<<< HEAD` is not one.
+
+  Both sides then became two entries in a feed that looked perfectly well-formed, and
+  CI's staleness check *passed*, because the committed file really was what the
+  generator produced from that source. Only a reader would ever have found out. Measured,
+  not assumed: a conflicted CHANGELOG produced a clean exit and a feed containing both
+  bullets.
+
+  It now refuses, naming the file and why — for `CHANGELOG.md` and for a conflicted
+  override, where the JSON parse error would otherwise send the reader looking for a
+  typo rather than for the merge they are in the middle of. A Go test drives the real
+  script against a throwaway tree, so the guard is exercised rather than asserted in
+  prose.
+
+  `make whats-new-resolve` is the resolution in one command: it regenerates the feed
+  from the merged CHANGELOG and stages it, and refuses while any *other* conflict is
+  still open — regenerating from a half-merged CHANGELOG being exactly what the guard
+  above exists to stop.
+
 - **The handbook blamed itself for a diagram the reader was simply not signed in to
   see.** The recipes in _Rezepte_ ship their models without BPMN-DI, so the coordinates
   come from `POST /api/v1/layout` — an endpoint that carries the `modeler` role, on a
