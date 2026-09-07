@@ -73,6 +73,11 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     connecting: null,    // {kind, fromId} while a relationship is being drawn
     dirty: false,
     schemaFor: "",       // class whose JSON Schema projection is open
+    // What the panel's member filter is narrowed to, and what the bar's search box
+    // is looking for. Both are view state: neither touches the document, and neither
+    // survives leaving the class it was typed for.
+    memberFilter: "",
+    search: "",
   };
 
   const stereotypeOf = (name) => subset.stereotypes.find((s) => s.stereotype === name) || subset.stereotypes[0];
@@ -88,6 +93,12 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         <b class="im-title" id="im-name">${esc(state.model.name)}</b>
         <span class="im-rev muted" id="im-rev">r${state.model.revision}</span>
         <span class="im-palette" id="im-palette"></span>
+        <span class="im-search">
+          <input type="search" id="im-search" placeholder="Find a class or a member…"
+            aria-label="Find a class or a member" autocomplete="off" role="combobox"
+            aria-expanded="false" aria-controls="im-search-results"/>
+          <div class="im-search-results" id="im-search-results" role="listbox" hidden></div>
+        </span>
         <span style="flex:1"></span>
         <span class="im-dirty" id="im-dirty" hidden>unsaved</span>
         <button class="btn" id="im-save" disabled title="Save the diagram (Ctrl/⌘ + S)">Save</button>
@@ -96,6 +107,11 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         <div class="im-canvas" id="im-canvas">
           <p class="im-empty-hint" id="im-empty" hidden>No classes yet. Add a business object — an Order, a
             Customer, a Claim — and give it a business key.</p>
+          <div class="im-tools" aria-label="Canvas controls">
+            <button type="button" class="icon-btn" data-tool="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+            <button type="button" class="icon-btn" data-tool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+            <button type="button" class="icon-btn" data-tool="fit" title="Fit the whole diagram in the window" aria-label="Fit diagram">⊡</button>
+          </div>
         </div>
         <div class="im-side" id="im-side"></div>
       </div>
@@ -132,6 +148,138 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     onSelection: (bo) => onCanvasSelection(bo),
     onChange: () => absorbMoves(),
   });
+
+  // Zoom and pan have been the canvas's own since it moved onto diagram-js
+  // (ADR-0237): the wheel scrolls, ctrl and the wheel zoom, and a drag on empty
+  // sheet pans. What was missing is that none of that is *visible* — a person who
+  // does not already know the gesture finds a diagram they cannot make fit, which
+  // is what the record meant by looking like the two canvases beside it.
+  //
+  // So these are the Panorama canvas's three controls, with its icons, its step and
+  // its placement, because zooming a diagram is the same act on both surfaces and a
+  // near-miss between them is worse than either choice on its own.
+  root.querySelector('[data-tool="zoom-in"]').addEventListener("click", () => canvas.zoom(1.2));
+  root.querySelector('[data-tool="zoom-out"]').addEventListener("click", () => canvas.zoom(1 / 1.2));
+  root.querySelector('[data-tool="fit"]').addEventListener("click", () => canvas.fit());
+
+  // ---- the search ----------------------------------------------------------
+  //
+  // A model outgrows its window in two directions at once: a canvas with thirty
+  // classes on it, and a class with forty members in it. This searches both from one
+  // field, because a person looking for `lieferadresse` does not know or care whether
+  // it is a class or an attribute of one — and what they get back says which.
+  //
+  // Picking a member does two things: it selects the class, and it narrows that
+  // class's panel to what was searched for. The second is the point. Selecting a
+  // class with forty attributes and leaving the reader to scroll for the one they
+  // just named would answer the question and then hide the answer.
+  const searchEl = root.querySelector("#im-search");
+  const resultsEl = root.querySelector("#im-search-results");
+
+  // A result is where it is and what it is called: {classId, attribute?, label, kind}.
+  // Classes come first because the class is the coarser answer and the one a reader
+  // means more often; within each group the model's own order is kept, so the same
+  // query always answers in the same order.
+  function searchResults(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const classes = [];
+    const members = [];
+    for (const c of state.model.classes || []) {
+      if (c.name.toLowerCase().includes(q)) {
+        classes.push({ classId: c.id, label: c.name, kind: stereotypeOf(c.stereotype).label });
+      }
+      for (const a of c.attributes || []) {
+        if (a.name.toLowerCase().includes(q) || String(a.type).toLowerCase().includes(q)) {
+          members.push({ classId: c.id, attribute: a.name, label: `${c.name} · ${a.name}`, kind: a.type });
+        }
+      }
+      for (const lit of c.literals || []) {
+        if (String(lit).toLowerCase().includes(q)) {
+          members.push({ classId: c.id, attribute: String(lit), label: `${c.name} · ${lit}`, kind: "literal" });
+        }
+      }
+    }
+    for (const st of state.model.stores || []) {
+      if (st.name.toLowerCase().includes(q)) {
+        classes.push({ storeId: st.id, label: st.name, kind: "Data store" });
+      }
+    }
+    return [...classes, ...members].slice(0, 12);
+  }
+
+  function renderSearch() {
+    const results = searchResults(state.search);
+    searchEl.setAttribute("aria-expanded", String(Boolean(state.search.trim())));
+    if (!state.search.trim()) {
+      resultsEl.hidden = true;
+      resultsEl.innerHTML = "";
+      return;
+    }
+    resultsEl.hidden = false;
+    resultsEl.innerHTML = results.length
+      ? results.map((r, i) => `<button type="button" class="im-search-hit" role="option" data-hit="${i}"
+          aria-selected="${i === 0}">${esc(r.label)}<span class="muted">${esc(r.kind)}</span></button>`).join("")
+      : `<p class="im-search-none muted">Nothing in this model matches “${esc(state.search.trim())}”.</p>`;
+    resultsEl.__results = results;
+  }
+
+  // pickResult selects what was found and brings it into view. The canvas is scrolled
+  // rather than fitted: fitting would answer "where is Order" by zooming out until
+  // every class is equally unreadable.
+  function pickResult(result) {
+    if (!result) return;
+    state.schemaFor = "";
+    state.connecting = null;
+    if (result.storeId) {
+      state.selected = { kind: "store", id: result.storeId };
+    } else {
+      state.selected = { kind: "class", id: result.classId };
+      // Set before the render, and claim the class the filter belongs to, so the
+      // panel does not drop it as a filter typed for somebody else.
+      filteredFor = result.classId;
+      state.memberFilter = result.attribute || "";
+    }
+    closeSearch();
+    render();
+    focusOnCanvas(result.storeId || result.classId);
+  }
+
+  // The canvas owns the viewport, so this asks it to scroll rather than doing the
+  // arithmetic here. It reaches for the diagram-js canvas and the shape map the
+  // bundle exposes; a `focus(id)` of its own is the tidier home for it, and belongs
+  // in the change that merges the two vendored bundles (ADR-0237).
+  function focusOnCanvas(id) {
+    const shape = canvas.shapes?.get(id);
+    if (shape && canvas.canvas?.scrollToElement) canvas.canvas.scrollToElement(shape, { top: 80, bottom: 80, left: 80, right: 80 });
+  }
+
+  function closeSearch() {
+    state.search = "";
+    searchEl.value = "";
+    renderSearch();
+  }
+
+  searchEl.addEventListener("input", () => {
+    state.search = searchEl.value;
+    renderSearch();
+  });
+  searchEl.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { closeSearch(); searchEl.blur(); return; }
+    // Enter takes the first hit, which is what a person typing a name they know
+    // expects: type "Order", press Enter, be looking at Order.
+    if (e.key === "Enter") {
+      e.preventDefault();
+      pickResult((resultsEl.__results || [])[0]);
+    }
+  });
+  // A click on a hit has to land before the field losing focus takes the list away.
+  resultsEl.addEventListener("mousedown", (e) => e.preventDefault());
+  resultsEl.addEventListener("click", (e) => {
+    const hit = e.target.closest("[data-hit]");
+    if (hit) pickResult((resultsEl.__results || [])[Number(hit.dataset.hit)]);
+  });
+  searchEl.addEventListener("blur", () => setTimeout(() => { if (state.search) closeSearch(); }, 120));
 
   // syncCanvas brings the drawing up to date with the model. It is a reconciliation
   // rather than a redraw because the panel edits on every keystroke: a redraw would
@@ -227,6 +375,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     sideEl.innerHTML = html;
     const body = sideEl.querySelector(".psec");
     if (body) groupifyPanel(body, groupCtl);
+    applyMemberFilter();
   }
 
   // The element header, the same shape the Modeler's panel uses: a type chip, the kind
@@ -280,11 +429,76 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       </div>`);
   }
 
+  // filteredFor is the class the member filter was typed for. See renderClassPanel.
+  let filteredFor = null;
+
+  // ---- finding a member, and finding a class -------------------------------
+  //
+  // A class with forty attributes is a scroll, and the one being looked for is in the
+  // middle of it. The filter narrows the table without touching the document: rows
+  // are hidden, never removed, so every row keeps the index its edit handlers and its
+  // reorder read — and the whole thing is a view state that dies with the selection.
+  //
+  // It is applied to the DOM rather than rendered into it, and that is the reason it
+  // works: the panel re-renders on every keystroke, so a filter that re-rendered
+  // would take the caret out of the field being typed in.
+  function memberFilterHTML(placeholder) {
+    return `<div class="im-filter">
+      <input type="search" id="im-member-filter" placeholder="${esc(placeholder)}"
+        value="${esc(state.memberFilter)}" aria-label="${esc(placeholder)}" autocomplete="off"/>
+      <span class="im-filter-count muted" id="im-member-count"></span>
+    </div>`;
+  }
+
+  // applyMemberFilter hides what does not match and says how much it hid. Reordering
+  // is refused while it is narrowed, because dragging a row past rows that are not
+  // on screen moves it somewhere nobody chose.
+  function applyMemberFilter() {
+    const rows = sideEl.querySelectorAll(".im-attrs tbody tr[data-member]");
+    const countEl = sideEl.querySelector("#im-member-count");
+    if (!rows.length) {
+      if (countEl) countEl.textContent = "";
+      return;
+    }
+    const q = state.memberFilter.trim().toLowerCase();
+    let shown = 0;
+    for (const row of rows) {
+      const match = !q || row.dataset.member.includes(q);
+      row.hidden = !match;
+      if (match) shown++;
+      const grip = row.querySelector(".im-grip");
+      if (grip) {
+        grip.classList.toggle("disabled", Boolean(q));
+        grip.title = q
+          ? "Clear the filter to reorder — dragging past rows that are hidden would move this somewhere nobody chose"
+          : "Drag to reorder — the order is the order the class box reads in";
+      }
+    }
+    if (countEl) {
+      countEl.textContent = q ? `${shown} of ${rows.length}` : "";
+      countEl.classList.toggle("none", q && shown === 0);
+    }
+    const empty = sideEl.querySelector(".im-filter-empty");
+    if (empty) empty.remove();
+    if (q && shown === 0) {
+      const table = sideEl.querySelector(".im-attrs");
+      table?.insertAdjacentHTML("afterend",
+        `<p class="im-filter-empty muted">Nothing here matches “${esc(state.memberFilter.trim())}”.</p>`);
+    }
+  }
+
   function renderClassPanel(c) {
+    // A filter typed for one class means nothing on the next, so it is dropped when
+    // the selection moves. Comparing here rather than at each of the places that set
+    // a selection is what makes that true for all of them.
+    if (filteredFor !== c.id) {
+      filteredFor = c.id;
+      state.memberFilter = "";
+    }
     const kind = stereotypeOf(c.stereotype);
     const findings = state.validation.findings.filter((f) => f.classId === c.id);
     const attrRows = (c.attributes || []).map((a, i) => `
-      <tr data-attr="${i}">
+      <tr data-attr="${i}" data-member="${esc(`${a.name} ${a.type}`.toLowerCase())}">
         <td class="im-grip" title="Drag to reorder — the order is the order the class box reads in"
             aria-label="Reorder">⠿</td>
         <td><input class="im-in" data-f="name" value="${esc(a.name)}" placeholder="name"/></td>
@@ -326,6 +540,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           <h3>Attributes</h3>
           <div class="field-actions">
             <button type="button" class="btn ghost small" data-act="add-attr">+ Attribute</button></div>
+          ${memberFilterHTML("Filter attributes by name or type…")}
           <table class="im-attrs"><thead><tr>
             <th></th><th>Name</th><th>Type</th><th>Card.</th><th title="Business key">⚿</th><th></th>
           </tr></thead><tbody>${attrRows || `<tr><td colspan="6" class="muted">No attributes yet.</td></tr>`}</tbody></table>
@@ -337,8 +552,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           <h3>Literals</h3>
           <div class="field-actions">
             <button type="button" class="btn ghost small" data-act="add-literal">+ Literal</button></div>
+          ${memberFilterHTML("Filter literals…")}
           <table class="im-attrs"><tbody>
-            ${(c.literals || []).map((lit, i) => `<tr data-lit="${i}">
+            ${(c.literals || []).map((lit, i) => `<tr data-lit="${i}" data-member="${esc(String(lit).toLowerCase())}">
               <td class="im-grip" title="Drag to reorder" aria-label="Reorder">⠿</td>
               <td><input class="im-in" data-f="literal" value="${esc(lit)}" placeholder="approved"/></td>
               <td><button type="button" class="icon-btn" data-act="del-literal" title="Remove">✕</button></td>
@@ -470,6 +686,14 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // a person just clicked is silently not selected.
   function onSideEdit(e) {
     const target = e.target;
+    // The filter is not an edit: it changes what is on screen, not what is in the
+    // document. Handling it here and returning is what keeps the caret in the field
+    // — every path below ends in a render, and a render rebuilds this panel.
+    if (target.id === "im-member-filter") {
+      state.memberFilter = target.value;
+      applyMemberFilter();
+      return;
+    }
     if (target.closest("#im-model-doc")) {
       if (state.model.documentation === target.value) return;
       state.model.documentation = target.value;
@@ -681,6 +905,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   });
 
   sideEl.addEventListener("dragstart", (e) => {
+    // Reordering past rows that are not on screen would move a member somewhere
+    // nobody chose, so a narrowed list does not reorder.
+    if (state.memberFilter.trim() && e.target.closest?.("tr[data-member]")) { e.preventDefault(); return; }
     const row = e.target.closest("tr[data-attr], tr[data-lit]");
     const at = listAt(row);
     if (!at) return;

@@ -14,6 +14,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The class canvas could not be zoomed, and a large model could not be searched.**
+  Two complaints from the same place: Data › Information model, on a model bigger
+  than the window.
+
+  **Zoom, pan and fit were there and invisible.** They have been the canvas's own
+  since it moved onto diagram-js ([ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md))
+  — the wheel scrolls, ctrl and the wheel zoom, a drag on empty sheet pans — and
+  nothing on the screen said so, so a diagram wider than the viewport could only be
+  scrolled at by somebody who already knew the gesture. The canvas now carries the
+  same three controls the Panorama canvas does, in the same corner with the same
+  icons and the same step, off the same CSS rather than a copy of it: zooming a
+  diagram is the same act on both surfaces, and a near-miss between two canvases a
+  person uses in one session is worse than either choice alone.
+
+  **And a model outgrows its window in two directions.** A sheet with thirty classes
+  on it, and a class with forty members in it — so there is now one search field in
+  the bar for both. It matches class names, attribute names, attribute *types* and
+  enumeration literals, and a hit says which class it is in (`Order · placedOn`).
+  Picking one selects the class, scrolls the sheet to it rather than fitting the
+  whole diagram, and — this is the point — narrows that class's panel to the member
+  that was searched for. Answering "where is `placedOn`" by selecting a class with
+  forty attributes and leaving the reader to scroll would hide the answer it just
+  gave.
+
+  The panel's filter is there on its own too, above the attributes and the literals,
+  matching name and type. It hides rows rather than removing them, so every row keeps
+  the index its editing and its reordering read, and it is applied to the DOM rather
+  than rendered — the panel re-renders on every keystroke, and a filter that
+  re-rendered would take the caret out of the field being typed in. Reordering is
+  refused while the list is narrowed, because dragging a row past rows that are not
+  on screen moves it somewhere nobody chose.
+
 - **Saving a layout onto a deployment was refused on diagrams nobody had edited.** The
   first real use of "Save layout to deployment" hit the guard that is supposed to catch a
   changed *process*, on a document whose process had not changed at all.
