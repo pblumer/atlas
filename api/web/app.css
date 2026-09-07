@@ -746,6 +746,19 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .panorama-tools > *, .im-tools > * { pointer-events: auto; }
 .panorama-tools .icon-btn, .im-tools .icon-btn { width: 30px; height: 28px; border-radius: 4px; font-weight: 700; }
 .im-tool-sep { height: 1px; margin: 3px 2px; background: var(--border); }
+/* An armed tool is a mode, and a mode has to be visible or it is a trap: the button
+   stays lit for exactly as long as the next drag draws a box instead of panning. */
+.im-tools .icon-btn.active { background: var(--accent); color: #fff; }
+.im-tools .icon-btn.active:hover { background: var(--accent); color: #fff; }
+.im-canvas.marquee, .im-canvas.marquee .djs-container { cursor: crosshair; }
+/* The list of what a box took hold of. Each line goes back to editing that one. */
+.im-many { display: flex; flex-direction: column; gap: 2px; }
+.im-many-row {
+  display: flex; gap: 8px; align-items: baseline; text-align: left; width: 100%;
+  padding: 4px 6px; border: 1px solid transparent; border-radius: 4px;
+  background: transparent; color: var(--text); font: inherit; cursor: pointer;
+}
+.im-many-row:hover { background: var(--bg); border-color: var(--border); }
 .panorama-canvas { flex: 1; min-width: 0; height: 100%; position: relative; overflow: hidden; background: var(--diagram-bg); }
 .panorama-canvas .djs-container { font-family: inherit; }
 .panorama-canvas .archimate-label { font: 600 12px/1.3 ui-sans-serif, system-ui, sans-serif; fill: #20252a; pointer-events: none; }
@@ -3750,6 +3763,7 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    width taken off every node, every label and every gap at once — the one view where
    the reading column costs more than it gives. */
 .starmap-mode main { max-width: none; }
+.infomodel-mode main { max-width: none; }
 .mesh-card { display: flex; flex-direction: column; gap: 12px; }
 /* One line, and it stays one line: the header is a row of controls, and a row that
    wraps into three stacked lines stops reading as one. What gives under pressure is

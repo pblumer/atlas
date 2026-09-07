@@ -1010,6 +1010,12 @@ function setChrome(appId, route) {
   // drops the centred column for the same reason the Tasks inbox does, and keeps the
   // padding.
   document.body.classList.toggle("starmap-mode", route === "#/panorama/starmap");
+  // A class diagram is a picture of a model for the same reason, and it is read the
+  // same way: the canvas fits the whole model into what it is given, so every pixel
+  // the centred column keeps is one taken off every box and every line between them.
+  // It is the drawing that wants the room, so this is the diagram's route and not the
+  // list of models beside it, which is a list and reads better in a column.
+  document.body.classList.toggle("infomodel-mode", route.startsWith("#/data/m/"));
 }
 
 // ---------- What's New ----------

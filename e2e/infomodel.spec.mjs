@@ -714,3 +714,140 @@ test.describe("room for a long member list", () => {
     expect(page.__errors).toEqual([]);
   });
 });
+
+// Taking hold of several classes at once. The gesture is diagram-js's lasso, and what
+// it needed was a way in: a plain drag on empty sheet pans — it has to, or a diagram
+// larger than its window could not be moved — so drawing a box is a mode, armed from
+// the control group or by holding Shift, as it is in the process modeler beside it.
+//
+// The part these tests exist for is what happens *after* the box: the canvas reports
+// the whole selection and the panel keeps it. Told only about the first of it, the
+// editor would put that one back as the selection and the other three would be gone
+// before anything could be done with them — a marquee that looks like it worked.
+test.describe("selecting several at once", () => {
+  const marquee = (page) => page.locator('#im-canvas [data-tool="marquee"]');
+
+  // A box drawn round the lower row — OrderStatus and Address — because those two
+  // have empty sheet on every side of them: the box has to *enclose* what it takes,
+  // and the upper row sits against the top edge of the window with nowhere to start.
+  // Neither the relationship (its waypoints are in the upper row) nor the data store
+  // below is inside it.
+  async function boxLowerRow(page, { shift = false } = {}) {
+    const left = await box(page, "OrderStatus").boundingBox();
+    const right = await box(page, "Address").boundingBox();
+    const x1 = Math.min(left.x, right.x) - 14;
+    const y1 = Math.min(left.y, right.y) - 14;
+    const x2 = Math.max(left.x + left.width, right.x + right.width) + 14;
+    const y2 = Math.max(left.y + left.height, right.y + right.height) + 14;
+    await page.mouse.move(x1, y1);
+    if (shift) await page.keyboard.down("Shift");
+    await page.mouse.down();
+    await page.mouse.move(x2, y2, { steps: 10 });
+    await page.mouse.up();
+    if (shift) await page.keyboard.up("Shift");
+  }
+
+  test("a box takes hold of what is inside it, and the panel says what it holds", async ({ page }) => {
+    await expect(marquee(page)).toHaveAttribute("aria-pressed", "false");
+    await marquee(page).click();
+    await expect(marquee(page)).toHaveAttribute("aria-pressed", "true");
+
+    await boxLowerRow(page);
+
+    // Both, and only both. Without the whole selection reaching the panel this is 1:
+    // the editor puts the first element back as the selection and drops the rest.
+    await expect(page.locator(".djs-element.selected")).toHaveCount(2);
+    await expect(box(page, "OrderStatus")).toHaveClass(/selected/);
+    await expect(box(page, "Address")).toHaveClass(/selected/);
+    await expect(page.locator(".phead b")).toHaveText("2 elements");
+    await expect(page.locator(".im-many-row")).toHaveCount(2);
+
+    // The mode is spent with the box. A button still lit would promise a gesture that
+    // is back to panning.
+    await expect(marquee(page)).toHaveAttribute("aria-pressed", "false");
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("Shift and drag draws the box without arming anything", async ({ page }) => {
+    await boxLowerRow(page, { shift: true });
+    await expect(page.locator(".djs-element.selected")).toHaveCount(2);
+    await expect(page.locator(".phead b")).toHaveText("2 elements");
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("dragging one of them moves them all, and the document keeps both", async ({ page }) => {
+    await marquee(page).click();
+    await boxLowerRow(page);
+
+    const before = {
+      status: await box(page, "OrderStatus").boundingBox(),
+      address: await box(page, "Address").boundingBox(),
+      order: await box(page, "Order").boundingBox(),
+    };
+    // Dragged by its header: a class's middle is where a relationship's hit line
+    // crosses it, and that line would take the press.
+    await page.mouse.move(before.status.x + 30, before.status.y + 12);
+    await page.mouse.down();
+    await page.mouse.move(before.status.x + 90, before.status.y + 52, { steps: 8 });
+    await page.mouse.up();
+
+    expect((await box(page, "OrderStatus").boundingBox()).x).toBeGreaterThan(before.status.x + 30);
+    expect((await box(page, "Address").boundingBox()).x).toBeGreaterThan(before.address.x + 30);
+    // What was not in the box stays where it was.
+    expect(Math.abs((await box(page, "Order").boundingBox()).x - before.order.x)).toBeLessThan(2);
+
+    await page.locator("#im-save").click();
+    await expect.poll(() => page.evaluate(() => window.__saved !== null)).toBe(true);
+    const saved = await page.evaluate(() => window.__saved.classes);
+    expect(saved.find((c) => c.name === "OrderStatus").x).toBeGreaterThan(40);
+    expect(saved.find((c) => c.name === "Address").x).toBeGreaterThan(340);
+    expect(saved.find((c) => c.name === "Order").x).toBe(340);
+    expect(page.__errors).toEqual([]);
+  });
+
+  // Undoing a move of several is where reading only what *differs* from the opened
+  // document goes wrong: the undo puts every box back, so nothing differs — and the
+  // document quietly keeps the positions that were just taken away.
+  test("moving several and undoing it leaves the document where it started", async ({ page }) => {
+    await marquee(page).click();
+    await boxLowerRow(page);
+    const at = await box(page, "OrderStatus").boundingBox();
+    await page.mouse.move(at.x + 30, at.y + 12);
+    await page.mouse.down();
+    await page.mouse.move(at.x + 90, at.y + 52, { steps: 8 });
+    await page.mouse.up();
+
+    await page.locator('#im-canvas [data-tool="undo"]').click();
+    await page.locator("#im-save").click();
+    await expect.poll(() => page.evaluate(() => window.__saved !== null)).toBe(true);
+    const saved = await page.evaluate(() => window.__saved.classes);
+    expect(saved.find((c) => c.name === "OrderStatus").x).toBe(40);
+    expect(saved.find((c) => c.name === "Address").x).toBe(340);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("a line in the list goes back to editing that one on its own", async ({ page }) => {
+    await marquee(page).click();
+    await boxLowerRow(page);
+    await page.locator(".im-many-row", { hasText: "Address" }).click();
+
+    await expect(page.locator("#im-c-name")).toHaveValue("Address");
+    await expect(page.locator(".djs-element.selected")).toHaveCount(1);
+    await expect(box(page, "Address")).toHaveClass(/selected/);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("Escape gives the drag back to panning", async ({ page }) => {
+    await marquee(page).click();
+    await expect(marquee(page)).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Escape");
+    await expect(marquee(page)).toHaveAttribute("aria-pressed", "false");
+
+    // The same gesture now moves the sheet, and takes hold of nothing.
+    const before = await box(page, "OrderStatus").boundingBox();
+    await boxLowerRow(page);
+    await expect(page.locator(".djs-element.selected")).toHaveCount(0);
+    expect((await box(page, "OrderStatus").boundingBox()).x).toBeGreaterThan(before.x + 20);
+    expect(page.__errors).toEqual([]);
+  });
+});
