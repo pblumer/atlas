@@ -181,27 +181,41 @@ func TestRecoverFromCheckpointNeedsNoPrefixSegments(t *testing.T) {
 
 // lastPositionIn reports the highest log position in a segment file, or 0 if it holds
 // no readable record.
+//
+// It reads the segment through the WAL's own reader rather than walking the framing
+// by hand: a copy of that framing here is a copy that goes stale the next time the
+// on-disk format changes, which is exactly what happened when batches replaced
+// per-record frames.
 func lastPositionIn(path string) (uint64, error) {
+	dir, err := os.MkdirTemp("", "seg")
+	if err != nil {
+		return 0, err
+	}
+	defer os.RemoveAll(dir)
 	blob, err := os.ReadFile(path)
 	if err != nil {
 		return 0, err
 	}
-	// Frames are [4-byte length | 4-byte CRC | payload]; walk them and decode each
-	// record's position, keeping the highest.
+	if err := os.WriteFile(filepath.Join(dir, filepath.Base(path)), blob, 0o644); err != nil {
+		return 0, err
+	}
+	l, err := wal.Open(wal.Options{Dir: dir})
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
 	var last uint64
-	for off := 0; off+8 <= len(blob); {
-		n := int(uint32(blob[off]) | uint32(blob[off+1])<<8 | uint32(blob[off+2])<<16 | uint32(blob[off+3])<<24)
-		if n <= 0 || off+8+n > len(blob) {
-			break
-		}
-		rec, err := model.ReadRecord(blob[off+8 : off+8+n])
-		if err != nil {
-			return 0, err
+	if err := l.Replay(func(data []byte) error {
+		rec, rerr := model.ReadRecord(data)
+		if rerr != nil {
+			return rerr
 		}
 		if rec.Header.Position > last {
 			last = rec.Header.Position
 		}
-		off += 8 + n
+		return nil
+	}); err != nil {
+		return 0, err
 	}
 	return last, nil
 }

@@ -191,6 +191,11 @@ direkte, projektgebundene und implizit zugeordnete Deployments.
 
 ### AP2 — Persistenzvertrag: F02 + F01 (L) · der eigentliche P0-Block
 
+> **Stand: F02 umgesetzt, F01 offen.** Das Batchformat steht, mit
+> Versionskopf, Abwärtskompatibilität für vorhandene Logs und einem Kind-Byte
+> je Eintrag, in das die Continuation aus F01 später einzieht. Die
+> Aufwandsschätzung für F01 unten war **falsch** — siehe den Kasten dort.
+
 Beide Befunde verlangen dieselbe Formatänderung. Ein Paket, ein Format, eine
 Migration.
 
@@ -245,6 +250,31 @@ ist total und lokal; Weg 2 ist eine Vollständigkeitsannahme, die mit jedem
 Feature neu gebrochen werden kann. Der Resume-Lauf muss in beiden Fällen
 **nach** dem Laden der Definitionen laufen, und normale Business-Behaviours
 dürfen nicht blind wiederholt werden (Doppeleffekte).
+
+> **Korrektur nach der Umsetzung von F02.** Oben steht, Weg 1 sei «vollständig
+> und billig, sobald die Hülle sowieso existiert». Die Hülle ist billig; Weg 1
+> ist es nicht. `engine.Command` trägt dreizehn Felder, nicht vier: neben
+> `Key`, `ValueType`, `Intent`, `Value` und `SourcePos` auch `StartVars`,
+> `StartElements`, `Decision`, `ToolCalls`, `Actor`, `Reason`, `Manual` und
+> `RetryBackoff`. Eine Continuation zu persistieren heisst also, einen zweiten
+> Codec neben dem Event-Codec zu bauen und zu pflegen.
+>
+> Das relativiert die Begründung, nicht die Empfehlung. Entlastend ist, dass
+> die **internen Followups** — die einzigen, die überleben müssen — eine
+> geschlossene, kleine Teilmenge benutzen: `Key`, `ValueType`, `Intent`,
+> `Value`, `SourcePos` und, nur an den beiden Anlage-Intents, `StartVars` und
+> `StartElements`. Die übrigen Felder reiten ausschliesslich auf extern
+> eingereichten Commands (Job-Completion, Variablenänderung,
+> Operator-Eingriff), und ein extern eingereichter, noch unbestätigter Command
+> darf nach einem Absturz verloren gehen — dieselbe Begründung, die F02 für
+> unbestätigte Commands gibt.
+>
+> Der Codec muss diese Teilmenge deshalb **erzwingen**, nicht annehmen: ein
+> Test, der die Felder von `Command` per Reflection aufzählt und fehlschlägt,
+> sobald ein neues auftaucht, das er nicht einordnet. Das ist dasselbe Muster
+> wie der Store-Registry-Test in AP3 — Vollständigkeit prüfen statt eine Liste
+> pflegen. Ohne ihn ist jedes künftige Feld ein stiller Datenverlust beim
+> Wiederanlauf.
 
 **ADR-Bedarf:** `draft-wal-batch-envelope`, `draft-durable-continuation`.
 Beide berühren I2 und I6 direkt und brauchen je einen Record.

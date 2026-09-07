@@ -2,8 +2,10 @@ package wal
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash/crc32"
 	"io"
 	"os"
@@ -100,7 +102,7 @@ func (l *Log) firstPosition(name string, positionOf func([]byte) (uint64, error)
 	defer f.Close()
 	var pos uint64
 	var ok bool
-	_, err = readFrames(f, func(data []byte) error {
+	_, err = readBatches(f, func(data []byte) error {
 		p, perr := positionOf(data)
 		if perr != nil {
 			return perr
@@ -120,23 +122,36 @@ func replaySegment(path string, fn func([]byte) error) error {
 		return err
 	}
 	defer f.Close()
-	_, err = readFrames(f, fn)
+	_, err = readBatches(f, fn)
 	return err
 }
 
-// readFrames reads length+CRC framed records from r, invoking fn (if non-nil)
-// for each valid one. It returns the byte offset of the end of the last valid
-// frame — the log's durable extent.
+// readBatches reads framed batches from r, invoking fn (if non-nil) for every
+// record inside each whole batch, in order. It returns the byte offset of the
+// end of the last valid batch — the log's durable extent.
 //
-// A frame that is incomplete (truncated header or payload) or fails its CRC is
-// treated as a torn tail from a crash mid-batch: reading stops cleanly and the
-// returned offset excludes it. Only the very end of the last-written segment
-// can legitimately be torn, because whole frames are written and fsynced before
-// a segment rolls.
-func readFrames(r io.Reader, fn func([]byte) error) (int64, error) {
+// A batch that is incomplete (truncated header or payload) or fails its CRC is
+// treated as a torn tail from a crash mid-write: reading stops cleanly and the
+// returned offset excludes it, so the batch is discarded entire rather than in
+// part. That is the whole point of framing a batch instead of a record: a single
+// write is not an atomic one, and every prefix of a per-record framing looked
+// like a shorter valid log (ADR-draft-wal-batch-envelope).
+//
+// A segment written before batch framing has no header and one record per frame.
+// It is read in that shape, which keeps an existing log readable across the
+// upgrade; those records were never batch-atomic on disk and cannot be made so
+// after the fact.
+func readBatches(r io.Reader, fn func([]byte) error) (int64, error) {
 	br := bufio.NewReader(r)
-	var consumed int64
-	var hdr [frameHeaderSize]byte
+	consumed := int64(0)
+	batched, err := consumeSegmentHeader(br)
+	if err != nil {
+		return 0, err
+	}
+	if batched {
+		consumed = segmentHeaderSize
+	}
+	var hdr [batchHeaderSize]byte
 	for {
 		if _, err := io.ReadFull(br, hdr[:]); err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
@@ -146,7 +161,7 @@ func readFrames(r io.Reader, fn func([]byte) error) (int64, error) {
 		}
 		n := binary.LittleEndian.Uint32(hdr[0:])
 		sum := binary.LittleEndian.Uint32(hdr[4:])
-		if n == 0 || int64(n) > maxRecordSize {
+		if n == 0 || int64(n) > maxBatchBytes {
 			return consumed, nil // corrupt or zeroed tail
 		}
 		payload := make([]byte, n)
@@ -154,15 +169,68 @@ func readFrames(r io.Reader, fn func([]byte) error) (int64, error) {
 			return consumed, nil // torn payload at tail
 		}
 		if crc32.Checksum(payload, castagnoli) != sum {
-			return consumed, nil // corrupt frame
+			return consumed, nil // corrupt batch
 		}
-		if fn != nil {
-			if err := fn(payload); err != nil {
-				return consumed, err
+		if !batched {
+			// Version 1: the frame's payload is the record.
+			if fn != nil {
+				if err := fn(payload); err != nil {
+					return consumed, err
+				}
 			}
+		} else if err := forEachEntry(payload, fn); err != nil {
+			return consumed, err
 		}
-		consumed += frameHeaderSize + int64(n)
+		consumed += batchHeaderSize + int64(n)
 	}
+}
+
+// consumeSegmentHeader reads and validates the version-2 segment header if one is
+// there, reporting whether the segment is batch-framed. A segment without the
+// magic is a version-1 file: nothing is consumed and the caller reads frames.
+func consumeSegmentHeader(br *bufio.Reader) (bool, error) {
+	hdr, err := br.Peek(segmentHeaderSize)
+	if err != nil || !bytes.Equal(hdr[:len(segmentMagic)], segmentMagic[:]) {
+		return false, nil // short file or no magic: version 1
+	}
+	if v := binary.LittleEndian.Uint32(hdr[len(segmentMagic):]); v != segmentVersion {
+		return false, fmt.Errorf("wal: segment is format version %d, which this build cannot read", v)
+	}
+	if _, err := br.Discard(segmentHeaderSize); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// forEachEntry walks the entries of a whole batch payload, handing every record
+// to fn. Only records are delivered: a batch may carry other kinds, and Replay's
+// contract is the events a caller folds.
+//
+// The payload has already passed its CRC, so a malformed entry here is not a torn
+// tail — it is a batch that is intact on disk and does not parse. That is
+// corruption, and it is returned as an error rather than swallowed as an end of
+// log.
+func forEachEntry(payload []byte, fn func([]byte) error) error {
+	for off := 0; off < len(payload); {
+		if off+entryHeaderSize > len(payload) {
+			return fmt.Errorf("wal: truncated entry header at byte %d of a checksummed batch", off)
+		}
+		n := int(binary.LittleEndian.Uint32(payload[off:]))
+		off += entryHeaderSize
+		if n < 1 || off+n > len(payload) {
+			return fmt.Errorf("wal: entry length %d out of range at byte %d of a checksummed batch", n, off)
+		}
+		kind, body := payload[off], payload[off+1:off+n]
+		off += n
+		if kind != entryRecord || fn == nil {
+			continue
+		}
+		// Copied: the contract is that fn's slice stays valid after it returns.
+		if err := fn(append([]byte(nil), body...)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Compact deletes the segments a replay after `after` would never open, returning how

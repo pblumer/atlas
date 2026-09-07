@@ -7,18 +7,18 @@ import (
 	"testing"
 )
 
-// errReader always fails with a non-EOF error, driving readFrames' read-error
+// errReader always fails with a non-EOF error, driving readBatches' read-error
 // return (as opposed to the clean torn-tail EOF handling).
 type errReader struct{}
 
 func (errReader) Read([]byte) (int, error) { return 0, errors.New("read boom") }
 
-// TestReadFramesReadError covers the branch where reading a frame header fails
-// with a genuine I/O error rather than EOF: readFrames surfaces it.
-func TestReadFramesReadError(t *testing.T) {
-	n, err := readFrames(errReader{}, nil)
+// TestReadBatchesReadError covers the branch where reading a batch header fails
+// with a genuine I/O error rather than EOF: readBatches surfaces it.
+func TestReadBatchesReadError(t *testing.T) {
+	n, err := readBatches(errReader{}, nil)
 	if err == nil {
-		t.Fatal("readFrames over an erroring reader: got nil error, want it surfaced")
+		t.Fatal("readBatches over an erroring reader: got nil error, want it surfaced")
 	}
 	if n != 0 {
 		t.Fatalf("consumed = %d, want 0", n)
