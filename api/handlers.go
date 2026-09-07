@@ -784,31 +784,59 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	projectID := r.URL.Query().Get("projectId")
 	hasProjectParam := r.URL.Query().Has("projectId")
 	pid, _ := processIdentity(body)
-	var (
-		resp           deployResp
-		compErr        error
-		persistErr     error
-		projErr        error
-		claimed        string
-		e              error
-		unknownProject bool
-	)
-	s.do(func() {
-		if !hasProjectParam {
-			if d, ok, e := s.drafts.Get(pid); e == nil && ok {
+
+	// Inherit the matching draft's project when the caller named none. A project
+	// that has since been deleted degrades to Ungrouped (ADR-0034) rather than
+	// failing the deploy over a stale record the caller does not own.
+	if !hasProjectParam {
+		var (
+			d       draft
+			ok      bool
+			readErr error
+		)
+		s.do(func() { d, ok, readErr = s.drafts.Get(pid) })
+		if readErr != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "read draft: "+readErr.Error())
+			return
+		}
+		if ok && d.ProjectID != "" {
+			var exists bool
+			s.do(func() { _, exists, readErr = s.projects.Get(d.ProjectID) })
+			if readErr != nil {
+				httpapi.Error(w, http.StatusInternalServerError, "read project: "+readErr.Error())
+				return
+			}
+			if exists {
 				projectID = d.ProjectID
 			}
-		} else if projectID != "" {
-			_, ok, e := s.projects.Get(projectID)
-			if e != nil {
-				projErr = e
-				return
-			}
-			if !ok {
-				unknownProject = true
-				return
-			}
 		}
+	}
+	// Filing a definition into a project is a write on that project, so it needs
+	// editor there — the check the project deploy path has always made, and the
+	// axis a role-per-route table cannot express (ADR-0071,
+	// ADR-draft-object-authorization). Without it the global modeler role was enough
+	// to publish a runnable definition into any private project whose id the caller
+	// knew, by naming it or by matching the process id of a draft filed in it.
+	//
+	// It runs before the message claim and before deployModel, so a refused deploy
+	// leaves behind neither a sidecar file nor a registry entry. It also has to stay
+	// outside the deploy's own do(): authorization reads the project store through a
+	// do() of its own, and Loop.Do is a rendezvous, so dispatching onto the loop from
+	// the loop would deadlock.
+	if projectID != "" {
+		if code, msg := s.authorizeTargetProject(r, projectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
+	var (
+		resp       deployResp
+		compErr    error
+		persistErr error
+		claimed    string
+		e          error
+	)
+	s.do(func() {
 		// The claim on a message name, checked before anything is persisted (ADR-0205):
 		// a definition that would be delivered somebody else's inbound events must not
 		// exist even briefly.
@@ -846,10 +874,6 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	switch {
-	case projErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "read project: "+projErr.Error())
-	case unknownProject:
-		httpapi.Error(w, http.StatusBadRequest, "unknown project id")
 	case compErr != nil:
 		// A compile failure is a client error: the submitted model is invalid.
 		httpapi.Error(w, http.StatusBadRequest, compErr.Error())

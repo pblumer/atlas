@@ -116,6 +116,12 @@ type Processor struct {
 	// same key would all read zero; this set closes that same-batch window. Cleared
 	// each batch (reused, not reallocated).
 	startsThisBatch map[startKeyIdent]struct{}
+	// terminatedThisBatch collects the process instances torn down during this
+	// batch, so advanceQueue can drop the work they still had scheduled. A cancel
+	// terminates what exists *now*; a command already queued for that instance would
+	// otherwise run in a later batch and rebuild what the teardown just removed. The
+	// map is reused across batches like startsThisBatch.
+	terminatedThisBatch map[uint64]struct{}
 }
 
 // startKeyIdent identifies a (definition, correlation key) pair for the per-batch
@@ -716,6 +722,9 @@ func (p *Processor) processBatch() error {
 	for k := range p.startsThisBatch {
 		delete(p.startsThisBatch, k) // reuse the map; empty by the next batch (ADR-0094)
 	}
+	for k := range p.terminatedThisBatch {
+		delete(p.terminatedThisBatch, k)
+	}
 
 	tx := p.store.NewTransaction()
 	p.tx = tx
@@ -868,7 +877,44 @@ func (p *Processor) processOne(cmd Command) {
 func (p *Processor) advanceQueue(n int) {
 	p.queueScratch = append(p.queueScratch[:0], p.queue[n:]...)
 	p.queueScratch = append(p.queueScratch, p.followups...)
+	if len(p.terminatedThisBatch) > 0 {
+		kept := p.queueScratch[:0]
+		for i := range p.queueScratch {
+			if pi := commandInstanceKey(&p.queueScratch[i]); pi != 0 {
+				if _, gone := p.terminatedThisBatch[pi]; gone {
+					continue
+				}
+			}
+			kept = append(kept, p.queueScratch[i])
+		}
+		p.queueScratch = kept
+	}
 	p.queue, p.queueScratch = p.queueScratch, p.queue
+}
+
+// commandInstanceKey is the process instance whose *execution* a queued command
+// would advance, or 0 when it names none. Only the three token-carrying value
+// types answer: an element, a job and a timer each record the instance they
+// belong to, and each would rebuild a piece of an execution after that instance
+// is gone.
+//
+// Process-instance commands are deliberately excluded, for two reasons. Their key
+// does not mean one thing — a creation mints its instance key in the handler, so
+// cmd.Key is not an instance at all there — and their handlers already retire
+// themselves against a missing instance. More importantly, one of them must
+// survive: IntentPurging operates on an instance that has *already* finished, and
+// dropping it would leave history that is never purged.
+func commandInstanceKey(cmd *Command) uint64 {
+	switch cmd.ValueType {
+	case model.VTElementInstance:
+		return cmd.Value.element.ProcessInstanceKey
+	case model.VTJob:
+		return cmd.Value.job.ProcessInstanceKey
+	case model.VTTimer:
+		return cmd.Value.timer.ProcessInstanceKey
+	default:
+		return 0
+	}
 }
 
 func (p *Processor) fail(err error) {

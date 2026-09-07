@@ -128,6 +128,12 @@ behoben» eine Behauptung statt einer Messung.
 
 ### AP1 — Sofortmassnahmen (S) · F09, F10, F17, F07
 
+> **Stand: umgesetzt.** Alle vier Befunde sind behoben, mit Regressionstests in
+> der Standardsuite und drei ADR-Entwürfen. Zwei Punkte weichen von der Planung
+> unten ab und stehen dort, wo sie auffielen: F07 brauchte einen zweiten Eingriff
+> (die Queue), und die Durchsicht der Commit-Lesezugriffe fiel kleiner aus als
+> erwartet.
+
 Vier Befunde, die klein, isoliert und ohne Abhängigkeit zum Persistenzumbau
 sind. Sie zuerst zu machen, kostet den grossen Umbau nichts und schliesst zwei
 Rechtelücken sofort.
@@ -138,6 +144,34 @@ Rechtelücken sofort.
 | **F10** Rollenentzug wirkt nicht in laufenden Sessions | `sessionStore.setUserRoles(userID, roles)` analog zu `setUserGroupMembership`, aufgerufen aus `handlePatchUser`. Das Muster existiert; es fehlt nur für Rollen. Für API-Tokens mit bewusst eigenständigen Rechten den Unterschied in der Oberfläche ausweisen statt ihn anzugleichen. | S |
 | **F17** Keine Lese-/Idle-Timeouts | `ReadHeaderTimeout` und `IdleTimeout` auf beiden `http.Server` explizit setzen, `ReadTimeout` bewusst wählen. **Kein** globales `WriteTimeout` — Long-Polling und gestreamte Backups brauchen abgestimmte Fristen; die betroffenen Endpunkte erhalten sie pro Handler. | S |
 | **F07** Abbruch übersieht Kind aus demselben Batch | `ChildInstancesOf` über `c.tx` statt `c.p.store` lesen. Danach **jeden** verbleibenden `c.p.store`-Lesezugriff in `engine/behavior.go` einzeln daraufhin prüfen, ob er absichtlich nur über Commitgrenzen arbeitet; das Ergebnis dieser Durchsicht gehört in den ADR. | S–M |
+
+**Was AP1 gegenüber dieser Planung gelernt hat.**
+
+*Die Durchsicht war kleiner als gedacht.* Im ganzen `engine`-Paket gehen genau
+**zwei** Lesezugriffe am `c.tx` vorbei — `ChildInstancesOf` (der Fehler) und
+`ForEachStartTimer`, das beim Deployment läuft und nicht im Batchkontext eines
+Prozesses. `engine/behavior.go` selbst hat keinen einzigen. Die befürchtete
+Fläche existiert nicht.
+
+*F07 brauchte einen zweiten Eingriff.* Der transaktionale Lesezugriff findet das
+Kind, reicht aber nicht: die Abbruchkaskade stellt für das Kind ein
+Terminating-Command ein, während dessen eigenes Start-Event schon in der Queue
+liegt. Das läuft zuerst und baut genau die Ausführung wieder auf, die der Abbruch
+entfernt — übrig blieben eine Elementinstanz und ein aktivierbarer Job. Eine
+terminierte Instanz verliert deshalb jetzt ihre noch nicht verarbeitete Arbeit
+(`advanceQueue`). Commands sind nie persistiert und werden nie repliziert (I6),
+also ändert das, was als Nächstes läuft, und nichts an dem, was die Recovery
+rekonstruiert.
+
+*Dabei ist ein eigener Defekt aufgefallen, der nicht zu F07 gehört.* Der erste
+Versuch war ein breiter Wächter: keine Elementaktivierung für eine Instanz, die
+nicht mehr lebt. Er brach die Kompensation — bei einem Compensation-Throw wird
+die Instanz **abgeschlossen**, bevor ihr Token das Throw-Event verlassen hat, und
+`park` entsteht heute auf einer bereits abgeschlossenen Instanz. Das ist ein
+echter Fehler in der Scope-Zählung, der bisher nur deshalb nicht auffällt, weil
+niemand hinsieht. Er ist hier bewusst **nicht** behoben — ein Fix für den Abbruch
+darf nicht still das Verhalten beim Abschluss ändern — und im ADR beschrieben.
+Kandidat für ein eigenes Befund-Register.
 
 **ADR-Bedarf:** `draft-object-authorization` (beginnt hier mit F09, wird in
 AP5 vollendet); `draft-session-role-revocation` (verhält sich zu ADR-0185/0044);

@@ -166,11 +166,17 @@ func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey
 // are collected before the caller acts on them, as the walk did, so the caller may
 // emit events for each without disturbing the read.
 //
-// Committed state only, deliberately: the teardown must be a pure function of what
-// is durable (I6), exactly as the walk it replaced was.
+// Read through the transaction, so a child activated earlier in this same batch is
+// visible to the teardown. ADR-0238 originally read the committed store here and
+// called that a determinism measure; it is not one. The records this transaction
+// has already applied are a deterministic function of the commands processed so
+// far — replay applies the same records in the same order — so seeing them is as
+// reproducible as not seeing them, and strictly more correct. What the committed
+// view actually produced was a child that outlived the caller cancelled in the
+// batch that created it (ADR-draft-transactional-child-view).
 func (c *ProcessingContext) ChildInstancesOf(callElKey uint64) []uint64 {
 	var children []uint64
-	if err := c.p.store.ChildInstancesOfParent(callElKey, func(childPiKey uint64) error {
+	if err := c.tx.ChildInstancesOfParent(callElKey, func(childPiKey uint64) error {
 		children = append(children, childPiKey)
 		return nil
 	}); err != nil {

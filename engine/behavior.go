@@ -128,6 +128,21 @@ func (p *Processor) registerBehaviors() {
 // each start event.
 func handleProcessInstanceActivating(c *ProcessingContext) {
 	defKey := c.cmd.Value.process.ProcessDefKey
+	// A child creation names the call activity that will resume when it finishes.
+	// If that element instance is already gone, the caller was cancelled between
+	// scheduling this command and running it, and starting the child now would
+	// produce an execution with nobody to report back to — the same orphan a cancel
+	// arriving the other way round produces, from the other side of the batch
+	// boundary (ADR-draft-transactional-child-view). Read through the transaction so
+	// a teardown applied earlier in this very batch counts.
+	//
+	// Only child creations are gated: an API, timer, message or signal start carries
+	// no parent element and must always be free to start.
+	if parentEl := c.cmd.Value.process.ParentElementInstanceKey; parentEl != 0 {
+		if c.GetElementInstance(parentEl) == nil {
+			return
+		}
+	}
 	piKey := c.NewKey()
 	cp := c.process(defKey)
 
@@ -283,6 +298,23 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 		}
 	})
 	c.AppendProcessInstanceEvent(piKey, model.IntentTerminated, terminated)
+	// A cancel tears down what exists now, and the work this instance still had
+	// scheduled has to go with it. That work is not hypothetical: a call activity's
+	// child can be created and its caller cancelled in one batch, which leaves the
+	// child's own start event queued at the moment the teardown cascades into it.
+	// Left in the queue it would activate against a terminated instance a batch
+	// later and rebuild the execution the cancel just removed — an element instance
+	// and an activatable job belonging to nobody
+	// (ADR-draft-transactional-child-view).
+	//
+	// This is scheduling, not state: commands are never persisted and never
+	// replayed (I6), so dropping them changes what runs next and nothing about what
+	// recovery rebuilds. A waiting timer, subscription or job is left alone, as
+	// before — those self-retire when they fire and find no element instance.
+	if c.p.terminatedThisBatch == nil {
+		c.p.terminatedThisBatch = make(map[uint64]struct{})
+	}
+	c.p.terminatedThisBatch[piKey] = struct{}{}
 }
 
 // handleProcessInstancePurging hard-deletes a finished instance's history (ADR-0115):

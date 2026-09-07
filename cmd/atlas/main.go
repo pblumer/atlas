@@ -727,7 +727,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	}
 	defer srv.Close()
 
-	httpSrv := &http.Server{Addr: addr, Handler: srv.Handler(), TLSConfig: serverTLS}
+	httpSrv := newHTTPServer(addr, srv.Handler(), serverTLS)
 	listeners := []httpListener{{srv: httpSrv, serve: func() error {
 		if !tlsOn {
 			return httpSrv.ListenAndServe()
@@ -738,7 +738,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		return httpSrv.ListenAndServeTLS("", "")
 	}}}
 	if loopbackLn != nil {
-		loopbackSrv := &http.Server{Handler: srv.Handler()}
+		loopbackSrv := newHTTPServer("", srv.Handler(), nil)
 		listeners = append(listeners, httpListener{srv: loopbackSrv, serve: func() error {
 			return loopbackSrv.Serve(loopbackLn)
 		}})
@@ -1153,7 +1153,10 @@ func runMockRemedy(args []string) error {
 // subcommands land here: a mock is a foreground dev aid, so it stays out of the
 // server's structured logging and shuts down on the signal a terminal sends.
 func runMockServer(addr string, handler http.Handler) error {
-	httpSrv := &http.Server{Addr: addr, Handler: handler}
+	// The same timeout contract as the real listeners. A mock is a dev aid and not
+	// an exposure worth reasoning about, but leaving one server in the binary on
+	// Go's unbounded defaults is how the next reader learns the wrong default.
+	httpSrv := newHTTPServer(addr, handler, nil)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errCh := make(chan error, 1)
