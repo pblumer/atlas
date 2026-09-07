@@ -152,7 +152,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/workers/{id}/jobs":    "operator diagnostics about a worker process, not an agent action",
 	"GET /api/v1/workers/{id}/history": "the same diagnostics, read from the operator's own clio; an agent with access to that clio queries it there",
 
-	// Task folders (ADR-draft-task-folders-are-saved-filters) are one person's saved
+	// Task folders (ADR-0268) are one person's saved
 	// filters over their own inbox — a preference, like the sort order or the column
 	// width, not a fact about the engine. An agent has no folders, because it has no
 	// sidebar; and giving it these tools would let it rearrange somebody else's

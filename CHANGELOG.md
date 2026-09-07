@@ -59,7 +59,7 @@ _Changed_ / _Removed_ for each version.
 
   New: `GET/POST/PUT/DELETE /api/v1/task-folders`, `/task-folders/fields`,
   `/task-folders/counts`, `/task-folders/preview`, and `?folder=<id>` on `/api/v1/tasks`.
-  See `docs/adr/draft-task-folders-are-saved-filters.md`.
+  See `docs/adr/0268-task-folders-are-saved-filters.md`.
 
 - **The console speaks German, on the screens that have been translated.** The interface
   was English, hard-coded wherever a string appears. That does not hold for the Tasks app:
@@ -75,7 +75,7 @@ _Changed_ / _Removed_ for each version.
 
   The boundary is the API: the server sends ids and model data, never interface text.
   Translation proceeds per screen rather than per release; the folders are the first.
-  See `docs/adr/draft-console-speaks-german-first.md`.
+  See `docs/adr/0267-console-speaks-german-first.md`.
 
 - **Every task row shows its key.** A queue of a dozen identically named tasks was
   unreadable: nothing on the row told them apart, so there was no way to say which one you

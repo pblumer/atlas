@@ -10,7 +10,7 @@ import (
 
 // TestFolderCatalogueHasMessagesForEveryFieldAndOperator holds the seam the
 // folder editor is built across: the server publishes field and operator *ids*
-// and the console owns the words (ADR-draft-console-speaks-german-first).
+// and the console owns the words (ADR-0267).
 //
 // That split has exactly one failure mode. Adding a field or an operator to the
 // catalogue in Go is a one-line change, and the editor then draws a listbox entry

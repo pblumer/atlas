@@ -6650,7 +6650,7 @@ function dueInfo(t) {
 // They are evaluated in the browser over the loaded page, which is what they have
 // always done. The folders a person *makes* are not: those are a saved rule the
 // server evaluates over the whole open-task population
-// (ADR-draft-task-folders-are-saved-filters), because a filter that only sees the
+// (ADR-0268), because a filter that only sees the
 // capped page would report an empty folder while matching work exists.
 const TASK_FOLDERS = [
   { id: "all", label: "All tasks", match: () => true },

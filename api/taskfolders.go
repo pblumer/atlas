@@ -14,7 +14,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// The server half of the Tasks app's folders (ADR-draft-task-folders-are-saved-filters).
+// The server half of the Tasks app's folders (ADR-0268).
 // The taskfolder service owns what a folder *is* — the rule, the generated FEEL,
 // the store; this file is the part that only the server can do: fill the editor's
 // value lists from the deployments and the directory, and walk the open user tasks

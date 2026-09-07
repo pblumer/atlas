@@ -1,4 +1,4 @@
-# ADR-DRAFT: The console speaks German first, through a catalogue rather than a rewrite
+# ADR-0267: The console speaks German first, through a catalogue rather than a rewrite
 
 - **Status:** Proposed
 - **Date:** 2026-09-07
@@ -106,4 +106,4 @@ through the catalogue. Nothing else has to change, and nothing else is blocked.
 ## Links
 
 - constrained by [ADR-0012](0012-web-ui-app-shell.md) (buildless UI)
-- first adopted by ADR-draft-task-folders-are-saved-filters
+- first adopted by ADR-0268

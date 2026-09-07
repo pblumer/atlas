@@ -1,4 +1,4 @@
-# ADR-DRAFT: Task folders are saved filters, stored as rules and generated into FEEL
+# ADR-0268: Task folders are saved filters, stored as rules and generated into FEEL
 
 - **Status:** Proposed
 - **Date:** 2026-09-07
@@ -136,4 +136,4 @@ be mistyped, because it is never typed.
 
 - builds on [ADR-0028](0028-forms-and-the-tasks-app.md) (the Tasks app), [ADR-0042](0042-user-task-assignment-and-claim.md) / [ADR-0045](0045-user-task-assignment-bound-to-identity.md) (assignee), [ADR-0121](0121-bpmn-lanes.md) (lanes)
 - rests on [ADR-0008](0008-feel-expression-strategy.md) (compile once), [ADR-0239](0239-off-loop-queries.md) (off-loop queries), [ADR-0147](0147-splitting-the-api-server-object.md) (a new API area is a service), [ADR-0180](0180-groups-as-members.md) (identity groups)
-- interface language: ADR-draft-console-speaks-german-first
+- interface language: ADR-0267

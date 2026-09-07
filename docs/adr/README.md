@@ -320,6 +320,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0264](0264-row-watch-mark-per-watch.md) | A row watch's idempotency mark is its own, and the cursor is why that needs no migration | Proposed |
 | [0265](0265-login-off-the-run-loop.md) | Signing in does not wait for the run loop | Proposed |
 | [0266](0266-stats-and-incidents-off-the-loop.md) | The runtime counts leave the run loop, and take the write paths with them | Proposed |
+| [0267](0267-console-speaks-german-first.md) | The console speaks German first, through a catalogue rather than a rewrite | Proposed |
+| [0268](0268-task-folders-are-saved-filters.md) | Task folders are saved filters, stored as rules and generated into FEEL | Proposed |
 
 ## Status values
 

@@ -1,4 +1,4 @@
-// The console's message catalogue (ADR-draft-console-speaks-german-first).
+// The console's message catalogue (ADR-0267).
 //
 // Atlas's console was written in English, hard-coded at every call site. The
 // Tasks app is where that stopped being tenable: its folders are built and read

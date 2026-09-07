@@ -60,7 +60,7 @@ type Counts struct {
 // its deployment lookup.
 type CountFunc func(matchers []*Matcher, u User) (perMatcher []int, total int, truncated bool, err error)
 
-// Service serves the task-folder area (ADR-draft-task-folders-are-saved-filters).
+// Service serves the task-folder area (ADR-0268).
 // Build it with [New].
 type Service struct {
 	// loop is the single-writer boundary: every store access below runs on it, and

@@ -3965,7 +3965,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ?folder= scopes the list to one saved folder's rule
-	// (ADR-draft-task-folders-are-saved-filters). It is answered off the run loop,
+	// (ADR-0268). It is answered off the run loop,
 	// because a filtered page has to keep scanning past the tasks the rule rejects
 	// and that walk grows with the open-task population, unlike the capped page
 	// below.

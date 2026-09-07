@@ -403,7 +403,7 @@ func (s *Server) apiRoutes() []apiRoute {
 
 		// The Tasks app's folders: a saved filter over the inbox, built from
 		// listboxes and stored as a rule the server turns into FEEL
-		// (ADR-draft-task-folders-are-saved-filters). Everything here is RoleUser —
+		// (ADR-0268). Everything here is RoleUser —
 		// a folder is a person's own view of the work they may already see, and it
 		// grants no access to a task their role does not already reach.
 		{"GET", "/api/v1/task-folders", s.taskFolders.HandleList, apiOp{

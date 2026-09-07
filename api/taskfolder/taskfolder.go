@@ -1,7 +1,7 @@
 // Package taskfolder serves the Tasks app's folders: the saved filters a person
 // builds for themselves out of listboxes, so a recurring question ("what is open
 // on customer enquiries?") becomes a place in the sidebar instead of something
-// retyped into the search box every morning (ADR-draft-task-folders-are-saved-filters).
+// retyped into the search box every morning (ADR-0268).
 //
 // A folder stores a *rule*, not an expression. The rule is a small structured
 // document — a match mode and a list of field/operator/value conditions — and the

@@ -1,4 +1,4 @@
-// The Tasks app's folder editor (ADR-draft-task-folders-are-saved-filters).
+// The Tasks app's folder editor (ADR-0268).
 //
 // A folder is a saved filter, and this is where somebody builds one. The rule it
 // produces is a structured document — a match mode and a list of field/operator/
