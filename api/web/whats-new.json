@@ -2,6 +2,51 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-waiting-task-badge-on-the-live-diagram-counted-its-own-p",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The waiting-task marker on the live diagram tells the truth again",
+        "de": "Die Marke für wartende Aufgaben im Live-Diagramm sagt wieder die Wahrheit"
+      },
+      "summary": {
+        "en": "A user task on the live diagram carries a 📋 link that takes you to the work waiting on it. On a busy process that link used to print a number, and the number was wrong: a task with 1 275 people's work parked on it said \"500\", and went on saying \"500\" however many of them were completed in the Tasks app. Nothing was stuck. 500 is simply as many tasks as one request for the inbox ever returns, and the link was counting what it had been handed — so it could not move until the queue fell below 500. Worse, the same limit applies across every process at once, so enough waiting tasks somewhere else made the link vanish from a task that plainly had people waiting on it. The link now takes both its facts — whether to show it, and whether it opens the form directly or the inbox — from the engine's own count of what is sitting on that element, which is exact however many there are. It no longer prints a number of its own: the green badge on the same shape is that number, it always was right, and it is the one that goes down as the queue is worked. Two more things in the same corner: isolating one instance now asks for that instance's tasks directly, so its form stays one click away even when hundreds of thousands of others are waiting; and completing a task in the Tasks app now refreshes the inbox properly, so the \"more exist\" note disappears once the backlog is gone and \"Load older\" keeps its place.",
+        "de": "Eine Benutzeraufgabe im Live-Diagramm trägt eine 📋-Verknüpfung, die zur wartenden Arbeit führt. Bei einem gut ausgelasteten Prozess stand auf dieser Verknüpfung eine Zahl, und die war falsch: Eine Aufgabe, auf der die Arbeit von 1 275 Personen lag, zeigte «500» — und zeigte weiterhin «500», wie viele davon in der Tasks-App auch abgeschlossen wurden. Es hing nichts. 500 ist schlicht die Zahl an Aufgaben, die eine Abfrage des Postkorbs höchstens zurückgibt, und die Verknüpfung zählte, was sie erhalten hatte — bewegen konnte sie sich also erst, wenn die Warteschlange unter 500 fällt. Schlimmer noch: Dieselbe Grenze gilt über alle Prozesse zusammen, genügend wartende Aufgaben anderswo liessen die Verknüpfung an einer Aufgabe, auf die sichtbar Leute warteten, ganz verschwinden. Beide Angaben — ob die Verknüpfung erscheint und ob sie direkt das Formular oder den Postkorb öffnet — stammen jetzt aus dem Zähler der Engine für das, was auf diesem Element liegt; der ist exakt, wie viele es auch sind. Eine eigene Zahl schreibt die Verknüpfung nicht mehr: Das grüne Badge am selben Element ist diese Zahl, war immer richtig, und ist die, die sinkt, während die Warteschlange abgearbeitet wird. Zwei weitere Dinge an derselben Stelle: Wird eine einzelne Instanz herausgegriffen, werden jetzt gezielt deren Aufgaben abgefragt — ihr Formular bleibt einen Klick entfernt, auch wenn Hunderttausende andere warten; und beim Abschliessen einer Aufgabe wird der Postkorb richtig neu geladen, sodass der Hinweis «weitere vorhanden» verschwindet, sobald der Rückstau weg ist, und «Ältere laden» seine Stelle behält."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Tasks"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations › Processes and pick a process whose user task has a queue of waiting work on it.",
+          "Open its live view. The user task carries a green badge — how many are waiting right now — and a 📋 link in its upper corner.",
+          "Hover the 📋: with one task waiting it says it opens that task's form, with several it says it opens the inbox. The count itself is the green badge.",
+          "Open the Tasks app in a second tab and complete a few of those tasks.",
+          "Back on the diagram, watch the green badge come down by what you completed — at any queue length, not only under 500."
+        ],
+        "de": [
+          "Öffnen Sie Operations › Processes und wählen Sie einen Prozess, dessen Benutzeraufgabe eine Warteschlange hat.",
+          "Öffnen Sie die Live-Ansicht. Die Benutzeraufgabe trägt ein grünes Badge — wie viele gerade warten — und oben in der Ecke eine 📋-Verknüpfung.",
+          "Fahren Sie über die 📋: Wartet eine einzige Aufgabe, öffnet sie deren Formular; warten mehrere, öffnet sie den Postkorb. Die Zahl selbst steht im grünen Badge.",
+          "Öffnen Sie die Tasks-App in einem zweiten Tab und schliessen Sie einige dieser Aufgaben ab.",
+          "Zurück im Diagramm: Das grüne Badge sinkt um genau das, was Sie abgeschlossen haben — bei jeder Warteschlangenlänge, nicht erst unter 500."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "saving-a-layout-onto-a-deployment-was-refused-on-diagrams-no",
       "version": "Unreleased",
       "date": null,
@@ -342,53 +387,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-live-diagram-tells-a-token-that-got-through-from-one-tha",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The diagram now says which event actually arrived",
-        "de": "Das Diagramm sagt jetzt, welches Ereignis wirklich eingetroffen ist"
-      },
-      "summary": {
-        "en": "Every element on the live diagram carries two counts: how many tokens sit there now, in green, and how many have been there, in gray. The gray one counted every token that had arrived and left again — whether it finished and moved on, or was cancelled. Nowhere did that hurt more than at an event-based gateway, the \"wait for a reply, otherwise time out\" pattern: the engine arms every branch at once, so one waiting case holds a token on each of them, and every decided race leaves one branch completed and the other cancelled. Both branches therefore showed the same two numbers whatever had happened — 10 941 gray and 50 002 green on the message branch, and exactly the same on the timer branch, which reads as \"both events arrive equally often\" and never meant that. Two things change. Gray now means completed here and moved on, and a new amber count means cancelled here — so at each branch you can read how often that event actually came, and how often the other one beat it. And the race itself is drawn as the one wait it is: the green count sits on the gateway, and the events behind it are outlined dashed instead of each repeating that count — what that outline means is in the legend under the diagram. The old cancellations are not lost, either: Atlas has recorded every one of them in each case’s history trail all along, and rebuilds the counts from it once when the engine starts, so the numbers are right for what already happened and not only for what happens next. Only cases whose history has already been deleted cannot be counted back.",
-        "de": "Jedes Element im Live-Diagramm trägt zwei Zahlen: wie viele Token gerade hier liegen (grün) und wie viele schon hier waren (grau). Die graue zählte jeden Token, der angekommen und wieder weg war — egal ob er fertig weitergelaufen oder abgebrochen worden ist. Nirgends störte das mehr als am ereignisbasierten Gateway, dem Muster „warte auf Antwort, sonst Timeout“: die Engine macht alle Zweige gleichzeitig scharf, ein wartender Fall hält also auf jedem Zweig einen Token, und jedes entschiedene Rennen lässt einen Zweig abgeschlossen und den anderen abgebrochen zurück. Beide Zweige zeigten deshalb dieselben zwei Zahlen, was auch immer passiert war — 10 941 grau und 50 002 grün am Nachrichten-Zweig und genau dasselbe am Timer-Zweig, was sich liest wie „beide Ereignisse treffen gleich oft ein“ und das nie bedeutet hat. Zwei Dinge ändern sich. Grau heisst jetzt hier abgeschlossen und weitergelaufen, und eine neue bernsteinfarbene Zahl heisst hier abgebrochen — am Zweig selbst steht also, wie oft dieses Ereignis wirklich kam und wie oft das andere schneller war. Und das Rennen wird als das eine Warten gezeichnet, das es ist: die grüne Zahl steht am Gateway, die Ereignisse dahinter sind nur noch gestrichelt umrandet — was das heisst, steht in der Legende unter dem Diagramm. Die alten Abbrüche sind auch nicht verloren: Atlas hat jeden einzelnen von Anfang an in der Verlaufsspur jedes Falls mitgeschrieben und baut die Zahlen daraus einmalig beim Start neu auf. Die Zahlen stimmen also für das, was schon passiert ist, und nicht erst ab jetzt. Nur Fälle, deren Historie bereits gelöscht wurde, lassen sich nicht mehr nachzählen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Events"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations › Processes and pick a process with an event-based gateway — the handbook's \"Antwort oder Timeout\" recipe deploys one in a click.",
-          "Start an instance. The green count appears on the gateway itself; the two events behind it are outlined dashed — the legend under the diagram says what that means.",
-          "Let one branch win: the recipe's ▶ Try it button publishes the message for you (or POST it yourself to /api/v1/messages).",
-          "The branch that won carries a gray 1 — completed here and moved on. The branch that lost carries an amber 1 — cancelled here.",
-          "Hover either badge: the tooltip spells out which of the two it is.",
-          "Switch the instance picker from \"All instances\" to a single one to read the same thing for that case alone."
-        ],
-        "de": [
-          "Öffnen Sie Operations › Processes und wählen Sie einen Prozess mit ereignisbasiertem Gateway — das Rezept „Antwort oder Timeout“ im Handbuch deployt einen per Klick.",
-          "Starten Sie eine Instanz. Die grüne Zahl steht am Gateway selbst; die beiden Ereignisse dahinter sind gestrichelt umrandet — die Legende unter dem Diagramm sagt, was das heisst.",
-          "Lassen Sie einen Zweig gewinnen: Der Knopf ▶ Ausprobieren im Rezept publiziert die Nachricht (oder Sie schicken sie selbst per POST an /api/v1/messages).",
-          "Der Zweig, der gewonnen hat, trägt eine graue 1 — hier abgeschlossen und weitergelaufen. Der unterlegene trägt eine bernsteinfarbene 1 — hier abgebrochen.",
-          "Fahren Sie über eine der Zahlen: der Tooltip sagt, welche der beiden es ist.",
-          "Stellen Sie die Instanzauswahl von „All instances“ auf eine einzelne um — dieselbe Lesart, nur für diesen Fall."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]
