@@ -1,10 +1,12 @@
 package engine
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/wal"
 )
 
 // TestEveryCommandFieldIsClassified is the guard that keeps the continuation
@@ -171,5 +173,54 @@ func TestContinuationRejectsCorruption(t *testing.T) {
 				t.Fatal("a malformed continuation decoded without error")
 			}
 		})
+	}
+}
+
+// TestHighestRestoredCounterIgnoresForeignKeys: only this partition's keys move
+// its counter. A key another partition minted says nothing about which numbers
+// this one has handed out, and treating it as a high-water mark would skip a
+// whole range of this partition's keys.
+func TestHighestRestoredCounterIgnoresForeignKeys(t *testing.T) {
+	cmds := []Command{
+		{Key: model.NewKey(1, 5)},
+		{Key: model.NewKey(2, 9999)}, // another partition's
+		{Key: model.NewKey(1, 12)},
+		{Key: 0}, // a creation mints its key in the handler and carries none
+	}
+	if got := highestRestoredCounter(1, cmds); got != 12 {
+		t.Errorf("highestRestoredCounter = %d, want 12 (this partition's highest)", got)
+	}
+	if got := highestRestoredCounter(3, cmds); got != 0 {
+		t.Errorf("highestRestoredCounter for an uninvolved partition = %d, want 0", got)
+	}
+}
+
+// TestRecoveryRefusesACorruptContinuation: a continuation that does not parse
+// rode inside a batch that passed its checksum, so those bytes are the bytes that
+// were written. Resuming anyway would mean resuming with less work than the
+// engine owes — silently, and with no way to notice. Recovery must refuse.
+func TestRecoveryRefusesACorruptContinuation(t *testing.T) {
+	dir := t.TempDir()
+	l, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	// A well-formed batch whose continuation claims one command and carries none.
+	if err := l.Append([]byte("not-a-record-but-framed-fine")); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := l.AppendContinuation([]byte{1, 0, 0, 0}); err != nil {
+		t.Fatalf("AppendContinuation: %v", err)
+	}
+	if err := l.Sync(); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	l.Close()
+
+	p, l2, s := openAt(t, dir, "state")
+	defer l2.Close()
+	defer s.Close()
+	if err := p.Recover(); err == nil {
+		t.Fatal("recovery accepted a continuation that does not parse; it must refuse rather than resume owing less")
 	}
 }
