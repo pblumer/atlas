@@ -1,4 +1,4 @@
-# ADR-DRAFT: Discord as an inbound event source — a channel is a log, and a snowflake is its sequence
+# ADR-0262: Discord as an inbound event source — a channel is a log, and a snowflake is its sequence
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

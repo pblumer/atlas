@@ -84,7 +84,7 @@ type inboundSubscription struct {
 	FolderID string `json:"folderId,omitempty"`
 
 	// ChannelID is a *Discord watch*: the channel whose messages are published
-	// (ADR-draft-discord-inbound-watch). A thread is itself a channel, so watching one
+	// (ADR-0262). A thread is itself a channel, so watching one
 	// is the same field with the thread's id.
 	//
 	// Unlike every source since clio, this one needs nothing else. A channel is a log:

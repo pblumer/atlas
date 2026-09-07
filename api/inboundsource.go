@@ -682,7 +682,7 @@ func driveFileFields(rec inboundSubscription, file map[string]any, field string)
 // discordSource reads a channel's messages, oldest first.
 //
 // It is clio's shape and not Jira's, and that is the whole design
-// (ADR-draft-discord-inbound-watch). A channel is a log: a message id is a snowflake,
+// (ADR-0262). A channel is a log: a message id is a snowflake,
 // monotonic by construction and never moved by an edit, and `after` bounds that
 // sequence exactly rather than querying an index that lags the write. So the sequence
 // is the snowflake itself, there is no lag knob and no cursor field, and the mark stays
