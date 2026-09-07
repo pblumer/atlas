@@ -11497,6 +11497,74 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     clockEl.textContent = `${shown} / ${frames.length}${shown ? ` · ${fmtClock(frames[shown - 1].at)}` : ""}`;
   }
 
+  // --- A deferred choice, drawn once (ADR-0110, ADR-0249) ---
+  //
+  // An event-based gateway arms every branch's catch at once, so a waiting instance holds
+  // a token on each branch and none on the gateway. The live view stopped drawing that
+  // literally — the race is one wait however many branches it has, so it is shown once, on
+  // the gateway, and the branches are outlined armed instead. The replay said the same
+  // moment differently: N token dots on N branches, and N entries in the token legend, for
+  // one wait. This is that rule, applied to the frame the replay is showing.
+  //
+  // The group is read off the diagram exactly as the live view reads it — a catch joins
+  // its gateway's race only when that gateway is its sole way in — so a catch reachable
+  // from elsewhere keeps its own token.
+  const armedBranches = new Map(); // catch id → the event gateway that arms it
+  const raceWidth = new Map();     // gateway id → how many branches it arms
+  for (const [gw, branches] of eventGatewayRaces(registry)) {
+    raceWidth.set(gw, branches.length);
+    for (const id of branches) armedBranches.set(id, gw);
+  }
+
+  // tokenKey identifies one token on one element — two tokens can sit on the same
+  // element, and one token id can appear on two of them across a fold.
+  const tokenKey = (t) => `${t.elementId}\u0000${t.tokenId}`;
+
+  // collapseRaces rewrites a frame's tokens into what the diagram should show: the forks
+  // of one armed race become a single token on their gateway, and the branches they sat
+  // on are named so they can be outlined armed rather than drawn as waits of their own.
+  //
+  // Which fork belongs to which race is not guessed: every armed catch is a fork of the
+  // gateway's own token (`parentTokenId`), so siblings group exactly, and two races
+  // running concurrently on one gateway stay two races.
+  //
+  // A group is only a race while *every* branch the gateway arms holds one of its forks.
+  // Once an event has fired and the losers are cancelled, what is left on a branch is a
+  // token running there — the winner — and it is drawn as one. That is the same rule the
+  // live view applies with its minimum over the branches.
+  function collapseRaces(tokens) {
+    const groups = new Map();
+    for (const t of tokens) {
+      const gw = armedBranches.get(t.elementId);
+      if (!gw || !t.parentTokenId) continue;
+      const k = `${gw}\u0000${t.parentTokenId}`;
+      if (!groups.has(k)) groups.set(k, { gw, tokenId: t.parentTokenId, forks: [] });
+      groups.get(k).forks.push(t);
+    }
+    const armed = new Set();  // element ids outlined armed
+    const folded = new Set(); // the forks the races below stand in for
+    const races = [];
+    for (const g of groups.values()) {
+      if (g.forks.length !== raceWidth.get(g.gw)) continue;
+      for (const f of g.forks) { armed.add(f.elementId); folded.add(tokenKey(f)); }
+      races.push(g);
+    }
+    if (!races.length) return { drawn: tokens, armed };
+    const drawn = tokens.filter((t) => !folded.has(tokenKey(t)));
+    for (const race of races) {
+      // Between arming its branches and completing, the gateway still holds the very
+      // token the race is — the forks are forks *of* it — so that token becomes the race
+      // rather than a second dot beside it.
+      const held = drawn.findIndex((t) => t.elementId === race.gw && t.tokenId === race.tokenId);
+      if (held >= 0) drawn[held] = { ...drawn[held], race: race.forks.length };
+      else drawn.push({ tokenId: race.tokenId, elementId: race.gw, state: "active", race: race.forks.length });
+    }
+    // Frames arrive in token order and the collapsed race is appended, so restore it:
+    // the dots on the diagram and the chips below it read in the same order.
+    drawn.sort((a, b) => (a.tokenId === b.tokenId ? 0 : a.tokenId < b.tokenId ? -1 : 1));
+    return { drawn, armed };
+  }
+
   // renderOverlay paints the current frame: every element a live token sits on is
   // highlighted (green, or orange while waiting at a join) and carries a colored
   // token dot; elements only walked earlier are grayed. An element that holds a
@@ -11510,12 +11578,21 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     while (dotLayer.firstChild) dotLayer.removeChild(dotLayer.firstChild);
     const frame = playhead ? frames[playhead - 1] : null;
     const position = frame ? frame.position : 0;
-    const tokens = frame ? frame.tokens : [];
+    const { drawn: tokens, armed } = collapseRaces(frame ? frame.tokens : []);
     const liveOn = new Set(tokens.map((t) => t.elementId));
     for (const s of steps.filter((item) => item.position <= position)) {
-      if (liveOn.has(s.elementId) || !registry.get(s.elementId)) continue;
+      if (liveOn.has(s.elementId) || armed.has(s.elementId) || !registry.get(s.elementId)) continue;
       canvas.addMarker(s.elementId, "atlas-visited");
       marked.push([s.elementId, "atlas-visited"]);
+    }
+    // An armed branch is live — its catch is waiting — but it is not where the wait is
+    // counted, so it is outlined and left without a token dot of its own. What the dashed
+    // outline means is said on the race's own chip below, once, rather than beside every
+    // branch of every race.
+    for (const elId of armed) {
+      if (liveOn.has(elId) || !registry.get(elId)) continue;
+      canvas.addMarker(elId, "atlas-armed");
+      marked.push([elId, "atlas-armed"]);
     }
     // Several tokens on one node — both arrivals at a join, a loop's body and the round
     // running under it — fan out along its top edge instead of stacking. They are grouped
@@ -11547,9 +11624,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       marked.push([elId, "atlas-incident"]);
     }
     const legend = root.querySelector("#token-legend");
+    const raceTitle = "An event-based gateway arms every branch at once, so the engine parks a token on each of them and none on the gateway. The wait is one race however many branches it has, so the replay draws it once — here, on the gateway — and outlines the armed branches dashed.";
     legend.innerHTML = tokens.length ? tokens.map((token) =>
-      `<span class="token-chip"><i style="--token-color:${tokenColor(token.tokenId)}">#</i>` +
-      `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)" : ""}</span>`).join("")
+      `<span class="token-chip"${token.race ? ` title="${esc(raceTitle)}"` : ""}>` +
+      `<i style="--token-color:${tokenColor(token.tokenId)}">#</i>` +
+      `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)"
+        : token.race ? ` (waiting for the first of ${token.race} events)` : ""}</span>`).join("")
       : `<span class="muted">No active tokens in this frame</span>`;
     applySelection();
   }

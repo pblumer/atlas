@@ -14,6 +14,40 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The replay drew a deferred choice as several tokens, and parked one on the gateway
+  that was not there.** The live diagram stopped drawing an event-based gateway's race
+  literally in [ADR-0249](docs/adr/0249-overlay-cancelled-tokens.md): the engine arms
+  every branch's catch at once ([ADR-0110](docs/adr/0110-event-based-gateways.md)), so a
+  waiting instance holds a token on each branch and none on the gateway, and drawn
+  one-for-one that says the same wait once per branch. The step-by-step instance replay
+  still drew it the old way — a token dot on every branch and a chip for each of them in
+  the legend below — so the two views described the same moment differently, which is what
+  a reader of both actually reported.
+
+  Two things were wrong, and the second one was a token drawn where no token was. The
+  frame fold ([ADR-0046](docs/adr/0046-single-process-step-replay.md),
+  [ADR-0136](docs/adr/0136-terminated-tokens-in-the-replay.md)) keeps a completed
+  element's token visible until the activation it causes appears, so the token never
+  flickers out between the two. An event gateway is the one element whose successors
+  activate *before* it completes — it arms the branches on activation and only then
+  completes itself, taking no outgoing flow of its own — so it waited for an arrival that
+  had already been and gone, and its token stayed on the gateway for the rest of the
+  replay. On a looping model that is a race drawn as still running a full round after it
+  was decided, which is what a production instance showed: three tokens on a two-branch
+  race, one of them a ghost.
+
+  The gateway's token is now released when it completes, like a leaf's and a loop round's
+  — the other two hand-offs that go to nobody. And the replay draws the race the way the
+  live view does: one token on the **gateway**, the armed branches outlined dashed and
+  without a dot of their own, and one chip in the legend that names the race and says what
+  it is waiting for — *waiting for the first of 2 events* — rather than one chip per
+  branch. The rule is read off the diagram, exactly as the live view reads it (a catch
+  joins its gateway's race only when that gateway is its sole way in), and off the token
+  that forked it: every armed catch is a fork of the gateway's own token, so two races
+  running at once on one gateway stay two races. Once an event has fired and the losers
+  are cancelled, what is left on a branch is the winner running there, and it is drawn as
+  itself again.
+
 - **The class canvas could not take hold of more than one class at a time.**
   [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md) put the canvas on diagram-js
   for marquee selection among other things, and the marquee was the one it did not
