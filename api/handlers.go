@@ -20,6 +20,7 @@ import (
 	"github.com/pblumer/atlas/connector/agent"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
@@ -5648,6 +5649,19 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"sheet": j.Sheet, "range": j.Range, "title": j.Title, "folder": j.Folder,
 			"values": j.Values, "input": j.Input, "header": j.Header,
 			"requestId": j.RequestID, "resultVariable": j.ResultVariable,
+		}}
+	case compiler.DiscordJobTypeIndex:
+		// The channel, the message and the body travel; the bot token does not exist
+		// here to travel. Same split as Jira's above (ADR-0258).
+		j, err := discord.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "discord", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "channel": j.Channel,
+			"message": j.Message, "content": j.Content, "name": j.Name,
+			"after": j.After, "maxResults": j.MaxResults, "fields": j.Fields,
+			"nonce": j.Nonce, "resultVariable": j.ResultVariable,
 		}}
 	case compiler.MsSqlJobTypeIndex, compiler.MariaDBJobTypeIndex, compiler.PostgresJobTypeIndex:
 		// The statement and its bound parameters travel; the DSN does not exist here
