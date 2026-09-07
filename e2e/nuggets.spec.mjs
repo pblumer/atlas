@@ -152,6 +152,157 @@ test("the chapter and its nuggets read in both languages", async ({ page }) => {
   }
 });
 
+// ---- full screen, for showing a nugget to a room ----
+// The shots are 1200x703 and screens are not, so the full-screen stage keeps
+// the picture's own ratio instead of filling the screen. That is the whole
+// point of the following test: the highlight and the cursor are percentages of
+// the *stage*, so a stage wider than the picture inside it puts the ring beside
+// the button instead of on it — which is what the first build did, with the
+// rectangle hanging off the left edge. Nothing throws when that happens; the
+// ring simply points at nothing, in front of an audience.
+async function frames(host) {
+  return await host.evaluate((h) => {
+    const img = h.querySelector(".nug-scene.on img");
+    const hi = h.querySelector(".nug-hi");
+    const r = (e) => { const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height }; };
+    return { img: r(img), hi: hi.hidden ? null : r(hi), natural: img.naturalWidth / img.naturalHeight };
+  });
+}
+
+test("full screen keeps the highlight on the picture, at every screen shape", async ({ page }) => {
+  await page.goto("/handbuch.html");
+  const nug = page.locator('[data-nugget="user"]');
+  await nug.scrollIntoViewIfNeeded();
+  // The button is only offered where the browser allows it, so its absence
+  // here would mean the capability check itself is broken.
+  await expect(nug.locator('[data-act="full"]')).toHaveCount(1);
+  await nug.locator('[data-act="full"]').click();
+  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+  // Somebody who went full screen is presenting: the first scene runs without
+  // a second click.
+  await expect(nug.locator('[data-act="toggle"]')).toHaveText("⏸");
+
+  for (const size of [{ width: 1280, height: 720 }, { width: 1024, height: 768 }]) {
+    await page.setViewportSize(size);
+    await nug.locator('.nug-steps i[data-i="0"]').click();
+    const { img, hi, natural } = await frames(nug);
+    const where = `${size.width}x${size.height}`;
+    expect(hi, `${where}: scene 0 lost its highlight`).toBeTruthy();
+    expect(img.w, `${where}: no picture`).toBeGreaterThan(200);
+    // This assertion has to come first, and it carries more than it looks like.
+    // The rectangles below are the <img> element's box, and an element box is
+    // not the visible picture: under object-fit:contain the box still fills its
+    // stage while the picture is letterboxed inside it, so a ring "inside the
+    // box" can still sit on grey. The two coincide only when the box already
+    // carries the picture's own ratio — which is exactly what the full-screen
+    // stage is shaped for, and what this checks. It also rules out the other
+    // way to fill a stage of the wrong shape: stretching the screenshot.
+    expect(img.w / img.h, `${where}: the screenshot is stretched`).toBeCloseTo(natural, 2);
+    // Half a pixel of slack for the browser's own rounding; anything more is
+    // the ring sitting outside the frame.
+    expect(hi.x, `${where}: ring starts left of the picture`).toBeGreaterThanOrEqual(img.x - 0.5);
+    expect(hi.y, `${where}: ring starts above the picture`).toBeGreaterThanOrEqual(img.y - 0.5);
+    expect(hi.x + hi.w, `${where}: ring runs off the right edge`).toBeLessThanOrEqual(img.x + img.w + 0.5);
+    expect(hi.y + hi.h, `${where}: ring runs off the bottom`).toBeLessThanOrEqual(img.y + img.h + 0.5);
+  }
+});
+
+test("in full screen the keyboard drives the nugget, and only there", async ({ page }) => {
+  await page.goto("/handbuch.html");
+  const nug = page.locator('[data-nugget="user"]');
+  await nug.scrollIntoViewIfNeeded();
+  await nug.locator(".nug-play").click();
+  await nug.locator('[data-act="toggle"]').click();          // pause, so nothing advances on its own
+  await expect(nug.locator('[data-act="toggle"]')).toHaveText("▶");
+
+  // Outside full screen the arrows belong to the page. Binding them anyway
+  // would take scrolling away from anyone reading the handbook.
+  await nug.evaluate((h) => h.focus());
+  await page.keyboard.press("ArrowRight");
+  await expect(nug.locator('.nug-steps i[data-i="0"]')).toHaveClass(/on/);
+
+  await nug.locator('[data-act="full"]').click();
+  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+  await page.keyboard.press("ArrowRight");
+  await expect(nug.locator('.nug-steps i[data-i="1"]')).toHaveClass(/on/);
+  await page.keyboard.press("ArrowLeft");
+  await expect(nug.locator('.nug-steps i[data-i="0"]')).toHaveClass(/on/);
+  await page.keyboard.press("End");
+  const last = catalogue().nuggets.find((n) => n.id === "user").scenes.length - 1;
+  await expect(nug.locator(`.nug-steps i[data-i="${last}"]`)).toHaveClass(/on/);
+  await page.keyboard.press("Home");
+  await expect(nug.locator('.nug-steps i[data-i="0"]')).toHaveClass(/on/);
+  await page.keyboard.press(" ");
+  await expect(nug.locator('[data-act="toggle"]')).toHaveText("⏸");
+  await page.keyboard.press(" ");
+  await expect(nug.locator('[data-act="toggle"]')).toHaveText("▶");
+});
+
+// The full-screen surround is dark, and the page around it is not: anything in
+// a caption that carries its own background from the light theme comes along
+// unchanged. The role nuggets say their role as <code>, so this is not a corner
+// case — it is the one word the scene is about, and it went light-on-light in
+// the first build.
+test("full screen leaves nothing in the caption unreadable", async ({ page }) => {
+  await page.goto("/handbuch.html");
+  const nug = page.locator('[data-nugget="user"]');
+  await nug.scrollIntoViewIfNeeded();
+  await nug.locator('[data-act="full"]').click();
+  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+  await nug.locator('.nug-steps i[data-i="0"]').click();
+
+  const worst = await nug.evaluate((h) => {
+    // WCAG relative luminance, so "readable" is a number rather than a look.
+    const lum = (c) => {
+      const [r, g, b] = c.match(/[\d.]+/g).slice(0, 3).map((v) => {
+        const x = v / 255;
+        return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (a, b) => {
+      const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m);
+      return (x + 0.05) / (y + 0.05);
+    };
+    const bg = (e) => {
+      for (let n = e; n; n = n.parentElement) {
+        const c = getComputedStyle(n).backgroundColor;
+        if (c && !/rgba\(0, 0, 0, 0\)|transparent/.test(c)) return c;
+      }
+      return "rgb(255, 255, 255)";
+    };
+    let low = { sel: "(nichts)", r: Infinity };
+    for (const el of h.querySelectorAll(".nug-cap, .nug-cap *, .nug-head, .nug-head *")) {
+      if (!el.textContent.trim()) continue;
+      const cs = getComputedStyle(el);
+      const r = ratio(cs.color, bg(el));
+      if (r < low.r) low = { sel: el.tagName.toLowerCase() + "." + (el.className || "-"), r };
+    }
+    return low;
+  });
+  // 4.5:1 is the WCAG AA threshold for body text; the failure this guards
+  // against scored about 1.05.
+  expect(worst.r, `${worst.sel} has a contrast of ${worst.r.toFixed(2)}:1`).toBeGreaterThan(4.5);
+});
+
+// Escape is the usual way out of full screen, and it does not pass through the
+// page. A nugget that kept running after it would go on animating behind
+// whatever the presenter switched to.
+test("leaving full screen stops the run", async ({ page }) => {
+  await page.goto("/handbuch.html");
+  const nug = page.locator('[data-nugget="operator"]');
+  await nug.scrollIntoViewIfNeeded();
+  await nug.locator('[data-act="full"]').click();
+  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+  await expect(nug.locator('[data-act="toggle"]')).toHaveText("⏸");
+  await page.evaluate(() => document.exitFullscreen());
+  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
+  await expect(nug.locator('[data-act="toggle"]')).toHaveText("▶");
+  const stopped = await nug.locator(".nug-pos").textContent();
+  await page.waitForTimeout(900);
+  expect(await nug.locator(".nug-pos").textContent()).toBe(stopped);
+});
+
 // The #nug-data block is generated from scripts/nuggets/scenes.mjs by
 // scripts/nuggets/capture.mjs, which also takes the screenshots — the two are
 // one artifact in two files. Editing the block by hand, or changing scenes.mjs

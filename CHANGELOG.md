@@ -14,6 +14,68 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The training nuggets play full screen, for showing one to a room.** A nugget sat in
+  the flow of the handbook at reading size, which is right for reading and wrong for the
+  case it keeps being used for: an onboarding session with the thing on a projector. The
+  ⛶ button hands the nugget the whole screen — dark surround, the caption set large and
+  centred underneath, and the space bar, arrow keys, Home and End driving it, so the
+  presenter is not aiming a mouse at a 24-pixel control. Going full screen starts the run
+  if nothing has played yet; leaving it stops the run rather than letting it animate on
+  behind whatever came next. The keys bind to the nugget only while it owns the screen —
+  bound globally they would take space and the arrows away from anyone scrolling the
+  handbook.
+
+  The picture keeps its own shape instead of filling the screen. That is not cosmetic and
+  it cost a build to learn: the highlight ring and the cursor are percentages *of the
+  stage*, so a stage wider than the picture inside it puts the ring beside the button
+  instead of on it — and a ring pointing at nothing looks exactly like a ring pointing at
+  something. The full-screen stage therefore carries the shots' 1200×703 and is centred in
+  what is left. `e2e/nuggets.spec.mjs` measures the ring against the picture at two screen
+  shapes; the check that does the work there is the one on the picture's aspect ratio,
+  because an `<img>` element box goes on filling its stage even when the picture inside it
+  does not.
+
+  Where a browser has no Fullscreen API, or an embedding forbids it, the button is not
+  offered rather than offered and inert.
+
+- **A weekly job asks whether the handbook's screenshots still match the product.**
+  `make nuggets` re-takes them, but nobody re-takes screenshots on a schedule — and
+  staleness here is silent: a shot of a UI that has since moved still renders, and a
+  highlight ring drawn on a button that moved still looks deliberate. Nothing throws.
+  The reader finds out months later, by looking for a button where the picture put it.
+
+  The **Nugget screenshots** workflow runs `capture.mjs --check` every Monday: it starts
+  a throwaway Atlas exactly as the capture does, measures where every highlighted element
+  actually is, and compares that against the committed block. It writes nothing — no
+  images, no commits. A difference opens an issue labelled `nuggets-stale` naming the
+  targets that moved, with the measurements; a difference still there the following week
+  comments on that issue instead of opening a second one.
+
+  Deliberately the cheap half. Regenerating and committing the images automatically would
+  keep the chapter current without anybody looking, at the price of a bot writing ~800 KB
+  of image data into the history on a schedule — and of captions drifting away from
+  pictures nobody read.
+
+  **Two bugs in the capture surfaced while proving the check works, and both were mine.**
+  The first run reported the UI had moved when it had not: an earlier capture that
+  outlived its `timeout` was still serving on the port, the next run seeded *that* engine
+  on top, and the process list grew by four rows between runs. `capture.mjs` now refuses
+  to run against a server it did not start, and kills its own on a signal rather than only
+  in a `finally` block that a signal skips. The second was in the comparison itself —
+  matching a measurement to the nearest committed rectangle is guesswork the moment two
+  targets sit close together, and Claim and Complete are neighbours on the task pane. The
+  target's name now travels with its rectangle, so the comparison is exact.
+
+  The generated block gains that `target` name per highlight; `e2e/nuggets.spec.mjs`
+  holds it against `scenes.mjs` like everything else.
+
+- **The README says which images a re-take actually changes.** Measured rather than
+  assumed: seven of the twenty, and always the same seven — the ones carrying a clock or
+  a live count. A diff touching only those is the capture re-photographing the clock; a
+  diff touching the other thirteen means something moved.
+
+### Added
+
 - **The nugget screenshots are output now, not artifacts somebody once made.** Their
   pictures are captures of the running product, which buys recognition and costs
   staleness: a shot of a UI that has since moved still renders, and a ring drawn on a

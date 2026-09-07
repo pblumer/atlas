@@ -1,0 +1,119 @@
+name: Nugget screenshots
+
+# The handbook's training nuggets are captures of the running product, because a
+# learner is meant to recognise the screen later. That buys recognition and costs
+# staleness — and staleness here is silent: a shot of a UI that has since moved
+# still renders, and a highlight ring drawn on a button that moved still looks
+# deliberate. Nothing throws. The reader is the one who finds out, months later,
+# by looking for a button where the picture put it.
+#
+# `make nuggets` re-takes the set, but nobody re-takes screenshots on a schedule.
+# So this asks the question weekly instead: start a throwaway Atlas, measure
+# where every highlighted element actually is, and compare against what the
+# committed shots say. It writes nothing — no images, no commits. A difference
+# opens an issue naming the targets that moved.
+#
+# It is deliberately the cheap half of the job. Regenerating and committing the
+# images automatically would keep the chapter current on its own, at the price of
+# a bot writing ~800KB of image data into the history on a schedule, and of
+# captions silently drifting away from pictures nobody read. A person re-taking
+# them after being told is the slower loop that keeps a human eye on the captions.
+
+on:
+  schedule:
+    # Monday morning, early enough that a difference is waiting when the week
+    # starts rather than landing in the middle of it.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nuggets-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: the UI still matches the screenshots
+    runs-on: ubuntu-latest
+    # Builds Atlas, runs it, drives twenty screens. Takes ~4 minutes; the cap is
+    # here because a browser job's expensive failure is the hang, not the error.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      # capture.mjs borrows Playwright from e2e/ rather than carrying a second copy.
+      - name: Install dependencies
+        working-directory: e2e
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: e2e
+        # Same reasoning as the e2e job in ci.yml: bound the apt-backed install so a
+        # stalled mirror stops the step instead of holding the runner, then fall back
+        # to the browser-only install.
+        run: |
+          timeout 5m npx playwright install --with-deps chromium \
+            || npx playwright install chromium
+
+      - name: Compare the UI against the committed screenshots
+        id: check
+        run: |
+          set -o pipefail
+          node scripts/nuggets/capture.mjs --check 2>&1 | tee check.log
+
+      # Only when the step above failed. A red scheduled run is easy to miss for a
+      # week; an issue is not, and it carries the measurements with it.
+      - name: Open an issue for the drift
+        if: failure() && steps.check.conclusion == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # One open issue at a time: the drift does not become a different problem
+          # by being a week older, and a new issue every Monday is how a label gets
+          # muted.
+          existing="$(gh issue list --label nuggets-stale --state open \
+            --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            echo "issue #$existing is already open for this; commenting instead"
+            gh issue comment "$existing" --body "Still drifting as of $(date -u +%Y-%m-%d). [Run]($RUN_URL)"
+            exit 0
+          fi
+          # The label may not exist yet on a fresh checkout of this workflow.
+          gh label create nuggets-stale --color D93F0B \
+            --description "The handbook's nugget screenshots no longer match the UI" 2>/dev/null || true
+          {
+            echo "The weekly check found elements that have moved since the handbook's"
+            echo "training-nugget screenshots were taken. The pictures still render, and"
+            echo "the highlight rings still look deliberate — they are just pointing at"
+            echo "where those elements used to be."
+            echo
+            echo '```'
+            sed -n '/has moved out from under/,$p' check.log | head -40
+            echo '```'
+            echo
+            echo "To fix: \`make nuggets\`, then **read every caption against its new"
+            echo "picture** — a caption that no longer describes its shot is the one"
+            echo "failure no test catches. Commit the images and the handbook together;"
+            echo "they are one artifact in two files."
+            echo
+            echo "See \`scripts/nuggets/README.md\`. [Workflow run]($RUN_URL)"
+          } > body.md
+          gh issue create --title "The nugget screenshots no longer match the UI" \
+            --label nuggets-stale --body-file body.md
