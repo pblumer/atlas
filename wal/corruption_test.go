@@ -206,3 +206,83 @@ func TestCompactedPrefixIsNotAHole(t *testing.T) {
 	defer l.Close()
 	wantEntries(t, replayAll(t, l), "B", "C")
 }
+
+// TestEveryKindOfDamageInASealedSegmentIsReported: the acceptance criterion asks
+// for checksum, length and truncation faults, not just the checksum one. A sealed
+// segment cannot have been left in any of those shapes by a crash, so all three
+// are damage and all three must say so.
+//
+// The shapes differ in how the reader meets them — a bad length is rejected before
+// any payload is read, a short payload runs out mid-read, a bad checksum needs the
+// whole batch first — and each took its own path to the "is this a tail?" decision.
+// Testing one of the three would have left the other two free to be wrong.
+func TestEveryKindOfDamageInASealedSegmentIsReported(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		damage func(t *testing.T, path string)
+	}{
+		{
+			name: "checksum does not match",
+			damage: func(t *testing.T, path string) {
+				flipByteAt(t, path, 25) // inside the batch payload
+			},
+		},
+		{
+			name: "length prefix is nonsense",
+			damage: func(t *testing.T, path string) {
+				f, err := os.OpenFile(path, os.O_RDWR, 0)
+				if err != nil {
+					t.Fatalf("open: %v", err)
+				}
+				defer f.Close()
+				// Zero the batch length, the shape a partially-zeroed write leaves.
+				if _, err := f.WriteAt([]byte{0, 0, 0, 0}, segmentHeaderBytes); err != nil {
+					t.Fatalf("write: %v", err)
+				}
+			},
+		},
+		{
+			name: "payload cut short",
+			damage: func(t *testing.T, path string) {
+				st, err := os.Stat(path)
+				if err != nil {
+					t.Fatalf("stat: %v", err)
+				}
+				if err := os.Truncate(path, st.Size()-3); err != nil {
+					t.Fatalf("truncate: %v", err)
+				}
+			},
+		},
+		{
+			name: "segment header cut short",
+			damage: func(t *testing.T, path string) {
+				if err := os.Truncate(path, 5); err != nil {
+					t.Fatalf("truncate: %v", err)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			paths := sealedLog(t, dir)
+			tc.damage(t, paths[1]) // the middle segment: sealed, with one after it
+
+			l, err := wal.Open(wal.Options{Dir: dir})
+			if err != nil {
+				return // refusing to open is the loud answer too
+			}
+			defer l.Close()
+			var got []string
+			if rerr := l.Replay(func(data []byte) error {
+				got = append(got, string(data))
+				return nil
+			}); rerr == nil {
+				t.Fatalf("replay of a sealed segment with %s returned %q and no error", tc.name, got)
+			}
+		})
+	}
+}
+
+// segmentHeaderBytes is the size of the version-2 segment preamble, spelled out
+// here so a test can reach past it without importing the package's internals.
+const segmentHeaderBytes = 16

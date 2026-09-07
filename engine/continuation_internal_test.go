@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/binary"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -222,5 +223,116 @@ func TestRecoveryRefusesACorruptContinuation(t *testing.T) {
 	defer s.Close()
 	if err := p.Recover(); err == nil {
 		t.Fatal("recovery accepted a continuation that does not parse; it must refuse rather than resume owing less")
+	}
+}
+
+// TestContinuationCorruptionIsCaughtAtEveryStage walks the decoder's structure and
+// damages each stage in turn.
+//
+// The stages fail differently — a command record that does not decode, a length
+// that points past the end, a start variable that decodes to something that is not
+// a variable — and each has its own way of being wrong. A decoder that caught the
+// first and not the rest would still let a restart resume with fewer commands than
+// the log recorded, which is the failure the whole continuation exists to prevent.
+// The point of this test is that "does not parse" is answered the same way
+// everywhere: an error, never a shorter queue.
+func TestContinuationCorruptionIsCaughtAtEveryStage(t *testing.T) {
+	valid := encodeContinuation(nil, []Command{{
+		Key:       model.NewKey(1, 7),
+		ValueType: model.VTProcessInstance,
+		Intent:    model.IntentActivating,
+		SourcePos: 4,
+		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: 9}},
+		StartVars: []model.VariableValue{
+			{ScopeKey: model.NewKey(1, 3), Name: "amount", Kind: model.VarString, Text: "42"},
+		},
+		StartElements: []int32{2},
+	}})
+
+	// Walk the layout so the damage lands where it is meant to:
+	// [count][cmdLen][cmdRec][varCount][varLen][varRec][elemCount][elem]
+	u32 := func(b []byte, off int) int { return int(binary.LittleEndian.Uint32(b[off:])) }
+	cmdLen := u32(valid, 4)
+	offVarCount := 8 + cmdLen
+	varLen := u32(valid, offVarCount+4)
+	offElemCount := offVarCount + 4 + 4 + varLen
+
+	cut := func(n int) []byte { return append([]byte(nil), valid[:n]...) }
+	withU32 := func(off int, v uint32) []byte {
+		b := append([]byte(nil), valid...)
+		binary.LittleEndian.PutUint32(b[off:], v)
+		return b
+	}
+
+	for _, tc := range []struct {
+		name string
+		b    []byte
+	}{
+		{"command record does not decode", func() []byte {
+			b := append([]byte(nil), valid...)
+			b[8] = 0xFF // the record's codec version byte
+			return b
+		}()},
+		{"command length points past the end", withU32(4, 0xFFFF)},
+		{"ends before the start-variable count", cut(8 + cmdLen)},
+		{"start-variable length points past the end", withU32(offVarCount+4, 0xFFFF)},
+		{"start variable does not decode", func() []byte {
+			b := append([]byte(nil), valid...)
+			b[offVarCount+8] = 0xFF // that record's codec version byte
+			return b
+		}()},
+		{"ends before the start-element count", cut(offElemCount)},
+		{"claims more start elements than it carries", withU32(offElemCount, 0xFF)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := decodeContinuation(tc.b); err == nil {
+				t.Fatal("a malformed continuation decoded without error; a restart would resume owing less than the log recorded")
+			}
+		})
+	}
+
+	// The undamaged encoding still decodes, so the cases above fail for the reason
+	// they name rather than because the fixture was broken to begin with.
+	if _, err := decodeContinuation(valid); err != nil {
+		t.Fatalf("the undamaged fixture does not decode: %v", err)
+	}
+}
+
+// TestContinuationRejectsAStartVariableThatIsNotOne: a record in the start-variable
+// position that decodes cleanly as something else is still wrong. Accepting it
+// would drop the variable and resume an instance seeded with less than it was
+// started with — the kind of loss that shows up as a business decision taken on
+// missing data, not as an error.
+func TestContinuationRejectsAStartVariableThatIsNotOne(t *testing.T) {
+	var b []byte
+	b = binary.LittleEndian.AppendUint32(b, 1) // one command
+	cmd := Command{
+		Key: model.NewKey(1, 7), ValueType: model.VTElementInstance,
+		Intent: model.IntentActivating, SourcePos: 4,
+		Value: inflightValue{element: model.ElementInstanceValue{ElementId: 1}},
+	}
+	b = appendSized(b, func(dst []byte) []byte {
+		rec := model.Record{
+			Header: model.RecordHeader{
+				SourcePos: cmd.SourcePos, Key: cmd.Key, RecordType: model.RecordCommand,
+				ValueType: cmd.ValueType, Intent: cmd.Intent,
+			},
+			Value: cmd.Value.asValue(cmd.ValueType),
+		}
+		return model.AppendRecord(dst, &rec)
+	})
+	b = binary.LittleEndian.AppendUint32(b, 1) // one "start variable"…
+	b = appendSized(b, func(dst []byte) []byte {
+		// …that is a job, not a variable.
+		rec := model.Record{
+			Header: model.RecordHeader{RecordType: model.RecordCommand, ValueType: model.VTJob},
+			Value:  &model.JobValue{JobType: 3},
+		}
+		return model.AppendRecord(dst, &rec)
+	})
+	b = binary.LittleEndian.AppendUint32(b, 0) // no start elements
+
+	if _, err := decodeContinuation(b); err == nil {
+		t.Fatal("a job in the start-variable position was accepted as a variable")
 	}
 }

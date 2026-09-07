@@ -2,7 +2,6 @@ package wal
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -307,17 +306,13 @@ func (seg segmentScan) tolerateIfLast(consumed, after int64, what string) (int64
 // there, reporting whether the segment is batch-framed. A segment without the
 // magic is a version-1 file: nothing is consumed and the caller reads frames.
 func consumeSegmentHeader(br *bufio.Reader) (batched, torn bool, err error) {
-	hdr, perr := br.Peek(segmentHeaderSize)
-	if perr != nil {
-		// Fewer than sixteen bytes. Either our header was cut short mid-write, or
-		// this is a version-1 file too small to hold one.
-		return false, isOurTornHead(hdr), nil
-	}
-	if !bytes.Equal(hdr[:len(segmentMagic)], segmentMagic[:]) {
-		return false, false, nil // version 1
-	}
-	if v := binary.LittleEndian.Uint32(hdr[len(segmentMagic):]); v != segmentVersion {
-		return false, false, fmt.Errorf("segment is format version %d, which this build cannot read", v)
+	// Peek returns whatever is there when the file is shorter than the header, which
+	// parseSegmentHeader reads as "ours, cut short" or "version 1" — the same
+	// decision the writer makes, from the same code.
+	hdr, _ := br.Peek(segmentHeaderSize)
+	batched, torn, err = parseSegmentHeader(hdr)
+	if err != nil || !batched {
+		return false, torn, err
 	}
 	if _, derr := br.Discard(segmentHeaderSize); derr != nil {
 		return false, false, derr

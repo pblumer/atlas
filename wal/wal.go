@@ -223,19 +223,35 @@ func isBatchFramed(path string) (bool, error) {
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return false, err
 	}
-	if n < segmentHeaderSize {
+	batched, torn, herr := parseSegmentHeader(hdr[:n])
+	if herr != nil {
+		return false, fmt.Errorf("wal: %s: %w", filepath.Base(path), herr)
+	}
+	// A segment whose header was cut short is still ours: it holds nothing, and the
+	// truncation below trims it back to empty so writing can continue in it.
+	return batched || torn, nil
+}
+
+// parseSegmentHeader reads a segment's opening bytes and says what kind of file it
+// is: batch-framed, ours with the header cut short mid-write, or a version-1
+// segment (which has no header at all and begins directly with a frame length).
+//
+// It is the one place that decides, because the writer and the reader both have to
+// agree and a second copy of this rule is a second chance to disagree with it.
+func parseSegmentHeader(head []byte) (batched, torn bool, err error) {
+	if len(head) < segmentHeaderSize {
 		// Too short to hold a header. If what is there is the start of ours, this is
 		// our segment with its header cut short by a crash — not a version-1 file
 		// that happens to begin with those bytes.
-		return isOurTornHead(hdr[:n]), nil
+		return false, isOurTornHead(head), nil
 	}
-	if !bytes.Equal(hdr[:len(segmentMagic)], segmentMagic[:]) {
-		return false, nil
+	if !bytes.Equal(head[:len(segmentMagic)], segmentMagic[:]) {
+		return false, false, nil
 	}
-	if v := binary.LittleEndian.Uint32(hdr[len(segmentMagic):]); v != segmentVersion {
-		return false, fmt.Errorf("wal: %s is format version %d, which this build cannot read", filepath.Base(path), v)
+	if v := binary.LittleEndian.Uint32(head[len(segmentMagic):]); v != segmentVersion {
+		return false, false, fmt.Errorf("segment is format version %d, which this build cannot read", v)
 	}
-	return true, nil
+	return true, false, nil
 }
 
 // Append stages data as the next record. It is buffered, not durable, until

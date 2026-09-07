@@ -117,3 +117,82 @@ func TestLegacyAndBatchedRecordsReplayInOrder(t *testing.T) {
 		t.Fatalf("segments = %d, want 2: reopening a batch-framed segment must not roll again", len(segs))
 	}
 }
+
+// TestPrefixSkippingWorksOverLegacySegments: skipping a prefix a checkpoint
+// covers reads the first record of each segment to find where it starts, and a
+// version-1 segment has to answer that question too. An upgraded installation
+// still has its old segments, and recovery must be able to skip past them rather
+// than replaying the whole log forever.
+func TestPrefixSkippingWorksOverLegacySegments(t *testing.T) {
+	dir := t.TempDir()
+	// Two legacy segments, each holding one positioned record.
+	for i, pos := range []uint64{1, 2} {
+		name := "0000000000000000.wal"
+		if i == 1 {
+			name = "0000000000000001.wal"
+		}
+		payload := make([]byte, 8)
+		binary.LittleEndian.PutUint64(payload, pos)
+		if err := os.WriteFile(filepath.Join(dir, name), v1FrameBytes(payload), 0o644); err != nil {
+			t.Fatalf("write legacy segment: %v", err)
+		}
+	}
+	l, err := wal.Open(wal.Options{Dir: dir})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer l.Close()
+
+	var got []uint64
+	if err := l.ReplayFrom(1, payloadPos, func(data []byte) error {
+		p, perr := payloadPos(data)
+		if perr != nil {
+			return perr
+		}
+		got = append(got, p)
+		return nil
+	}); err != nil {
+		t.Fatalf("ReplayFrom over legacy segments: %v", err)
+	}
+	if len(got) == 0 {
+		t.Fatal("skipping the prefix skipped everything")
+	}
+	if got[len(got)-1] != 2 {
+		t.Fatalf("replayed %v, want the suffix to reach position 2", got)
+	}
+}
+
+// v1FrameBytes renders one pre-batch frame around an arbitrary payload.
+func v1FrameBytes(payload []byte) []byte {
+	var hdr [8]byte
+	binary.LittleEndian.PutUint32(hdr[0:], uint32(len(payload)))
+	binary.LittleEndian.PutUint32(hdr[4:], crc32.Checksum(payload, crc32.MakeTable(crc32.Castagnoli)))
+	return append(hdr[:], payload...)
+}
+
+// TestASegmentNameThatIsNotASequenceIsReported: segment order is the sequence in
+// the file name, and the continuity check reads it. A .wal file whose name is not
+// a sequence number cannot be placed in that order, and guessing would silently
+// replay the log in the wrong order or skip a real segment.
+func TestASegmentNameThatIsNotASequenceIsReported(t *testing.T) {
+	dir := t.TempDir()
+	l, err := wal.Open(wal.Options{Dir: dir})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := l.Append([]byte("real")); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := l.Sync(); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	l.Close()
+
+	// A stray file that sorts after the real segment and is not a sequence number.
+	if err := os.WriteFile(filepath.Join(dir, "zzz-stray.wal"), []byte("junk"), 0o644); err != nil {
+		t.Fatalf("write stray: %v", err)
+	}
+	if _, err := wal.Open(wal.Options{Dir: dir}); err == nil {
+		t.Fatal("a .wal file whose name is not a sequence number was accepted into the segment order")
+	}
+}
