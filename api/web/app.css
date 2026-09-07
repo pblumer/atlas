@@ -1368,6 +1368,19 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .legend-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .legend-toggle[aria-pressed="false"] { opacity: 0.4; }
 
+/* The legend under a runtime diagram is a key, not a status line: it has to stay readable
+   at whatever width the window happens to be. The bar it shares with the Modeler's problem
+   list is one fixed-height row, which on a narrow screen broke every entry across two or
+   three lines and then clipped them at 30px — "completed here / and moved on" cut in half
+   under the border. So here an entry never breaks in the middle; the row wraps between
+   entries instead, and the bar grows by whole rows to hold them. On a wide screen nothing
+   moves: one row, same height as before. */
+.editor.live .problems {
+  height: auto; min-height: 30px; flex-wrap: wrap;
+  padding-top: 3px; padding-bottom: 3px; row-gap: 4px;
+}
+.editor.live .problems > * { white-space: nowrap; }
+
 /* The incident block that leads the live variables panel: what is parked, why, and
    the resolve. Red-on-red so it reads as a problem at a glance, and never collapses
    a message — an operator needs the provider's own words to act on them. */
