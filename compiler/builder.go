@@ -389,6 +389,21 @@ const AiTaskJobType = "io.atlas.ai.task"
 // every compiled process: NewBuilder reserves it twenty-ninth, so it is always 28.
 const AiTaskJobTypeIndex int32 = 28
 
+// DiscordJobType is the reserved job type a Discord task carries
+// (ADR-draft-discord-worker). One job type serves every Discord operation — send a
+// message, edit or delete one, read one, list a channel's messages, or open a thread —
+// because they share a bot identity, a credential and an error envelope; the operation
+// is a modeled value rather than a reserved index of its own, as it is for Jira
+// (ADR-0201) and Google Sheets (ADR-0235).
+const DiscordJobType = "io.atlas.discord"
+
+// DiscordJobTypeIndex is the interned index DiscordJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it thirtieth, so it is always 29.
+// Together with the name it lets a job carry its type as an integer and the in-process
+// Discord worker subscribe by one global index across every deployed process, the same
+// way the Jira worker uses JiraJobTypeIndex.
+const DiscordJobTypeIndex int32 = 29
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -425,6 +440,7 @@ var reservedJobTypes = []string{
 	GoogleSheetsJobType,  // 26
 	AgentJobType,         // 27
 	AiTaskJobType,        // 28
+	DiscordJobType,       // 29
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1885,6 +1901,61 @@ func (b *Builder) AddJiraConnectorTask(cfg JiraConfig) int32 {
 		JiraMaxResults:  cfg.MaxResults,
 		JiraFields:      cfg.Fields,
 		Retries:         cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// DiscordConfig is the deploy-time configuration of a Discord task
+// (ADR-draft-discord-worker). Worker names the configured Discord Worker (its bot
+// token lives server-side, never in the model) and Operation is the chat operation.
+// The remaining values are the ones that operation takes — literal-or-FEEL values (the
+// parser compiles the FEEL ones) evaluated over the variables the task sees at call
+// time. MaxResults is a list's cap and After its lower bound, both already defaulted by
+// the compiler so the runtime interprets nothing (I5). ResultVar, if set, is the
+// process variable what Discord returned is written back into.
+type DiscordConfig struct {
+	Connector  string
+	Operation  string
+	Channel    RestExpr
+	Message    RestExpr
+	Content    RestExpr
+	Name       RestExpr
+	After      RestExpr
+	MaxResults int32
+	Fields     []RestKV
+	ResultVar  string
+	Retries    int32
+}
+
+// AddDiscordConnectorTask adds a Discord task and returns its element id. Like a
+// service task it creates a job on activation and waits; the job carries the reserved
+// DiscordJobType so the in-process Discord worker picks it up, evaluates the authored
+// literal-or-FEEL values over the variables the task sees, resolves the named worker's
+// client, performs the one operation, writes what Discord returned into ResultVar
+// (empty = discard it), and completes the job. The bot token is resolved server-side
+// from the named worker, never authored in the model — mirroring Jira and Google
+// Sheets (ADR-0201/0235).
+func (b *Builder) AddDiscordConnectorTask(cfg DiscordConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:           b.intern(DiscordJobType),
+		Connector:         b.intern(cfg.Connector),
+		Subject:           -1, // not a clio task
+		EventType:         -1,
+		ClioQuery:         -1,
+		ReduceSpec:        -1,
+		Method:            -1, // not a REST task
+		ResultVar:         b.intern(cfg.ResultVar),
+		Auth:              -1,
+		DiscordOp:         b.intern(cfg.Operation),
+		DiscordChannel:    cfg.Channel,
+		DiscordMessage:    cfg.Message,
+		DiscordContent:    cfg.Content,
+		DiscordName:       cfg.Name,
+		DiscordAfter:      cfg.After,
+		DiscordMaxResults: cfg.MaxResults,
+		DiscordFields:     cfg.Fields,
+		Retries:           cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

@@ -3537,6 +3537,91 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "discord", name: "Discord", group: "Messaging & events",
+    desc: "Send, edit, delete and read messages in a Discord channel, and open a thread for a case",
+    icon: "D",
+    // A speech bubble on Discord blurple: the message, which is what this Worker Type
+    // is for — its counterpart to Jira's ticked issue and Sheets' grid. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white marks.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5865f2"/><path d="M3.4 5.1a1.2 1.2 0 0 1 1.2-1.2h6.8a1.2 1.2 0 0 1 1.2 1.2v3.8a1.2 1.2 0 0 1-1.2 1.2H7l-2.6 2v-2h-.2a1.2 1.2 0 0 1-1.2-1.2z" fill="#fff"/><circle cx="6.3" cy="7" r=".85" fill="#5865f2"/><circle cx="9.7" cy="7" r=".85" fill="#5865f2"/></svg>`,
+    ext: "atlas:DiscordConnector",
+    fields: [
+      { group: "Discord worker" },
+      { key: "connector", label: "Worker", datalist: "discord", placeholder: "team", hint: "The configured Discord Worker this task posts as, by the name it has under Workers in the Console. Its bot token lives on the server, never in the model." },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "send-message", l: "Send message" },
+          { v: "edit-message", l: "Edit message" },
+          { v: "delete-message", l: "Delete message" },
+          { v: "get-message", l: "Read message" },
+          { v: "list-messages", l: "List messages" },
+          { v: "create-thread", l: "Open thread" },
+        ],
+      },
+      {
+        key: "channel", label: "Channel", placeholder: "123456789012345678", fx: true,
+        hint: "The channel id this task acts in — in Discord, enable Developer Mode and use the channel's \"Copy Channel ID\". A thread is itself a channel, so replying in one is a Send message naming the thread's id (=faden.id after an Open thread). May be a FEEL expression (fx).",
+      },
+      {
+        key: "messageId", label: "Message", placeholder: "=nachricht.id", fx: true,
+        showIf: (v) => ["edit-message", "delete-message", "get-message", "create-thread"].includes(v.operation),
+        hint: (v) => (v.operation === "create-thread"
+          ? "Optional. Naming a message hangs the thread under it, which is what keeps the discussion attached to the notice that started it. Leave empty for a standalone thread in the channel. May be a FEEL expression (fx)."
+          : "The message id this operation addresses. Usually a FEEL expression (fx) naming the variable an earlier Send message wrote — e.g. =nachricht.id."),
+      },
+      {
+        key: "content", label: "Message", placeholder: "Antrag =vorgang.nummer ist genehmigt", fx: true,
+        showIf: (v) => v.operation === "send-message" || v.operation === "edit-message",
+        hint: "The message body, up to Discord's 2000 characters. May be a FEEL expression (fx) — note that a boolean resolves to nothing, so use =if genehmigt then \"genehmigt\" else \"abgelehnt\" rather than =genehmigt.",
+      },
+      {
+        key: "name", label: "Thread name", placeholder: "=\"Antrag \" + vorgang.nummer", fx: true,
+        showIf: (v) => v.operation === "create-thread",
+        hint: "The thread's title, as it appears in the channel's thread list. May be a FEEL expression (fx), which is how one process instance gets its own named thread.",
+      },
+      {
+        key: "after", label: "After message", placeholder: "=letzteGelesen", fx: true,
+        showIf: (v) => v.operation === "list-messages",
+        hint: "Optional. Reads only messages newer than this id, exclusive. Discord orders by id, so keeping the last id you read and passing it back here pages a channel forward without re-reading what you already have. May be a FEEL expression (fx).",
+      },
+      {
+        key: "maxResults", label: "Maximum messages", placeholder: "50",
+        showIf: (v) => v.operation === "list-messages",
+        hint: "Caps what may land in the result variable. Empty uses 50; Discord's endpoint accepts at most 100 per call, and a larger value is refused at deploy.",
+      },
+      {
+        key: "fields", label: "Further fields", type: "map", childType: "atlas:DiscordField", fx: true,
+        showIf: (v) => ["send-message", "edit-message", "create-thread"].includes(v.operation),
+        hint: "Any other property of the request body, by its Discord name (embeds, allowed_mentions, components, tts…). A value may be a FEEL expression (fx), and its shape is kept: a FEEL list is sent as a list, an object as an object, a boolean as a boolean. These are merged last, so a field named content overrides the Message above.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable",
+        resultType: (v) => (v.operation === "list-messages" ? "array" : "object"),
+        placeholder: "nachricht",
+        // Delete is the one operation Discord answers with 204 No Content, so a result
+        // variable there would name a value that is never written — the panel hides it
+        // rather than letting an author expect one (the compiler refuses it too).
+        showIf: (v) => v.operation !== "delete-message",
+        hint: (v) => {
+          switch (v.operation) {
+            case "list-messages":
+              return "The messages are written into this process variable as a JSON array, newest first. FEEL lists are 1-based, so the newest message's id is =nachrichten[1].id.";
+            case "create-thread":
+              return "The created thread is written into this process variable. A thread is a channel, so a later Send message posts into it with channel ==faden.id. Leave empty to open the thread and post nothing into it \u2014 a place for people to discuss the notice it hangs under.";
+            case "send-message":
+              return "The created message is written into this process variable, so a later Edit message can address it as =nachricht.id. Leave empty to discard it.";
+            default:
+              return "What Discord returned is written into this process variable (leave empty to discard it).";
+          }
+        },
+      },
+    ],
+  },
+  {
     id: "aitask", name: "AI Task", group: "Applications",
     desc: "Ask a language model one question and put the answer in a process variable",
     icon: "A",

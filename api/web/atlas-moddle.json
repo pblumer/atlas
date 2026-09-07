@@ -396,6 +396,32 @@
       ]
     },
     {
+      "name": "DiscordConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "channel", "type": "String", "isAttr": true },
+        { "name": "messageId", "type": "String", "isAttr": true },
+        { "name": "content", "type": "String", "isAttr": true },
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "after", "type": "String", "isAttr": true },
+        { "name": "maxResults", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true },
+        { "name": "fields", "type": "DiscordField", "isMany": true }
+      ]
+    },
+    {
+      "name": "DiscordField",
+      "superClass": ["Element"],
+      "properties": [
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "value", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "WebscrapeConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

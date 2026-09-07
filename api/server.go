@@ -55,6 +55,7 @@ import (
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/envname"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
@@ -417,6 +418,12 @@ type Server struct {
 	// Worker's OAuth credential bundle resolved from the vault (ADR-0041). Read only
 	// while driving jobs on the run loop, so it needs no lock.
 	googleSheetsRegistry *googlesheets.Registry
+
+	// discordRegistry resolves a Worker name to a Discord API client for Discord tasks
+	// (ADR-draft-discord-worker), built from the Worker store at startup and rebuilt on
+	// every change to it, with each Worker's bot token resolved from the vault
+	// (ADR-0041). Read only while driving jobs on the run loop, so it needs no lock.
+	discordRegistry *discord.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll

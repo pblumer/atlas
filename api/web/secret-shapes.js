@@ -9,8 +9,9 @@
 //
 // The shapes track the Go side: connector/mail/oauth.go's credentialBundle,
 // connector/sharepoint/oauth.go's, api/connectors.go's remedyCredentials, and
-// connector/jira/rest.go's and connector/googlesheets/oauth.go's credentialBundle. A
-// field added there is a field added here.
+// connector/jira/rest.go's, connector/googlesheets/oauth.go's and
+// connector/discord/rest.go's credentialBundle. A field added there is a field added
+// here.
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -22,8 +23,8 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 // back, a wrong shape is invisible until a task parks behind an incident hours later
 // (ADR-0155). The shapes mirror the Go decoders — connector/mail/oauth.go's
 // credentialBundle, connector/sharepoint/oauth.go's, api/connectors.go's
-// remedyCredentials, and the connector/jira and connector/googlesheets bundles — so a
-// change there is a change here.
+// remedyCredentials, and the connector/jira, connector/googlesheets and
+// connector/discord bundles — so a change there is a change here.
 export const SECRET_SHAPES = {
   "mail:gmail": {
     what: "a Google OAuth credential bundle (JSON)",
@@ -73,6 +74,12 @@ export const SECRET_SHAPES = {
       privateKey: "-----BEGIN PRIVATE KEY-----\u2026",
     },
     note: "Copied out of the JSON key file Google hands out for a service account (<code>client_email</code> and <code>private_key</code>, camel-cased here). Atlas fills in <code>tokenUrl</code> and the Sheets and Drive <code>scope</code>. Add <code>\"subject\"</code> to act as a Workspace user through domain-wide delegation. Pasting the whole key file is the common mistake: it is that file's two fields, not the file.",
+  },
+  "discord:": {
+    what: "a Discord bot credential bundle (JSON): {botToken}",
+    fields: ["botToken"],
+    skeleton: { botToken: "MTIz\u2026" },
+    note: "The bot token from <b>Discord Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Reset Token</b>. Store the token alone: Atlas composes the <code>Bot </code> scheme itself, so a value pasted with the prefix has it stripped rather than sent twice. The bot must be invited to the server and have <b>View Channel</b> and <b>Send Messages</b> in each channel a process writes to \u2014 a missing grant is answered with code 50001, <i>Missing Access</i>.",
   },
   "mail:smtp": { what: "the SMTP password for the worker's sender address (a plain string)" },
   "mail:preview": { what: "nothing — the preview provider needs no credential" },

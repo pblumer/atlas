@@ -123,6 +123,11 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Agent.Retries },
 		compile: compileAgentConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Discord != nil },
+		retries: func(st xmlServiceTask) string { return st.Discord.Retries },
+		compile: compileDiscordConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here
@@ -1563,6 +1568,199 @@ func webScrapeMaxItems(taskID, raw string) (int32, error) {
 	}
 	if n < 0 {
 		return 0, fmt.Errorf("compiler: webscrape task %q has a negative maxItems %d", taskID, n)
+	}
+	return int32(n), nil
+}
+
+// discordDefaultMaxResults is the cap a list gets when a model authors none. It is
+// Discord's own default for the endpoint, restated here because a default the runtime
+// would have to know is a default the compiler has not applied (I5).
+const discordDefaultMaxResults int32 = 50
+
+// discordMaxResultsCeiling is the largest page Discord's list endpoint accepts. A
+// model asking for more is refused at deploy rather than told at call time by a 400
+// naming a field the author never typed.
+const discordMaxResultsCeiling int32 = 100
+
+// discordOp describes what one Discord operation requires of a model, and what it is
+// allowed to carry. The table is the compiler's half of connector/discord's Ops table;
+// the drift test TestDiscordOpsMatchTheConnector keeps the two from disagreeing about
+// the operation set.
+//
+// takesMessage rather than needsMessage is what create-thread uses: naming a message
+// is the authored difference between a thread hanging under that message and a
+// standalone one, so it is optional rather than required or refused.
+type discordOp struct {
+	needsChannel bool
+	needsMessage bool
+	takesMessage bool
+	needsContent bool
+	needsName    bool
+	// takesList marks the one operation that pages: after and maxResults apply to it
+	// and to nothing else.
+	takesList bool
+	// needsResult marks an operation whose whole point is what it returns: a read that
+	// discards its answer is a call made for nothing.
+	needsResult bool
+	// takesResult marks an operation that answers with something a model may keep.
+	// delete-message is the one that does not — Discord answers it with 204, where a
+	// result variable would name a value that is never written.
+	takesResult bool
+	// takesFields marks an operation whose request has a body extra properties can be
+	// merged into. A GET and a DELETE have none.
+	takesFields bool
+}
+
+// discordOps is the operation table: what a process actually does in a channel. It is
+// deliberately not "every Discord endpoint" — what earns a row is a step a business
+// process takes, which is why there is no guild, role or scheduled-event operation here
+// and why the generic REST Worker Type (ADR-0067) remains the way to reach the rest.
+//
+// There is no reply-in-thread row, and that is the point of the design rather than an
+// omission: a thread *is* a channel in Discord, and its id is on the object
+// create-thread returns, so a reply is send-message addressing that id. A second name
+// for the same call is how two rows later disagree about which one sets
+// allowed_mentions.
+//
+// It mirrors connector/discord.Ops, which the drift test
+// TestDiscordOpsMatchTheConnector keeps honest.
+var discordOps = map[string]discordOp{
+	"send-message":   {needsChannel: true, needsContent: true, takesResult: true, takesFields: true},
+	"edit-message":   {needsChannel: true, needsMessage: true, needsContent: true, takesResult: true, takesFields: true},
+	"delete-message": {needsChannel: true, needsMessage: true},
+	"get-message":    {needsChannel: true, needsMessage: true, needsResult: true, takesResult: true},
+	"list-messages":  {needsChannel: true, takesList: true, needsResult: true, takesResult: true},
+	// create-thread does not require a result variable, for the reason create-issue
+	// does not in jiraOps: opening a thread under a notice is a complete act, and
+	// whether the process then posts into it is the model's business.
+	"create-thread": {needsChannel: true, takesMessage: true, needsName: true, takesResult: true, takesFields: true},
+}
+
+// discordOpNames lists the operations, sorted, for the messages that have to say what
+// was expected.
+func discordOpNames() []string {
+	out := make([]string, 0, len(discordOps))
+	for name := range discordOps {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// compileDiscordConnectorTask compiles an <atlas:discordConnector> task: one chat
+// operation against a configured Discord Worker via the job path
+// (ADR-draft-discord-worker). The bot token is resolved server-side by worker name,
+// like Jira's credential and Google's; only the operation and its values live in the
+// model.
+func compileDiscordConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.Discord
+	if strings.TrimSpace(cn.Connector) == "" {
+		return 0, fmt.Errorf("compiler: discord task %q needs a worker (the name the server holds the bot token under)", st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: discord task %q needs an operation (%s)", st.Id, strings.Join(discordOpNames(), ", "))
+	}
+	spec, ok := discordOps[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: discord task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(discordOpNames(), ", "))
+	}
+	// One pass over every authored value: required where the operation needs it,
+	// refused where it does not use it. A single table means neither half can be
+	// forgotten for a field, and an added field is one row rather than two checks in
+	// two places.
+	values := []struct {
+		attr     string
+		raw      string
+		required bool
+		allowed  bool
+		why      string
+	}{
+		{"channel", cn.Channel, spec.needsChannel, spec.needsChannel,
+			"the channel id the operation acts in (a thread is a channel too, so a reply names the thread's id)"},
+		{"messageId", cn.MessageID, spec.needsMessage, spec.needsMessage || spec.takesMessage,
+			"the message id the operation addresses; on create-thread, the message the thread hangs under"},
+		{"content", cn.Content, spec.needsContent, spec.needsContent, "the message body"},
+		{"name", cn.Name, spec.needsName, spec.needsName, "the thread's title"},
+		{"after", cn.After, false, spec.takesList, "the message id to list after, exclusive"},
+		{"maxResults", cn.MaxResults, false, spec.takesList, "how many messages a list may return"},
+		{"resultVariable", cn.ResultVariable, spec.needsResult, spec.takesResult, "the process variable receiving what Discord returned"},
+	}
+	for _, v := range values {
+		set := strings.TrimSpace(v.raw) != ""
+		if v.required && !set {
+			return 0, fmt.Errorf("compiler: discord task %q operation %q needs a %s (%s)", st.Id, op, v.attr, v.why)
+		}
+		if set && !v.allowed {
+			return 0, fmt.Errorf("compiler: discord task %q operation %q does not use %s (%s); remove it rather than leaving a value the worker ignores",
+				st.Id, op, v.attr, v.why)
+		}
+	}
+	if len(cn.Fields) > 0 && !spec.takesFields {
+		return 0, fmt.Errorf("compiler: discord task %q operation %q has no request body, so it does not use discordField values; remove them rather than leaving values the worker ignores", st.Id, op)
+	}
+	fields, err := httpKVList(st.Id, "discord field", cn.Fields)
+	if err != nil {
+		return 0, err
+	}
+	maxResults := int32(0)
+	if spec.takesList {
+		maxResults, err = discordMaxResults(st.Id, cn.MaxResults)
+		if err != nil {
+			return 0, err
+		}
+	}
+	cfg := DiscordConfig{
+		Connector:  strings.TrimSpace(cn.Connector),
+		Operation:  op,
+		MaxResults: maxResults,
+		Fields:     fields,
+		ResultVar:  strings.TrimSpace(cn.ResultVariable),
+		Retries:    retries,
+	}
+	// Each authored value is literal or FEEL (the fx toggle, ADR-0067), compiled once
+	// here and evaluated over the variables the task sees at call time.
+	for _, v := range []struct {
+		what string
+		raw  string
+		into *RestExpr
+	}{
+		{"channel", cn.Channel, &cfg.Channel},
+		{"messageId", cn.MessageID, &cfg.Message},
+		{"content", cn.Content, &cfg.Content},
+		{"name", cn.Name, &cfg.Name},
+		{"after", cn.After, &cfg.After},
+	} {
+		if strings.TrimSpace(v.raw) == "" {
+			continue
+		}
+		val, err := connectorValue(st.Id, "discord worker", v.what, v.raw)
+		if err != nil {
+			return 0, err
+		}
+		*v.into = val
+	}
+	return b.AddDiscordConnectorTask(cfg), nil
+}
+
+// discordMaxResults reads a list's cap, applying the default when a model authors none.
+// A cap that is not a number, is not positive, or is past what Discord's endpoint
+// accepts is refused at deploy rather than turned into a 400 at call time naming a
+// field the author never typed.
+func discordMaxResults(taskID, raw string) (int32, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return discordDefaultMaxResults, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: discord task %q has a non-numeric maxResults %q", taskID, raw)
+	}
+	if n < 1 {
+		return 0, fmt.Errorf("compiler: discord task %q has a maxResults of %d; a list reads at least one message", taskID, n)
+	}
+	if int32(n) > discordMaxResultsCeiling {
+		return 0, fmt.Errorf("compiler: discord task %q has a maxResults of %d; Discord's list endpoint accepts at most %d per call", taskID, n, discordMaxResultsCeiling)
 	}
 	return int32(n), nil
 }
