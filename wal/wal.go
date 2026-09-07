@@ -170,7 +170,14 @@ func Open(opts Options) (*Log, error) {
 	if err != nil {
 		return nil, err
 	}
-	validEnd, err := readBatches(f, nil)
+	// The active segment: the one place a crash may legitimately have left a torn
+	// tail, so the scan is allowed to stop at one.
+	seg, err := scanOf(path, false)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	validEnd, err := readBatches(f, seg, nil, nil)
 	if err != nil {
 		f.Close()
 		return nil, err
@@ -187,6 +194,21 @@ func Open(opts Options) (*Log, error) {
 	return l, nil
 }
 
+// isOurTornHead reports whether head is a proper prefix of a version-2 segment
+// header — the shape a crash leaves when it interrupts the header write itself.
+// A version-1 segment begins with a frame length, and the four bytes that would
+// collide here decode to a length far past maxBatchBytes, so nothing real is
+// misread as torn.
+func isOurTornHead(head []byte) bool {
+	if len(head) == 0 || len(head) >= segmentHeaderSize {
+		return false
+	}
+	if len(head) <= len(segmentMagic) {
+		return bytes.HasPrefix(segmentMagic[:], head)
+	}
+	return bytes.HasPrefix(head, segmentMagic[:])
+}
+
 // isBatchFramed reports whether the segment at path carries the version-2 header.
 // A file too short to hold one, or starting with anything else, is a version-1
 // segment: those begin directly with a frame length and have no header at all.
@@ -201,7 +223,13 @@ func isBatchFramed(path string) (bool, error) {
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return false, err
 	}
-	if n < segmentHeaderSize || !bytes.Equal(hdr[:len(segmentMagic)], segmentMagic[:]) {
+	if n < segmentHeaderSize {
+		// Too short to hold a header. If what is there is the start of ours, this is
+		// our segment with its header cut short by a crash — not a version-1 file
+		// that happens to begin with those bytes.
+		return isOurTornHead(hdr[:n]), nil
+	}
+	if !bytes.Equal(hdr[:len(segmentMagic)], segmentMagic[:]) {
 		return false, nil
 	}
 	if v := binary.LittleEndian.Uint32(hdr[len(segmentMagic):]); v != segmentVersion {
@@ -364,7 +392,37 @@ func segmentFilesIn(dir string) ([]string, error) {
 	}
 	// Zero-padded names sort lexically in segment order.
 	sort.Strings(names)
+	if err := checkSegmentContinuity(names); err != nil {
+		return nil, err
+	}
 	return names, nil
+}
+
+// checkSegmentContinuity refuses a segment list with a hole in it.
+//
+// Segments are numbered consecutively as they roll, and the only thing that ever
+// removes one is compaction, which deletes a *prefix* — so what remains is always
+// a contiguous run. A gap in the middle is a segment that went missing some other
+// way, and replaying across it would skip everything it held without a word,
+// exactly the silent hole strict corruption checking exists to prevent
+// (ADR-draft-strict-log-corruption).
+func checkSegmentContinuity(names []string) error {
+	for i := 1; i < len(names); i++ {
+		prev, err := parseSeq(names[i-1])
+		if err != nil {
+			return fmt.Errorf("wal: bad segment name %q: %w", names[i-1], err)
+		}
+		cur, err := parseSeq(names[i])
+		if err != nil {
+			return fmt.Errorf("wal: bad segment name %q: %w", names[i], err)
+		}
+		if cur != prev+1 {
+			return fmt.Errorf("wal: segments jump from %s to %s, so %d segment(s) are missing "+
+				"between them. Compaction only ever removes the oldest segments, so a gap in the "+
+				"middle means the records they held are gone", names[i-1], names[i], cur-prev-1)
+		}
+	}
+	return nil
 }
 
 func segmentName(seq uint64) string {

@@ -16,7 +16,7 @@ func (errReader) Read([]byte) (int, error) { return 0, errors.New("read boom") }
 // TestReadBatchesReadError covers the branch where reading a batch header fails
 // with a genuine I/O error rather than EOF: readBatches surfaces it.
 func TestReadBatchesReadError(t *testing.T) {
-	n, err := readBatches(errReader{}, nil)
+	n, err := readBatches(errReader{}, segmentScan{name: "test.wal"}, nil, nil)
 	if err == nil {
 		t.Fatal("readBatches over an erroring reader: got nil error, want it surfaced")
 	}
@@ -27,7 +27,7 @@ func TestReadBatchesReadError(t *testing.T) {
 
 // TestReplaySegmentOpenError covers replaySegment's os.Open failure path.
 func TestReplaySegmentOpenError(t *testing.T) {
-	if err := replaySegment(filepath.Join(t.TempDir(), "absent.wal"), nil); err == nil {
+	if err := replaySegment(filepath.Join(t.TempDir(), "absent.wal"), false, nil); err == nil {
 		t.Fatal("replaySegment of a missing file: got nil error, want an open error")
 	}
 }
