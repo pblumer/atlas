@@ -347,7 +347,16 @@ var mcpOmittedRoutes = map[string]string{
 	// the one exception (atlas_delete_draft): an agent can *create* drafts, so
 	// leaving it no way to remove one makes every generated or throwaway diagram
 	// permanent litter that only a human can clear.
-	"PATCH /api/v1/drafts/{id}":          "artifact editing is a UI concern",
+	"PATCH /api/v1/drafts/{id}": "artifact editing is a UI concern",
+	// Filing a deployment under an application is the same gesture one altitude
+	// down, and it is omitted on the same ground: it changes an artifact that
+	// already exists, and a human is the one who decides where their estate lives.
+	// It is worth saying what that costs, because the cost is real — re-filing the
+	// deployments of an estate is a bulk edit nobody wants to do by hand, and the
+	// only remaining path is a script holding an API token. If that trade is ever
+	// revisited, it should be revisited for the draft move above at the same time:
+	// the two are one decision wearing two routes.
+	"PATCH /api/v1/processes/{key}":      "artifact editing is a UI concern",
 	"DELETE /api/v1/forms/{id}":          "artifact editing is a UI concern",
 	"PATCH /api/v1/dmnrefs/{id}":         "artifact editing is a UI concern",
 	"DELETE /api/v1/dmnrefs/{id}":        "artifact editing is a UI concern",
