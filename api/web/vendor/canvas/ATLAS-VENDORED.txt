@@ -1,0 +1,52 @@
+atlas-canvas.js is Atlas's pre-built diagram-js bundle. It carries both canvases
+Atlas draws with, namespaced, under the global AtlasCanvas:
+
+  - AtlasCanvas.archimate — the ArchiMate 3.2 canvas (ADR-0189): the Open Group
+    Model Exchange parser, the renderer, and the authoring behaviour loaded on top
+    when the caller may edit. Source: src/archimate.js
+  - AtlasCanvas.uml — the UML class-diagram canvas for the information model
+    (ADR-0237): the renderer and the subset-driven rules provider.
+    Source: src/uml.js
+
+  - diagram-js@15.26.0, once, for both of them
+
+They were vendored as two bundles at first, a copy of diagram-js each, because the
+UML canvas arrived later and merging them then would have meant touching Panorama's
+shipped canvas for a saving that was real but not urgent. ADR-0237 named the merge
+as the follow-up; this file is the result of it. 123,109 bytes where the two were
+211,888 — 88,779 fewer, and one cache entry rather than two.
+
+The two canvases share the library and nothing else. Each keeps its own renderer,
+its own rules, and its own idea of what a document is: an ArchiMate view is read
+from a server that owns it and is never created by the canvas, while an information
+model is a working copy with an explicit Save, which is what makes an undo stack
+mean anything. That is why they are namespaced rather than flattened into one
+export list — Viewer and ClassCanvas in one namespace would read as two kinds of
+the same thing, and they are not.
+
+The editing modules (modeling, move, resize, outline, rules) are part of the bundle
+whether or not a given canvas loads them. They are instantiated only for an editable
+canvas, so a reader's diagram carries no modeling behaviour — but the code ships
+either way, because a single buildless bundle is the whole point of vendoring it
+(ADR-0012).
+
+There is still a separate copy of diagram-js inside the vendored bpmn-js and dmn-js
+bundles. Those are third-party bundles vendored whole rather than Atlas sources
+built against the library, so folding them in would mean building bpmn-js from
+source — a different decision from this one, and not one this merge makes.
+
+diagram-js and its bundled dependencies are MIT licensed (see LICENSE). The Atlas
+parsers, renderers and rules remain part of Atlas. Only the output is loaded at
+runtime: Atlas remains a single, buildless, offline-capable binary.
+
+Do not edit atlas-canvas.js by hand. To rebuild:
+
+  npm install --no-save --no-package-lock diagram-js@15.26.0 esbuild@0.25.9
+  npx esbuild api/web/vendor/canvas/src/index.js --bundle --format=iife \
+    --global-name=AtlasCanvas --minify --legal-comments=none \
+    --outfile=api/web/vendor/canvas/atlas-canvas.js
+  cp node_modules/diagram-js/assets/diagram-js.css \
+    api/web/vendor/canvas/diagram-js.css
+
+SHA-256 atlas-canvas.js:
+d93a28eff99c5f5bc47844f0ad32657447ac2c051d1dbbdd0569e79f632e6fa3

@@ -1,6 +1,7 @@
 // Read-only ArchiMate 3.2 diagram surface (ADR-0189). The canonical XML stays
 // untouched on the server; this module only projects its Diagram views into the
-// Atlas-owned diagram-js renderer vendored under vendor/archimate.
+// Atlas-owned diagram-js renderer, which ships in the shared canvas bundle under
+// vendor/canvas alongside the UML class canvas (ADR-0237).
 
 // An element's documentation is prose, and prose in Atlas is Markdown
 // (ADR-0250). It is rendered with the shared module rather
@@ -8,26 +9,14 @@
 // elsewhere: this text comes out of a foreign modelling tool, so it is exactly the kind
 // of string that must be inert. renderMarkdown escapes before it parses.
 import { renderMarkdown } from "./markdown.js";
+import { loadCanvasBundle } from "./canvas-bundle.js";
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 
-let vendorPromise;
+// The bundle carries both canvases; this view wants the ArchiMate half of it.
 function loadVendor() {
-  if (globalThis.AtlasArchiMate) return Promise.resolve(globalThis.AtlasArchiMate);
-  if (vendorPromise) return vendorPromise;
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  link.href = "vendor/archimate/diagram-js.css";
-  document.head.appendChild(link);
-  vendorPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "vendor/archimate/archimate-viewer.js";
-    script.onload = () => resolve(globalThis.AtlasArchiMate);
-    script.onerror = () => reject(new Error("Could not load the ArchiMate renderer"));
-    document.head.appendChild(script);
-  });
-  return vendorPromise;
+  return loadCanvasBundle().then((bundle) => bundle.archimate);
 }
 
 const prettyType = (type) => String(type || "Element").replace(/([a-z])([A-Z])/g, "$1 $2");

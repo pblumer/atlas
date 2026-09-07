@@ -1,5 +1,5 @@
 // End-to-end coverage for the UML class canvas bundle
-// (api/web/vendor/uml/, ADR-0237).
+// (api/web/vendor/canvas/src/uml.js, ADR-0237).
 //
 // The class canvas was hand-rolled SVG, redrawn whole on every edit. That is why it
 // had no zoom, no pan, no marquee, no multi-select and no undo: each of those is
@@ -183,4 +183,46 @@ test("a class related to its own kind loops rather than collapsing", async ({ pa
   const xs = points.split(" ").map((p) => Number(p.split(",")[0]));
   expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(20);
   expect(page.__errors).toEqual([]);
+});
+
+// Fitting a model that is smaller than its window. diagram-js fits by shrinking only,
+// which leaves a six-class diagram on a wide screen drawn at its own size in the
+// middle of it — the width the screen has going to nothing on either side. That is
+// what the canvas is asked for, so it is what it has to give.
+test.describe("fitting uses the room", () => {
+  const small = {
+    id: "m-small", stores: [], associations: [],
+    classes: [{ id: "c1", name: "Customer", stereotype: "businessObject", identity: [], x: 40, y: 40,
+      attributes: [{ name: "nr", type: "string", multiplicity: "1" }] }],
+  };
+  // Wider than the window at any zoom this harness has: fitting has to shrink it.
+  const wide = {
+    id: "m-wide", stores: [], associations: [],
+    classes: [
+      { id: "c1", name: "Left", stereotype: "businessObject", identity: [], x: 0, y: 40, attributes: [] },
+      { id: "c2", name: "Right", stereotype: "businessObject", identity: [], x: 4000, y: 40, attributes: [] },
+    ],
+  };
+  // The drawn box itself, not the diagram-js element around it: that group carries the
+  // selection outline, so its box is a few units wider than the class at any zoom.
+  const drawn = async (page, name) =>
+    (await page.locator(`.uml-class[data-name="${name}"]`).boundingBox()).width;
+
+  test("a model with room to grow is grown into it, up to a limit", async ({ page }) => {
+    await page.evaluate((model) => window.__canvas.render(model, []), small);
+    await expect(page.locator(".uml-class")).toHaveCount(1);
+    const width = await drawn(page, "Customer");
+    // A class is 200 units wide. Drawn larger than that means the fit magnified it,
+    // which is the whole change; 1.6× is where it stops.
+    expect(width).toBeGreaterThan(240);
+    expect(width).toBeLessThanOrEqual(200 * 1.6 + 4); // + the box's own stroke
+  });
+
+  test("a model larger than the window is still shrunk to fit", async ({ page }) => {
+    await page.evaluate((model) => window.__canvas.render(model, []), wide);
+    await expect(page.locator(".uml-class")).toHaveCount(2);
+    expect(await drawn(page, "Left")).toBeLessThan(200);
+    // And both ends of it are on screen, which is what fitting is for.
+    await expect(page.locator('.uml-class[data-name="Right"]')).toBeVisible();
+  });
 });

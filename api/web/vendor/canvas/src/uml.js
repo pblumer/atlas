@@ -35,6 +35,13 @@ import RuleProvider from "diagram-js/lib/features/rules/RuleProvider";
 // looking the way its author left it. A class is as tall as its members make it, so
 // the shape of the diagram carries information rather than a grid does.
 export const BOX_W = 200;
+
+// How far fitting will magnify a model that is smaller than its window, and how much
+// of the room it leaves as margin. Past MAX_FIT the drawing stops gaining anything
+// from the extra pixels — a class box has a fixed amount to say — and starts looking
+// like a zoom somebody left on by accident.
+const MAX_FIT = 1.6;
+const FIT_MARGIN = 0.94;
 const HEAD_H = 34;
 const ROW_H = 20;
 const PAD = 10;
@@ -564,7 +571,28 @@ export class ClassCanvas {
     this.diagram.get("lassoTool").activateSelection(event);
   }
 
-  fit() { this.canvas.zoom("fit-viewport", "auto"); }
+  // Fit the model into the room, and then use the room.
+  //
+  // diagram-js fits by shrinking only — it never magnifies past 100% — so a model
+  // smaller than the window is drawn at its own size in the middle of it, with the
+  // width the screen has going to nothing on either side. That is the right default
+  // for a canvas whose diagrams are usually larger than the viewport; a class diagram
+  // of six classes on a wide screen is the other case, and it reads as a picture that
+  // will not fill its frame.
+  //
+  // So a model that has room to grow is grown into it, short of the point where it
+  // stops being a diagram and starts being a poster: MAX_FIT is where a class box is
+  // still a class box. A model bigger than the window is untouched — shrinking to fit
+  // is what fitting means there, and that half was never wrong.
+  fit() {
+    this.canvas.zoom("fit-viewport", "auto");
+    const box = this.canvas.viewbox();
+    if (!box.inner.width || !box.inner.height) return; // nothing drawn yet
+    const room = Math.min(box.outer.width / box.inner.width, box.outer.height / box.inner.height);
+    // A margin, so the outermost boxes do not sit against the edge of the sheet.
+    const wanted = Math.min(room * FIT_MARGIN, MAX_FIT);
+    if (wanted > this.canvas.zoom()) this.canvas.zoom(wanted, "auto");
+  }
   zoom(delta) {
     const now = this.canvas.zoom();
     this.canvas.zoom(Math.max(0.2, Math.min(4, now * delta)), "auto");

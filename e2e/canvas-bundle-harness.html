@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas canvas bundle e2e harness</title>
+    <!-- Drives the real api/web/canvas-bundle.js against the real
+         api/web/vendor/canvas/atlas-canvas.js. The two canvases used to be two
+         bundles with a copy of diagram-js each (ADR-0189, ADR-0237); this pins what
+         merging them was for — one file that both views draw from, fetched once
+         however many of them ask. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; }
+      .sheet { height: 45vh; background: var(--surface, #fff); }
+    </style>
+  </head>
+  <body>
+    <div id="archimate" class="sheet"></div>
+    <div id="uml" class="sheet"></div>
+    <script type="module">
+      import { loadCanvasBundle } from "/canvas-bundle.js";
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" identifier="m">
+  <name xml:lang="en">Merged</name>
+  <elements>
+    <element identifier="app" xsi:type="ApplicationComponent"><name xml:lang="en">Order Service</name></element>
+  </elements>
+  <views><diagrams>
+    <view identifier="v" xsi:type="Diagram"><name xml:lang="en">Application</name>
+      <node identifier="n" elementRef="app" xsi:type="Element" x="40" y="40" w="190" h="80"/>
+    </view>
+  </diagrams></views>
+</model>`;
+
+      const MODEL = {
+        id: "m1",
+        classes: [{ id: "c1", name: "Customer", stereotype: "businessObject", identity: ["kdnr"], x: 40, y: 40,
+          attributes: [{ name: "kdnr", type: "string", multiplicity: "1" }] }],
+        stores: [], associations: [],
+      };
+
+      // Each view asks for the bundle in its own right, exactly as Panorama and the
+      // information model do — neither knowing the other has already loaded it.
+      window.__mountArchiMate = async () => {
+        const { archimate } = await loadCanvasBundle();
+        const parsed = archimate.parseOpenExchange(XML);
+        const viewer = new archimate.Viewer(document.getElementById("archimate"), () => {});
+        viewer.render(parsed.views[0]);
+      };
+
+      window.__mountUml = async () => {
+        const { uml } = await loadCanvasBundle();
+        const canvas = new uml.ClassCanvas(document.getElementById("uml"), { subset: { matrix: {} } });
+        canvas.render(MODEL, []);
+      };
+
+      window.__ready = true;
+    </script>
+  </body>
+</html>
