@@ -118,6 +118,11 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.GoogleSheets.Retries },
 		compile: compileGoogleSheetsConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Agent != nil },
+		retries: func(st xmlServiceTask) string { return st.Agent.Retries },
+		compile: compileAgentConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here
@@ -2011,4 +2016,59 @@ func googleSheetsBool(taskID, op, attr, raw string) (bool, error) {
 		return false, fmt.Errorf("compiler: google sheets task %q operation %q has a non-boolean %s %q (want true or false)",
 			taskID, op, attr, raw)
 	}
+}
+
+// compileAgentConnectorTask compiles an <atlas:agentConnector> service task: one call to
+// a language model, one answer into one variable (ADR-0256). It is ADR-0117's
+// service-task form minus the tool allow-list, because a step with tools is the ad-hoc
+// container ADR-0253 describes and not this.
+//
+// The Worker is required and the model is not: a Worker holds the endpoint, the
+// credential and the wire format, and its configured model is the default a task inherits
+// when it names none. That is the whole division this record turns on — a provider is
+// configured, a model name is authored — so a missing Worker is an error here and a
+// missing model is a deliberate silence.
+//
+// The container-only attributes are refused rather than ignored. The same element hosts
+// an agent-driven ad-hoc, where resultCollection/resultElement say where a tool call's
+// result is appended; on a task there is no tool call to append, and a model that says
+// something the engine will never read should be told so at deploy rather than run for a
+// year looking configured.
+func compileAgentConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.Agent
+	worker := strings.TrimSpace(cn.Connector)
+	if worker == "" {
+		return 0, fmt.Errorf("compiler: ai task %q names no connector "+
+			"(<atlas:agentConnector connector=\"…\"> must name a configured agent Worker; "+
+			"its credential is resolved from the vault, never carried in the model)", st.Id)
+	}
+	if strings.TrimSpace(cn.Prompt) == "" {
+		return 0, fmt.Errorf("compiler: ai task %q needs a prompt (<atlas:agentConnector prompt=\"…\">)", st.Id)
+	}
+	result := strings.TrimSpace(cn.ResultVariable)
+	if result == "" {
+		return 0, fmt.Errorf("compiler: ai task %q needs a resultVariable to put the answer in "+
+			"(an answer nothing reads is a call nobody needed)", st.Id)
+	}
+	for _, unsupported := range []struct{ attr, value string }{
+		{"resultCollection", cn.ResultCollection},
+		{"resultElement", cn.ResultElement},
+	} {
+		if strings.TrimSpace(unsupported.value) != "" {
+			return 0, fmt.Errorf("compiler: ai task %q sets %s, which only an agent-driven ad-hoc subprocess reads "+
+				"(it is where a tool call's result is appended; an ai task makes one call and answers into resultVariable)",
+				st.Id, unsupported.attr)
+		}
+	}
+	prompt, err := connectorValue(st.Id, "ai", "prompt", cn.Prompt)
+	if err != nil {
+		return 0, err
+	}
+	return b.AddAgentConnectorTask(AgentTaskConfig{
+		Worker:    worker,
+		Model:     strings.TrimSpace(cn.Model),
+		Prompt:    prompt,
+		ResultVar: result,
+		Retries:   retries,
+	}), nil
 }

@@ -36,6 +36,7 @@ func TestConnectorCompilersRegistry(t *testing.T) {
 		{Ldif: &xmlLdifConnector{}},
 		{Jira: &xmlJiraConnector{}},
 		{GoogleSheets: &xmlGoogleSheetsConnector{}},
+		{Agent: &xmlAgentConnector{}},
 	}
 	if len(cases) != len(connectorCompilers) {
 		t.Fatalf("cases = %d, connectorCompilers = %d; keep them in step", len(cases), len(connectorCompilers))

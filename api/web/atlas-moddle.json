@@ -468,11 +468,15 @@
     {
       "name": "AgentConnector",
       "superClass": ["Element"],
-      "meta": { "allowedIn": ["bpmn:AdHocSubProcess"] },
+      "meta": { "allowedIn": ["bpmn:AdHocSubProcess", "bpmn:ServiceTask"] },
       "properties": [
         { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "model", "type": "String", "isAttr": true },
         { "name": "resultCollection", "type": "String", "isAttr": true },
-        { "name": "resultElement", "type": "String", "isAttr": true }
+        { "name": "resultElement", "type": "String", "isAttr": true },
+        { "name": "prompt", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
     {

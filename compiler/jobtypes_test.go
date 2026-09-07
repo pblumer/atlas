@@ -41,6 +41,7 @@ func TestReservedJobTypesMatchTheirIndices(t *testing.T) {
 		JiraJobType:          JiraJobTypeIndex,
 		GoogleSheetsJobType:  GoogleSheetsJobTypeIndex,
 		AgentJobType:         AgentJobTypeIndex,
+		AiTaskJobType:        AiTaskJobTypeIndex,
 	}
 
 	reserved := ReservedJobTypes()

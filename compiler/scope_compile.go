@@ -582,6 +582,7 @@ func registerScope(
 			// holds, and run the entry activities in parallel.
 			CancelRemaining:  ah.CancelRemainingInstances != "false",
 			AgentWorker:      -1,
+			AgentModel:       -1,
 			ResultCollection: -1,
 		}
 		// An <atlas:agentConnector> makes the container agent-driven: entry activates
@@ -602,8 +603,31 @@ func registerScope(
 					"which an agent-driven container can't honour — its round ends when the activated "+
 					"tools drain, and that is when the next round is asked for", ah.Id)
 			}
+			// The same extension element hosts an ai task, and three of its attributes are
+			// that host's alone. A prompt here has nowhere to go — a round's standing
+			// instruction is the container's own <bpmn:documentation> — and a round answers
+			// with tool calls rather than one value, so resultVariable has nowhere to go
+			// either; the round job's retries are fixed by the engine (agentRoundRetries),
+			// not authored. Each is refused rather than dropped, because from the author's
+			// side an ignored attribute and an honoured one look identical, and a model
+			// carrying configuration nothing reads looks configured for a year (ADR-0256).
+			for _, unsupported := range []struct{ attr, value, instead string }{
+				{"prompt", ag.Prompt, "a round's instruction is the container's own <bpmn:documentation>"},
+				{"resultVariable", ag.ResultVariable, "a round answers with tool calls, not with one value; " +
+					"resultCollection/resultElement say where a tool's result is appended"},
+				{"retries", ag.Retries, "an agent round's retries are the engine's, not the model's"},
+			} {
+				if strings.TrimSpace(unsupported.value) != "" {
+					return fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q sets %s, which only an ai service task reads (%s)",
+						ah.Id, unsupported.attr, unsupported.instead)
+				}
+			}
 			d.AgentDriven = true
 			d.AgentWorker = b.intern(worker)
+			// A model name is authored, a provider is configured: naming none interns to -1
+			// and leaves the Worker's own model to run, so a container and the ai tasks
+			// beside it can ask different models through one endpoint and one credential.
+			d.AgentModel = b.intern(strings.TrimSpace(ag.Model))
 			if rc := strings.TrimSpace(ag.ResultCollection); rc != "" {
 				d.ResultCollection = b.intern(rc)
 			}

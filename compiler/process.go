@@ -861,6 +861,23 @@ type ConnectorTaskDetail struct {
 	SheetsColumns []string
 	SheetsInput   int32
 	SheetsHeader  bool
+	// AI task fields (JobType == AiTaskJobType, ADR-0256). Connector (above) names the
+	// agent Worker holding the endpoint, the credential and the wire format;
+	// a task carries none of those, because a provider is configured and not authored.
+	//
+	// AgentModel is the interned language model to ask, -1 when the task names none
+	// and inherits the Worker's configured default. It is authored rather than
+	// configured for the same reason a decision id or a REST URL is: it says what the
+	// step does, not how the deployment reaches anything, and a process wanting a
+	// small model for a classification and a strong one for the advice beside it
+	// should not need two Workers over one string.
+	//
+	// AgentPrompt is the question — a literal-or-FEEL value evaluated over the
+	// variables the task sees at call time — and ResultVar (above) receives the
+	// answer. There is no tool list: a step with tools is the ad-hoc container
+	// (ADR-0253), not this.
+	AgentModel  int32
+	AgentPrompt RestExpr
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
@@ -1082,8 +1099,10 @@ type ConditionalDetail struct {
 // behind that job picks which contained activity to run. AgentDriven marks it; AgentWorker names
 // the configured agent Worker the job resolves against (ADR-0203); ResultCollection /
 // ResultElement are where a tool call's result is appended, the multi-instance pair exactly
-// (ADR-0077); Tools is the deploy-time index of what the model may choose from. The prompt and
-// the run's limits ride the agent Worker's own configuration (ADR-0117) and are not carried here.
+// (ADR-0077); Tools is the deploy-time index of what the model may choose from. AgentModel names
+// the language model the round asks and is -1 when the container names none, in which case the
+// Worker's configured model is what runs (ADR-0256). The run's limits ride the agent
+// Worker's own configuration (ADR-0117) and are not carried here.
 //
 // Tools is a slice rather than a span of a shared array like the entry index: it is read once
 // per round, when the container's job is built, and never per token — off the hot path (I1).
@@ -1093,6 +1112,7 @@ type AdHocDetail struct {
 
 	AgentDriven      bool
 	AgentWorker      int32 // interned agent Worker name → index, -1 when not agent-driven
+	AgentModel       int32 // interned language model name → index, -1 → the Worker's own model
 	ResultCollection int32 // interned variable name a tool result is appended to, -1 if none
 	ResultElement    *expr.Compiled
 	Tools            []AgentTool
