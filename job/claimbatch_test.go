@@ -1,6 +1,7 @@
 package job_test
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/pblumer/atlas/job"
@@ -19,9 +20,17 @@ func TestClaimTakesARoundsWorthNotTheWholeBacklog(t *testing.T) {
 	p, store, jobType, defKey := setup(t)
 	r := job.NewRunner(store, p)
 	r.SetClaimBatch(4)
+	// Handlers run concurrently, one goroutine per job, so the counter they share
+	// needs a lock — the round's whole point is that they do not run in sequence.
+	var mu sync.Mutex
 	worked := 0
 	r.Handle(jobType, func(state.Reader) job.Handler {
-		return func(job.Job) error { worked++; return nil }
+		return func(job.Job) error {
+			mu.Lock()
+			worked++
+			mu.Unlock()
+			return nil
+		}
 	})
 
 	const backlog = 17
@@ -32,21 +41,25 @@ func TestClaimTakesARoundsWorthNotTheWholeBacklog(t *testing.T) {
 		t.Fatalf("RunUntilIdle: %v", err)
 	}
 
-	claimed, err := r.Claim()
+	// One round: claimed, worked and submitted. It takes the cap, not the backlog.
+	n, err := r.PollOnce()
 	if err != nil {
-		t.Fatalf("Claim: %v", err)
+		t.Fatalf("PollOnce: %v", err)
 	}
-	if len(claimed) != 4 {
-		t.Fatalf("one claim took %d of %d waiting jobs, want the round's cap of 4", len(claimed), backlog)
+	if n != 4 {
+		t.Fatalf("one round took %d of %d waiting jobs, want the cap of 4", n, backlog)
 	}
 
-	// Driving to idle still works every one of them: the cap bounds a round, not the
+	// Driving to idle works every one of the rest: the cap bounds a round, not the
 	// backlog, and nothing is left behind.
 	if err := r.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
 	}
-	if worked != backlog {
-		t.Errorf("worked %d jobs, want all %d", worked, backlog)
+	mu.Lock()
+	total := worked
+	mu.Unlock()
+	if total != backlog {
+		t.Errorf("worked %d jobs, want all %d", total, backlog)
 	}
 	if left, err := r.Claim(); err != nil || len(left) != 0 {
 		t.Errorf("after Drive: claimed %d more jobs (err=%v), want none", len(left), err)
