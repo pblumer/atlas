@@ -8,17 +8,20 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// Round is a resolved round as it travels to a worker: what the model is asked, and
-// which of the worker's configured models to ask.
+// Round is a resolved round as it travels to a worker: what the model is asked, which of
+// the worker's configured providers to ask it through, and which language model to ask.
 //
-// The name is *routing*, not content — it never reaches a model — which is why it sits
-// beside the [Request] rather than in it. It is the `connector` of
+// Neither name is content — neither reaches a model as part of the question — which is
+// why both sit beside the [Request] rather than in it. Connector is the `connector` of
 // <atlas:agentConnector>, the same way a business rule task names its decision service,
 // and it is what lets one worker hold an Anthropic endpoint and an OpenAI one and send
-// each container to the model it was modelled against.
+// each container to the provider it was modelled against. Model is that element's
+// `model`, empty when the container named none, in which case the provider's own
+// configured model runs (ADR-0256).
 type Round struct {
 	Request
 	Connector string
+	Model     string
 }
 
 // Resolve turns a parked agent round into everything the decision needs, with nothing
@@ -59,6 +62,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, ei *model.Element
 			Round:   len(results) + 1,
 		},
 		Connector: cp.Intern(d.AgentWorker),
+		Model:     cp.Intern(d.AgentModel),
 	}, nil
 }
 
@@ -83,6 +87,7 @@ func collectedResults(store state.Reader, containerKey uint64) []string {
 func ResolveJobPayload(r Round) map[string]any {
 	return map[string]any{
 		"connector": r.Connector,
+		"model":     r.Model,
 		"goal":      r.Goal,
 		"context":   r.Context,
 		"tools":     r.Tools,
@@ -98,6 +103,7 @@ func ResolveJobPayload(r Round) map[string]any {
 func RoundFromPayload(fields map[string]any) (Round, error) {
 	r := Round{}
 	r.Connector, _ = fields["connector"].(string)
+	r.Model, _ = fields["model"].(string)
 	if v, ok := fields["goal"].(string); ok {
 		r.Goal = v
 	}

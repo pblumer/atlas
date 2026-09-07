@@ -51,11 +51,16 @@ func TestAnAgentWorkerRegistersItsModels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuiltinConnectors: %v", err)
 	}
-	if _, ok := built.Handlers[compiler.AgentJobType]; !ok {
-		t.Fatalf("handlers = %v, want one under %s", built.Handlers, compiler.AgentJobType)
+	// Two job types, one kind: the round an agent container parks, and the single call an
+	// ai service task makes (ADR-0256). One credential and one endpoint serve both, which
+	// is why one Console record configures both.
+	for _, jobType := range []string{compiler.AgentJobType, compiler.AiTaskJobType} {
+		if _, ok := built.Handlers[jobType]; !ok {
+			t.Fatalf("handlers = %v, want one under %s", built.Handlers, jobType)
+		}
 	}
-	if len(built.Handlers) != 1 {
-		t.Errorf("handlers = %v, want only the agent job type", built.Handlers)
+	if len(built.Handlers) != 2 {
+		t.Errorf("handlers = %v, want only the agent kind's two job types", built.Handlers)
 	}
 	if len(built.Names) != 2 {
 		t.Errorf("names = %v, want both configured models on the Workers view", built.Names)

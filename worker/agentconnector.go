@@ -144,7 +144,7 @@ func RunAgentRound(ctx context.Context, j Job, models map[string]agent.Model) (O
 	if err != nil {
 		return Outcome{}, err
 	}
-	m, err := agentModelFor(round.Connector, models)
+	m, err := agentModelFor(round.Connector, round.Model, models)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -172,23 +172,48 @@ func RunAgentRound(ctx context.Context, j Job, models map[string]agent.Model) (O
 	return out, nil
 }
 
-// agentModelFor picks the model a round was modelled against.
+// agentModelFor picks the provider a round or task was modelled against, and then the
+// language model it named.
 //
-// A container that names nothing is served by the only model this worker holds, because
-// that is unambiguous and it is what a single-model deployment looks like. With more
-// than one it is not, and guessing would send an agent to a model whose reach and cost
-// the modeller never chose — so the round fails, naming what this worker actually holds.
-func agentModelFor(name string, models map[string]agent.Model) (agent.Model, error) {
+// A model that names no provider is served by the only one this worker holds, because
+// that is unambiguous and it is what a single-provider deployment looks like. With more
+// than one it is not, and guessing would send an agent to an endpoint whose reach and
+// cost the modeller never chose — so the job fails, naming what this worker actually
+// holds.
+//
+// The language model is the second, finer choice (ADR-0256): naming none runs whatever
+// the provider is configured for, which is how a deployment sets a house default. Naming
+// one asks an adapter that cannot honour it to say so rather than answer from a model
+// nobody chose — a wrong model is a wrong answer, and a wrong answer that looks right is
+// the worst thing this package can produce.
+func agentModelFor(provider, modelID string, models map[string]agent.Model) (agent.Model, error) {
 	if len(models) == 0 {
 		return nil, fmt.Errorf("agent: this worker holds no model")
 	}
+	m, err := agentProviderFor(provider, models)
+	if err != nil {
+		return nil, err
+	}
+	if modelID == "" {
+		return m, nil
+	}
+	chooser, ok := m.(agent.ModelChooser)
+	if !ok {
+		return nil, fmt.Errorf("agent: the model asks for %q, but this worker's %s serves only the model it is configured for",
+			modelID, agentProviderName(provider))
+	}
+	return chooser.ForModel(modelID), nil
+}
+
+// agentProviderFor is the first half of that choice: the named provider, or the only one.
+func agentProviderFor(name string, models map[string]agent.Model) (agent.Model, error) {
 	if name == "" {
 		if len(models) == 1 {
 			for _, m := range models {
 				return m, nil
 			}
 		}
-		return nil, fmt.Errorf("agent: the container names no model and this worker holds %s",
+		return nil, fmt.Errorf("agent: the model names no connector and this worker holds %s",
 			agentModelNames(models))
 	}
 	m, ok := models[name]
@@ -197,6 +222,56 @@ func agentModelFor(name string, models map[string]agent.Model) (agent.Model, err
 			name, agentModelNames(models))
 	}
 	return m, nil
+}
+
+// agentProviderName names the provider in a diagnostic, including the case where the
+// model named none and the worker's single one was used.
+func agentProviderName(name string) string {
+	if name == "" {
+		return "only configured connector"
+	}
+	return "connector " + strconv.Quote(name)
+}
+
+// RunAiTask works one ai task: one call to a language model, the answer into the variable
+// the model named (ADR-0256).
+//
+// It shares everything below the question with RunAgentRound — the same provider map, the
+// same adapters, the same wire — because a one-shot call is a round offered no tools, and
+// an adapter with nothing to call answers in words.
+//
+// The one thing it does not share is where the answer goes. A round answers into whatever
+// variable this worker is configured for; a task answers into the variable the *model*
+// named, which is the point of the task. So the single output is renamed here, and a
+// decision that came back as a tool call is refused: an ai task offered no tools, and a
+// model that called one anyway has answered a question nobody asked.
+func RunAiTask(ctx context.Context, j Job, models map[string]agent.Model) (map[string]any, error) {
+	if j.Connector == nil {
+		return nil, fmt.Errorf("agent: the job carried no resolved ai task; is this server resolving ai tasks?")
+	}
+	task, err := agent.TaskFromPayload(j.Connector.Fields)
+	if err != nil {
+		return nil, err
+	}
+	m, err := agentModelFor(task.Connector, task.Model, models)
+	if err != nil {
+		return nil, err
+	}
+	decision, err := m.Decide(ctx, agent.TaskRequest(task))
+	if err != nil {
+		return nil, err
+	}
+	if len(decision.ToolCalls) > 0 {
+		return nil, fmt.Errorf("agent: the model called %d tool(s) for an ai task, which offers none",
+			len(decision.ToolCalls))
+	}
+	if len(decision.Outputs) != 1 {
+		// The adapters answer with exactly one output or fail (answerDecision), so this
+		// is a broken adapter rather than a bad answer — and renaming the wrong one of
+		// several would put text under a name that promises something else.
+		return nil, fmt.Errorf("agent: the model answered with %d values, want exactly one", len(decision.Outputs))
+	}
+	return map[string]any{task.ResultVariable: variableValue(decision.Outputs[0])}, nil
 }
 
 func agentModelNames(models map[string]agent.Model) string {

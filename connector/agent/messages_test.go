@@ -244,3 +244,51 @@ func TestHTTPModelDescribesAnUndocumentedTool(t *testing.T) {
 		t.Errorf("description = %q, want it to say the activity carries none", d)
 	}
 }
+
+// A request offering no tools is an ai task, and it is put to the model as a question
+// rather than as a round (ADR-0256).
+//
+// This is not a cosmetic difference. The round prompt tells the model to choose among
+// tools and reports which round it is; handed that with no tools, a model looks for the
+// tools — it asks for one, or it hedges about not having any — and either is a worse
+// answer than the question deserved. What lands in a process variable is read by a
+// program, so the framing says that too.
+//
+// No tools is unambiguous: the compiler refuses an agent-driven ad-hoc with no contained
+// activity (ADR-0253), so a request with an empty toolbox is never a round.
+func TestAOneShotCallIsFramedAsAQuestionNotARound(t *testing.T) {
+	srv, seen, _ := endpoint(t, http.StatusOK, `{"stop_reason":"end_turn","content":[{"type":"text","text":"Dachsanierung"}]}`)
+	m := &agent.HTTPModel{Endpoint: srv.URL, APIKey: "k", Client: srv.Client()}
+
+	if _, err := m.Decide(context.Background(), agent.Request{Goal: "Klassifiziere: Dachdecker AG", Round: 1}); err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if len(*seen) != 1 {
+		t.Fatalf("saw %d requests, want 1", len(*seen))
+	}
+	got := (*seen)[0]
+	if len(got.Tools) != 0 {
+		t.Errorf("tools = %v, want the field omitted entirely for a task", got.Tools)
+	}
+	if got.Messages[0].Content != "Klassifiziere: Dachdecker AG" {
+		t.Errorf("message = %q, want the author's question verbatim with no round bookkeeping", got.Messages[0].Content)
+	}
+	if strings.Contains(got.System, "tools you are given") {
+		t.Errorf("system prompt talks about tools this call has none of:\n%s", got.System)
+	}
+	if !strings.Contains(got.System, "process variable") {
+		t.Errorf("system prompt does not say where the answer goes:\n%s", got.System)
+	}
+
+	// And a round still gets the round framing, so the two did not collapse into one.
+	if _, err := m.Decide(context.Background(), requestWithOneTool()); err != nil {
+		t.Fatalf("Decide (round): %v", err)
+	}
+	round := (*seen)[1]
+	if !strings.Contains(round.System, "tools you are given") {
+		t.Errorf("a round's system prompt lost its instruction to choose among tools:\n%s", round.System)
+	}
+	if !strings.Contains(round.Messages[0].Content, "round 1") {
+		t.Errorf("a round's message = %q, want it to say which round this is", round.Messages[0].Content)
+	}
+}

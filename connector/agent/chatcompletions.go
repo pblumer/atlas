@@ -105,8 +105,8 @@ func (m *ChatCompletionsModel) request(req Request) chatRequest {
 	return chatRequest{
 		Model: m.Model,
 		Messages: []chatTurn{
-			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: roundPrompt(req)},
+			{Role: "system", Content: systemFor(req)},
+			{Role: "user", Content: promptFor(req)},
 		},
 		Tools:               chatToolSchemas(req.Tools),
 		MaxCompletionTokens: m.MaxTokens,
@@ -191,4 +191,16 @@ func unwrapJSONString(raw json.RawMessage) json.RawMessage {
 		return raw
 	}
 	return json.RawMessage(inner)
+}
+
+// ForModel implements [ModelChooser]. See [HTTPModel.ForModel]: same reasoning, same
+// copy — one adapter serves many concurrent jobs, so the model id cannot be written in
+// place.
+func (m *ChatCompletionsModel) ForModel(id string) Model {
+	if id == "" || id == m.Model {
+		return m
+	}
+	c := *m
+	c.Model = id
+	return &c
 }

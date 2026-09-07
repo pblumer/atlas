@@ -5600,6 +5600,23 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"assignee": j.Assignee, "jql": j.JQL, "query": j.Query, "maxResults": j.MaxResults,
 			"fields": j.Fields, "requestId": j.RequestID, "resultVariable": j.ResultVariable,
 		}}
+	case compiler.AiTaskJobTypeIndex:
+		// The question travels; the endpoint, the credential and the wire format do not
+		// (ADR-0168). The *model* does — it is authored on the element, because which
+		// model a step asks is what the step is about, not what the deployment is
+		// (ADR-0256) — and so does the prompt with its FEEL already evaluated against
+		// the variables the task sees, which is engine work by necessity.
+		//
+		// This is the agent's second job type, not a discriminator inside its first: an
+		// ai task completes with variables through the ordinary job path, while an agent
+		// round's completion carries tool calls the engine turns into activations
+		// (ADR-0253/0254). Two arms rather than one payload nobody can read without
+		// knowing which it is.
+		j, err := agent.ResolveTask(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "agent", Fields: agent.TaskJobPayload(j)}
 	case compiler.GoogleSheetsJobTypeIndex:
 		// The operation, the spreadsheet, the range and the already-projected rows
 		// travel; the service account's private key does not. Google Sheets is Jira's

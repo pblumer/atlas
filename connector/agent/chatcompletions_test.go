@@ -333,3 +333,26 @@ func TestChatCompletionsFailsOnArgumentsThatAreNotJSON(t *testing.T) {
 		t.Errorf("err = %v, want it to name the call that could not be read", err)
 	}
 }
+
+// The one-shot framing is shared code, but which framing this adapter *picks* is its own
+// line — and a line that reads systemPrompt directly would compile, pass every other test,
+// and quietly tell an ai task's model to choose among tools it has none of (ADR-0256).
+func TestChatCompletionsFramesAOneShotAsAQuestion(t *testing.T) {
+	srv, seen, _ := chatEndpoint(t, http.StatusOK,
+		`{"choices":[{"finish_reason":"stop","message":{"content":"Dachsanierung"}}]}`)
+	m := &agent.ChatCompletionsModel{Endpoint: srv.URL, APIKey: "k", Model: "gpt-4o", Client: srv.Client()}
+
+	if _, err := m.Decide(context.Background(), agent.Request{Goal: "Klassifiziere: Dachdecker AG", Round: 1}); err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	got := (*seen)[0]
+	if len(got.Tools) != 0 {
+		t.Errorf("tools = %v, want the field omitted entirely for a task", got.Tools)
+	}
+	if got.Messages[0].Role != "system" || strings.Contains(got.Messages[0].Content, "tools you are given") {
+		t.Errorf("system turn talks about tools this call has none of:\n%s", got.Messages[0].Content)
+	}
+	if got.Messages[1].Content != "Klassifiziere: Dachdecker AG" {
+		t.Errorf("user turn = %q, want the author's question verbatim", got.Messages[1].Content)
+	}
+}

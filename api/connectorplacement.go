@@ -77,7 +77,7 @@ var authoredKindJobTypes = map[string][]int32{
 	// The round job an agent-driven ad-hoc subprocess parks on (ADR-0253). Authored on
 	// the container itself rather than on a task, but it is a Worker Type an operator
 	// configures and the Console places like any other.
-	connectorKindAgent:        {compiler.AgentJobTypeIndex},
+	connectorKindAgent:        {compiler.AgentJobTypeIndex, compiler.AiTaskJobTypeIndex},
 	connectorKindClio:         {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
 	connectorKindMail:         {compiler.MailJobTypeIndex},
 	"csv":                     {compiler.CsvImportJobTypeIndex},
