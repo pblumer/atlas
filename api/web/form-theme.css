@@ -1,0 +1,127 @@
+/* Atlas → form-js theming bridge (ADR-draft-form-runtime-brand-theming).
+ *
+ * ADR-0028's form runtime, painted in ADR-0113's palette.
+ *
+ * Every form a person fills in — a user task in the Tasks app, an incident's
+ * repair form, the public start form behind a share link — is rendered by the
+ * vendored form-js runtime, which brings its own stylesheet and its own colours.
+ * Until this file existed, the brand accent an admin set stopped at the edge of
+ * that renderer: the console around the form was tinted and the form itself was
+ * bpmn.io blue, in a different typeface, on borders a shade off the ones beside
+ * it. This file is the mapping that closes that gap.
+ *
+ * How form-js can be themed, and why the two blocks below are scoped differently
+ * — this is the whole trick, and getting it wrong looks like "form-js cannot be
+ * themed":
+ *
+ *   • form-js resolves each of its own `--color-*` tokens through an IBM Carbon
+ *     token first and its built-in default second, e.g.
+ *       --color-text: var(--cds-text-primary, var(--color-grey-225-10-15))
+ *     The `--cds-*` layer is *not* declared on `.fjs-container`, so setting it on
+ *     `:root` inherits all the way in. That is the first block: name the Carbon
+ *     tokens, and every rule form-js writes picks up Atlas's palette. Nothing is
+ *     restyled by selector, so a form-js upgrade that renames a class cannot
+ *     break it — only a rename of a Carbon token could, and that is exactly what
+ *     TestFormThemeWritesOnlyTokensFormJSReads catches.
+ *
+ *     (`.fjs-no-theme` in form-js.css resets that whole `--cds-*` layer to
+ *     `initial`. The runtime never puts that class on a container; if a future
+ *     version does, this file's first block stops reaching it. The same test
+ *     watches for it.)
+ *
+ *   • The `--color-*` and `--font-*` tokens with no Carbon backing *are* declared
+ *     on `.fjs-container` itself. An override for those must therefore beat that
+ *     selector rather than inherit into it, which is what the `:root` prefix in
+ *     the second block buys: 0,2,0 against form-js's 0,1,0, so it wins on
+ *     specificity and does not depend on which stylesheet the browser applied
+ *     last.
+ *
+ * Deliberately not mapped: the "inverted" greys (--cds-background-inverse,
+ * --cds-text-inverse, --cds-background-active, --cds-icon-inverse). They paint
+ * the taglist chips and the number spinner's hover, where form-js's "inverted"
+ * means a *light* grey block with dark text — and the same tokens also colour the
+ * submit button's label, where it means white on the accent. One value cannot
+ * serve both, so they keep form-js's defaults, and the submit button's label is
+ * set explicitly below instead. Revisit this if a dark theme is ever added: it is
+ * that family, not this mapping, that a dark theme turns over.
+ */
+
+:root {
+  /* Field and surface fills. */
+  --cds-field: var(--surface);
+  --cds-field-01: var(--surface);
+  --cds-layer: var(--surface);
+  --cds-layer-01: var(--surface);
+  /* The fill behind a disabled or read-only field, and behind a table head —
+     the same pale grey `thead th` uses in app.css, so a form's table and a
+     console table read as one system. */
+  --cds-background: var(--bg);
+  --cds-layer-accent: var(--bg);
+  /* --cds-field-02, --cds-field-hover-02, --cds-layer-02 and --cds-icon-secondary
+     are absent on purpose: this build of form-js lists them in its .fjs-no-theme
+     reset but resolves none of them, so setting them would paint nothing. If a
+     later version starts reading them, add them here — the reverse case, a token
+     set but never read, is what TestFormThemeWritesOnlyTokensFormJSReads rejects. */
+
+  /* Type. */
+  --cds-text-primary: var(--text);
+  --cds-text-secondary: var(--muted);
+  --cds-text-placeholder: var(--muted);
+  --cds-text-disabled: var(--muted);
+  --cds-text-error: var(--danger);
+  --cds-icon-primary: var(--text);
+
+  /* Rules and edges. A field's own outline is the strong border (it has to hold
+     its own against white), a group's divider the quiet one — matching how
+     app.css spends the two. */
+  --cds-border-strong: var(--border-strong);
+  --cds-border-strong-01: var(--border-strong);
+  --cds-border-subtle: var(--border);
+  --cds-border-subtle-01: var(--border);
+  --cds-border-disabled: var(--border);
+  --cds-shadow: var(--border-strong);
+
+  /* The brand accent: the submit button's fill, a checked box, a link inside a
+     text field, and the focus ring. --cds-focus is what form-js's
+     `--outline-definition` resolves to, so keyboard focus inside a form is the
+     same ring as everywhere else in the console. */
+  --cds-link-primary: var(--accent);
+  --cds-button-primary: var(--accent);
+  --cds-focus: var(--accent);
+}
+
+/* The tokens form-js declares on `.fjs-container` with no Carbon fallback. See
+   the specificity note in the header for why these carry the `:root` prefix. */
+:root .fjs-container {
+  /* form-js asks for 'IBM Plex Sans', which nothing here ships — so a form was
+     rendering in whatever generic sans-serif the browser fell back to, beside a
+     console in system-ui. One stack for both. */
+  --font-family: var(--font-sans);
+  /* Only the family. form-js's --font-size-* already hold the sizes this UI would
+     ask for, so restating them here would be four declarations that change
+     nothing and read as if a type scale were themeable when none exists yet. */
+}
+
+/* The action buttons a form schema can carry (form-js's Button component; the
+   Tasks app and the public page render their own Send button outside the form).
+   These need a rule of their own rather than a token, because of a cascade quirk
+   in form-js's own stylesheet: it paints the accent fill at
+     .fjs-container .fjs-button[type=submit]                       (0,3,0)
+   and then, forty lines later, a read-only variant at
+     .fjs-container .fjs-button[type=submit]:read-only             (0,4,0)
+   — and `:read-only` matches *every* button, since a button is never
+   user-alterable. Measured in Chromium against this exact stylesheet, the second
+   rule wins and a form-js Button renders grey, not in the accent it asks for. So
+   an override that only named a colour token could not reach it.
+
+   `:not(:disabled)` puts this at 0,5,0, ahead of that rule, and leaves form-js's
+   genuinely disabled styling untouched — a disabled button keeps its grey. The
+   label is --accent-ink: white or near-black, whichever the accent's luminance
+   makes readable (theme.js). [type=reset] is deliberately not included; it is the
+   neutral secondary action and stays neutral. */
+:root .fjs-container .fjs-button[type="submit"]:not(:disabled),
+:root .fjs-container .fjs-button[type="button"]:not(:disabled) {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}

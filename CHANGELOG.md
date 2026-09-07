@@ -14,6 +14,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Your brand colour reaches the forms.** Setting an organisation's accent under
+  *Settings → Appearance* used to tint the Console around a form and stop at its edge:
+  the form itself — its fields, labels, focus ring, buttons and typeface — came from
+  the form renderer's own stylesheet and stayed stock blue. It no longer does. A user
+  task, an incident's repair form, the preview in the form editor and the public start
+  form behind a share link are all painted from the same palette as everything else,
+  in the same typeface, on the same borders.
+
+- **The public start form and the sign-in consent screen carry your branding.** Both
+  are shown before anyone has a session, and both used to display the built-in Atlas
+  mark and the default blue no matter what an admin had configured. They now ask the
+  server for the organisation's colour and logo like every other page — which matters
+  most for the start form, since that is the page an organisation's own customers
+  open. If the settings are momentarily unreachable the page still appears, in the
+  default colours: a form that is late is worse than a form that is unbranded.
+
+- **A button label that stays readable on your brand colour.** Text on an accent fill
+  used to be white, fixed. White on a deep blue or a federal red is fine; white on a
+  brand yellow or a pale mint is about 1.5:1, which nobody can read. Atlas now derives
+  the label colour from the accent you chose — white or near-black, whichever the
+  colour's own luminance makes legible — and applies it everywhere the accent is a
+  background: primary buttons, count badges, active segments, the submit button inside
+  a form.
+
 - **Forms written by the AI Worker.** The form editor has a **✨ Generate** button.
   Describe what the form should ask for — in your own words, in your own language —
   and, if you like, point it at the process the form belongs to and the step it is
