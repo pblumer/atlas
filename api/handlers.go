@@ -2451,10 +2451,12 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		driveNeeded = true
 	})
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
-	// read-back that follows it are two separate visits to the loop.
+	// read-back that follows it are two separate visits to the loop — and the
+	// read-back's is now only long enough to take a view, not to do the counting
+	// (ADR-draft-stats-and-incidents-off-the-loop).
 	if driveNeeded {
 		if runErr = s.drive(); runErr == nil {
-			s.do(func() { stats, statErr = s.readStats() })
+			stats, statErr = s.statsOffLoop()
 		}
 	}
 	switch {
@@ -3446,10 +3448,12 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		driveNeeded = true
 	})
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
-	// read-back that follows it are two separate visits to the loop.
+	// read-back that follows it are two separate visits to the loop — and the
+	// read-back's is now only long enough to take a view, not to do the counting
+	// (ADR-draft-stats-and-incidents-off-the-loop).
 	if driveNeeded {
 		if runErr = s.drive(); runErr == nil {
-			s.do(func() { stats, statErr = s.readStats() })
+			stats, statErr = s.statsOffLoop()
 		}
 	}
 	switch {
@@ -3491,10 +3495,12 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 		driveNeeded = true
 	})
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
-	// read-back that follows it are two separate visits to the loop.
+	// read-back that follows it are two separate visits to the loop — and the
+	// read-back's is now only long enough to take a view, not to do the counting
+	// (ADR-draft-stats-and-incidents-off-the-loop).
 	if driveNeeded {
 		if runErr = s.drive(); runErr == nil {
-			s.do(func() { stats, statErr = s.readStats() })
+			stats, statErr = s.statsOffLoop()
 		}
 	}
 	switch {
@@ -3595,7 +3601,7 @@ func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.R
 	}
 	if driveNeeded {
 		if opErr = s.drive(); opErr == nil {
-			s.do(func() { stats, opErr = s.readStats() })
+			stats, opErr = s.statsOffLoop()
 		}
 	}
 	switch {
@@ -3698,7 +3704,7 @@ func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
 	})
 	if driveNeeded {
 		if opErr = s.drive(); opErr == nil {
-			s.do(func() { stats, opErr = s.readStats() })
+			stats, opErr = s.statsOffLoop()
 		}
 	}
 	if opErr != nil {
@@ -3788,7 +3794,7 @@ func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstances
 	}
 	if driveNeeded {
 		if opErr = s.drive(); opErr == nil {
-			s.do(func() { stats, opErr = s.readStats() })
+			stats, opErr = s.statsOffLoop()
 		}
 	}
 	switch {
@@ -4595,8 +4601,13 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	}
 	list := []incidentView{}
 	truncated := false
-	var scanErr error
-	s.do(func() {
+	// Off the run loop (ADR-draft-stats-and-incidents-off-the-loop). The walk itself
+	// is over the incident family, which an operator is expected to keep near zero,
+	// so cost is not what moved it: a turn on the loop is simply unavailable for as
+	// long as the engine is busy, and this is an endpoint somebody reaches for
+	// precisely when it is. The view is a second gain — an incident resolved while
+	// the page is being built can no longer appear half-described.
+	scanErr := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
 		// One instance is looked up once however many of its elements are stuck, and
 		// a flood of incidents is usually a flood on few instances.
 		type instanceCtx struct {
@@ -4607,27 +4618,28 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 		resolved := map[uint64]instanceCtx{}
 		// One resolver for the whole page: the worker store is read once, not once
 		// per parked token, and not at all when nothing on the page is on a worker
-		// task (ADR-0159).
+		// task (ADR-0159). It reads a durable sidecar, which is safe to do off the
+		// loop (ADR-draft-login-off-the-run-loop).
 		connectorFor := s.incidentConnectorLookup()
 		lookup := func(piKey uint64) (instanceCtx, error) {
 			if ctx, ok := resolved[piKey]; ok {
 				return ctx, nil
 			}
 			var ctx instanceCtx
-			pi, ok, err := s.store.ProcessInstance(piKey)
+			pi, ok, err := rv.ProcessInstance(piKey)
 			if err != nil {
 				return ctx, err
 			}
 			if ok {
 				ctx.defKey = pi.ProcessDefKey
-				if d, ok := s.deployments[pi.ProcessDefKey]; ok {
+				if d, ok := defs[pi.ProcessDefKey]; ok {
 					ctx.processID, ctx.cp = d.ProcessID, d.cp
 				}
 			}
 			resolved[piKey] = ctx
 			return ctx, nil
 		}
-		err := s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
+		err := rv.Incidents(func(elKey uint64, v *model.IncidentValue) error {
 			if instanceFilter != 0 && v.ProcessInstanceKey != instanceFilter {
 				return nil
 			}
@@ -4661,9 +4673,13 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 			list = append(list, view)
 			return nil
 		})
-		scanErr = unlessTruncated(err)
+		return unlessTruncated(err)
 	})
-	if scanErr != nil {
+	switch {
+	case errors.Is(scanErr, errLoopClosing):
+		httpapi.Error(w, http.StatusServiceUnavailable, scanErr.Error())
+		return
+	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "list incidents: "+scanErr.Error())
 		return
 	}
@@ -4830,16 +4846,15 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request, assignee str
 
 // handleStats returns the live instance counts.
 func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
-	var (
-		stats statsResp
-		err   error
-	)
-	s.do(func() { stats, err = s.readStats() })
-	if err != nil {
+	stats, err := s.statsOffLoop()
+	switch {
+	case errors.Is(err, errLoopClosing):
+		httpapi.Error(w, http.StatusServiceUnavailable, err.Error())
+	case err != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+err.Error())
-		return
+	default:
+		httpapi.JSON(w, http.StatusOK, stats)
 	}
-	httpapi.JSON(w, http.StatusOK, stats)
 }
 
 type draftResp struct {

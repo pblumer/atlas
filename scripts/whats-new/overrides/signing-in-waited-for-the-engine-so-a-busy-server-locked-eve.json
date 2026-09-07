@@ -1,0 +1,13 @@
+{
+  "title": {
+    "en": "Signing in no longer waits for the engine",
+    "de": "Die Anmeldung wartet nicht mehr auf die Engine"
+  },
+  "tags": [
+    "Console"
+  ],
+  "summary": {
+    "en": "On a heavily loaded server, signing in could stop working: the login page simply never answered, while the server itself looked perfectly healthy from the outside. Logging in needed a turn from the very component that runs your processes, so the busier the engine got, the longer the front door took — precisely when you needed to get in and do something about it. Signing in no longer depends on how busy the engine is.",
+    "de": "Auf einem stark ausgelasteten Server konnte die Anmeldung ausfallen: Die Login-Seite antwortete schlicht nicht mehr, während der Server von aussen völlig gesund aussah. Das Anmelden brauchte eine Zuteilung genau jener Komponente, die auch Ihre Prozesse ausführt — je beschäftigter die Engine, desto länger dauerte die Anmeldung. Und zwar ausgerechnet dann, wenn Sie sich anmelden mussten, um etwas gegen die Auslastung zu tun. Die Anmeldung hängt jetzt nicht mehr davon ab, wie beschäftigt die Engine ist."
+  }
+}

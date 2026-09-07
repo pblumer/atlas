@@ -74,11 +74,18 @@ func TestUserStoreErrorBranches(t *testing.T) {
 		t.Fatalf("delete of a non-empty record path should error")
 	}
 
-	// loadAll surfaces a read error on a hex-named .json entry it cannot read (a
-	// dangling symlink).
+	// loadAll surfaces a read error on a hex-named .json entry it cannot read.
+	// Unreadable, not absent: a record deleted from under a listing is skipped now,
+	// because a reader running off the run loop meets that legitimately
+	// (ADR-draft-login-off-the-run-loop), so this is a pair of symlinks pointing at
+	// each other.
 	st5dir := t.TempDir()
 	st5, _ := newUserStore(st5dir)
-	if err := os.Symlink(filepath.Join(st5dir, "missing-target"), st5.FileFor("dangle")); err != nil {
+	loopA, loopB := st5.FileFor("dangle"), st5.FileFor("dangle-too")
+	if err := os.Symlink(loopB, loopA); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	if err := os.Symlink(loopA, loopB); err != nil {
 		t.Fatalf("symlink: %v", err)
 	}
 	if _, err := st5.LoadAll(); err == nil {
