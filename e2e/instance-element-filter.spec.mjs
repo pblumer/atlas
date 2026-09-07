@@ -1,5 +1,5 @@
 // End-to-end coverage for the Operations view's "click a task, see who is on it"
-// filter (ADR-draft-instances-on-an-element).
+// filter (ADR-0261).
 //
 // The complaint behind it: a diagram badged "25205 here" beside an instance panel
 // listing the newest fifty of fifty thousand, and no way to get from the first to

@@ -192,7 +192,7 @@ and pays nothing; the NUL between the value and the instance key is what lets an
 `piByEl` is `elByProc` read the other way round, and it answers the operator's
 question at the shape rather than at the instance: "which instances are sitting on
 *this* element right now?" — the click that filters the Operations instance list
-(ADR-draft-instances-on-an-element). Without it that filter is a walk of the
+(ADR-0261). Without it that filter is a walk of the
 version's live instances testing each for a token, once per 1.5-second poll of an
 open view. The instance key precedes the element-instance key so the range walked
 backwards yields instances newest first and one instance's several tokens on the

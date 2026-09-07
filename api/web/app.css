@@ -1224,7 +1224,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .badges-hide-passed .token-badge.history,
 .badges-hide-cancelled .token-badge.cancelled,
 .badges-hide-live .token-badge:not(.history):not(.cancelled) { display: none; }
-/* The element the instance list is filtered to (ADR-draft-instances-on-an-element).
+/* The element the instance list is filtered to (ADR-0261).
    It is drawn in the accent colour rather than in any of the token colours: green,
    gray and amber all say something about where tokens are, and this says something
    about what the panel beside the diagram is showing. Solid and thick so it reads as
@@ -1508,7 +1508,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    version that may hold hundreds of thousands of instances, so this — not the
    list — is how an operator reaches a specific one. */
 /* The chip that says what the listing is narrowed to, and the way back out of it
-   (ADR-draft-instances-on-an-element). It sits above the search row because it is
+   (ADR-0261). It sits above the search row because it is
    the coarser of the two filters and because an operator who clicked a shape needs
    to see, without hunting, that the short list in front of them is a filtered one
    and not an empty process. */

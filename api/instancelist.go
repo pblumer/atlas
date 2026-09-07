@@ -35,7 +35,7 @@ type instanceListQuery struct {
 	beforeDoneAt int64
 	hasBefore    bool
 	// element is the BPMN id of a diagram element, and narrows the listing to the
-	// instances whose token is sitting on it right now (ADR-draft-instances-on-an-element).
+	// instances whose token is sitting on it right now (ADR-0261).
 	// It is resolved to the definition's node index against the compiled process, so
 	// it requires ?process= — an element id means nothing without the version that
 	// defines it, and the index it reads is keyed by that pair.
@@ -263,7 +263,7 @@ func listInstances(rv *state.ReadView, defs defIndex, q instanceListQuery) (inst
 
 // listInstancesOnElement pages the instances whose token is sitting on one element
 // of one definition right now — the Operations view's "click a task, see who is
-// waiting on it" filter (ADR-draft-instances-on-an-element).
+// waiting on it" filter (ADR-0261).
 //
 // It reads the piByEl index, so the cost is the page it returns and not the
 // version's instance population. That distinction is the whole reason the index

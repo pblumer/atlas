@@ -50,7 +50,7 @@ func listedKeys(t *testing.T, body []byte) []uint64 {
 
 // TestListInstancesByElement covers the Operations filter end to end: clicking a
 // task lists exactly the instances whose token is sitting on it, another element
-// lists its own, and no element filter lists everything (ADR-draft-instances-on-an-element).
+// lists its own, and no element filter lists everything (ADR-0261).
 func TestListInstancesByElement(t *testing.T) {
 	ts := newTestServer(t)
 

@@ -1,4 +1,4 @@
-# ADR-DRAFT: The diagram is the query — filtering instances by the element they sit on
+# ADR-0261: The diagram is the query — filtering instances by the element they sit on
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

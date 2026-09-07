@@ -865,7 +865,7 @@ What it takes to run this for real.
   could lack it. Remaining, and deliberately so: substring and free text stay in the
   OpenSearch export (ADR-0114) rather than becoming a second engine index.
   The **third way in is the diagram itself**
-  ([ADR-draft-instances-on-an-element](docs/adr/draft-instances-on-an-element.md)): a
+  ([ADR-0261](docs/adr/0261-instances-on-an-element.md)): a
   live view badged "25 205 here now" beside a page of fifty was a dead end — the count
   said how many were waiting and nothing said *which*. Clicking an element in
   Operations now filters the instance list to the instances whose token is sitting on

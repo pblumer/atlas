@@ -9033,7 +9033,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   let finishedCount = 0;    // finished instances of this version, for the honest total
   // elementFilter is the diagram element the listing is narrowed to: clicking a task
   // asks "which instances are sitting here?", and the panel answers with those and
-  // nothing else (ADR-draft-instances-on-an-element). "" is the whole version, which
+  // nothing else (ADR-0261). "" is the whole version, which
   // is what clicking the process — the canvas around the shapes, or a collaboration's
   // pool — goes back to. It is a listing filter and not a second selection: the
   // diagram keeps showing the version's aggregate tokens, because the question the
@@ -10018,7 +10018,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   });
 
   // Clicking the diagram is how an operator asks the instance list a question
-  // (ADR-draft-instances-on-an-element). A flow node means "which instances are
+  // (ADR-0261). A flow node means "which instances are
   // sitting here?" and narrows the panel to them; clicking it again, or clicking
   // anything that is not one — the canvas around the shapes, a collaboration's pool
   // or lane, a sequence flow — means "all of them" and puts the whole version back.
