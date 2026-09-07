@@ -116,3 +116,62 @@ func TestClaimBatchDefaults(t *testing.T) {
 		t.Errorf("claimed %d of 3, want all of them under the default batch of %d", len(claimed), job.DefaultClaimBatch)
 	}
 }
+
+// TestARoundSharesOutToAtLeastOnePerType: the share is the batch divided by the
+// number of served types, and integer division reaches zero as soon as there are
+// more types than the batch. A share of zero would claim nothing at all — a runner
+// that serves many kinds would stop working, quietly, the moment somebody tuned the
+// batch down.
+func TestARoundSharesOutToAtLeastOnePerType(t *testing.T) {
+	p, store, jobType, defKey := setup(t)
+	r := job.NewRunner(store, p)
+	r.SetClaimBatch(1) // one job for four types: the share rounds to zero
+	for i := int32(0); i < 4; i++ {
+		r.Handle(jobType+i*1000, func(state.Reader) job.Handler { return func(job.Job) error { return nil } })
+	}
+	for i := 0; i < 3; i++ {
+		p.CreateInstance(defKey)
+	}
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	claimed, err := r.Claim()
+	if err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	if len(claimed) != 1 {
+		t.Fatalf("claimed %d jobs, want 1 — a share never rounds down to nothing", len(claimed))
+	}
+}
+
+// TestConcurrencyDefaultsWhenUnset: zero means the default, not "run them one at a
+// time" and not "run them all at once".
+func TestConcurrencyDefaultsWhenUnset(t *testing.T) {
+	p, store, jobType, defKey := setup(t)
+	r := job.NewRunner(store, p)
+	r.Concurrency = 0
+	var mu sync.Mutex
+	worked := 0
+	r.Handle(jobType, func(state.Reader) job.Handler {
+		return func(job.Job) error {
+			mu.Lock()
+			worked++
+			mu.Unlock()
+			return nil
+		}
+	})
+	for i := 0; i < 3; i++ {
+		p.CreateInstance(defKey)
+	}
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if _, err := r.PollOnce(); err != nil {
+		t.Fatalf("PollOnce: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if worked != 3 {
+		t.Errorf("worked %d of 3 with Concurrency unset", worked)
+	}
+}

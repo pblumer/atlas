@@ -595,3 +595,37 @@ func TestParsePlainTaskPassThrough(t *testing.T) {
 		t.Fatalf("node after start = %v, want Task (pass-through)", cp.Node(task).Type)
 	}
 }
+
+// TestNodeSetIsSafeToAskAboutAnything: the set is indexed by node id, so a query
+// outside its range must answer no rather than reach past its bits. The engine only
+// ever asks about real nodes, but a set whose safety depends on its caller is a set
+// that will be unsafe the day it gets another one.
+func TestNodeSetIsSafeToAskAboutAnything(t *testing.T) {
+	b := NewBuilder(3, "bounds", 1)
+	s := b.AddStartEvent()
+	split := b.AddInclusiveGateway()
+	one, two := b.AddTask(), b.AddTask()
+	join := b.AddInclusiveGateway()
+	e := b.AddEndEvent()
+	b.Connect(s, split)
+	b.Connect(split, one)
+	b.Connect(split, two)
+	b.Connect(one, join)
+	b.Connect(two, join)
+	b.Connect(join, e)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	set := cp.InclusiveJoinReach(join)
+	for _, id := range []int32{-1, -1000, 1 << 20} {
+		if set.Has(id) {
+			t.Errorf("Has(%d) = true, want false for an id outside the graph", id)
+		}
+	}
+	// And the zero set answers the same way without a graph behind it at all.
+	var empty NodeSet
+	if empty.Has(0) || empty.Has(-1) || empty.Count() != 0 {
+		t.Error("the zero NodeSet is not empty")
+	}
+}

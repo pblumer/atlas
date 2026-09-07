@@ -3,6 +3,7 @@ package job_test
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/state"
@@ -138,5 +139,43 @@ func TestAnOutcomeFromALostLeaseIsDropped(t *testing.T) {
 	}
 	if _, ok, err := store.GetJob(claimed[0].Key); err != nil || ok {
 		t.Fatalf("the lease holder's completion was dropped: GetJob ok=%v err=%v", ok, err)
+	}
+}
+
+// TestLeaseDefaultsWhenUnset: zero or less means [job.DefaultLease]. A lease of
+// zero would expire the instant it was taken, which is a claim that claims nothing.
+func TestLeaseDefaultsWhenUnset(t *testing.T) {
+	p, store, jobType, defKey := setup(t)
+	r := job.NewRunner(store, p)
+	r.SetLease(0)
+	r.Handle(jobType, func(state.Reader) job.Handler { return func(job.Job) error { return nil } })
+	p.CreateInstance(defKey)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	claimed, err := r.Claim()
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("Claim with the default lease: %v (%d jobs)", err, len(claimed))
+	}
+
+	// An explicit lease is used as given, and is what the job records.
+	p2, store2, jobType2, defKey2 := setup(t)
+	r2 := job.NewRunner(store2, p2)
+	r2.SetLease(int64(90 * time.Second))
+	r2.Handle(jobType2, func(state.Reader) job.Handler { return func(job.Job) error { return nil } })
+	p2.CreateInstance(defKey2)
+	if err := p2.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	held, err := r2.Claim()
+	if err != nil || len(held) != 1 {
+		t.Fatalf("Claim with an explicit lease: %v (%d jobs)", err, len(held))
+	}
+	jv, ok, err := store2.GetJob(held[0].Key)
+	if err != nil || !ok {
+		t.Fatalf("GetJob: %v (ok=%v)", err, ok)
+	}
+	if jv.LeaseExpiresAt == 0 || jv.Assignee != job.InProcessWorker {
+		t.Errorf("job = assignee %q lease %d, want it held by %q", jv.Assignee, jv.LeaseExpiresAt, job.InProcessWorker)
 	}
 }
