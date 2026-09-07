@@ -384,3 +384,266 @@ test("a class box never falls through to SVG's black default", async ({ page }) 
   }
   expect(page.__errors).toEqual([]);
 });
+
+// Zoom, pan and fit have been the canvas's own since it moved onto diagram-js
+// (ADR-0237). What a person found was a diagram they could not make fit: the wheel
+// scrolls, ctrl and the wheel zoom, and nothing on the screen says so. These are the
+// controls the record's "looks like the two canvases beside it" was about.
+//
+// The assertion is the viewport's own scale rather than a class on a button: the
+// question is whether the drawing actually zoomed.
+const scale = (page) => page.evaluate(() => {
+  const viewport = document.querySelector("#im-canvas .djs-container .viewport");
+  return new DOMMatrix(getComputedStyle(viewport).transform).a;
+});
+
+test("the canvas can be zoomed and fitted from the controls, not only by a gesture", async ({ page }) => {
+  const tools = page.locator("#im-canvas .im-tools");
+  await expect(tools.locator('[data-tool="zoom-in"]')).toBeVisible();
+  await expect(tools.locator('[data-tool="zoom-out"]')).toBeVisible();
+  await expect(tools.locator('[data-tool="fit"]')).toBeVisible();
+
+  const fitted = await scale(page);
+  expect(fitted).toBeGreaterThan(0);
+
+  await tools.locator('[data-tool="zoom-in"]').click();
+  const zoomedIn = await scale(page);
+  expect(zoomedIn).toBeGreaterThan(fitted);
+
+  await tools.locator('[data-tool="zoom-out"]').click();
+  expect(await scale(page)).toBeLessThan(zoomedIn);
+
+  // Fit is the way back: after zooming somewhere, one click returns the whole
+  // diagram to the window.
+  await tools.locator('[data-tool="zoom-in"]').click();
+  await tools.locator('[data-tool="zoom-in"]').click();
+  expect(await scale(page)).toBeGreaterThan(fitted);
+  await tools.locator('[data-tool="fit"]').click();
+  expect(await scale(page)).toBeCloseTo(fitted, 5);
+
+  expect(page.__errors).toEqual([]);
+});
+
+// The zoom has to stop somewhere at both ends: a canvas that keeps zooming out loses
+// the diagram in a dot, and one that keeps zooming in loses it off every edge.
+test("zooming stops at a bound rather than running away", async ({ page }) => {
+  const tools = page.locator("#im-canvas .im-tools");
+  for (let i = 0; i < 15; i++) await tools.locator('[data-tool="zoom-out"]').click();
+  const out = await scale(page);
+  expect(out).toBeGreaterThanOrEqual(0.2);
+
+  for (let i = 0; i < 25; i++) await tools.locator('[data-tool="zoom-in"]').click();
+  expect(await scale(page)).toBeLessThanOrEqual(4);
+  expect(page.__errors).toEqual([]);
+});
+
+// The controls sit over the sheet, so the sheet has to stay reachable around them:
+// the group itself ignores the pointer and only its buttons take it.
+test("the control group does not take the pointer away from the sheet", async ({ page }) => {
+  const events = await page.evaluate(() => ({
+    group: getComputedStyle(document.querySelector("#im-canvas .im-tools")).pointerEvents,
+    button: getComputedStyle(document.querySelector('#im-canvas .im-tools [data-tool="fit"]')).pointerEvents,
+  }));
+  expect(events.group).toBe("none");
+  expect(events.button).toBe("auto");
+});
+
+// Finding something in a model that outgrew its window. Two surfaces, one need: a
+// class among many on the sheet, and a member among many in the panel.
+const search = (page) => page.locator("#im-search");
+const hits = (page) => page.locator("#im-search-results .im-search-hit");
+
+test("the search finds a class and brings it into view", async ({ page }) => {
+  await search(page).fill("addr");
+  await expect(hits(page)).toHaveCount(1);
+  await expect(hits(page).first()).toContainText("Address");
+
+  await hits(page).first().click();
+  // Found means selected: the panel is on it, and the canvas says so too.
+  await expect(page.locator(".psec input#im-c-name")).toHaveValue("Address");
+  await expect(page.locator(".djs-element.selected .uml-class[data-name='Address']")).toHaveCount(1);
+  // The field empties itself, so the next search starts from nothing.
+  await expect(search(page)).toHaveValue("");
+  expect(page.__errors).toEqual([]);
+});
+
+// The half that matters on a class with forty attributes: a member is findable
+// without knowing which class holds it, and picking it narrows the panel to it.
+test("the search finds a member, and the panel opens narrowed to it", async ({ page }) => {
+  await search(page).fill("placedOn");
+  await expect(hits(page).first()).toContainText("Order · placedOn");
+
+  await hits(page).first().click();
+  await expect(page.locator(".psec input#im-c-name")).toHaveValue("Order");
+  await expect(page.locator("#im-member-filter")).toHaveValue("placedOn");
+  const rows = page.locator(".im-attrs tbody tr[data-attr]");
+  await expect(rows).toHaveCount(3);          // every row is still there…
+  await expect(rows.locator("visible=true")).toHaveCount(1); // …one is on screen
+  await expect(page.locator("#im-member-count")).toHaveText("1 of 3");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a search that matches nothing says so and changes no selection", async ({ page }) => {
+  await search(page).fill("zzz");
+  await expect(page.locator(".im-search-none")).toContainText("Nothing in this model matches");
+  await expect(hits(page)).toHaveCount(0);
+  // Nothing was selected: no class panel, nothing marked on the sheet.
+  await expect(page.locator(".psec input#im-c-name")).toHaveCount(0);
+  await expect(page.locator(".djs-element.selected")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test.describe("the member filter", () => {
+  test.beforeEach(async ({ page }) => {
+    await box(page, "Order").click();
+    await expect(page.locator("#im-member-filter")).toBeVisible();
+  });
+
+  test("narrows the table without removing a row, and counts what it hid", async ({ page }) => {
+    const rows = page.locator(".im-attrs tbody tr[data-attr]");
+    await expect(rows.locator("visible=true")).toHaveCount(3);
+
+    await page.locator("#im-member-filter").fill("total");
+    await expect(rows).toHaveCount(3);
+    await expect(rows.locator("visible=true")).toHaveCount(1);
+    await expect(page.locator("#im-member-count")).toHaveText("1 of 3");
+
+    // Clearing puts them all back.
+    await page.locator("#im-member-filter").fill("");
+    await expect(rows.locator("visible=true")).toHaveCount(3);
+    await expect(page.locator("#im-member-count")).toHaveText("");
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("matches a member's type as well as its name", async ({ page }) => {
+    await page.locator("#im-member-filter").fill("date");
+    const shown = page.locator(".im-attrs tbody tr[data-attr]:visible input[data-f='name']");
+    await expect(shown).toHaveCount(1);
+    await expect(shown).toHaveValue("placedOn");
+  });
+
+  test("keeps the caret in the field, and still edits the right attribute", async ({ page }) => {
+    // The panel re-renders on every keystroke of an edit; the filter must not, or
+    // typing into it would take the caret out of it after the first letter.
+    await page.locator("#im-member-filter").pressSequentially("tot");
+    await expect(page.locator("#im-member-filter")).toBeFocused();
+    await expect(page.locator("#im-member-filter")).toHaveValue("tot");
+
+    // A row hidden by the filter keeps its index, so the visible row still edits the
+    // attribute it names rather than the one that happens to be third on screen.
+    const name = page.locator(".im-attrs tbody tr[data-attr]:visible input[data-f='name']");
+    await name.fill("totalAmount");
+    await expect(box(page, "Order").locator(".uml-attr-name")).toContainText(["id", "placedOn", "totalAmount"]);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("says when nothing matches, and refuses to reorder while narrowed", async ({ page }) => {
+    await page.locator("#im-member-filter").fill("nothinghere");
+    await expect(page.locator(".im-filter-empty")).toContainText("Nothing here matches");
+    await expect(page.locator(".im-attrs tbody tr[data-attr]:visible")).toHaveCount(0);
+
+    await page.locator("#im-member-filter").fill("id");
+    const grip = page.locator(".im-attrs tbody tr[data-attr]:visible .im-grip").first();
+    await expect(grip).toHaveClass(/disabled/);
+    await expect(grip).toHaveAttribute("title", /Clear the filter to reorder/);
+  });
+
+  test("belongs to the class it was typed for", async ({ page }) => {
+    await page.locator("#im-member-filter").fill("total");
+    await box(page, "Customer").click();
+    await expect(page.locator("#im-member-filter")).toHaveValue("");
+    await expect(page.locator(".im-attrs tbody tr[data-attr]:visible")).toHaveCount(2);
+  });
+});
+
+// The canvas binds the keyboard — arrow keys nudge the selection — and the search
+// field sits above it. Typing a class's name into the field must not also drive the
+// drawing underneath.
+test("typing in the search does not reach the canvas's keyboard", async ({ page }) => {
+  const order = box(page, "Order");
+  await order.click();
+  const before = await order.boundingBox();
+
+  await search(page).click();
+  await search(page).pressSequentially("Order");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowDown");
+
+  const after = await order.boundingBox();
+  expect(Math.abs(after.x - before.x)).toBeLessThan(0.5);
+  expect(Math.abs(after.y - before.y)).toBeLessThan(0.5);
+  expect(page.__errors).toEqual([]);
+});
+
+// Undo and redo were the other half of ADR-0237's promise, reachable from nowhere:
+// the canvas has kept a command stack since the port, and nothing asked it for
+// anything. What they undo is what the canvas does — moving something — which is why
+// the control says "the last move" and not "the last change".
+test.describe("undo and redo on the canvas", () => {
+  const undo = (page) => page.locator('#im-canvas [data-tool="undo"]');
+  const redo = (page) => page.locator('#im-canvas [data-tool="redo"]');
+
+  // A drag on the sheet, through diagram-js's own hit layer.
+  async function dragOrder(page, dx, dy) {
+    const target = box(page, "Order");
+    const at = await target.boundingBox();
+    await page.mouse.move(at.x + at.width / 2, at.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(at.x + at.width / 2 + dx, at.y + 10 + dy, { steps: 8 });
+    await page.mouse.up();
+  }
+
+  test("a mis-drag is undone, and the undo is redone", async ({ page }) => {
+    // Nothing has happened yet, so there is nothing to undo.
+    await expect(undo(page)).toBeDisabled();
+    await expect(redo(page)).toBeDisabled();
+
+    const before = await box(page, "Order").boundingBox();
+    await dragOrder(page, 90, 60);
+    const moved = await box(page, "Order").boundingBox();
+    expect(moved.x).toBeGreaterThan(before.x + 40);
+    await expect(undo(page)).toBeEnabled();
+
+    await undo(page).click();
+    const back = await box(page, "Order").boundingBox();
+    expect(Math.abs(back.x - before.x)).toBeLessThan(2);
+    await expect(redo(page)).toBeEnabled();
+
+    await redo(page).click();
+    expect((await box(page, "Order").boundingBox()).x).toBeGreaterThan(before.x + 40);
+    expect(page.__errors).toEqual([]);
+  });
+
+  // The undone position has to reach the document, or Save would write the geometry
+  // the reader just took back.
+  test("what was undone is what gets saved", async ({ page }) => {
+    const before = await box(page, "Order").boundingBox();
+    await dragOrder(page, 100, 0);
+    await undo(page).click();
+    await page.locator("#im-save").click();
+    await expect.poll(() => page.evaluate(() => window.__saved !== null)).toBe(true);
+
+    const saved = await page.evaluate(() => window.__saved.classes.find((c) => c.name === "Order"));
+    expect(saved.x).toBe(340); // the model's own position, not the dragged one
+    expect(before).toBeTruthy();
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("Ctrl+Z undoes on the sheet, and leaves a field being typed in alone", async ({ page }) => {
+    await dragOrder(page, 90, 0);
+    const moved = (await box(page, "Order").boundingBox()).x;
+    await page.keyboard.press("Control+z");
+    expect((await box(page, "Order").boundingBox()).x).toBeLessThan(moved - 40);
+
+    // With the caret in a field, Ctrl+Z belongs to that field: the box stays put.
+    // Clicked on its header rather than its middle, where a relationship's hit line
+    // crosses the box and would take the click.
+    await box(page, "Order").click({ position: { x: 30, y: 12 } });
+    await dragOrder(page, 90, 0);
+    const again = (await box(page, "Order").boundingBox()).x;
+    await page.locator("#im-c-name").click();
+    await page.keyboard.press("Control+z");
+    expect((await box(page, "Order").boundingBox()).x).toBeCloseTo(again, 0);
+    expect(page.__errors).toEqual([]);
+  });
+});

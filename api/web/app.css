@@ -733,13 +733,19 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    over a diagram covers whatever is under it, and moving it to another corner only
    changes which shapes it steals clicks from; both corners were tried, and both
    broke a different test. */
-.panorama-tools {
+/* The canvas controls, on both diagram-js surfaces. One definition rather than two
+   because zooming a diagram is the same act on the Panorama canvas and on the class
+   canvas, and ADR-0237 asks the second to look like the first — which a copied block
+   stops doing the day either copy is touched. The group ignores the pointer so a drag
+   that starts beside a button still pans the sheet underneath. */
+.panorama-tools, .im-tools {
   position: absolute; right: 12px; top: 12px; z-index: 8; display: flex; flex-direction: column;
   padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
   box-shadow: 0 2px 8px rgba(0,0,0,.08); pointer-events: none;
 }
-.panorama-tools > * { pointer-events: auto; }
-.panorama-tools .icon-btn { width: 30px; height: 28px; border-radius: 4px; font-weight: 700; }
+.panorama-tools > *, .im-tools > * { pointer-events: auto; }
+.panorama-tools .icon-btn, .im-tools .icon-btn { width: 30px; height: 28px; border-radius: 4px; font-weight: 700; }
+.im-tool-sep { height: 1px; margin: 3px 2px; background: var(--border); }
 .panorama-canvas { flex: 1; min-width: 0; height: 100%; position: relative; overflow: hidden; background: var(--diagram-bg); }
 .panorama-canvas .djs-container { font-family: inherit; }
 .panorama-canvas .archimate-label { font: 600 12px/1.3 ui-sans-serif, system-ui, sans-serif; fill: #20252a; pointer-events: none; }
@@ -4891,6 +4897,38 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .im-title { font-size: 14px; }
 .im-rev { font: 12px/1.5 ui-monospace, monospace; }
 .im-palette { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 8px; }
+
+/* Finding something in a model that outgrew its window — a class among thirty on the
+   sheet, a member among forty in a panel. Both are view state and neither touches the
+   document, so both are styled as quiet fields rather than as controls. */
+.im-search { position: relative; display: inline-flex; }
+.im-search > input {
+  width: 190px; font: 12px/1.5 system-ui, sans-serif; color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; background: var(--bg);
+}
+.im-search-results {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 12; min-width: 260px; max-width: 340px;
+  max-height: 300px; overflow: auto; padding: 3px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+  box-shadow: 0 4px 14px rgba(0,0,0,.12);
+}
+.im-search-hit {
+  display: flex; gap: 8px; align-items: baseline; justify-content: space-between; width: 100%;
+  text-align: left; font: 12px/1.5 system-ui, sans-serif; color: var(--text);
+  border: 0; border-radius: 4px; padding: 4px 7px; background: none; cursor: pointer;
+}
+.im-search-hit:hover, .im-search-hit:focus-visible { background: var(--accent-soft); }
+.im-search-hit .muted { font-size: 11px; white-space: nowrap; }
+.im-search-none { margin: 0; padding: 5px 7px; font-size: 12px; }
+
+.im-filter { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+.im-filter > input {
+  flex: 1; min-width: 0; font: 12px/1.4 system-ui, sans-serif; color: var(--text);
+  border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px; background: var(--bg);
+}
+.im-filter-count { font-size: 11px; white-space: nowrap; }
+.im-filter-count.none { color: var(--danger, #b42318); }
+.im-filter-empty { margin: 6px 0 0; font-size: 12px; }
 .im-add, .im-connect {
   font: 500 12px/1.5 system-ui, sans-serif; cursor: pointer; white-space: nowrap;
   border: 1px solid var(--border); background: var(--bg); color: var(--text);
@@ -4997,6 +5035,9 @@ table.im-attrs { width: 100%; border-collapse: collapse; font-size: 12px; }
   color: var(--muted); font-size: 11px; line-height: 1; text-align: center;
 }
 .im-attrs .im-grip:active { cursor: grabbing; }
+/* A narrowed list does not reorder: a row dragged past rows that are not on screen
+   would land somewhere nobody chose, so the grip says so rather than lying. */
+.im-attrs .im-grip.disabled { cursor: not-allowed; opacity: .35; }
 .im-attrs tr:hover .im-grip { color: var(--text); }
 .im-attrs tr.im-dragging { opacity: .45; }
 .im-attrs tr.im-drop-before td { box-shadow: inset 0 2px 0 0 var(--accent); }
