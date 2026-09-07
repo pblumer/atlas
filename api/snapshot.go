@@ -377,6 +377,45 @@ func ApplyPendingRestore(dataDir string) (bool, error) {
 	return true, os.RemoveAll(staging)
 }
 
+// SeedStateFromCheckpoint gives a data directory with no state store its starting
+// point, from the newest checkpoint that verifies. It reports whether it seeded
+// one.
+//
+// It exists because a compacted log no longer carries the prefix that would
+// rebuild the store: those records were deleted, and they live only in the
+// checkpoint (ADR-0131). Recovery can detect that gap and refuse — and does
+// (ADR-draft-prove-the-prefix) — but refusing is only the right answer when
+// nothing can close it. Where a checkpoint can, the server should start.
+//
+// This runs at startup, before the store is opened, because that is the only
+// moment installing state files is possible: replacing the files under an open
+// Pebble store is not. It is the same installation the whole-instance restore
+// performs, called rather than copied, so the two cannot come to disagree about
+// what a checkpoint restores to.
+//
+// A directory that already has a state store is left alone. That store is the
+// newer answer, and replacing it with a checkpoint would discard everything
+// applied since.
+func SeedStateFromCheckpoint(dataDir string) (bool, error) {
+	if _, err := os.Stat(filepath.Join(dataDir, "state")); err == nil {
+		return false, nil // already has one: the newer answer wins
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return false, err
+	}
+	before, err := checkpoint.List(checkpoint.Dir(dataDir))
+	if err != nil {
+		return false, err
+	}
+	if err := installCheckpointState(dataDir); err != nil {
+		return false, err
+	}
+	if len(before) == 0 {
+		return false, nil // nothing to seed from; a whole log replays from genesis
+	}
+	_, statErr := os.Stat(filepath.Join(dataDir, "state"))
+	return statErr == nil, nil
+}
+
 // installCheckpointState seeds <dataDir>/state from the newest verified checkpoint the
 // restore brought along, so recovery replays only the WAL suffix past it. With no
 // checkpoint it does nothing and recovery replays the whole log — the pre-ADR-0131

@@ -473,6 +473,23 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	}
 	defer wl.Close()
 
+	// A data directory with no state store gets its starting point from the newest
+	// verified checkpoint, before the store is opened — the only moment installing
+	// state files is possible, since they cannot be replaced under an open store.
+	//
+	// It matters because a compacted log no longer holds the prefix that would
+	// rebuild the store from genesis: those records were deleted and live only in
+	// the checkpoint (ADR-0131). Without this, recovery would find the gap and
+	// refuse to start (ADR-draft-prove-the-prefix) — correct, but a refusal where a
+	// checkpoint could have closed it. A directory that already has a state store is
+	// left alone: that store is the newer answer.
+	if seeded, err := api.SeedStateFromCheckpoint(dataDir); err != nil {
+		return fmt.Errorf("seed state from checkpoint: %w", err)
+	} else if seeded {
+		logging.Info(logging.DataDirOpened,
+			"no state store found; seeded it from the newest verified checkpoint so the compacted log's prefix is not needed")
+	}
+
 	store, err := state.Open(filepath.Join(dataDir, "state"))
 	if err != nil {
 		return err

@@ -91,6 +91,33 @@ func (l *Log) firstSegmentHolding(segs []string, after uint64, positionOf func([
 	return start, nil
 }
 
+// EarliestPosition reports the log position of the oldest record still on disk,
+// and whether there is one at all.
+//
+// It is what lets a caller prove that the log still contains the prefix its state
+// needs. Compaction deletes whole segments (ADR-0131), so after one the log no
+// longer starts at genesis — and a replay of what remains looks exactly like a
+// replay of everything unless somebody checks where "what remains" begins.
+//
+// Segments that hold no readable record are skipped: a freshly rolled one carries
+// only its header, which says nothing about position.
+func (l *Log) EarliestPosition(positionOf func(data []byte) (uint64, error)) (uint64, bool, error) {
+	segs, err := l.segmentFiles()
+	if err != nil {
+		return 0, false, err
+	}
+	for _, name := range segs {
+		pos, ok, perr := l.firstPosition(name, positionOf)
+		if perr != nil {
+			return 0, false, perr
+		}
+		if ok {
+			return pos, true, nil
+		}
+	}
+	return 0, false, nil
+}
+
 // firstPosition reads just the first record of a segment and reports its log position,
 // or ok=false when the segment holds no readable record.
 func (l *Log) firstPosition(name string, positionOf func([]byte) (uint64, error)) (uint64, bool, error) {

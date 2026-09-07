@@ -990,6 +990,15 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	}
 	after, seedPos, seedCounter := p.checkpointSeed(checkpointRoot, lastApplied)
 
+	// Prove the log still holds the prefix this state needs, before replaying a
+	// suffix and calling it a recovery. Compaction deletes the segments a checkpoint
+	// covers, so after one the log no longer starts at genesis — and a replay of what
+	// remains is indistinguishable from a replay of everything unless somebody checks
+	// where what remains begins (ADR-draft-prove-the-prefix).
+	if err := p.proveThePrefix(lastApplied, after, checkpointRoot); err != nil {
+		return err
+	}
+
 	tx := p.store.NewTransaction()
 	defer tx.Close()
 
