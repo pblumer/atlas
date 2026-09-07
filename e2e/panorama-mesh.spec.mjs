@@ -77,6 +77,16 @@ function installMock(page, mesh = graph) {
 // The depth control is a number field plus an "all" switch, so setting it is two
 // possible gestures rather than one option to pick. One helper, so every test says
 // what it wants rather than how the control is built.
+// Going into a node. A double-click does it for every kind whose inside is on this
+// canvas; for a process the inside is its Operations view, so the drilldown there is
+// the header's "→" — the control the gesture was given when the drilldown became a
+// path. One helper, so a test about the drilldown says "go into this" rather than
+// picking a gesture per kind.
+async function drillInto(page, id) {
+  await page.locator(`[data-node-id="${id}"] .mesh-body`).click();
+  await page.locator("#mesh-drill-in").click();
+}
+
 async function setDepth(page, hops) {
   if (hops === "all") {
     await page.locator("#mesh-depth-any").check();
@@ -1311,13 +1321,13 @@ test("a filtered findings list says it is filtered", async ({ page }) => {
 //
 // The complaint it answers is the one every large graph has: you find the thing you
 // came for and it is still sitting in four hundred circles of everything else.
-test("double-clicking a node goes into it", async ({ page }) => {
+test("going into a node reduces the landscape to it and what it touches", async ({ page }) => {
   installMock(page);
   await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-node")).toHaveCount(7);
   await expect(page.locator("#mesh-drill-trail")).toBeHidden();
 
-  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+  await drillInto(page, "process:1");
 
   // Invoice, and what it touches at the depth already on screen (2 hops): its
   // application, both processes, the restricted placeholder, the mail worker, and
@@ -1346,7 +1356,7 @@ test("the drilldown reaches as far as the depth says", async ({ page }) => {
   await page.goto("/index.html#/panorama/starmap");
 
   await setDepth(page, "1");
-  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+  await drillInto(page, "process:1");
   const oneHop = await page.locator(".mesh-node").count();
   // Invoice's own neighbours only: the decision that only Dunning uses is two away.
   await expect(page.locator('[data-node-id="decision:credit"]')).toHaveCount(0);
@@ -1371,7 +1381,7 @@ test("leaving a drilldown restores the landscape with the node still marked", as
   await expect(page.locator(".mesh-panel-head")).toContainText("ops-mail");
 
   // Escape is the other way out, the one it is everywhere else.
-  await page.locator('[data-node-id="process:2"] .mesh-body').dblclick();
+  await drillInto(page, "process:2");
   await expect(page.locator("#mesh-drill-trail")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator("#mesh-drill-trail")).toBeHidden();
@@ -1390,7 +1400,7 @@ test("a search leaves the drilldown rather than compounding with it", async ({ p
 
   // Drilling in clears the box, so the header is never describing one narrowing
   // while the picture shows another.
-  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+  await drillInto(page, "process:1");
   await expect(page.locator("#mesh-search")).toHaveValue("");
   await expect(page.locator("#mesh-count")).toContainText("hop(s)");
 
@@ -2654,7 +2664,7 @@ test("going into a node is repeatable, and the path is the way back", async ({ p
 
   // From inside Billing, into one of its processes: the picture recentres and the
   // station is appended rather than replacing the one before it.
-  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+  await drillInto(page, "process:1");
   await expect(page.locator(".mesh-crumb-here")).toHaveText("Invoice");
   await expect(page.locator("#mesh-drill-trail .mesh-crumb")).toHaveText(["All", "Billing", "Invoice"]);
 
@@ -2687,7 +2697,7 @@ test("stepping into a node already on the path returns to it", async ({ page }) 
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   await page.locator('[data-node-id="application:a1"] .mesh-body').dblclick();
-  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+  await drillInto(page, "process:1");
   await expect(page.locator("#mesh-drill-trail .mesh-crumb")).toHaveText(["All", "Billing", "Invoice"]);
 
   await page.locator('[data-node-id="application:a1"] .mesh-body').dblclick();
@@ -2703,7 +2713,7 @@ test("an export of a path says which way it came", async ({ page }) => {
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
   await page.locator('[data-node-id="application:a1"] .mesh-body').dblclick();
-  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+  await drillInto(page, "process:1");
 
   const [download] = await Promise.all([
     page.waitForEvent("download"),
@@ -3092,4 +3102,56 @@ test("the structure of the picture clears the contrast floor a canvas needs", as
   expect(seen.outline).toBeGreaterThan(4);
   expect(seen.outlineScales).toBe("non-scaling-stroke");
   expect(seen.edgeScales).toBe("non-scaling-stroke");
+});
+
+// Double-clicking a process opens it in Operations.
+//
+// One gesture with one meaning — go inside the thing this node stands for — and where
+// the inside is depends on the kind. Panorama owns the landscape and application
+// altitudes and links into the process one rather than reimplementing it (§5), so a
+// process's inside is not on this canvas at all: it is the live view, with its
+// instances and its tokens.
+test("double-clicking a process opens it in Operations", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator('[data-node-id="process:1"] .mesh-body').dblclick();
+  await expect(page).toHaveURL(/#\/operations\/p\/1$/);
+});
+
+// And the link it duplicates stays where it was. A gesture you have to be told about
+// is one most readers never find, so the panel goes on saying it in words.
+test("the panel still says where a process opens, in words", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+
+  await page.locator('[data-node-id="process:1"] .mesh-body').click();
+  await expect(page.getByRole("link", { name: "Open in Operations" })).toBeVisible();
+  await page.getByRole("link", { name: "Open in Operations" }).click();
+  await expect(page).toHaveURL(/#\/operations\/p\/1$/);
+});
+
+// Every other kind keeps the gesture it had: there is no elsewhere to open a worker
+// in, so going into one still means this node becomes the centre of the picture.
+test("double-clicking anything else still goes into it on the canvas", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+
+  await page.locator('[data-node-id="worker:c1"] .mesh-body').dblclick();
+  await expect(page.locator("#mesh-drill-trail")).toBeVisible();
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("ops-mail");
+  await expect(page).toHaveURL(/#\/panorama\/starmap$/);
+});
+
+// A process can still be drilled into on the landscape — the gesture moved, the
+// capability did not. The "→" is the discoverable half of the pair.
+test("a process can still be made the centre of the picture, from the header", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+
+  await drillInto(page, "process:1");
+  await expect(page.locator("#mesh-drill-trail")).toBeVisible();
+  await expect(page.locator(".mesh-crumb-here")).toHaveText("Invoice");
+  await expect(page).toHaveURL(/#\/panorama\/starmap$/);
 });
