@@ -14,6 +14,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The training nuggets play full screen, for showing one to a room.** A nugget sat in
+  the flow of the handbook at reading size, which is right for reading and wrong for the
+  case it keeps being used for: an onboarding session with the thing on a projector. The
+  ⛶ button hands the nugget the whole screen — dark surround, the caption set large and
+  centred underneath, and the space bar, arrow keys, Home and End driving it, so the
+  presenter is not aiming a mouse at a 24-pixel control. Going full screen starts the run
+  if nothing has played yet; leaving it stops the run rather than letting it animate on
+  behind whatever came next. The keys bind to the nugget only while it owns the screen —
+  bound globally they would take space and the arrows away from anyone scrolling the
+  handbook.
+
+  The picture keeps its own shape instead of filling the screen. That is not cosmetic and
+  it cost a build to learn: the highlight ring and the cursor are percentages *of the
+  stage*, so a stage wider than the picture inside it puts the ring beside the button
+  instead of on it — and a ring pointing at nothing looks exactly like a ring pointing at
+  something. The full-screen stage therefore carries the shots' 1200×703 and is centred in
+  what is left. `e2e/nuggets.spec.mjs` measures the ring against the picture at two screen
+  shapes; the check that does the work there is the one on the picture's aspect ratio,
+  because an `<img>` element box goes on filling its stage even when the picture inside it
+  does not.
+
+  Where a browser has no Fullscreen API, or an embedding forbids it, the button is not
+  offered rather than offered and inert.
+
 - **A weekly job asks whether the handbook's screenshots still match the product.**
   `make nuggets` re-takes them, but nobody re-takes screenshots on a schedule — and
   staleness here is silent: a shot of a UI that has since moved still renders, and a

@@ -253,6 +253,53 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 .nug-pos{font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);
   min-width:112px;text-align:right}
 
+/* ---- full screen, for showing a nugget to a room ----
+   The shots are 1200x703 and a screen is usually 16:9, so the picture is
+   letterboxed rather than cropped: in a presentation the cut-off edge is
+   exactly the row somebody is being told to look at. Everything else scales
+   with the viewport, so the highlight and the cursor — both percentages of the
+   image — land where they always did. */
+.nug:fullscreen{margin:0;border:0;border-radius:0;display:flex;flex-direction:column;
+  background:#0b0d10;box-shadow:none}
+.nug:fullscreen .nug-head{background:#0b0d10;border-bottom-color:#22272e;color:#e6e9ec;
+  padding:14px 22px;font-size:17px}
+.nug:fullscreen .nug-head .nug-dur{color:#9aa3ad;font-size:15px}
+/* The stage keeps the image's own ratio and is centred in whatever is left,
+   rather than filling the screen and letterboxing inside itself. That is not
+   cosmetic: the highlight and the cursor are percentages of the *stage*, so a
+   stage wider than its picture puts the ring beside the button — visible in the
+   first full-screen build as a rectangle hanging off the left edge. Same shape
+   of bug as measuring against the stage instead of the image, one level up. */
+.nug:fullscreen .nug-stage{flex:1;min-height:0;background:#0b0d10;
+  aspect-ratio:1200/703;max-width:100%;max-height:100%;margin:0 auto;align-self:center}
+.nug:fullscreen .nug-scene img{object-fit:fill}
+.nug:fullscreen .nug-poster{background:#0b0d10;color:#e6e9ec}
+.nug:fullscreen .nug-poster h4{font-size:clamp(22px,3.2vw,40px)}
+.nug:fullscreen .nug-poster p{font-size:clamp(15px,1.6vw,21px);color:#9aa3ad;max-width:60ch}
+.nug:fullscreen .nug-play{font-size:clamp(16px,1.5vw,20px);padding:12px 26px}
+/* The caption is the spoken line in a presentation, so it gets room to be read
+   from the back of a room. */
+.nug:fullscreen .nug-cap{background:#0b0d10;border-top-color:#22272e;color:#e6e9ec;
+  font-size:clamp(15px,1.7vw,24px);line-height:1.5;padding:18px clamp(20px,4vw,64px);
+  min-height:0;text-align:center}
+.nug:fullscreen .nug-cap b{color:#5b8def}
+/* The role nuggets name their role as <code>, and a code chip keeps the light
+   theme's own background wherever it sits — so on the dark surround it became
+   light text on a light chip: the one word the scene is about, invisible, at
+   the size a room is reading it. */
+.nug:fullscreen code{background:#161a1f;border-color:#2c323a;color:#cfd6de}
+.nug:fullscreen .nug-ctl{background:#0b0d10;border-top-color:#22272e;padding:12px 22px}
+.nug:fullscreen .nug-ctl button{background:#161a1f;border-color:#2c323a;color:#e6e9ec;
+  font-size:15px;padding:6px 14px}
+.nug:fullscreen .nug-pos{color:#9aa3ad;font-size:14px}
+.nug:fullscreen .nug-steps i{width:9px;height:9px;background:#2c323a}
+.nug:fullscreen .nug-steps i.on{background:#5b8def}
+.nug:fullscreen .nug-steps i.seen{background:#3a4a63}
+/* Firefox and Safari expose the same state under their own selector; a browser
+   that has neither simply never enters this block. */
+.nug:-webkit-full-screen{background:#0b0d10}
+.nug-full{margin-left:4px}
+
 @media (prefers-reduced-motion: reduce){
   .nug-scene,.nug-cursor,.nug-hi{transition:none}
   .nug-cursor.tap::after{animation:none}
@@ -384,9 +431,16 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <p class="lead" data-l="de">Kurze, abspielbare Durchgänge: Man drückt auf Abspielen und sieht Schritt für
         Schritt, wo geklickt wird und was dabei geschieht. Zuerst der Gesamtüberblick, danach ein Pfad je
         <a href="#konten">Rolle</a> &ndash; jeder unter zwei Minuten.</p>
+      <p data-l="de">Für eine Schulung vor Publikum gibt es unten rechts am Nugget die Schaltfläche
+        <b>&#9974;</b>: Sie legt das Nugget auf den ganzen Bildschirm, mit grosser Bildunterschrift.
+        Gesteuert wird dort mit <b>Leertaste</b> (anhalten und weiter), den <b>Pfeiltasten</b> sowie
+        <b>Pos1</b> und <b>Ende</b>. <b>Esc</b> beendet das Vollbild.</p>
       <p class="lead" data-l="en">Short, playable walk-throughs: press play and watch, step by step, where the
         clicks go and what happens. First the whole picture, then one path per <a href="#konten">role</a> &ndash;
         each under two minutes.</p>
+      <p data-l="en">To show one to a room, the <b>&#9974;</b> button at the bottom right of a nugget puts
+        it on the whole screen with a large caption. There it is driven with the <b>space bar</b> (pause and
+        resume), the <b>arrow keys</b>, and <b>Home</b> and <b>End</b>. <b>Esc</b> leaves full screen.</p>
 
       <h3 data-l="de">Der Gesamtüberblick</h3><h3 data-l="en">The whole picture</h3>
       <p data-l="de">Wer noch nie mit Atlas gearbeitet hat, fängt hier an. Drei Minuten, und die Begriffe im Rest
@@ -4962,6 +5016,12 @@ document.querySelectorAll("main section[id]").forEach(s => obs.observe(s));
     '<svg viewBox="0 0 24 24" aria-hidden="true">' +
     '<path d="M5 2l14 10-6 1 3.5 6.5-2.6 1.4L10.4 14 5 18z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg>';
 
+  // Not every context allows it — an iframe without allowfullscreen, an older
+  // browser. Where it is missing the button is simply not offered, rather than
+  // offered and inert.
+  const CAN_FULL = typeof document.documentElement.requestFullscreen === "function" &&
+    document.fullscreenEnabled !== false;
+
   // players holds every mounted nugget so starting one can stop the rest.
   const players = [];
 
@@ -4972,6 +5032,9 @@ document.querySelectorAll("main section[id]").forEach(s => obs.observe(s));
     const total = scenes.reduce((a, s) => a + s.t, 0);
 
     host.classList.add("nug");
+    // tabindex="-1" so the element can hold focus for its own key handling
+    // without entering the page's tab order.
+    host.tabIndex = -1;
     host.innerHTML =
       `<div class="nug-head"><b>${bi(nug.title)}</b>` +
       `<span class="nug-dur">${clock(total)}</span></div>` +
@@ -4989,6 +5052,8 @@ document.querySelectorAll("main section[id]").forEach(s => obs.observe(s));
         `<button type="button" data-act="next" aria-label="Next">▶|</button>` +
         `<span class="nug-steps"></span>` +
         `<span class="nug-pos">0:00 / ${clock(total)}</span>` +
+        (CAN_FULL ? `<button type="button" class="nug-full" data-act="full" ` +
+          `title="Vollbild / Full screen" aria-label="Full screen">⛶</button>` : "") +
       `</div>`;
 
     const stage = host.querySelector(".nug-stage");
@@ -5114,6 +5179,39 @@ document.querySelectorAll("main section[id]").forEach(s => obs.observe(s));
       if (act === "toggle") return st.playing ? pause() : play();
       if (act === "prev") return goto(st.i - 1);
       if (act === "next") return goto(st.i + 1);
+      if (act === "full") return toggleFull();
+    });
+
+    function toggleFull() {
+      if (document.fullscreenElement === host) return document.exitFullscreen?.();
+      host.requestFullscreen?.().then(() => {
+        // Somebody who just went full screen is presenting, not reading — start
+        // from the top if nothing has been played yet.
+        if (st.i < 0) play();
+        host.focus?.();
+      }).catch(() => { /* the browser refused; the page is unchanged */ });
+    }
+
+    // Keys, but only while this nugget owns the screen. Binding them globally
+    // would hijack space and the arrows for anyone scrolling the handbook.
+    host.addEventListener("keydown", (e) => {
+      if (document.fullscreenElement !== host) return;
+      const k = e.key;
+      if (k === " " || k === "Spacebar") { e.preventDefault(); return st.playing ? pause() : play(); }
+      if (k === "ArrowRight" || k === "PageDown") { e.preventDefault(); return goto(st.i + 1); }
+      if (k === "ArrowLeft" || k === "PageUp") { e.preventDefault(); return goto(st.i - 1); }
+      if (k === "Home") { e.preventDefault(); return goto(0); }
+      if (k === "End") { e.preventDefault(); return goto(scenes.length - 1); }
+      // Escape is the browser's own way out and needs no help here.
+    });
+
+    // Leaving full screen stops the run. Otherwise the animation keeps playing
+    // behind whatever the presenter switched to — the same reason a nugget
+    // pauses when it scrolls out of view.
+    let wasFull = false;
+    document.addEventListener("fullscreenchange", () => {
+      if (wasFull && document.fullscreenElement === null && st.playing) pause();
+      wasFull = document.fullscreenElement === host;
     });
 
     // A nugget that scrolls out of view stops rather than running on unseen.

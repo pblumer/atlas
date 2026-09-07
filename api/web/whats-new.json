@@ -2,6 +2,34 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-training-nuggets-play-full-screen-for-showing-one-to-a-r",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Training nuggets play full screen",
+        "de": "Schulungsnuggets laufen im Vollbild"
+      },
+      "summary": {
+        "en": "A nugget used to run at reading size, in the flow of the handbook. That is right for reading and wrong for what it keeps being used for: an onboarding session with the thing on a projector. The new button hands a nugget the whole screen — dark surround, the caption set large and centred underneath, and the space bar, arrow keys, Home and End driving it, so nobody has to aim a mouse at a small control in front of a room. Going full screen starts the run; leaving it stops it, rather than letting it animate on behind whatever came next. The picture keeps its own shape instead of filling the screen, so the highlight ring stays on the button it is pointing at.",
+        "de": "Ein Nugget lief bisher in Lesegrösse mitten im Handbuch. Das ist zum Lesen richtig und für den Fall falsch, für den es tatsächlich benutzt wird: eine Einführung mit dem Beamer im Raum. Die neue Schaltfläche gibt dem Nugget den ganzen Bildschirm — dunkler Rahmen, die Bildunterschrift gross und mittig darunter, und Leertaste, Pfeiltasten, Home und Ende steuern es, damit niemand vor einem Publikum eine kleine Schaltfläche treffen muss. Der Wechsel ins Vollbild startet den Ablauf, das Verlassen beendet ihn, statt ihn hinter dem nächsten Fenster weiterlaufen zu lassen. Das Bild behält seine eigene Form, statt den Bildschirm zu füllen — so bleibt der Markierungsrahmen auf der Schaltfläche, auf die er zeigt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Handbook"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the handbook",
+          "de": "Handbuch öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "the-training-nuggets-show-the-real-atlas-not-a-drawing-of-it",
       "version": "Unreleased",
       "date": null,
@@ -175,24 +203,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-edges-in-the-landscape-nugget-missed-the-nodes-they-conn",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The edges in the landscape nugget missed the nodes they connect.",
-        "de": "The edges in the landscape nugget missed the nodes they connect."
-      },
-      "summary": {
-        "en": "The scene that shows Panorama drew its edges as divs rotated by an angle computed from percentage coordinates — and x is a share of the container's width while y is a share of its height, so on anything that is not square both the angle and the length come out of mixed units.",
-        "de": "The scene that shows Panorama drew its edges as divs rotated by an angle computed from percentage coordinates — and x is a share of the container's width while y is a share of its height, so on anything that is not square both the angle and the length come out of mixed units."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     },
     {
