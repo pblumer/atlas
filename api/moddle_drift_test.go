@@ -39,8 +39,13 @@ var connectorExtRe = regexp.MustCompile(`xml:"extensionElements>([a-zA-Z]+Connec
 // to be in the moddle — the round-trip rule has no exceptions.
 var nonServiceTaskConnectors = map[string]string{
 	"temisConnector": "a business rule task's central-DMN binding, configured in the decision panel rather than the service-task worker picker (ADR-0050)",
-	"agentConnector": "an agent's configuration, on either of its two hosts. On an ad-hoc subprocess it is the container's (ADR-0253), which the worker picker is the wrong panel for; on a service task it is an ai task, whose panel is not built yet — the extension is in the moddle with every attribute, so a hand-authored ai task survives a Modeler round trip, it just cannot be edited there (ADR-0256)",
 }
+
+// agentConnector used to be listed above, because ADR-0253 put it only on an ad-hoc
+// container. ADR-0256 gave it a second host — a service task that asks a model once — so
+// it is a service-task kind now and the catalog must carry it. The exemption came off
+// rather than being reworded, which is the point of the check below: an excuse that has
+// stopped being true is worse than none, because it reads like a decision.
 
 // compilerConnectorTags returns the worker extension tags the compiler parses.
 func compilerConnectorTags(t *testing.T) []string {
@@ -183,11 +188,7 @@ func TestModdleDeclaresEveryCompilerConnector(t *testing.T) {
 // worker that is genuinely not a service-task kind belongs in
 // nonServiceTaskConnectors with its reason.
 func TestModelerPanelKnowsEveryConnector(t *testing.T) {
-	src, err := os.ReadFile("web/editor.js")
-	if err != nil {
-		t.Fatalf("read editor.js: %v", err)
-	}
-	catalog := string(src)
+	catalog := serviceTaskKindsSource(t)
 
 	var missing []string
 	for _, tag := range compilerConnectorTags(t) {
@@ -226,6 +227,50 @@ func TestNonServiceTaskConnectorsAreReal(t *testing.T) {
 			t.Errorf("nonServiceTaskConnectors[%q] has no reason recorded", tag)
 		}
 	}
+}
+
+// TestNoConnectorIsExemptedAndCatalogued is the other half of keeping that list honest.
+// The staleness check above catches an entry the compiler no longer parses; this one
+// catches an entry the Modeler *does* now offer, which is how an exemption outlives the
+// reason it was written for — and an exemption still standing is a claim that the picker
+// is the wrong panel for that worker, which would then be false.
+func TestNoConnectorIsExemptedAndCatalogued(t *testing.T) {
+	catalog := strings.ToLower(serviceTaskKindsSource(t))
+	for tag, reason := range nonServiceTaskConnectors {
+		if strings.Contains(catalog, strings.ToLower(`"atlas:`+moddleTypeFor(tag)+`"`)) {
+			t.Errorf("nonServiceTaskConnectors excuses %q (%s), but SERVICE_TASK_KINDS now offers it; drop the exemption", tag, reason)
+		}
+	}
+}
+
+// serviceTaskKindsSource returns the SERVICE_TASK_KINDS array's own source text.
+//
+// Reading the whole of editor.js would be wrong in both directions. A worker named
+// anywhere in the file — in the decision panel, in a comment, in the agent container's
+// own section — would look catalogued when the service-task picker has no entry for it,
+// and an exemption for such a worker would look stale when it is exactly right. The
+// question both callers ask is about the picker, so the text they ask it of is the
+// picker's.
+func serviceTaskKindsSource(t *testing.T) string {
+	t.Helper()
+	src, err := os.ReadFile("web/editor.js")
+	if err != nil {
+		t.Fatalf("read editor.js: %v", err)
+	}
+	const opening = "const SERVICE_TASK_KINDS = ["
+	i := strings.Index(string(src), opening)
+	if i < 0 {
+		t.Fatalf("editor.js has no %s; the catalog must have been renamed", opening)
+	}
+	rest := string(src)[i+len(opening):]
+	// The array's own closing bracket is the first one at column zero: every entry inside
+	// is indented, so nothing nested can look like the end. What follows it varies (today
+	// a .map), which is why the bracket rather than the statement's end is the anchor.
+	j := strings.Index(rest, "\n]")
+	if j < 0 {
+		t.Fatal("SERVICE_TASK_KINDS is not closed by a bracket at column zero; the catalog's shape must have changed")
+	}
+	return rest[:j]
 }
 
 // connectorAttrRe matches the attributes one xml*Worker struct parses, e.g.

@@ -17,7 +17,12 @@
          The model carries one of each on purpose: `agent` is agent-driven with a
          documented tool, an undocumented tool and a chained inner activity that is not a
          tool at all; `plain` is an ordinary ad-hoc, so the switch can be driven in both
-         directions from one file. -->
+         directions from one file.
+
+         `einordnen` is the other host of <atlas:agentConnector> (ADR-0256): a service
+         task that asks a model once. It sits here rather than in a file of its own
+         because the thing worth checking is that the two do not bleed into each other —
+         one element type, two panels, and neither may show the other's fields. -->
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
@@ -39,7 +44,7 @@
     <bpmn:adHocSubProcess id="agent" name="Beraten">
       <bpmn:documentation>Finde den guenstigsten Hypothekarzins.</bpmn:documentation>
       <bpmn:extensionElements>
-        <atlas:agentConnector connector="anthropic_pb" resultCollection="toolCallResults" resultElement="=toolCallResult"/>
+        <atlas:agentConnector connector="anthropic_pb" model="claude-opus-5" resultCollection="toolCallResults" resultElement="=toolCallResult"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
       <bpmn:serviceTask id="zinsen_holen" name="Zinsen holen">
@@ -64,9 +69,16 @@
         <bpmn:extensionElements><zeebe:taskDefinition type="free"/></bpmn:extensionElements>
       </bpmn:serviceTask>
     </bpmn:adHocSubProcess>
-    <bpmn:endEvent id="End_1"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:serviceTask id="einordnen" name="Einordnen">
+      <bpmn:extensionElements>
+        <atlas:agentConnector connector="anthropic_pb" model="claude-haiku-4-5" prompt="=&quot;Klassifiziere: &quot; + antrag" resultVariable="kategorie"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_1"><bpmn:incoming>f2</bpmn:incoming></bpmn:endEvent>
     <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="agent"/>
-    <bpmn:sequenceFlow id="f1" sourceRef="agent" targetRef="End_1"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="agent" targetRef="einordnen"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="einordnen" targetRef="End_1"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="berater">
     <bpmndi:BPMNShape id="Start_1_s" bpmnElement="Start_1"><dc:Bounds x="120" y="200" width="36" height="36"/></bpmndi:BPMNShape>
@@ -76,9 +88,11 @@
     <bpmndi:BPMNShape id="historie_lesen_s" bpmnElement="historie_lesen"><dc:Bounds x="260" y="240" width="100" height="80"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="plain_s" bpmnElement="plain" isExpanded="true"><dc:Bounds x="220" y="380" width="280" height="160"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="frei_s" bpmnElement="frei"><dc:Bounds x="260" y="420" width="100" height="80"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="End_1_s" bpmnElement="End_1"><dc:Bounds x="720" y="200" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="einordnen_s" bpmnElement="einordnen"><dc:Bounds x="720" y="178" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_s" bpmnElement="End_1"><dc:Bounds x="880" y="200" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNEdge id="f0_e" bpmnElement="f0"><di:waypoint x="156" y="218"/><di:waypoint x="220" y="218"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f1_e" bpmnElement="f1"><di:waypoint x="660" y="218"/><di:waypoint x="720" y="218"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_e" bpmnElement="f2"><di:waypoint x="820" y="218"/><di:waypoint x="880" y="218"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="g0_e" bpmnElement="g0"><di:waypoint x="360" y="180"/><di:waypoint x="420" y="180"/></bpmndi:BPMNEdge>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
