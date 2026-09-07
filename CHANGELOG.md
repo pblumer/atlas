@@ -54,6 +54,36 @@ _Changed_ / _Removed_ for each version.
   refused while the list is narrowed, because dragging a row past rows that are not
   on screen moves it somewhere nobody chose.
 
+- **The waiting-task badge on the live diagram counted its own page.** A user task with
+  1 275 people's work parked on it showed "500" on its 📋 link, and went on showing "500"
+  as the queue was worked down in the Tasks app — while the green token badge on the same
+  shape counted correctly. Nothing was stuck. 500 is the cap on one page of
+  `GET /api/v1/tasks`, and the badge was counting the rows it had been handed, so it could
+  not have said anything else until the queue fell below the cap.
+
+  The same cap could also delete the badge outright, which is the worse half: it is
+  applied across every definition *before* the list is filtered to the one on screen, so
+  enough waiting tasks on another process pushed this one's off the page and took the link
+  to a plainly waiting task with it.
+
+  Both facts — whether to draw the link, and whether it goes to a form or to the inbox —
+  now come from the element's live-token counter, which is exact at any scale
+  ([ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) and is what the "All
+  instances" total in the picker beside it has always been read from. The link no longer
+  carries a count at all: the green badge on that shape is that number, and on a user task
+  "tokens waiting here" and "tasks waiting here" are one fact, so a second copy of it was
+  the same wait read twice — the reason an armed branch does not restate its gateway's
+  race either. The task list is still read for the one thing only it can say: which task
+  to open when exactly one is waiting.
+
+  Isolating a single instance now asks for *that instance's* tasks rather than filtering
+  the global page, so its form stays one click away under a flood — the endpoint has
+  resolved an instance's tasks through its own element index all along, and the live view
+  was the caller not using it. And completing a task in the Tasks app reloads the inbox
+  through the path that reads the paging headers, instead of only the body: the "more
+  exist" banner now goes away when the queue drains, and "Load older" no longer pages from
+  a cursor that has moved.
+
 - **Saving a layout onto a deployment was refused on diagrams nobody had edited.** The
   first real use of "Save layout to deployment" hit the guard that is supposed to catch a
   changed *process*, on a document whose process had not changed at all.
@@ -3299,6 +3329,7 @@ rules run at deploy.
   one compiles through the same `compiler.ParseAll` a deploy uses, gate included, and each
   card's `data-proc` must name a process its own model declares — so the next compiler
   rule catches the documentation with the code.
+
 - **The call-activity recipe no longer promises an incident that never comes.** Its hint
   said that without a deployed `kyc-check` the instance "pauses with an incident (which
   you can inspect nicely in Operations)". It does not: the call activity parks with the
@@ -3306,6 +3337,7 @@ rules run at deploy.
   an incident as follow-up work — so a reader who took the hint at its word went to
   Operations looking for the one thing that is not there. The hint now describes the
   parking it really does, and says to deploy the called process and start again.
+
 - **A server that requires a login no longer calls itself single-user mode.** The account
   menu's label was written for the case where nobody *can* sign in — enforcement off, the
   API and UI open — but it was rendered whenever nobody *is* signed in, which on a server
@@ -3315,6 +3347,7 @@ rules run at deploy.
   now reads "Not signed in" where a login is enforced and keeps "Single-user mode" where
   it is the truth. Found while diagnosing an instance whose operator concluded from that
   label that a deploy had turned their authentication off.
+
 - **The Modeler stops guessing where a task's work runs — and starts saying it in all
   three panels that choose an implementation**
   ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md),
@@ -4064,6 +4097,7 @@ version, with a dry run that shows what the move would do before anything is wri
   model. The same sender/recipient checks a real provider applies are applied here, so
   it is a rehearsal rather than a bypass. The outbox is bounded and not durable:
   nothing in it was ever sent, and nothing in it survives a restart.
+
 - **The live diagram says why a token is not moving** (ADR-0150): the runtime overlay
   now carries the unresolved incidents on a definition, so the Operations live view
   marks a parked element red, badges it with the failure's own message, and offers
@@ -4259,6 +4293,7 @@ version, with a dry run that shows what the move would do before anything is wri
   the send as a whole, and a connector check walks the same connection a send does. A
   send is also bounded by the context of the job that asked for it, which it never was
   before.
+
 - **An SMTP endpoint written without a port is completed instead of failing at send
   time** (ADR-0150): `mail.example.com` now becomes `mail.example.com:587` (and
   `smtps://…` becomes `:465`), a pasted URL's path is dropped, a bare IPv6 literal is
@@ -4608,6 +4643,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
 - **Self-service registration link** ([ADR-0126](docs/adr/0126-self-service-registration-link.md)):
   the login screen can offer a registration link that starts the user-intake process, so a request
   for access is a modeled, approvable flow rather than an out-of-band email.
+
 - **Every element takes a Documentation property, and a user task shows it to the person
   doing the work** ([ADR-0025](docs/adr/0025-full-properties-panel.md) amended, reversing
   its "the compiler ignores it" clause): the Modeler's Details panel now offers a
@@ -4686,6 +4722,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   cannot parse a loop marker. The Modeler offers the Loop section on these tasks, and
   its "Atlas does not run this marker here" note is now reserved for the genuinely
   non-activity cases.
+
 - **Engine recovery checkpoints & WAL compaction — ADR + manifest primitives**
   (v0.2.0 programme D, [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md)):
   recovery replays the WAL from genesis, so it is O(total log) and no segment is ever
@@ -4703,6 +4740,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   CRC) and validation, with round-trip and corruption/truncation/version tests at 100%
   coverage. No checkpoint is created and **no WAL segment is deleted** — those are the
   later ADR-0131 slices.
+
 - **Standard loop activities** (the ↻ marker, [ADR-0133](docs/adr/0133-standard-loop-activities.md)):
   `<standardLoopCharacteristics>` now runs — an activity repeats while a FEEL
   `loopCondition` holds, one run at a time, with `testBefore` choosing the while form
@@ -4717,6 +4755,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   activity leaves behind what the same activity would leave running once. A loop with
   neither a condition nor a maximum, an invalid maximum, or both loop markers on one
   activity is refused at deploy.
+
 - **Loop authoring in the Modeler, in sync with the icon**: the Implement panel's
   Multi-instance section is now a **Loop** section whose single Mode select covers all
   four states (none, loop, multi-instance parallel, multi-instance sequential). It reads
@@ -4728,6 +4767,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
   `loopMaximum`, and the Operations call-activity list labels a looping call activity
   **loop** rather than **multi-instance**.
+
 - **Engine throughput and latency metrics** (v0.2.0 programme E,
   [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 2): `/metrics` now reports what
   the partition writer is actually doing — `atlas_batches_total`,
@@ -4754,6 +4794,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   measured rather than asserted — `BenchmarkInstrumented` against
   `BenchmarkUninstrumented` in `benchmarks/` shows **identical `allocs/op`**, with
   `ns/op` inside the fsync's own run-to-run spread.
+
 - **Prometheus metrics at `/metrics`** (v0.2.0 programme E,
   [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 1): Atlas had no metrics at all —
   everything observable was a JSON read of the present moment or a line in the log, so
@@ -4781,6 +4822,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   module graph via Pebble, so this promotes an existing dependency rather than adding
   one. `/metrics` is on by default and unauthenticated like `/healthz` — it carries only
   aggregates — with `--metrics=false` to turn it off.
+
 - **Checkpoint and compaction status, and a checkpoint-now control** (v0.2.0 programme D,
   [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 8 —
   completing the ADR): everything checkpointing and compaction did was visible only in the
@@ -4799,6 +4841,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   disabled the endpoint says so (409) instead of hanging or quietly doing nothing. Both
   endpoints are admin-gated like backup/restore, and neither is an MCP tool: this is
   storage housekeeping, not something an agent drives a scenario with.
+
 - **The WAL stops growing forever — compaction runs in the server** (v0.2.0 programme D,
   [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 7):
   `atlas serve --compact-wal` deletes the WAL segments a recovery checkpoint and every
@@ -4818,6 +4861,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   that hold *before* it picks the checkpoint it carries — so a pass that sees no backup is
   one whose deletion the backup's later choice already accounts for. `--compact-wal`
   without checkpointing warns and does nothing; the cut comes from a checkpoint.
+
 - **Whole-instance backup survives a compacted log** (v0.2.0 programme D,
   [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 6;
   [ADR-0109](docs/adr/0109-full-instance-snapshot.md) amended): the whole-instance
@@ -4841,6 +4885,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   grows by roughly the state store, against the 1 GiB restore-upload cap. Still no WAL
   segment is deleted anywhere — that is the last ADR-0131 slice, and this was the last
   consumer standing in its way.
+
 - **Bounded restart time — the server now takes recovery checkpoints** (v0.2.0
   programme D, [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md),
   slice 5): the mechanism built by the previous slices is switched on. `atlas serve`
@@ -4864,6 +4909,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   checkpoints taken against the replaced log describe a log that no longer exists — and
   once the restored log advanced past their position they would look usable. Dropping
   them costs the full replay a restore performs anyway.
+
 - **WAL compaction — old segments finally become deletable** (v0.2.0 programme D,
   [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 4):
   the log no longer grows without bound. `wal.Log.Compact` deletes the segments a replay
@@ -4880,6 +4926,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   optimization like the checkpoint itself — skipping it costs disk, never correctness.
   Nothing wires this into the server yet; the cadence and the operator surface are the
   last ADR-0131 slice.
+
 - **Engine recovery checkpoints — restore and suffix replay** (v0.2.0 programme D,
   [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 3):
   recovery can now *use* a checkpoint, which is what turns O(total log) startup into
@@ -4898,6 +4945,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   files, since a suffix replay does not touch them. Nothing wires this into the server
   yet and **no WAL segment is deleted**; compaction and the operator surface are the
   remaining ADR-0131 slices.
+
 - **Engine recovery checkpoints — create and atomically publish** (v0.2.0 programme D,
   [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 2):
   the engine can now *produce* a recovery checkpoint. `state.Store.Snapshot` flushes the
@@ -4915,6 +4963,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   exact — and is purely additive to durability: a failed checkpoint costs a slower
   recovery, never correctness. Nothing reads a checkpoint yet and **no WAL segment is
   deleted**; restore-and-suffix-replay and compaction are the next ADR-0131 slices.
+
 - **Deterministic crash-and-recovery harness** (v0.2.0 programme C): a new
   engine-level test harness (`engine/crash_recovery_test.go`) that turns the
   durability contract into checkable evidence. It runs a workload to a durable point,
@@ -4932,6 +4981,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   after-append/after-commit cut points, child-process (SIGKILL) crashes, the
   no-side-effect-before-durability ordering assertion, and richer workloads (timers,
   messages, incidents).
+
 - **Reproducible benchmark harness** (v0.2.0 programme B): a new
   [`benchmarks/`](benchmarks/) package measures the pure engine under the durable
   profile (a real segmented WAL with a group-commit `fsync` per batch and a real
@@ -4948,6 +4998,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   lives in `_test.go` files, so it adds nothing to the coverage floor. An
   in-memory/no-fsync profile, latency percentiles, and recovery benchmarks are
   deferred to later programme-B slices.
+
 - **End-to-end HTTP benchmark profile** (v0.2.0 programme B): the benchmark harness
   gained an API-layer profile that drives the same durable engine through
   `api.Server`'s HTTP handlers (in-process via `ServeHTTP`, so TCP/client cost is
@@ -4957,6 +5008,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   request decode, routing, the run-loop handoff, and response encode. The existing
   `-bench=.` CI smoke step covers them; still deferred are a loopback-socket (real
   TCP) variant and service-task completion over HTTP.
+
 - **In-memory benchmark profile** (v0.2.0 programme B): RAM-backed (tmpfs) twins of
   the three engine-level workloads (`BenchmarkInMemory…`). The state store already
   commits with `pebble.NoSync`, so the WAL `fsync` is the only durability cost;
@@ -4967,6 +5019,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   measurement profile, not a durability mode; the benchmarks skip when no tmpfs is
   available (`ATLAS_BENCH_TMPFS` overrides the mount). Still test-only, so the
   coverage floor is untouched, and the `-bench=.` CI smoke step covers them.
+
 - **Recovery benchmark profile** (v0.2.0 programme B): the startup/recovery axis —
   how fast a fresh engine rebuilds state by replaying the WAL from genesis (there is
   no checkpoint yet). `BenchmarkRecoveryLinearCompleted` and
@@ -4977,6 +5030,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   `events/op` × instances/sec); the two workloads recover completed history and
   parked instances-plus-jobs respectively. Test-only, so the coverage floor is
   untouched; the `-bench=.` CI smoke step covers them.
+
 - **Published benchmark baseline** (v0.2.0 programme B): the first committed,
   reproducible Atlas performance baseline lives in [`benchmarks/results/`](benchmarks/results/)
   — a machine-labelled raw `go test -bench` capture (`baseline-<commit>.txt`, with an
@@ -4986,6 +5040,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   labelled as illustrative and `fsync`-dominated, captured on a shared, ephemeral VM —
   not a product claim, hardware reference, or cross-engine comparison — and documents
   the exact command to reproduce or refresh it.
+
 - **Latency-percentile benchmark profile** (v0.2.0 programme B): `ns/op` is a mean,
   which the skewed `fsync` latency understates, so `BenchmarkLatencyHTTPLinearCreate`
   and `BenchmarkLatencyEngineLinearSelfCompleting` sample each operation's wall-clock
@@ -4996,6 +5051,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   for a fixed, meaningful sample count (P99 wants a few thousand); the percentiles
   appear in the raw `-bench` output and via `benchstat`. Test-only, coverage floor
   untouched; the `-bench=.` CI smoke step covers them.
+
 - **Deactivate a deployed process** ([ADR-0119](docs/adr/0119-deactivate-deployed-process.md)):
   a deployed definition can be paused so it stays deployed and keeps its running
   instances, but no longer auto-starts new ones from its timer, message, or signal
@@ -5005,6 +5061,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   the process listing, and toggled from the Modeler's Deployed list (an "Inactive" badge
   and an Activate/Deactivate button). The flag persists on the deployment sidecar and is
   re-applied on restart; an explicit operator/API start is not gated.
+
 - **Web-scraping connector** ([ADR-0118](docs/adr/0118-web-scraping-connector.md)):
   a `<serviceTask>` bearing an `<atlas:webscrapeConnector url selector attribute
   resultVariable>` extension fetches a model-authored page and extracts the elements
@@ -5072,6 +5129,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   tests must not depend on wall-clock time or goroutine scheduling (invariant I4,
   AGENTS.md). Production behavior is unchanged — a real ticker and the system clock
   still drive the sweep in the running server.
+
 - **Deterministic OpenSearch-exporter test** (v0.2.0 reliability foundation): the
   exporter loop (ADR-0114) gained a test seam — an injectable tick trigger in place of
   its real ticker, with a completion signal. The exporter test previously fired a 15ms
@@ -5119,14 +5177,17 @@ Not for production use.
   date, cycle, cron, and FEEL expressions), **message** events with
   subscriptions and correlation, **signal** broadcast events, and **error**
   events with structural propagation to the nearest handler.
+
 - **Receive tasks**, and **boundary events** (timer, message, signal;
   interrupting and non-interrupting).
 - Structure and reuse: **embedded** and **event subprocesses**, **call
   activities**, **multi-instance** activities (sequential and parallel), and
   **compensation** with compensation handlers.
+
 - **Business rule tasks (DMN)** via the embedded [temis](https://github.com/pblumer/temis)
   engine or a remote temis connector, with I/O mappings, decision binding
   (`latest`/`deployment`), and durable, replayable decision-evaluation records.
+
 - **Collaborations & pools** with message-flow correlation between participants.
 - **Incident model**: a job that exhausts its retries parks and raises a durable
   incident an operator can resolve, resume, or complete by hand.
@@ -5145,18 +5206,23 @@ Not for production use.
 - Embedded **bpmn-js Modeler** with a hand-written properties/"Implement" panel,
   an embedded **dmn-js** decision-table editor, projects & artifacts, diagram
   drafts, and durable deployments that survive a restart.
+
 - **Operations**: live runtime overlay on the diagram (active elements, token
   counts), instance management, and multi-token replay with causal token
   lineage.
+
 - **Forms** and the **Tasks** app for human tasks.
 - **User management & auth boundary** (opt-in `--auth`): durable accounts,
   bcrypt passwords, RBAC-ready roles, identity-bound user-task assignment.
+
 - **Encrypted secret vault** (AES-256-GCM, on by default with a generated key)
   for connector credentials, resolved through a `credentialsRef` indirection —
   secrets never touch the WAL, state, or variables.
+
 - **MCP server** (ADR-0016) over stdio (`atlas mcp`) and Streamable HTTP
   (`/mcp`), so an AI agent can deploy a model, start an instance, and read live
   runtime state.
+
 - **Backup & restore** of the design-time state and whole-instance snapshots
   over the HTTP API.
 - `atlas version` reports the product version plus the binary's embedded VCS

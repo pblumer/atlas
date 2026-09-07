@@ -88,7 +88,7 @@
         if (/\/processes\/\d+\/xml$/.test(url)) return CALLER_XML;
         if ((m = url.match(/\/instances\/(\d+)\/timeline$/))) return TIMELINE[m[1]] || {};
         if (url.startsWith("/api/v1/instances?")) return new URL(url, location.origin).searchParams.get("state") === "active" ? [instanceRow] : [];
-        if (url === "/api/v1/tasks") return [];
+        if (url.startsWith("/api/v1/tasks")) return [];  // global page or ?processInstance=
         if (url.includes("/runtime")) {
           return {
             instances: 1, finished: 0, tokens: 1, incidents: [], incidentsTruncated: false,

@@ -98,7 +98,7 @@
           const state = new URL(url, location.origin).searchParams.get("state");
           return state === "finished" ? [] : instances;
         }
-        if (url === "/api/v1/tasks") return [];
+        if (url.startsWith("/api/v1/tasks")) return [];  // global page or ?processInstance=
         if (url.includes("/runtime")) {
           return {
             instances: 2, finished: 1, tokens: 4,
@@ -142,7 +142,7 @@
         }
         if (/\/processes\/\d+\/xml$/.test(url)) return PLAIN_XML;
         if (url.startsWith("/api/v1/instances?process=")) return [];
-        if (url === "/api/v1/tasks") return [];
+        if (url.startsWith("/api/v1/tasks")) return [];  // global page or ?processInstance=
         if (url.includes("/runtime")) {
           return { instances: 1, finished: 0, tokens: 1, incidents: [], incidentsTruncated: false, elements: PLAIN_ELEMENTS };
         }

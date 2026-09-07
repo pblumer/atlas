@@ -35,7 +35,9 @@
   scope; amended 2026-09-04 — §6's depth is a number somebody types beside an "all",
   rather than a shortlist that answers at two distances; amended 2026-09-04 — §7's
   frame is observed rather than measured once, so a picture laid out before the canvas
-  had a box corrects itself)
+  had a box corrects itself; amended 2026-09-07 — framing is measured on every view
+  write rather than only on a re-layout, and §4's two channels are drawn in screen
+  units so a finding stays visible at the size §7 budgets for)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -659,6 +661,46 @@ unaffected.
 > resized window — repaints, debounced and guarded on the frame having actually
 > changed so a repaint cannot chase its own tail. It replaces the window resize
 > listener, which watched the wrong thing and outlived the view it painted.
+
+> **Amendment (2026-09-07): framing is measured, not scheduled.**
+> Watching the surface was necessary and not sufficient, and the report that followed
+> said so: the picture still sometimes opened with the nodes huddled together. The
+> reason is that the observer only ever asked for one thing — a *re-layout* — and a
+> re-layout is the expensive half, so it is debounced. Every further resize reset that
+> debounce. A page still settling around the canvas, a panel filling in, a scrollbar
+> deciding, a window being dragged: while any of it continues, the re-layout never
+> runs, and until it ran nothing recomputed the framing either. The viewBox kept an
+> aspect ratio the canvas no longer had, preserveAspectRatio letterboxed the
+> difference, and the whole drawing shrank into the middle of its surface with empty
+> bands beside it — which is what a reader describes as the nodes being too close
+> together.
+>
+> The two halves are separated. Framing is arithmetic on a bounding box, so it is done
+> by *measuring*, on every write of the view and on the frame after every paint — a
+> paint changes the page it is drawn on, and a taller page takes a scrollbar, so a
+> picture can be settled for a box its own arrival destroyed. Re-settling stays
+> debounced, now against the frame the layout actually used and with a ceiling on the
+> wait, so a stream of resizes can no longer postpone it indefinitely. A notification
+> that never comes now costs the arrangement of the nodes; it can no longer cost the
+> shape of the picture.
+
+> **Amendment (2026-09-07): a finding is drawn in screen units.**
+> §4 gives a finding three channels — colour, a glyph, and a heartbeat — and two of
+> them are strokes: the node's own outline, thickened, and the ring that beats under
+> it. Both were drawn in world units, and §7's fit scales world units by whatever it
+> takes to get the estate onto the canvas. So the two channels faded out in proportion
+> to how much landscape there was to look at. Measured on the fitted view at a 1400px
+> window: the red outline is 3.3 device pixels at twelve nodes, 1.0 at a hundred and
+> sixty, and 0.73 at three hundred and twenty; the heartbeat ring 2.4, 0.73 and 0.52.
+> Three hundred and twenty nodes is inside the four hundred §7 budgets for, so the
+> channels were vanishing exactly where the picture stops being scannable by shape and
+> a finding has to announce itself.
+>
+> Both are drawn with a non-scaling stroke now, as the edges and the hover halo
+> already were. The rule behind all four is the same one §7 states about the fit:
+> positions and radii are the picture and scale with it, and a stroke is a channel —
+> it has to carry the same claim at every magnification, or it is a claim the view
+> only makes when the estate is small enough not to need it.
 
 > **Amendment (2026-09-04): depth is a number, not a shortlist.**
 > The depth control offered 1 hop, 2 hops and all — which answers the question at

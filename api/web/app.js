@@ -6931,8 +6931,15 @@ async function viewTasks(preselectKey) {
     try {
       await api("POST", "/api/v1/tasks/" + t.key + "/complete", payload);
       toast("Task completed");
-      state.tasks = await api("GET", "/api/v1/tasks");
-      state.tasks.sort(taskOrder);
+      // Reload through load(), not a bare GET: the page is capped, and its truncation
+      // flag and cursor ride the response *headers*. Re-reading only the body left both
+      // at what the first load saw — so "Load older" kept paging from a cursor that had
+      // moved, and the "more exist" banner stayed up after the queue had drained below
+      // the cap. Clearing the selection first is what makes it one request: the task
+      // just completed is gone, and load() would otherwise go fetch it by key to find
+      // that out. The slot it occupied is re-selected below.
+      state.selected = null;
+      await load();
       const after = visible();
       state.selected = after.length ? after[Math.min(Math.max(idx, 0), after.length - 1)].key : null;
       renderAll();

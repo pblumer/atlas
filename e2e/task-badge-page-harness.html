@@ -1,0 +1,160 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas open-task badge e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js live view against a mock API that reproduces
+         the condition the reported bug needed: more open user tasks than one page of
+         GET /api/v1/tasks can carry.
+
+         The report: a user task with 1 275 people's work waiting on it showed "500" on
+         its open-task link, and went on showing "500" as tasks were completed in the
+         Tasks app. 500 is the page cap (api/handlers.go maxTaskListDefault), so the link
+         was reporting the size of its own page and could not have said anything else.
+
+         So this mock answers /api/v1/tasks the way the server does under a flood: a full
+         page of 500 rows and X-Tasks-Truncated, in which one element is over-represented,
+         a second element's tasks do not appear at all (they are older than the page), and
+         a third element's single task does. The live view must read its counts from the
+         runtime element counters instead, which are exact whatever the page holds. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+      /* Read-only here: the palette would only intercept clicks meant for the shapes. */
+      .djs-palette { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountLive } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const DEF = 404;        // this definition
+      const OTHER_DEF = 405;  // another one, flooding the shared task page
+      const INST = 281474983999455;
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_sd" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="service-desk-ticket" name="Service-Desk-Ticket" isExecutable="true">
+    <bpmn:startEvent id="start"><bpmn:outgoing>f1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="ut_ersatz" name="Ersatzgerät beschaffen">
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="ut_flood" name="Rückfrage beantworten">
+      <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="ut_single" name="Abnahme bestätigen">
+      <bpmn:incoming>f3</bpmn:incoming><bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="ut_done" name="Befund festhalten">
+      <bpmn:incoming>f4</bpmn:incoming><bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="end"><bpmn:incoming>f5</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="ut_ersatz"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="ut_ersatz" targetRef="ut_flood"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="ut_flood" targetRef="ut_single"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="ut_single" targetRef="ut_done"/>
+    <bpmn:sequenceFlow id="f5" sourceRef="ut_done" targetRef="end"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="service-desk-ticket">
+    <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="80" y="180" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="ut_ersatz_di" bpmnElement="ut_ersatz"><dc:Bounds x="180" y="158" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="ut_flood_di" bpmnElement="ut_flood"><dc:Bounds x="340" y="158" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="ut_single_di" bpmnElement="ut_single"><dc:Bounds x="500" y="158" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="ut_done_di" bpmnElement="ut_done"><dc:Bounds x="660" y="158" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="end_di" bpmnElement="end"><dc:Bounds x="820" y="180" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="116" y="198"/><di:waypoint x="180" y="198"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="280" y="198"/><di:waypoint x="340" y="198"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="440" y="198"/><di:waypoint x="500" y="198"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><di:waypoint x="600" y="198"/><di:waypoint x="660" y="198"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><di:waypoint x="760" y="198"/><di:waypoint x="820" y="198"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // The reported magnitudes. ut_ersatz holds far more waiting tasks than a page can
+      // carry; ut_single holds exactly one (the case the deep link into the form exists
+      // for); ut_flood holds a modest number whose tasks are all older than the page, so
+      // the page carries none of them; ut_done is history only.
+      const state = { ersatz: 1275 };
+      const elements = () => [
+        { elementId: "start", type: "MessageStartEvent", tokens: 0, visits: 27780, terminated: 0, incidents: 0 },
+        { elementId: "ut_ersatz", type: "UserTask", tokens: state.ersatz, visits: state.ersatz + 15, terminated: 0, incidents: 0 },
+        { elementId: "ut_flood", type: "UserTask", tokens: 40, visits: 60, terminated: 0, incidents: 0 },
+        { elementId: "ut_single", type: "UserTask", tokens: 1, visits: 9, terminated: 0, incidents: 0 },
+        { elementId: "ut_done", type: "UserTask", tokens: 0, visits: 12, terminated: 0, incidents: 0 },
+        { elementId: "end", type: "EndEvent", tokens: 0, visits: 26504, terminated: 0, incidents: 0 },
+      ];
+
+      // Isolating one instance: it holds one token on each of two user tasks. One of
+      // them (ut_flood) is a task the global page cannot show, which is the whole point
+      // of the instance-scoped list — its form must still be one click away.
+      const instanceElements = () => [
+        { elementId: "start", type: "MessageStartEvent", tokens: 0, visits: 1, terminated: 0, incidents: 0 },
+        { elementId: "ut_ersatz", type: "UserTask", tokens: 0, visits: 1, terminated: 0, incidents: 0 },
+        { elementId: "ut_flood", type: "UserTask", tokens: 1, visits: 1, terminated: 0, incidents: 0 },
+        { elementId: "ut_single", type: "UserTask", tokens: 1, visits: 1, terminated: 0, incidents: 0 },
+      ];
+
+      const task = (key, elementId, defKey) => ({
+        key, processInstanceKey: INST, elementInstanceKey: key - 1,
+        processDefKey: defKey, processId: "service-desk-ticket",
+        elementId, name: elementId, candidateGroups: "service-desk", priority: 50,
+      });
+
+      // One page of the global task list: 500 rows and no more, exactly as the server
+      // caps it. 400 of them are ut_ersatz's, 99 belong to a *different* definition
+      // flooding the same page, and one is ut_single's. ut_flood's tasks are older than
+      // every row here, so none of them made the page at all — which is the shape of the
+      // flood: the cap is applied before the filter to this definition.
+      const PAGE = [
+        ...Array.from({ length: 400 }, (_, i) => task(9000 + i, "ut_ersatz", DEF)),
+        ...Array.from({ length: 99 }, (_, i) => task(8000 + i, "elsewhere", OTHER_DEF)),
+        task(7001, "ut_single", DEF),
+      ];
+
+      const seen = [];  // every URL the view asked for, so a test can name the call
+      const api = async (method, url) => {
+        seen.push(url);
+        if (url === "/api/v1/processes") {
+          return [{ key: DEF, processId: "service-desk-ticket", name: "Service-Desk-Ticket", version: 2 }];
+        }
+        if (/\/processes\/\d+\/xml$/.test(url)) return XML;
+        if (url === "/api/v1/tasks") return PAGE;
+        if (url.startsWith("/api/v1/tasks?processInstance=")) {
+          // The instance-scoped list resolves through the instance's own element index,
+          // so it is not subject to the page cap — the flood cannot hide these.
+          return [task(7001, "ut_single", DEF), task(6001, "ut_flood", DEF)];
+        }
+        if (url.includes("/decisions")) return [];
+        if (url.includes("/runtime")) {
+          const one = url.includes("instance=");
+          return {
+            instances: 1276, finished: 26504, tokens: one ? 2 : state.ersatz + 42,
+            incidents: [], incidentsTruncated: false,
+            elements: one ? instanceElements() : elements(),
+          };
+        }
+        return {};
+      };
+
+      const apiRaw = async (method, url, body) => {
+        if (url.startsWith("/api/v1/instances?process=")) {
+          seen.push(url);
+          const rows = url.includes("state=active")
+            ? [{ key: INST, processDefKey: DEF, state: "active", createdAt: 1e18, variables: [] }]
+            : [];
+          return { data: rows, headers: new Headers() };
+        }
+        return { data: await api(method, url, body), headers: new Headers() };
+      };
+
+      window.__seen = seen;
+      window.__setErsatzTokens = (n) => { state.ersatz = n; };
+      window.__mountLive = () => mountLive(view, { api, apiRaw, toast: noop, key: DEF });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

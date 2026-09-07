@@ -3968,8 +3968,18 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 
    The ring is a circle of its own under the node, so the body's stroke goes on
    carrying the severity and the fill goes on carrying the kind, and the beat is
-   added to the picture rather than taken out of it. */
-.mesh-beat { fill: none; stroke-width: 2.5; opacity: 0; pointer-events: none; }
+   added to the picture rather than taken out of it.
+
+   The ring is drawn in world units and the beat is a stroke, so it needs
+   non-scaling-stroke for the same reason the severity outline above does — more
+   sharply, in fact, because it is thinner to begin with: measured on the fitted view
+   at a 1400px window it is 2.4 device pixels at 12 nodes, 0.73 at 160 and 0.52 at
+   320. A heartbeat half a pixel wide is not a heartbeat; the motion is still there
+   in the DOM and nobody can see it. */
+.mesh-beat {
+  fill: none; stroke-width: 2.5; opacity: 0; pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
 .mesh-sev-attention .mesh-beat { stroke: var(--mesh-attention); }
 .mesh-sev-critical .mesh-beat { stroke: var(--danger); }
 @keyframes mesh-beat-quick {
@@ -4360,8 +4370,20 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 /* A node with a finding wears a heavier ring than one without. Colour alone had to
    carry the whole difference before, at the same weight as every other outline on
    the canvas; weight is the channel that survives being small, being zoomed out,
-   and being looked at by somebody who does not separate red from amber. */
-.mesh-sev-attention .mesh-body, .mesh-sev-critical .mesh-body { stroke-width: 3.5; }
+   and being looked at by somebody who does not separate red from amber.
+
+   Weight only survives being zoomed out if it is not itself zoomed out, which it was:
+   the outline is drawn in world units, and the opening view of a large estate scales
+   those hard. Measured on the fitted view at a 1400px window: at 12 nodes the red
+   ring is 3.3 device pixels, at 160 it is 1.0, and at 320 — inside the 400-node
+   budget ADR-0211 §7 sets — it is 0.73, which antialiases to a grey smudge. So the
+   channel that was supposed to survive being small disappeared exactly where the
+   landscape got big enough to need it. non-scaling-stroke, for the same reason the
+   edges and the hover halo already have it: positions and radii are the picture and
+   scale with it; a stroke is a channel and has to stay legible at every scale. */
+.mesh-sev-attention .mesh-body, .mesh-sev-critical .mesh-body {
+  stroke-width: 3.5; vector-effect: non-scaling-stroke;
+}
 .mesh-node.mesh-sev-attention:hover .mesh-body,
 .mesh-node.mesh-sev-critical:hover .mesh-body { stroke-width: 4.5; }
 .mesh-sev-unknown .mesh-badge-dot { fill: var(--canvas-fill); stroke: var(--muted); }
