@@ -173,16 +173,26 @@ func TestPublicLinkStoreLoadAllSkipsAndErrors(t *testing.T) {
 	if len(got) != 1 || got[0].Token != "abcd" {
 		t.Fatalf("loadAll = %+v, want just the one hex record", got)
 	}
-	// A hex-named record that is a dangling symlink makes loadAll's read fail
-	// (the entry isn't a directory, so it isn't skipped, but the read errors).
-	if err := os.Symlink(filepath.Join(s.Dir(), "missing-target"), s.FileFor("dead")); err != nil {
+	// A hex-named record that cannot be read makes loadAll's read fail (the entry
+	// isn't a directory, so it isn't skipped). It has to be unreadable rather than
+	// absent: a record that has gone away is skipped now, since that is what a
+	// reader off the run loop legitimately meets
+	// (ADR-draft-login-off-the-run-loop). Two symlinks pointing at each other are
+	// neither.
+	dead, alsoDead := s.FileFor("dead"), s.FileFor("deae")
+	if err := os.Symlink(alsoDead, dead); err != nil {
+		t.Fatalf("symlink hex record: %v", err)
+	}
+	if err := os.Symlink(dead, alsoDead); err != nil {
 		t.Fatalf("symlink hex record: %v", err)
 	}
 	if _, err := s.LoadAll(); err == nil {
 		t.Fatal("loadAll over an unreadable record: want an error")
 	}
-	if err := os.Remove(s.FileFor("dead")); err != nil {
-		t.Fatalf("cleanup symlink: %v", err)
+	for _, p := range []string{dead, alsoDead} {
+		if err := os.Remove(p); err != nil {
+			t.Fatalf("cleanup symlink: %v", err)
+		}
 	}
 	// A corrupt hex record makes loadAll fail.
 	if err := os.WriteFile(s.FileFor("beef"), []byte("{nope"), 0o644); err != nil {

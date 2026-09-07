@@ -2,9 +2,11 @@ package sidecar
 
 import (
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -259,12 +261,22 @@ func TestStoreReadErrors(t *testing.T) {
 }
 
 // TestStoreLoadAllReadError covers the listing's read-error branch with an entry
-// that passes the name filter and is not a directory, but cannot be read — a
-// dangling symlink, the shape a half-cleaned data directory leaves behind.
+// that passes the name filter, is not a directory, and is not merely absent, but
+// still cannot be read: a pair of symlinks pointing at each other.
+//
+// "Cannot be read" and "is not there" part company here, and deliberately. A
+// record that has gone away is skipped, because an off-loop reader meets that
+// legitimately whenever the run loop deletes one mid-listing
+// (TestStoreLoadAllSurvivesARecordDeletedMidListing). Anything else is a broken
+// data directory and is still reported — a store that swallowed those would answer
+// "no such user" for a directory it simply failed to read.
 func TestStoreLoadAllReadError(t *testing.T) {
 	s := newItemStore(t)
-	link := s.FileFor("dangling")
-	if err := os.Symlink(filepath.Join(s.Dir(), "no-such-target"), link); err != nil {
+	first, second := s.FileFor("loop-a"), s.FileFor("loop-b")
+	if err := os.Symlink(second, first); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := os.Symlink(first, second); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	if _, err := s.LoadAll(); err == nil || !strings.Contains(err.Error(), "itemstore: read ") {
@@ -348,5 +360,80 @@ func TestStoreRejectsUnaddressableKeys(t *testing.T) {
 	}
 	if got, ok, err := s.Get("beef"); !ok || err != nil || got.Name != "ok" {
 		t.Errorf("Get(beef) = %+v, ok %v, err %v", got, ok, err)
+	}
+}
+
+// TestStoreLoadAllSurvivesARecordDeletedMidListing covers what a reader running
+// off the run loop can meet and a reader on it never could: the directory listing
+// named a record, and it was gone by the time the read reached it. A record that
+// is not there is not an error — that is what Get has always answered for one —
+// and failing the whole listing instead would let one unrelated delete refuse a
+// login.
+//
+// The dangling symlink reaches that branch deterministically, without having to
+// win a scheduling window; TestStoreLoadAllRacesADelete runs the real race.
+func TestStoreLoadAllSurvivesARecordDeletedMidListing(t *testing.T) {
+	s := newItemStore(t)
+	if err := s.Save(item{ID: "real"}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	vanished := filepath.Join(s.Dir(), hex.EncodeToString([]byte("vanished"))+".json")
+	if err := os.Symlink(filepath.Join(s.Dir(), "nothing-here.json"), vanished); err != nil {
+		t.Skipf("symlinks unavailable on this platform: %v", err)
+	}
+
+	all, err := s.LoadAll()
+	if err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+	if len(all) != 1 || all[0].ID != "real" {
+		t.Errorf("LoadAll = %+v, want just the record that is still there", all)
+	}
+}
+
+// TestStoreLoadAllRacesADelete is the same property under the real race: readers
+// listing while the writer deletes, which is what a store now sees whenever
+// somebody signs in while an administrator is editing accounts
+// (ADR-draft-login-off-the-run-loop). Under -race it also asserts the claim the
+// type comment makes — that a Store keeps no shared mutable state to protect.
+func TestStoreLoadAllRacesADelete(t *testing.T) {
+	s := newItemStore(t)
+	const records = 60
+	for i := 0; i < records; i++ {
+		if err := s.Save(item{ID: fmt.Sprintf("item-%02d", i)}); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+
+	wg.Add(1)
+	go func() { // the writer, in the run loop's role
+		defer wg.Done()
+		for i := 0; i < records; i++ {
+			if err := s.Delete(fmt.Sprintf("item-%02d", i)); err != nil {
+				errs <- fmt.Errorf("Delete: %w", err)
+				return
+			}
+		}
+	}()
+	for reader := 0; reader < 4; reader++ { // the off-loop logins
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < records; i++ {
+				if _, err := s.LoadAll(); err != nil {
+					errs <- fmt.Errorf("LoadAll: %w", err)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		t.Errorf("a listing failed while records were being deleted: %v", err)
 	}
 }

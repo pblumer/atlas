@@ -152,6 +152,33 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Signing in waited for the engine, so a busy server locked everybody out.** On a
+  server carrying ~50.000 parked process instances, with load generators still starting
+  and finishing more, `POST /api/v1/auth/login` stopped answering while
+  `GET /api/v1/info` answered instantly. Nothing was down and nothing was slow: the
+  login was *queued*. Both of its lookups were dispatched onto the single-writer run
+  loop ([ADR-0002](docs/adr/0002-single-writer-partition-model.md)), which executes one
+  closure at a time in arrival order, so authentication was only ever as available as
+  the processor was idle — and an operator signs in precisely in order to deal with a
+  processor that is not.
+
+  Neither lookup reads engine state. Accounts and groups are durable sidecar records
+  ([ADR-0044](docs/adr/0044-user-management-and-authentication-boundary.md)) that never
+  travel through the WAL or the processor; they sat on the loop by convention. They now
+  read directly off it, so a login costs zero loop turns and answers at the speed of the
+  filesystem regardless of engine load — matching the rest of the session path, which
+  never needed the loop either ([ADR-0180](docs/adr/0180-groups-as-members.md),
+  [ADR-0185](docs/adr/0185-live-group-membership.md)). Writes are untouched: the run loop
+  remains the single writer of design-time state, and the OIDC callback's account
+  resolution deliberately stays on it, because that path may *create* the account it is
+  resolving and the check-then-write is atomic only inside one turn. A listing that meets
+  a record deleted from under it now skips that record instead of failing outright, which
+  is what an off-loop reader can legitimately see. The reasoning is in
+  [the record on signing in off the run loop](docs/adr/draft-login-off-the-run-loop.md).
+
+  This fixes the front door, not the building: the same queueing still keeps `/stats` and
+  `/incidents` from answering under that load, even though neither has real work to do.
+
 - **The replay drew a deferred choice as several tokens, and parked one on the gateway
   that was not there.** The live diagram stopped drawing an event-based gateway's race
   literally in [ADR-0249](docs/adr/0249-overlay-cancelled-tokens.md): the engine arms
