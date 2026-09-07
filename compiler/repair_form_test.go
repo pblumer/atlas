@@ -114,7 +114,7 @@ func TestRepairFormIsSeparateFromAUserTaskForm(t *testing.T) {
 // down a different arm of the task walk than a plain service task does. Both arms must
 // record the form, or the feature works only for the tasks least likely to need it.
 func TestRepairFormOnAConnectorTask(t *testing.T) {
-	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas.dev/schema/1.0">
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0">
   <process id="mailing" isExecutable="true">
     <startEvent id="start"/>
     <serviceTask id="notify">

@@ -19,7 +19,7 @@ func retriesBPMN(task string) string {
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     ` + task + `

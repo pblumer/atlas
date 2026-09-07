@@ -72,11 +72,13 @@ type deployResp struct {
 	ProcessID   string            `json:"processId"`
 	Version     int32             `json:"version"`
 	Deployments []deployedProcess `json:"deployments"`
-	// Warnings are things that deployed fine but will not run as written — today, a
-	// worker reference naming something that is not configured, or is configured
-	// as another kind, or cannot be built. The deploy succeeds anyway (a model is
-	// routinely deployed before its workers exist), but the author is told now
-	// rather than by the first token to park (ADR-0158).
+	// Warnings are things that deployed fine but will not hold as written: a worker
+	// reference naming something that is not configured, or is configured as another
+	// kind, or cannot be built; and an Atlas extension element bound to a namespace
+	// that is not Atlas', which runs but which the Modeler cannot read back. The
+	// deploy succeeds anyway (a model is routinely deployed before its workers
+	// exist), but the author is told now rather than by the first token to park, or
+	// by the first save that drops their configuration (ADR-0158).
 	Warnings []string `json:"warnings,omitempty"`
 }
 
@@ -857,6 +859,12 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		claimRefusal(w, claimed, "An inbound worker you cannot reach publishes under this "+
 			"message name. Rename the message in your model, or ask whoever owns that worker to share it.")
 	default:
+		// Off the run loop on purpose: this reads nothing but the bytes the caller
+		// sent, and work that does not need the engine's single writer does not
+		// belong on it (I3). Once for the model rather than once per deployed pool —
+		// a namespace prefix is bound at the document root, so every pool of a
+		// collaboration shares the one declaration and the one mistake.
+		resp.Warnings = append(resp.Warnings, foreignAtlasNamespaceWarnings(body)...)
 		httpapi.JSON(w, http.StatusOK, resp)
 	}
 }

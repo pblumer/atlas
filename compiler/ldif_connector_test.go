@@ -8,7 +8,7 @@ import (
 // ldifTaskBPMN builds a one-task model from raw <atlas:ldifConnector> attributes.
 func ldifTaskBPMN(attrs string) string {
 	return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:ldifConnector ` + attrs + `/></bpmn:extensionElements></bpmn:serviceTask>

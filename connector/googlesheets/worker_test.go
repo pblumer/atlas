@@ -57,7 +57,7 @@ func (r *recordingClient) ListFiles(context.Context, gs.FileQuery) ([]map[string
 func workerFixture(t *testing.T, inner string, vars ...model.VariableValue) (*fakeReader, gs.ProcessLookup) {
 	t.Helper()
 	bpmn := `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements>` + inner + `</bpmn:extensionElements></bpmn:serviceTask>

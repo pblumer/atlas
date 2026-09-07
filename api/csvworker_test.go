@@ -29,7 +29,7 @@ const csvImportBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524
 // a renamed result variable), so only the file (csvText) is seeded at runtime — no
 // columnConfig variable, no preceding script task.
 const csvConnectorBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                    xmlns:atlas="http://atlas.dev/schema/1.0">
+                    xmlns:atlas="http://atlas/schema/1.0">
   <process id="impc" isExecutable="true">
     <startEvent id="s"/>
     <serviceTask id="einlesen">

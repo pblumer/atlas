@@ -83,7 +83,7 @@ func TestParseSendTaskDefaultRetries(t *testing.T) {
 func TestParseSendTaskConnector(t *testing.T) {
 	const xml = `<?xml version="1.0" encoding="UTF-8"?>
 	<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-	                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+	                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
 	  <bpmn:process id="p" isExecutable="true">
 	    <bpmn:startEvent id="s"/>
 	    <bpmn:sendTask id="notify">

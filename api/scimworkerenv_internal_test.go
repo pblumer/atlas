@@ -15,7 +15,7 @@ import (
 func scimModel(procID, auth string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs-%s">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs-%s">
   <bpmn:process id="%s" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">

@@ -16,7 +16,7 @@ import (
 const agentRoundBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs-agent">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs-agent">
   <bpmn:process id="berater" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:adHocSubProcess id="agent">

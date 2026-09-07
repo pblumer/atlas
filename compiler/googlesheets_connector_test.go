@@ -12,7 +12,7 @@ import (
 // operation, the spreadsheet, the range and the values — is authored in the model.
 const googleSheetsConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -154,7 +154,7 @@ func TestGoogleSheetsRefusesBadModels(t *testing.T) {
 // carries a service task.
 func sheetsBPMN(attrs string) string {
 	return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">

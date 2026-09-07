@@ -10,7 +10,7 @@ import (
 // path rather than to an external service-task worker.
 const clioConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -52,7 +52,7 @@ func TestParseClioConnectorTask(t *testing.T) {
 func TestParseClioConnectorErrors(t *testing.T) {
 	// A clio task missing a required attribute fails to compile.
 	const missingSubject = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -74,7 +74,7 @@ func TestParseClioConnectorErrors(t *testing.T) {
 // as a raw string) in a Start → service task → End process.
 func clioTaskBPMN(attrs string) string {
 	return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-	                  xmlns:atlas="http://atlas.dev/schema/1.0">
+	                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">

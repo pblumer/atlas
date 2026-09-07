@@ -450,7 +450,7 @@ func TestResolveProducesAPlainJob(t *testing.T) {
 // because only the engine has the compiled expression and the scope.
 func TestResolveEvaluatesFEELIds(t *testing.T) {
 	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements>
@@ -486,7 +486,7 @@ func TestResolveEvaluatesFEELIds(t *testing.T) {
 func TestResolveEvaluatesTheConnectorExpression(t *testing.T) {
 	bpmn := func(connector string) string {
 		return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements>
@@ -542,7 +542,7 @@ func TestResolveEvaluatesTheConnectorExpression(t *testing.T) {
 // variable.
 func TestResolveEvaluatesInlineAttributes(t *testing.T) {
 	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements>
@@ -649,7 +649,7 @@ func TestOpNames(t *testing.T) {
 // is that an authored id actually resolves.
 func TestResolveBindsEveryVariableKind(t *testing.T) {
 	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements>
@@ -823,7 +823,7 @@ func TestEntraAssignRoleKeepsAnAuthoredScope(t *testing.T) {
 // entraTaskBPMN builds a one-task model from raw worker attributes.
 func entraTaskBPMN(attrs string) string {
 	return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:entraConnector ` + attrs + `/></bpmn:extensionElements></bpmn:serviceTask>

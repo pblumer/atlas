@@ -11,7 +11,7 @@ import (
 // service-task worker.
 const soapConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -83,7 +83,7 @@ func TestParseSoapConnectorTask(t *testing.T) {
 // explicit soapVersion="1.2" is preserved.
 func TestParseSoapConnectorFeelAndVersion(t *testing.T) {
 	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -117,7 +117,7 @@ func TestParseSoapConnectorFeelAndVersion(t *testing.T) {
 func TestParseSoapConnectorErrors(t *testing.T) {
 	wrap := func(inner string) string {
 		return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements>` + inner + `</bpmn:extensionElements></bpmn:serviceTask>

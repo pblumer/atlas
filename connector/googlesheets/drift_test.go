@@ -47,7 +47,7 @@ func TestGoogleSheetsOpsMatchTheWorkerType(t *testing.T) {
 	}
 	compile := func(attrs string) error {
 		bpmn := `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">

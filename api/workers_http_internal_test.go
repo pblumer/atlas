@@ -375,7 +375,7 @@ func TestWorkersViewNamesTheProcessesBehindTheUserTaskType(t *testing.T) {
 // both of the node types the users map used to walk past.
 const jiraUsersBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="jira-users" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">

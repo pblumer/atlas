@@ -231,7 +231,7 @@ func TestADynamicConnectorNameIsNotReportedUnserved(t *testing.T) {
 // tenant name and once with a FEEL expression for it.
 const entraCoverageModel = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="jml" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t1">
@@ -319,7 +319,7 @@ func pullMail(t *testing.T, srv *Server, body string) {
 // corrected worker name looks like on a server that keeps every version.
 const mailCoverageModel = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="notify" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">

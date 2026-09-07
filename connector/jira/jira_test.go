@@ -487,7 +487,7 @@ func (r *recordingClient) Do(_ context.Context, req jira.Request) (any, error) {
 func workerFixture(t *testing.T, inner string, vars ...model.VariableValue) (*fakeReader, func(uint64) *compiler.CompiledProcess) {
 	t.Helper()
 	bpmn := `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements>` + inner + `</bpmn:extensionElements></bpmn:serviceTask>
@@ -635,7 +635,7 @@ func TestJiraOpsMatchTheConnector(t *testing.T) {
 	}
 	compile := func(attrs string) error {
 		bpmn := `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:jiraConnector ` + attrs + `/></bpmn:extensionElements></bpmn:serviceTask>

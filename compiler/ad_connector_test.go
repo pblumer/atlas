@@ -10,7 +10,7 @@ import (
 // a model-authored server via the job path.
 const adConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -67,7 +67,7 @@ func TestParseAdConnectorTask(t *testing.T) {
 // A group-membership operation authors a member DN (here a FEEL expression).
 func TestParseAdConnectorGroupMember(t *testing.T) {
 	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements>
@@ -94,7 +94,7 @@ func TestParseAdConnectorGroupMember(t *testing.T) {
 func TestParseAdConnectorErrors(t *testing.T) {
 	wrap := func(inner string) string {
 		return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements>` + inner + `</bpmn:extensionElements></bpmn:serviceTask>
@@ -129,7 +129,7 @@ func TestParseAdConnectorErrors(t *testing.T) {
 // adTaskBPMN builds a one-task model from raw <atlas:adConnector> attributes.
 func adTaskBPMN(attrs string) string {
 	return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:adConnector ` + attrs + `/></bpmn:extensionElements></bpmn:serviceTask>
