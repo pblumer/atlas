@@ -420,7 +420,7 @@ type Server struct {
 	googleSheetsRegistry *googlesheets.Registry
 
 	// discordRegistry resolves a Worker name to a Discord API client for Discord tasks
-	// (ADR-draft-discord-worker), built from the Worker store at startup and rebuilt on
+	// (ADR-0258), built from the Worker store at startup and rebuilt on
 	// every change to it, with each Worker's bot token resolved from the vault
 	// (ADR-0041). Read only while driving jobs on the run loop, so it needs no lock.
 	discordRegistry *discord.Registry

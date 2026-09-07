@@ -1,4 +1,4 @@
-# ADR-DRAFT: Discord as a Worker Type — a process speaks in the channel the team already reads
+# ADR-0258: Discord as a Worker Type — a process speaks in the channel the team already reads
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

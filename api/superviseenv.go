@@ -207,7 +207,7 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		connectorKindGoogleSheets: s.googleSheetsWorkerEnv,
 		// Discord is provisioned for Google Sheets' reason: the bot token is the whole
 		// configuration and lives in the Worker store and the vault
-		// (ADR-draft-discord-worker), so a supervised worker holding neither could serve
+		// (ADR-0258), so a supervised worker holding neither could serve
 		// no Discord task at all.
 		connectorKindDiscord:  s.discordWorkerEnv,
 		connectorKindPostgres: func() []string { return s.sqlWorkerEnvByName(connectorKindPostgres) },

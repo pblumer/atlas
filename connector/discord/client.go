@@ -1,7 +1,7 @@
 // Package discord integrates Discord as a server-registered Atlas worker: a BPMN
 // Discord task performs one chat operation — send a message, edit one, delete one,
 // read one, list a channel's messages, or open a thread — against a configured Discord
-// Worker via the job path (ADR-draft-discord-worker). It mirrors how the jira package
+// Worker via the job path (ADR-0258). It mirrors how the jira package
 // delegates an issue-tracker step to a registry-managed instance (ADR-0201) and mail a
 // send to a registry-managed provider (ADR-0079), and inherits the job protocol's
 // durability and non-blocking properties (ADR-0007):

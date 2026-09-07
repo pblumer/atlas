@@ -390,7 +390,7 @@ const AiTaskJobType = "io.atlas.ai.task"
 const AiTaskJobTypeIndex int32 = 28
 
 // DiscordJobType is the reserved job type a Discord task carries
-// (ADR-draft-discord-worker). One job type serves every Discord operation — send a
+// (ADR-0258). One job type serves every Discord operation — send a
 // message, edit or delete one, read one, list a channel's messages, or open a thread —
 // because they share a bot identity, a credential and an error envelope; the operation
 // is a modeled value rather than a reserved index of its own, as it is for Jira
@@ -1906,7 +1906,7 @@ func (b *Builder) AddJiraConnectorTask(cfg JiraConfig) int32 {
 }
 
 // DiscordConfig is the deploy-time configuration of a Discord task
-// (ADR-draft-discord-worker). Worker names the configured Discord Worker (its bot
+// (ADR-0258). Worker names the configured Discord Worker (its bot
 // token lives server-side, never in the model) and Operation is the chat operation.
 // The remaining values are the ones that operation takes — literal-or-FEEL values (the
 // parser compiles the FEEL ones) evaluated over the variables the task sees at call

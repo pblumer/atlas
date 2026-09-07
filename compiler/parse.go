@@ -2213,7 +2213,7 @@ type xmlServiceTask struct {
 	// spreadsheet operation against a Worker an operator configured.
 	GoogleSheets *xmlGoogleSheetsConnector `xml:"extensionElements>googleSheetsConnector"`
 	// Discord, when present, marks this service task a Discord task
-	// (ADR-draft-discord-worker): one chat operation — send, edit, delete, read, list
+	// (ADR-0258): one chat operation — send, edit, delete, read, list
 	// or open a thread — against a Worker an operator configured.
 	Discord *xmlDiscordConnector `xml:"extensionElements>discordConnector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
@@ -2738,7 +2738,7 @@ type xmlJiraConnector struct {
 
 // A Discord task's parameters, carried on a service task as an
 // <atlas:discordConnector connector="..." operation="..." .../> extension element
-// (ADR-draft-discord-worker). The connector attribute names the configured Discord
+// (ADR-0258). The connector attribute names the configured Discord
 // Worker (whose bot token lives on the server, never in the model) and operation is the
 // chat operation the task performs. Element and attribute keep the pre-ADR-0203
 // spelling their siblings carry, because both are authored in deployed models.

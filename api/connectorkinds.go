@@ -315,7 +315,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 	},
 	{
 		// A Discord task performs one chat operation against a Worker an operator
-		// configured (ADR-draft-discord-worker) and writes what Discord returned into
+		// configured (ADR-0258) and writes what Discord returned into
 		// the task's result variable (HandleWithOutput) — for the operations that
 		// answer with something. The bot token lives in the Worker store as a reference
 		// and is resolved from the vault at build time (ADR-0041), so a model carries
@@ -766,7 +766,7 @@ func validateGoogleSheetsConnector(p *createConnectorParams) string {
 // Google Sheets it needs no endpoint: Discord's API base is the same for everyone, and
 // the endpoint field stays an override for an operator behind a proxy. What it does
 // need is the credentialsRef, because for this Worker Type the credential *is* the
-// whole configuration (ADR-draft-discord-worker). Provider/Sender are mail-only.
+// whole configuration (ADR-0258). Provider/Sender are mail-only.
 func validateDiscordConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.CredentialsRef == "" {

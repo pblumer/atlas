@@ -1649,7 +1649,7 @@ func discordOpNames() []string {
 
 // compileDiscordConnectorTask compiles an <atlas:discordConnector> task: one chat
 // operation against a configured Discord Worker via the job path
-// (ADR-draft-discord-worker). The bot token is resolved server-side by worker name,
+// (ADR-0258). The bot token is resolved server-side by worker name,
 // like Jira's credential and Google's; only the operation and its values live in the
 // model.
 func compileDiscordConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {

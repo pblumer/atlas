@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:discordConnector> extension is a Discord task
-// (ADR-draft-discord-worker): it performs one chat operation against a configured
+// (ADR-0258): it performs one chat operation against a configured
 // Discord Worker via the job path. The bot token lives server-side, like Jira's
 // credential and Google's (ADR-0201/0235); only what the task is *about* — the
 // operation and its values — is authored in the model.

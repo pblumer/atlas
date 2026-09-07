@@ -470,7 +470,7 @@ type UserTaskDetail struct {
 //   - Discord (JobType == DiscordJobType): Connector names the configured Discord
 //     Worker whose bot token the server holds; DiscordOp is the chat operation and the
 //     Discord* fields below are the values it takes (all literal-or-FEEL); ResultVar,
-//     if set, receives what Discord returned (ADR-draft-discord-worker).
+//     if set, receives what Discord returned (ADR-0258).
 //   - web scrape (JobType == WebScrapeJobType): Url is the model-authored page to
 //     fetch (literal-or-FEEL, like REST); ScrapeSelector is the CSS selector whose
 //     matches are extracted; ScrapeAttribute names the HTML attribute to read from
@@ -865,7 +865,7 @@ type ConnectorTaskDetail struct {
 	SheetsColumns []string
 	SheetsInput   int32
 	SheetsHeader  bool
-	// Discord fields (JobType == DiscordJobType, ADR-draft-discord-worker). Connector
+	// Discord fields (JobType == DiscordJobType, ADR-0258). Connector
 	// (above) names the configured Discord Worker — the field keeps that name because
 	// the BPMN attribute it is read from does; its bot token lives in the Worker store
 	// and the vault, never in a model. DiscordOp is the interned operation

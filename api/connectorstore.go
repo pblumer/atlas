@@ -51,7 +51,7 @@ const (
 	// Google's API bases are not a per-tenant address.
 	connectorKindGoogleSheets = "googlesheets"
 	// connectorKindDiscord is the Discord Worker Type
-	// (ADR-draft-discord-worker): a configured record of this kind resolves to a live
+	// (ADR-0258): a configured record of this kind resolves to a live
 	// Discord API client whose bot token — a {botToken} bundle — is read from the vault.
 	// Like Google Sheets it needs no endpoint, because Discord's API base is not a
 	// per-tenant address; the field stays an override for an operator behind a proxy.

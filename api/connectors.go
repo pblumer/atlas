@@ -402,7 +402,7 @@ func (s *Server) buildDiscordClients() (map[string]discord.Client, map[string]st
 }
 
 // discordCredentials is the shape of a Discord Worker's credential bundle held in the
-// vault under its credentialsRef (ADR-draft-discord-worker): the bot token, without the
+// vault under its credentialsRef (ADR-0258): the bot token, without the
 // "Bot " scheme prefix the client composes. Only a *reference* to this bundle is stored
 // in the Worker record; the value lives in the vault, never in a model or the record
 // (I6). It mirrors connector/discord's own unexported bundle type, which is what the
