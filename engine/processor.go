@@ -105,7 +105,11 @@ type Processor struct {
 	// contBuf holds the encoded continuation for the batch being committed. Reused
 	// across batches like encBuf, so persisting the outstanding queue costs no
 	// allocation per batch (invariant I1).
-	contBuf  []byte
+	contBuf []byte
+	// routeBuf holds the outgoing flows an inclusive gateway decided to take, reused
+	// across decisions so an OR split allocates nothing per token (invariant I1). It
+	// is valid only between a routing decision and the caller taking those flows.
+	routeBuf []int32
 	fatalErr error
 
 	// condDirty collects the process instances whose variables changed this batch, so the
