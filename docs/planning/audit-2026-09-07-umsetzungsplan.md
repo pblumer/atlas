@@ -191,10 +191,33 @@ direkte, projektgebundene und implizit zugeordnete Deployments.
 
 ### AP2 — Persistenzvertrag: F02 + F01 (L) · der eigentliche P0-Block
 
-> **Stand: F02 umgesetzt, F01 offen.** Das Batchformat steht, mit
-> Versionskopf, Abwärtskompatibilität für vorhandene Logs und einem Kind-Byte
-> je Eintrag, in das die Continuation aus F01 später einzieht. Die
-> Aufwandsschätzung für F01 unten war **falsch** — siehe den Kasten dort.
+> **Stand: umgesetzt.** Beide P0-Befunde sind behoben. Das Batchformat trägt
+> Versionskopf, Abwärtskompatibilität für vorhandene Logs und ein Kind-Byte je
+> Eintrag; die Continuation nutzt dieses Byte. Der Reflection-Wächter über die
+> Felder von `Command` steht. Die Aufwandsschätzung für F01 unten war
+> **falsch** — siehe den Kasten dort.
+>
+> **Was erst die Abnahmematrix gefunden hat.** Das Kriterium «an jeder
+> Batchgrenze unterbrechen» ist nicht Zierde, sondern hat zwei Fehler
+> aufgedeckt, die durch Nachdenken nicht auffielen und durch die
+> Einzelreproduktion des Auditors auch nicht:
+>
+> 1. *Duplikate am Ende.* Wird die Queue leer, wurde ursprünglich **keine**
+>    Continuation geschrieben — also blieb die vorherige die neueste und wurde
+>    beim Neustart erneut ausgeführt. Ergebnis: doppelte Jobs. Ein Batch, der
+>    nichts mehr schuldet, schreibt jetzt eine Continuation der Länge null.
+> 2. *Stiller Verlust in der Mitte.* Ein Command in der Queue trägt bereits
+>    einen Schlüssel, den noch kein Ereignis nennt — das Ereignis dazu ist ja
+>    genau das, was der Absturz verhindert hat. Der Wiederanlauf leitet den
+>    Zähler aus den Ereignissen ab und hätte dieselbe Nummer erneut vergeben;
+>    die wiederhergestellte Elementinstanz kollidierte mit einer frisch
+>    geprägten. Das Symptom war eine fehlende Elementinstanz, keine
+>    Fehlermeldung. Die Continuation hebt den Zähler jetzt über jeden Schlüssel,
+>    den sie trägt.
+>
+> Beides wäre mit einem einzelnen Reproduktionstest durchgerutscht. Die Matrix
+> läuft über alle Batchgrenzen, jeweils mit erhaltenem *und* aus dem Log neu
+> aufgebautem State.
 
 Beide Befunde verlangen dieselbe Formatänderung. Ein Paket, ein Format, eine
 Migration.

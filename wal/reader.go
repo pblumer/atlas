@@ -116,6 +116,44 @@ func (l *Log) firstPosition(name string, positionOf func([]byte) (uint64, error)
 	return pos, ok, nil
 }
 
+// ReplayForRecovery is [Log.ReplayFrom] plus the continuation the last batch in
+// the log carried — the work that batch had scheduled and not yet done.
+//
+// Recovery is the one reader that needs it. Every other reader folds events, and
+// a continuation is not an event: it never reaches applyToState and replaying it
+// would be replaying an intention (invariant I6). It is handed back separately so
+// the caller can seed its queue with it and nothing else
+// (ADR-draft-durable-continuation).
+//
+// The last one wins because each continuation describes the whole outstanding
+// queue rather than a change to it, so an earlier one is a strictly older answer
+// to the same question. nil means the log ends owing nothing.
+func (l *Log) ReplayForRecovery(after uint64, positionOf func(data []byte) (uint64, error), onRecord func(data []byte) error) ([]byte, error) {
+	var continuation []byte
+	segs, err := l.segmentFiles()
+	if err != nil {
+		return nil, err
+	}
+	start := 0
+	if after != 0 {
+		if start, err = l.firstSegmentHolding(segs, after, positionOf); err != nil {
+			return nil, err
+		}
+	}
+	for _, name := range segs[start:] {
+		f, oerr := os.Open(filepath.Join(l.dir, name))
+		if oerr != nil {
+			return nil, oerr
+		}
+		_, rerr := readBatchesWithContinuation(f, onRecord, func(b []byte) { continuation = b })
+		f.Close()
+		if rerr != nil {
+			return nil, rerr
+		}
+	}
+	return continuation, nil
+}
+
 func replaySegment(path string, fn func([]byte) error) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -142,6 +180,10 @@ func replaySegment(path string, fn func([]byte) error) error {
 // upgrade; those records were never batch-atomic on disk and cannot be made so
 // after the fact.
 func readBatches(r io.Reader, fn func([]byte) error) (int64, error) {
+	return readBatchesWithContinuation(r, fn, nil)
+}
+
+func readBatchesWithContinuation(r io.Reader, fn func([]byte) error, onContinuation func([]byte)) (int64, error) {
 	br := bufio.NewReader(r)
 	consumed := int64(0)
 	batched, err := consumeSegmentHeader(br)
@@ -178,7 +220,7 @@ func readBatches(r io.Reader, fn func([]byte) error) (int64, error) {
 					return consumed, err
 				}
 			}
-		} else if err := forEachEntry(payload, fn); err != nil {
+		} else if err := forEachEntryKind(payload, fn, onContinuation); err != nil {
 			return consumed, err
 		}
 		consumed += batchHeaderSize + int64(n)
@@ -211,6 +253,13 @@ func consumeSegmentHeader(br *bufio.Reader) (bool, error) {
 // corruption, and it is returned as an error rather than swallowed as an end of
 // log.
 func forEachEntry(payload []byte, fn func([]byte) error) error {
+	return forEachEntryKind(payload, fn, nil)
+}
+
+// forEachEntryKind is forEachEntry with a sink for continuation entries as well.
+// onContinuation is called with the newest one in the payload; a nil sink skips
+// them, which is what every reader but recovery wants.
+func forEachEntryKind(payload []byte, fn func([]byte) error, onContinuation func([]byte)) error {
 	for off := 0; off < len(payload); {
 		if off+entryHeaderSize > len(payload) {
 			return fmt.Errorf("wal: truncated entry header at byte %d of a checksummed batch", off)
@@ -222,12 +271,16 @@ func forEachEntry(payload []byte, fn func([]byte) error) error {
 		}
 		kind, body := payload[off], payload[off+1:off+n]
 		off += n
-		if kind != entryRecord || fn == nil {
-			continue
-		}
-		// Copied: the contract is that fn's slice stays valid after it returns.
-		if err := fn(append([]byte(nil), body...)); err != nil {
-			return err
+		switch {
+		case kind == entryContinuation:
+			if onContinuation != nil {
+				onContinuation(append([]byte(nil), body...))
+			}
+		case kind == entryRecord && fn != nil:
+			// Copied: the contract is that fn's slice stays valid after it returns.
+			if err := fn(append([]byte(nil), body...)); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

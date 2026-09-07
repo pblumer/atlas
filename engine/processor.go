@@ -102,7 +102,11 @@ type Processor struct {
 	followups    []Command
 	sideEffects  []sideEffect
 	encBuf       []byte
-	fatalErr     error
+	// contBuf holds the encoded continuation for the batch being committed. Reused
+	// across batches like encBuf, so persisting the outstanding queue costs no
+	// allocation per batch (invariant I1).
+	contBuf  []byte
+	fatalErr error
 
 	// condDirty collects the process instances whose variables changed this batch, so the
 	// batch loop can schedule a conditional re-check for each (ADR-0137). Reused, not
@@ -769,6 +773,19 @@ func (p *Processor) processBatch() error {
 			return err
 		}
 	}
+	// The work this batch still owes, in the same frame as the events that caused
+	// it. Built before the sync because that is the only way it can be durable at
+	// the same instant: a continuation written afterwards could be lost while its
+	// events survived, which is the failure it exists to prevent. Built from the
+	// queue that will actually be installed, so work this batch dropped — a
+	// terminated instance's, say — is not resurrected on restart.
+	p.buildNextQueue(n)
+	p.contBuf = encodeContinuation(p.contBuf[:0], p.queueScratch)
+	if err := p.log.AppendContinuation(p.contBuf); err != nil {
+		tx.Close()
+		return err
+	}
+
 	var syncSeconds, commitSeconds float64
 	var started time.Time
 	if p.metrics != nil {
@@ -805,7 +822,9 @@ func (p *Processor) processBatch() error {
 	}
 
 	// Phase 4: followups go to the next batch; Phase 5: side effects post-fsync.
-	p.advanceQueue(n)
+	// The queue was assembled before the sync so it could be persisted with the
+	// batch; this is where it becomes live.
+	p.installNextQueue()
 	// Everything this batch wrote is now durable and visible, which is the earliest
 	// point at which counting it is honest (invariant I2, ADR-0142). QueueDepth is read
 	// after advanceQueue so it includes the follow-ups this batch scheduled.
@@ -875,6 +894,19 @@ func (p *Processor) processOne(cmd Command) {
 // advanceQueue drops the n consumed commands and appends this batch's followups,
 // reusing a scratch buffer so it does not allocate once warmed.
 func (p *Processor) advanceQueue(n int) {
+	p.buildNextQueue(n)
+	p.installNextQueue()
+}
+
+// buildNextQueue assembles the queue the next batch will run — the unconsumed
+// tail plus this batch's followups, less anything belonging to an instance this
+// batch terminated — into queueScratch, without installing it.
+//
+// It is separate from installing so the batch can *persist* that queue before it
+// commits: the continuation has to describe the work that will actually survive,
+// which means it is computed after the terminated-instance filter and not before
+// (ADR-draft-durable-continuation).
+func (p *Processor) buildNextQueue(n int) {
 	p.queueScratch = append(p.queueScratch[:0], p.queue[n:]...)
 	p.queueScratch = append(p.queueScratch, p.followups...)
 	if len(p.terminatedThisBatch) > 0 {
@@ -889,6 +921,10 @@ func (p *Processor) advanceQueue(n int) {
 		}
 		p.queueScratch = kept
 	}
+}
+
+// installNextQueue makes the queue built by buildNextQueue the live one.
+func (p *Processor) installNextQueue() {
 	p.queue, p.queueScratch = p.queueScratch, p.queue
 }
 
@@ -995,12 +1031,10 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	}
 
 	// Skipping the prefix needs a record's position, which only the model layer can
-	// decode; the wal package asks for it through this.
-	if after == 0 {
-		err = p.log.Replay(onRecord)
-	} else {
-		err = p.log.ReplayFrom(after, recordPosition, onRecord)
-	}
+	// decode; the wal package asks for it through this. ReplayForRecovery also hands
+	// back the continuation the last batch carried — the work the engine had
+	// scheduled and not yet run when it stopped.
+	continuation, err := p.log.ReplayForRecovery(after, recordPosition, onRecord)
 	if err != nil {
 		return err
 	}
@@ -1015,6 +1049,28 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	}
 	p.position = maxPos
 	p.keygen.counter = maxCounter
+
+	// Restore the obligation, not just the facts. Folding events rebuilds what
+	// happened; the queue is what still has to happen, and without it an instance
+	// interrupted at a batch boundary comes back correctly materialized and never
+	// moves again (ADR-draft-durable-continuation). The commands are re-run, not
+	// re-applied: they go through the normal handlers, which is why the events they
+	// produce are written once and only once — the batch that scheduled them never
+	// got to run them.
+	if len(continuation) > 0 {
+		cmds, derr := decodeContinuation(continuation)
+		if derr != nil {
+			return derr
+		}
+		p.queue = append(p.queue[:0], cmds...)
+		// A restored command already holds a key that no event carries yet — the
+		// event it would have produced is what the crash prevented. Minting from the
+		// replayed events alone would hand that number out a second time.
+		if c := highestRestoredCounter(p.partition, cmds); c > p.keygen.counter {
+			p.keygen.counter = c
+		}
+	}
+
 	// Recorded last, so a recovery that failed leaves no stats claiming it succeeded.
 	p.recovery = RecoveryStats{Seconds: time.Since(started).Seconds(), Replayed: replayed, Done: true}
 	return nil

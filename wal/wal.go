@@ -75,6 +75,11 @@ var segmentMagic = [8]byte{'A', 'T', 'L', 'A', 'S', 'W', 'A', 'L'}
 // engine folds is a record, and Replay delivers only those.
 const (
 	entryRecord uint8 = 0
+	// entryContinuation carries the work a batch still owes after committing: the
+	// commands its events scheduled, which lived only in memory until now. It is
+	// not an event — nothing folds it into state — so a reader that only wants
+	// records never sees it (ADR-draft-durable-continuation).
+	entryContinuation uint8 = 1
 )
 
 // castagnoli is the CRC32C table (hardware-accelerated on most CPUs).
@@ -214,6 +219,17 @@ func isBatchFramed(path string) (bool, error) {
 // log. Real records always carry a header, so this is not a practical limit.
 func (l *Log) Append(data []byte) error {
 	return l.appendEntry(entryRecord, data)
+}
+
+// AppendContinuation stages the batch's outstanding work as a non-record entry.
+// It is durable exactly when the batch's events are — the same frame, the same
+// fsync — which is the point: the obligation to continue must not be able to
+// survive or vanish separately from the events that created it.
+//
+// At most one continuation belongs in a batch, and the newest one supersedes
+// every earlier one, since each describes the whole queue rather than a delta.
+func (l *Log) AppendContinuation(data []byte) error {
+	return l.appendEntry(entryContinuation, data)
 }
 
 // appendEntry stages one typed entry in the batch being built. The batch header
