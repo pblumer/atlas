@@ -2632,11 +2632,22 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
+	// Being signed in is not a relationship to this instance. The role gate on this
+	// route is "any" so a task worker can prefill their form; the object question —
+	// may *you* read *this* instance, and how much of it — is asked here
+	// (ADR-draft-instance-visibility, audit F11).
+	acc, code, msg := s.instanceAccessFor(r, key)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	out := map[string]any{}
 	var scanErr error
 	s.do(func() {
 		scanErr = s.store.VisibleVariablesOfScope(key, func(v *model.VariableValue) error {
-			out[v.Name] = nativeVar(v)
+			if acc.allows(v.Name) {
+				out[v.Name] = nativeVar(v)
+			}
 			return nil
 		})
 	})

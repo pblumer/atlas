@@ -270,11 +270,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Matching instances", tArray())}},
 		// Every signed-in identity, not the operator role the rest of this group carries:
 		// a task form is prefilled from the variables of the instance the task belongs to,
-		// so a role narrower than "signed in" would hand a task worker an empty form. What
-		// this route needs is the *other* axis — may you see this instance — and that is
-		// open work (O-02), not something a role per endpoint group can express.
+		// so a role narrower than "signed in" would hand a task worker an empty form. The
+		// role is not the whole gate — the handler asks the *other* axis, may you see this
+		// instance and how much of it (instancescope.go, ADR-draft-instance-visibility).
 		{"GET", "/api/v1/instances/{key}/variables", s.handleInstanceVariables, apiOp{
-			summary: "Read a process instance's variables as a typed JSON object", tag: "Instances", role: roleAny,
+			summary: "Read a process instance's variables as a typed JSON object — scoped to the caller: everything for an operator, an admin, or a member of the project the definition was deployed from; for somebody holding a user task on the instance, only the fields that task's form asks for; 404 for anyone else",
+			tag:     "Instances", role: roleAny,
 			resp: jsonBody("Instance variables", tObject())}},
 		{"POST", "/api/v1/instances/{key}/variables", s.handleSetInstanceVariables, apiOp{
 			summary: "Set or overwrite variables on a running instance — an operator correction to live process state (admin-only when auth is on); optional scopeKey targets a subprocess local scope; does not re-evaluate already-passed gateways", tag: "Instances", role: RoleAdmin,

@@ -498,6 +498,34 @@ begrenzter Latenz möglich bleiben.
 
 ### AP5 — Objektautorisierung vollenden: F11 (M)
 
+> **Stand: umgesetzt.** Der Endpunkt hat jetzt beide Achsen: die Rolle bleibt
+> `any` — sonst bekäme genau die Person, für die die Route offen war, ein leeres
+> Formular —, und die Objektfrage stellt der Handler.
+>
+> **Was die Umsetzung entscheiden musste.** Eine BPMN-Kandidatengruppe ist freier
+> Text im Modell, und Atlas hatte ihr Verhältnis zu einer Identitätsgruppe nie
+> definiert; ADR-0042 führt genau das seit Langem als Folgearbeit, und die
+> Tasks-App nutzte das Attribut nur für «das ist eine Gruppentask». Die hier
+> getroffene Regel: eine *unbeanspruchte* Task passt auf eine Identitätsgruppe der
+> Aufruferin, über den Gruppennamen (ohne Rücksicht auf Gross-/Kleinschreibung)
+> oder über die Gruppen-Id. Eine beanspruchte Task gehört ihrer Inhaberin allein.
+> Das ist die einzige Stelle, an der dieser Schritt neues Produktverhalten
+> festlegt statt bestehendes zu schützen — bewusst an einer Stelle, wo man es
+> findet und ändern kann.
+>
+> **Enger als vorher, nicht nur zu.** Eine Taskinhaberin bekommt die Felder ihres
+> Formulars und sonst nichts — weniger als vor dieser Änderung, obwohl diese
+> Änderung diejenige ist, die den Endpunkt geschlossen hat. Eine Task *ohne*
+> Formular gewährt dadurch nichts mehr: es gibt keine deklarierte Feldmenge, und
+> eine zu raten ist der Weg, auf dem eine Positivliste zur Formalität wird.
+>
+> **Nicht behandelt, aber benannt:** `GET /api/v1/tasks/{key}` hat dieselbe Lücke
+> in kleinerem Format, und die übrigen instanzbezogenen Lesezugriffe sind über die
+> Rolle statt über die Beziehung geschützt — wer irgendwo `operator` ist, sieht
+> jede Instanz des Servers. Beides ist dieselbe Achse und verdient dieselbe
+> Behandlung.
+
+
 Die in AP1 mit F09 begonnene zweite Achse wird zur Fläche. Instanzsichtbarkeit
 wird aus dem fachlichen Berechtigungsmodell abgeleitet statt für jede
 angemeldete Identität geöffnet. Für Taskformulare — der Grund, aus dem der
@@ -568,11 +596,10 @@ AP0 Harness  ──┬───────────────────�
 Freigabe für dauerhafte geschäftskritische Ausführung frühestens nach AP3 —
 das ist der Punkt, an dem V1 und V2 geschlossen sind.
 
-> **Stand:** AP0 bis AP4 sind umgesetzt. V1 und V2 sind damit geschlossen, die
-> Freigabeschwelle oben ist erreicht. V3 fehlt noch die zweite Achse (F11,
-> AP5). Offen sind ausserdem die vier P2-Befunde in AP6 und, aus AP4, die
-> Zählung je eingehendem Flow — die einzige bewusst zurückgestellte
-> Semantikschuld.
+> **Stand:** AP0 bis AP5 sind umgesetzt. V1, V2 und V3 sind damit geschlossen und
+> die Freigabeschwelle oben ist erreicht. Offen sind die vier P2-Befunde in AP6
+> und, aus AP4, die Zählung je eingehendem Flow — die einzige bewusst
+> zurückgestellte Semantikschuld.
 
 ---
 
@@ -658,7 +685,7 @@ dafür, dass F07 und F08 mit einer *Begründung im Code* danebenlagen.
 | F08 | P1 | XOR ohne Route verliert Token ohne Incident | AP4 | `TestAuditXORNoMatchRaisesIncident` | behoben |
 | F09 | P1 | Deployment umgeht Projektmitgliedschaft | AP1 | `TestAuditRawDeployRequiresProjectMembership` | behoben |
 | F10 | P1 | Entzogene Rollen bleiben in Sessions wirksam | AP1 | `TestAuditRoleRevocationInvalidatesExistingSession` | behoben |
-| F11 | P1 | Jeder Benutzer liest fremde Instanzvariablen | AP5 | `TestAuditUnrelatedUserCannotReadInstanceVariables` | offen |
+| F11 | P1 | Jeder Benutzer liest fremde Instanzvariablen | AP5 | `TestAuditUnrelatedUserCannotReadInstanceVariables` | behoben |
 | F12 | P1 | Automatische Zyklen besetzen den Single-Writer | AP4 | `TestAuditAutomaticCycleHasExecutionBudget` | behoben |
 | F13 | P2 | Langsame Worker blockieren unabhängige Requests | AP6 | `TestAuditSlowWorkerDoesNotBlockIndependentMutation` | offen |
 | F14 | P2 | Erreichbarkeit am Inclusive-Join neu aufgebaut | AP6 | `TestAuditReachabilityAllocations` | offen |
