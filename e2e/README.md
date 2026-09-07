@@ -200,10 +200,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   and an instance recorded before the engine attributed writes must fall back to the old
   difference *and say so* on the section rather than presenting it as the element's own
   work. Drives the real `mountInstanceReplay` against a mock `api` serving both shapes of
-  timeline (`?legacy=1` for the unattributed one). And the card's **stacking**: diagram-js
-  paints overlays in the order their elements first got one, so the execution badges of the
-  shapes a card covers were drawn on top of it, dropping a neighbour's count among the
-  card's own rows. The browser's own hit-testing answers which is on top.
+  timeline (`?legacy=1` for the unattributed one).
+
+  The second half is about **where the card hangs**, on the geometry that made the case —
+  the identity lifecycle's event hub, at its deployed coordinates (`io-card-hub-harness.html`).
+  A 36px event with eight input values carries a card nearly six times its own height, so
+  hung underneath it covered the whole mutation branch. The branch must stay readable, no
+  single element may lose half of itself to the card, and the badge that *is* under it —
+  badges are not what the placement dodges — must stay behind it, which the browser's own
+  hit-testing answers. Only a browser knows any of this geometry: the card's height comes
+  from its content through the CSS that lays it out.
 
 - **`id-check.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **live id-availability check** on an artifact's ID field. A draft is stored under

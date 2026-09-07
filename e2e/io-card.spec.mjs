@@ -7,10 +7,8 @@
 // against the ones that stood when it finished — and on a fork that window spans the
 // sibling branch's writes. An operator read it as the fetch task having created a ticket.
 //
-// And the case behind the last test: what the card covers stayed on top of it. diagram-js
-// paints overlays in the order their elements first received one, so the execution badge
-// of a shape the card happens to cover was drawn over the card — a neighbour's "11"
-// standing among the card's own rows, reading as one of its values.
+// The second half of the file is about where the card goes and what it is allowed to
+// cover once it is there, on the diagram that made both cases — see its own note below.
 import { test, expect } from "@playwright/test";
 
 const mount = async (page, query = "") => {
@@ -67,31 +65,81 @@ test("an instance recorded before attribution says why it cannot tell", async ({
   await expect(page.locator(".io-ov .io-sec.out")).not.toHaveAttribute("title", /./);
 });
 
-// --- What the card covers stays covered ------------------------------------------
-// The canvas is the small half of this view, next to the transport bar and the history
-// tree, so a default-sized window shrinks the diagram until the legend below it is what
-// a click at those coordinates finds. This one gets a taller window.
-test.describe("the card's stacking", () => {
+// --- Where the card hangs ---------------------------------------------------------
+// The card is 240px of opaque surface and an event is 36px tall, so hung under its
+// element it came down over whatever was drawn below. On the model that made the case —
+// the identity lifecycle's event hub — that was the entire mutation branch: two shapes
+// and both their captions, while the air above the event stood free. These drive the
+// real geometry, because which spot is free is a question about a rendered diagram.
+test.describe("the card's placement", () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
-  test("nothing pokes through the card it covers", async ({ page }) => {
-    await mount(page);
-    await select(page, "1002"); // the upper branch — its card hangs over the join and the branch below
+  const mountHub = async (page) => {
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    page.__errors = errors;
+    await page.goto("/io-card-hub-harness.html");
+    await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+    await page.evaluate(() => window.__mount());
+    await expect(page.locator("#history-list .ops-hrow").first()).toBeVisible();
+    await select(page, "1001"); // Service-Ereignis, the event whose card is six times its height
+    await expect(page.locator(".io-ov")).toHaveCount(1);
+  };
 
-    // The card takes no pointer events, by design: a click on it must reach the element
-    // underneath. Hit-testing and painting follow the same stacking order, though, so
-    // lending it pointer events for the length of this test lets the browser itself answer
-    // "what is on top here" instead of the test re-deriving z-index rules.
+  // covers reports what the card's rectangle lands on, by element id — the shapes and
+  // the captions bpmn-js drew, measured rather than predicted.
+  const covers = (page, ids) => page.evaluate((wanted) => {
+    const card = document.querySelector(".io-ov").getBoundingClientRect();
+    const out = [];
+    for (const g of document.querySelectorAll("g.djs-element[data-element-id]")) {
+      const id = g.dataset.elementId;
+      if (wanted && !wanted.some((w) => id === w || id.startsWith(`${w}_label`))) continue;
+      const r = g.getBoundingClientRect();
+      if (Math.min(card.right, r.right) - Math.max(card.left, r.left) > 0.5 &&
+          Math.min(card.bottom, r.bottom) - Math.max(card.top, r.top) > 0.5) out.push(id);
+    }
+    return out;
+  }, ids);
+
+  test("the branch below the element stays readable", async ({ page }) => {
+    await mountHub(page);
+    // The two elements the card used to swallow whole, and the captions that name them.
+    expect(await covers(page, ["c_mutation", "s_mutation"]), "the mutation branch").toEqual([]);
+    expect(page.__errors, "page errors").toEqual([]);
+  });
+
+  test("what it does cover, it covers because there was nothing better", async ({ page }) => {
+    await mountHub(page);
+    // Not an empty list: on this diagram every one of the eight spots covers something,
+    // and the card says so by taking the least of them rather than by not being drawn.
+    // The assertion is that the price paid is a fraction of one task rather than a whole
+    // branch — measured against the element's own area, which is what the chooser scores.
+    const worst = await page.evaluate(() => {
+      const card = document.querySelector(".io-ov").getBoundingClientRect();
+      let most = 0;
+      for (const g of document.querySelectorAll("g.djs-element[data-element-id]")) {
+        const id = g.dataset.elementId;
+        if (id.startsWith("c_service")) continue; // its own element and caption are free to cover
+        const r = g.getBoundingClientRect();
+        const x = Math.min(card.right, r.right) - Math.max(card.left, r.left);
+        const y = Math.min(card.bottom, r.bottom) - Math.max(card.top, r.top);
+        if (x > 0 && y > 0) most = Math.max(most, (x * y) / (r.width * r.height));
+      }
+      return most;
+    });
+    expect(worst, "the largest share of any one element hidden").toBeLessThan(0.5);
+  });
+
+  test("a badge it cannot avoid stays behind it", async ({ page }) => {
+    await mountHub(page);
+    // Badges are not part of what the placement dodges — they are 20px pills and they are
+    // everywhere — so the spot it takes still has one under it. That is the case the
+    // stacking rule is for, on the model it was reported from.
     await page.addStyleTag({ content: ".io-ov { pointer-events: auto; }" });
-    await expect(page.locator(".ops-badge")).toHaveCount(3);
-
     const covered = await page.evaluate(() => {
-      const box = (el) => el.getBoundingClientRect();
-      const card = box(document.querySelector(".io-ov"));
+      const card = document.querySelector(".io-ov").getBoundingClientRect();
       return [...document.querySelectorAll(".ops-badge")].map((badge) => {
-        const b = box(badge);
-        // The overlapping patch of the two, and its middle — the point where the question
-        // "which of these two is drawn on top" is actually asked.
+        const b = badge.getBoundingClientRect();
         const x = [Math.max(card.left, b.left), Math.min(card.right, b.right)];
         const y = [Math.max(card.top, b.top), Math.min(card.bottom, b.bottom)];
         if (x[1] - x[0] <= 0.5 || y[1] - y[0] <= 0.5) return null;
@@ -99,11 +147,7 @@ test.describe("the card's stacking", () => {
         return { badge: badge.textContent.trim(), onTop: !!(top && top.closest(".io-ov")) };
       }).filter(Boolean);
     });
-
-    // The fixture has to keep producing the collision, or the assertion below proves nothing.
     expect(covered.length, "badges under the card").toBeGreaterThan(0);
     expect(covered.filter((c) => !c.onTop), "badges drawn on top of the card").toEqual([]);
-
-    expect(page.__errors, "page errors").toEqual([]);
   });
 });
