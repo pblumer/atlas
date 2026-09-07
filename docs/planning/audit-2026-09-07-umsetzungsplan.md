@@ -549,6 +549,19 @@ Seiteneffekte zurückbleiben.
 
 ### AP6 — Budgets und Entkopplung: F13, F14, F15, F16 (M)
 
+> **Stand: F15 umgesetzt**, F13, F14 und F16 offen.
+>
+> **F15.** Es fehlte keine Fähigkeit. Der Scan bricht seit jeher ab, wenn der
+> Callback einen Fehler zurückgibt, und die API-Schicht hat mit
+> `errListTruncated`/`unlessTruncated` längst das Muster dafür — die beiden
+> Polling-Stellen haben es nur nicht benutzt. Der Worker-Pull hält jetzt bei der
+> Seite an, die er wollte; der prozessinterne `Claim` nimmt eine Runde statt des
+> ganzen Rückstaus, mit gleichem Anteil je bedientem Typ. Beide Aufrufer treiben
+> ohnehin in einer Schleife bis leer, also kostet die Grenze eine Runde und keinen
+> Job. Die dauerhafte Hälfte der Korrektur steht im Doc-Kommentar von
+> `ActivatableJobs`: dort liest die nächste Aufruferin, was der Vertrag ist.
+
+
 | Befund | Eingriff |
 |---|---|
 | **F13** Langsamer Worker blockiert unabhängige Mutationen | `driveMu` deckt heute die komplette Drain-Schleife inklusive `jobRunner.Work` ab. Claim und Completion als begrenzte Scheduleroperationen führen, Worker-Ausführung unabhängig von synchronen Request-Drain-Schleifen. **Voraussetzung**: interne Jobs brauchen eine eindeutige Claim-/In-flight-Identität, sonst führt die Lockerung Doppelausführung ein. Diese Identität ist der eigentliche Arbeitsinhalt, nicht das Entfernen des Mutex. |
@@ -689,6 +702,6 @@ dafür, dass F07 und F08 mit einer *Begründung im Code* danebenlagen.
 | F12 | P1 | Automatische Zyklen besetzen den Single-Writer | AP4 | `TestAuditAutomaticCycleHasExecutionBudget` | behoben |
 | F13 | P2 | Langsame Worker blockieren unabhängige Requests | AP6 | `TestAuditSlowWorkerDoesNotBlockIndependentMutation` | offen |
 | F14 | P2 | Erreichbarkeit am Inclusive-Join neu aufgebaut | AP6 | `TestAuditReachabilityAllocations` | offen |
-| F15 | P2 | Job-Polling scannt die ganze Warteschlange | AP6 | statisch belegt | offen |
+| F15 | P2 | Job-Polling scannt die ganze Warteschlange | AP6 | statisch belegt | behoben |
 | F16 | P2 | Ressourcenbudgets unvollständig | AP6 | statisch belegt | offen |
 | F17 | P2 | Keine expliziten Lese-/Idle-Timeouts | AP1 | statisch belegt | behoben |

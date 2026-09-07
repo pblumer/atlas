@@ -13,6 +13,7 @@
 package job
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/pblumer/atlas/model"
@@ -101,6 +102,8 @@ type Runner struct {
 	// descriptors here and hammering whatever is on the other end. The cap keeps the
 	// throughput and drops the herd.
 	Concurrency int
+	// claimBatch bounds how many jobs one round collects; see SetClaimBatch.
+	claimBatch int
 }
 
 // DefaultConcurrency is how many handlers a round runs at once when nothing says
@@ -170,17 +173,57 @@ func (r *Runner) Handles(jobType int32) bool {
 	return ok
 }
 
-// Claim collects every activatable job of a registered type. It reads state, so it
-// runs on the goroutine that owns it — the run loop — and it does nothing slow: the
-// work itself happens in [Runner.Work], off the loop.
+// DefaultClaimBatch is how many jobs one [Runner.Claim] collects before it stops
+// and lets the round proceed. Every caller drives in a loop until a claim comes
+// back empty, so the cap costs a round, not a job.
+//
+// It exists because Claim runs on the single writer and reads a record per job: an
+// uncapped claim against a backlog of a hundred thousand held the writer for all of
+// them, and every other instance, timer and health probe waited behind a burst that
+// one round was never going to finish anyway (ADR-draft-bounded-job-polling).
+const DefaultClaimBatch = 256
+
+// errClaimFull stops a claim scan once the round's share is collected. A sentinel
+// to break the scan early, not a failure — the scan's contract is that any non-nil
+// error from the callback ends it.
+var errClaimFull = errors.New("job: claim batch full")
+
+// SetClaimBatch bounds how many jobs one Claim collects. Zero or less restores
+// [DefaultClaimBatch].
+func (r *Runner) SetClaimBatch(n int) { r.claimBatch = n }
+
+// claimBatchSize is the effective cap, defaulted.
+func (r *Runner) claimBatchSize() int {
+	if r.claimBatch > 0 {
+		return r.claimBatch
+	}
+	return DefaultClaimBatch
+}
+
+// Claim collects up to a round's worth of activatable jobs of the registered types.
+// It reads state, so it runs on the goroutine that owns it — the run loop — and it
+// does nothing slow: the work itself happens in [Runner.Work], off the loop.
+//
+// Each served type gets an equal share of the round rather than whatever is left
+// after the types before it. Ranging a map is randomly ordered, so leaving it to
+// chance would work *on average*, and "on average" is not what a job type flooded
+// by its neighbour needs.
 func (r *Runner) Claim() ([]Job, error) {
 	var jobs []Job
+	share := r.claimBatchSize() / max(1, len(r.factories))
+	if share < 1 {
+		share = 1
+	}
 	for jobType := range r.factories {
 		var keys []uint64
-		if err := r.store.ActivatableJobs(jobType, func(k uint64) error {
+		err := r.store.ActivatableJobs(jobType, func(k uint64) error {
 			keys = append(keys, k)
+			if len(keys) >= share {
+				return errClaimFull
+			}
 			return nil
-		}); err != nil {
+		})
+		if err != nil && !errors.Is(err, errClaimFull) {
 			return jobs, err
 		}
 		for _, k := range keys {

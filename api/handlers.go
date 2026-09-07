@@ -5486,13 +5486,20 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 				return
 			}
 			// Collect first, then lease: activating mutates the very index being scanned.
+			// The scan *stops* at the page it wanted rather than reading on and
+			// discarding: the callback used to keep returning nil once it was full, so a
+			// poll for one job walked every waiting job of that type, and the cost of a
+			// worker's heartbeat grew with the backlog it was there to drain
+			// (ADR-draft-bounded-job-polling).
 			var keys []uint64
-			if scanErr = s.store.ActivatableJobs(jobType, func(k uint64) error {
-				if len(keys) < want {
-					keys = append(keys, k)
+			scanErr = unlessTruncated(s.store.ActivatableJobs(jobType, func(k uint64) error {
+				keys = append(keys, k)
+				if len(keys) >= want {
+					return errListTruncated
 				}
 				return nil
-			}); scanErr != nil {
+			}))
+			if scanErr != nil {
 				return
 			}
 			for _, k := range keys {
