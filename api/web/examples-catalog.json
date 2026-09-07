@@ -314,6 +314,112 @@
       }
     },
     {
+      "id": "umzug",
+      "path": "umzug",
+      "app": "Beispiel: Umzug",
+      "processes": [
+        {
+          "processId": "proc_umzug",
+          "name": "Umzug organisieren",
+          "file": "umzug/umzug.bpmn",
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\n  Umzug organisieren — Atlas für eine Privatperson.\n\n  Das Beispiel gegen den Reflex, eine Workflow-Engine sei etwas für Konzerne.\n  Ein Umzug ist ein Prozess mit allem, was dazugehört: mehrere Stränge, die\n  gleichzeitig laufen, eine Frist, die man nicht verpassen darf, und ein\n  Abschluss, der auf alle Stränge wartet. Genau das, was eine Liste auf Papier\n  nicht kann.\n\n    Start \"Umzug geplant\"\n      → Script \"Fristen rechnen\"     kuendigenBis = Umzugstermin − Kündigungsfrist\n      → (+) parallel\n           A  Wohnung kündigen   ⏰ Boundary-Timer auf kuendigenBis (nicht unterbrechend)\n                                    → [Mockup] Erinnerung → Ende \"Erinnert\"\n           B  Umzugsfirma buchen\n           C  Adressen ändern       (Formular: die Checkliste, die man vergisst)\n        (+) join — wartet auf alle drei\n      → Wohnung übergeben\n      → Ende \"Angekommen\"\n\n  Zwei Dinge, die dieses Modell zeigt und kein anderes im Repo:\n\n  * **Ein Termin statt einer Dauer.** Die anderen Timer im Repo warten eine\n    Dauer ab (\"in zehn Tagen\") oder laufen auf einen Zeitplan. Dieser feuert an\n    einem *berechneten Datum*: \u003ctimeDate\u003e nimmt einen FEEL-Ausdruck (ADR-0055),\n    und der rechnet mit echter Datumsarithmetik — Umzugstermin minus Frist.\n    Liegt das Datum bereits in der Vergangenheit, feuert der Timer sofort; für\n    einen Umzug in zwei Wochen bei drei Monaten Frist ist genau das die\n    richtige Antwort. Zwei Stolpersteine stecken in dem einen Ausdruck — das\n    date(...) um die Variable und der Offset statt einer Zonen-ID; beide stehen\n    an der Boundary dokumentiert, weil sie denselben Incident erzeugen.\n  * **Der Timer erinnert, er bricht nicht ab.** cancelActivity=\"false\": die\n    Aufgabe „Wohnung kündigen\" bleibt offen, es kommt nur eine Erinnerung dazu.\n    Unterbrechend wäre er das Gegenteil von hilfreich — er würde die Aufgabe\n    schliessen, deren Erledigung er anmahnt.\n\n  Der Erinnerungs-Task ist ein Mockup (ADR-0120); scharf wird daraus ein\n  Mail-Task an die eigene Adresse.\n--\u003e\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:atlas=\"http://atlas/schema/1.0\"\n             xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n             xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\"\n             xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\"\n             id=\"defs_umzug\" targetNamespace=\"http://atlas/examples\"\u003e\n\n  \u003cprocess id=\"proc_umzug\" name=\"Umzug organisieren\" isExecutable=\"true\"\u003e\n    \u003cdocumentation\u003eFührt einen privaten Umzug: kündigen, Umzugsfirma buchen und Adressen ändern laufen\ngleichzeitig, die Übergabe wartet auf alle drei. Startvariablen: umzugstermin (Datum, ISO), kuendigungsfrist\n(ISO-Dauer, Vorgabe P3M), alteAdresse und neueAdresse.\u003c/documentation\u003e\n\n    \u003cextensionElements\u003e\n      \u003catlas:startForm\u003e\n        \u003catlas:startVariable name=\"umzugstermin\" type=\"string\" required=\"true\" default=\"\u0026quot;2026-10-01\u0026quot;\"/\u003e\n        \u003catlas:startVariable name=\"kuendigungsfrist\" type=\"string\" required=\"false\" default=\"\u0026quot;P3M\u0026quot;\"/\u003e\n        \u003catlas:startVariable name=\"alteAdresse\" type=\"string\" required=\"true\" default=\"\u0026quot;Bahnhofstrasse 12, 8001 Zürich\u0026quot;\"/\u003e\n        \u003catlas:startVariable name=\"neueAdresse\" type=\"string\" required=\"true\" default=\"\u0026quot;Seestrasse 4, 8802 Kilchberg\u0026quot;\"/\u003e\n      \u003c/atlas:startForm\u003e\n    \u003c/extensionElements\u003e\n\n    \u003cstartEvent id=\"start\" name=\"Umzug geplant\"\u003e\n      \u003coutgoing\u003ef_start_fristen\u003c/outgoing\u003e\n    \u003c/startEvent\u003e\n\n    \u003cscriptTask id=\"fristen\" name=\"Fristen rechnen\"\u003e\n      \u003cdocumentation\u003eEchte Datumsarithmetik in FEEL: date(umzugstermin) - duration(kuendigungsfrist).\nInnerhalb des Ausdrucks ist das Ergebnis ein Datum; als Prozessvariable wird es JSON und kommt als String\nzurück. Der Timer wandelt es deshalb mit date(...) wieder um — siehe die Dokumentation an der Boundary.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:script resultVariable=\"fristen\"\n          expression=\"= { kuendigenBis: date(umzugstermin) - duration(kuendigungsfrist), umzug: date(umzugstermin) }\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_start_fristen\u003c/incoming\u003e\n      \u003coutgoing\u003ef_fristen_fork\u003c/outgoing\u003e\n    \u003c/scriptTask\u003e\n\n    \u003cparallelGateway id=\"fork\" name=\"gleichzeitig\"\u003e\n      \u003cincoming\u003ef_fristen_fork\u003c/incoming\u003e\n      \u003coutgoing\u003ef_fork_kuendigen\u003c/outgoing\u003e\n      \u003coutgoing\u003ef_fork_firma\u003c/outgoing\u003e\n      \u003coutgoing\u003ef_fork_adressen\u003c/outgoing\u003e\n    \u003c/parallelGateway\u003e\n\n    \u003cuserTask id=\"kuendigen\" name=\"Wohnung kündigen\"\u003e\n      \u003cdocumentation\u003eDer Schritt mit der harten Frist. Wer ihn verpasst, zahlt drei Monate doppelt — deshalb\nhängt eine Erinnerung daran und keine Notiz im Kalender.\u003c/documentation\u003e\n      \u003cincoming\u003ef_fork_kuendigen\u003c/incoming\u003e\n      \u003coutgoing\u003ef_kuendigen_join\u003c/outgoing\u003e\n    \u003c/userTask\u003e\n\n    \u003cboundaryEvent id=\"erinnerung_timer\" name=\"Kündigungsfrist\" attachedToRef=\"kuendigen\" cancelActivity=\"false\"\u003e\n      \u003cdocumentation\u003eFeuert an einem berechneten Datum, nicht nach einer Dauer. Nicht unterbrechend: die\nAufgabe bleibt offen, es kommt nur eine Erinnerung dazu. Unterbrechend würde er die Aufgabe schliessen,\nderen Erledigung er anmahnt.\n\nZwei Stolpersteine stecken in diesem einen Ausdruck. Erstens das date(...) um die Variable: Der Script-Task\nhat ein FEEL-Datum geschrieben, aber eine Prozessvariable wird als JSON persistiert — zurück kommt ein\nString. Ohne die Rückwandlung bekommt \"date and time\" einen Text, wo es ein Datum erwartet, und der Timer\nscheitert mit \"result is not a valid date\". Zweitens die Zone: \"09:00:00Z\" trägt einen Offset. Eine\nZonen-ID wie \"09:00:00@Europe/Zurich\" ergibt hier keinen Zeitpunkt, den der Timer verwenden kann — und der\nIncident sagt genau dasselbe, ohne den Unterschied zu nennen.\u003c/documentation\u003e\n      \u003coutgoing\u003ef_timer_erinnern\u003c/outgoing\u003e\n      \u003ctimerEventDefinition\u003e\n        \u003ctimeDate\u003e= date and time(date(fristen.kuendigenBis), time(\"09:00:00Z\"))\u003c/timeDate\u003e\n      \u003c/timerEventDefinition\u003e\n    \u003c/boundaryEvent\u003e\n\n    \u003cserviceTask id=\"erinnern\" name=\"Erinnerung senden\"\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:mockupConnector minDuration=\"PT1S\" maxDuration=\"PT2S\"\n          resultExpression=\"={ erinnert: true, betreff: \u0026quot;Kündigungsfrist läuft\u0026quot; }\"\n          resultVariable=\"erinnerung\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_timer_erinnern\u003c/incoming\u003e\n      \u003coutgoing\u003ef_erinnern_end\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cendEvent id=\"end_erinnert\" name=\"Erinnert\"\u003e\n      \u003cincoming\u003ef_erinnern_end\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003cuserTask id=\"firma\" name=\"Umzugsfirma buchen\"\u003e\n      \u003cincoming\u003ef_fork_firma\u003c/incoming\u003e\n      \u003coutgoing\u003ef_firma_join\u003c/outgoing\u003e\n    \u003c/userTask\u003e\n\n    \u003cuserTask id=\"adressen\" name=\"Adressen ändern\"\u003e\n      \u003cdocumentation\u003eDie Checkliste, die man vergisst. Sie steht im Formular und nicht im Kopf — und was\nabgehakt wurde, bleibt als Variable auf der Instanz.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:formDefinition formId=\"umzug-adressen\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_fork_adressen\u003c/incoming\u003e\n      \u003coutgoing\u003ef_adressen_join\u003c/outgoing\u003e\n    \u003c/userTask\u003e\n\n    \u003cparallelGateway id=\"join\" name=\"alle drei erledigt\"\u003e\n      \u003cdocumentation\u003eWartet auf alle drei Stränge. Ein exklusives Gateway an dieser Stelle wäre der häufigste\nModellierfehler überhaupt: die Übergabe fände statt, sobald irgendein Strang fertig ist.\u003c/documentation\u003e\n      \u003cincoming\u003ef_kuendigen_join\u003c/incoming\u003e\n      \u003cincoming\u003ef_firma_join\u003c/incoming\u003e\n      \u003cincoming\u003ef_adressen_join\u003c/incoming\u003e\n      \u003coutgoing\u003ef_join_uebergabe\u003c/outgoing\u003e\n    \u003c/parallelGateway\u003e\n\n    \u003cuserTask id=\"uebergabe\" name=\"Wohnung übergeben\"\u003e\n      \u003cincoming\u003ef_join_uebergabe\u003c/incoming\u003e\n      \u003coutgoing\u003ef_uebergabe_end\u003c/outgoing\u003e\n    \u003c/userTask\u003e\n\n    \u003cendEvent id=\"end\" name=\"Angekommen\"\u003e\n      \u003cincoming\u003ef_uebergabe_end\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003csequenceFlow id=\"f_start_fristen\" sourceRef=\"start\" targetRef=\"fristen\"/\u003e\n    \u003csequenceFlow id=\"f_fristen_fork\" sourceRef=\"fristen\" targetRef=\"fork\"/\u003e\n    \u003csequenceFlow id=\"f_fork_kuendigen\" sourceRef=\"fork\" targetRef=\"kuendigen\"/\u003e\n    \u003csequenceFlow id=\"f_fork_firma\" sourceRef=\"fork\" targetRef=\"firma\"/\u003e\n    \u003csequenceFlow id=\"f_fork_adressen\" sourceRef=\"fork\" targetRef=\"adressen\"/\u003e\n    \u003csequenceFlow id=\"f_timer_erinnern\" sourceRef=\"erinnerung_timer\" targetRef=\"erinnern\"/\u003e\n    \u003csequenceFlow id=\"f_erinnern_end\" sourceRef=\"erinnern\" targetRef=\"end_erinnert\"/\u003e\n    \u003csequenceFlow id=\"f_kuendigen_join\" sourceRef=\"kuendigen\" targetRef=\"join\"/\u003e\n    \u003csequenceFlow id=\"f_firma_join\" sourceRef=\"firma\" targetRef=\"join\"/\u003e\n    \u003csequenceFlow id=\"f_adressen_join\" sourceRef=\"adressen\" targetRef=\"join\"/\u003e\n    \u003csequenceFlow id=\"f_join_uebergabe\" sourceRef=\"join\" targetRef=\"uebergabe\"/\u003e\n    \u003csequenceFlow id=\"f_uebergabe_end\" sourceRef=\"uebergabe\" targetRef=\"end\"/\u003e\n  \u003c/process\u003e\n\n  \u003cbpmndi:BPMNDiagram id=\"diagram\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"plane\" bpmnElement=\"proc_umzug\"\u003e\n      \u003cbpmndi:BPMNShape id=\"di_start\" bpmnElement=\"start\"\u003e\n        \u003cdc:Bounds x=\"160\" y=\"282\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"140\" y=\"322\" width=\"78\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_fristen\" bpmnElement=\"fristen\"\u003e\n        \u003cdc:Bounds x=\"250\" y=\"260\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_fork\" bpmnElement=\"fork\"\u003e\n        \u003cdc:Bounds x=\"420\" y=\"275\" width=\"50\" height=\"50\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"412\" y=\"330\" width=\"70\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_kuendigen\" bpmnElement=\"kuendigen\"\u003e\n        \u003cdc:Bounds x=\"520\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_erinnerung_timer\" bpmnElement=\"erinnerung_timer\"\u003e\n        \u003cdc:Bounds x=\"552\" y=\"142\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"596\" y=\"130\" width=\"90\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_erinnern\" bpmnElement=\"erinnern\"\u003e\n        \u003cdc:Bounds x=\"660\" y=\"20\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_end_erinnert\" bpmnElement=\"end_erinnert\"\u003e\n        \u003cdc:Bounds x=\"820\" y=\"42\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"802\" y=\"82\" width=\"72\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_firma\" bpmnElement=\"firma\"\u003e\n        \u003cdc:Bounds x=\"520\" y=\"260\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_adressen\" bpmnElement=\"adressen\"\u003e\n        \u003cdc:Bounds x=\"520\" y=\"380\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_join\" bpmnElement=\"join\"\u003e\n        \u003cdc:Bounds x=\"700\" y=\"275\" width=\"50\" height=\"50\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"682\" y=\"330\" width=\"90\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_uebergabe\" bpmnElement=\"uebergabe\"\u003e\n        \u003cdc:Bounds x=\"800\" y=\"260\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_end\" bpmnElement=\"end\"\u003e\n        \u003cdc:Bounds x=\"960\" y=\"282\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"940\" y=\"322\" width=\"78\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n\n      \u003cbpmndi:BPMNEdge id=\"di_f_start_fristen\" bpmnElement=\"f_start_fristen\"\u003e\n        \u003cdi:waypoint x=\"196\" y=\"300\"/\u003e\u003cdi:waypoint x=\"250\" y=\"300\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_fristen_fork\" bpmnElement=\"f_fristen_fork\"\u003e\n        \u003cdi:waypoint x=\"350\" y=\"300\"/\u003e\u003cdi:waypoint x=\"420\" y=\"300\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_fork_kuendigen\" bpmnElement=\"f_fork_kuendigen\"\u003e\n        \u003cdi:waypoint x=\"470\" y=\"300\"/\u003e\u003cdi:waypoint x=\"495\" y=\"300\"/\u003e\n        \u003cdi:waypoint x=\"495\" y=\"200\"/\u003e\u003cdi:waypoint x=\"520\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_fork_firma\" bpmnElement=\"f_fork_firma\"\u003e\n        \u003cdi:waypoint x=\"470\" y=\"300\"/\u003e\u003cdi:waypoint x=\"520\" y=\"300\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_fork_adressen\" bpmnElement=\"f_fork_adressen\"\u003e\n        \u003cdi:waypoint x=\"470\" y=\"300\"/\u003e\u003cdi:waypoint x=\"495\" y=\"300\"/\u003e\n        \u003cdi:waypoint x=\"495\" y=\"420\"/\u003e\u003cdi:waypoint x=\"520\" y=\"420\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_timer_erinnern\" bpmnElement=\"f_timer_erinnern\"\u003e\n        \u003cdi:waypoint x=\"570\" y=\"142\"/\u003e\u003cdi:waypoint x=\"570\" y=\"60\"/\u003e\n        \u003cdi:waypoint x=\"660\" y=\"60\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_erinnern_end\" bpmnElement=\"f_erinnern_end\"\u003e\n        \u003cdi:waypoint x=\"760\" y=\"60\"/\u003e\u003cdi:waypoint x=\"820\" y=\"60\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_kuendigen_join\" bpmnElement=\"f_kuendigen_join\"\u003e\n        \u003cdi:waypoint x=\"620\" y=\"200\"/\u003e\u003cdi:waypoint x=\"660\" y=\"200\"/\u003e\n        \u003cdi:waypoint x=\"660\" y=\"300\"/\u003e\u003cdi:waypoint x=\"700\" y=\"300\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_firma_join\" bpmnElement=\"f_firma_join\"\u003e\n        \u003cdi:waypoint x=\"620\" y=\"300\"/\u003e\u003cdi:waypoint x=\"700\" y=\"300\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_adressen_join\" bpmnElement=\"f_adressen_join\"\u003e\n        \u003cdi:waypoint x=\"620\" y=\"420\"/\u003e\u003cdi:waypoint x=\"660\" y=\"420\"/\u003e\n        \u003cdi:waypoint x=\"660\" y=\"300\"/\u003e\u003cdi:waypoint x=\"700\" y=\"300\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_join_uebergabe\" bpmnElement=\"f_join_uebergabe\"\u003e\n        \u003cdi:waypoint x=\"750\" y=\"300\"/\u003e\u003cdi:waypoint x=\"800\" y=\"300\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_uebergabe_end\" bpmnElement=\"f_uebergabe_end\"\u003e\n        \u003cdi:waypoint x=\"900\" y=\"300\"/\u003e\u003cdi:waypoint x=\"960\" y=\"300\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/definitions\u003e"
+        }
+      ],
+      "forms": [
+        {
+          "id": "umzug-adressen",
+          "name": "Umzug – Adressen ändern",
+          "file": "umzug/form-umzug-adressen.json",
+          "schema": {
+            "id": "umzug-adressen",
+            "type": "default",
+            "schemaVersion": 16,
+            "exporter": {
+              "name": "Atlas",
+              "version": "0.4.0-dev"
+            },
+            "components": [
+              {
+                "id": "kopf",
+                "type": "text",
+                "text": "## Adressen ändern\n\nDie Liste, die man im Kopf hat und trotzdem halb vergisst. Was hier abgehakt ist, bleibt auf der Instanz — auch in drei Jahren noch nachlesbar."
+              },
+              {
+                "id": "f-alt",
+                "type": "textfield",
+                "key": "alteAdresse",
+                "label": "Bisher",
+                "disabled": true
+              },
+              {
+                "id": "f-neu",
+                "type": "textfield",
+                "key": "neueAdresse",
+                "label": "Neu",
+                "disabled": true
+              },
+              {
+                "id": "f-liste",
+                "type": "checklist",
+                "key": "gemeldet",
+                "label": "Gemeldet an",
+                "values": [
+                  {
+                    "label": "Einwohnerkontrolle / Gemeinde",
+                    "value": "gemeinde"
+                  },
+                  {
+                    "label": "Post-Nachsendeauftrag",
+                    "value": "post"
+                  },
+                  {
+                    "label": "Krankenkasse",
+                    "value": "krankenkasse"
+                  },
+                  {
+                    "label": "Bank",
+                    "value": "bank"
+                  },
+                  {
+                    "label": "Arbeitgeber",
+                    "value": "arbeitgeber"
+                  },
+                  {
+                    "label": "Versicherungen (Haftpflicht, Hausrat)",
+                    "value": "versicherungen"
+                  },
+                  {
+                    "label": "Strom, Wasser, Internet",
+                    "value": "versorger"
+                  },
+                  {
+                    "label": "Abo-Dienste und Vereine",
+                    "value": "abos"
+                  }
+                ]
+              },
+              {
+                "id": "f-offen",
+                "type": "textarea",
+                "key": "offeneAdressen",
+                "label": "Noch offen",
+                "description": "Was hier steht, ist beim nächsten Umzug die Liste, mit der man anfängt."
+              }
+            ]
+          }
+        }
+      ],
+      "start": {
+        "processId": "proc_umzug",
+        "variables": {
+          "alteAdresse": "Bahnhofstrasse 12, 8001 Zürich",
+          "kuendigungsfrist": "P3M",
+          "neueAdresse": "Seestrasse 4, 8802 Kilchberg",
+          "umzugstermin": "2026-10-01"
+        }
+      }
+    },
+    {
       "id": "pruefung",
       "path": "pruefung",
       "app": "Beispiel: Prüfung",

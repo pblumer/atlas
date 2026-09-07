@@ -44,8 +44,17 @@ _Changed_ / _Removed_ for each version.
   All three are framed for the readers the examples were thinnest on: a small business and
   a private person. All three run with no worker, no credential and no network.
 
+  A fourth, **`examples/umzug/`**, is there for the audience alone rather than a
+  mechanism: organising a move, because a workflow engine reads as something for
+  corporations until somebody shows it doing a private person's Saturday. It happens to be
+  the only model in the tree that fires a timer on a **computed date** rather than after a
+  duration — and its two trip hazards are documented because both actually happened while
+  it was being built, and both produce the same incident: a process variable is persisted
+  as JSON and comes back a string (so the date has to be parsed again), and a zone id
+  where the timer needs an offset.
+
 - **The handbook now shows every example Atlas ships, and what it takes to run one.**
-  Twenty-nine scenarios live under `examples/` — a shopping cart that computes a total in
+  Thirty scenarios live under `examples/` — a shopping cart that computes a total in
   FEEL, an exam with a hard deadline, a CSV checked row by row, a directory recertified
   against the HR system, a Google Form whose every new row becomes a case. The handbook
   showed two of them. `examples/README.md`, the only overview there was, is written for
@@ -59,7 +68,7 @@ _Changed_ / _Removed_ for each version.
   is `null` in FEEL; a Jira user search without the browse permission finds nobody
   *without failing*). Each card renders the real diagram, and installs the real artifacts —
   application, decision, forms, processes, publish — into the reader's own instance in one
-  click. Eight of them then start with one more click, most running to an end event with no
+  click. Nine of them then start with one more click, most running to an end event with no
   worker configured at all.
 
   Alongside it, **Worker in Betrieb nehmen**: a runbook per worker type for the half that

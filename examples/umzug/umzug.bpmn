@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Umzug organisieren — Atlas für eine Privatperson.
+
+  Das Beispiel gegen den Reflex, eine Workflow-Engine sei etwas für Konzerne.
+  Ein Umzug ist ein Prozess mit allem, was dazugehört: mehrere Stränge, die
+  gleichzeitig laufen, eine Frist, die man nicht verpassen darf, und ein
+  Abschluss, der auf alle Stränge wartet. Genau das, was eine Liste auf Papier
+  nicht kann.
+
+    Start "Umzug geplant"
+      → Script "Fristen rechnen"     kuendigenBis = Umzugstermin − Kündigungsfrist
+      → (+) parallel
+           A  Wohnung kündigen   ⏰ Boundary-Timer auf kuendigenBis (nicht unterbrechend)
+                                    → [Mockup] Erinnerung → Ende "Erinnert"
+           B  Umzugsfirma buchen
+           C  Adressen ändern       (Formular: die Checkliste, die man vergisst)
+        (+) join — wartet auf alle drei
+      → Wohnung übergeben
+      → Ende "Angekommen"
+
+  Zwei Dinge, die dieses Modell zeigt und kein anderes im Repo:
+
+  * **Ein Termin statt einer Dauer.** Die anderen Timer im Repo warten eine
+    Dauer ab ("in zehn Tagen") oder laufen auf einen Zeitplan. Dieser feuert an
+    einem *berechneten Datum*: <timeDate> nimmt einen FEEL-Ausdruck (ADR-0055),
+    und der rechnet mit echter Datumsarithmetik — Umzugstermin minus Frist.
+    Liegt das Datum bereits in der Vergangenheit, feuert der Timer sofort; für
+    einen Umzug in zwei Wochen bei drei Monaten Frist ist genau das die
+    richtige Antwort. Zwei Stolpersteine stecken in dem einen Ausdruck — das
+    date(...) um die Variable und der Offset statt einer Zonen-ID; beide stehen
+    an der Boundary dokumentiert, weil sie denselben Incident erzeugen.
+  * **Der Timer erinnert, er bricht nicht ab.** cancelActivity="false": die
+    Aufgabe „Wohnung kündigen" bleibt offen, es kommt nur eine Erinnerung dazu.
+    Unterbrechend wäre er das Gegenteil von hilfreich — er würde die Aufgabe
+    schliessen, deren Erledigung er anmahnt.
+
+  Der Erinnerungs-Task ist ein Mockup (ADR-0120); scharf wird daraus ein
+  Mail-Task an die eigene Adresse.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_umzug" targetNamespace="http://atlas/examples">
+
+  <process id="proc_umzug" name="Umzug organisieren" isExecutable="true">
+    <documentation>Führt einen privaten Umzug: kündigen, Umzugsfirma buchen und Adressen ändern laufen
+gleichzeitig, die Übergabe wartet auf alle drei. Startvariablen: umzugstermin (Datum, ISO), kuendigungsfrist
+(ISO-Dauer, Vorgabe P3M), alteAdresse und neueAdresse.</documentation>
+
+    <extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="umzugstermin" type="string" required="true" default="&quot;2026-10-01&quot;"/>
+        <atlas:startVariable name="kuendigungsfrist" type="string" required="false" default="&quot;P3M&quot;"/>
+        <atlas:startVariable name="alteAdresse" type="string" required="true" default="&quot;Bahnhofstrasse 12, 8001 Zürich&quot;"/>
+        <atlas:startVariable name="neueAdresse" type="string" required="true" default="&quot;Seestrasse 4, 8802 Kilchberg&quot;"/>
+      </atlas:startForm>
+    </extensionElements>
+
+    <startEvent id="start" name="Umzug geplant">
+      <outgoing>f_start_fristen</outgoing>
+    </startEvent>
+
+    <scriptTask id="fristen" name="Fristen rechnen">
+      <documentation>Echte Datumsarithmetik in FEEL: date(umzugstermin) - duration(kuendigungsfrist).
+Innerhalb des Ausdrucks ist das Ergebnis ein Datum; als Prozessvariable wird es JSON und kommt als String
+zurück. Der Timer wandelt es deshalb mit date(...) wieder um — siehe die Dokumentation an der Boundary.</documentation>
+      <extensionElements>
+        <zeebe:script resultVariable="fristen"
+          expression="= { kuendigenBis: date(umzugstermin) - duration(kuendigungsfrist), umzug: date(umzugstermin) }"/>
+      </extensionElements>
+      <incoming>f_start_fristen</incoming>
+      <outgoing>f_fristen_fork</outgoing>
+    </scriptTask>
+
+    <parallelGateway id="fork" name="gleichzeitig">
+      <incoming>f_fristen_fork</incoming>
+      <outgoing>f_fork_kuendigen</outgoing>
+      <outgoing>f_fork_firma</outgoing>
+      <outgoing>f_fork_adressen</outgoing>
+    </parallelGateway>
+
+    <userTask id="kuendigen" name="Wohnung kündigen">
+      <documentation>Der Schritt mit der harten Frist. Wer ihn verpasst, zahlt drei Monate doppelt — deshalb
+hängt eine Erinnerung daran und keine Notiz im Kalender.</documentation>
+      <incoming>f_fork_kuendigen</incoming>
+      <outgoing>f_kuendigen_join</outgoing>
+    </userTask>
+
+    <boundaryEvent id="erinnerung_timer" name="Kündigungsfrist" attachedToRef="kuendigen" cancelActivity="false">
+      <documentation>Feuert an einem berechneten Datum, nicht nach einer Dauer. Nicht unterbrechend: die
+Aufgabe bleibt offen, es kommt nur eine Erinnerung dazu. Unterbrechend würde er die Aufgabe schliessen,
+deren Erledigung er anmahnt.
+
+Zwei Stolpersteine stecken in diesem einen Ausdruck. Erstens das date(...) um die Variable: Der Script-Task
+hat ein FEEL-Datum geschrieben, aber eine Prozessvariable wird als JSON persistiert — zurück kommt ein
+String. Ohne die Rückwandlung bekommt "date and time" einen Text, wo es ein Datum erwartet, und der Timer
+scheitert mit "result is not a valid date". Zweitens die Zone: "09:00:00Z" trägt einen Offset. Eine
+Zonen-ID wie "09:00:00@Europe/Zurich" ergibt hier keinen Zeitpunkt, den der Timer verwenden kann — und der
+Incident sagt genau dasselbe, ohne den Unterschied zu nennen.</documentation>
+      <outgoing>f_timer_erinnern</outgoing>
+      <timerEventDefinition>
+        <timeDate>= date and time(date(fristen.kuendigenBis), time("09:00:00Z"))</timeDate>
+      </timerEventDefinition>
+    </boundaryEvent>
+
+    <serviceTask id="erinnern" name="Erinnerung senden">
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
+          resultExpression="={ erinnert: true, betreff: &quot;Kündigungsfrist läuft&quot; }"
+          resultVariable="erinnerung"/>
+      </extensionElements>
+      <incoming>f_timer_erinnern</incoming>
+      <outgoing>f_erinnern_end</outgoing>
+    </serviceTask>
+
+    <endEvent id="end_erinnert" name="Erinnert">
+      <incoming>f_erinnern_end</incoming>
+    </endEvent>
+
+    <userTask id="firma" name="Umzugsfirma buchen">
+      <incoming>f_fork_firma</incoming>
+      <outgoing>f_firma_join</outgoing>
+    </userTask>
+
+    <userTask id="adressen" name="Adressen ändern">
+      <documentation>Die Checkliste, die man vergisst. Sie steht im Formular und nicht im Kopf — und was
+abgehakt wurde, bleibt als Variable auf der Instanz.</documentation>
+      <extensionElements>
+        <zeebe:formDefinition formId="umzug-adressen"/>
+      </extensionElements>
+      <incoming>f_fork_adressen</incoming>
+      <outgoing>f_adressen_join</outgoing>
+    </userTask>
+
+    <parallelGateway id="join" name="alle drei erledigt">
+      <documentation>Wartet auf alle drei Stränge. Ein exklusives Gateway an dieser Stelle wäre der häufigste
+Modellierfehler überhaupt: die Übergabe fände statt, sobald irgendein Strang fertig ist.</documentation>
+      <incoming>f_kuendigen_join</incoming>
+      <incoming>f_firma_join</incoming>
+      <incoming>f_adressen_join</incoming>
+      <outgoing>f_join_uebergabe</outgoing>
+    </parallelGateway>
+
+    <userTask id="uebergabe" name="Wohnung übergeben">
+      <incoming>f_join_uebergabe</incoming>
+      <outgoing>f_uebergabe_end</outgoing>
+    </userTask>
+
+    <endEvent id="end" name="Angekommen">
+      <incoming>f_uebergabe_end</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_fristen" sourceRef="start" targetRef="fristen"/>
+    <sequenceFlow id="f_fristen_fork" sourceRef="fristen" targetRef="fork"/>
+    <sequenceFlow id="f_fork_kuendigen" sourceRef="fork" targetRef="kuendigen"/>
+    <sequenceFlow id="f_fork_firma" sourceRef="fork" targetRef="firma"/>
+    <sequenceFlow id="f_fork_adressen" sourceRef="fork" targetRef="adressen"/>
+    <sequenceFlow id="f_timer_erinnern" sourceRef="erinnerung_timer" targetRef="erinnern"/>
+    <sequenceFlow id="f_erinnern_end" sourceRef="erinnern" targetRef="end_erinnert"/>
+    <sequenceFlow id="f_kuendigen_join" sourceRef="kuendigen" targetRef="join"/>
+    <sequenceFlow id="f_firma_join" sourceRef="firma" targetRef="join"/>
+    <sequenceFlow id="f_adressen_join" sourceRef="adressen" targetRef="join"/>
+    <sequenceFlow id="f_join_uebergabe" sourceRef="join" targetRef="uebergabe"/>
+    <sequenceFlow id="f_uebergabe_end" sourceRef="uebergabe" targetRef="end"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_umzug">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="282" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="140" y="322" width="78" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_fristen" bpmnElement="fristen">
+        <dc:Bounds x="250" y="260" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_fork" bpmnElement="fork">
+        <dc:Bounds x="420" y="275" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="412" y="330" width="70" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_kuendigen" bpmnElement="kuendigen">
+        <dc:Bounds x="520" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_erinnerung_timer" bpmnElement="erinnerung_timer">
+        <dc:Bounds x="552" y="142" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="596" y="130" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_erinnern" bpmnElement="erinnern">
+        <dc:Bounds x="660" y="20" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_erinnert" bpmnElement="end_erinnert">
+        <dc:Bounds x="820" y="42" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="802" y="82" width="72" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_firma" bpmnElement="firma">
+        <dc:Bounds x="520" y="260" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_adressen" bpmnElement="adressen">
+        <dc:Bounds x="520" y="380" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_join" bpmnElement="join">
+        <dc:Bounds x="700" y="275" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="682" y="330" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_uebergabe" bpmnElement="uebergabe">
+        <dc:Bounds x="800" y="260" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end">
+        <dc:Bounds x="960" y="282" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="940" y="322" width="78" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_fristen" bpmnElement="f_start_fristen">
+        <di:waypoint x="196" y="300"/><di:waypoint x="250" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_fristen_fork" bpmnElement="f_fristen_fork">
+        <di:waypoint x="350" y="300"/><di:waypoint x="420" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_fork_kuendigen" bpmnElement="f_fork_kuendigen">
+        <di:waypoint x="470" y="300"/><di:waypoint x="495" y="300"/>
+        <di:waypoint x="495" y="200"/><di:waypoint x="520" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_fork_firma" bpmnElement="f_fork_firma">
+        <di:waypoint x="470" y="300"/><di:waypoint x="520" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_fork_adressen" bpmnElement="f_fork_adressen">
+        <di:waypoint x="470" y="300"/><di:waypoint x="495" y="300"/>
+        <di:waypoint x="495" y="420"/><di:waypoint x="520" y="420"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_timer_erinnern" bpmnElement="f_timer_erinnern">
+        <di:waypoint x="570" y="142"/><di:waypoint x="570" y="60"/>
+        <di:waypoint x="660" y="60"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_erinnern_end" bpmnElement="f_erinnern_end">
+        <di:waypoint x="760" y="60"/><di:waypoint x="820" y="60"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_kuendigen_join" bpmnElement="f_kuendigen_join">
+        <di:waypoint x="620" y="200"/><di:waypoint x="660" y="200"/>
+        <di:waypoint x="660" y="300"/><di:waypoint x="700" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_firma_join" bpmnElement="f_firma_join">
+        <di:waypoint x="620" y="300"/><di:waypoint x="700" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_adressen_join" bpmnElement="f_adressen_join">
+        <di:waypoint x="620" y="420"/><di:waypoint x="660" y="420"/>
+        <di:waypoint x="660" y="300"/><di:waypoint x="700" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_join_uebergabe" bpmnElement="f_join_uebergabe">
+        <di:waypoint x="750" y="300"/><di:waypoint x="800" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_uebergabe_end" bpmnElement="f_uebergabe_end">
+        <di:waypoint x="900" y="300"/><di:waypoint x="960" y="300"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

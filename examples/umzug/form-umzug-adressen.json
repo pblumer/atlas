@@ -1,0 +1,38 @@
+{
+  "id": "umzug-adressen",
+  "type": "default",
+  "schemaVersion": 16,
+  "exporter": { "name": "Atlas", "version": "0.4.0-dev" },
+  "components": [
+    {
+      "id": "kopf",
+      "type": "text",
+      "text": "## Adressen ändern\n\nDie Liste, die man im Kopf hat und trotzdem halb vergisst. Was hier abgehakt ist, bleibt auf der Instanz — auch in drei Jahren noch nachlesbar."
+    },
+    { "id": "f-alt", "type": "textfield", "key": "alteAdresse", "label": "Bisher", "disabled": true },
+    { "id": "f-neu", "type": "textfield", "key": "neueAdresse", "label": "Neu", "disabled": true },
+    {
+      "id": "f-liste",
+      "type": "checklist",
+      "key": "gemeldet",
+      "label": "Gemeldet an",
+      "values": [
+        { "label": "Einwohnerkontrolle / Gemeinde", "value": "gemeinde" },
+        { "label": "Post-Nachsendeauftrag", "value": "post" },
+        { "label": "Krankenkasse", "value": "krankenkasse" },
+        { "label": "Bank", "value": "bank" },
+        { "label": "Arbeitgeber", "value": "arbeitgeber" },
+        { "label": "Versicherungen (Haftpflicht, Hausrat)", "value": "versicherungen" },
+        { "label": "Strom, Wasser, Internet", "value": "versorger" },
+        { "label": "Abo-Dienste und Vereine", "value": "abos" }
+      ]
+    },
+    {
+      "id": "f-offen",
+      "type": "textarea",
+      "key": "offeneAdressen",
+      "label": "Noch offen",
+      "description": "Was hier steht, ist beim nächsten Umzug die Liste, mit der man anfängt."
+    }
+  ]
+}

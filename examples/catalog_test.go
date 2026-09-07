@@ -128,6 +128,18 @@ var catalogSources = []catalogSource{
 			"kunde": "Kunde A", "artikel": "Zaunfeld verzinkt", "menge": 40, "einzelpreis": 89.5,
 		}},
 	},
+	{
+		ID: "umzug", App: "Beispiel: Umzug",
+		Dir: "umzug",
+		// A move three months out with a three-month notice period puts the reminder's
+		// date in the past, so the timer fires at once — which is both correct and the
+		// only way a reader sees it inside a demo.
+		Start: &catalogStart{"proc_umzug", map[string]any{
+			"umzugstermin": "2026-10-01", "kuendigungsfrist": "P3M",
+			"alteAdresse": "Bahnhofstrasse 12, 8001 Zürich",
+			"neueAdresse": "Seestrasse 4, 8802 Kilchberg",
+		}},
+	},
 	{ID: "pruefung", App: "Beispiel: Prüfung", Dir: "pruefung"},
 	{ID: "reisebuchung", App: "Beispiel: Reisebuchung", Dir: "reisebuchung", Main: "reisebuchung/reisebuchung.bpmn"},
 	{ID: "bewerbermanagement", App: "Bewerbermanagement", Dir: "bewerbermanagement", Main: "bewerbermanagement/bewerbung.bpmn"},
@@ -206,6 +218,7 @@ var catalogSources = []catalogSource{
 // under its id.
 var formDisplayNames = map[string]string{
 	"mahn-entscheid":        "Mahnung – Entscheid",
+	"umzug-adressen":        "Umzug – Adressen ändern",
 	"offerte-entscheid":     "Offerte – Kundenentscheid",
 	"bw-bewerbung-eingang":  "Bewerbung – Eingang",
 	"bw-interview-feedback": "Interview – Feedback",

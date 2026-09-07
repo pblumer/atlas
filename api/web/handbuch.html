@@ -2134,12 +2134,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Neunundzwanzig fertige Szenarien, die im Atlas-Repository liegen und hier
+      <p class="lead" data-l="de">Dreissig fertige Szenarien, die im Atlas-Repository liegen und hier
         vollständig beschrieben sind – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Twenty-nine finished scenarios that live in the Atlas repository and are described
+      <p class="lead" data-l="en">Thirty finished scenarios that live in the Atlas repository and are described
         here in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -2174,6 +2174,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <td><a href="#bsp-cart-total" data-l="de">Warenkorb</a><a href="#bsp-cart-total" data-l="en">Shopping cart</a></td></tr>
           <tr><td data-l="de">… einen Antrag von einem Menschen freigeben lassen</td><td data-l="en">… have a person approve a request</td>
             <td><a href="#bsp-jira-zugangsantrag">Zugangsantrag</a>, <a href="#bsp-account-bestellung">Account-Bestellung</a></td></tr>
+          <tr><td data-l="de">… ein privates Vorhaben organisieren, nicht ein geschäftliches</td><td data-l="en">… organise something private, not something for work</td>
+            <td><a href="#bsp-umzug" data-l="de">Umzug</a><a href="#bsp-umzug" data-l="en">Moving house</a>, <a href="#bsp-reisestorno" data-l="de">Reise-Rückabwicklung</a><a href="#bsp-reisestorno" data-l="en">Trip rollback</a></td></tr>
           <tr><td data-l="de">… etwas rückgängig machen, das schon passiert ist</td><td data-l="en">… undo something that already happened</td>
             <td><a href="#bsp-reisestorno" data-l="de">Reise-Rückabwicklung</a><a href="#bsp-reisestorno" data-l="en">Trip rollback</a></td></tr>
           <tr><td data-l="de">… eine Nachricht an <i>alle</i> laufenden Fälle schicken</td><td data-l="en">… send word to <i>all</i> running cases</td>
@@ -2212,9 +2214,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="card">
           <b><span class="tag ok" data-l="de">läuft sofort</span><span class="tag ok" data-l="en">runs at once</span></b>
           <p class="lead" data-l="de">Kein Worker, kein Zugang, kein Internet. Installieren, starten, in Operations
-            zusehen. Vierzehn der Beispiele sind so – darunter jedes, das etwas Grundsätzliches erklärt.</p>
+            zusehen. Fünfzehn der Beispiele sind so – darunter jedes, das etwas Grundsätzliches erklärt.</p>
           <p class="lead" data-l="en">No worker, no credential, no internet. Install it, start it, watch it in
-            Operations. Fourteen of the examples are like this – including every one that explains something fundamental.</p>
+            Operations. Fifteen of the examples are like this – including every one that explains something fundamental.</p>
         </div>
         <div class="card">
           <b><span class="tag warn" data-l="de">braucht Internet</span><span class="tag warn" data-l="en">needs the internet</span></b>
@@ -2286,6 +2288,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <td data-l="de">Eine Preisliste ändert sich – jede offene Offerte rechnet nach</td><td data-l="en">A price list changes – every open quote recalculates</td>
             <td><span class="tag ok">–</span></td>
             <td data-l="de">Signal: einer wirft, alle empfangen</td><td data-l="en">Signal: one throws, all receive</td></tr>
+          <tr><td><a href="#bsp-umzug" data-l="de">Umzug</a><a href="#bsp-umzug" data-l="en">Moving house</a></td>
+            <td data-l="de">Kündigen, Umzugsfirma, Adressen – gleichzeitig, mit einer Frist</td><td data-l="en">Notice, movers, addresses – at once, against a deadline</td>
+            <td><span class="tag ok">–</span></td>
+            <td data-l="de">Timer auf ein berechnetes Datum, paralleles Join</td><td data-l="en">A timer on a computed date, a parallel join</td></tr>
           <tr><td><a href="#bsp-pruefung" data-l="de">Prüfung</a><a href="#bsp-pruefung" data-l="en">Exam</a></td>
             <td data-l="de">Prüfung mit hartem Zeitlimit und Notenschlüssel</td><td data-l="en">An exam with a hard time limit and a grading scale</td>
             <td><span class="tag ok">–</span></td>
@@ -2416,7 +2422,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <tr><td data-l="de">Boundary-Timer, unterbrechend</td><td data-l="en">Boundary timer, interrupting</td>
             <td><a href="#bsp-pruefung" data-l="de">Prüfung</a><a href="#bsp-pruefung" data-l="en">Exam</a></td></tr>
           <tr><td data-l="de">Boundary-Timer, nicht unterbrechend</td><td data-l="en">Boundary timer, non-interrupting</td>
-            <td><a href="#bsp-bewerbermanagement">Bewerbermanagement</a></td></tr>
+            <td><a href="#bsp-bewerbermanagement">Bewerbermanagement</a>, <a href="#bsp-umzug" data-l="de">Umzug</a><a href="#bsp-umzug" data-l="en">Moving house</a></td></tr>
+          <tr><td data-l="de">Timer auf ein <i>berechnetes Datum</i></td><td data-l="en">Timer on a <i>computed date</i></td>
+            <td><a href="#bsp-umzug" data-l="de">Umzug</a><a href="#bsp-umzug" data-l="en">Moving house</a></td></tr>
           <tr><td data-l="de">Nachricht als Start (Ereignis von aussen)</td><td data-l="en">Message start (an event from outside)</td>
             <td><a href="#bsp-jira-ticket-eingang">Ticket-Eingang</a>, <a href="#bsp-google-sheets-antragseingang">Antragseingang</a></td></tr>
           <tr><td data-l="de">Nachricht empfangen (Receive-Task)</td><td data-l="en">Receiving a message (receive task)</td>
@@ -2894,6 +2902,78 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             Ereignisüberwachung.</p>
           <p data-l="en"><b>The coupling is the signal name.</b> One character apart between thrower and catcher and
             both models run flawlessly and never meet – exactly as with the message name of an event watch.</p>
+        </details>
+      </div>
+
+      <div class="bsp" id="bsp-umzug">
+        <h4><span class="rz-emoji" aria-hidden="true">📦</span>
+          <span data-l="de">Umzug organisieren – Atlas für eine Privatperson</span><span data-l="en">Organise a move – Atlas for a private person</span></h4>
+        <p class="bsp-tags">
+          <span class="tag ok" data-l="de">läuft sofort</span><span class="tag ok" data-l="en">runs at once</span>
+          <span class="tag" data-l="de">parallel</span><span class="tag" data-l="en">parallel</span>
+          <span class="tag" data-l="de">Termin-Timer</span><span class="tag" data-l="en">date timer</span>
+          <span class="tag">examples/umzug/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Das Beispiel gegen den Reflex, eine Workflow-Engine sei etwas für Konzerne. Ein Umzug
+              hat alles, was einen Prozess ausmacht: <b>drei Stränge, die gleichzeitig laufen</b> (kündigen,
+              Umzugsfirma, Adressen), eine <b>Frist, die man nicht verpassen darf</b>, und einen Abschluss, der auf
+              alle drei wartet. Eine Liste auf Papier kann das nicht: Sie erinnert nicht, sie wartet nicht, und sie
+              weiss hinterher nicht mehr, was abgehakt war. Dieselbe Bauform trägt eine Hochzeit, einen Hausbau, eine
+              Firmengründung oder einen Vereinsanlass.</p>
+            <p data-l="en">The example against the reflex that a workflow engine is for corporations. A move has
+              everything a process has: <b>three strands running at once</b> (give notice, hire movers, change
+              addresses), a <b>deadline you must not miss</b>, and a closing step that waits for all three. A list on
+              paper cannot do that: it does not remind you, it does not wait, and afterwards it no longer knows what
+              was ticked off. The same shape carries a wedding, building a house, founding a company or a club
+              event.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Das einzige Modell im Repo mit einem <b>Termin</b> statt einer Dauer: alle anderen Timer
+              warten „in zehn Tagen" ab oder laufen auf einen Zeitplan. <code>&lt;timeDate&gt;</code> nimmt einen
+              FEEL-Ausdruck, und der rechnet mit echter Datumsarithmetik – Umzugstermin minus Kündigungsfrist. Liegt
+              das Datum schon in der Vergangenheit, feuert der Timer <b>sofort</b>, was bei zwei Wochen Vorlauf und
+              drei Monaten Frist genau die richtige Antwort ist. Die Boundary ist <b>nicht unterbrechend</b>: sie
+              erinnert, statt die Aufgabe zu schliessen, deren Erledigung sie anmahnt. Und das Join ist ein
+              <b>paralleles</b> Gateway – ein exklusives wäre der häufigste Modellierfehler überhaupt, die Übergabe
+              fände statt, sobald irgendein Strang fertig ist.</p>
+            <p data-l="en">The only model in the repository with a <b>date</b> instead of a duration: every other
+              timer waits "in ten days" or runs on a schedule. <code>&lt;timeDate&gt;</code> takes a FEEL expression,
+              and that one does real date arithmetic – moving date minus notice period. If the date is already in the
+              past the timer fires <b>at once</b>, which with two weeks' lead time and three months' notice is exactly
+              the right answer. The boundary is <b>non-interrupting</b>: it reminds rather than closing the task whose
+              completion it is chasing. And the join is a <b>parallel</b> gateway – an exclusive one would be the most
+              common modelling mistake there is, with the handover happening as soon as any one strand finishes.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Zwei Stolpersteine in einem Ausdruck</span><span data-l="en">Two trip hazards in one expression</span></summary>
+          <p data-l="de">Beide erzeugen denselben Incident – <code>timer schedule: result is not a valid date</code> –
+            und beide sind beim Bauen dieses Beispiels tatsächlich passiert:</p>
+          <p data-l="en">Both produce the same incident – <code>timer schedule: result is not a valid date</code> –
+            and both actually happened while this example was being built:</p>
+          <pre><code>= date and time(date(fristen.kuendigenBis), time("09:00:00Z"))
+                ^^^^                             ^^^^^^^^^^^^</code></pre>
+          <ul>
+            <li data-l="de"><b>Das <code>date(...)</code> um die Variable.</b> Der Script-Task hat ein FEEL-Datum
+              geschrieben – aber eine Prozessvariable wird als <b>JSON</b> persistiert, und zurück kommt ein String.
+              Ohne die Rückwandlung bekommt <code>date and time</code> einen Text, wo es ein Datum erwartet.</li>
+            <li data-l="en"><b>The <code>date(...)</code> around the variable.</b> The script task wrote a FEEL date –
+              but a process variable is persisted as <b>JSON</b>, and what comes back is a string. Without converting
+              it back, <code>date and time</code> gets text where it expects a date.</li>
+            <li data-l="de"><b>Ein Offset, keine Zonen-ID.</b> <code>"09:00:00Z"</code> funktioniert;
+              <code>"09:00:00@Europe/Zurich"</code> ergibt hier keinen Zeitpunkt, den der Timer verwenden kann. Der
+              Incident nennt den Unterschied nicht – er sagt in beiden Fällen dasselbe.</li>
+            <li data-l="en"><b>An offset, not a zone id.</b> <code>"09:00:00Z"</code> works;
+              <code>"09:00:00@Europe/Zurich"</code> yields no instant the timer can use here. The incident does not
+              name the difference – it says the same thing in both cases.</li>
+          </ul>
         </details>
       </div>
 
@@ -7286,7 +7366,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle 29 Beispiele im Handbuch</span><span data-l="en">All 29 examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle 30 Beispiele im Handbuch</span><span data-l="en">All 30 examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>
