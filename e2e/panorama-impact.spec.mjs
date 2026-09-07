@@ -376,3 +376,72 @@ test("a window that reaches a boundary reports a floor", async ({ page }) => {
   expect(o.each.find((r) => r.name === "P1").complete).toBe(true);
   expect(o.each.find((r) => r.name === "P2").complete).toBe(false);
 });
+
+// Where a node's name is written (ADR-0211 §7). It is arithmetic over rectangles once
+// the browser has measured the text, so it is checked as arithmetic: the layout, the
+// font and the zoom are not part of the question.
+//
+// One box shape throughout — 160 wide, 18 tall, hanging under a node of radius 10,
+// which is what a name of ordinary length does on this canvas.
+const caption = { x: -80, y: 14, width: 160, height: 18 };
+const node = (id, x, y, r = 10) => ({ id, x, y, r, box: caption });
+
+test("a name stays under its node when nothing is in its way", async ({ page }) => {
+  const spots = await page.evaluate((items) => window.placeCaptions(items),
+    [node("a", 0, 0), node("b", 600, 600)]);
+  expect(spots.a).toEqual({ dx: 0, dy: 0 });
+  expect(spots.b).toEqual({ dx: 0, dy: 0 });
+});
+
+test("a name moves when another name is in its way, and only then", async ({ page }) => {
+  // Two nodes close enough that both names cannot hang under them.
+  const spots = await page.evaluate((items) => window.placeCaptions(items),
+    [node("a", 0, 0), node("b", 30, 20)]);
+  // The first one placed keeps the habit; the second is the one that gives way.
+  expect(spots.a).toEqual({ dx: 0, dy: 0 });
+  expect(spots.b.dy).toBeLessThan(0);
+});
+
+test("the biggest node keeps its place, because its name is the one being navigated by", async ({ page }) => {
+  const spots = await page.evaluate((items) => window.placeCaptions(items),
+    [node("small", 0, 0, 8), node("hub", 30, 20, 30)]);
+  expect(spots.hub).toEqual({ dx: 0, dy: 0 });
+  expect(spots.small.dx || spots.small.dy).toBeTruthy();
+});
+
+test("a name with nowhere to go is not written", async ({ page }) => {
+  // Five nodes on one spot: four places to write a name, and one more name than that.
+  const spots = await page.evaluate((items) => window.placeCaptions(items),
+    ["a", "b", "c", "d", "e"].map((id, i) => node(id, i, i)));
+  const unwritten = Object.values(spots).filter((s) => s === null);
+  expect(unwritten.length).toBeGreaterThan(0);
+  // And nothing that *was* written overlaps anything else that was written.
+  const boxes = Object.entries(spots).filter(([, s]) => s).map(([id, s], i) => {
+    const n = ["a", "b", "c", "d", "e"].indexOf(id);
+    return { left: n + caption.x + s.dx, right: n + caption.x + caption.width + s.dx,
+             top: n + caption.y + s.dy, bottom: n + caption.y + caption.height + s.dy };
+  });
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const [p, q] = [boxes[i], boxes[j]];
+      expect(p.left < q.right && q.left < p.right && p.top < q.bottom && q.top < p.bottom).toBe(false);
+    }
+  }
+});
+
+test("the same picture puts the same names in the same places", async ({ page }) => {
+  const items = [node("b", 30, 20), node("a", 0, 0), node("c", 20, 40)];
+  const once = await page.evaluate((i) => window.placeCaptions(i), items);
+  // Same nodes, different array order: the answer is the same, so a repaint cannot
+  // rearrange the names while the picture underneath them stands still.
+  const twice = await page.evaluate((i) => window.placeCaptions(i), [...items].reverse());
+  expect(twice).toEqual(once);
+});
+
+test("a name without a measured box is left alone", async ({ page }) => {
+  // A restricted placeholder has no name to write, so it has no box either.
+  const spots = await page.evaluate((items) => window.placeCaptions(items),
+    [node("a", 0, 0), { id: "restricted:1", x: 20, y: 20, r: 10, box: { x: 0, y: 0, width: 0, height: 0 } }]);
+  expect(spots["restricted:1"]).toBeUndefined();
+  expect(spots.a).toEqual({ dx: 0, dy: 0 });
+});

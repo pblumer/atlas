@@ -13,7 +13,7 @@
     <script type="module">
       import {
         blastRanking, depthOf, impactFrom, impactList, impactOf, impactSummary,
-        windowOverlap,
+        placeCaptions, windowOverlap,
       } from "/panorama-mesh.js";
       // Exposed for the spec; the spec passes a graph and options and reads the
       // result back, so every case is a table row rather than a click sequence.
@@ -37,6 +37,11 @@
       // How a typed depth is read. It is arithmetic over whatever a number field can
       // hold, so it is checked as arithmetic rather than by typing into one.
       window.depthOf = (value) => depthOf(value);
+      // Where each node's name is written. Given the boxes the browser measured, it
+      // is arithmetic over rectangles, so it is checked as arithmetic — the layout
+      // and the font are not part of the question.
+      window.placeCaptions = (items) =>
+        Object.fromEntries(placeCaptions(items));
       document.getElementById("ready").textContent = "ready";
     </script>
   </body>

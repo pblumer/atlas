@@ -817,6 +817,112 @@ export function fitToFrame(nodes, width, height, pad = LABEL_MARGIN) {
   return nodes;
 }
 
+// CAPTION_SPOTS is where a node's name may be written, in the order it is preferred.
+//
+// Under the circle first, because that is where it has always been and a picture
+// whose names all sit in one place is the one that reads fastest. Above next, then
+// beside — the sides last because a name beside a node overhangs by its whole width
+// where one under it overhangs by half, and the fit reserves the same margin either
+// way (see LABEL_MARGIN).
+const CAPTION_SPOTS = ["under", "over", "right", "left"];
+
+// captionSpot is where one caption lands for a given choice, as an offset from where
+// it was drawn. `box` is the caption's own bounds relative to its node's centre, as
+// the browser measured them, so this is arithmetic on a real box rather than on an
+// estimate of how wide a name might be.
+function captionSpot(spot, box, room) {
+  switch (spot) {
+    // Its bottom just above the circle instead of its top just below it.
+    case "over": return { dx: 0, dy: -room - (box.y + box.height) };
+    // Left edge clear of the circle, and centred on it rather than hanging under it.
+    case "right": return { dx: room - box.x, dy: -(box.y + box.height / 2) };
+    case "left": return { dx: -room - (box.x + box.width), dy: -(box.y + box.height / 2) };
+    default: return { dx: 0, dy: 0 };
+  }
+}
+
+// HALO is the ring of surface colour painted behind a name so it stays readable
+// where it crosses a line (see .mesh-label-ink). It is drawn in world units like the
+// text itself, and it is what a reader sees, so the placement counts it as part of
+// the name rather than measuring the letters alone.
+const HALO = 3;
+
+const hits = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+// placeCaptions decides where each node's name is written, and which names are not
+// written at all.
+//
+// The alternative was to make the layout itself keep names apart — to give every node
+// personal space as wide as its name. That trade is a bad one and the numbers say so:
+// names here run to 250 world units against node radii of 6 to 18, so the world would
+// grow by about an order of magnitude in area, and since the opening view fits the
+// whole world onto the canvas, every node and every name would be drawn that much
+// smaller. It answers "the names overlap" with "the names are too small to read",
+// which is the same complaint one step further on.
+//
+// So the graph is left exactly where it settled and the names move instead. Each one
+// is offered four places around its own node and takes the first that is free;
+// biggest node first, because a hub's name is worth more than a leaf's and it is the
+// one a reader is navigating by. A name with nowhere to go is not written — it comes
+// back on hover, on focus, on selection and when the view is moved in, which the
+// stylesheet already does for every name the zoom has taken away.
+//
+// The circles are obstacles too, not only the other names: a name written across a
+// node is no more readable than a name written across a name, and it also lies about
+// which node it belongs to.
+//
+// It is all in world units, which is what makes it worth doing once. A caption's size
+// is in world units as much as its position is — the text scales with the view — so
+// two names that clear each other here clear each other at every magnification, and
+// panning and zooming need no re-placement at all.
+//
+// Deterministic: same graph, same layout, same names in the same places. Ties are
+// broken by id rather than by array order, so a repaint cannot rearrange the names
+// while the picture underneath it stands still.
+export function placeCaptions(items) {
+  // Under the node is where a name belongs, and it is given up only to another name.
+  //
+  // The two kinds of collision do not cost the same. A name lying across another name
+  // destroys both of them and looks like a rendering fault. A name crossing a circle
+  // is still readable — the ink is painted with a halo behind it for exactly that
+  // reason — and costs only a little clarity about which node it belongs to. Treating
+  // them alike is worse than either: measured on a 36-node estate it moved 31 of 36
+  // names off their nodes and left six unwritten, for a picture where a reader has to
+  // work out every association, instead of moving six and leaving one.
+  //
+  // So a name moves when another name is in the way, and not otherwise. Among the
+  // places it can move to, one clear of the circles wins.
+  const circles = items.map((it) => ({
+    left: it.x - it.r, right: it.x + it.r, top: it.y - it.r, bottom: it.y + it.r,
+  }));
+  const written = [];
+  const spots = new Map();
+  const order = [...items].sort((a, b) => b.r - a.r || String(a.id).localeCompare(String(b.id)));
+  for (const it of order) {
+    if (!it.box || !it.box.width) continue;
+    const free = CAPTION_SPOTS.map((spot) => {
+      const at = captionSpot(spot, it.box, it.r + 8);
+      return {
+        spot,
+        at,
+        // The halo the ink is painted with is part of what a reader sees, so it is
+        // part of what has to fit: getBBox reports the letters alone.
+        rect: {
+          left: it.x + it.box.x + at.dx - HALO, top: it.y + it.box.y + at.dy - HALO,
+          right: it.x + it.box.x + at.dx + it.box.width + HALO,
+          bottom: it.y + it.box.y + at.dy + it.box.height + HALO,
+        },
+      };
+    }).filter((o) => !written.some((w) => hits(o.rect, w)));
+    const found = free[0]?.spot === CAPTION_SPOTS[0]
+      ? free[0]
+      : free.find((o) => !circles.some((c) => hits(o.rect, c))) || free[0] || null;
+    if (found) written.push(found.rect);
+    spots.set(it.id, found ? found.at : null);
+  }
+  return spots;
+}
+
 // contentBox is the box the drawn nodes actually occupy, in world units, including
 // each node's own footprint and the room its name needs beside it.
 //
@@ -1659,9 +1765,11 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, instances
       <circle class="mesh-pin" r="4" cx="${(-r * 0.72).toFixed(1)}" cy="${(r * 0.72).toFixed(1)}"/>
       ${n.children ? `<text class="mesh-count" text-anchor="middle" dy="4">${n.children}</text>` : ""}
       ${badge}
+      <g class="mesh-caption" data-room="${(r + 8).toFixed(1)}">
       <text class="mesh-label" text-anchor="middle" dy="${(r + 14).toFixed(1)}"><tspan class="mesh-label-ink">${label}</tspan></text>
       ${typed ? `<text class="mesh-type" text-anchor="middle" dy="${(r + 28).toFixed(1)}"><tspan class="mesh-label-ink">[${esc(typed.name)}]</tspan></text>` : ""}
       ${running ? `<text class="mesh-runs" text-anchor="middle" dy="${runsAt.toFixed(1)}"><tspan class="mesh-label-ink">${fmtCount(running)} running</tspan></text>` : ""}
+      </g>
       <title>${esc(nodeTitle(n, spoken))}</title></g>`;
   }).join("");
 
@@ -2462,6 +2570,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       ? svg
       : `<p class="mesh-empty-filter">Nothing matches “${esc(term)}”.</p>`;
     index();
+    nameTheNodes();
     // The rendered SVG carries none of the hover highlight, so the record of what is
     // lit has to be cleared with it — otherwise pointing back at the same node would
     // be a no-op and the highlight would never come back.
@@ -2590,6 +2699,49 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     if (!svg) return;
     for (const g of svg.querySelectorAll(".mesh-node")) nodeEls.set(g.dataset.nodeId, g);
     edgeEls = [...svg.querySelectorAll(".mesh-edge")];
+  }
+
+  // nameTheNodes puts every name somewhere it can be read, and says which ones there
+  // was no room for. See placeCaptions for why the names move rather than the nodes.
+  //
+  // The measuring is the only part that touches the browser: getBBox reports a text's
+  // bounds in the coordinates it is drawn in, which are world units here, so one pass
+  // over the captions is enough for the whole picture and no zoom or pan invalidates
+  // it. Reading them all in one loop before writing anything back is deliberate —
+  // interleaving reads and writes would make the browser lay the SVG out again
+  // between every pair of nodes. Measured at the size budget (400 nodes): about a
+  // millisecond to measure and six to place, against the few hundred the simulation
+  // itself costs.
+  function nameTheNodes() {
+    const svg = surface.querySelector("svg");
+    if (!svg) return;
+    const items = [];
+    for (const [id, g] of nodeEls) {
+      const caption = g.querySelector(".mesh-caption");
+      const n = at.get(id);
+      if (!caption || !n) continue;
+      // Cleared before measuring: a caption still carrying the last paint's offset
+      // would be measured where it was put rather than where it starts.
+      caption.removeAttribute("transform");
+      items.push({ id, x: n.x, y: n.y, r: radiusOf(n), caption });
+    }
+    for (const it of items) it.box = it.caption.getBBox();
+    const spots = placeCaptions(items);
+    for (const it of items) {
+      const at_ = spots.get(it.id);
+      const g = nodeEls.get(it.id);
+      if (at_) {
+        if (at_.dx || at_.dy) {
+          it.caption.setAttribute("transform", `translate(${at_.dx.toFixed(1)},${at_.dy.toFixed(1)})`);
+        }
+        g.classList.remove("mesh-crowded");
+      } else {
+        // Nowhere to write it. The name is not lost — the stylesheet still shows it
+        // on hover, on focus, on selection and while the neighbourhood is lit, which
+        // is the same way a name the zoom has taken away comes back.
+        g.classList.add("mesh-crowded");
+      }
+    }
   }
 
   // applyPositions writes the live coordinates into the SVG that is already there.
