@@ -152,6 +152,36 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Every instance start scanned the whole runtime on the single writer.** `/stats` looks
+  like an aggregate and is not one: all three of its counts walk a whole column family,
+  so on a server holding 50.000 instances and 200.000 tokens a single call was a
+  quarter-million-key scan. ADR-0080 introduced maintained counters, but for the
+  per-definition sums the Prometheus path uses — the counts behind `/stats` are the
+  authoritative scans it is explicitly contrasted with.
+
+  The endpoint was not the main caller. Seven of the eight callers are **write paths**
+  that report the counts back in their response — starting an instance, publishing a
+  message, cancelling or terminating a batch, a CSV upload — and each took a run-loop
+  turn of its own purely for that read-back. So every instance start paid a full
+  population scan on the single writer, and a load generator kept the engine executing
+  one per write, indefinitely. That is what made the API unreachable; the parked test
+  instances were not the load, they were the size that made each read-back expensive.
+
+  `readStats` now takes a `state.ReadView` instead of the live store, which moves the
+  counting off the run loop and makes it impossible to spell the on-loop version: a
+  caller must obtain a view. All eight sites go through one helper, so the write paths
+  were fixed by the same change as the endpoint. `GET /api/v1/incidents` was the same
+  defect in its milder form — two rows to return and its whole walk, its per-instance
+  lookups and its deployment-map reads inside the loop — and now runs off it too. Both
+  reads are snapshots, so a page can no longer mix an instance counted before a write
+  with a token counted after it. Both also answer 503 while the server is shutting down
+  rather than a 200 that cannot be told apart from a true empty answer: the old code
+  reported `{"activeProcessInstances":0,…}`, which reads as "the engine is empty". The
+  reasoning is in [the record on the runtime counts](docs/adr/draft-stats-and-incidents-off-the-loop.md).
+
+  `/stats` is no faster for its own caller — it still walks the population. It simply no
+  longer walks it for everybody else.
+
 - **Signing in waited for the engine, so a busy server locked everybody out.** On a
   server carrying ~50.000 parked process instances, with load generators still starting
   and finishing more, `POST /api/v1/auth/login` stopped answering while
@@ -176,8 +206,7 @@ _Changed_ / _Removed_ for each version.
   is what an off-loop reader can legitimately see. The reasoning is in
   [the record on signing in off the run loop](docs/adr/draft-login-off-the-run-loop.md).
 
-  This fixes the front door, not the building: the same queueing still keeps `/stats` and
-  `/incidents` from answering under that load, even though neither has real work to do.
+  What the login was queued *behind* is the entry below.
 
 - **The replay drew a deferred choice as several tokens, and parked one on the gateway
   that was not there.** The live diagram stopped drawing an event-based gateway's race

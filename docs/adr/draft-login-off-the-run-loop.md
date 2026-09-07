@@ -32,11 +32,18 @@ writer.
 
 ADR-0239 established the shape of the answer for *expensive* reads: a scan whose cost
 grows with the instance population must not hold the writer. This incident is the
-other half, and it is not about cost at all. The evidence is that `/stats` — O(1)
-maintained counters since ADR-0080 — and `/incidents`, which had exactly **two** rows
-to return, both timed out alongside the login. None of those three were slow. All
-three were *queued*. A read that needs a turn on the loop is only as available as the
-engine is idle, however little work the read itself does.
+other half, and it is not about the login's own cost at all. `/incidents` timed out
+alongside it with exactly **two** rows to return, and the login reads no engine state
+whatsoever — neither had work to do, and both were nevertheless unreachable, because a
+read that needs a turn on the loop is only as available as the engine is idle.
+
+What they were queued *behind* is the subject of its own record, and it was not idle
+time: `/stats` walks all three column families, so at this population one call was a
+quarter-million-key scan, and seven write paths ran that same scan on the loop to
+report the counts back (ADR-draft-stats-and-incidents-off-the-loop). That is what a
+login had to wait for. It does not change this record's decision — a login must not
+wait for the loop *however* long the queue happens to be — but it is why the wait was
+unbounded in practice rather than merely noticeable.
 
 That is the wrong dependency for authentication specifically, because signing in is
 what an operator does *in order to* deal with the busy engine. The one credential
