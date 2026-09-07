@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Tasks"
+  ],
+  "title": {
+    "en": "Every task in the list now shows its number",
+    "de": "Jede Aufgabe in der Liste zeigt ihre Nummer"
+  },
+  "summary": {
+    "en": "A queue of a dozen tasks that all carry the same name was unreadable: nothing on the row told them apart, so there was no way to say which one you meant to a colleague, or to see that the one you just finished is gone. Each row now carries its own number — the same one the link to that task uses. The lane moved off the row to make space for it; it is on the task's detail pane, with its full path.",
+    "de": "Eine Warteschlange aus einem Dutzend gleich benannter Aufgaben war nicht lesbar: Nichts an der Zeile unterschied sie, also liess sich weder einer Kollegin sagen, welche man meint, noch sehen, dass die gerade erledigte weg ist. Jede Zeile trägt jetzt ihre eigene Nummer — dieselbe, die auch der Link auf diese Aufgabe verwendet. Die Lane ist dafür aus der Zeile gewichen; sie steht im Detailbereich der Aufgabe, mit vollem Pfad."
+  },
+  "try": {
+    "label": {
+      "en": "Open the inbox",
+      "de": "Zum Posteingang"
+    },
+    "route": "#/tasks"
+  }
+}

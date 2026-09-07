@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Console"
+  ],
+  "title": {
+    "en": "The console has started speaking German",
+    "de": "Die Konsole spricht Deutsch"
+  },
+  "summary": {
+    "en": "Atlas's interface was English everywhere. The task folders are the first screen with a real message catalogue behind it, and German is what it shows by default — because the people working through the inbox are not the people deploying the models, and their processes and forms are German already. The rest of the console follows screen by screen rather than in one sweep, so nothing is half-translated on the way. If you would rather read English, add ?lang=en to the URL once and it is remembered.",
+    "de": "Die Oberfläche von Atlas war durchgehend englisch. Die Aufgaben-Ordner sind die erste Ansicht mit einem echten Textkatalog dahinter, und die zeigt standardmässig Deutsch — weil die Menschen, die den Posteingang abarbeiten, nicht dieselben sind, die Modelle deployen, und deren Prozesse und Formulare längst deutsch sind. Der Rest der Konsole folgt Ansicht für Ansicht statt in einem Rutsch, damit unterwegs nichts halb übersetzt dasteht. Wer lieber Englisch liest, hängt einmal ?lang=en an die URL — die Wahl wird gemerkt."
+  },
+  "try": {
+    "label": {
+      "en": "Open the inbox",
+      "de": "Zum Posteingang"
+    },
+    "route": "#/tasks"
+  }
+}

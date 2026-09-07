@@ -2,6 +2,104 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "task-folders-the-tasks-app-s-sidebar-folders-are-now-saved-f",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Build your own folders in the task inbox",
+        "de": "Eigene Ordner im Aufgaben-Posteingang"
+      },
+      "summary": {
+        "en": "The inbox had four fixed folders, and the question you actually arrive with in the morning — what is open on customer enquiries? — was retyped into the search box every day. Now you can save it as a folder. You pick the conditions from listboxes rather than typing them: the processes come from what is deployed, the task names and groups from the models, the people from the directory, so a folder cannot be built around something that does not exist. Underneath, Atlas shows the expression your choices make and how many tasks match right now. Counting happens across every open task, not just the page on screen, and a folder can be shared with your team — where only its owner can change it.",
+        "de": "Der Posteingang hatte vier feste Ordner, und die Frage, mit der man morgens tatsächlich anfängt — was ist bei den Kundenanfragen offen? — wurde jeden Tag neu ins Suchfeld getippt. Jetzt lässt sie sich als Ordner speichern. Die Bedingungen wählen Sie aus Listen statt sie zu tippen: die Prozesse kommen aus dem, was deployt ist, die Aufgabennamen und Gruppen aus den Modellen, die Personen aus dem Verzeichnis — ein Ordner kann also gar nicht auf etwas gebaut werden, das es nicht gibt. Darunter zeigt Atlas den Ausdruck, der aus Ihrer Auswahl entsteht, und wie viele Aufgaben gerade passen. Gezählt wird über alle offenen Aufgaben, nicht nur über die Seite auf dem Bildschirm, und ein Ordner lässt sich mit dem Team teilen — ändern darf ihn nur, wem er gehört."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Tasks"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Tasks › Inbox and click ＋ Neuer Ordner in the sidebar.",
+          "Give the folder a name, then pick a field, an operator and a value — for example Prozess · ist · your process.",
+          "Watch the match count and the generated expression below the conditions while you change them.",
+          "Save. The folder appears in the sidebar with its own count, and you can reopen it later in the same listboxes."
+        ],
+        "de": [
+          "Öffnen Sie Tasks › Inbox und klicken Sie in der Seitenleiste auf ＋ Neuer Ordner.",
+          "Geben Sie dem Ordner einen Namen und wählen Sie Feld, Operator und Wert — zum Beispiel Prozess · ist · Ihr Prozess.",
+          "Beobachten Sie beim Ändern die Trefferzahl und den erzeugten Ausdruck unter den Bedingungen.",
+          "Speichern. Der Ordner steht mit eigener Zahl in der Seitenleiste und lässt sich später wieder mit denselben Listen öffnen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the inbox",
+          "de": "Zum Posteingang"
+        },
+        "route": "#/tasks"
+      }
+    },
+    {
+      "id": "the-console-speaks-german-on-the-screens-that-have-been-tran",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The console has started speaking German",
+        "de": "Die Konsole spricht Deutsch"
+      },
+      "summary": {
+        "en": "Atlas's interface was English everywhere. The task folders are the first screen with a real message catalogue behind it, and German is what it shows by default — because the people working through the inbox are not the people deploying the models, and their processes and forms are German already. The rest of the console follows screen by screen rather than in one sweep, so nothing is half-translated on the way. If you would rather read English, add ?lang=en to the URL once and it is remembered.",
+        "de": "Die Oberfläche von Atlas war durchgehend englisch. Die Aufgaben-Ordner sind die erste Ansicht mit einem echten Textkatalog dahinter, und die zeigt standardmässig Deutsch — weil die Menschen, die den Posteingang abarbeiten, nicht dieselben sind, die Modelle deployen, und deren Prozesse und Formulare längst deutsch sind. Der Rest der Konsole folgt Ansicht für Ansicht statt in einem Rutsch, damit unterwegs nichts halb übersetzt dasteht. Wer lieber Englisch liest, hängt einmal ?lang=en an die URL — die Wahl wird gemerkt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Console"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the inbox",
+          "de": "Zum Posteingang"
+        },
+        "route": "#/tasks"
+      }
+    },
+    {
+      "id": "every-task-row-shows-its-key",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Every task in the list now shows its number",
+        "de": "Jede Aufgabe in der Liste zeigt ihre Nummer"
+      },
+      "summary": {
+        "en": "A queue of a dozen tasks that all carry the same name was unreadable: nothing on the row told them apart, so there was no way to say which one you meant to a colleague, or to see that the one you just finished is gone. Each row now carries its own number — the same one the link to that task uses. The lane moved off the row to make space for it; it is on the task's detail pane, with its full path.",
+        "de": "Eine Warteschlange aus einem Dutzend gleich benannter Aufgaben war nicht lesbar: Nichts an der Zeile unterschied sie, also liess sich weder einer Kollegin sagen, welche man meint, noch sehen, dass die gerade erledigte weg ist. Jede Zeile trägt jetzt ihre eigene Nummer — dieselbe, die auch der Link auf diese Aufgabe verwendet. Die Lane ist dafür aus der Zeile gewichen; sie steht im Detailbereich der Aufgabe, mit vollem Pfad."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Tasks"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the inbox",
+          "de": "Zum Posteingang"
+        },
+        "route": "#/tasks"
+      }
+    },
+    {
       "id": "the-training-nuggets-show-the-real-atlas-not-a-drawing-of-it",
       "version": "Unreleased",
       "date": null,
@@ -258,104 +356,6 @@
       "tags": [
         "Handbook"
       ]
-    },
-    {
-      "id": "an-element-s-documentation-is-markdown-now-and-the-people-wh",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Documentation you wrote in the model now reads as you wrote it",
-        "de": "Dokumentation aus dem Modell wird jetzt so gelesen, wie sie geschrieben ist"
-      },
-      "summary": {
-        "en": "The documentation field on an element understands Markdown: headings, bullet and numbered lists, quotes, code, bold and italic, links. Where it used to arrive as a wall of asterisks and hyphens, a work instruction now reaches the person doing the work as the checklist it was written as — in the Tasks app, in the instance replay and in the Panorama properties panel. Text written before this is untouched: a line break is still a line break, and a variable name is still a variable name.",
-        "de": "Das Dokumentationsfeld eines Elements versteht Markdown: Überschriften, Aufzählungen, nummerierte Listen, Zitate, Code, fett und kursiv, Links. Wo vorher eine Wand aus Sternchen und Bindestrichen ankam, erreicht eine Arbeitsanweisung die bearbeitende Person jetzt als die Prüfliste, als die sie geschrieben wurde — in der Tasks-App, im Instanz-Replay und im Panorama-Eigenschaftenpanel. Vorher geschriebener Text bleibt unangetastet: Ein Zeilenumbruch bleibt ein Zeilenumbruch, ein Variablenname bleibt ein Variablenname."
-      },
-      "link": {
-        "label": "ADR-0250",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0250-documentation-is-markdown.md"
-      },
-      "tags": [
-        "Tasks",
-        "Operations",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and select a user task.",
-          "In the Details panel, write the instruction in the Documentation field — a heading with ##, a checklist with -, an important word in **bold**.",
-          "Deploy and start the process, then open the task in the Tasks app: the instruction stands above the form, rendered."
-        ],
-        "de": [
-          "Öffnen Sie einen Prozess im Modeler und wählen Sie eine User-Task aus.",
-          "Schreiben Sie die Anweisung im Details-Panel ins Feld Documentation — eine Überschrift mit ##, eine Prüfliste mit -, ein wichtiges Wort in **fett**.",
-          "Deployen und starten Sie den Prozess und öffnen Sie die Aufgabe in der Tasks-App: Die Anweisung steht gerendert über dem Formular."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Tasks",
-          "de": "Aufgaben öffnen"
-        },
-        "route": "#/tasks"
-      }
-    },
-    {
-      "id": "the-handbook-is-caught-up-with-the-product-six-apps-the-play",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The handbook now covers all six apps",
-        "de": "Das Handbuch deckt jetzt alle sechs Apps ab"
-      },
-      "summary": {
-        "en": "Two of the six apps in the grid menu were not in the handbook at all: Panorama, which shows the landscape of everything deployed and how it hangs together, and Data, where you say what an order actually is across all your processes. Both now have a chapter, in German and English. So does the Playground — the Modeler tab that runs your draft against two hundred cases on the real engine, without deploying anything — and the two Console screens for connecting an AI assistant and reading who shared what with whom. The help menu's On this page entry points at the right chapter from those screens now, instead of dropping you at the top of the handbook.",
-        "de": "Zwei der sechs Apps im Rastermenü kamen im Handbuch überhaupt nicht vor: Panorama, das die Landschaft alles Deployten und ihre Zusammenhänge zeigt, und Data, wo festgehalten wird, was ein Auftrag über alle Prozesse hinweg tatsächlich ist. Beide haben jetzt ein Kapitel, auf Deutsch und Englisch. Ebenso der Playground — der Modeler-Tab, der Ihren Entwurf mit zweihundert Fällen auf der echten Engine durchrechnet, ohne etwas zu deployen — und die zwei Console-Seiten für den Anschluss eines KI-Assistenten und dafür, wer was mit wem geteilt hat. Der Eintrag «Auf dieser Seite» im Hilfemenü führt von diesen Bildschirmen nun ins passende Kapitel, statt an den Anfang des Handbuchs."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Handbook"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Panorama",
-          "de": "Panorama öffnen"
-        },
-        "route": "#/panorama/starmap"
-      }
-    },
-    {
-      "id": "runtime-badges-no-longer-sit-on-the-names-they-are-pointing-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Runtime badges keep off the names",
-        "de": "Laufzeit-Badges bleiben von den Namen weg"
-      },
-      "summary": {
-        "en": "On a running diagram each shape can carry badges: how many tokens are on it, whether it is stuck, a link to a waiting task, a decision to inspect. They used to sit in the corners inside the shape, which is where the name is — on a task with a long name the decision badge covered a whole line of it, and on an event the token count landed on the caption underneath. They now hang just outside the shape, on the side the name is not, and they are the size of a count instead of spelling out a word. Each one kept its corner, so they still read the same way; hover for the wording.",
-        "de": "Auf einem laufenden Diagramm trägt jede Form Badges: wie viele Tokens auf ihr liegen, ob sie klemmt, ein Link zur wartenden Aufgabe, eine Entscheidung zum Nachsehen. Sie saßen bisher in den Ecken *innerhalb* der Form — also dort, wo der Name steht: Bei einer Aufgabe mit langem Namen verdeckte das Entscheidungs-Badge eine ganze Zeile, bei einem Ereignis landete der Token-Zähler auf der Beschriftung darunter. Jetzt hängen sie knapp außerhalb der Form, auf der Seite, auf der der Name nicht steht, und sie sind so groß wie eine Zahl statt so breit wie ein Wort. Die Ecke jedes Badges ist geblieben, sie lesen sich also unverändert; den Wortlaut zeigt der Tooltip."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
     }
   ]
 }

@@ -32,7 +32,11 @@ import (
 // such instead of a confident wrong figure. It sits well above the list page cap
 // (500) because counting a task is far cheaper than enriching and shipping one,
 // and this is the number a person actually reads.
-const maxFolderScan = 20000
+// It is a var rather than a const for one reason: the behaviour at the bound —
+// the count coming back as a floor and the sidebar saying so — is the half of this
+// that a reader has to trust, and a bound only reachable by parking twenty
+// thousand tasks in a test is a bound nothing checks.
+var maxFolderScan = 20000
 
 // taskDefLookup resolves a deployment key to what enriching a task needs. It
 // exists so the same enrichment serves the loop-owned registry and an off-loop
@@ -319,4 +323,14 @@ func plainOptions(set map[string]bool) []taskfolder.Option {
 // folderQuery reads the ?folder= selector off a task listing request.
 func folderQuery(r *http.Request) string {
 	return strings.TrimSpace(r.URL.Query().Get("folder"))
+}
+
+// SetMaxFolderScanForTest lowers the folder scan budget and returns a function
+// that puts it back. It is exported for the api_test package, which drives the
+// bound through the real routes rather than reaching into this one — the
+// behaviour at the budget is what a person sees, so it is tested from outside.
+func SetMaxFolderScanForTest(n int) func() {
+	prev := maxFolderScan
+	maxFolderScan = n
+	return func() { maxFolderScan = prev }
 }

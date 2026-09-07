@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/api"
 )
 
 // Two models with user tasks, so a folder that names one process has something to
@@ -376,5 +378,114 @@ func TestFolderRejectsARuleTheCatalogueDoesNotDescribe(t *testing.T) {
 		"application/json")
 	if code != http.StatusBadRequest {
 		t.Errorf("create with an unknown field = %d, want 400 (%s)", code, body)
+	}
+}
+
+// TestFolderCountsReportAFloorAtTheScanBudget covers what happens at the bound:
+// a population past the scan budget is answered with what the scan saw, flagged
+// as truncated, rather than with a smaller number that reads like a total. The
+// budget is lowered here rather than the population raised — the behaviour is the
+// same and the test does not have to park twenty thousand tasks to reach it.
+func TestFolderCountsReportAFloorAtTheScanBudget(t *testing.T) {
+	restore := api.SetMaxFolderScanForTest(2)
+	defer restore()
+
+	ts := newTestServer(t)
+	deployTasks(t, ts, folderKundenBPMN, 4)
+
+	f := createFolder(t, ts, `{"name":"Alle","rule":{"match":"all","conditions":[`+
+		`{"field":"process","op":"is","value":"kunden-anfrage"}]}}`)
+
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/task-folders/counts", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("counts = %d (%s)", code, body)
+	}
+	var counts struct {
+		Folders   map[string]int `json:"folders"`
+		Total     int            `json:"total"`
+		Truncated bool           `json:"truncated"`
+	}
+	if err := json.Unmarshal(body, &counts); err != nil {
+		t.Fatalf("decode counts: %v (%s)", err, body)
+	}
+	if !counts.Truncated {
+		t.Error("a scan that hit its budget did not report itself as truncated")
+	}
+	if counts.Total != 2 || counts.Folders[f.ID] != 2 {
+		t.Errorf("counts = %+v, want the two tasks the budget allowed", counts)
+	}
+
+	// The filtered listing hits the same bound and says so the same way, so a
+	// client can tell "this is the whole folder" from "this is what we got to".
+	res, err := http.Get(ts.URL + "/api/v1/tasks?folder=" + f.ID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	defer res.Body.Close()
+	if res.Header.Get("X-Tasks-Truncated") != "true" {
+		t.Error("a folder page cut short by the scan budget did not report truncation")
+	}
+	if res.Header.Get("X-Tasks-Next-Cursor") == "" {
+		t.Error("a truncated folder page handed back no cursor to resume from")
+	}
+}
+
+// instanceAgeBPMN parks a task on a process with no priority, lane or group, so a
+// folder built on the instance's age has nothing else to accidentally match on.
+const instanceAgeBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="langlaeufer" name="Langläufer" isExecutable="true">
+    <startEvent id="s"/>
+    <userTask id="warten" name="Warten"/>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="warten"/>
+    <sequenceFlow id="f2" sourceRef="warten" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestFolderFiltersOnInstanceAge covers the one field that is not on the task
+// itself: how long the process instance carrying it has been running. It is the
+// only condition that costs the scan a second store read, and the scan takes it
+// only for a rule that asks — so this also exercises that branch.
+func TestFolderFiltersOnInstanceAge(t *testing.T) {
+	ts := newTestServer(t)
+	deployTasks(t, ts, instanceAgeBPMN, 2)
+
+	// Everything started in this test is seconds old, so "less than a day" holds
+	// for both tasks and "more than a day" for neither.
+	fresh := createFolder(t, ts, `{"name":"Frisch","rule":{"match":"all","conditions":[`+
+		`{"field":"instanceAge","op":"newerThan","value":"1","unit":"d"}]}}`)
+	if fresh.FEEL != `instanceCreatedAt > now() - duration("P1D")` {
+		t.Errorf("generated FEEL = %q", fresh.FEEL)
+	}
+	got, _ := listTasks(t, ts, "/api/v1/tasks?folder="+fresh.ID)
+	if len(got) != 2 {
+		t.Errorf("newer-than-a-day selected %d tasks, want both", len(got))
+	}
+
+	stale := createFolder(t, ts, `{"name":"Liegengeblieben","rule":{"match":"all","conditions":[`+
+		`{"field":"instanceAge","op":"olderThan","value":"1","unit":"d"}]}}`)
+	got, _ = listTasks(t, ts, "/api/v1/tasks?folder="+stale.ID)
+	if len(got) != 0 {
+		t.Errorf("older-than-a-day selected %d tasks, want none", len(got))
+	}
+
+	// An hours-based bound generates the other duration form and reads the same way.
+	hours := createFolder(t, ts, `{"name":"Letzte Stunde","rule":{"match":"all","conditions":[`+
+		`{"field":"instanceAge","op":"newerThan","value":"1","unit":"h"}]}}`)
+	if hours.FEEL != `instanceCreatedAt > now() - duration("PT1H")` {
+		t.Errorf("hours FEEL = %q", hours.FEEL)
+	}
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/task-folders/counts", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("counts = %d (%s)", code, body)
+	}
+	var counts struct {
+		Folders map[string]int `json:"folders"`
+	}
+	if err := json.Unmarshal(body, &counts); err != nil {
+		t.Fatal(err)
+	}
+	if counts.Folders[fresh.ID] != 2 || counts.Folders[stale.ID] != 0 || counts.Folders[hours.ID] != 2 {
+		t.Errorf("counts = %+v", counts.Folders)
 	}
 }
