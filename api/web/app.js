@@ -6659,6 +6659,59 @@ const TASK_FOLDERS = [
   { id: "group", label: "Group tasks", match: (t) => !!t.candidateGroups },
 ];
 
+// ---------- Answering a form that refused to submit --------------------------
+//
+// form-js validates on submit and marks the fields it rejected, and both places that
+// mount a form — completing a task, starting a process — used to answer that with
+// "Please fix the highlighted fields". That sentence assumes the person can see the
+// highlighting. In the Tasks app they could not: the form stays mounted while the
+// Process tab is showing, so the marked fields were on a pane nobody was looking at.
+// Even where they can, "highlighted" makes them go hunting through a form for a
+// colour instead of being told what is missing.
+//
+// So the two views share this: name the fields, and scroll to the first one.
+
+// FORM_REFUSAL_NAMES is how many fields a refusal spells out before it starts
+// counting. A blank form refuses everything it has, and a message listing fifteen
+// field names names none of them — the first few plus "and 11 more fields" is what
+// somebody can read at a glance and act on.
+const FORM_REFUSAL_NAMES = 4;
+
+// formRefusalMessage turns what a form refused into the sentence to put in front of
+// the person: the fields to go back to, called what the form calls them.
+//
+// form-js keys its errors by *field id* — the opaque `Field_1a2b3c` the form editor
+// generates — so the ids are resolved through the form's own field registry, which
+// is the table it keyed them with in the first place. A field with no label falls
+// back to its variable key, and one the registry does not know falls back to the id:
+// worse to read, still better than "some field somewhere". Two fields may share a
+// label, so the names are deduplicated before they are cut.
+function formRefusalMessage(form, errors) {
+  let reg = null;
+  try { reg = form.get("formFieldRegistry"); } catch { /* no registry to ask */ }
+  const names = [...new Set(Object.keys(errors).map((id) => {
+    const f = reg && reg.get(id);
+    const label = f && typeof f.label === "string" ? f.label.trim() : "";
+    return label || (f && f.key) || id;
+  }))];
+  const shown = names.slice(0, FORM_REFUSAL_NAMES);
+  const rest = names.length - shown.length;
+  let msg = tr("form.invalidFields", { fields: shown.join(", ") });
+  if (rest > 0) msg += " " + trPlural("form.invalidMore", rest);
+  return msg;
+}
+
+// scrollToFirstInvalidField brings the first field the form marked into view — long
+// forms scroll, and the thing to fix can be below the fold. `hostId` is the element
+// the form was mounted into. After the current task, because the marks are drawn by
+// the form's own re-render and are not in the document yet.
+function scrollToFirstInvalidField(hostId) {
+  setTimeout(() => {
+    const first = document.querySelector(`#${hostId} .fjs-has-errors, #${hostId} .fjs-form-field-error`);
+    if (first && first.scrollIntoView) first.scrollIntoView({ block: "center" });
+  }, 0);
+}
+
 async function viewTasks(preselectKey) {
   // With auth on, identity is the signed-in user (server-authoritative); with auth
   // off it stays a typed, display-only identity (ADR-0045).
@@ -7089,43 +7142,11 @@ async function viewTasks(preselectKey) {
   // their screen. So the refusal brings the form forward before it complains about
   // it.
   //
-  // The second is which. The message names the fields the way the person reading it
-  // sees them — "IBAN", not the variable key behind it and not an id.
+  // The second is which — see formRefusalMessage, which the Start view shares.
   function refuseIncompleteForm(errors, t) {
     showDetailTab("form", t);
-    // A blank form refuses every required field it has, and a toast listing fifteen
-    // of them names none of them: the first few plus a count is what somebody can
-    // read at a glance and act on. Two fields may share a label, so the list is
-    // deduplicated before it is cut.
-    const names = [...new Set(invalidFieldNames(errors))];
-    const shown = names.slice(0, 4);
-    const rest = names.length - shown.length;
-    let msg = tr("tasks.complete.invalidFields", { fields: shown.join(", ") });
-    if (rest > 0) msg += " " + trPlural("tasks.complete.invalidMore", rest);
-    toast(msg, "err");
-    // Long forms scroll: the first thing to fix can be below the fold even once the
-    // form is the pane in front. After the current task, because the marks are drawn
-    // by the form's own re-render and are not in the document yet.
-    setTimeout(() => {
-      const first = document.querySelector("#task-form .fjs-has-errors, #task-form .fjs-form-field-error");
-      if (first && first.scrollIntoView) first.scrollIntoView({ block: "center" });
-    }, 0);
-  }
-
-  // invalidFieldNames turns what the form refused into the names it shows those
-  // fields under. form-js keys its errors by *field id* — the opaque `Field_1a2b3c`
-  // the form editor generates — so the ids are resolved through the form's own field
-  // registry, which is the table it keyed them with in the first place. A field with
-  // no label falls back to its variable key, and one the registry does not know
-  // falls back to the id: worse to read, still better than "some field somewhere".
-  function invalidFieldNames(errors) {
-    let reg = null;
-    try { reg = state.mountedForm.get("formFieldRegistry"); } catch { /* no registry to ask */ }
-    return Object.keys(errors).map((id) => {
-      const f = reg && reg.get(id);
-      const label = f && typeof f.label === "string" ? f.label.trim() : "";
-      return label || (f && f.key) || id;
-    });
+    toast(formRefusalMessage(state.mountedForm, errors), "err");
+    scrollToFirstInvalidField("task-form");
   }
 
   // destroyForm tears down the live form-js instance (if any) before the detail
@@ -7664,7 +7685,13 @@ async function viewStartProcess() {
       let variables = {};
       if (state.form) {
         const { data, errors } = state.form.submit();
-        if (errors && Object.keys(errors).length > 0) { toast("Please fix the highlighted fields", "err"); return; }
+        if (errors && Object.keys(errors).length > 0) {
+          // One pane here, so there is nothing to bring forward — but "which field?"
+          // is the same question it was in the inbox, and it gets the same answer.
+          toast(formRefusalMessage(state.form, errors), "err");
+          scrollToFirstInvalidField("start-form");
+          return;
+        }
         variables = data;
       }
       btn.disabled = true;

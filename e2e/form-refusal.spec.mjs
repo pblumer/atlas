@@ -1,16 +1,16 @@
-// End-to-end coverage for what happens when completing a task fails validation
+// End-to-end coverage for what the console says when a form refuses to submit
 // (api/web/app.js, ADR-0028).
 //
-// The detail pane has two tabs, and the form is mounted even while the Process tab is
-// showing — deliberately, so Complete has its data either way. The consequence nobody
-// had looked at: pressing Complete from the Process tab validated a form the person
-// could not see, and answered "Please fix the highlighted fields". Highlighted where?
-// The fields are on the other tab. There was no way to find out what was wrong short
-// of guessing to click Form.
+// Two screens mount a form-js form: completing a task and starting a process. Both
+// used to answer a failed validation with "Please fix the highlighted fields", which
+// assumes you can see the highlighting. In the inbox you could not — the form stays
+// mounted while the Process tab is showing (deliberately, so Complete has its data
+// either way), so pressing Complete from there marked fields on a pane you were not
+// looking at, and there was no way to find out short of guessing to click Form.
 //
 // This drives the REAL app shell against a mocked /api/v1, with a real vendored form-js
-// form, and holds the three things that make the refusal actionable: it puts the form in
-// front of the person, it says which field, and it stays readable when a blank form
+// form, and holds what makes the refusal actionable on both screens: it puts the form
+// in front of the person, it says which field, and it stays readable when a blank form
 // refuses a dozen of them at once.
 import { test, expect } from "@playwright/test";
 
@@ -122,4 +122,61 @@ test("a complete with every required field filled is not refused", async ({ page
 
   await expect.poll(() => completed.length, { timeout: 15000 }).toBe(1);
   expect(completed[0].variables.iban).toBe("CH9300762011623852957");
+});
+
+// ---------- Starting a process by its start form (#/tasks/start) -------------------
+//
+// One pane here, so there is nothing to bring forward — but "which field?" is the same
+// question, and the two screens share the answer.
+
+const PROC = {
+  key: 77, processId: "proc_kredit", name: "Kreditantrag", version: 3,
+  startFormId: "kredit", executable: true,
+};
+
+function installStartMock(page) {
+  page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (path.endsWith("/api/v1/processes")) return route.fulfill({ json: [PROC] });
+    if (path.includes("/api/v1/forms/")) return route.fulfill({ json: FORM });
+    return route.fulfill({ json: [] });
+  });
+}
+
+async function openStartForm(page) {
+  await page.goto("/index.html#/tasks/start");
+  await page.locator('.tasks-item[data-key="77"]').click();
+  await expect(page.locator("#start-form .fjs-form")).toBeVisible({ timeout: 15000 });
+}
+
+test("a start form that is not filled in names the field, and starts nothing", async ({ page }) => {
+  installStartMock(page);
+  const started = [];
+  await page.route("**/api/v1/processes/77/instances", async (route) => {
+    started.push(route.request().postDataJSON());
+    return route.fulfill({ json: { key: 1234 } });
+  });
+  await openStartForm(page);
+
+  await page.locator("#start-go").click();
+
+  await expect(page.locator("#toast")).toContainText("IBAN");
+  expect(started).toHaveLength(0);
+});
+
+test("a filled start form starts the process with what was entered", async ({ page }) => {
+  installStartMock(page);
+  const started = [];
+  await page.route("**/api/v1/processes/77/instances", async (route) => {
+    started.push(route.request().postDataJSON());
+    return route.fulfill({ json: { key: 1234 } });
+  });
+  await openStartForm(page);
+
+  await page.locator("#start-form").getByLabel("IBAN").fill("CH9300762011623852957");
+  await page.locator("#start-go").click();
+
+  await expect.poll(() => started.length, { timeout: 15000 }).toBe(1);
+  expect(started[0].variables.iban).toBe("CH9300762011623852957");
 });

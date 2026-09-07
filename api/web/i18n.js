@@ -37,6 +37,12 @@ const CATALOGS = {
     "common.edit": "Bearbeiten",
     "common.close": "Schließen",
 
+    // A form-js form refused to submit; both the inbox and the Start view answer with
+    // these (see formRefusalMessage in app.js).
+    "form.invalidFields": "Bitte noch prüfen: {fields}",
+    "form.invalidMore.one": "und ein weiteres Feld.",
+    "form.invalidMore.other": "und {n} weitere Felder.",
+
     "tasks.folders.mine": "Meine Ordner",
     "tasks.folders.shared": "Geteilt",
     "tasks.folders.new": "Neuer Ordner",
@@ -117,9 +123,6 @@ const CATALOGS = {
     "tasks.folders.unit.h": "Stunden",
     "tasks.folders.unit.d": "Tagen",
 
-    "tasks.complete.invalidFields": "Bitte noch prüfen: {fields}",
-    "tasks.complete.invalidMore.one": "und ein weiteres Feld.",
-    "tasks.complete.invalidMore.other": "und {n} weitere Felder.",
     "tasks.complete.fileUnreadable": "Datei konnte nicht gelesen werden: {error}",
   },
 
@@ -131,6 +134,10 @@ const CATALOGS = {
     "common.delete": "Delete",
     "common.edit": "Edit",
     "common.close": "Close",
+
+    "form.invalidFields": "Still to check: {fields}",
+    "form.invalidMore.one": "and one more field.",
+    "form.invalidMore.other": "and {n} more fields.",
 
     "tasks.folders.mine": "My folders",
     "tasks.folders.shared": "Shared",
@@ -212,9 +219,6 @@ const CATALOGS = {
     "tasks.folders.unit.h": "hours",
     "tasks.folders.unit.d": "days",
 
-    "tasks.complete.invalidFields": "Still to check: {fields}",
-    "tasks.complete.invalidMore.one": "and one more field.",
-    "tasks.complete.invalidMore.other": "and {n} more fields.",
     "tasks.complete.fileUnreadable": "The file could not be read: {error}",
   },
 };

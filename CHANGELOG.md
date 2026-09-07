@@ -14,24 +14,32 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
-- **A task that will not close now says which field is missing.** The task form stays
-  mounted while the Process tab is showing — deliberately, so *Complete* has the form's
-  data whichever tab you are on. The consequence nobody had looked at: pressing
-  *Complete* from the Process tab validated a form you could not see, and answered
-  "Please fix the highlighted fields". Nothing was highlighted on your screen. The
-  fields were on the other tab, and there was no way to find that out short of guessing
-  to click *Form*.
+- **A form that will not submit now says which field is missing.** Completing a task and
+  starting a process both answered a failed validation with "Please fix the highlighted
+  fields" — a sentence that assumes you can see the highlighting.
 
-  The refusal now brings the form forward before it complains about it, scrolls to the
-  first field that needs attention, and names the fields the way the form labels them —
-  *Bitte noch prüfen: IBAN*, not a colour you cannot see. The names come from the form's
-  own field registry, which is the table form-js keyed the errors by, so a field's label
-  is what you read rather than the variable key or the editor's `Field_1a2b3c` id.
+  In the inbox you could not. The task form stays mounted while the Process tab is
+  showing, deliberately, so *Complete* has the form's data whichever tab you are on; the
+  consequence nobody had looked at is that pressing *Complete* from there validated a
+  form you were not looking at. Nothing on your screen was highlighted. The fields were
+  on the other tab, and there was no way to find that out short of guessing to click
+  *Form*. On the Start-a-process screen there is only one pane, so nothing was hidden —
+  but "highlighted" still sent you hunting through the form for a colour instead of
+  telling you what was missing.
 
-  The tab strip's switch is one function now (`showDetailTab`) instead of a closure
-  inside the click handler, which is what let the refusal use it.
-  `e2e/tasks-complete-validation.spec.mjs` holds all three parts: the tab switch, the
-  named field, and a complete with everything filled that is not refused.
+  Both screens now name the fields the way the form labels them — *Bitte noch prüfen:
+  IBAN* — and scroll to the first one; completing a task additionally brings the Form
+  tab forward before it complains about the form. The names come from the form's own
+  field registry, which is the table form-js keyed the errors by, so a field's label is
+  what you read rather than the variable key or the editor's `Field_1a2b3c` id. A blank
+  form refuses everything it has, so the list is deduplicated, cut at four, and finished
+  with a count: *… und 2 weitere Felder.*
+
+  Both screens share one `formRefusalMessage()`, and the tab strip's switch is a
+  function now (`showDetailTab`) instead of a closure inside its click handler, which is
+  what let the refusal use it. `e2e/form-refusal.spec.mjs` holds all of it: the tab
+  switch, the named field, the blank-form cut, and — on both screens — a filled form
+  that is not refused.
 
 ### Changed
 
