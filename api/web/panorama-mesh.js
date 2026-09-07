@@ -54,7 +54,34 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
 // never had one, which is how this file came to hold the first of these literals.
 const KIND = {
   application: { r: 30, grow: 12, shape: "circle", fill: "#dbe6ff", stroke: "var(--accent)", label: "Application" },
-  process: { r: 17, grow: 5, shape: "square", fill: "#e9edf5", stroke: "var(--mesh-ink)", label: "Process" },
+  process: { r: 17, grow: 5, shape: "square", fill: "#e9edf5", stroke: "var(--mesh-ink)", label: "Process — deployed" },
+  // A saved diagram nobody has deployed. It keeps the process square, because that is
+  // what it is going to be, and it is told apart by the two channels a *state* may use
+  // here: a warmer fill and a dashed outline. Not by shape — shape is what kind of
+  // thing a node is, and a draft is a process; giving it its own outline would say a
+  // draft and a process are different kinds of thing, which is the wrong reading.
+  //
+  // The dash is not decoration. It is the same mark the two placeholder kinds carry,
+  // and it means the same thing on all three: what is drawn here is not running. On a
+  // printout or to a reader who does not separate the hues, that is the channel that
+  // survives (ADR-0211 §4).
+  //
+  // Smaller than a deployed process, by the width of one rank rather than a whole
+  // band: the eye sorts by size first, and on a picture with drafts switched on the
+  // running estate has to stay the thing you see. Still comfortably larger than a
+  // worker, because it is not one.
+  //
+  // The fill is lighter than any other kind's, and that is the measured part. Its
+  // first draft was a warm tone at the same *luminance* as the process fill — 1.00
+  // against it — so the two differed in hue alone: identical on a projector, in a
+  // print, and to a reader who does not separate those hues, leaving the dash to carry
+  // the whole distinction. This is 1.09 against the process fill and 1.08 against the
+  // canvas, so the colour channel does measurable work and a deployed process is the
+  // more substantial mark of the two — which is the way round it has to be, since the
+  // running estate is what this view is about. It stays far below a finding: the amber
+  // status badge is 3.59 against the canvas and the red 5.44, and a kind must never
+  // compete with those (ADR-0211 §4).
+  draft: { r: 14, grow: 4, shape: "square", fill: "#fbf6ee", stroke: "var(--muted)", label: "Draft — saved, not deployed", dashed: true },
   worker: { r: 12, grow: 3.5, shape: "hexagon", fill: "#d9efe1", stroke: "var(--ok)", label: "Worker" },
   decision: { r: 12, grow: 3.5, shape: "triangle", fill: "#dbe6ff", stroke: "var(--accent-hover)", label: "Decision" },
   // A placeholder for something real whose kind we may not learn, so it takes the
@@ -523,6 +550,35 @@ function share(overlap, aHeld, bHeld) {
   return [overlap / 2, overlap / 2];
 }
 
+// LOOSE_PULL is how much harder the centring pull works on a node with no edges.
+//
+// The pull is anisotropic — weaker along the wider axis, so the graph takes the shape
+// of the frame — and that shape is decided for a node the springs are also holding.
+// A node with no edge has no springs: the pull is the whole of what keeps it near the
+// picture, and it balances against a repulsion that falls off as 1/d². Measured on a
+// 34-node estate with ten unattached processes at 1400x900, the balance put two of
+// them hard against the left and right edges of an otherwise centred picture, with
+// everything else squeezed into the middle — the frame was "filled" by two stragglers
+// rather than by the content, which is why the fill test never saw it.
+//
+// The number is measured rather than reasoned. Across five estate shapes — from six
+// nodes to a hundred and nineteen, from one loose node to eighty-three — this is the
+// worst node's distance to its nearest neighbour, as a multiple of the median:
+//
+//	              1×     2×     3×     4×     8×
+//	1 app + 1     1.60   1.32   1.21   1.15   1.04
+//	2 apps + 3    1.28   1.03   1.08   1.06   1.05
+//	4 apps + 10   3.11   1.10   1.22   1.39   1.44
+//	6 apps + 83   1.32   1.56   1.71   1.94   2.56
+//	1 app + 40    2.14   1.19   1.18   1.67   2.18
+//
+// Two is the only column with no bad case in it. Higher is not better and the table
+// says why: past it the loose nodes stop being spread through the picture and collapse
+// into a lump of their own in the middle, with the applications pushed out around it —
+// the same defect mirrored. The pull that holds a straggler in is not the pull that
+// packs a crowd.
+const LOOSE_PULL = 2;
+
 // forcesFor derives the constants the simulation runs on from the world it runs in.
 //
 // Everything scales with the world rather than being a fixed number, because a
@@ -556,6 +612,11 @@ function forcesFor(nodes, width, height) {
 // A node marked `held` is not simulated: its position is whatever put it there, and
 // everything else arranges itself around it.
 function settle(nodes, links, radii, force, iterations) {
+  // Which nodes have an edge at all. A sprung node is held in place by its springs,
+  // which are ten times the centring pull; a node with no edge is held by the pull
+  // alone, and the pull was tuned for nodes that also have springs.
+  const linked = new Uint8Array(nodes.length);
+  for (const [a, b] of links) { linked[a] = 1; linked[b] = 1; }
   for (let step = 0; step < iterations; step++) {
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
@@ -589,16 +650,18 @@ function settle(nodes, links, radii, force, iterations) {
       const fx = (dx / d) * magnitude, fy = (dy / d) * magnitude;
       a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
     }
-    for (const n of nodes) {
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
       // A held node keeps its place and its stillness: carrying velocity through a
       // drag would make it spring away the moment it was let go.
       if (n.held) { n.vx = 0; n.vy = 0; continue; }
+      const hold = linked[i] ? 1 : LOOSE_PULL;
       // The pull toward the centre is anisotropic, weaker along the wider axis, so
       // the graph settles into the shape of the frame instead of into a disc. A disc
       // in a wide viewport is what produced the empty bands on either side: the
       // content was never the shape of the space it had.
-      n.vx += (force.cx - n.x) * 0.0012 * force.pullX;
-      n.vy += (force.cy - n.y) * 0.0012 * force.pullY;
+      n.vx += (force.cx - n.x) * 0.0012 * force.pullX * hold;
+      n.vy += (force.cy - n.y) * 0.0012 * force.pullY * hold;
       n.vx *= force.damping; n.vy *= force.damping;
       n.x += n.vx; n.y += n.vy;
     }
@@ -1355,6 +1418,12 @@ export function windowOverlap(graph, startIds, { direction = "dependents", depth
 // its evaluation history, which is the same question one altitude down — what has this
 // actually done, and with what.
 //
+// A draft's inside is the other direction. It has never run, so there is nothing for
+// Operations to show and sending a reader there would be sending them to an empty
+// page; what a draft has is a diagram, so it opens in the Modeler. That is the same
+// rule, not an exception to it — a node is opened where the thing it stands for
+// actually lives.
+//
 // Everything else answers "" and is opened *here*, by becoming the centre of the
 // picture. The two placeholder kinds are covered by that: a decision the caller may
 // not see is a restricted node and one nothing provides is an unresolved node, and
@@ -1369,7 +1438,18 @@ function hrefFor(node) {
     const id = node.id.slice("decision:".length);
     return `#/operations/decisions/${encodeURIComponent(id)}`;
   }
+  if (node.kind === "draft") {
+    const id = node.id.slice("draft:".length);
+    return `#/modeler/draft/${encodeURIComponent(id)}`;
+  }
   return "";
+}
+
+// Where that link goes, in the words of the page it lands on. It is derived from the
+// kind rather than written beside each href so the two cannot come apart: a link that
+// says Operations and opens the Modeler is worse than no link.
+function insideName(node) {
+  return node.kind === "draft" ? "Modeler" : "Operations";
 }
 
 function nodeTitle(node, notation) {
@@ -1403,9 +1483,21 @@ function nodeTitle(node, notation) {
     const of = node.id.split(":")[1] || "dependency";
     return `Nothing on this server provides the ${of} "${node.name}". Work reaching it would park.`;
   }
+  if (node.kind === "draft") {
+    // Said in words rather than left to the shared sentence below, which would have
+    // reached for a version this node has not got. That is not a cosmetic slip: a
+    // draft's whole claim is that nothing about it is running, and a tooltip reading
+    // "v undefined" would be the picture contradicting itself.
+    return `${node.name || node.id} · ${node.processId} · a saved diagram, not ` +
+      `deployed. Nothing runs here yet; open it in the Modeler.`;
+  }
   const parts = [node.name || node.id];
   if (node.modelName && node.modelName !== node.name) parts.push(`modeled as “${node.modelName}”`);
-  if (node.processId) parts.push(`${node.processId} v${node.version}`);
+  // The version only where there is one. A node can carry a process id without being
+  // a deployment, and printing "v undefined" beside it would invent a fact.
+  if (node.processId) {
+    parts.push(node.version ? `${node.processId} v${node.version}` : node.processId);
+  }
   if (node.workerType) parts.push(`${node.workerType} worker`);
   if (node.children) parts.push(`${node.children} process(es) collapsed`);
   // The state, then the reason, then — if it was inherited — which descendant it
@@ -2052,7 +2144,7 @@ function impactPanelHTML(node, result, direction, depth,
   // says in words what the double-click does without being asked.
   const inside = hrefFor(node);
   const drill = inside
-    ? `<a class="mesh-drill" href="${inside}">Open in Operations →</a>`
+    ? `<a class="mesh-drill" href="${inside}">Open in ${insideName(node)} →</a>`
     : "";
   // Releasing one hand-placed node lives here, beside the node it is about. It used
   // to be a double-click, which is a thing you have to be told; a button on the
@@ -2208,10 +2300,29 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   }
   const fetchMs = performance.now() - fetched;
 
+  // Whether drafts are on. It survives the empty check below because that check can
+  // turn it on: an instance where nothing is deployed yet is one where everything is
+  // a draft, and an empty picture whose only switch is on the page it refuses to draw
+  // is a dead end rather than an answer.
+  let withDrafts = false;
+  if (!graph.nodes.length) {
+    try {
+      const drafted = await api("GET", "/api/v1/panorama/mesh?drafts=1");
+      if (drafted.nodes.length) {
+        graph = drafted;
+        withDrafts = true;
+      }
+    } catch {
+      // The empty landscape stands. A second request that failed says nothing about
+      // the first one, and reporting it would replace a true answer with an error.
+    }
+  }
+
   if (!graph.nodes.length) {
     view.innerHTML = `<div class="card empty"><h1>Starmap</h1>
-      <p>Nothing is deployed on this server yet. The landscape is derived from what
-      Atlas holds, so it fills in as you deploy — there is nothing to model first.</p></div>`;
+      <p>Nothing is deployed on this server yet, and there are no saved diagrams
+      either. The landscape is derived from what Atlas holds, so it fills in as you
+      draw and deploy — there is nothing to model first.</p></div>`;
     return;
   }
 
@@ -2241,8 +2352,16 @@ export async function mountPanoramaMesh(view, { api, toast }) {
            default and asked for by name: it is a second number on every node, and a
            structural picture that always carried it would be a status board that
            happens to have arrows. -->
-      <label class="mesh-instances" title="Show how many instances are running, on the processes that have any">
+      <label class="mesh-toggle" title="Show how many instances are running, on the processes that have any">
         <input id="mesh-instances" type="checkbox"/> Instances
+      </label>
+      <!-- Saved diagrams nobody has deployed. Off by default, and the one control here
+           that re-asks the server rather than re-drawing what is already on screen:
+           the drafts are not in the payload until they are wanted, because an estate
+           holds several of them per deployed process and carrying them always would
+           spend the size budget (ADR-0211 §7) on work that is not running. -->
+      <label class="mesh-toggle" title="Also draw saved diagrams that have not been deployed">
+        <input id="mesh-drafts" type="checkbox"/> Drafts
       </label>
       <!-- Beside the picture's own controls rather than in the side column: what is
            exported is the picture, including whatever the search box and the
@@ -2347,6 +2466,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const zoomFit = document.getElementById("mesh-zoom-fit");
   const release = document.getElementById("mesh-release");
   const instancesToggle = document.getElementById("mesh-instances");
+  const draftsToggle = document.getElementById("mesh-drafts");
+  // Set from what was actually fetched rather than left at its markup default, so the
+  // control agrees with the picture on the first frame as well as on every later one.
+  draftsToggle.checked = withDrafts;
   const legendSlot = document.getElementById("mesh-legend-slot");
   const count = document.getElementById("mesh-count");
   const panel = document.getElementById("mesh-panel-slot");
@@ -3274,6 +3397,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // on some nodes and not others has no way to tell "nothing running" from "this
       // export was taken with counts off".
       instances: instancesToggle.checked,
+      drafts: draftsToggle.checked,
       partial: Boolean(status.partial),
       unavailable: (status.unavailable || []).map((u) => ({
         ...u, label: STATE_TEXT[u.state] || u.state,
@@ -3330,6 +3454,40 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // reserves it (see the margin in renderGraph).
   instancesToggle.addEventListener("change", paint);
 
+  // Drafts are the one switch that changes the *landscape* rather than the drawing of
+  // it, so it is answered by the server. Two things reach for it — the switch, and a
+  // saved view that was saved with drafts on — and both go through here, so a view
+  // cannot come back showing half the picture it was named for.
+  //
+  // Everything the reader has arranged survives the swap: positions are kept by node
+  // id, and the drilldown trail is pruned rather than cleared — a station whose node
+  // is no longer on the picture cannot be a way back to it, and the ones still there
+  // still are.
+  async function loadLandscape(wantDrafts) {
+    draftsToggle.disabled = true;
+    try {
+      graph = await api("GET", "/api/v1/panorama/mesh" + (wantDrafts ? "?drafts=1" : ""));
+    } finally {
+      draftsToggle.disabled = false;
+    }
+    draftsToggle.checked = wantDrafts;
+    trail = trail.filter((id) => graph.nodes.some((n) => n.id === id));
+  }
+
+  // A failed fetch puts the checkbox back. The picture did not change, so a control
+  // left claiming it did would be the one lie this view cannot afford.
+  draftsToggle.addEventListener("change", async () => {
+    const want = draftsToggle.checked;
+    try {
+      await loadLandscape(want);
+    } catch (e) {
+      draftsToggle.checked = !want;
+      toast(`Could not ${want ? "add" : "remove"} drafts: ${e.message}`);
+      return;
+    }
+    paint();
+  });
+
   exportModelBtn.addEventListener("click", () => {
     window.location.href = "/api/v1/panorama/mesh/archimate";
   });
@@ -3381,6 +3539,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const parts = [];
     if (v.term) parts.push(`filter “${v.term}”`);
     if (v.instances) parts.push("with instance counts");
+    if (v.drafts) parts.push("with drafts");
     if (v.trail?.length) parts.push(`${v.trail.length} step(s) in`);
     if (v.picked?.length) parts.push(`a window of ${v.picked.length} node(s)`);
     else if (v.selected) parts.push(`watching ${v.selected}`);
@@ -3397,7 +3556,19 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // one places them in. Opening a saved view is a rare, deliberate act; paying two
   // layouts for it is cheaper than storing coordinates that mean somewhere else on a
   // different screen.
-  function openView(v) {
+  async function openView(v) {
+    // The landscape first, because everything below is about *this* graph: the trail
+    // is filtered against it and the pins are placed in the world it sizes. A view
+    // saved before drafts existed carries none, and false is the picture it was
+    // looking at. A fetch that fails leaves the landscape as it is and says so — the
+    // rest of the view is still worth restoring against it.
+    if (Boolean(v.drafts) !== draftsToggle.checked) {
+      try {
+        await loadLandscape(Boolean(v.drafts));
+      } catch (e) {
+        toast(`Showing this view without changing the drafts: ${e.message}`);
+      }
+    }
     search.value = v.term || "";
     dirSelect.value = v.direction || "dependents";
     setDepth(v.depth ?? "2");
@@ -3485,6 +3656,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       selected: only(),
       picked,
       instances: instancesToggle.checked,
+      drafts: draftsToggle.checked,
       trail,
       frameView,
       world,

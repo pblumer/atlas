@@ -150,6 +150,16 @@ export function stampLines(meta = {}) {
     lines.push({ text: `Running instances are drawn under the names that have any, as ` +
       `observed above. A process with none carries no number.` });
   }
+  // Whether saved-but-undeployed diagrams are in this file, by the same argument the
+  // instance counts make: a reader receiving a picture with no drafts on it cannot
+  // otherwise tell "this server has none" from "this export was taken without them".
+  // Only said when they are on — the absence is the default, and a stamp that
+  // announced every default would bury the sentences that matter.
+  if (meta.drafts) {
+    lines.push({ text: `Saved diagrams that have not been deployed are drawn too, ` +
+      `dashed and named in the key. They run nothing: no version, no instances and ` +
+      `no status is claimed for any of them.` });
+  }
   if (meta.restricted > 0) {
     lines.push({ text: `${meta.restricted} node(s) in this starmap are hidden by your ` +
       `access. Their dependencies are drawn, their identities are not — this picture is ` +
