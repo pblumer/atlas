@@ -2802,3 +2802,113 @@ test("a picture laid out before the canvas had a box corrects itself", async ({ 
   });
   expect(spread).toBeGreaterThan(0.5);
 });
+
+// A canvas whose box keeps moving.
+//
+// The observer that fixed the first-paint case only ever asked for a *re-layout*,
+// and a re-layout is expensive, so it is debounced — every further resize pushed it
+// back again. A page that keeps nudging the surface while it settles (a panel
+// filling in, a scrollbar making up its mind, a window being dragged) therefore held
+// the picture at the shape it was first drawn for, for as long as the nudging went
+// on: the viewBox kept an aspect ratio the canvas no longer had, preserveAspectRatio
+// letterboxed the difference, and the whole drawing shrank into the middle of the
+// surface — which is what "the nodes are too close together" looks like.
+//
+// Framing is not expensive, so it no longer waits for the layout: the view is put
+// right on the spot and the re-settling follows.
+test("a canvas still being nudged is framed for the box it has, not the one it had", async ({ page }) => {
+  installMock(page, radiusGraph);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+
+  // Something on the page keeps resizing the canvas — never for long enough to let a
+  // debounced re-layout run. Deliberately not awaited: the assertion below is about
+  // what the reader sees *while* this is going on.
+  await page.evaluate(() => {
+    const style = document.createElement("style");
+    document.head.append(style);
+    let flip = 0;
+    const id = setInterval(() => {
+      style.textContent = `.mesh-surface{height:${300 + (flip ^= 1)}px!important}`;
+    }, 40);
+    setTimeout(() => clearInterval(id), 3000);
+  });
+
+  const shape = () => page.evaluate(() => {
+    const s = document.querySelector(".mesh-surface").getBoundingClientRect();
+    const [, , w, h] = document.querySelector(".mesh-canvas")
+      .getAttribute("viewBox").split(" ").map(Number);
+    return { canvas: s.width / s.height, view: w / h };
+  });
+  // Let the nudging get going, so the canvas is demonstrably no longer the shape the
+  // picture was first drawn for — otherwise the first sample would agree by having
+  // been taken too early.
+  await expect.poll(async () => (await shape()).canvas, { timeout: 2000 })
+    .toBeGreaterThan(3);
+  // Then every sample, while the nudging carries on, has the picture framed for the
+  // canvas it is in. Sampled rather than awaited once: the claim is that the view is
+  // right *throughout*, not that it eventually catches up when the page stops moving.
+  for (let i = 0; i < 5; i++) {
+    const now = await shape();
+    expect(now.view).toBeCloseTo(now.canvas, 1);
+    await page.waitForTimeout(120);
+  }
+});
+
+// The two channels a finding is drawn in are strokes, and a stroke in world units is
+// a stroke that disappears as the estate grows — the opening view scales the world
+// down to fit, so the red outline measured 3.3 device pixels at twelve nodes and
+// 0.73 at three hundred and twenty, and the heartbeat ring 2.4 and 0.52. Both are
+// still in the DOM at that size and neither is visible, which is the worst of both:
+// the view reports that it is showing you the problem.
+test("the severity outline and the heartbeat keep their weight on a large starmap", async ({ page }) => {
+  const many = { nodes: [], edges: [], restricted: 0, clustered: false };
+  for (let i = 1; i <= 120; i++) {
+    const bad = i % 11 === 0;
+    many.nodes.push({
+      id: `process:${i}`, kind: "process", name: `Process ${i}`, provenance: "derived",
+      processId: `p${i}`, version: 1,
+      severity: bad ? "critical" : "ok", state: bad ? "not-ready" : "healthy",
+      reason: bad ? "3 token(s) are parked." : "", incidents: bad ? 3 : 0,
+    });
+    if (i > 1) many.edges.push({ from: `process:${i - 1}`, to: `process:${i}`, kind: "calls" });
+  }
+  installMock(page, many);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+
+  const drawn = await page.evaluate(() => {
+    const svg = document.querySelector(".mesh-canvas");
+    const [, , w] = svg.getAttribute("viewBox").split(" ").map(Number);
+    const bad = document.querySelector(".mesh-sev-critical");
+    const beat = bad.querySelector(".mesh-beat");
+    const body = bad.querySelector(".mesh-body");
+    const stroke = (el) => parseFloat(getComputedStyle(el).strokeWidth);
+    return {
+      // Well under one screen pixel per world unit: this is the case the strokes
+      // used to vanish in, so the test is measuring the situation it is about.
+      scale: document.querySelector(".mesh-surface").getBoundingClientRect().width / w,
+      beating: svg.classList.contains("mesh-beating"),
+      beatColour: getComputedStyle(beat).stroke,
+      bodyColour: getComputedStyle(body).stroke,
+      danger: getComputedStyle(document.documentElement).getPropertyValue("--danger").trim(),
+      beatAnimation: getComputedStyle(beat).animationName,
+      // Drawn in screen pixels rather than in world units, so the weight is the
+      // weight the stylesheet asked for however far out the view is.
+      beatPx: getComputedStyle(beat).vectorEffect === "non-scaling-stroke" ? stroke(beat) : null,
+      bodyPx: getComputedStyle(body).vectorEffect === "non-scaling-stroke" ? stroke(body) : null,
+    };
+  });
+
+  expect(drawn.scale).toBeLessThan(0.5);
+  // Still red, still beating — the two things the finding is drawn with.
+  expect(drawn.bodyColour).toBe(drawn.beatColour);
+  expect(drawn.beatAnimation).toBe("mesh-beat-slow");
+  expect(drawn.beating).toBe(true);
+  // And both are drawn at the weight they are specified at, not at that weight times
+  // however far the landscape had to shrink to fit.
+  expect(drawn.bodyPx).toBeCloseTo(3.5, 2);
+  expect(drawn.beatPx).toBeCloseTo(2.5, 2);
+});

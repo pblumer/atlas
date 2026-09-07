@@ -2262,6 +2262,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // frameView is the part of it currently on screen; null means fitted, which is where
   // every paint starts — the opening picture is the whole landscape.
   let frame = { width: 1200, height: 720 };
+  // laidOut is the box the node positions on screen were actually settled for, which
+  // is not the same thing as the box the picture is currently framed for. Reframing
+  // is cheap and happens the instant the surface moves; re-settling the graph is the
+  // expensive part and is debounced — so the two drift apart for a moment, and the
+  // repaint has to be owed against the frame the *layout* used rather than against
+  // the one the view was last written for. Comparing against the wrong one is how a
+  // re-layout gets marked "already done" and the picture keeps a shape it was never
+  // laid out in.
+  let laidOut = frame;
   let frameView = null;
   // world is the box the graph was actually laid out in, and the base view is that
   // box rather than the frame: the frame is a window, not the canvas.
@@ -2285,9 +2294,40 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     frame = frameNow();
   }
 
+  // reframed re-measures the surface and, when it has moved, frames the picture for
+  // the box it actually has. Returns whether anything changed.
+  //
+  // This is the guarantee that does not depend on being notified. fitView returns a
+  // view with the frame's own aspect ratio, so a viewBox written for a frame the
+  // surface no longer has is a viewBox of the wrong shape — and preserveAspectRatio
+  // letterboxes that, which shrinks the whole drawing and huddles it into the middle
+  // of the canvas with empty bands beside it. That is the picture reported as "the
+  // nodes are too close together", and until now it could only be undone by a
+  // re-layout: nothing else measured. So nothing put it right if the notification
+  // that a re-layout was needed never arrived, or arrived while the re-layout was
+  // still being postponed.
+  //
+  // Reframing costs no simulation — a bounding box and a division — so it can happen
+  // on every view write, which is far more often than the graph is settled.
+  function reframed() {
+    const now = frameNow();
+    if (Math.abs(now.width - frame.width) < 1 && Math.abs(now.height - frame.height) < 1) return false;
+    frame = now;
+    // A reader who has zoomed in keeps their magnification and what they are looking
+    // at; only the shape of the window changed, so only the height follows from it.
+    if (frameView) {
+      const cy = frameView.y + frameView.h / 2;
+      const h = frameView.w * (now.height / Math.max(now.width, 1));
+      frameView = { x: frameView.x, y: cy - h / 2, w: frameView.w, h };
+    }
+    refit();
+    return true;
+  }
+
   function applyView() {
     const svg = surface.querySelector("svg");
     if (!svg) return;
+    reframed();
     const v = frameView || baseView();
     svg.setAttribute("viewBox", `${v.x.toFixed(2)} ${v.y.toFixed(2)} ${v.w.toFixed(2)} ${v.h.toFixed(2)}`);
     svg.classList.toggle("mesh-zoomed", frameView !== null);
@@ -2377,6 +2417,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // the picture on screen forward instead of settling a fresh one around the pins.
     const from = new Map(placed.map((n) => [n.id, { x: n.x, y: n.y }]));
     const spoken = notationOf(notationPick.value);
+    laidOut = frame;
     const painted = renderGraph(shown, 0, frame, {
       pinned, from, notation: spoken, instances: instancesToggle.checked,
     });
@@ -2412,6 +2453,18 @@ export async function mountPanoramaMesh(view, { api, toast }) {
         : `${graph.nodes.length} node(s), ${graph.edges.length} edge(s)`;
     }
     refresh();
+    // And check, one frame later, that the box the graph was just settled for is
+    // still the box the surface has.
+    //
+    // A paint changes the page it is drawn on: the key goes under the picture and
+    // the side panel fills with findings and a ranking, so the document gets taller,
+    // and a taller document can take a scrollbar — which is fifteen pixels off the
+    // width of everything, this canvas included. The frame was measured before any
+    // of that, at the top of this function, so the picture can be settled for a box
+    // that its own arrival destroyed. Asking again on the next frame is the cheapest
+    // possible way to notice, and it does not depend on a resize notification
+    // arriving, or on it arriving before something else postpones the answer.
+    requestAnimationFrame(() => reframe());
   }
 
   // paintRanking is kept out of refresh deliberately. The ranking is about the
@@ -3343,17 +3396,48 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   //
   // Observing the surface catches every version of that — a late box, a late
   // stylesheet, a font that changes the chrome, a scrollbar appearing, and a resized
-  // window, which the window listener used to catch alone. Debounced, because a
-  // drag-resize fires continuously and the simulation is the expensive part, and
-  // guarded on the frame having actually changed so a repaint cannot chase its own
-  // tail through the page's scrollbar.
+  // window, which the window listener used to catch alone.
+  //
+  // But an observer alone was not enough, and that is the part this correction adds.
+  // It made the whole picture depend on being *told*: the framing was only ever
+  // recomputed by a full re-layout, the re-layout only ever ran when a notification
+  // arrived, and the notification could be postponed indefinitely by the next one.
+  // So the two are separated below — the framing is put right by measuring, on every
+  // view write and on the frame after every paint, and the re-settling is what the
+  // observer schedules. A missed or endlessly deferred notification now costs the
+  // arrangement of the nodes, which is a picture drawn for a slightly different
+  // shape; it no longer costs the shape of the picture itself.
+  //
+  // Two answers, because the question has two halves and they cost different
+  // amounts. The framing is put right *now* — it is arithmetic on a bounding box,
+  // and a view of the wrong shape is a letterboxed, shrunken picture for however
+  // long it is left. The layout is re-settled after a pause, because the simulation
+  // is the expensive part and a drag-resize asks a hundred times a second.
   let resizing;
+  let owedSince = 0;
   const reframe = () => {
+    applyView();
     const now = frameNow();
-    if (Math.abs(now.width - frame.width) < 2 && Math.abs(now.height - frame.height) < 2) return;
+    if (Math.abs(now.width - laidOut.width) < 2 && Math.abs(now.height - laidOut.height) < 2) {
+      // Settled for the box it has. Anything owed is owed no longer.
+      clearTimeout(resizing);
+      owedSince = 0;
+      return;
+    }
+    if (!owedSince) owedSince = performance.now();
     clearTimeout(resizing);
-    resizing = setTimeout(() => { frameView = null; paint(); }, 120);
+    // A ceiling on the debounce, because a debounce without one is a promise that
+    // can be broken for ever: every event resets the timer, so a page that keeps
+    // nudging the surface — a lazily loaded panel, a transition, a scrollbar that
+    // cannot make up its mind — postpones the re-layout indefinitely, and the reader
+    // is left looking at a graph settled for a box that stopped existing.
+    resizing = setTimeout(relayout, performance.now() - owedSince > 400 ? 0 : 120);
   };
+  function relayout() {
+    owedSince = 0;
+    frameView = null;
+    paint();
+  }
   if (typeof ResizeObserver === "function") {
     // No teardown: the observer's only reference is this closure, and once the view
     // is replaced it is watching a detached element and can never fire again. The
