@@ -50,6 +50,7 @@ import (
 	"github.com/pblumer/atlas/api/infomodel"
 	"github.com/pblumer/atlas/api/panorama"
 	"github.com/pblumer/atlas/api/runloop"
+	"github.com/pblumer/atlas/api/taskfolder"
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
@@ -246,6 +247,8 @@ type Server struct {
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
 	processDocs *processdoc.Service
+	// taskFolders serves the Tasks app's saved filters (ADR-draft-task-folders-are-saved-filters).
+	taskFolders *taskfolder.Service
 	// formGen writes a form from a description and from the process it belongs to
 	// (ADR-0260). It is the one area service that holds no run
 	// loop, because it owns no state: it stores nothing, and the three closures in
@@ -1058,6 +1061,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	taskFolderStore, err := taskfolder.NewStore(filepath.Join(dataDir, "task-folders"))
+	if err != nil {
+		return nil, err
+	}
 	panoramaStore, err := panorama.NewStore(filepath.Join(dataDir, "panorama-models"))
 	if err != nil {
 		return nil, err
@@ -1264,6 +1271,17 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			return processdoc.Deployment{Key: d.Key, Version: d.Version}, true
 		},
 		token.New,
+	)
+	// The Tasks app's folders are the second such area. Both collaborators are the
+	// server's for the same reason: the editor's value lists come from the
+	// deployment registry and the user store, which only the loop may read, and the
+	// counts come from a walk of the open tasks, which only the server can do.
+	s.taskFolders = taskfolder.New(
+		s.runLoop,
+		taskFolderStore,
+		s.taskFolderOptions,
+		s.countTaskFolders,
+		taskfolder.NewID,
 	)
 	// Panorama reuses the process-application scope rather than inventing an ACL.
 	// The resolver is called only from the service's run-loop turn, so reading the

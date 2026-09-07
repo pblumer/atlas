@@ -2211,7 +2211,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tasks-mode main { max-width: none; }
 .tasks {
   display: grid;
-  grid-template-columns: 210px 340px 1fr;
+  grid-template-columns: 232px 360px 1fr;
   gap: 1px;
   background: var(--border);
   border: 1px solid var(--border);
@@ -2266,13 +2266,28 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 14px; border-bottom: 1px solid var(--border);
 }
-.tasks-list-head h2 { margin: 0; font-size: 15px; }
+.tasks-list-head h2 {
+  margin: 0; font-size: 15px;
+  /* A folder carries a name its owner chose, which can be longer than the four
+     built-in labels this header was sized for. It ellipsises rather than wrapping,
+     because a wrapped title pushes the actions onto a second line. */
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .tasks-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
 .tasks-item { padding: 11px 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
 .tasks-item:hover { background: var(--bg); }
 .tasks-item.selected { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .tasks-item-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.tasks-item-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tasks-item-title {
+  font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* The name is what a person reads down the list, so it gets the flexible share
+     and the chips beside it give way. Without this the two chips take their full
+     width and a task called "Ersatzgerät beschaffen" renders as "Ers…". */
+  flex: 1 1 auto; min-width: 3em;
+}
+/* Shrink factor 2 against the title's 1: when the row is tight, the process id
+   gives way before the task's name does. */
+.tasks-item-top .chip { flex: 0 2 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 44%; }
 .tasks-item-sub { font-size: 12px; margin-top: 3px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .tasks-empty { padding: 16px 14px; }
 
@@ -5407,3 +5422,124 @@ button.im-problem:hover { background: var(--accent-soft); }
 /* The line from a store to the class it keeps is an annotation, not an
    association — nothing in the model *relates* those two — so it is drawn as one. */
 .im-store-line { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; }
+
+/* ---------- Task folders: saved filters in the inbox sidebar ---------- */
+/* (ADR-draft-task-folders-are-saved-filters)
+
+   The sidebar now carries two kinds of entry that must not read as one list. The
+   built-in folders are the app's; the ones below them are the person's own. A
+   section header rather than a divider is what says so — a rule between two
+   groups of identical buttons says "there is a gap here", not "these are yours". */
+.tasks-folder-head {
+  font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted);
+  padding: 0 8px; margin: 12px 0 4px; display: flex; align-items: center; gap: 6px;
+}
+.tasks-folder-head::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.tasks-folder { display: flex; align-items: center; gap: 8px; }
+.tasks-folder-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tasks-folder-ico { width: 14px; height: 14px; flex: 0 0 auto; opacity: .75; }
+.tasks-folder.active .tasks-folder-ico { opacity: 1; }
+/* Dashed, because it makes a thing rather than opening one — the same distinction
+   the modeller's "add" affordances draw. */
+.tasks-folder-new {
+  display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 4px;
+  padding: 6px 8px; font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+  color: var(--muted); background: none; border: 1px dashed var(--border-strong); border-radius: 6px;
+}
+.tasks-folder-new:hover { color: var(--accent); border-color: var(--accent); }
+/* Shown only when the counting scan hit its budget: the badges above are then a
+   floor, and saying so is cheaper than a number quietly being wrong. */
+.tasks-folder-note { margin: 10px 8px 0; font-size: 11.5px; line-height: 1.45; }
+
+/* The selected folder's rule, above its rows: the folder explaining itself. Two
+   folders with similar names are otherwise indistinguishable without opening the
+   editor. One line, ellipsised — the full expression is in the title and in the
+   dialog. */
+.tasks-rule {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  padding: 7px 14px; font-size: 12px; color: var(--muted);
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.tasks-rule[hidden] { display: none; }
+.tasks-rule-feel {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1 1 auto;
+}
+.tasks-rule .btn { flex: 0 0 auto; padding: 2px 8px; font-size: 12px; }
+
+/* The row's own key. A queue of identical task names is unreadable without it:
+   nothing else on the row differs, so there is no way to say which one you mean
+   or to notice that one of them is gone. */
+.tasks-item-meta { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.tasks-item-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+  color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 auto;
+}
+.tasks-item.selected .tasks-item-id { color: var(--accent); }
+
+/* ---------- The folder editor ---------- */
+/* Wider than the stock modal: a condition is four controls on one line, and
+   wrapping them turns a sentence a person reads into a form they have to parse. */
+.modal.tf-modal { width: min(720px, 100%); }
+.tf-body { display: flex; flex-direction: column; gap: 18px; padding-top: 14px; }
+.tf-top { display: grid; grid-template-columns: 1fr 220px; gap: 14px; }
+.tf-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.tf-label {
+  font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--muted); font-weight: 600;
+}
+.tf-in, .tf-sel {
+  font: inherit; font-size: 13px; padding: 5px 8px; max-width: 100%;
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--surface); color: var(--text);
+}
+.tf-in:focus, .tf-sel:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.tf-match { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.tf-match .tf-sel { flex: 0 0 auto; width: auto; }
+.tf-conds { display: flex; flex-direction: column; gap: 8px; }
+/* Field · operator · value · remove. The first two are fixed so the rows line up
+   into columns a person can read down; the value takes what is left, because it is
+   the only one whose control changes shape. */
+.tf-cond {
+  display: grid; grid-template-columns: 132px 172px 1fr 26px; gap: 8px; align-items: start;
+  padding: 9px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+}
+.tf-cond .tf-val { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.tf-cond .tf-val > * { min-width: 0; }
+.tf-grow { flex: 1 1 130px; width: 100%; }
+.tf-narrow { width: 92px; flex: 0 0 auto; }
+.tf-cond .tf-val select.tf-narrow { width: 124px; }
+.tf-cond select[multiple] { height: auto; padding: 0; }
+.tf-cond select[multiple] option { padding: 1px 6px; }
+.tf-hint { font-size: 12px; color: var(--muted); }
+.tf-del {
+  border: 0; background: none; color: var(--muted); cursor: pointer;
+  font-size: 16px; line-height: 1; padding: 5px 2px; border-radius: 5px;
+}
+.tf-del:hover { color: var(--danger); background: var(--danger-soft); }
+.tf-joiner {
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted); text-align: center;
+}
+/* The generated expression, always visible. It is what makes the dialog teach:
+   the person sees their listbox choices become the thing the engine evaluates. */
+.tf-preview { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.tf-preview-head {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 12px;
+  color: var(--muted); background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.tf-preview-head b { color: var(--text); font-variant-numeric: tabular-nums; }
+.tf-preview-head b.tf-incomplete { color: var(--warn); font-weight: 500; }
+.tf-preview-tag { margin-left: auto; }
+.tf-feel {
+  margin: 0; padding: 12px; white-space: pre; overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.65;
+  color: var(--text); min-height: 42px;
+}
+
+@media (max-width: 720px) {
+  .tf-top { grid-template-columns: 1fr; }
+  .tf-cond { grid-template-columns: 1fr 1fr 26px; }
+  .tf-cond .tf-val { grid-column: 1 / -1; }
+}

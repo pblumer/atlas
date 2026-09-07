@@ -387,7 +387,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Element instance key and stats", tObject())}},
 
 		{"GET", "/api/v1/tasks", s.handleListTasks, apiOp{
-			summary: "List active user tasks, newest first — capped per call (?limit=, default 500, max 5000). A capped page sets X-Tasks-Truncated: true and X-Tasks-Next-Cursor: <jobKey>; pass it as ?before= to page to older tasks. ?processInstance=<key> scopes the list to one instance (flood-proof, for embedded clients)", tag: "Tasks", role: RoleUser, resp: jsonBody("Tasks", tArray())}},
+			summary: "List active user tasks, newest first — capped per call (?limit=, default 500, max 5000). A capped page sets X-Tasks-Truncated: true and X-Tasks-Next-Cursor: <jobKey>; pass it as ?before= to page to older tasks. ?processInstance=<key> scopes the list to one instance (flood-proof, for embedded clients). ?folder=<id> scopes it to a saved folder's rule, paged the same way", tag: "Tasks", role: RoleUser, resp: jsonBody("Tasks", tArray())}},
 		{"GET", "/api/v1/tasks/{key}", s.handleGetTask, apiOp{
 			summary: "Fetch one open user task by key — the deep-link primitive so a task stays reachable outside a capped list page", tag: "Tasks", role: RoleUser, resp: jsonBody("Task", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/complete", s.handleCompleteTask, apiOp{
@@ -400,6 +400,36 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Task and assignee", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/unclaim", s.handleUnclaimTask, apiOp{
 			summary: "Release a user task's claim", tag: "Tasks", role: RoleUser, resp: jsonBody("Task key", tObject())}},
+
+		// The Tasks app's folders: a saved filter over the inbox, built from
+		// listboxes and stored as a rule the server turns into FEEL
+		// (ADR-draft-task-folders-are-saved-filters). Everything here is RoleUser —
+		// a folder is a person's own view of the work they may already see, and it
+		// grants no access to a task their role does not already reach.
+		{"GET", "/api/v1/task-folders", s.taskFolders.HandleList, apiOp{
+			summary: "List the task folders this identity can see — their own, those shared with a group they are in, and organisation-wide ones — in sidebar order, each with the FEEL its rule generates", tag: "Task folders", role: RoleUser,
+			resp: jsonBody("Task folders", tArray())}},
+		{"GET", "/api/v1/task-folders/fields", s.taskFolders.HandleFields, apiOp{
+			summary: "The folder editor's catalogue: every field and operator a rule may use, and the value lists (deployed processes, user-task names, users, candidate groups, lanes) its listboxes are filled from. Ids and model data only — the interface text belongs to the client", tag: "Task folders", role: RoleUser,
+			resp: jsonBody("Fields and value lists", tObject())}},
+		{"GET", "/api/v1/task-folders/counts", s.taskFolders.HandleCounts, apiOp{
+			summary: "How many open tasks each visible folder holds, answered from one scan of the open tasks. `truncated` means the scan hit its budget and the numbers are a floor", tag: "Task folders", role: RoleUser,
+			resp: jsonBody("Counts per folder", tObject())}},
+		{"POST", "/api/v1/task-folders/preview", s.taskFolders.HandlePreview, apiOp{
+			summary: "What an unsaved rule would select: the FEEL it generates and how many open tasks match. An incomplete rule answers 200 with ok:false and the reason, because a half-filled dialog is not a client error", tag: "Task folders", role: RoleUser,
+			req:  jsonBody("The rule being edited", schemaObj(map[string]any{"rule": tObject()}, "rule")),
+			resp: jsonBody("Generated FEEL and match count", tObject())}},
+		{"POST", "/api/v1/task-folders", s.taskFolders.HandleCreate, apiOp{
+			summary: "Create a task folder. The rule is validated and compiled here, so a folder that is stored is one whose expression the FEEL compiler has already accepted", tag: "Task folders", role: RoleUser,
+			req:  jsonBody("Name, visibility and rule", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "groupId": tString(), "position": tInteger(), "rule": tObject()}, "name")),
+			resp: jsonBody("The created folder", tObject())}},
+		{"PUT", "/api/v1/task-folders/{id}", s.taskFolders.HandleUpdate, apiOp{
+			summary: "Rewrite a task folder. Only its owner may: a shared folder is shared to be used, not rewritten under the team that works from it", tag: "Task folders", role: RoleUser,
+			req:  jsonBody("Name, visibility and rule", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "groupId": tString(), "position": tInteger(), "rule": tObject()}, "name")),
+			resp: jsonBody("The updated folder", tObject())}},
+		{"DELETE", "/api/v1/task-folders/{id}", s.taskFolders.HandleDelete, apiOp{
+			summary: "Delete a task folder (owner only)", tag: "Task folders", role: RoleUser,
+			resp: jsonBody("The deleted folder's id", tObject())}},
 
 		{"POST", "/api/v1/drafts", s.handleSaveDraft, apiOp{
 			summary: "Save a diagram draft, keyed by its process id. ?from=<draft id> names the draft being edited (empty for a never-saved diagram): a changed process id then renames the draft instead of leaving a second copy behind, and a save onto an id another draft already holds is refused with 409 (ADR-0222). Omit ?from= for the plain upsert-by-id an import or an agent wants", tag: "Drafts", role: RoleModeler, req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},

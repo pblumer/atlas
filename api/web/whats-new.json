@@ -2,6 +2,104 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "task-folders-the-tasks-app-s-sidebar-folders-are-now-saved-f",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Build your own folders in the task inbox",
+        "de": "Eigene Ordner im Aufgaben-Posteingang"
+      },
+      "summary": {
+        "en": "The inbox had four fixed folders, and the question you actually arrive with in the morning — what is open on customer enquiries? — was retyped into the search box every day. Now you can save it as a folder. You pick the conditions from listboxes rather than typing them: the processes come from what is deployed, the task names and groups from the models, the people from the directory, so a folder cannot be built around something that does not exist. Underneath, Atlas shows the expression your choices make and how many tasks match right now. Counting happens across every open task, not just the page on screen, and a folder can be shared with your team — where only its owner can change it.",
+        "de": "Der Posteingang hatte vier feste Ordner, und die Frage, mit der man morgens tatsächlich anfängt — was ist bei den Kundenanfragen offen? — wurde jeden Tag neu ins Suchfeld getippt. Jetzt lässt sie sich als Ordner speichern. Die Bedingungen wählen Sie aus Listen statt sie zu tippen: die Prozesse kommen aus dem, was deployt ist, die Aufgabennamen und Gruppen aus den Modellen, die Personen aus dem Verzeichnis — ein Ordner kann also gar nicht auf etwas gebaut werden, das es nicht gibt. Darunter zeigt Atlas den Ausdruck, der aus Ihrer Auswahl entsteht, und wie viele Aufgaben gerade passen. Gezählt wird über alle offenen Aufgaben, nicht nur über die Seite auf dem Bildschirm, und ein Ordner lässt sich mit dem Team teilen — ändern darf ihn nur, wem er gehört."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Tasks"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Tasks › Inbox and click ＋ Neuer Ordner in the sidebar.",
+          "Give the folder a name, then pick a field, an operator and a value — for example Prozess · ist · your process.",
+          "Watch the match count and the generated expression below the conditions while you change them.",
+          "Save. The folder appears in the sidebar with its own count, and you can reopen it later in the same listboxes."
+        ],
+        "de": [
+          "Öffnen Sie Tasks › Inbox und klicken Sie in der Seitenleiste auf ＋ Neuer Ordner.",
+          "Geben Sie dem Ordner einen Namen und wählen Sie Feld, Operator und Wert — zum Beispiel Prozess · ist · Ihr Prozess.",
+          "Beobachten Sie beim Ändern die Trefferzahl und den erzeugten Ausdruck unter den Bedingungen.",
+          "Speichern. Der Ordner steht mit eigener Zahl in der Seitenleiste und lässt sich später wieder mit denselben Listen öffnen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the inbox",
+          "de": "Zum Posteingang"
+        },
+        "route": "#/tasks"
+      }
+    },
+    {
+      "id": "the-console-speaks-german-on-the-screens-that-have-been-tran",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The console has started speaking German",
+        "de": "Die Konsole spricht Deutsch"
+      },
+      "summary": {
+        "en": "Atlas's interface was English everywhere. The task folders are the first screen with a real message catalogue behind it, and German is what it shows by default — because the people working through the inbox are not the people deploying the models, and their processes and forms are German already. The rest of the console follows screen by screen rather than in one sweep, so nothing is half-translated on the way. If you would rather read English, add ?lang=en to the URL once and it is remembered.",
+        "de": "Die Oberfläche von Atlas war durchgehend englisch. Die Aufgaben-Ordner sind die erste Ansicht mit einem echten Textkatalog dahinter, und die zeigt standardmässig Deutsch — weil die Menschen, die den Posteingang abarbeiten, nicht dieselben sind, die Modelle deployen, und deren Prozesse und Formulare längst deutsch sind. Der Rest der Konsole folgt Ansicht für Ansicht statt in einem Rutsch, damit unterwegs nichts halb übersetzt dasteht. Wer lieber Englisch liest, hängt einmal ?lang=en an die URL — die Wahl wird gemerkt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Console"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the inbox",
+          "de": "Zum Posteingang"
+        },
+        "route": "#/tasks"
+      }
+    },
+    {
+      "id": "every-task-row-shows-its-key",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Every task in the list now shows its number",
+        "de": "Jede Aufgabe in der Liste zeigt ihre Nummer"
+      },
+      "summary": {
+        "en": "A queue of a dozen tasks that all carry the same name was unreadable: nothing on the row told them apart, so there was no way to say which one you meant to a colleague, or to see that the one you just finished is gone. Each row now carries its own number — the same one the link to that task uses. The lane moved off the row to make space for it; it is on the task's detail pane, with its full path.",
+        "de": "Eine Warteschlange aus einem Dutzend gleich benannter Aufgaben war nicht lesbar: Nichts an der Zeile unterschied sie, also liess sich weder einer Kollegin sagen, welche man meint, noch sehen, dass die gerade erledigte weg ist. Jede Zeile trägt jetzt ihre eigene Nummer — dieselbe, die auch der Link auf diese Aufgabe verwendet. Die Lane ist dafür aus der Zeile gewichen; sie steht im Detailbereich der Aufgabe, mit vollem Pfad."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Tasks"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the inbox",
+          "de": "Zum Posteingang"
+        },
+        "route": "#/tasks"
+      }
+    },
+    {
       "id": "clicking-an-element-in-operations-lists-the-instances-sittin",
       "version": "Unreleased",
       "date": null,
@@ -279,70 +377,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "three-mechanisms-the-engine-has-always-had-now-have-an-examp",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Signal, escalation and compensation now have examples",
-        "de": "Signal, Eskalation und Kompensation haben jetzt Beispiele"
-      },
-      "summary": {
-        "en": "Three things the engine has always been able to do had no scenario showing what they are for. Now they do, each written for a small business or a private person and each running with no worker, no credential and no network. Chasing an unpaid invoice shows escalation beside a message on the same subprocess — the message interrupts because the dunning run is then moot, the escalation does not because the owner should still be asked. A price change that reaches every open quote shows a signal: a message hits exactly one case, a signal hits all of them and does not know how many. And a trip whose payment is declined shows compensation, taking the hotel and the flight back in reverse order. A fourth, organising a move, is simply Atlas doing a private person's Saturday.",
-        "de": "Drei Dinge, die die Engine seit jeher kann, hatten kein Szenario, das zeigt wofür. Jetzt haben sie eines — je für einen Kleinbetrieb oder eine Privatperson geschrieben, und alle laufen ohne Worker, ohne Zugangsdaten und ohne Netz. Das Mahnen einer offenen Rechnung zeigt die Eskalation neben einer Nachricht am selben Teilprozess: Die Nachricht unterbricht, weil der Mahnlauf dann gegenstandslos ist, die Eskalation nicht, weil der Inhaber trotzdem gefragt werden soll. Eine Preisänderung, die jede offene Offerte erreicht, zeigt das Signal: Eine Nachricht trifft genau einen Fall, ein Signal trifft alle und weiss nicht, wie viele. Und eine Reise, deren Zahlung abgelehnt wird, zeigt die Kompensation, die Hotel und Flug in umgekehrter Reihenfolge zurücknimmt. Ein viertes, ein Umzug, ist schlicht Atlas am Samstag einer Privatperson."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Examples"
-      ]
-    },
-    {
-      "id": "the-handbook-now-shows-every-example-atlas-ships-and-what-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Every example Atlas ships now has a page in the handbook",
-        "de": "Jedes mitgelieferte Beispiel hat jetzt eine Seite im Handbuch"
-      },
-      "summary": {
-        "en": "Atlas ships thirty finished scenarios — a shopping cart that computes a total, an exam with a hard deadline, a CSV checked row by row, a Google Form whose every new row becomes a case — and the handbook showed two of them. The new Beispiele chapter describes all thirty in German and English, on two levels at once: what the scenario is for, and how it is built. Every card draws the real diagram and installs the real thing into your instance in one click; nine of them then start with one more click and run with no worker configured at all. Beside it, a runbook per worker type for the part that happens outside Atlas — the Google service account and the sharing step people forget, the two Entra permissions that cover a joiner/mover/leaver flow, the Jira token — each with the symptom that tells you what is missing.",
-        "de": "Atlas liefert dreissig fertige Szenarien mit — einen Warenkorb, der eine Summe rechnet, eine Prüfung mit hartem Zeitlimit, eine CSV, die Zeile für Zeile geprüft wird, ein Google-Formular, dessen jede neue Zeile ein Vorgang wird — und das Handbuch zeigte zwei davon. Das neue Kapitel «Beispiele» beschreibt alle dreissig auf Deutsch und Englisch, auf zwei Ebenen zugleich: wofür das Szenario gut ist, und wie es gebaut ist. Jede Karte zeichnet das echte Diagramm und installiert das Echte mit einem Klick in Ihre Instanz; neun davon starten mit einem weiteren Klick und laufen ganz ohne konfigurierten Worker. Daneben steht je Worker-Typ ein Runbook für den Teil, der ausserhalb von Atlas passiert — das Google-Dienstkonto und der Freigabeschritt, den alle vergessen, die zwei Entra-Berechtigungen für einen Eintritts-/Wechsel-/Austrittsprozess, das Jira-Token — jeweils mit dem Fehlerbild, an dem Sie erkennen, was fehlt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Handbook",
-        "Examples"
-      ]
-    },
-    {
-      "id": "the-handbook-blamed-itself-for-a-diagram-the-reader-was-simp",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A missing diagram in the handbook now says why it is missing",
-        "de": "Ein fehlendes Diagramm im Handbuch sagt jetzt, warum es fehlt"
-      },
-      "summary": {
-        "en": "The recipes in the handbook keep their models free of drawing coordinates so the XML on the card stays readable, and let the server work the picture out instead. That service asks for the modeler role, while the handbook is open to everyone — so a reader who had not signed in saw no diagram on any of the 28 cards, under a note claiming Atlas could not lay the pattern out yet. It could; it was the request that was turned away. The note now tells the three cases apart: sign in, with a link that takes you there; a session that does not hold the modeler role; and a real limit of the layout, which is the only one of the three that is about the model at all.",
-        "de": "Die Rezepte im Handbuch halten ihre Modelle frei von Zeichenkoordinaten, damit das XML auf der Karte lesbar bleibt, und lassen das Bild stattdessen vom Server rechnen. Dieser Dienst verlangt die Rolle modeler, das Handbuch steht aber allen offen — wer nicht angemeldet war, sah deshalb auf keiner der 28 Karten ein Diagramm, unter einem Hinweis, Atlas könne das Muster noch nicht layouten. Konnte es sehr wohl; abgewiesen wurde die Anfrage. Der Hinweis unterscheidet jetzt die drei Fälle: anmelden, mit einem Link dorthin; eine Sitzung ohne die Rolle modeler; und eine echte Grenze des Layouts — als einziger der drei Fälle einer, bei dem es um das Modell geht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Handbook"
-      ]
     }
   ]
 }
