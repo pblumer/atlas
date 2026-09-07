@@ -73,7 +73,7 @@ Group.ReadWrite.All.</bpmn:documentation>
 
     <bpmn:startEvent id="start" name="Onboarding beantragt">
       <bpmn:extensionElements>
-        <zeebe:formDefinition formId="onb-start"/>
+        <zeebe:formDefinition formId="eonb-start"/>
       </bpmn:extensionElements>
       <bpmn:outgoing>f_start_vorschlag</bpmn:outgoing>
     </bpmn:startEvent>
@@ -102,7 +102,7 @@ endet, geht zur Freigabe. Der Default-Pfad (jeder andere UPN) fuehrt direkt zum 
     <bpmn:userTask id="freigabe" name="Onboarding freigeben">
       <bpmn:extensionElements>
         <zeebe:assignmentDefinition candidateGroups="entra-onboarding"/>
-        <zeebe:formDefinition formId="onb-freigabe"/>
+        <zeebe:formDefinition formId="eonb-freigabe"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f_test_ok</bpmn:incoming>
       <bpmn:outgoing>f_freigabe_gw</bpmn:outgoing>

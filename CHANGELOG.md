@@ -12,6 +12,46 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The handbook now shows every example Atlas ships, and what it takes to run one.**
+  Twenty-six scenarios live under `examples/` — a shopping cart that computes a total in
+  FEEL, an exam with a hard deadline, a CSV checked row by row, a directory recertified
+  against the HR system, a Google Form whose every new row becomes a case. The handbook
+  showed two of them. `examples/README.md`, the only overview there was, is written for
+  developers, is half in English, and was missing five examples entirely, because nothing
+  checked.
+
+  The new **Beispiele** chapter describes all of them in both languages and on two levels
+  at once: what the scenario is *for* — who has the problem, what they get out of it — and
+  how it is *built*, down to the trap the reader is about to walk into (`query-one`
+  returns null and fails on two hits; a Sheets cell is text, so comparing it with a number
+  is `null` in FEEL; a Jira user search without the browse permission finds nobody
+  *without failing*). Each card renders the real diagram, and installs the real artifacts —
+  application, decision, forms, processes, publish — into the reader's own instance in one
+  click. Ten of them then start with one more click and run to an end event with no worker
+  configured at all.
+
+  Alongside it, **Worker in Betrieb nehmen**: a runbook per worker type for the half that
+  happens outside Atlas and is where commissioning actually fails. The Google service
+  account and the sharing step without which a document you have open in front of you
+  answers 403; the Entra app registration with the two application permissions that cover
+  a joiner/mover/leaver flow and the one to remove if it is there; the Atlassian API token
+  and the global permission an assignment needs; the AD service account that should be
+  delegated on an OU rather than made a domain admin; the SQL user that should be granted
+  on views. With, for each, the symptom that tells you what is missing — a parked token
+  with no incident is a worker that is not running, an empty search result is usually a
+  permission.
+
+  The models are not copied into the page. They travel as one generated asset,
+  `api/web/examples-catalog.json`, which `go test ./examples -update` builds from the
+  files; a plain run fails when the served catalogue has drifted from them, when an
+  example has no card, when a card names an example that does not exist, or when two
+  examples would ship the same form id and installing the second would silently overwrite
+  the first one's form. That last one was not hypothetical: `onboarding` and
+  `entra-onboarding-selfservice` both shipped a form called `onb-start`, and the
+  self-service pair is now `eonb-start`/`eonb-freigabe`.
+
 ### Fixed
 
 - **The class canvas could not take hold of more than one class at a time.**

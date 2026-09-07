@@ -8,7 +8,7 @@ die eigentlichen privilegierten Mutationen (Konto anlegen/sperren) bleiben bewus
 Admin-Handlungen.
 
 Diese Beispiele sind der erste Insasse des **geschützten System-Projekts** aus
-[ADR-0122](../../docs/adr/0119-protected-system-project-and-bootstrap-deployment.md):
+[ADR-0122](../../docs/adr/0122-protected-system-project-and-bootstrap-deployment.md):
 eigene Plattform-Prozesse, die mit der Installation kommen und nicht wie normale
 Nutzer-Inhalte editier-/löschbar sind.
 
