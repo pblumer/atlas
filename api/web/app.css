@@ -2975,6 +2975,24 @@ tr[hidden] { display: none; }
    it reads as part of the form. The canvas already carries one for the page. */
 .startform-host .fjs-powered-by { display: none; }
 
+/* "Generate this form" (ADR-draft-ai-form-generation). A brief, the process it belongs
+   to, and one button. Wider than a confirm dialog because the brief is prose: a
+   three-line box invites three words, and three words is not a brief. */
+.fg-modal { width: min(560px, 100%); }
+.fg-modal .field textarea,
+.fg-modal .field select {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 5px;
+  padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px;
+  font: inherit; color: var(--text); background: var(--surface);
+}
+.fg-modal .field textarea { resize: vertical; min-height: 88px; }
+.fg-modal .field textarea:focus,
+.fg-modal .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+/* The optional-but-worth-it note on the process picker: the same size as the label it
+   qualifies, not a second voice. */
+.fg-modal .field > span em { font-style: normal; opacity: 0.75; }
+.fg-modal .modal-foot { gap: 16px; }
+
 .share-sec { margin-top: 16px; }
 .share-sec .mlabel { margin: 0 0 8px; font-weight: 600; color: var(--text); font-size: 13px; }
 .muted.small, p.small, .small { font-size: 12px; }

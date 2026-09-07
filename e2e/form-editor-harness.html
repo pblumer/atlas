@@ -74,6 +74,45 @@
         };
         return mountFormEditor(view, { api, toast: noop, formId: "form-mtjs4" });
       };
+      // Reached by pressing "Create a new form" on a step in the Modeler: the router
+      // hands mountFormEditor a generateFor, and the generator must already be open —
+      // that click was the author saying what the form is for, and asking them to press
+      // a second button to say it again is the thing this avoids.
+      const GEN_XML = `<?xml version="1.0"?>
+        <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">
+          <bpmn:process id="urlaubsantrag" name="Urlaubsantrag">
+            <bpmn:userTask id="Task_Melden" name="Abwesenheit melden" />
+          </bpmn:process>
+        </bpmn:definitions>`;
+      window.__generated = null;
+      function generatingApi(workers) {
+        return async (method, url, body) => {
+          if (method === "GET" && url === "/api/v1/forms/generate/workers") {
+            return { available: workers.length > 0, workers };
+          }
+          if (method === "GET" && url === "/api/v1/drafts") {
+            return [{ processId: "urlaubsantrag", name: "Urlaubsantrag" }];
+          }
+          if (method === "GET" && url === "/api/v1/processes") return [];
+          if (method === "GET" && url.endsWith("/xml")) return GEN_XML;
+          if (method === "POST" && url === "/api/v1/forms/generate") {
+            window.__generated = JSON.parse(JSON.stringify(body));
+            return {
+              schema: { type: "default", id: body.formId, components: [{ type: "textfield", key: "grund", label: "Grund" }] },
+              worker: "haus", model: "claude-opus-5",
+            };
+          }
+          if (/\/forms\/[^/]+\/availability$/.test(url)) return { id: "x", available: true };
+          if (url.endsWith("/projects") || url.endsWith("/applications")) return [];
+          return {};
+        };
+      }
+      window.__mountGenerate = (workers = [{ name: "haus", model: "claude-opus-5" }]) =>
+        mountFormEditor(view, {
+          api: generatingApi(workers), toast: noop,
+          generateFor: { processId: "urlaubsantrag", elementId: "Task_Melden" },
+        });
+
       window.__save = () => document.getElementById("form-save").click();
       window.__cleanup = cleanup; // stands in for the navigation teardown (route → __atlasCleanup)
       window.__ready = true;

@@ -316,3 +316,35 @@ func TestARoundPutsWhatTheProcessKnowsToTheModel(t *testing.T) {
 		}
 	}
 }
+
+// A caller that is not a running process says so itself. Both standing system prompts
+// open by telling the model it is "one step inside a running business process", which is
+// true of every caller this package had until design-time form generation
+// (ADR-draft-ai-form-generation) — and a model told it is inside a process it is not
+// inside answers as if it were, asking for the case it is working on. Request.System
+// replaces that sentence and nothing else about the call.
+func TestAStatedSystemPromptReplacesTheStandingOne(t *testing.T) {
+	srv, seen, _ := endpoint(t, http.StatusOK, `{"stop_reason":"end_turn","content":[{"type":"text","text":"{}"}]}`)
+	m := &agent.HTTPModel{Endpoint: srv.URL, APIKey: "k", Client: srv.Client()}
+
+	const own = "You design forms. Answer with one JSON document and nothing else."
+	if _, err := m.Decide(context.Background(), agent.Request{Goal: "Ein Urlaubsantrag", System: own, Round: 1}); err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	got := (*seen)[0]
+	if got.System != own {
+		t.Errorf("system = %q, want the caller's own prompt verbatim", got.System)
+	}
+	if got.Messages[0].Content != "Ein Urlaubsantrag" {
+		t.Errorf("message = %q, want the goal unchanged by the override", got.Messages[0].Content)
+	}
+
+	// Stating none still gets the standing prompt: this is an override, not a
+	// requirement every caller now has to meet.
+	if _, err := m.Decide(context.Background(), agent.Request{Goal: "Klassifiziere", Round: 1}); err != nil {
+		t.Fatalf("Decide (no override): %v", err)
+	}
+	if !strings.Contains((*seen)[1].System, "running business process") {
+		t.Errorf("a request that states no system prompt lost the standing one:\n%s", (*seen)[1].System)
+	}
+}

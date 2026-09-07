@@ -1915,6 +1915,33 @@ function startFormId(modeler) {
   } catch { return ""; }
 }
 
+// owningProcessId walks up to the <bpmn:process> an element belongs to. Up rather than
+// at the canvas root, because both cases that matter are not the root: an element inside
+// a subprocess belongs to the process containing it, and a collaboration's root is the
+// collaboration, not any one of its pools.
+function owningProcessId(bo) {
+  for (let p = bo; p; p = p.$parent) {
+    if (/:Process$/.test(p.$type || "") && p.id) return p.id;
+  }
+  return "";
+}
+
+// newFormHref is the "Create a new form" link, carrying where it was pressed from
+// (ADR-draft-ai-form-generation). Pressing it on a step is the author saying what the
+// form is for, and the form editor's generator opens on exactly that: the process and
+// the step for a user task, the process alone for a start event — which is the
+// start-form case, where the form is for starting the process rather than for a step
+// inside it.
+//
+// A diagram whose element belongs to no identifiable process still gets the plain link:
+// a new form is a new form, and the generator simply opens with nothing preselected.
+function newFormHref(bo, forThisStep) {
+  const pid = owningProcessId(bo);
+  if (!pid) return "#/modeler/form/new";
+  const href = "#/modeler/form/new/for/" + encodeURIComponent(pid);
+  return forThisStep && bo.id ? href + "/" + encodeURIComponent(bo.id) : href;
+}
+
 // ensureFormFields fetches the schema of each not-yet-cached form id, records its
 // field keys, then calls onLoaded so the caller can re-render with the new
 // variables. Each form is requested once (its cache slot is reserved as null while
@@ -4595,6 +4622,13 @@ const REPAIR_FORM_TYPES = new Set(["bpmn:ServiceTask", "bpmn:SendTask", "bpmn:Bu
 // is identical (zeebe:formDefinition), only the element carrying it differs, which is
 // exactly what makes one the work form and the other the repair form. An element is one
 // type, so the two branches never both render and the id is never duplicated.
+//
+// Its "Create a new form" link is deliberately the plain one, where the work-form and
+// start-form links carry their step into the generator (newFormHref): a repair form is
+// neither of the two things the generator writes. It is the subset of a parked
+// instance's variables an operator corrects to get the task moving, and opening the
+// generator on this task would frame it as the task's work form — the very confusion
+// the paragraph below exists to prevent.
 function repairFormHTML(bo) {
   if (!REPAIR_FORM_TYPES.has(bo.$type)) return "";
   const fd = findExt(bo, "zeebe:FormDefinition") || {};
@@ -6279,7 +6313,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
             <p class="muted" style="font-size:12px">The form the Tasks app renders for this task, submitted as its variables.
-              <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
+              <a href="${newFormHref(bo, true)}" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
             <h3>Assignment</h3>
             <label class="field"><span>Assignee</span>
               <textarea id="f-assignee" rows="1" spellcheck="false" placeholder="editor">${esc(a.assignee || "")}</textarea></label>
@@ -6571,7 +6605,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
             <p class="muted" style="font-size:12px">Shown before the process starts — from the Tasks app's <b>Start</b> view — its data becomes the instance's start variables.
-              <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
+              <a href="${newFormHref(bo, false)}" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
             <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> start event instead.</p>`;
         }
       } else if (bo.$type === "bpmn:EventBasedGateway") {
