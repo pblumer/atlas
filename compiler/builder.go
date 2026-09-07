@@ -377,6 +377,18 @@ const AgentJobType = "io.atlas.ai.agent"
 // every compiled process: NewBuilder reserves it twenty-eighth, so it is always 27.
 const AgentJobTypeIndex int32 = 27
 
+// AiTaskJobType is the reserved job type an AI task carries: one call to a language
+// model, one answer into one variable, no tools and no rounds (ADR-0256). It sits beside
+// AgentJobType rather than inside it because the two are different shapes — a step
+// that asks a question once, and a container whose model chooses what runs — and two
+// shapes that never have to be told apart by looking inside a payload are worth an
+// index. One kind serving several job types is clio's shape already.
+const AiTaskJobType = "io.atlas.ai.task"
+
+// AiTaskJobTypeIndex is the interned index AiTaskJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it twenty-ninth, so it is always 28.
+const AiTaskJobTypeIndex int32 = 28
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -412,6 +424,7 @@ var reservedJobTypes = []string{
 	JiraJobType,          // 25
 	GoogleSheetsJobType,  // 26
 	AgentJobType,         // 27
+	AiTaskJobType,        // 28
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1939,6 +1952,56 @@ func (b *Builder) AddGoogleSheetsConnectorTask(cfg GoogleSheetsConfig) int32 {
 		SheetsInput:   b.intern(cfg.Input),
 		SheetsHeader:  cfg.Header,
 		Retries:       cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// AgentTaskConfig is the deploy-time configuration of an AI task (ADR-0256): one call to
+// a language model, one answer into one variable. Worker names the agent Worker an
+// operator
+// configured — the endpoint, the credential and the wire format are its business and
+// never enter the model (ADR-0041/0069/0168). Model names the language model to ask and
+// may be empty, in which case the Worker's configured model is what runs. Prompt is the
+// question, a literal-or-FEEL value evaluated over the variables the task sees at call
+// time, and ResultVar is where the answer lands.
+type AgentTaskConfig struct {
+	Worker    string
+	Model     string
+	Prompt    RestExpr
+	ResultVar string
+	Retries   int32
+}
+
+// AddAgentConnectorTask adds an AI task and returns its element id. Like every other
+// connector task it creates a job on activation and waits; the job carries the reserved
+// AiTaskJobType, which nothing in the engine subscribes to — the kind is worker-only
+// (ADR-0164), so the job waits for the Worker Instance holding the provider's credential,
+// which asks the model once and completes the job with the answer as a variable.
+//
+// It is deliberately not AgentJobType. That job type is a *round* on an ad-hoc container,
+// whose completion carries tool calls the engine turns into activations (ADR-0253/0254);
+// this one's completion is variables, so the ordinary job handler serves it. Telling the
+// two apart by an index rather than by looking inside a payload is the point.
+//
+// A task naming no model interns to -1, which the builder's own interner already does
+// for the empty string — and -1 is the answer "ask whatever the Worker is configured
+// for", not "ask the model called empty string". They are different questions and only
+// one of them is one anyone asked.
+func (b *Builder) AddAgentConnectorTask(cfg AgentTaskConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:     b.intern(AiTaskJobType),
+		Connector:   b.intern(cfg.Worker),
+		Subject:     -1, // not a clio task
+		EventType:   -1,
+		ClioQuery:   -1,
+		ReduceSpec:  -1,
+		Method:      -1, // not a REST task
+		Auth:        -1, // the provider's credential lives on the Worker
+		ResultVar:   b.intern(cfg.ResultVar),
+		AgentModel:  b.intern(cfg.Model),
+		AgentPrompt: cfg.Prompt,
+		Retries:     cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

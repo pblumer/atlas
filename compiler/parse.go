@@ -1662,16 +1662,32 @@ type xmlAdHocSubProcess struct {
 	xmlFlowContent
 }
 
-// An agent-driven ad-hoc's configuration, carried on the container as an
-// <atlas:agentConnector> extension (ADR-0253).
-// connector names the configured agent Worker (ADR-0203); the credential it resolves lives in
-// the vault, never in the model (ADR-0041/0069). resultCollection and resultElement are where a
-// tool call's result is appended — the multi-instance outputCollection/outputElement pair
-// (ADR-0077) — with resultElement a FEEL expression over the finished activity's scope.
+// An agent's configuration, carried as an <atlas:agentConnector> extension. It has two
+// hosts and means a different thing on each (ADR-0256):
+//
+//   - on an ad-hoc subprocess it makes the container agent-driven (ADR-0253), and
+//     resultCollection/resultElement say where a tool call's result is appended — the
+//     multi-instance outputCollection/outputElement pair (ADR-0077), with resultElement a
+//     FEEL expression over the finished activity's scope;
+//   - on a service task it is one call to the model: prompt asks, resultVariable receives
+//     the answer, and there is no toolbox, because a step with tools *is* the container.
+//
+// connector names the configured agent Worker (ADR-0203) on both; the credential it
+// resolves lives in the vault, never in the model (ADR-0041/0069). model names the language
+// model to ask and is optional on both — a Worker's configured model is the default a task
+// inherits when it names none, so a process can use a small model for a classification and a
+// strong one for the advice beside it against one Worker and one key.
+//
+// A field belonging to the other host is refused rather than ignored: an element that means
+// two things has to say which one it was given.
 type xmlAgentConnector struct {
 	Connector        string `xml:"connector,attr"`
+	Model            string `xml:"model,attr"`
 	ResultCollection string `xml:"resultCollection,attr"`
 	ResultElement    string `xml:"resultElement,attr"`
+	Prompt           string `xml:"prompt,attr"`
+	ResultVariable   string `xml:"resultVariable,attr"`
+	Retries          string `xml:"retries,attr"`
 }
 
 // One <atlas:agentParam> on a contained activity: a value the model must supply when it calls
@@ -2192,6 +2208,11 @@ type xmlServiceTask struct {
 	// GoogleSheets, when present, marks this service task a Google Sheets task: one
 	// spreadsheet operation against a Worker an operator configured.
 	GoogleSheets *xmlGoogleSheetsConnector `xml:"extensionElements>googleSheetsConnector"`
+	// Agent, when present, marks this service task an AI task: one call to a language
+	// model, one answer into one variable (ADR-0256). It is the same extension element an
+	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
+	// than the toolbox's result collection.
+	Agent *xmlAgentConnector `xml:"extensionElements>agentConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
 	// absent.
