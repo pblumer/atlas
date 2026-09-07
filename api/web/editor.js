@@ -8718,12 +8718,31 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // renderer has to remember would blink back the moment the next runtime arrives. The
   // legend's own samples stay lit whatever the diagram shows — they are the switch, not
   // a reading of it, and the pressed state says which way it is thrown.
+  //
+  // Each switch is remembered in the browser (localStorage), like this view's variables
+  // panel beside it: which counts you read is about how *you* read a diagram, not about
+  // this process — so a reload, a version switch or the next definition should not put
+  // back the numbers you just took off. It is applied before the first poll, so a count
+  // switched off stays off rather than flashing on once. Reads and writes are guarded
+  // because a browser with site data blocked throws on the very first `localStorage`
+  // touch, and this one happens before the diagram is imported: unguarded, it would cost
+  // that browser the whole view to remember a preference. There it simply starts on.
+  const badgeKey = (kind) => `atlas.live.badge.${kind}`;
+  const badgeShown = (kind) => {
+    try { return localStorage.getItem(badgeKey(kind)) !== "0"; } catch { return true; }
+  };
   const canvasBox = root.querySelector("#canvas");
   for (const toggle of root.querySelectorAll(".legend-toggle[data-badge]")) {
+    const kind = toggle.dataset.badge;
+    const apply = (on) => {
+      toggle.setAttribute("aria-pressed", String(on));
+      canvasBox.classList.toggle(`badges-hide-${kind}`, !on);
+    };
+    apply(badgeShown(kind));
     toggle.addEventListener("click", () => {
       const on = toggle.getAttribute("aria-pressed") !== "true";
-      toggle.setAttribute("aria-pressed", String(on));
-      canvasBox.classList.toggle(`badges-hide-${toggle.dataset.badge}`, !on);
+      apply(on);
+      try { localStorage.setItem(badgeKey(kind), on ? "1" : "0"); } catch { /* not storable */ }
     });
   }
 

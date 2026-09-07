@@ -9,6 +9,9 @@
 // here: the switches are independent of one another, and a count stays switched off
 // across the 1.5s poll that rebuilds every overlay from scratch.
 //
+// A switch is also remembered per browser, so the third thing asserted here is that a
+// reload — and a remount onto another definition — comes back the way it was left.
+//
 // It drives the event-gateway harness because that one diagram carries all three colours
 // at once: the gateway holds a gray and a green count, the losing branch an amber one.
 import { test, expect } from "@playwright/test";
@@ -94,5 +97,43 @@ test("the legend keeps its own samples, and says which way each switch is thrown
   await expect(page.locator(".problems")).toContainText("completed here and moved on");
   await expect(page.locator(".problems")).toContainText("cancelled here");
   await expect(page.locator(".problems")).toContainText("tokens here now");
+  expect(page.__errors).toEqual([]);
+});
+
+test("the switches come back the way they were left, after a reload", async ({ page }) => {
+  await open(page);
+  await toggle(page, "passed").click();
+  await toggle(page, "live").click();
+  await expect(badges(page, "gw", ".history")).toBeHidden();
+
+  // Reload and mount again, as an operator refreshing the view: which counts you read is
+  // about how you read a diagram, so it is not a choice to make twice.
+  await open(page);
+  await expect(toggle(page, "passed")).toHaveAttribute("aria-pressed", "false");
+  await expect(toggle(page, "live")).toHaveAttribute("aria-pressed", "false");
+  await expect(toggle(page, "cancelled")).toHaveAttribute("aria-pressed", "true");
+  await expect(badges(page, "gw", ".history")).toBeHidden();
+  await expect(green(page, "gw")).toBeHidden();
+  await expect(badges(page, "timeout", ".cancelled")).toBeVisible();
+
+  // And switching one back on is remembered just as well as switching it off.
+  await toggle(page, "passed").click();
+  await open(page);
+  await expect(badges(page, "gw", ".history")).toBeVisible();
+  await expect(green(page, "gw")).toBeHidden();
+  expect(page.__errors).toEqual([]);
+});
+
+test("the choice follows the operator to the next definition", async ({ page }) => {
+  await open(page);
+  await toggle(page, "live").click();
+
+  // Mounting another deployed definition is what a version switch does. The preference is
+  // about reading diagrams, not about the process being read, so it survives the remount
+  // — and it is applied before the first poll draws, not after it.
+  await page.evaluate(() => window.__mountPlain());
+  await expect(page.locator('.legend-toggle[data-badge="live"]')).toHaveAttribute("aria-pressed", "false");
+  await expect(badges(page, "p_start", ".history")).toBeVisible();
+  await expect(green(page, "p_task")).toBeHidden();
   expect(page.__errors).toEqual([]);
 });
