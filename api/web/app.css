@@ -1181,6 +1181,14 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    event-based gateway, an activity a boundary event interrupted, a scope torn down. Amber,
    not the incident red: nothing here is broken or waiting for an operator. */
 .token-badge.cancelled { background: var(--warn); }
+/* Each of the three counts can be switched off from the legend (see mountLive). The class
+   lands on the canvas, so the poll that rebuilds the overlays cannot undo it, and the
+   legend — which lives outside the canvas — keeps showing all three samples: they are the
+   switches. The live badge carries no modifier of its own, so it is the one that is
+   neither gray nor amber. */
+.badges-hide-passed .token-badge.history,
+.badges-hide-cancelled .token-badge.cancelled,
+.badges-hide-live .token-badge:not(.history):not(.cancelled) { display: none; }
 /* An element whose token is parked behind an incident (ADR-0061) is drawn red over
    its live-token green, and carries a badge with the reason. Without it a stuck task
    is pixel-identical to one that is legitimately waiting, which is exactly how a
@@ -1326,6 +1334,19 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .legend-swatch.history { border-top: 2px dashed var(--muted); }
 .legend-swatch.armed { border-top: 2.5px dashed var(--ok); }
 .legend-swatch.incident { border-top-color: var(--danger); }
+
+/* A legend entry that is also a switch: the Live view's three count badges turn their own
+   number on the diagram off and on. It has to read as part of the legend line rather than
+   as a button — hence the bar's own type and colour, and no chrome until the pointer is
+   on it — and to say which way it is thrown: dimmed while its count is hidden. */
+.legend-toggle {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 0; background: none; padding: 1px 4px; margin: 0;
+  font: inherit; color: inherit; line-height: inherit; cursor: pointer; border-radius: 4px;
+}
+.legend-toggle:hover { background: var(--surface); color: var(--text); }
+.legend-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.legend-toggle[aria-pressed="false"] { opacity: 0.4; }
 
 /* The incident block that leads the live variables panel: what is parked, why, and
    the resolve. Red-on-red so it reads as a problem at a glance, and never collapses
