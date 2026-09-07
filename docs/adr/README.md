@@ -315,6 +315,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0259](0259-data-object-lifecycle.md) | The data object lifecycle — what the BPMN data state resolves against | Proposed |
 | [0260](0260-ai-form-generation.md) | A form is generated at design time, by the Worker an operator already configured | Proposed |
 | [0261](0261-instances-on-an-element.md) | The diagram is the query — filtering instances by the element they sit on | Proposed |
+| [0262](0262-discord-inbound-watch.md) | Discord as an inbound event source — a channel is a log, and a snowflake is its sequence | Proposed |
 
 ## Status values
 

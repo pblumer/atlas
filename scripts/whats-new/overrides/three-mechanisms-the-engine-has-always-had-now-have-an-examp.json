@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Examples"
+  ],
+  "title": {
+    "en": "Signal, escalation and compensation now have examples",
+    "de": "Signal, Eskalation und Kompensation haben jetzt Beispiele"
+  },
+  "summary": {
+    "en": "Three things the engine has always been able to do had no scenario showing what they are for. Now they do, each written for a small business or a private person and each running with no worker, no credential and no network. Chasing an unpaid invoice shows escalation beside a message on the same subprocess — the message interrupts because the dunning run is then moot, the escalation does not because the owner should still be asked. A price change that reaches every open quote shows a signal: a message hits exactly one case, a signal hits all of them and does not know how many. And a trip whose payment is declined shows compensation, taking the hotel and the flight back in reverse order. A fourth, organising a move, is simply Atlas doing a private person's Saturday.",
+    "de": "Drei Dinge, die die Engine seit jeher kann, hatten kein Szenario, das zeigt wofür. Jetzt haben sie eines — je für einen Kleinbetrieb oder eine Privatperson geschrieben, und alle laufen ohne Worker, ohne Zugangsdaten und ohne Netz. Das Mahnen einer offenen Rechnung zeigt die Eskalation neben einer Nachricht am selben Teilprozess: Die Nachricht unterbricht, weil der Mahnlauf dann gegenstandslos ist, die Eskalation nicht, weil der Inhaber trotzdem gefragt werden soll. Eine Preisänderung, die jede offene Offerte erreicht, zeigt das Signal: Eine Nachricht trifft genau einen Fall, ein Signal trifft alle und weiss nicht, wie viele. Und eine Reise, deren Zahlung abgelehnt wird, zeigt die Kompensation, die Hotel und Flug in umgekehrter Reihenfolge zurücknimmt. Ein viertes, ein Umzug, ist schlicht Atlas am Samstag einer Privatperson."
+  }
+}

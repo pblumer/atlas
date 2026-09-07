@@ -112,7 +112,7 @@ func (s *Server) handleListMessageSources(w http.ResponseWriter, r *http.Request
 
 // describeInboundWatch renders one watch in the words of its own kind: a jira watch is
 // its JQL and the timestamp it follows, a clio one its subject and whether the subtree
-// counts. The kind comes from the worker record, which is the discriminator
+// counts, a discord one the channel it reads. The kind comes from the worker record, which is the discriminator
 // everywhere else too (see inboundSubscription).
 func describeInboundWatch(kind string, sub inboundSubscription) string {
 	if kind == connectorKindGoogleSheets {
@@ -130,6 +130,9 @@ func describeInboundWatch(kind string, sub inboundSubscription) string {
 			rng = sheetsDefaultRange
 		}
 		return fmt.Sprintf("new rows in spreadsheet %s (%s)", sub.SpreadsheetID, rng)
+	}
+	if kind == connectorKindDiscord {
+		return fmt.Sprintf("new messages in channel %s", sub.ChannelID)
 	}
 	if kind == connectorKindJira {
 		field := strings.TrimSpace(sub.CursorField)

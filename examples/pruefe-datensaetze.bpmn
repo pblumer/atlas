@@ -43,7 +43,10 @@
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
              xmlns:atlas="http://atlas/schema/1.0"
-             id="defs_pruefe_datensaetze" targetNamespace="http://atlas/examples">
+             id="defs_pruefe_datensaetze" targetNamespace="http://atlas/examples"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI">
   <process id="proc_pruefe_datensaetze" name="prüfe Datensätze" isExecutable="true">
 
     <startEvent id="start" name="Start"/>
@@ -105,10 +108,10 @@
       <sequenceFlow id="rf_start" sourceRef="row_start" targetRef="pruef_join"/>
       <sequenceFlow id="rf_join_check" sourceRef="pruef_join" targetRef="regelpruefung"/>
       <sequenceFlow id="rf_check_split" sourceRef="regelpruefung" targetRef="pruef_split"/>
-      <sequenceFlow id="rf_gueltig" sourceRef="pruef_split" targetRef="row_end">
+      <sequenceFlow id="rf_gueltig" name="gültig" sourceRef="pruef_split" targetRef="row_end">
         <conditionExpression>= verdict.valid</conditionExpression>
       </sequenceFlow>
-      <sequenceFlow id="rf_korrigieren" sourceRef="pruef_split" targetRef="korrigiere"/>
+      <sequenceFlow id="rf_korrigieren" name="ungültig" sourceRef="pruef_split" targetRef="korrigiere"/>
       <sequenceFlow id="rf_loop" sourceRef="korrigiere" targetRef="pruef_join"/>
     </subProcess>
 
@@ -119,4 +122,80 @@
     <sequenceFlow id="f_einlesen_pruefe" sourceRef="einlesen" targetRef="pruefe_datensatz"/>
     <sequenceFlow id="f_pruefe_end" sourceRef="pruefe_datensatz" targetRef="end"/>
   </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_pruefe_datensaetze">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="152" y="262" width="52" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_hochladen" bpmnElement="hochladen">
+        <dc:Bounds x="250" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_einlesen" bpmnElement="einlesen">
+        <dc:Bounds x="400" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="di_pruefe_datensatz" bpmnElement="pruefe_datensatz" isExpanded="true">
+        <dc:Bounds x="550" y="150" width="640" height="300"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_row_start" bpmnElement="row_start">
+        <dc:Bounds x="580" y="222" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_pruef_join" bpmnElement="pruef_join" isMarkerVisible="true">
+        <dc:Bounds x="650" y="215" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_regelpruefung" bpmnElement="regelpruefung">
+        <dc:Bounds x="740" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_pruef_split" bpmnElement="pruef_split" isMarkerVisible="true">
+        <dc:Bounds x="890" y="215" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="884" y="180" width="62" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_korrigiere" bpmnElement="korrigiere">
+        <dc:Bounds x="865" y="330" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_row_end" bpmnElement="row_end">
+        <dc:Bounds x="1090" y="222" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end">
+        <dc:Bounds x="1250" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1246" y="262" width="46" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_upload" bpmnElement="f_start_upload">
+        <di:waypoint x="196" y="240"/><di:waypoint x="250" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_upload_einlesen" bpmnElement="f_upload_einlesen">
+        <di:waypoint x="350" y="240"/><di:waypoint x="400" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_einlesen_pruefe" bpmnElement="f_einlesen_pruefe">
+        <di:waypoint x="500" y="240"/><di:waypoint x="550" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_rf_start" bpmnElement="rf_start">
+        <di:waypoint x="616" y="240"/><di:waypoint x="650" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_rf_join_check" bpmnElement="rf_join_check">
+        <di:waypoint x="700" y="240"/><di:waypoint x="740" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_rf_check_split" bpmnElement="rf_check_split">
+        <di:waypoint x="840" y="240"/><di:waypoint x="890" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_rf_gueltig" bpmnElement="rf_gueltig">
+        <di:waypoint x="940" y="240"/><di:waypoint x="1090" y="240"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="978" y="218" width="52" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_rf_korrigieren" bpmnElement="rf_korrigieren">
+        <di:waypoint x="915" y="265"/><di:waypoint x="915" y="330"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="923" y="288" width="80" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_rf_loop" bpmnElement="rf_loop">
+        <di:waypoint x="865" y="370"/><di:waypoint x="675" y="370"/><di:waypoint x="675" y="265"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_pruefe_end" bpmnElement="f_pruefe_end">
+        <di:waypoint x="1190" y="240"/><di:waypoint x="1250" y="240"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </definitions>

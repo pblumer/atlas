@@ -136,7 +136,7 @@ Backup and restore, including whole-instance snapshots ([ADR-0107](docs/adr/0107
 
 ## Try the examples
 
-[`examples/`](examples/) holds runnable models that double as showcases and as deterministic test scenarios — a self-completing order-fulfillment flow that exercises all three gateway kinds, an order-to-cash lifecycle that parks on human approval, CSV batch validation driven by a DMN table, an exam with a hard timer deadline, and a travel booking whose required forms are chosen by a decision table. [`examples/order-to-cash-app.html`](examples/order-to-cash-app.html) is a self-contained page you can open in a browser with no server at all.
+[`examples/`](examples/) holds runnable models that double as showcases and as deterministic test scenarios — a self-completing order-fulfillment flow that exercises all three gateway kinds, an order-to-cash lifecycle that parks on human approval, CSV batch validation driven by a DMN table, an exam with a hard timer deadline, and a travel booking whose required forms are chosen by a decision table. [`examples/order-to-cash-app.html`](examples/order-to-cash-app.html) is a self-contained page you can open in a browser with no server at all. Every one of them is described — in German and English, in business terms and technically — in the handbook's **Beispiele** chapter (`/handbuch.html#beispiele` on a running server), which renders each diagram and installs the example into your own instance in one click; the per-worker commissioning runbooks sit beside it under `#runbooks`.
 
 ## Documentation
 

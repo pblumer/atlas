@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Offene Rechnung mahnen — der Zahlungseingang, den ein kleiner Betrieb heute im
+  Kopf oder in einer Excel-Spalte führt.
+
+  Das Beispiel zu **Eskalation**: der einzigen der drei BPMN-Ereignisarten, die
+  einen Fall aus einem Teilprozess heraus nach oben meldet, ohne ihn abzubrechen.
+  Ein Fehler sagt „das ging schief", eine Nachricht kommt von aussen — eine
+  Eskalation sagt „hier drin komme ich nicht weiter, das gehört eine Ebene höher".
+  Genau das ist eine Mahnstufe, die nichts mehr bringt.
+
+    Start "Rechnung gestellt"
+      → Teilprozess "Zahlung überwachen"
+           Timer (= zahlungsfrist) → Mockup "Mahnung senden"
+             → Timer (= nachfrist) → Eskalation werfen → Ende
+        ├─ Boundary NACHRICHT "zahlung.eingegangen" (unterbrechend)
+        │     → Ende "Bezahlt"            der Normalfall: er bricht alles ab
+        └─ Boundary ESKALATION (nicht unterbrechend)
+              → User-Task "Wie weiter?"  → (X) → Ende "An Inkasso"
+                                              → Ende "Abgeschrieben"
+      → Ende "Frist ohne Zahlung"
+
+  Drei Entscheidungen, die den Unterschied machen:
+
+  * **Die Nachricht unterbricht, die Eskalation nicht.** Geht das Geld ein, ist
+    der ganze Mahnlauf gegenstandslos — der Teilprozess wird abgebrochen. Läuft
+    dagegen die Nachfrist ab, soll der Mahnlauf zu Ende laufen *und* der Inhaber
+    gefragt werden; deshalb cancelActivity="false". Wer hier unterbricht, verliert
+    den Rest des Laufs für einen Fall, der noch offen ist.
+  * **Der Teilprozess ist keine Kosmetik.** Eine Eskalation wird an der
+    umschliessenden Aktivität gefangen — ohne den Teilprozess gäbe es keine
+    Aktivität, an der die Boundary hängen könnte. Das ist der Grund, warum dieses
+    Muster immer aus zwei Ebenen besteht.
+  * **Die Fristen sind Startvariablen, keine Konstanten.** <timeDuration> nimmt
+    einen FEEL-Ausdruck (ADR-0055), also stehen "P10D" und "P20D" als Vorgabe im
+    Startformular und nicht im Diagramm. Zum Ausprobieren startet man mit
+    "PT20S" — derselbe Prozess, in zwanzig Sekunden statt zwanzig Tagen.
+
+  Der Mahn-Task ist ein Mockup (ADR-0120): das Beispiel läuft ohne Mailserver.
+  Scharf ersetzt man genau diesen einen Task durch einen Mail-Task — oder stellt
+  den Mail-Worker auf "Vorschau", dann landet die Mahnung im Postausgang.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_mahnwesen" targetNamespace="http://atlas/examples">
+
+  <message id="Msg_zahlung" name="zahlung.eingegangen">
+    <extensionElements>
+      <zeebe:subscription correlationKey="=rechnungsnummer"/>
+    </extensionElements>
+  </message>
+  <escalation id="Esc_frist" escalationCode="ZAHLUNGSZIEL_UEBERSCHRITTEN" name="Zahlungsziel überschritten"/>
+
+  <process id="proc_mahnwesen" name="Offene Rechnung mahnen" isExecutable="true">
+    <documentation>Überwacht den Zahlungseingang einer gestellten Rechnung: mahnt nach Ablauf der
+Zahlungsfrist einmal, und meldet nach der Nachfrist per Eskalation an den Inhaber, der über Inkasso oder
+Abschreibung entscheidet. Startvariablen: rechnungsnummer (Korrelationsschlüssel der Zahlungsmeldung),
+kunde, betrag, zahlungsfrist und nachfrist (ISO-8601-Dauern, Vorgabe P10D/P20D).</documentation>
+
+    <extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="rechnungsnummer" type="string" required="true" default="&quot;RE-2026-0042&quot;"/>
+        <atlas:startVariable name="kunde" type="string" required="true" default="&quot;Muster GmbH&quot;"/>
+        <atlas:startVariable name="betrag" type="number" required="true" default="1250"/>
+        <atlas:startVariable name="zahlungsfrist" type="string" required="false" default="&quot;P10D&quot;"/>
+        <atlas:startVariable name="nachfrist" type="string" required="false" default="&quot;P20D&quot;"/>
+      </atlas:startForm>
+    </extensionElements>
+
+    <startEvent id="start" name="Rechnung gestellt">
+      <documentation>Die Rechnung ist raus. Ab hier läuft die Uhr.</documentation>
+      <outgoing>f_start_sub</outgoing>
+    </startEvent>
+
+    <subProcess id="ueberwachen" name="Zahlung überwachen">
+      <documentation>Kapselt den Mahnlauf. Der Teilprozess existiert, damit die Eskalation aus ihm heraus
+an einer Boundary gefangen werden kann — ohne umschliessende Aktivität gibt es keine Eskalation.</documentation>
+      <incoming>f_start_sub</incoming>
+      <outgoing>f_sub_end</outgoing>
+
+      <startEvent id="sub_start">
+        <outgoing>f_substart_frist</outgoing>
+      </startEvent>
+
+      <intermediateCatchEvent id="frist" name="Zahlungsfrist">
+        <documentation>Wartet die Zahlungsfrist ab. Die Dauer ist ein FEEL-Ausdruck über die Startvariable,
+also lässt sich derselbe Prozess mit PT20S in zwanzig Sekunden durchspielen.</documentation>
+        <incoming>f_substart_frist</incoming>
+        <outgoing>f_frist_mahnung</outgoing>
+        <timerEventDefinition>
+          <timeDuration>= zahlungsfrist</timeDuration>
+        </timerEventDefinition>
+      </intermediateCatchEvent>
+
+      <serviceTask id="mahnung" name="Mahnung senden">
+        <documentation>Mockup statt Mailversand: das Beispiel läuft ohne Mailserver. Scharf wird genau
+dieser Task zu einem Mail-Task — der Rest des Modells bleibt unberührt.</documentation>
+        <extensionElements>
+          <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
+            resultExpression="={ versandt: true, stufe: 1 }"
+            resultVariable="mahnung"/>
+        </extensionElements>
+        <incoming>f_frist_mahnung</incoming>
+        <outgoing>f_mahnung_nachfrist</outgoing>
+      </serviceTask>
+
+      <intermediateCatchEvent id="nachfrist" name="Nachfrist">
+        <incoming>f_mahnung_nachfrist</incoming>
+        <outgoing>f_nachfrist_eskalieren</outgoing>
+        <timerEventDefinition>
+          <timeDuration>= nachfrist</timeDuration>
+        </timerEventDefinition>
+      </intermediateCatchEvent>
+
+      <intermediateThrowEvent id="eskalieren" name="Eskalieren">
+        <documentation>Meldet nach oben, ohne den eigenen Lauf abzubrechen: der Teilprozess läuft in sein
+Ende, und parallel dazu öffnet die Boundary die Aufgabe für den Inhaber.</documentation>
+        <incoming>f_nachfrist_eskalieren</incoming>
+        <outgoing>f_eskalieren_subend</outgoing>
+        <escalationEventDefinition escalationRef="Esc_frist"/>
+      </intermediateThrowEvent>
+
+      <endEvent id="sub_end" name="Mahnlauf beendet">
+        <incoming>f_eskalieren_subend</incoming>
+      </endEvent>
+
+      <sequenceFlow id="f_substart_frist" sourceRef="sub_start" targetRef="frist"/>
+      <sequenceFlow id="f_frist_mahnung" sourceRef="frist" targetRef="mahnung"/>
+      <sequenceFlow id="f_mahnung_nachfrist" sourceRef="mahnung" targetRef="nachfrist"/>
+      <sequenceFlow id="f_nachfrist_eskalieren" sourceRef="nachfrist" targetRef="eskalieren"/>
+      <sequenceFlow id="f_eskalieren_subend" sourceRef="eskalieren" targetRef="sub_end"/>
+    </subProcess>
+
+    <boundaryEvent id="bezahlt" name="Zahlung eingegangen" attachedToRef="ueberwachen">
+      <documentation>Unterbrechend, und das ist der Punkt: geht das Geld ein, ist der ganze Mahnlauf
+gegenstandslos. Korreliert über die Rechnungsnummer, also trifft die Meldung genau diese eine Instanz —
+anders als ein Signal, das alle erreicht.</documentation>
+      <outgoing>f_bezahlt_end</outgoing>
+      <messageEventDefinition messageRef="Msg_zahlung"/>
+    </boundaryEvent>
+
+    <boundaryEvent id="ueberfaellig" name="Zahlungsziel überschritten" attachedToRef="ueberwachen" cancelActivity="false">
+      <documentation>Nicht unterbrechend: der Mahnlauf soll zu Ende laufen und der Inhaber trotzdem
+gefragt werden. Wer hier unterbricht, verliert den Rest eines Laufs, der noch offen ist.</documentation>
+      <outgoing>f_ueberfaellig_entscheiden</outgoing>
+      <escalationEventDefinition escalationRef="Esc_frist"/>
+    </boundaryEvent>
+
+    <userTask id="entscheiden" name="Wie weiter?">
+      <documentation>Die Entscheidung, die keine Regel abnehmen kann: bei diesem Kunden, bei diesem Betrag,
+in dieser Beziehung — Inkasso oder abschreiben.</documentation>
+      <extensionElements>
+        <zeebe:formDefinition formId="mahn-entscheid"/>
+      </extensionElements>
+      <incoming>f_ueberfaellig_entscheiden</incoming>
+      <outgoing>f_entscheiden_gw</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="gw" name="Entscheid?" default="f_gw_abschreiben">
+      <documentation>Default ist das Abschreiben — der Zweig, der niemandem schadet. Ein Gateway, dessen
+Bedingung wegen eines Tippfehlers nicht greift, darf kein Inkasso auslösen.</documentation>
+      <incoming>f_entscheiden_gw</incoming>
+      <outgoing>f_gw_inkasso</outgoing>
+      <outgoing>f_gw_abschreiben</outgoing>
+    </exclusiveGateway>
+
+    <endEvent id="end_inkasso" name="An Inkasso">
+      <incoming>f_gw_inkasso</incoming>
+    </endEvent>
+
+    <endEvent id="end_abschreiben" name="Abgeschrieben">
+      <incoming>f_gw_abschreiben</incoming>
+    </endEvent>
+
+    <endEvent id="end_bezahlt" name="Bezahlt">
+      <incoming>f_bezahlt_end</incoming>
+    </endEvent>
+
+    <endEvent id="end_frist" name="Frist ohne Zahlung">
+      <incoming>f_sub_end</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_sub" sourceRef="start" targetRef="ueberwachen"/>
+    <sequenceFlow id="f_sub_end" sourceRef="ueberwachen" targetRef="end_frist"/>
+    <sequenceFlow id="f_bezahlt_end" sourceRef="bezahlt" targetRef="end_bezahlt"/>
+    <sequenceFlow id="f_ueberfaellig_entscheiden" sourceRef="ueberfaellig" targetRef="entscheiden"/>
+    <sequenceFlow id="f_entscheiden_gw" sourceRef="entscheiden" targetRef="gw"/>
+    <sequenceFlow id="f_gw_inkasso" name="Inkasso" sourceRef="gw" targetRef="end_inkasso">
+      <conditionExpression>= entscheid = "inkasso"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_gw_abschreiben" name="abschreiben" sourceRef="gw" targetRef="end_abschreiben"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_mahnwesen">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="162" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="136" y="202" width="84" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="di_ueberwachen" bpmnElement="ueberwachen" isExpanded="true">
+        <dc:Bounds x="250" y="80" width="560" height="200"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_sub_start" bpmnElement="sub_start">
+        <dc:Bounds x="280" y="162" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_frist" bpmnElement="frist">
+        <dc:Bounds x="356" y="162" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="340" y="202" width="70" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_mahnung" bpmnElement="mahnung">
+        <dc:Bounds x="432" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_nachfrist" bpmnElement="nachfrist">
+        <dc:Bounds x="582" y="162" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="570" y="202" width="60" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_eskalieren" bpmnElement="eskalieren">
+        <dc:Bounds x="658" y="162" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="646" y="202" width="60" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_sub_end" bpmnElement="sub_end">
+        <dc:Bounds x="734" y="162" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="di_bezahlt" bpmnElement="bezahlt">
+        <dc:Bounds x="382" y="262" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="330" y="302" width="140" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ueberfaellig" bpmnElement="ueberfaellig">
+        <dc:Bounds x="642" y="262" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="586" y="302" width="148" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="di_end_bezahlt" bpmnElement="end_bezahlt">
+        <dc:Bounds x="382" y="400" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="368" y="440" width="64" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_entscheiden" bpmnElement="entscheiden">
+        <dc:Bounds x="600" y="380" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw" bpmnElement="gw" isMarkerVisible="true">
+        <dc:Bounds x="760" y="395" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="752" y="360" width="66" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_inkasso" bpmnElement="end_inkasso">
+        <dc:Bounds x="880" y="402" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="857" y="442" width="82" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_abschreiben" bpmnElement="end_abschreiben">
+        <dc:Bounds x="767" y="530" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="740" y="570" width="92" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_frist" bpmnElement="end_frist">
+        <dc:Bounds x="880" y="162" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="848" y="202" width="102" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_sub" bpmnElement="f_start_sub">
+        <di:waypoint x="196" y="180"/><di:waypoint x="250" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_substart_frist" bpmnElement="f_substart_frist">
+        <di:waypoint x="316" y="180"/><di:waypoint x="356" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_frist_mahnung" bpmnElement="f_frist_mahnung">
+        <di:waypoint x="392" y="180"/><di:waypoint x="432" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_mahnung_nachfrist" bpmnElement="f_mahnung_nachfrist">
+        <di:waypoint x="532" y="180"/><di:waypoint x="582" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_nachfrist_eskalieren" bpmnElement="f_nachfrist_eskalieren">
+        <di:waypoint x="618" y="180"/><di:waypoint x="658" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_eskalieren_subend" bpmnElement="f_eskalieren_subend">
+        <di:waypoint x="694" y="180"/><di:waypoint x="734" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_sub_end" bpmnElement="f_sub_end">
+        <di:waypoint x="810" y="180"/><di:waypoint x="880" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_bezahlt_end" bpmnElement="f_bezahlt_end">
+        <di:waypoint x="400" y="298"/><di:waypoint x="400" y="400"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_ueberfaellig_entscheiden" bpmnElement="f_ueberfaellig_entscheiden">
+        <di:waypoint x="660" y="298"/><di:waypoint x="660" y="380"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_entscheiden_gw" bpmnElement="f_entscheiden_gw">
+        <di:waypoint x="700" y="420"/><di:waypoint x="760" y="420"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_inkasso" bpmnElement="f_gw_inkasso">
+        <di:waypoint x="810" y="420"/><di:waypoint x="880" y="420"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="820" y="398" width="52" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_abschreiben" bpmnElement="f_gw_abschreiben">
+        <di:waypoint x="785" y="445"/><di:waypoint x="785" y="530"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="792" y="470" width="76" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

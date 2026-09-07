@@ -7,11 +7,11 @@ ausschließlich gegen klar benannte **Test-Objekte**.
 ## Der Ablauf
 
 ```
-Start (onb-start: Vorname, Nachname, UPN, Abteilung, Lizenz?, Gruppe?)
+Start (eonb-start: Vorname, Nachname, UPN, Abteilung, Lizenz?, Gruppe?)
   → [Script] Vorschlag              displayName + mailNickname aus den Namen
   → (X) Test-Objekt?    ── sonst ──▶ Ende "Kein Test-Objekt"  (kein Entra-Aufruf)
         │ jml-test-*@blumer.net
-  → 🔑 User-Task "Onboarding freigeben" (onb-freigabe) – Admin setzt Initialpasswort
+  → 🔑 User-Task "Onboarding freigeben" (eonb-freigabe) – Admin setzt Initialpasswort
   → (X) Freigegeben?    ── ablehnen ▶ Ende "Abgelehnt"
         │ anlegen
   → [entra create-user] Benutzer anlegen (Worker "blumer_net" → konto)
@@ -60,18 +60,18 @@ zusätzlich **`Organization.Read.All`** (SKUs) und **`Group.ReadWrite.All`**.
 
 ```
 atlas_create_application  name="Onboarding-Self-Service"        → appId
-atlas_save_form           id=onb-start     schema=…  projectId=appId
-atlas_save_form           id=onb-freigabe  schema=…  projectId=appId
+atlas_save_form           id=eonb-start    schema=…  projectId=appId
+atlas_save_form           id=eonb-freigabe schema=…  projectId=appId
 atlas_save_draft          xml=<onboarding-selfservice.bpmn>     projectId=appId
 atlas_publish_application  id=appId                              → Definition-Keys + Release
 ```
 
 ## Erfasste Prozessvariablen
 
-- **onb-start:** `vorname`, `nachname`, `upn`, `abteilung`, `lizenzSku` (optional),
+- **eonb-start:** `vorname`, `nachname`, `upn`, `abteilung`, `lizenzSku` (optional),
   `gruppeId` (optional)
 - **Script:** `displayName`, `mailNick`
-- **onb-freigabe:** `displayName` (editierbar), `entscheidung`, `initialpasswort`,
+- **eonb-freigabe:** `displayName` (editierbar), `entscheidung`, `initialpasswort`,
   `ablehnungsgrund`
 - **create-user:** `konto` (das angelegte Konto samt `id`, trägt `=konto.id` in die
   optionalen Folgeschritte)
