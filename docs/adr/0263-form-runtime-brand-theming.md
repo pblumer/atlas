@@ -1,4 +1,4 @@
-# ADR-DRAFT: The brand palette reaches the form runtime
+# ADR-0263: The brand palette reaches the form runtime
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

@@ -50,7 +50,7 @@ _Changed_ / _Removed_ for each version.
   task, an incident's repair form, the preview in the form editor and the public start
   form behind a share link are all painted from the same palette as everything else,
   in the same typeface, on the same borders
-  ([ADR-draft-form-runtime-brand-theming](docs/adr/draft-form-runtime-brand-theming.md)).
+  ([ADR-0263](docs/adr/0263-form-runtime-brand-theming.md)).
 
 - **The public start form and the sign-in consent screen carry your branding.** Both
   are shown before anyone has a session, and both used to display the built-in Atlas

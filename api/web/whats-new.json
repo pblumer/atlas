@@ -43,8 +43,8 @@
         "de": "Bisher färbte Ihre Organisationsfarbe alles rund um ein Formular und hörte an dessen Rand auf: Das Formular selbst kam aus dem Stylesheet des Formular-Renderers, blieb im Standardblau, in einer anderen Schrift und mit Rahmen in einem leicht abweichenden Ton. Das ist vorbei. Eine Benutzeraufgabe, das Reparaturformular eines Incidents, die Vorschau im Formular-Editor und das öffentliche Startformular hinter einem Freigabelink werden aus Ihrer Palette gezeichnet — in derselben Schrift und mit denselben Rahmen wie der Rest von Atlas."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0263",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0263-form-runtime-brand-theming.md"
       },
       "tags": [
         "Organization",
