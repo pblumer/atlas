@@ -3,7 +3,7 @@
              xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
              xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
              xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
-             xmlns:atlas="http://atlas.dev/schema/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
              id="defs_rest_connector" targetNamespace="http://atlas/playground">
   <process id="rest-connector" name="REST connector" isExecutable="true">
     <documentation>Playground fixture for isolation: the task names a URL that must never be fetched. A sandbox registers no workers at all, so the call cannot happen — the stub answers instead.</documentation>

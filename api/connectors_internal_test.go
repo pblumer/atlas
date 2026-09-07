@@ -922,7 +922,7 @@ func TestListConnectorsCarriesTheProblem(t *testing.T) {
 
 // deployWarnBPMN references a mail worker by name, the way every model refers to a
 // server-registered worker (ADR-0036/0041).
-const deployWarnBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0/bpmn">
+const deployWarnBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
   <process id="warnme" isExecutable="true">
     <startEvent id="start"/>
     <serviceTask id="notify">

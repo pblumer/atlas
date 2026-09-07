@@ -560,7 +560,7 @@ func TestALeasedPlainJobCarriesNoConnectorDetail(t *testing.T) {
 // csvConnectorBPMN is a process whose service task is a CSV-to-JSON worker.
 const csvConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="import" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">

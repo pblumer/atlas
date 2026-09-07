@@ -11,7 +11,7 @@ import (
 func parseWebScrapeProcess(t *testing.T, ext string) *CompiledProcess {
 	t.Helper()
 	bpmn := `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements>` + ext + `</bpmn:extensionElements></bpmn:serviceTask>
@@ -42,7 +42,7 @@ func parseWebScrapeExtension(t *testing.T, ext string) *ConnectorTaskDetail {
 func parseWebScrapeError(t *testing.T, ext, want string) {
 	t.Helper()
 	bpmn := `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements>` + ext + `</bpmn:extensionElements></bpmn:serviceTask>

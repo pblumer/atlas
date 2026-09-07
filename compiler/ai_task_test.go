@@ -17,7 +17,7 @@ import (
 // because which model to ask is what the step is about.
 const aiTaskBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -117,7 +117,7 @@ func TestAiTaskWithoutAModelInheritsTheWorkers(t *testing.T) {
 // pinned to the Worker that needed two Workers differing in one string.
 func TestTwoAiTasksShareOneWorkerAndDifferentModels(t *testing.T) {
 	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="klein">
@@ -220,7 +220,7 @@ func TestAnAgentContainerNamesItsModel(t *testing.T) {
 // carries a service task.
 func aiTaskBPMNWith(attrs string) string {
 	return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -237,7 +237,7 @@ func aiTaskBPMNWith(attrs string) string {
 // activity to offer as a tool, so it compiles as far as the attribute checks.
 func agentContainerBPMN(attrs string) string {
 	return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:adHocSubProcess id="ah">

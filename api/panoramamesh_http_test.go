@@ -170,7 +170,7 @@ func meshProcessID(key uint64) string {
 // workerMeshBPMN names a mail worker the way every model names one (ADR-0036/0041):
 // by name, with no endpoint and no secret. The attribute is still connector="…" —
 // that is the model contract ADR-0203 deliberately leaves alone.
-const workerMeshBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0/bpmn">
+const workerMeshBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
   <process id="notifier" name="Notifier" isExecutable="true">
     <startEvent id="start"/>
     <serviceTask id="notify">

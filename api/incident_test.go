@@ -356,7 +356,7 @@ func TestStatsCountsUnresolvedIncidents(t *testing.T) {
 func TestIncidentCarriesItsConnector(t *testing.T) {
 	ts := newTestServer(t)
 
-	const mailBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0/bpmn">
+	const mailBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
   <process id="notify" isExecutable="true">
     <startEvent id="start"/>
     <serviceTask id="send">
@@ -426,7 +426,7 @@ func TestIncidentCarriesItsConnector(t *testing.T) {
 func TestIncidentCarriesItsRepairForm(t *testing.T) {
 	ts := newTestServer(t)
 
-	const repairBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas.dev/schema/1.0/bpmn">
+	const repairBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0">
   <process id="notify" isExecutable="true">
     <startEvent id="start"/>
     <serviceTask id="send">
@@ -496,7 +496,7 @@ func TestIncidentCarriesItsRepairForm(t *testing.T) {
 func TestIncidentWithoutARepairFormSaysSo(t *testing.T) {
 	ts := newTestServer(t)
 
-	const plainBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0/bpmn">
+	const plainBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
   <process id="notify" isExecutable="true">
     <startEvent id="start"/>
     <serviceTask id="send">

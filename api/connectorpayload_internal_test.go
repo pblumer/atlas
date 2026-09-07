@@ -51,7 +51,7 @@ import (
 func connectorTaskModel(procID, element string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs-%s">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs-%s">
   <bpmn:process id="%s" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -404,7 +404,7 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 func scriptJobTaskModel() string {
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs-script">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs-script">
   <bpmn:process id="script-proc" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:scriptTask id="t">
@@ -521,7 +521,7 @@ func TestLocalDMNMustNotGainAPayloadArm(t *testing.T) {
 const localDecisionPayloadBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs-dmn-proc">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs-dmn-proc">
   <bpmn:process id="dmn-proc" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:businessRuleTask id="decide">

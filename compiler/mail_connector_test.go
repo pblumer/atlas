@@ -13,7 +13,7 @@ import (
 // message fields (recipients, subject, body) are model-authored like REST's.
 const mailConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -71,7 +71,7 @@ func TestParseMailConnectorTask(t *testing.T) {
 // evaluated over the instance's variables at send time; a literal stays literal.
 func TestParseMailConnectorFeelFields(t *testing.T) {
 	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -108,7 +108,7 @@ func TestParseMailConnectorFeelFields(t *testing.T) {
 func TestParseMailConnectorErrors(t *testing.T) {
 	wrap := func(inner string) string {
 		return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements>` + inner + `</bpmn:extensionElements></bpmn:serviceTask>
@@ -143,7 +143,7 @@ func TestParseMailConnectorErrors(t *testing.T) {
 // as before, so the field is additive for every already-deployed process.
 func TestParseMailConnectorHTMLBody(t *testing.T) {
 	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -186,7 +186,7 @@ func TestParseMailConnectorHTMLBody(t *testing.T) {
 // instance's variables; a broken expression is a deploy error, not a send-time one.
 func TestParseMailConnectorHTMLBodyFeel(t *testing.T) {
 	tmpl := `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">

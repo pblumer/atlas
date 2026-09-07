@@ -10,7 +10,7 @@ import (
 // rather than delegating to an external service-task worker.
 const restConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
   <bpmn:process id="p" isExecutable="true">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -61,7 +61,7 @@ func TestParseRestConnectorTask(t *testing.T) {
 // allowed (the response is discarded).
 func TestParseRestConnectorDefaults(t *testing.T) {
 	const noMethod = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -91,7 +91,7 @@ func TestParseRestConnectorDefaults(t *testing.T) {
 func TestParseRestConnectorErrors(t *testing.T) {
 	// A REST task missing its url fails to compile.
 	const missingURL = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -110,7 +110,7 @@ func TestParseRestConnectorErrors(t *testing.T) {
 
 	// An unsupported HTTP method fails to compile.
 	const badMethod = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -133,7 +133,7 @@ func TestParseRestConnectorErrors(t *testing.T) {
 // compiles to a JSON object that references a server-side secret, never a value.
 func TestParseRestConnectorHeadersQueryAuth(t *testing.T) {
 	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -176,7 +176,7 @@ func TestParseRestConnectorHeadersQueryAuth(t *testing.T) {
 // (ADR-0152) — never the secret value.
 func TestParseRestConnectorOAuth2(t *testing.T) {
 	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -209,7 +209,7 @@ func TestParseRestConnectorOAuth2(t *testing.T) {
 func TestParseRestConnectorAuthAndHeaderErrors(t *testing.T) {
 	wrap := func(inner string) string {
 		return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t"><bpmn:extensionElements>` + inner + `</bpmn:extensionElements></bpmn:serviceTask>
@@ -258,7 +258,7 @@ func TestParseRestConnectorNoAuthNoMaps(t *testing.T) {
 // stays literal.
 func TestParseRestConnectorFeelFields(t *testing.T) {
 	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
@@ -299,7 +299,7 @@ func TestParseRestConnectorFeelFields(t *testing.T) {
 // A malformed FEEL expression in a field fails the compile.
 func TestParseRestConnectorFeelError(t *testing.T) {
 	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas.dev/schema/1.0">
+                  xmlns:atlas="http://atlas/schema/1.0">
   <bpmn:process id="p">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
