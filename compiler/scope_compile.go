@@ -628,6 +628,20 @@ func registerScope(
 			// and leaves the Worker's own model to run, so a container and the ai tasks
 			// beside it can ask different models through one endpoint and one credential.
 			d.AgentModel = b.intern(strings.TrimSpace(ag.Model))
+			// What this agent is given to read, by name
+			// (ADR-0257). Interned here so the round's payload is
+			// built from the compiled process rather than from a string split at runtime
+			// (I5). A duplicate name is dropped: it would put the same fact in front of
+			// the model twice and say nothing more.
+			seenCtx := make(map[string]bool)
+			for _, name := range strings.Split(ag.Context, ",") {
+				name = strings.TrimSpace(name)
+				if name == "" || seenCtx[name] {
+					continue
+				}
+				seenCtx[name] = true
+				d.AgentContext = append(d.AgentContext, b.intern(name))
+			}
 			if rc := strings.TrimSpace(ag.ResultCollection); rc != "" {
 				d.ResultCollection = b.intern(rc)
 			}

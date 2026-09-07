@@ -6269,6 +6269,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <label class="field"><span>Model</span>
               <input type="text" id="f-agent-model" value="${esc(ac.model || "")}" placeholder="leave empty for the Worker's own model"/></label>
             <p class="muted" style="font-size:12px">The Worker holding the model endpoint and its credential — neither travels in the model (<b>General → Documentation</b> on this subprocess is the agent's <b>goal</b>: the sentence the model reads to know what it is here for). <b>Model</b> is which language model it asks, by the provider's own id; leave it empty and whatever that Worker is configured for runs.</p>
+            <label class="field"><span>May read</span>
+              <input type="text" id="f-agent-context" value="${esc(ac.context || "")}" placeholder="dossier, kunde"/></label>
+            <p class="muted" style="font-size:12px">The variables this agent is given, by name, comma-separated. What an agent may <b>reach</b> is the diagram; what it may <b>read</b> is this list — so a reviewer sees both on the element. A name the instance does not carry is sent as <code>(not set)</code>, so the agent says so rather than inventing a value. Leave it empty and the agent knows only its goal, its tools, and what its own calls returned — which is a real design when its tools fetch what it needs.</p>
             <h3>Tool results</h3>
             <label class="field"><span>Collect results into</span>
               <input type="text" id="f-agent-resultcoll" value="${esc(ac.resultCollection || "")}" placeholder="toolCallResults"/></label>
@@ -7672,6 +7675,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     const fagentconn = body.querySelector("#f-agent-connector");
     if (fagentconn) {
       const fagentmodel = body.querySelector("#f-agent-model");
+      const fagentctx = body.querySelector("#f-agent-context");
       const fagentcoll = body.querySelector("#f-agent-resultcoll");
       const fagentelem = body.querySelector("#f-agent-resultelem");
       const saveAgent = () => savePreservingPanel(() => {
@@ -7683,12 +7687,16 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // and an attribute spelling it out would only be a second way to say it
           // (ADR-0256).
           model: (fagentmodel.value || "").trim() || undefined,
+          // Naming none means the agent is given nothing, which the compiler reads from a
+          // missing attribute — an empty one would be a second way to say it.
+          context: (fagentctx.value || "").trim() || undefined,
           resultCollection: (fagentcoll.value || "").trim() || undefined,
           resultElement: elem === "" ? undefined : (elem.startsWith("=") ? elem : "= " + elem),
         });
       });
       fagentconn.addEventListener("change", saveAgent);
       fagentmodel.addEventListener("change", saveAgent);
+      fagentctx.addEventListener("change", saveAgent);
       fagentcoll.addEventListener("change", saveAgent);
       fagentelem.addEventListener("change", saveAgent);
       fillWorkerDatalist(api, body.querySelector("#dl-agent-connector"),
@@ -11674,10 +11682,130 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       </div>`;
   }
 
+  // --- Where the card hangs --------------------------------------------------------
+  // Under the element is the obvious place for it, and on a busy diagram the wrong one:
+  // an event is 36px tall and its card three or four times that, so on the identity
+  // lifecycle the card of "Service-Ereignis" came down over the whole mutation branch —
+  // two shapes and both their captions — while the band above the event stood empty.
+  // Covering the model is the price ADR-0161 accepted for answering the question on the
+  // diagram. Paying it next to free air is not the same bargain.
+  //
+  // So the spot is chosen rather than fixed: the card goes on one of the element's four
+  // sides, flush with one of that side's two edges, and of those eight the one that
+  // hides the least wins — the first of them, in the order below, when several tie. A
+  // card with room under it therefore does not move at all.
+  //
+  // What "the least" counts is how much of each element disappears, not how many square
+  // pixels are covered: hiding an 8px strip of a 100×80 task costs 0.1, hiding a 36px
+  // event whole costs 1. Summed area answers the same question with the sign flipped —
+  // it would rather swallow two small elements than clip the corner of a big one, which
+  // is how the first cut of this came to cover the mutation branch a second time. A
+  // caption is an element in its own right here, because an element whose name is hidden
+  // is not much better off than one whose shape is.
+  //
+  // Sequence flows are not counted: a line whose two ends both stay visible is still
+  // readable across a card, and no spot crosses none of them.
+  //
+  // The window counts too, because the alternative is worse than anything on this list: a
+  // diagram is fitted to the canvas, so an element at its edge has free air on that side
+  // and none of it on screen, and a card hung out there hides nothing by being nowhere.
+  // Hence the second term — the share of the card that would fall outside what is on
+  // screen, at twice the weight, so a card fully out of view loses to one that covers
+  // two whole elements.
+  const IO_GAP = 10;                        // clear air between the element and its card
+  const IO_SCALE = { min: 0.7, max: 1.15 }; // the zoom range the card is held between
+
+  const boxOverlap = (a, b) =>
+    Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) *
+    Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+
+  // ioFootprint is the card's size in *diagram* units, which is what an overlay position
+  // is measured in. It measures rather than predicts: the html carries a variable number
+  // of rows and the CSS laying them out is not this file's to duplicate, so the real
+  // markup is laid out off-screen at its real width and thrown away. One layout per
+  // redraw, and a redraw only happens when the card's content changed.
+  //
+  // The scale bounds are read back rather than assumed to be 1: an overlay counter-scales
+  // outside them, so at a zoom of 0.5 a card held at 0.7 covers 1.4× its own CSS size of
+  // the model.
+  function ioFootprint(html) {
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:absolute;left:-10000px;top:0;visibility:hidden";
+    probe.innerHTML = html;
+    root.appendChild(probe);
+    const box = probe.firstElementChild.getBoundingClientRect();
+    probe.remove();
+    const z = canvas.zoom() || 1;
+    const r = z < IO_SCALE.min ? IO_SCALE.min / z : z > IO_SCALE.max ? IO_SCALE.max / z : 1;
+    return { width: box.width * r, height: box.height * r };
+  }
+
+  // ioObstacles is what the card would rather not sit on: every shape and every caption
+  // on the plane, minus two things. Its own element and that element's caption, because
+  // a card over the name it repeats in its own header hides nothing. And the containers —
+  // a pool, a lane, an expanded subprocess — whose area is the room their children are
+  // drawn in rather than drawing of their own.
+  function ioObstacles() {
+    const out = [];
+    for (const el of registry.getAll()) {
+      if (el.waypoints || !el.parent) continue;                      // connections, and the plane
+      if (!Number.isFinite(el.x) || !el.width || !el.height) continue;
+      if (el.children && el.children.length) continue;               // containers
+      if ((el.labelTarget || el).id === selElId) continue;
+      out.push(el);
+    }
+    return out;
+  }
+
+  // ioSpot picks where the card hangs off its element, in the element-relative diagram
+  // units overlays are positioned in. The five candidates are in preference order, so the
+  // first one that covers nothing is taken as it is found and a fully boxed-in element
+  // still gets the least bad of them.
+  function ioSpot(el, size) {
+    const { width: w, height: h } = size;
+    const ew = el.width || 100;   // a shape with no size is not a thing bpmn-js draws,
+    const eh = el.height || 80;   // but the arithmetic below should not produce NaN either
+    const spots = [
+      { top: eh + IO_GAP, left: 0 },            // under it, where it has always been
+      { top: eh + IO_GAP, left: ew - w },       // under it, hanging the other way
+      { top: 0, left: ew + IO_GAP },            // beside it, reading on
+      { top: eh - h, left: ew + IO_GAP },       // beside it, hanging up from its foot
+      { top: -(h + IO_GAP), left: 0 },          // over it
+      { top: -(h + IO_GAP), left: ew - w },     // over it, the other way
+      { top: 0, left: -(w + IO_GAP) },          // back beside it
+      { top: eh - h, left: -(w + IO_GAP) },     // back beside it, hanging up from its foot
+    ];
+    // Nothing measurable (the view is not laid out yet): keep the place it has always had
+    // rather than pick a spot from a size of zero.
+    if (!(w > 0) || !(h > 0)) return spots[0];
+    const obstacles = ioObstacles();
+    const onScreen = canvas.viewbox();
+    let best = spots[0];
+    let least = Infinity;
+    for (const spot of spots) {
+      const box = { x: el.x + spot.left, y: el.y + spot.top, width: w, height: h };
+      let cost = 2 * (1 - boxOverlap(box, onScreen) / (w * h));
+      for (const o of obstacles) cost += boxOverlap(box, o) / (o.width * o.height);
+      if (cost < least) { least = cost; best = spot; }
+      if (!cost) break;
+    }
+    return best;
+  }
+
   // drawIOOverlay re-attaches the card to the selected element. renderOverlay runs on
   // every frame and every 1.5s poll, so it re-draws only when the card's content (or the
   // element it belongs to) actually changed — otherwise a scrub would rebuild the same
-  // DOM dozens of times.
+  // DOM dozens of times. The spot is chosen on that same redraw: a card does not chase
+  // the diagram around under a pan or a zoom, which would be the more distracting of the
+  // two ways to be wrong.
+  //
+  // The card is typed "atlas-io" so the stylesheet can lift it above the other overlays.
+  // diagram-js gives every overlay the same bare position:absolute wrapper and no z-index,
+  // which leaves paint order at the order the *elements* first received an overlay — and
+  // that order works systematically against this card: it hangs below and to the right of
+  // its element, so what it covers are the shapes drawn after it, whose badges therefore
+  // land on top of it. An execution count from a covered neighbour then reads as one of
+  // the card's own rows (.djs-overlay-atlas-io in app.css).
   function drawIOOverlay() {
     const html = ioOverlayHTML();
     const sig = html ? selElId + "\u0000" + html : "";
@@ -11688,9 +11816,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const el = html && registry.get(selElId);
     if (!el) return;
     try {
-      ioOverlays.push(overlays.add(selElId, {
-        position: { top: (el.height || 80) + 10, left: 0 },
-        scale: { min: 0.7, max: 1.15 },
+      ioOverlays.push(overlays.add(selElId, "atlas-io", {
+        position: ioSpot(el, ioFootprint(html)),
+        scale: IO_SCALE,
         html,
       }));
     } catch { /* element not in this diagram */ }

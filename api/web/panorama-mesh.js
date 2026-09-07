@@ -1347,13 +1347,27 @@ export function windowOverlap(graph, startIds, { direction = "dependents", depth
   };
 }
 
-// hrefFor is the drilldown. A process node leads to the Operations live view —
-// Panorama owns the landscape and application altitudes and links into the
-// process and instance ones rather than reimplementing them (ADR-0211 §5).
+// hrefFor is where a node is opened, when its inside is somewhere else.
+//
+// Panorama owns the landscape and application altitudes and links into the ones below
+// rather than reimplementing them (ADR-0211 §5), so two kinds have an elsewhere: a
+// process opens on its live view, with its instances and its tokens, and a decision on
+// its evaluation history, which is the same question one altitude down — what has this
+// actually done, and with what.
+//
+// Everything else answers "" and is opened *here*, by becoming the centre of the
+// picture. The two placeholder kinds are covered by that: a decision the caller may
+// not see is a restricted node and one nothing provides is an unresolved node, and
+// neither is a `decision`, so neither is offered a link to a page that would not have
+// it (ADR-0211 §3 — an absence must never read as a fact).
 function hrefFor(node) {
   if (node.kind === "process") {
     const key = node.id.slice("process:".length);
     return `#/operations/p/${encodeURIComponent(key)}`;
+  }
+  if (node.kind === "decision") {
+    const id = node.id.slice("decision:".length);
+    return `#/operations/decisions/${encodeURIComponent(id)}`;
   }
   return "";
 }
@@ -2033,8 +2047,12 @@ function impactPanelHTML(node, result, direction, depth,
     : (KIND[node.kind] || {}).label || node.kind;
   const others = result ? result.nodes.length - 1 : 0;
   const word = direction === "dependents" ? "depend on this" : "are needed by this";
-  const drill = node.kind === "process"
-    ? `<a class="mesh-drill" href="${hrefFor(node)}">Open in Operations →</a>`
+  // The link the double-click duplicates. Every kind that has an elsewhere gets one:
+  // a gesture you have to be told about is one most readers never find, so the panel
+  // says in words what the double-click does without being asked.
+  const inside = hrefFor(node);
+  const drill = inside
+    ? `<a class="mesh-drill" href="${inside}">Open in Operations →</a>`
     : "";
   // Releasing one hand-placed node lives here, beside the node it is about. It used
   // to be a double-click, which is a thing you have to be told; a button on the

@@ -262,3 +262,55 @@ func compileAiTask(t *testing.T, attrs string) (*CompiledProcess, *ConnectorTask
 	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
 	return cp, cp.ConnectorTask(cp.Node(task).Detail)
 }
+
+// --- What an agent is given to read (ADR-0257) ---------
+
+// The container names the process variables its agent is given. Names rather than values,
+// on the element, for the reason ADR-0253 gives about tools: what an agent may reach is
+// the diagram, so what it may read is in the diagram too.
+func TestAnAgentContainerNamesWhatItMayRead(t *testing.T) {
+	cp, err := Parse(1, 1, strings.NewReader(agentContainerBPMN(`connector="acme" context="dossier, kunde ,dossier"`)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	d := cp.AdHoc(nodeByBpmnId(t, cp, "ah").Detail)
+	var got []string
+	for _, idx := range d.AgentContext {
+		got = append(got, cp.Intern(idx))
+	}
+	// Authored order, trimmed, and a name said twice contributes once: putting the same
+	// fact in front of the model twice says nothing more.
+	want := []string{"dossier", "kunde"}
+	if len(got) != len(want) {
+		t.Fatalf("context = %#v, want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("context[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// Naming none is a real design — an agent whose tools fetch what it needs — so it compiles
+// to nothing rather than to an error.
+func TestAnAgentContainerMayNameNoContext(t *testing.T) {
+	cp, err := Parse(1, 1, strings.NewReader(agentContainerBPMN(`connector="acme"`)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if d := cp.AdHoc(nodeByBpmnId(t, cp, "ah").Detail); len(d.AgentContext) != 0 {
+		t.Errorf("context = %#v, want none", d.AgentContext)
+	}
+}
+
+// And on an ai task the attribute is refused, like the container's other attributes: a
+// task's prompt is FEEL over the variables it sees, so it already carries its own data.
+func TestAnAiTaskRefusesAContextList(t *testing.T) {
+	_, err := Parse(1, 1, strings.NewReader(aiTaskBPMNWith(`connector="acme" prompt="P" resultVariable="a" context="dossier"`)))
+	if err == nil {
+		t.Fatal("an ai task naming a context list compiled, want an error")
+	}
+	if !strings.Contains(err.Error(), "only an agent-driven ad-hoc subprocess reads") {
+		t.Errorf("error %q should say the attribute belongs to the container", err)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -57,6 +58,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, ei *model.Element
 			// The container's own documentation is what this agent is for. The modeler
 			// writes it for the next human; it is the same sentence the model reads.
 			Goal:    cp.ElementDocumentation(ei.ElementId),
+			Context: contextValues(store, cp, d.AgentContext, elementInstanceKey),
 			Tools:   tools,
 			Results: results,
 			Round:   len(results) + 1,
@@ -64,6 +66,63 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, ei *model.Element
 		Connector: cp.Intern(d.AgentWorker),
 		Model:     cp.Intern(d.AgentModel),
 	}, nil
+}
+
+// contextNotSet is what a named variable that is not there travels as. It is sent rather
+// than dropped because "the process meant to tell you this and had nothing" is a different
+// fact from "you were never told", and only the first one lets an agent say so instead of
+// inventing a value (ADR-0257).
+const contextNotSet = "(not set)"
+
+// contextValues reads the process variables this agent was given by name, up the
+// container's scope chain, nearest scope winning (ADR-0068) — the same walk every other
+// authored value takes.
+//
+// A name is authored on the element, so the set is one a reviewer chose and can read off
+// the diagram; this function's whole job is to look up that list and nothing wider. An
+// agent that names none gets nil, which the prompt renders as no context section at all.
+func contextValues(store state.Reader, cp *compiler.CompiledProcess, names []int32, containerKey uint64) map[string]string {
+	if len(names) == 0 {
+		return nil
+	}
+	scope, err := state.VisibleVariablesMap(store, containerKey)
+	if err != nil {
+		// The round is still worth putting: an agent told nothing is the behaviour this
+		// record replaces, not a new failure, and failing the job here would park a
+		// container over a read the next round would retry anyway.
+		scope = nil
+	}
+	out := make(map[string]string, len(names))
+	for _, idx := range names {
+		name := cp.Intern(idx)
+		if name == "" {
+			continue
+		}
+		v, ok := scope[name]
+		if !ok {
+			out[name] = contextNotSet
+			continue
+		}
+		out[name] = contextText(v)
+	}
+	return out
+}
+
+// contextText is a stored variable in the form a model reads: its string form, which is
+// what the prompt renders and what a JSON variable is anyway.
+//
+// A boolean needs its own arm because Classify hands it back in the bool slot with an
+// empty text — right for a caller deciding a branch, and an empty string for a caller
+// writing a sentence, which is what this one is doing.
+func contextText(v model.VariableValue) string {
+	kind, b, text := expr.Classify(expr.FromStored(toExprKind(v.Kind), v.Bool, v.Text))
+	if kind == expr.KindBool {
+		if b {
+			return "true"
+		}
+		return "false"
+	}
+	return text
 }
 
 // collectedResults reads what this container's earlier tool calls returned — the whole
@@ -126,18 +185,37 @@ func RoundFromPayload(fields map[string]any) (Round, error) {
 	return r, nil
 }
 
+// stringMap reads a payload's context back, in either shape it can arrive in.
+//
+// A round that travelled as JSON arrives as map[string]any, which is the case this was
+// written for. A round handed straight across in memory still carries the map[string]string
+// ResolveJobPayload put there — and reading only the first shape made these two functions,
+// documented as mirrors of each other, agree only after a trip through a serializer. That
+// is the kind of seam that holds until the day something calls them directly.
 func stringMap(v any) map[string]string {
-	raw, ok := v.(map[string]any)
-	if !ok || len(raw) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(raw))
-	for k, val := range raw {
-		if s, ok := val.(string); ok {
-			out[k] = s
+	switch raw := v.(type) {
+	case map[string]string:
+		if len(raw) == 0 {
+			return nil
 		}
+		out := make(map[string]string, len(raw))
+		for k, val := range raw {
+			out[k] = val
+		}
+		return out
+	case map[string]any:
+		if len(raw) == 0 {
+			return nil
+		}
+		out := make(map[string]string, len(raw))
+		for k, val := range raw {
+			if s, ok := val.(string); ok {
+				out[k] = s
+			}
+		}
+		return out
 	}
-	return out
+	return nil
 }
 
 func stringSlice(v any) []string {

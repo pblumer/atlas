@@ -202,6 +202,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   work. Drives the real `mountInstanceReplay` against a mock `api` serving both shapes of
   timeline (`?legacy=1` for the unattributed one).
 
+  The second half is about **where the card hangs**, on the geometry that made the case —
+  the identity lifecycle's event hub, at its deployed coordinates (`io-card-hub-harness.html`).
+  A 36px event with eight input values carries a card nearly six times its own height, so
+  hung underneath it covered the whole mutation branch. The branch must stay readable, no
+  single element may lose half of itself to the card, and the badge that *is* under it —
+  badges are not what the placement dodges — must stay behind it, which the browser's own
+  hit-testing answers. Only a browser knows any of this geometry: the card's height comes
+  from its content through the CSS that lays it out.
+
 - **`id-check.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **live id-availability check** on an artifact's ID field. A draft is stored under
   its process id and a form under the id a user task binds to, so saving onto an id

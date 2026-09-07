@@ -1,6 +1,6 @@
 # ADR-0189: Panorama architecture modeling and live operational overlays
 
-- **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; amended 2026-09-01 — P5's "over time" is a journal of transitions, not a store of samples, its historical context is a query rather than a copy, and arranging a view splices the document rather than re-serialising it; amended 2026-09-02 — §4/§6 say what an observation of a job type asserts, and where it stops; see the amendment notes below)
+- **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; amended 2026-09-01 — P5's "over time" is a journal of transitions, not a store of samples, its historical context is a query rather than a copy, and arranging a view splices the document rather than re-serialising it; amended 2026-09-02 — §4/§6 say what an observation of a job type asserts, and where it stops; amended 2026-09-07 — §5's bundle is now shared with the UML class canvas and lives at `api/web/vendor/canvas/`; see the amendment notes below)
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 
@@ -152,6 +152,20 @@
 > arbitrary query on somebody else's cluster. And the run-loop split is §6's: ids
 > become definition keys on the loop under the caller's sharing scope, and the
 > query itself runs off it (I3).
+
+> **Amendment (2026-09-07): §5's bundle is shared, and has moved.** The ArchiMate
+> canvas is no longer vendored on its own. [ADR-0237](0237-class-canvas-on-diagram-js.md)
+> built the UML class canvas on the same library and named the merge of the two bundles
+> as its follow-up; that merge is done. Both canvases now ship in one file at
+> `api/web/vendor/canvas/atlas-canvas.js`, namespaced under one global — the ArchiMate
+> canvas is `AtlasCanvas.archimate`, its source `src/archimate.js` — with one copy of
+> diagram-js between them instead of one each.
+>
+> Nothing §5 requires changes. The bundle is still Atlas-owned, still separate from the
+> BPMN Modeler's, still embedded in the binary, and the checksum and reproducible
+> rebuild command are recorded beside it as before. What changes is the path, and that
+> a page opening either canvas now carries both renderers — a few kilobytes more for
+> somebody who opens only one, against half the bytes for anybody who opens both.
 
 ## Context
 
@@ -402,8 +416,9 @@ The ArchiMate editor uses `diagram-js` directly with Atlas-owned palette, rules,
 renderers, commands, import/export, property panel, and overlays. It is a separate
 bundle from the BPMN Modeler and must not modify or fork `bpmn-js` behavior.
 
-The browser bundle and its assets are vendored under `api/web/vendor/archimate/`
-and embedded in the Atlas binary. The repository records the exact upstream
+The browser bundle and its assets are vendored under `api/web/vendor/canvas/`
+(originally `api/web/vendor/archimate/`; see the 2026-09-07 amendment above) and
+embedded in the Atlas binary. The repository records the exact upstream
 versions, licenses, checksums, and reproducible rebuild command. Building or running
 Atlas does not fetch a CDN asset and does not require a Node.js toolchain. Any
 third-party editor adoption requires a separate dependency/license review and
