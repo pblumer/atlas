@@ -3537,6 +3537,91 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "discord", name: "Discord", group: "Messaging & events",
+    desc: "Send, edit, delete and read messages in a Discord channel, and open a thread for a case",
+    icon: "D",
+    // A speech bubble on Discord blurple: the message, which is what this Worker Type
+    // is for — its counterpart to Jira's ticked issue and Sheets' grid. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white marks.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5865f2"/><path d="M3.4 5.1a1.2 1.2 0 0 1 1.2-1.2h6.8a1.2 1.2 0 0 1 1.2 1.2v3.8a1.2 1.2 0 0 1-1.2 1.2H7l-2.6 2v-2h-.2a1.2 1.2 0 0 1-1.2-1.2z" fill="#fff"/><circle cx="6.3" cy="7" r=".85" fill="#5865f2"/><circle cx="9.7" cy="7" r=".85" fill="#5865f2"/></svg>`,
+    ext: "atlas:DiscordConnector",
+    fields: [
+      { group: "Discord worker" },
+      { key: "connector", label: "Worker", datalist: "discord", placeholder: "team", hint: "The configured Discord Worker this task posts as, by the name it has under Workers in the Console. Its bot token lives on the server, never in the model." },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "send-message", l: "Send message" },
+          { v: "edit-message", l: "Edit message" },
+          { v: "delete-message", l: "Delete message" },
+          { v: "get-message", l: "Read message" },
+          { v: "list-messages", l: "List messages" },
+          { v: "create-thread", l: "Open thread" },
+        ],
+      },
+      {
+        key: "channel", label: "Channel", placeholder: "123456789012345678", fx: true,
+        hint: "The channel id this task acts in — in Discord, enable Developer Mode and use the channel's \"Copy Channel ID\". A thread is itself a channel, so replying in one is a Send message naming the thread's id (=faden.id after an Open thread). May be a FEEL expression (fx).",
+      },
+      {
+        key: "messageId", label: "Message", placeholder: "=nachricht.id", fx: true,
+        showIf: (v) => ["edit-message", "delete-message", "get-message", "create-thread"].includes(v.operation),
+        hint: (v) => (v.operation === "create-thread"
+          ? "Optional. Naming a message hangs the thread under it, which is what keeps the discussion attached to the notice that started it. Leave empty for a standalone thread in the channel. May be a FEEL expression (fx)."
+          : "The message id this operation addresses. Usually a FEEL expression (fx) naming the variable an earlier Send message wrote — e.g. =nachricht.id."),
+      },
+      {
+        key: "content", label: "Message", placeholder: "Antrag =vorgang.nummer ist genehmigt", fx: true,
+        showIf: (v) => v.operation === "send-message" || v.operation === "edit-message",
+        hint: "The message body, up to Discord's 2000 characters. May be a FEEL expression (fx) — note that a boolean resolves to nothing, so use =if genehmigt then \"genehmigt\" else \"abgelehnt\" rather than =genehmigt.",
+      },
+      {
+        key: "name", label: "Thread name", placeholder: "=\"Antrag \" + vorgang.nummer", fx: true,
+        showIf: (v) => v.operation === "create-thread",
+        hint: "The thread's title, as it appears in the channel's thread list. May be a FEEL expression (fx), which is how one process instance gets its own named thread.",
+      },
+      {
+        key: "after", label: "After message", placeholder: "=letzteGelesen", fx: true,
+        showIf: (v) => v.operation === "list-messages",
+        hint: "Optional. Reads only messages newer than this id, exclusive. Discord orders by id, so keeping the last id you read and passing it back here pages a channel forward without re-reading what you already have. May be a FEEL expression (fx).",
+      },
+      {
+        key: "maxResults", label: "Maximum messages", placeholder: "50",
+        showIf: (v) => v.operation === "list-messages",
+        hint: "Caps what may land in the result variable. Empty uses 50; Discord's endpoint accepts at most 100 per call, and a larger value is refused at deploy.",
+      },
+      {
+        key: "fields", label: "Further fields", type: "map", childType: "atlas:DiscordField", fx: true,
+        showIf: (v) => ["send-message", "edit-message", "create-thread"].includes(v.operation),
+        hint: "Any other property of the request body, by its Discord name (embeds, allowed_mentions, components, tts…). A value may be a FEEL expression (fx), and its shape is kept: a FEEL list is sent as a list, an object as an object, a boolean as a boolean. These are merged last, so a field named content overrides the Message above.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable",
+        resultType: (v) => (v.operation === "list-messages" ? "array" : "object"),
+        placeholder: "nachricht",
+        // Delete is the one operation Discord answers with 204 No Content, so a result
+        // variable there would name a value that is never written — the panel hides it
+        // rather than letting an author expect one (the compiler refuses it too).
+        showIf: (v) => v.operation !== "delete-message",
+        hint: (v) => {
+          switch (v.operation) {
+            case "list-messages":
+              return "The messages are written into this process variable as a JSON array, newest first. FEEL lists are 1-based, so the newest message's id is =nachrichten[1].id.";
+            case "create-thread":
+              return "The created thread is written into this process variable. A thread is a channel, so a later Send message posts into it with channel ==faden.id. Leave empty to open the thread and post nothing into it \u2014 a place for people to discuss the notice it hangs under.";
+            case "send-message":
+              return "The created message is written into this process variable, so a later Edit message can address it as =nachricht.id. Leave empty to discard it.";
+            default:
+              return "What Discord returned is written into this process variable (leave empty to discard it).";
+          }
+        },
+      },
+    ],
+  },
+  {
     id: "aitask", name: "AI Task", group: "Applications",
     desc: "Ask a language model one question and put the answer in a process variable",
     icon: "A",
@@ -11505,6 +11590,74 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     clockEl.textContent = `${shown} / ${frames.length}${shown ? ` · ${fmtClock(frames[shown - 1].at)}` : ""}`;
   }
 
+  // --- A deferred choice, drawn once (ADR-0110, ADR-0249) ---
+  //
+  // An event-based gateway arms every branch's catch at once, so a waiting instance holds
+  // a token on each branch and none on the gateway. The live view stopped drawing that
+  // literally — the race is one wait however many branches it has, so it is shown once, on
+  // the gateway, and the branches are outlined armed instead. The replay said the same
+  // moment differently: N token dots on N branches, and N entries in the token legend, for
+  // one wait. This is that rule, applied to the frame the replay is showing.
+  //
+  // The group is read off the diagram exactly as the live view reads it — a catch joins
+  // its gateway's race only when that gateway is its sole way in — so a catch reachable
+  // from elsewhere keeps its own token.
+  const armedBranches = new Map(); // catch id → the event gateway that arms it
+  const raceWidth = new Map();     // gateway id → how many branches it arms
+  for (const [gw, branches] of eventGatewayRaces(registry)) {
+    raceWidth.set(gw, branches.length);
+    for (const id of branches) armedBranches.set(id, gw);
+  }
+
+  // tokenKey identifies one token on one element — two tokens can sit on the same
+  // element, and one token id can appear on two of them across a fold.
+  const tokenKey = (t) => `${t.elementId}\u0000${t.tokenId}`;
+
+  // collapseRaces rewrites a frame's tokens into what the diagram should show: the forks
+  // of one armed race become a single token on their gateway, and the branches they sat
+  // on are named so they can be outlined armed rather than drawn as waits of their own.
+  //
+  // Which fork belongs to which race is not guessed: every armed catch is a fork of the
+  // gateway's own token (`parentTokenId`), so siblings group exactly, and two races
+  // running concurrently on one gateway stay two races.
+  //
+  // A group is only a race while *every* branch the gateway arms holds one of its forks.
+  // Once an event has fired and the losers are cancelled, what is left on a branch is a
+  // token running there — the winner — and it is drawn as one. That is the same rule the
+  // live view applies with its minimum over the branches.
+  function collapseRaces(tokens) {
+    const groups = new Map();
+    for (const t of tokens) {
+      const gw = armedBranches.get(t.elementId);
+      if (!gw || !t.parentTokenId) continue;
+      const k = `${gw}\u0000${t.parentTokenId}`;
+      if (!groups.has(k)) groups.set(k, { gw, tokenId: t.parentTokenId, forks: [] });
+      groups.get(k).forks.push(t);
+    }
+    const armed = new Set();  // element ids outlined armed
+    const folded = new Set(); // the forks the races below stand in for
+    const races = [];
+    for (const g of groups.values()) {
+      if (g.forks.length !== raceWidth.get(g.gw)) continue;
+      for (const f of g.forks) { armed.add(f.elementId); folded.add(tokenKey(f)); }
+      races.push(g);
+    }
+    if (!races.length) return { drawn: tokens, armed };
+    const drawn = tokens.filter((t) => !folded.has(tokenKey(t)));
+    for (const race of races) {
+      // Between arming its branches and completing, the gateway still holds the very
+      // token the race is — the forks are forks *of* it — so that token becomes the race
+      // rather than a second dot beside it.
+      const held = drawn.findIndex((t) => t.elementId === race.gw && t.tokenId === race.tokenId);
+      if (held >= 0) drawn[held] = { ...drawn[held], race: race.forks.length };
+      else drawn.push({ tokenId: race.tokenId, elementId: race.gw, state: "active", race: race.forks.length });
+    }
+    // Frames arrive in token order and the collapsed race is appended, so restore it:
+    // the dots on the diagram and the chips below it read in the same order.
+    drawn.sort((a, b) => (a.tokenId === b.tokenId ? 0 : a.tokenId < b.tokenId ? -1 : 1));
+    return { drawn, armed };
+  }
+
   // renderOverlay paints the current frame: every element a live token sits on is
   // highlighted (green, or orange while waiting at a join) and carries a colored
   // token dot; elements only walked earlier are grayed. An element that holds a
@@ -11518,12 +11671,21 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     while (dotLayer.firstChild) dotLayer.removeChild(dotLayer.firstChild);
     const frame = playhead ? frames[playhead - 1] : null;
     const position = frame ? frame.position : 0;
-    const tokens = frame ? frame.tokens : [];
+    const { drawn: tokens, armed } = collapseRaces(frame ? frame.tokens : []);
     const liveOn = new Set(tokens.map((t) => t.elementId));
     for (const s of steps.filter((item) => item.position <= position)) {
-      if (liveOn.has(s.elementId) || !registry.get(s.elementId)) continue;
+      if (liveOn.has(s.elementId) || armed.has(s.elementId) || !registry.get(s.elementId)) continue;
       canvas.addMarker(s.elementId, "atlas-visited");
       marked.push([s.elementId, "atlas-visited"]);
+    }
+    // An armed branch is live — its catch is waiting — but it is not where the wait is
+    // counted, so it is outlined and left without a token dot of its own. What the dashed
+    // outline means is said on the race's own chip below, once, rather than beside every
+    // branch of every race.
+    for (const elId of armed) {
+      if (liveOn.has(elId) || !registry.get(elId)) continue;
+      canvas.addMarker(elId, "atlas-armed");
+      marked.push([elId, "atlas-armed"]);
     }
     // Several tokens on one node — both arrivals at a join, a loop's body and the round
     // running under it — fan out along its top edge instead of stacking. They are grouped
@@ -11555,9 +11717,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       marked.push([elId, "atlas-incident"]);
     }
     const legend = root.querySelector("#token-legend");
+    const raceTitle = "An event-based gateway arms every branch at once, so the engine parks a token on each of them and none on the gateway. The wait is one race however many branches it has, so the replay draws it once — here, on the gateway — and outlines the armed branches dashed.";
     legend.innerHTML = tokens.length ? tokens.map((token) =>
-      `<span class="token-chip"><i style="--token-color:${tokenColor(token.tokenId)}">#</i>` +
-      `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)" : ""}</span>`).join("")
+      `<span class="token-chip"${token.race ? ` title="${esc(raceTitle)}"` : ""}>` +
+      `<i style="--token-color:${tokenColor(token.tokenId)}">#</i>` +
+      `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)"
+        : token.race ? ` (waiting for the first of ${token.race} events)` : ""}</span>`).join("")
       : `<span class="muted">No active tokens in this frame</span>`;
     applySelection();
   }

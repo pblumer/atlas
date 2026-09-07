@@ -2,7 +2,7 @@
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
 .PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server \
-        whats-new nuggets adr-number docker docker-powershell docker-buildx helm-lint helm-template helm-package
+        whats-new nuggets nuggets-check adr-number docker docker-powershell docker-buildx helm-lint helm-template helm-package
 
 all: check
 
@@ -55,6 +55,13 @@ check: build vet fmt-check race cover
 # Needs Playwright: run `npm ci` in e2e/ once. See scripts/nuggets/README.md.
 nuggets:
 	node scripts/nuggets/capture.mjs
+
+# Measure where every highlighted element actually is and compare against what the
+# committed screenshots say — without writing anything. This is what the weekly
+# "Nugget screenshots" workflow runs; a difference means the UI moved and the shots
+# need re-taking.
+nuggets-check:
+	node scripts/nuggets/capture.mjs --check
 
 # Regenerate the Console "What's New" feed (api/web/whats-new.json) from CHANGELOG.md
 # and scripts/whats-new/overrides/. Commit the regenerated JSON. See

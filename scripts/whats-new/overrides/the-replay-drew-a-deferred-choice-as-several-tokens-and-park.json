@@ -1,0 +1,15 @@
+{
+  "title": {
+    "en": "A race in the replay is one wait again",
+    "de": "Ein Rennen im Replay ist wieder ein Warten"
+  },
+  "summary": {
+    "en": "An event-based gateway waits for whichever event comes first — a reply, say, or a timeout. The engine opens all of those waits at once, so it really does hold a token on every branch, and the replay drew each of them: three token dots and three entries in the token bar for one instance that was waiting for one thing. One of them was not even there any more — the gateway kept a token of its own long after its race had been decided, so on a process that loops you saw a race still running a full round after it ended. The live view has drawn this as the one wait it is for a while now; the replay does too. One token on the gateway, the events it is waiting for outlined dashed, and one line underneath that says what it is waiting for. Nothing to re-run: open any instance and its history is drawn the new way.",
+    "de": "Ein Ereignis-Gateway wartet darauf, was zuerst eintrifft — etwa eine Antwort oder ein Timeout. Die Engine öffnet alle diese Warten gleichzeitig, hält also tatsächlich auf jedem Zweig einen Token, und das Replay zeichnete jeden davon: drei Token-Punkte und drei Einträge in der Token-Leiste für eine Instanz, die auf eine Sache wartet. Einer davon war gar nicht mehr da — das Gateway behielt einen eigenen Token, lange nachdem sein Rennen entschieden war, und bei einem Prozess mit Schleife sah man ein Rennen darum noch eine ganze Runde nach seinem Ende als laufend. Die Live-Ansicht zeigt das schon länger als das eine Warten, das es ist; das Replay jetzt auch. Ein Token auf dem Gateway, die Ereignisse, auf die es wartet, gestrichelt umrandet, und darunter eine Zeile, die sagt, worauf gewartet wird. Nichts neu zu starten: Jede Instanz wird beim Öffnen neu gezeichnet."
+  },
+  "tags": ["Operations"],
+  "try": {
+    "label": { "en": "Open Operations", "de": "Operations öffnen" },
+    "route": "#/operations"
+  }
+}

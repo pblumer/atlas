@@ -50,7 +50,14 @@ const (
 	// Documented above the block: it needs no endpoint, only a credentialsRef, because
 	// Google's API bases are not a per-tenant address.
 	connectorKindGoogleSheets = "googlesheets"
-	connectorKindEntra        = "entra"
+	// connectorKindDiscord is the Discord Worker Type
+	// (ADR-0258): a configured record of this kind resolves to a live
+	// Discord API client whose bot token — a {botToken} bundle — is read from the vault.
+	// Like Google Sheets it needs no endpoint, because Discord's API base is not a
+	// per-tenant address; the field stays an override for an operator behind a proxy.
+	// Only the operation and its values are model-authored.
+	connectorKindDiscord = "discord"
+	connectorKindEntra   = "entra"
 	// connectorKindAD is the Active Directory Worker Type
 	// (ADR-0206). A record holds the directory's LDAP URL
 	// and a credentialsRef naming a vault {bindDN, password} bundle; the model names

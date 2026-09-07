@@ -14,6 +14,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/mail"
@@ -360,6 +361,54 @@ func (s *Server) buildGoogleSheetsClients() (map[string]googlesheets.Client, map
 	}
 	noteForeignKinds(problems, recs, connectorKindGoogleSheets, clients)
 	return clients, problems, nil
+}
+
+// buildDiscordClients builds the live Discord client for every enabled Discord Worker,
+// resolving each one's bot token from the vault (ADR-0041) — so a model names a Worker
+// and never a token. A Worker whose bundle is missing or malformed is skipped with the
+// reason recorded, which is what lets the list say "configured but not working" instead
+// of leaving it to be discovered by a token parking on it (ADR-0158).
+//
+// Unlike Jira there is no endpoint to be missing: Discord's API base is the same for
+// everyone, so a record carrying only a credential is complete, and the endpoint field
+// is an override for an operator behind a proxy.
+func (s *Server) buildDiscordClients() (map[string]discord.Client, map[string]string, error) {
+	clients := map[string]discord.Client{}
+	problems := map[string]string{}
+	recs, err := s.connectors.LoadAll()
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, c := range recs {
+		if c.Kind != connectorKindDiscord {
+			continue
+		}
+		if !c.Enabled {
+			problems[c.Name] = problemDisabled
+			continue
+		}
+		client, err := discord.NewProviderClient(discord.ProviderConfig{
+			Endpoint: strings.TrimSpace(c.Endpoint),
+			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+		})
+		if err != nil {
+			problems[c.Name] = err.Error() // its tasks park until it is fixed
+			continue
+		}
+		clients[c.Name] = client
+	}
+	noteForeignKinds(problems, recs, connectorKindDiscord, clients)
+	return clients, problems, nil
+}
+
+// discordCredentials is the shape of a Discord Worker's credential bundle held in the
+// vault under its credentialsRef (ADR-0258): the bot token, without the
+// "Bot " scheme prefix the client composes. Only a *reference* to this bundle is stored
+// in the Worker record; the value lives in the vault, never in a model or the record
+// (I6). It mirrors connector/discord's own unexported bundle type, which is what the
+// shape test holds it to.
+type discordCredentials struct {
+	BotToken string `json:"botToken,omitempty"`
 }
 
 // googleSheetsCredentials is the shape of a Google Worker's credential bundle held in

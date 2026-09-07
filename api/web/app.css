@@ -1194,7 +1194,9 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 /* A catch event armed by an event-based gateway: waiting, but not the place the wait
    is counted — the race is one wait however many branches it has, and it is counted
    once, on the gateway. Green like a live element because it is live, dashed because
-   the token here is a branch of a race and not a token that got this far on its own. */
+   the token here is a branch of a race and not a token that got this far on its own.
+   Both runtime views draw it: the live overlay's count and the step replay's token dot
+   sit on the gateway, and the branches carry this outline in either (ADR-0249). */
 .djs-element.atlas-armed .djs-visual > :nth-child(1) {
   stroke: var(--ok) !important; stroke-width: 2.5px !important;
   stroke-dasharray: 5 4 !important;

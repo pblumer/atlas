@@ -43,20 +43,54 @@ leaving a ring on empty space.
 This is also why the shots have to be regenerated as a set: an image and the rectangles
 drawn on it are only valid together. Editing `#nug-data` by hand is how they come apart.
 
-## The diff is large every time, and that is expected
+## Who notices that a re-take is due
 
-A capture rewrites all twenty images, so `git status` lists all of them whether the UI
-changed or not — WebP encoding is not byte-reproducible, and the seeded engine does not
-produce an identical screen twice. The process list in particular sorts by last activity,
-so `order-to-cash` lands in a different row between runs and its highlight is measured
-somewhere new. That is harmless because the rectangle is measured from the image it is
-drawn on, but it does mean **a capture is all-or-nothing**: take the whole set or none of
-it, and never hand-pick images out of the diff.
+Nobody re-takes screenshots on a schedule, so a weekly workflow asks the question
+instead. **Nugget screenshots** (`.github/workflows/nuggets-check.yml`) runs
 
-It also means the one thing no test can catch is a caption that no longer describes its
-picture. `nuggets.spec.mjs` checks that the block matches `scenes.mjs`, that every image
-ships and every highlight is inside its frame — none of which notices a sentence promising
-"four cases waiting here" over a screenshot of something else. Read the captions.
+```bash
+make nuggets-check      # node scripts/nuggets/capture.mjs --check
+```
+
+every Monday: it starts a throwaway Atlas exactly as the capture does, measures where
+every highlighted element actually is, and compares that against the committed block.
+It writes nothing — no images, no commits. A difference opens an issue labelled
+`nuggets-stale` naming the targets that moved, with the measurements; a difference that
+is still there next week comments on that issue rather than opening a second one.
+
+Two findings, and they mean different things:
+
+- **A target no longer resolves.** The capture dies on the spot with the selector that
+  matched nothing. The element was renamed or removed, so the nugget is pointing at
+  something that does not exist.
+- **A target moved.** The screenshot is of an older layout: still wrong for a learner,
+  but it degrades rather than breaks. The tolerance is 1.5 percentage points, which is
+  wide enough that fonts and scrollbars on a different machine do not trip it.
+
+Deliberately the cheap half: the workflow does not regenerate and commit the images
+itself. Automating that would keep the chapter current without anybody looking, at the
+price of a bot writing ~800 KB of image data into the history on a schedule — and of
+captions drifting away from pictures nobody read. Being told, and then re-taking them
+by hand, is the slower loop that keeps a human eye on the captions.
+
+## Which images change on a re-take
+
+Not all of them, and the split is predictable: a shot changes when what it shows
+changes. Measured over consecutive runs with no code change between them, seven of the
+twenty differ — the ones carrying a clock or a counter:
+
+| Changes every run | Stable |
+|---|---|
+| `ops-instances`, `ops-process`, `ops-workers` (timestamps, "running for") | `apps`, `tasks-*`, `panorama`, `data-model` |
+| `console-engine`, `console-org`, `console-workers` (live counts) | `modeler-diagram`, `modeler-playground`, `ops-decisions`, `ops-incidents` |
+| `modeler-home` (saved-at times) | `console`, `console-ai`, `console-audit` |
+
+So a diff touching only that first group is the capture doing nothing but re-photograph
+the clock. A diff touching the second group means something actually moved — read it.
+
+**Take the set whole either way.** An image and the rectangles drawn on it are only valid
+together, so committing some images and not others is how they come apart. `--check`
+compares measurements, not pixels, so it stays quiet about the clock.
 
 ## Adding or changing a nugget
 

@@ -141,9 +141,10 @@ type instanceTimeline struct {
 }
 
 type timelineToken struct {
-	TokenID   uint64 `json:"tokenId"`
-	ElementID string `json:"elementId"`
-	State     string `json:"state"`
+	TokenID       uint64 `json:"tokenId"`
+	ParentTokenID uint64 `json:"parentTokenId"`
+	ElementID     string `json:"elementId"`
+	State         string `json:"state"`
 }
 
 type timelineFrame struct {

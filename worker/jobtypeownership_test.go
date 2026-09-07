@@ -34,6 +34,7 @@ var connectorJobTypes = map[string][]string{
 	"agent":        {compiler.AgentJobType, compiler.AiTaskJobType},
 	"clio":         {compiler.ClioWriteJobType, compiler.ClioQueryJobType, compiler.ClioReadJobType},
 	"csv":          {compiler.CsvImportJobType},
+	"discord":      {compiler.DiscordJobType},
 	"entra":        {compiler.EntraJobType},
 	"googlesheets": {compiler.GoogleSheetsJobType},
 	"jira":         {compiler.JiraJobType},
@@ -75,6 +76,11 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 		return map[string]string{
 			"ATLAS_CLIO_CONNECTORS":      "events",
 			"ATLAS_CLIO_EVENTS_ENDPOINT": "https://events.example.com",
+		}
+	case "discord":
+		return map[string]string{
+			"ATLAS_DISCORD_CONNECTORS": "team",
+			"ATLAS_DISCORD_TEAM_TOKEN": "bot-t0ken",
 		}
 	case "entra":
 		return map[string]string{
