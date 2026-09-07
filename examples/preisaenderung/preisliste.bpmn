@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Neue Preisliste — der Sender des Signals.
+
+  Die andere Hälfte von offerte.bpmn. Drei Elemente, und trotzdem das
+  Lehrreichste am ganzen Beispiel: dieser Prozess weiss nicht, wie viele
+  Offerten gerade offen sind, und muss es auch nicht wissen. Er wirft das
+  Signal, und die Engine trägt es an jede wartende Instanz — null, eine oder
+  zehntausend.
+
+    Start "Neue Preise gültig"
+      → Script "Änderung festhalten"
+      → Signal werfen "preisliste.geaendert"
+      → Ende "Alle offenen Offerten informiert"
+
+  Zum Ausprobieren: erst ein paar Instanzen von proc_offerte starten (die
+  parken alle am Kundenentscheid), dann eine Instanz von diesem Prozess. In
+  Operations sieht man danach in *jeder* Offerte einen zweiten, nachgerechneten
+  Token.
+
+  Der Name des Signals ist die ganze Kopplung zwischen den beiden Modellen —
+  wie der Nachrichtenname bei einer Ereignisüberwachung. Weicht er um ein
+  Zeichen ab, laufen beide Prozesse fehlerfrei und treffen sich nie.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_preisliste" targetNamespace="http://atlas/examples">
+
+  <signal id="Sig_preise" name="preisliste.geaendert"/>
+
+  <process id="proc_preisliste" name="Neue Preisliste veröffentlichen" isExecutable="true">
+    <documentation>Hält eine Preisänderung fest und meldet sie per Signal an jede offene Offerte.
+Startvariablen: artikel und neuerPreis. Der Prozess kennt seine Empfänger nicht — das ist der
+Unterschied zwischen einem Signal und einer Nachricht.</documentation>
+
+    <extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="artikel" type="string" required="true" default="&quot;Zaunfeld verzinkt&quot;"/>
+        <atlas:startVariable name="neuerPreis" type="number" required="true" default="94.9"/>
+      </atlas:startForm>
+    </extensionElements>
+
+    <startEvent id="start" name="Neue Preise gültig">
+      <outgoing>f_start_erfassen</outgoing>
+    </startEvent>
+
+    <scriptTask id="erfassen" name="Änderung festhalten">
+      <documentation>Der Beleg der Änderung: wer wann welchen Preis gesetzt hat, steht als Variable auf
+dieser Instanz und ist damit nachträglich belegbar — anders als eine überschriebene Zelle in einer Liste.</documentation>
+      <extensionElements>
+        <zeebe:script resultVariable="aenderung"
+          expression="= { artikel: artikel, neuerPreis: neuerPreis, gueltigAb: today() }"/>
+      </extensionElements>
+      <incoming>f_start_erfassen</incoming>
+      <outgoing>f_erfassen_werfen</outgoing>
+    </scriptTask>
+
+    <intermediateThrowEvent id="werfen" name="Preisliste geändert">
+      <documentation>Wirft das Signal. Es gibt keinen Korrelationsschlüssel, weil es keinen einzelnen
+Empfänger gibt: die Engine trägt es an jede Instanz, die gerade darauf wartet.</documentation>
+      <incoming>f_erfassen_werfen</incoming>
+      <outgoing>f_werfen_end</outgoing>
+      <signalEventDefinition signalRef="Sig_preise"/>
+    </intermediateThrowEvent>
+
+    <endEvent id="end" name="Offerten informiert">
+      <incoming>f_werfen_end</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_erfassen" sourceRef="start" targetRef="erfassen"/>
+    <sequenceFlow id="f_erfassen_werfen" sourceRef="erfassen" targetRef="werfen"/>
+    <sequenceFlow id="f_werfen_end" sourceRef="werfen" targetRef="end"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_preisliste">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="134" y="162" width="88" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_erfassen" bpmnElement="erfassen">
+        <dc:Bounds x="250" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_werfen" bpmnElement="werfen">
+        <dc:Bounds x="420" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="382" y="162" width="112" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end">
+        <dc:Bounds x="530" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="498" y="162" width="102" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_erfassen" bpmnElement="f_start_erfassen">
+        <di:waypoint x="196" y="140"/><di:waypoint x="250" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_erfassen_werfen" bpmnElement="f_erfassen_werfen">
+        <di:waypoint x="350" y="140"/><di:waypoint x="420" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_werfen_end" bpmnElement="f_werfen_end">
+        <di:waypoint x="456" y="140"/><di:waypoint x="530" y="140"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

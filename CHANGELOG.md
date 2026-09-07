@@ -194,6 +194,103 @@ _Changed_ / _Removed_ for each version.
   the token markers, so the one scene that most needed its whole picture was the one
   losing it.
 
+- **Every shipped model now carries its own diagram.** Four of them did not:
+  `order-fulfillment`, `galsync`, `entra-create-account` and `pruefe-datensaetze` shipped
+  with no `<bpmndi:BPMNDiagram>`, and Atlas generated one on deploy. That is enough to run
+  a model and not enough to read one — which stopped being a detail the moment the
+  handbook began rendering every example on its card, because a generated layout is what
+  the reader then sees first.
+
+  They are laid out by hand now, to the conventions in `AGENTS.md`: one straight main
+  axis, every branch in a lane of its own, orthogonal waypoints that go around boxes
+  rather than through them, and every gateway exit labelled with its answer — which meant
+  naming six branches in `galsync` and two in `pruefe-datensaetze` that had no name at
+  all, so a reader could not tell which way "deleted?" went. The two subprocesses are
+  drawn expanded, because the branching inside them is the example; collapsed, all that is
+  left is a box that explains nothing.
+
+  Each was checked as a rendered picture and not only as a deploy, which is the only way
+  the two rounds of label collisions in `order-fulfillment` were ever going to surface: a
+  gateway label centred over its own branch line reads fine, the same label lying across a
+  task box does not.
+
+- **Three mechanisms the engine has always had now have an example.** Signal, escalation
+  and compensation were demonstrated by no scenario in `examples/` — only as isolated
+  patterns in the conformance gallery and the recipe chapter, which show *that* they work
+  and never *what they are for*. The handbook's mechanism matrix said so out loud. It no
+  longer has to:
+
+  - **`examples/mahnwesen/`** chases an unpaid invoice, and is the escalation example. Two
+    boundaries hang on the same subprocess and their difference is the whole business
+    logic: the message "payment received" **interrupts**, because the dunning run is then
+    moot; the escalation does **not**, because the run should finish *and* the owner
+    should be asked. The subprocess is not cosmetic — an escalation is caught on the
+    enclosing activity, so without one there is none. Its deadlines are start variables,
+    since `<timeDuration>` takes FEEL (ADR-0055): the same process runs in seconds instead
+    of weeks.
+  - **`examples/preisaenderung/`** recalculates every open quote when the price list
+    changes, and is the signal example — deliberately paired with the one above, because
+    the pair is the lesson: a **message** hits exactly one instance, the one whose
+    correlation key matches; a **signal** hits **all** that are waiting and does not know
+    how many that is. Verified against a live server: three waiting quotes, one instance
+    of the thrower, three recalculated quotes.
+  - **`examples/reisestorno/`** books a flight and a hotel, has the payment declined, and
+    takes both back — the compensation example. An error jumps out of an activity that
+    just went wrong; a compensation undoes activities that completed *successfully* long
+    ago, which is the case a rollback is actually about. It unwinds backwards, and the
+    handlers hang off an `<association>` rather than a sequence flow — the proof being
+    that a run with `zahlungOk: true` carries no cancellation variables at all.
+
+  All three are framed for the readers the examples were thinnest on: a small business and
+  a private person. All three run with no worker, no credential and no network.
+
+  A fourth, **`examples/umzug/`**, is there for the audience alone rather than a
+  mechanism: organising a move, because a workflow engine reads as something for
+  corporations until somebody shows it doing a private person's Saturday. It happens to be
+  the only model in the tree that fires a timer on a **computed date** rather than after a
+  duration — and its two trip hazards are documented because both actually happened while
+  it was being built, and both produce the same incident: a process variable is persisted
+  as JSON and comes back a string (so the date has to be parsed again), and a zone id
+  where the timer needs an offset.
+
+- **The handbook now shows every example Atlas ships, and what it takes to run one.**
+  Thirty scenarios live under `examples/` — a shopping cart that computes a total in
+  FEEL, an exam with a hard deadline, a CSV checked row by row, a directory recertified
+  against the HR system, a Google Form whose every new row becomes a case. The handbook
+  showed two of them. `examples/README.md`, the only overview there was, is written for
+  developers, is half in English, and was missing five examples entirely, because nothing
+  checked.
+
+  The new **Beispiele** chapter describes all of them in both languages and on two levels
+  at once: what the scenario is *for* — who has the problem, what they get out of it — and
+  how it is *built*, down to the trap the reader is about to walk into (`query-one`
+  returns null and fails on two hits; a Sheets cell is text, so comparing it with a number
+  is `null` in FEEL; a Jira user search without the browse permission finds nobody
+  *without failing*). Each card renders the real diagram, and installs the real artifacts —
+  application, decision, forms, processes, publish — into the reader's own instance in one
+  click. Nine of them then start with one more click, most running to an end event with no
+  worker configured at all.
+
+  Alongside it, **Worker in Betrieb nehmen**: a runbook per worker type for the half that
+  happens outside Atlas and is where commissioning actually fails. The Google service
+  account and the sharing step without which a document you have open in front of you
+  answers 403; the Entra app registration with the two application permissions that cover
+  a joiner/mover/leaver flow and the one to remove if it is there; the Atlassian API token
+  and the global permission an assignment needs; the AD service account that should be
+  delegated on an OU rather than made a domain admin; the SQL user that should be granted
+  on views. With, for each, the symptom that tells you what is missing — a parked token
+  with no incident is a worker that is not running, an empty search result is usually a
+  permission.
+
+  The models are not copied into the page. They travel as one generated asset,
+  `api/web/examples-catalog.json`, which `go test ./examples -update` builds from the
+  files; a plain run fails when the served catalogue has drifted from them, when an
+  example has no card, when a card names an example that does not exist, or when two
+  examples would ship the same form id and installing the second would silently overwrite
+  the first one's form. That last one was not hypothetical: `onboarding` and
+  `entra-onboarding-selfservice` both shipped a form called `onb-start`, and the
+  self-service pair is now `eonb-start`/`eonb-freigabe`.
+
 ### Fixed
 
 - **The replay drew a deferred choice as several tokens, and parked one on the gateway

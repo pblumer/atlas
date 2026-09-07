@@ -25,7 +25,10 @@
                   xmlns:atlas="http://atlas/schema/1.0"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
                   id="defs_galsync"
-                  targetNamespace="http://atlas/examples">
+                  targetNamespace="http://atlas/examples"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI">
   <bpmn:process id="galsync" name="GALSync (cross-forest address list)" isExecutable="true">
 
     <bpmn:startEvent id="start" name="Start GALSync"/>
@@ -117,16 +120,16 @@
       <bpmn:endEvent id="eintrag_ende"/>
 
       <bpmn:sequenceFlow id="e1" sourceRef="eintrag_start" targetRef="geloescht"/>
-      <bpmn:sequenceFlow id="e2" sourceRef="geloescht" targetRef="entferne_kontakt">
+      <bpmn:sequenceFlow id="e2" name="ja" sourceRef="geloescht" targetRef="entferne_kontakt">
         <bpmn:conditionExpression>=eintrag.attributes.isDeleted != null</bpmn:conditionExpression>
       </bpmn:sequenceFlow>
-      <bpmn:sequenceFlow id="e3" sourceRef="geloescht" targetRef="suche_kontakt"/>
+      <bpmn:sequenceFlow id="e3" name="nein" sourceRef="geloescht" targetRef="suche_kontakt"/>
       <bpmn:sequenceFlow id="e4" sourceRef="suche_kontakt" targetRef="baue_kontakt"/>
       <bpmn:sequenceFlow id="e5" sourceRef="baue_kontakt" targetRef="vorhanden"/>
-      <bpmn:sequenceFlow id="e6" sourceRef="vorhanden" targetRef="aktualisiere_kontakt">
+      <bpmn:sequenceFlow id="e6" name="ja" sourceRef="vorhanden" targetRef="aktualisiere_kontakt">
         <bpmn:conditionExpression>=treffer.found</bpmn:conditionExpression>
       </bpmn:sequenceFlow>
-      <bpmn:sequenceFlow id="e7" sourceRef="vorhanden" targetRef="lege_kontakt_an"/>
+      <bpmn:sequenceFlow id="e7" name="nein" sourceRef="vorhanden" targetRef="lege_kontakt_an"/>
       <bpmn:sequenceFlow id="e8" sourceRef="entferne_kontakt" targetRef="eintrag_join"/>
       <bpmn:sequenceFlow id="e9" sourceRef="aktualisiere_kontakt" targetRef="eintrag_join"/>
       <bpmn:sequenceFlow id="e10" sourceRef="lege_kontakt_an" targetRef="eintrag_join"/>
@@ -146,10 +149,127 @@
     <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="lese_aenderungen"/>
     <bpmn:sequenceFlow id="f2" sourceRef="lese_aenderungen" targetRef="je_aenderung"/>
     <bpmn:sequenceFlow id="f3" sourceRef="je_aenderung" targetRef="mehr"/>
-    <bpmn:sequenceFlow id="f4" sourceRef="mehr" targetRef="lese_aenderungen">
+    <bpmn:sequenceFlow id="f4" name="ja" sourceRef="mehr" targetRef="lese_aenderungen">
       <bpmn:conditionExpression>=aenderungen.more</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="f5" sourceRef="mehr" targetRef="warte"/>
+    <bpmn:sequenceFlow id="f5" name="nein" sourceRef="mehr" targetRef="warte"/>
     <bpmn:sequenceFlow id="f6" sourceRef="warte" targetRef="lese_aenderungen"/>
   </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="galsync">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="282" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="140" y="322" width="80" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_lese_aenderungen" bpmnElement="lese_aenderungen">
+        <dc:Bounds x="250" y="260" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="di_je_aenderung" bpmnElement="je_aenderung" isExpanded="true">
+        <dc:Bounds x="420" y="90" width="900" height="400"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_eintrag_start" bpmnElement="eintrag_start">
+        <dc:Bounds x="450" y="282" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_geloescht" bpmnElement="geloescht" isMarkerVisible="true">
+        <dc:Bounds x="520" y="275" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="514" y="240" width="62" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_entferne_kontakt" bpmnElement="entferne_kontakt">
+        <dc:Bounds x="610" y="120" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_suche_kontakt" bpmnElement="suche_kontakt">
+        <dc:Bounds x="610" y="260" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_baue_kontakt" bpmnElement="baue_kontakt">
+        <dc:Bounds x="760" y="260" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_vorhanden" bpmnElement="vorhanden" isMarkerVisible="true">
+        <dc:Bounds x="910" y="275" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="902" y="240" width="66" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_aktualisiere_kontakt" bpmnElement="aktualisiere_kontakt">
+        <dc:Bounds x="1000" y="260" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_lege_kontakt_an" bpmnElement="lege_kontakt_an">
+        <dc:Bounds x="1000" y="380" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_eintrag_join" bpmnElement="eintrag_join" isMarkerVisible="true">
+        <dc:Bounds x="1160" y="275" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_eintrag_ende" bpmnElement="eintrag_ende">
+        <dc:Bounds x="1254" y="282" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="di_mehr" bpmnElement="mehr" isMarkerVisible="true">
+        <dc:Bounds x="1370" y="275" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1352" y="330" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_warte" bpmnElement="warte">
+        <dc:Bounds x="1470" y="282" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1460" y="322" width="58" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1">
+        <di:waypoint x="196" y="300"/><di:waypoint x="250" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2">
+        <di:waypoint x="350" y="300"/><di:waypoint x="420" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e1" bpmnElement="e1">
+        <di:waypoint x="486" y="300"/><di:waypoint x="520" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e2" bpmnElement="e2">
+        <di:waypoint x="545" y="275"/><di:waypoint x="545" y="160"/><di:waypoint x="610" y="160"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="551" y="196" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e3" bpmnElement="e3">
+        <di:waypoint x="570" y="300"/><di:waypoint x="610" y="300"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="572" y="278" width="36" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e4" bpmnElement="e4">
+        <di:waypoint x="710" y="300"/><di:waypoint x="760" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e5" bpmnElement="e5">
+        <di:waypoint x="860" y="300"/><di:waypoint x="910" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e6" bpmnElement="e6">
+        <di:waypoint x="960" y="300"/><di:waypoint x="1000" y="300"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="962" y="278" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e7" bpmnElement="e7">
+        <di:waypoint x="935" y="325"/><di:waypoint x="935" y="420"/><di:waypoint x="1000" y="420"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="941" y="356" width="36" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e8" bpmnElement="e8">
+        <di:waypoint x="710" y="160"/><di:waypoint x="1185" y="160"/><di:waypoint x="1185" y="275"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e9" bpmnElement="e9">
+        <di:waypoint x="1100" y="300"/><di:waypoint x="1160" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e10" bpmnElement="e10">
+        <di:waypoint x="1100" y="420"/><di:waypoint x="1185" y="420"/><di:waypoint x="1185" y="325"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e11" bpmnElement="e11">
+        <di:waypoint x="1210" y="300"/><di:waypoint x="1254" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3">
+        <di:waypoint x="1320" y="300"/><di:waypoint x="1370" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4">
+        <di:waypoint x="1395" y="275"/><di:waypoint x="1395" y="40"/>
+        <di:waypoint x="300" y="40"/><di:waypoint x="300" y="260"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1330" y="46" width="60" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f5" bpmnElement="f5">
+        <di:waypoint x="1420" y="300"/><di:waypoint x="1470" y="300"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1422" y="278" width="46" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f6" bpmnElement="f6">
+        <di:waypoint x="1488" y="318"/><di:waypoint x="1488" y="560"/>
+        <di:waypoint x="300" y="560"/><di:waypoint x="300" y="340"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </bpmn:definitions>
