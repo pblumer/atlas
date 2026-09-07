@@ -9325,19 +9325,39 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         position: badgeSpot(shape, "br"),
         html: tokenBadgesHTML(e, { tokens, green: armed ? "" : null }),
       });
-      // A user-task element with a waiting job gets a clickable "Open" badge that
-      // jumps to its form. One waiting task → straight to it; several (only under
-      // "All instances") → the inbox, where the operator picks.
-      const ets = tasksByElement.get(e.elementId);
-      if (ets && ets.length) {
-        const href = ets.length === 1 ? `#/tasks/t/${ets[0].key}` : "#/tasks";
-        const many = ets.length > 1 ? ` ${fmtCount(ets.length)}` : "";
-        const what = ets.length === 1
+      // A user-task element holding a token gets a clickable "Open" badge: one task
+      // waiting → straight to its form, several → the inbox, where the operator picks.
+      //
+      // Whether to draw it, and which of those two it is, are read off the element's
+      // live-token count — the maintained per-element counter (ADR-0080), exact at any
+      // scale. They used to be read off the length of the task list, which is a *page*:
+      // GET /api/v1/tasks returns the newest 500 open tasks across every definition and
+      // flags the rest with X-Tasks-Truncated. Counting its rows made the badge report
+      // the size of its own page. A user task with 1 275 waiting read "500" — and stayed
+      // at "500" as an operator worked the queue down, because 500 was all the page could
+      // ever hold, while the green badge beside it counted correctly down from 1 275. The
+      // same cap could delete the badge outright: it is applied before the filter to this
+      // definition, so a flood on *another* process pushes this one's tasks off the page
+      // and takes the link to a plainly waiting task with it.
+      //
+      // The count itself is not repeated on the link. The green badge on this shape is
+      // already that number — on a user task "tokens waiting here" and "tasks waiting
+      // here" are one fact — and a second copy of it is that fact read twice, exactly as
+      // an armed branch does not restate its gateway's race. The page is kept for the one
+      // thing it alone can say: which task to deep-link to when there is a single one.
+      // What kind of element this is comes from the diagram rather than the runtime row:
+      // the shape is already in hand, "bpmn:UserTask" is the BPMN spec's own name for it,
+      // and the compiler maps exactly that element to the job type this badge is about.
+      const ets = tasksByElement.get(e.elementId) || [];
+      if (shape.type === "bpmn:UserTask" && tokens > 0) {
+        const one = tokens === 1 && ets.length === 1;
+        const href = one ? `#/tasks/t/${ets[0].key}` : "#/tasks";
+        const what = one
           ? "Open the waiting user task's form"
-          : `Open the ${fmtCount(ets.length)} waiting user tasks`;
+          : "Open the waiting user tasks in the inbox";
         overlays.add(e.elementId, "open-task", {
           position: badgeSpot(shape, "tr"),
-          html: `<a class="task-open" href="${href}" aria-label="${esc(what)}" title="${esc(what)}">&#128203;${many}</a>`,
+          html: `<a class="task-open" href="${href}" aria-label="${esc(what)}" title="${esc(what)}">&#128203;</a>`,
         });
       }
       // A decided business rule task offers a decision-inspection badge.
@@ -9357,12 +9377,22 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     renderVariables();
   }
 
-  // refreshTasks pulls the open user-task jobs and keeps those for this deployed
-  // version. Best-effort: a transient failure leaves the previous set so the links
-  // and diagram badges don't flicker.
+  // refreshTasks pulls the open user-task jobs this view can link to, keeping those
+  // of the deployed version on screen. Best-effort: a transient failure leaves the
+  // previous set so the links don't flicker.
+  //
+  // With one instance selected the list is asked for *that instance's* tasks, which
+  // the server resolves through the instance's own element index rather than the
+  // global newest-first page — so its form stays one click away even when a flood of
+  // other instances has pushed its task past that page's cap. "All instances" has no
+  // such scope and takes the global page; what the page cannot hold, nothing on the
+  // diagram counts (see the open-task badge, which counts tokens instead).
   async function refreshTasks() {
+    const url = selected === "all"
+      ? "/api/v1/tasks"
+      : `/api/v1/tasks?processInstance=${encodeURIComponent(selected)}`;
     let all;
-    try { all = await api("GET", "/api/v1/tasks"); }
+    try { all = await api("GET", url); }
     catch { return; }
     liveTasks = all.filter((t) => t.processDefKey === key);
   }

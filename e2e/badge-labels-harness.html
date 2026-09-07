@@ -119,7 +119,12 @@
         if (/\/instances\/\w+\/decisions$/.test(url)) return decisions;
         if (/\/instances\/\w+\/variables$/.test(url)) return { betrag: 4200 };
         if (/\/instances\/\w+\/data-objects$/.test(url)) return [];
-        if (url === "/api/v1/tasks") return tasks;
+        if (url.startsWith("/api/v1/tasks")) {
+          // ?processInstance= is the instance-scoped list, which the server resolves
+          // through that instance's own element index rather than the capped global page.
+          const inst = new URL(url, location.origin).searchParams.get("processInstance");
+          return inst ? tasks.filter((t) => String(t.processInstanceKey) === inst) : tasks;
+        }
         if (url.includes("/runtime")) {
           return {
             instances: 1, finished: 0, tokens: 1,

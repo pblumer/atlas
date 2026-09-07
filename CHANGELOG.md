@@ -14,6 +14,36 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The waiting-task badge on the live diagram counted its own page.** A user task with
+  1 275 people's work parked on it showed "500" on its 📋 link, and went on showing "500"
+  as the queue was worked down in the Tasks app — while the green token badge on the same
+  shape counted correctly. Nothing was stuck. 500 is the cap on one page of
+  `GET /api/v1/tasks`, and the badge was counting the rows it had been handed, so it could
+  not have said anything else until the queue fell below the cap.
+
+  The same cap could also delete the badge outright, which is the worse half: it is
+  applied across every definition *before* the list is filtered to the one on screen, so
+  enough waiting tasks on another process pushed this one's off the page and took the link
+  to a plainly waiting task with it.
+
+  Both facts — whether to draw the link, and whether it goes to a form or to the inbox —
+  now come from the element's live-token counter, which is exact at any scale
+  ([ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) and is what the "All
+  instances" total in the picker beside it has always been read from. The link no longer
+  carries a count at all: the green badge on that shape is that number, and on a user task
+  "tokens waiting here" and "tasks waiting here" are one fact, so a second copy of it was
+  the same wait read twice — the reason an armed branch does not restate its gateway's
+  race either. The task list is still read for the one thing only it can say: which task
+  to open when exactly one is waiting.
+
+  Isolating a single instance now asks for *that instance's* tasks rather than filtering
+  the global page, so its form stays one click away under a flood — the endpoint has
+  resolved an instance's tasks through its own element index all along, and the live view
+  was the caller not using it. And completing a task in the Tasks app reloads the inbox
+  through the path that reads the paging headers, instead of only the body: the "more
+  exist" banner now goes away when the queue drains, and "Load older" no longer pages from
+  a cursor that has moved.
+
 - **Saving a layout onto a deployment was refused on diagrams nobody had edited.** The
   first real use of "Save layout to deployment" hit the guard that is supposed to catch a
   changed *process*, on a document whose process had not changed at all.

@@ -125,7 +125,7 @@
           window.__requests.push(url);
           return listResponse(url).data;
         }
-        if (url === "/api/v1/tasks") return [];
+        if (url.startsWith("/api/v1/tasks")) return [];  // global page or ?processInstance=
         if (url.includes("/runtime")) {
           return {
             instances: ACTIVE, finished: FINISHED, tokens: ACTIVE,

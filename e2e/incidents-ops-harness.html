@@ -171,7 +171,7 @@
             String(r.key) === q.trim() ||
             (r.variables || []).some((v) => `${v.name}=${v.value}`.toLowerCase().includes(q.toLowerCase())));
         }
-        if (url === "/api/v1/tasks") return [];
+        if (url.startsWith("/api/v1/tasks")) return [];  // global page or ?processInstance=
         if (url.includes("/runtime")) {
           // The overlay carries the incidents (ADR-0150): scoped to one instance when the
           // caller asks for one, which is how the live view isolates a selection and how

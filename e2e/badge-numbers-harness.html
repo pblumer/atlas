@@ -68,7 +68,7 @@
         }
         if (/\/processes\/\d+\/xml$/.test(url)) return XML;
         if (url.startsWith("/api/v1/instances?process=")) return [];
-        if (url === "/api/v1/tasks") return [];
+        if (url.startsWith("/api/v1/tasks")) return [];  // global page or ?processInstance=
         if (url.includes("/runtime")) {
           return {
             instances: 50002, finished: 28292, tokens: 78294,
