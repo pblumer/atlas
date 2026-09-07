@@ -3,6 +3,7 @@ package engine
 import (
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -23,9 +24,30 @@ func TestTokenCanStillReachReadsOnlyActivations(t *testing.T) {
 	defer tx.Close()
 	c := &ProcessingContext{p: p, tx: tx}
 
+	// The reach set comes from a real compiled join rather than a hand-built map: it
+	// is computed at compile time now, and a test that made its own would stop
+	// exercising the pairing this function depends on
+	// (ADR-draft-precomputed-join-reachability).
+	b := compiler.NewBuilder(1, "reach", 1)
+	st := b.AddStartEvent()
+	split := b.AddInclusiveGateway()
+	one, two := b.AddTask(), b.AddTask()
+	join := b.AddInclusiveGateway()
+	end := b.AddEndEvent()
+	b.Connect(st, split)
+	b.Connect(split, one)
+	b.Connect(split, two)
+	b.Connect(one, join)
+	b.Connect(two, join)
+	b.Connect(join, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	reaches := cp.InclusiveJoinReach(join)
+	upstream := one
+
 	const proc, scope, sibling = uint64(1), uint64(10), uint64(20)
-	const join, upstream = int32(3), int32(7)
-	reaches := map[int32]bool{upstream: true}
 	p.batchPos = -1 // so queue[batchPos+1:] is the whole queue
 
 	activation := func(scopeKey uint64, node int32) Command {

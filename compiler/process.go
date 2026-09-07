@@ -11,6 +11,7 @@ package compiler
 
 import (
 	"fmt"
+	"math/bits"
 	"sort"
 
 	"github.com/pblumer/atlas/expr"
@@ -1278,6 +1279,11 @@ type CompiledProcess struct {
 	nodes []CompiledNode
 	flows []CompiledFlow
 
+	// joinReach is each inclusive join's ancestor set, computed at compile time
+	// (ADR-draft-precomputed-join-reachability). Nil when the process has no
+	// inclusive join, which is the common case.
+	joinReach map[int32]NodeSet
+
 	outgoingFlows      []int32 // shared topology: flow ids grouped by source node
 	boundaryEvents     []int32 // shared topology: boundary-event node ids grouped by host node
 	scopeStarts        []int32 // shared topology: nested start-event node ids grouped by subprocess node
@@ -1397,32 +1403,100 @@ func (p *CompiledProcess) EventSubprocesses(id int32) []int32 {
 // process root — the triggers armed when an instance is created (ADR-0082).
 func (p *CompiledProcess) RootEventSubprocesses() []int32 { return p.rootEventSubs }
 
-// NodesReaching returns the set of node ids from which target is reachable by
-// following sequence flows — target's ancestors in the flow graph. An inclusive
-// join uses it to decide whether any live token upstream could still arrive
-// (if none can, and at least one has, it fires). Computed by a reverse walk from
-// target; target itself is not included unless a cycle leads back to it.
-func (p *CompiledProcess) NodesReaching(target int32) map[int32]bool {
-	preds := make([][]int32, len(p.nodes))
-	for i := range p.nodes {
-		for _, fid := range p.Outgoing(int32(i)) {
-			t := p.Flow(fid).Target
+// NodeSet is a compile-time set of node ids, held as a bitset. It answers
+// membership and nothing else, which is all the runtime asks of it, and it is
+// immutable once built — so one lives on the CompiledProcess and is shared by every
+// instance of it (invariant I5).
+//
+// The zero NodeSet is empty and safe to query.
+type NodeSet struct{ bits []uint64 }
+
+// Has reports whether id is in the set.
+func (s NodeSet) Has(id int32) bool {
+	if id < 0 {
+		return false
+	}
+	w := int(id) >> 6
+	if w >= len(s.bits) {
+		return false
+	}
+	return s.bits[w]&(1<<(uint(id)&63)) != 0
+}
+
+// Count returns how many ids the set holds. It is for tests and diagnostics; the
+// runtime only ever asks Has.
+func (s NodeSet) Count() int {
+	n := 0
+	for _, w := range s.bits {
+		n += bits.OnesCount64(w)
+	}
+	return n
+}
+
+func (s *NodeSet) add(id int32) {
+	w := int(id) >> 6
+	for len(s.bits) <= w {
+		s.bits = append(s.bits, 0)
+	}
+	s.bits[w] |= 1 << (uint(id) & 63)
+}
+
+// InclusiveJoinReach returns the set of node ids from which the given node is
+// reachable by following sequence flows — its ancestors in the flow graph. An
+// inclusive join uses it to decide whether any live token upstream could still
+// arrive (if none can, and at least one has, it fires).
+//
+// It is computed once, at compile time, for exactly the nodes that need it: the
+// inclusive gateways with more than one incoming flow. Anything else gets the empty
+// set, which is why the name says which nodes it answers for — a join that had no
+// set would look like a join with nothing upstream, and fire early.
+//
+// It used to be derived at runtime, on every arrival at every such join: a reverse
+// adjacency over the whole graph, a map and a stack, all allocated and thrown away
+// per token movement. That is topology, and topology is compiled, not interpreted
+// (invariants I1 and I5, ADR-draft-precomputed-join-reachability).
+func (p *CompiledProcess) InclusiveJoinReach(node int32) NodeSet { return p.joinReach[node] }
+
+// computeJoinReach builds the ancestor set of each inclusive join in nodes, given
+// the flow graph. It is the compile-time half of InclusiveJoinReach and runs once
+// per process, so the reverse adjacency it needs is built once rather than per
+// arrival.
+func computeJoinReach(nodes []CompiledNode, outgoingOf func(int32) []int32, targetOf func(int32) int32) map[int32]NodeSet {
+	var joins []int32
+	for i := range nodes {
+		if nodes[i].Type == TypeInclusiveGateway && nodes[i].IncomingCount > 1 {
+			joins = append(joins, int32(i))
+		}
+	}
+	if len(joins) == 0 {
+		return nil
+	}
+	preds := make([][]int32, len(nodes))
+	for i := range nodes {
+		for _, fid := range outgoingOf(int32(i)) {
+			t := targetOf(fid)
 			preds[t] = append(preds[t], int32(i))
 		}
 	}
-	seen := map[int32]bool{}
-	stack := []int32{target}
-	for len(stack) > 0 {
-		n := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		for _, pd := range preds[n] {
-			if !seen[pd] {
-				seen[pd] = true
-				stack = append(stack, pd)
+	out := make(map[int32]NodeSet, len(joins))
+	for _, target := range joins {
+		var set NodeSet
+		seen := make([]bool, len(nodes))
+		stack := []int32{target}
+		for len(stack) > 0 {
+			n := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			for _, pd := range preds[n] {
+				if !seen[pd] {
+					seen[pd] = true
+					set.add(pd)
+					stack = append(stack, pd)
+				}
 			}
 		}
+		out[target] = set
 	}
-	return seen
+	return out
 }
 
 // ServiceTask returns the detail at the given table index.

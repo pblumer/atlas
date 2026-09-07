@@ -549,7 +549,7 @@ Seiteneffekte zurückbleiben.
 
 ### AP6 — Budgets und Entkopplung: F13, F14, F15, F16 (M)
 
-> **Stand: F15 umgesetzt**, F13, F14 und F16 offen.
+> **Stand: F14 und F15 umgesetzt**, F13 und F16 offen.
 >
 > **F15.** Es fehlte keine Fähigkeit. Der Scan bricht seit jeher ab, wenn der
 > Callback einen Fehler zurückgibt, und die API-Schicht hat mit
@@ -560,6 +560,19 @@ Seiteneffekte zurückbleiben.
 > ohnehin in einer Schleife bis leer, also kostet die Grenze eine Runde und keinen
 > Job. Die dauerhafte Hälfte der Korrektur steht im Doc-Kommentar von
 > `ActivatableJobs`: dort liest die nächste Aufruferin, was der Vertrag ist.
+>
+> **F14.** Die Ahnenmenge eines Inclusive-Joins wurde bei *jedem* Eintreffen neu
+> hergeleitet — Reverse-Adjazenz über den ganzen Graphen, Map und Stack, alles
+> allokiert und weggeworfen, je Tokenbewegung. Das ist I1 und I5 zugleich: ein
+> kompilierter Prozess ist unveränderlich, seine Ahnen waren die letzten tausend
+> Male dieselben. Jetzt einmal beim Build, als Bitset je relevanter Join-Stelle.
+> Maps hätten dasselbe geleistet und für zehn Joins in tausend Knoten ein halbes
+> Megabyte je Deployment gekostet; das Bitset kostet gut ein Kilobyte. Der Name
+> hat sich mitgeändert: `NodesReaching` klang nach allgemeiner Graphabfrage und
+> antwortete für jeden Knoten, `InclusiveJoinReach` sagt, für welche — denn eine
+> leere Menge an einem echten Join liest sich als «nichts stromaufwärts» und
+> lässt ihn zu früh feuern. Ein Compiler-Test hält fest, dass jeder Inclusive-Join
+> eine Menge hat.
 
 
 | Befund | Eingriff |
@@ -701,7 +714,7 @@ dafür, dass F07 und F08 mit einer *Begründung im Code* danebenlagen.
 | F11 | P1 | Jeder Benutzer liest fremde Instanzvariablen | AP5 | `TestAuditUnrelatedUserCannotReadInstanceVariables` | behoben |
 | F12 | P1 | Automatische Zyklen besetzen den Single-Writer | AP4 | `TestAuditAutomaticCycleHasExecutionBudget` | behoben |
 | F13 | P2 | Langsame Worker blockieren unabhängige Requests | AP6 | `TestAuditSlowWorkerDoesNotBlockIndependentMutation` | offen |
-| F14 | P2 | Erreichbarkeit am Inclusive-Join neu aufgebaut | AP6 | `TestAuditReachabilityAllocations` | offen |
+| F14 | P2 | Erreichbarkeit am Inclusive-Join neu aufgebaut | AP6 | `TestAuditReachabilityAllocations` | behoben |
 | F15 | P2 | Job-Polling scannt die ganze Warteschlange | AP6 | statisch belegt | behoben |
 | F16 | P2 | Ressourcenbudgets unvollständig | AP6 | statisch belegt | offen |
 | F17 | P2 | Keine expliziten Lese-/Idle-Timeouts | AP1 | statisch belegt | behoben |

@@ -3296,7 +3296,7 @@ func (inclusiveGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei
 		return
 	}
 	// Join: park until nothing more can arrive at this gateway.
-	if c.TokenCanStillReach(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId, cp.NodesReaching(ei.ElementId)) {
+	if c.TokenCanStillReach(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId, cp.InclusiveJoinReach(ei.ElementId)) {
 		return
 	}
 	// Route before consuming: a join that cannot decide must leave every arrival

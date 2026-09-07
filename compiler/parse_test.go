@@ -444,9 +444,15 @@ func TestParseParallelGateway(t *testing.T) {
 	}
 }
 
-// TestNodesReaching checks the reverse-reachability an inclusive join relies on:
-// a node's ancestors (nodes from which it is reachable) — and nothing downstream.
-func TestNodesReaching(t *testing.T) {
+// TestInclusiveJoinReach checks the reverse-reachability an inclusive join relies
+// on: every ancestor of the join is in its set, the join's own downstream is not,
+// and a node that is not an inclusive join has no set at all.
+//
+// That last part is the contract worth pinning. The set is computed at compile time
+// for exactly the nodes that need it, so an empty answer means "not a join" — and a
+// join whose set went missing would look like a join with nothing upstream and fire
+// early, which is the failure this precomputation must never introduce.
+func TestInclusiveJoinReach(t *testing.T) {
 	b := NewBuilder(1, "reach", 1)
 	s := b.AddStartEvent()
 	g := b.AddInclusiveGateway()
@@ -464,21 +470,68 @@ func TestNodesReaching(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	reach := cp.NodesReaching(j)
+	reach := cp.InclusiveJoinReach(j)
 	for _, anc := range []int32{s, g, a, bb} {
-		if !reach[anc] {
-			t.Errorf("NodesReaching(join) missing ancestor %d", anc)
+		if !reach.Has(anc) {
+			t.Errorf("InclusiveJoinReach(join) missing ancestor %d", anc)
 		}
 	}
-	if reach[e] {
-		t.Errorf("NodesReaching(join) includes the downstream end event %d", e)
+	if reach.Has(e) {
+		t.Errorf("InclusiveJoinReach(join) includes the downstream end event %d", e)
 	}
-	if reach[j] {
-		t.Errorf("NodesReaching(join) includes the join itself (no cycle)")
+	if reach.Has(j) {
+		t.Errorf("InclusiveJoinReach(join) includes the join itself (no cycle)")
 	}
-	// A start event has no ancestors.
-	if len(cp.NodesReaching(s)) != 0 {
-		t.Errorf("NodesReaching(start) = %v, want empty", cp.NodesReaching(s))
+	if got := reach.Count(); got != 4 {
+		t.Errorf("InclusiveJoinReach(join).Count() = %d, want 4", got)
+	}
+	// The split has one incoming flow, so it is not a join and has no set.
+	if got := cp.InclusiveJoinReach(g).Count(); got != 0 {
+		t.Errorf("InclusiveJoinReach(split).Count() = %d, want 0", got)
+	}
+	// Neither does a node of another kind, and querying one is safe.
+	if cp.InclusiveJoinReach(s).Has(s) {
+		t.Error("a start event has a reach set")
+	}
+}
+
+// TestEveryInclusiveJoinHasItsReachSet is the completeness half: the engine reads
+// the set for whatever inclusive join a token arrives at, and there is no fallback
+// if one is absent. So every such node in a built process must have one.
+func TestEveryInclusiveJoinHasItsReachSet(t *testing.T) {
+	b := NewBuilder(2, "many-joins", 1)
+	start := b.AddStartEvent()
+	split := b.AddInclusiveGateway()
+	one, two := b.AddTask(), b.AddTask()
+	first := b.AddInclusiveGateway()
+	after := b.AddTask()
+	split2 := b.AddInclusiveGateway()
+	three, four := b.AddTask(), b.AddTask()
+	second := b.AddInclusiveGateway()
+	end := b.AddEndEvent()
+	b.Connect(start, split)
+	b.Connect(split, one)
+	b.Connect(split, two)
+	b.Connect(one, first)
+	b.Connect(two, first)
+	b.Connect(first, after)
+	b.Connect(after, split2)
+	b.Connect(split2, three)
+	b.Connect(split2, four)
+	b.Connect(three, second)
+	b.Connect(four, second)
+	b.Connect(second, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, join := range []int32{first, second} {
+		if cp.InclusiveJoinReach(join).Count() == 0 {
+			t.Errorf("inclusive join %d has no reach set; a join without one fires early", join)
+		}
+	}
+	if !cp.InclusiveJoinReach(second).Has(first) {
+		t.Error("the second join does not see the first as an ancestor")
 	}
 }
 

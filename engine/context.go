@@ -252,10 +252,10 @@ func (c *ProcessingContext) ElementInstancesOnNode(procKey, scopeKey uint64, ele
 // cross a scope boundary, so an inner node is not in reaches at all — what keeps the
 // join waiting is the subprocess's own element instance, which sits in *this* scope
 // on a node that does reach the join.
-func (c *ProcessingContext) TokenCanStillReach(procKey, scopeKey uint64, nodeId int32, reaches map[int32]bool) bool {
+func (c *ProcessingContext) TokenCanStillReach(procKey, scopeKey uint64, nodeId int32, reaches compiler.NodeSet) bool {
 	upstream := false
 	err := c.tx.ElementInstancesOfProcess(procKey, func(_ uint64, v *model.ElementInstanceValue) error {
-		if v.FlowScopeKey == scopeKey && v.ElementId != nodeId && reaches[v.ElementId] {
+		if v.FlowScopeKey == scopeKey && v.ElementId != nodeId && reaches.Has(v.ElementId) {
 			upstream = true
 		}
 		return nil
@@ -274,7 +274,7 @@ func (c *ProcessingContext) TokenCanStillReach(procKey, scopeKey uint64, nodeId 
 			if e.ProcessInstanceKey != procKey || e.FlowScopeKey != scopeKey {
 				continue
 			}
-			if e.ElementId == nodeId || reaches[e.ElementId] {
+			if e.ElementId == nodeId || reaches.Has(e.ElementId) {
 				return true
 			}
 		}
